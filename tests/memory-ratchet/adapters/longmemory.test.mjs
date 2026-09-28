@@ -108,8 +108,10 @@ test('recall returns native hits and items without adapter reranking', async () 
     items: [{ node: { id: 'n1', content: { raw: 'Use Postgres' } }, score: 0.91 }],
   };
   const fake = fakeExecutor([JSON.stringify(payload)]);
-  const adapter = createLongMemoryAdapter({ execute: fake.execute });
-  adapter.__setDatabaseForTest('/tmp/ratchet/.memory-ratchet-longmemory.db');
+  const adapter = createLongMemoryAdapter({
+    execute: fake.execute,
+    databasePath: '/tmp/ratchet/.memory-ratchet-longmemory.db',
+  });
 
   const result = await adapter.recall({
     query: 'SQLite Postgres',
