@@ -247,3 +247,11 @@ test('executeMemspec reports spawn status, stderr, and stdout', () => {
     /stderr: schema validation failed[\s\S]*stdout: partial output[\s\S]*exit 2/,
   );
 });
+
+
+test('formats non-Error spawn failures with their message', () => {
+  assert.equal(
+    formatExecFailure({ message: 'spawnSync memspec ENOENT', status: null, stdout: '', stderr: '' }),
+    'spawnSync memspec ENOENT',
+  );
+});
