@@ -16,6 +16,7 @@
       "branch": "main",
       "revision": "main_head",
       "ingest": [
+        "EV-A-SQLITE-ACCEPT",
         "EV-A-POSTGRES-DECISION"
       ],
       "source_harness": "claude-code",
@@ -27,6 +28,7 @@
       "branch": "main",
       "revision": "main_head",
       "ingest": [
+        "EV-A-SQLITE-ACCEPT",
         "EV-A-POSTGRES-DECISION"
       ],
       "noise": "long_gap_sessions",
@@ -37,6 +39,7 @@
       "branch": "main",
       "revision": "main_head",
       "ingest": [
+        "EV-A-SQLITE-ACCEPT",
         "EV-A-POSTGRES-DECISION",
         "EV-B-MYSQL-DECISION"
       ],
@@ -96,9 +99,10 @@
       "branch": "main",
       "revision": "main_head",
       "ingest": [
+        "EV-A-SQLITE-ACCEPT",
+        "EV-A-POSTGRES-DECISION",
         "EV-A-SQLITE-PROPOSAL",
-        "EV-A-SQLITE-REJECT",
-        "EV-A-POSTGRES-DECISION"
+        "EV-A-SQLITE-REJECT"
       ],
       "query": "Should this service use SQLite or Postgres, and why?"
     },
@@ -146,6 +150,7 @@
       "branch": "main",
       "revision": "main_head",
       "ingest": [
+        "EV-A-SQLITE-ACCEPT",
         "EV-A-POSTGRES-DECISION"
       ],
       "noise": "recall_distractors",
@@ -156,6 +161,7 @@
       "branch": "main",
       "revision": "main_head",
       "ingest": [
+        "EV-A-SQLITE-ACCEPT",
         "EV-A-POSTGRES-DECISION",
         "EV-A-PARTIAL-WRITE"
       ],
