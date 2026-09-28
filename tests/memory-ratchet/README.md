@@ -68,3 +68,17 @@ node --test tests/memory-ratchet/fixture.test.mjs tests/memory-ratchet/runner.te
 ```
 
 Candidate adapters must not import candidate-specific semantics into these shared layers.
+
+
+## Runtime baseline
+
+Candidate results must record the runtime used for execution. The coding-agent target runtime for the initial comparison is Node 24 where a Node runtime is required.
+
+A candidate may also be exercised on its declared minimum runtime as a compatibility side-check. Compatibility side-checks do not replace the target-runtime core track.
+
+For memspec 0.11.0 at source revision `7c0a47f36d75585db0701b9828592433a0fa1c7b`, the pinned smoke test currently records:
+
+- Node 20.20.2: `remember` terminates with status 139 / SIGSEGV.
+- Node 24.21.0: `init -> remember -> search` succeeds.
+
+The Node 20 result is tracked as an operational compatibility finding. The Memory Ratchet hard-gate result is evaluated on the Node 24 target runtime.
