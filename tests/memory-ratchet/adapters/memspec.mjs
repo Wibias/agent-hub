@@ -4,11 +4,32 @@ const MEMSPEC_VERSION = '0.11.0';
 const MEMSPEC_SOURCE_REVISION = '7c0a47f36d75585db0701b9828592433a0fa1c7b';
 const MEMORY_ID = /ms_[A-Z0-9]{26}/g;
 
+function outputText(value) {
+  if (typeof value === 'string') return value.trim();
+  if (Buffer.isBuffer(value)) return value.toString('utf8').trim();
+  return '';
+}
+
+export function formatExecFailure(error) {
+  const parts = [];
+  const stderr = outputText(error?.stderr);
+  const stdout = outputText(error?.stdout);
+  if (stderr) parts.push(`stderr: ${stderr}`);
+  if (stdout) parts.push(`stdout: ${stdout}`);
+  if (Number.isInteger(error?.status)) parts.push(`exit ${error.status}`);
+  if (parts.length === 0) parts.push(error instanceof Error ? error.message : String(error));
+  return parts.join('\n');
+}
+
 function defaultExecute(args) {
-  return execFileSync(process.env.MEMSPEC_BIN ?? 'memspec', args, {
-    encoding: 'utf8',
-    stdio: ['ignore', 'pipe', 'pipe'],
-  }).trim();
+  try {
+    return execFileSync(process.env.MEMSPEC_BIN ?? 'memspec', args, {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    }).trim();
+  } catch (error) {
+    throw new Error(formatExecFailure(error), { cause: error });
+  }
 }
 
 function titleFor(event) {
