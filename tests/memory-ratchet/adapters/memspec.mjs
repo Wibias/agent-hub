@@ -17,7 +17,7 @@ export function formatExecFailure(error) {
   if (stderr) parts.push(`stderr: ${stderr}`);
   if (stdout) parts.push(`stdout: ${stdout}`);
   if (Number.isInteger(error?.status)) parts.push(`exit ${error.status}`);
-  if (parts.length === 0) parts.push(error instanceof Error ? error.message : String(error));
+  if (parts.length === 0) parts.push(typeof error?.message === 'string' ? error.message : String(error));
   return parts.join('\n');
 }
 
