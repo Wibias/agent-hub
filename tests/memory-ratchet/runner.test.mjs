@@ -30,11 +30,12 @@ test('long-gap noise is deterministic and creates exactly 27 later sessions', as
   const first = await prepareCase('M02', rootA);
   const second = await prepareCase('M02', rootB);
 
-  assert.equal(first.events.length, 28);
-  assert.equal(first.events[0].id, 'EV-A-POSTGRES-DECISION');
-  assert.equal(first.events.slice(1).length, 27);
-  assert.ok(first.events.slice(1).every((event) => event.type === 'noise_session'));
-  assert.equal(new Set(first.events.slice(1).map(({ session_id }) => session_id)).size, 27);
+  assert.equal(first.events.length, 29);
+  assert.equal(first.events[0].id, 'EV-A-SQLITE-ACCEPT');
+  assert.equal(first.events[1].id, 'EV-A-POSTGRES-DECISION');
+  assert.equal(first.events.slice(2).length, 27);
+  assert.ok(first.events.slice(2).every((event) => event.type === 'noise_session'));
+  assert.equal(new Set(first.events.slice(2).map(({ session_id }) => session_id)).size, 27);
 
   const stable = (prepared) => prepared.events.map(({ repo_path, ...event }) => event);
   assert.deepEqual(stable(first), stable(second));
