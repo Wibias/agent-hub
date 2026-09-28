@@ -1,0 +1,107 @@
+#!/usr/bin/env node
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const state = (value) => value === true ? 'supported' : value === false ? 'unsupported' : String(value ?? 'unverified');
+const normalizeText = (value) => String(value ?? '').replace(/\r\n/g, '\n');
+
+export function assertConfigRendererSupported(hostId, host) {
+  if (host?.adapter?.configRenderer !== 'supported') {
+    throw new Error(`${hostId}: no supported config renderer; refusing to guess host configuration`);
+  }
+}
+
+export function renderHostReport(hostId, host, runtime) {
+  const sources = host.sources ?? (host.source ? [host.source] : []);
+  const lines = [
+    `# ${host.displayName ?? hostId} runtime capability report`,
+    '',
+    'Generated from `agent-runtime/host-capabilities.json` and `agent-runtime/skill-runtime.json`. Do not hand edit.',
+    '',
+    `- reviewed: ${host.reviewed ?? 'unverified'}`,
+    `- agentsRoot: ${state(host.skills?.agentsRoot)}`,
+    `- skillModelRouting: ${state(host.skills?.skillModelRouting)}`,
+    `- config renderer: ${host.adapter?.configRenderer ?? 'unsupported'}`,
+  ];
+  if (host.skills?.sharedSkillRoot) lines.push(`- shared skill root: \`${host.skills.sharedSkillRoot}\``);
+  if (host.agentProfiles?.supported !== undefined) lines.push(`- agent profiles: ${state(host.agentProfiles.supported)}`);
+  if (host.agentProfiles?.nativeRoot) lines.push(`- native agent root: \`${host.agentProfiles.nativeRoot}\``);
+  if (host.agentProfiles?.compatibleRoots?.length) lines.push(`- compatible agent roots: ${host.agentProfiles.compatibleRoots.map((root) => `\`${root}\``).join(', ')}`);
+  if (host.adapter?.note) lines.push(`- note: ${host.adapter.note}`);
+  if (sources.length) {
+    lines.push('', '## Sources', '');
+    for (const source of sources) lines.push(`- ${source}`);
+  }
+  lines.push('', '## Semantic runtime preferences', '');
+  lines.push('| skill | reasoning | isolation | mutation |');
+  lines.push('|---|---|---|---|');
+  const defaults = runtime.defaults ?? {};
+  lines.push(`| (default) | ${defaults.reasoning ?? 'inherit'} | ${defaults.isolation ?? 'inherit'} | ${defaults.mutation ?? 'inherit'} |`);
+  for (const skillName of Object.keys(runtime.skills ?? {}).sort()) {
+    const hint = runtime.skills[skillName] ?? {};
+    lines.push(`| ${skillName} | ${hint.reasoning ?? defaults.reasoning ?? 'inherit'} | ${hint.isolation ?? defaults.isolation ?? 'inherit'} | ${hint.mutation ?? defaults.mutation ?? 'inherit'} |`);
+  }
+  lines.push('', 'These are Hub preferences, not claims that this host can enforce each field. Host capability state above is authoritative.', '');
+  return lines.join('\n');
+}
+
+async function load(root) {
+  const capabilities = JSON.parse(await readFile(join(root, 'agent-runtime', 'host-capabilities.json'), 'utf8'));
+  const runtime = JSON.parse(await readFile(join(root, 'agent-runtime', 'skill-runtime.json'), 'utf8'));
+  return { capabilities, runtime };
+}
+
+export async function renderAll(root = process.cwd(), { check = false } = {}) {
+  const resolved = resolve(root);
+  const { capabilities, runtime } = await load(resolved);
+  const outDir = join(resolved, 'agent-runtime', 'generated');
+  if (!check) await mkdir(outDir, { recursive: true });
+  const drift = [];
+  for (const hostId of Object.keys(capabilities.hosts ?? {}).sort()) {
+    const content = renderHostReport(hostId, capabilities.hosts[hostId], runtime);
+    const path = join(outDir, `${hostId}.md`);
+    if (check) {
+      let current = null;
+      try { current = await readFile(path, 'utf8'); } catch {}
+      if (normalizeText(current) !== normalizeText(content)) drift.push(path);
+    } else {
+      await writeFile(path, content, 'utf8');
+    }
+  }
+  return drift;
+}
+
+export async function main(argv = process.argv.slice(2)) {
+  const check = argv.includes('--check');
+  const emitIndex = argv.indexOf('--emit-config');
+  const rootIndex = argv.indexOf('--root');
+  const root = rootIndex >= 0 ? argv[rootIndex + 1] : process.cwd();
+  if (rootIndex >= 0 && !root) {
+    console.error('render-agent-runtime: --root requires a path');
+    return 2;
+  }
+  try {
+    const { capabilities } = await load(resolve(root));
+    if (emitIndex >= 0) {
+      const hostId = argv[emitIndex + 1];
+      if (!hostId || !capabilities.hosts?.[hostId]) throw new Error(`unknown host ${hostId ?? '<missing>'}`);
+      assertConfigRendererSupported(hostId, capabilities.hosts[hostId]);
+      throw new Error(`${hostId}: supported renderer declared but no renderer implementation exists`);
+    }
+    const drift = await renderAll(root, { check });
+    if (drift.length) {
+      console.error(`render-agent-runtime: ${drift.length} generated report(s) are stale`);
+      for (const path of drift) console.error(`- ${path}`);
+      return 1;
+    }
+    console.log(check ? 'render-agent-runtime: PASS (generated reports current)' : 'render-agent-runtime: generated host reports');
+    return 0;
+  } catch (error) {
+    console.error(`render-agent-runtime: ${error.message}`);
+    return 2;
+  }
+}
+
+const isMain = process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+if (isMain) process.exitCode = await main();

@@ -1,0 +1,173 @@
+{
+  "schemaVersion": 1,
+  "source": {
+    "upstream": "nextlevelbuilder/ui-ux-pro-max-skill",
+    "snapshot": "f3ac195224eac1eb0dfe1a3059c2a6add78ffbe3",
+    "license": "MIT",
+    "reviewedAt": "2026-09-04"
+  },
+  "records": [
+    {
+      "id": "chart-trend-over-time",
+      "domain": "chart",
+      "title": "Trend over time",
+      "keywords": ["trend", "time", "series", "time-series", "line", "timeline", "growth", "history"],
+      "guidance": "Prefer a line encoding when the main question is how a continuous measure changes over time. Preserve chronological order and expose exact values on demand.",
+      "avoid": "Do not use a line merely because data has many points; if the x-axis is categorical, choose a categorical encoding.",
+      "accessibility": "Directly label important series where possible, combine hue with line style or markers, and provide the underlying values in an accessible table or equivalent text view."
+    },
+    {
+      "id": "chart-category-comparison",
+      "domain": "chart",
+      "title": "Compare categories",
+      "keywords": ["compare", "comparison", "category", "categories", "ranking", "bar", "column", "magnitude"],
+      "guidance": "Use bars when users compare magnitudes across discrete categories. Sort only when ranking is the question; preserve meaningful ordinal, chronological, or domain order otherwise.",
+      "avoid": "Do not impose descending order when category order itself carries meaning.",
+      "accessibility": "Show category and value labels or an accessible table; do not distinguish groups by hue alone."
+    },
+    {
+      "id": "chart-part-to-whole",
+      "domain": "chart",
+      "title": "Part to whole",
+      "keywords": ["part", "whole", "share", "percentage", "proportion", "pie", "donut", "stacked", "waffle"],
+      "guidance": "Use a part-to-whole encoding only when the total is meaningful. For precise comparison or many similar shares, a stacked bar, table, or ranked bar view is usually clearer than slices.",
+      "avoid": "Avoid slice-heavy pies and donuts when users must compare small differences or read exact values.",
+      "accessibility": "Label values directly and provide a non-color fallback such as a table or stacked representation."
+    },
+    {
+      "id": "chart-distribution-correlation",
+      "domain": "chart",
+      "title": "Distribution and correlation",
+      "keywords": ["distribution", "correlation", "scatter", "relationship", "cluster", "outlier", "density", "bubble"],
+      "guidance": "Use scatter or distribution encodings when the task is to inspect relationships, clusters, spread, or outliers across continuous variables.",
+      "avoid": "Do not add an extra visual channel such as bubble area unless the third variable materially helps the task and remains interpretable.",
+      "accessibility": "Combine shape, labels, summaries, and a tabular fallback; brushing or hover-only inspection needs keyboard-operable alternatives."
+    },
+    {
+      "id": "chart-forecast-uncertainty",
+      "domain": "chart",
+      "title": "Forecast and uncertainty",
+      "keywords": ["forecast", "prediction", "uncertainty", "confidence", "projection", "estimate", "band", "interval"],
+      "guidance": "Separate observed and forecast values visually and encode uncertainty explicitly with intervals or bands whose meaning is named in text.",
+      "avoid": "Never draw a prediction as if it were observed fact or hide the uncertainty range because it complicates the visual.",
+      "accessibility": "Use line style and labels in addition to hue, and expose forecast values plus uncertainty in text or table form."
+    },
+    {
+      "id": "chart-flow-funnel",
+      "domain": "chart",
+      "title": "Sequential flow and drop-off",
+      "keywords": ["flow", "funnel", "conversion", "dropoff", "drop-off", "pipeline", "stage", "stages", "sankey"],
+      "guidance": "Use a flow or funnel view only when stages are genuinely sequential and the user's question is transition, conversion, or drop-off between those stages.",
+      "avoid": "Do not force non-sequential categories into a funnel shape.",
+      "accessibility": "Keep stage names, values, and transition rates visible and provide a linear stage list or table."
+    },
+    {
+      "id": "chart-target-progress",
+      "domain": "chart",
+      "title": "Target and progress",
+      "keywords": ["target", "goal", "threshold", "progress", "kpi", "benchmark", "bullet", "gauge"],
+      "guidance": "When a metric is judged against a target, make the value, target, and direction explicit. Prefer compact bullet/progress forms when multiple KPIs must be compared.",
+      "avoid": "Do not use a decorative gauge when no target or threshold exists.",
+      "accessibility": "State the value and target in text; status must not rely on red/yellow/green alone."
+    },
+    {
+      "id": "native-touch-targets",
+      "domain": "native",
+      "title": "Platform touch targets",
+      "keywords": ["touch", "tap", "target", "ios", "android", "44pt", "48dp", "hit", "press"],
+      "guidance": "Treat platform touch guidance as platform-specific: approximately 44pt on iOS and 48dp on Android are useful baseline targets. A smaller visual icon may use a larger non-overlapping hit area.",
+      "avoid": "Do not reuse CSS-pixel target guidance as if it were native points or density-independent pixels.",
+      "accessibility": "Verify the real hit region, spacing from neighboring actions, and activation with assistive technologies."
+    },
+    {
+      "id": "native-safe-area",
+      "domain": "native",
+      "title": "Safe areas and system chrome",
+      "keywords": ["safe", "area", "notch", "island", "gesture", "system", "bar", "inset", "bottom"],
+      "guidance": "Fixed headers, tab bars, sheets, and CTAs must respect current safe-area and system-chrome insets instead of assuming rectangular screens.",
+      "avoid": "Do not place primary controls under status bars, camera cutouts, home indicators, or system gesture regions.",
+      "accessibility": "Check that enlarged text and screen-reader focus do not push controls back into unsafe or obscured regions."
+    },
+    {
+      "id": "native-dynamic-type",
+      "domain": "native",
+      "title": "Dynamic text scaling",
+      "keywords": ["dynamic", "type", "text", "scaling", "large", "font", "accessibility", "truncate"],
+      "guidance": "Use platform text roles and verify the interface with large accessibility text sizes. Reflow hierarchy instead of assuming fixed-height labels and rows.",
+      "avoid": "Do not preserve a compact screenshot by clipping essential text when system text size grows.",
+      "accessibility": "Essential content and actions remain available at the largest supported text setting for the target platform."
+    },
+    {
+      "id": "native-platform-controls",
+      "domain": "native",
+      "title": "Native controls and gestures",
+      "keywords": ["native", "control", "gesture", "swipe", "back", "pressable", "button", "platform"],
+      "guidance": "Prefer platform-native interactive primitives and established navigation/gesture conventions unless a product requirement justifies a custom interaction.",
+      "avoid": "Do not redefine system gestures or make a critical action gesture-only.",
+      "accessibility": "Every author-controlled drag or swipe action needs an equivalent visible or assistive interaction path."
+    },
+    {
+      "id": "interaction-interruptible-state",
+      "domain": "interaction",
+      "title": "Interruption-safe state transitions",
+      "keywords": ["interrupt", "cancel", "rapid", "animation", "state", "transition", "race", "toggle"],
+      "guidance": "Rapid interactions may cancel visual motion, but semantic state, focus, and content must resolve immediately to the newest user intent.",
+      "avoid": "Never make correctness depend on an animation-end event that may not fire after interruption.",
+      "accessibility": "Reduced-motion and assistive-input paths must reach the same final state without waiting for decorative choreography."
+    },
+    {
+      "id": "interaction-drag-alternative",
+      "domain": "interaction",
+      "title": "Alternatives to dragging",
+      "keywords": ["drag", "dragging", "reorder", "slider", "pointer", "keyboard", "move"],
+      "guidance": "Author-controlled dragging needs a single-pointer and keyboard-operable alternative when the same result cannot otherwise be achieved.",
+      "avoid": "Do not make precise drag manipulation the only path to a required outcome.",
+      "accessibility": "Expose state and destination programmatically, preserve focus, and verify the alternative interaction."
+    },
+    {
+      "id": "text-layout-long-token",
+      "domain": "text-layout",
+      "title": "Long token wrapping",
+      "keywords": ["long", "token", "url", "identifier", "overflow", "wrap", "wrapping", "flex", "grid"],
+      "guidance": "Allow URLs, identifiers, and user content to reflow without breaking the container; make flex/grid text children shrinkable and use safe overflow wrapping when needed.",
+      "avoid": "Do not use aggressive break-all behavior on normal prose merely to hide a layout defect.",
+      "accessibility": "The complete value remains readable or has an operable full-value path when visual truncation is unavoidable."
+    },
+    {
+      "id": "text-layout-chip-collection",
+      "domain": "text-layout",
+      "title": "Chip and tag collections",
+      "keywords": ["chip", "chips", "tag", "tags", "badge", "badges", "overflow", "wrap", "collection"],
+      "guidance": "Let chip/tag collections wrap before shrinking essential labels. If space requires a +n summary, make it an operable disclosure rather than silently hiding values.",
+      "avoid": "Do not compress labels until they become ambiguous or use inaccessible hover-only disclosure for hidden values.",
+      "accessibility": "Interactive chips expose native semantics, focus, state, and an accessible path to every hidden value."
+    },
+    {
+      "id": "accessibility-focus-not-obscured",
+      "domain": "accessibility",
+      "title": "Focused controls stay visible",
+      "keywords": ["focus", "obscured", "sticky", "overlay", "banner", "keyboard", "visible"],
+      "guidance": "Sticky UI, overlays, banners, and virtual keyboards must not hide the keyboard-focused control.",
+      "avoid": "Do not treat a visible focus ring as sufficient if the focused element is covered by another layer.",
+      "accessibility": "Scroll or offset the focused control into a visible region and test with representative sticky/overlay states."
+    },
+    {
+      "id": "accessibility-authentication",
+      "domain": "accessibility",
+      "title": "Accessible authentication",
+      "keywords": ["authentication", "auth", "login", "password", "paste", "manager", "cognitive"],
+      "guidance": "Authentication should support password managers and paste and should not require a cognitive-memory challenge as the only path.",
+      "avoid": "Do not block paste or password-manager completion merely to appear more secure.",
+      "accessibility": "Provide a non-cognitive authentication path compatible with the product's real security requirements."
+    },
+    {
+      "id": "accessibility-redundant-entry",
+      "domain": "accessibility",
+      "title": "Avoid redundant entry",
+      "keywords": ["redundant", "entry", "repeat", "re-enter", "form", "wizard", "process"],
+      "guidance": "Reuse information already supplied in the same process when it is safe and appropriate instead of forcing the user to type it again.",
+      "avoid": "Do not make repeated entry a default across multi-step flows when the system already has the value.",
+      "accessibility": "When re-entry is genuinely required for security or correctness, explain the requirement and preserve accessible labels and error recovery."
+    }
+  ]
+}

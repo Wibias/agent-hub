@@ -1,0 +1,11 @@
+.workflow/*
+.cache/
+plugins/*
+knowledge/*
+superpowers/
+sync.ffs_db
+.cursor/hooks/state/
+memory/MEMORY.md
+memory/pending-rules.md
+memory/notes/*
+!memory/notes/.gitkeep

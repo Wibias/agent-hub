@@ -1,0 +1,38 @@
+name: Refresh skill routing index
+
+on:
+  push:
+    branches:
+      - agent/verify-skill-routing
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Regenerate skill index
+        run: node knowledge/build-index.mjs
+
+      - name: Commit generated index outputs
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add knowledge/INDEX.md knowledge/index.json
+          if git diff --cached --quiet; then
+            echo "No generated changes"
+          else
+            git commit -m "refresh skill routing verification outputs [skip ci]"
+            git push
+          fi

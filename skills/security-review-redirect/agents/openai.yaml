@@ -1,0 +1,4 @@
+interface:
+  display_name: "Security Review"
+  short_description: "App/security checklist depth (not GitHub PR ship-loop — use github-delivery for PR #N)"
+  default_prompt: "Use $github-delivery for security review on a PR/issue. Use $security-review only as checklist depth or for a non-ship codebase audit."

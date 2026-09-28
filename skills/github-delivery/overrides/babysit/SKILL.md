@@ -1,0 +1,33 @@
+---
+name: babysit
+description: >
+  Compatibility redirect for the explicit babysit alias and requests to watch or
+  monitor a GitHub PR or CI loop. Routes to github-delivery; not a standalone
+  PR or CI workflow.
+---
+
+# Babysit → github-delivery
+
+Cursor’s built-in `babysit` (`~/.cursor/skills-cursor/babysit`) is a thin
+conflict/CI stub. It reinstalls when deleted. **Do not follow it** when this
+personal skill or `github-delivery` is available.
+
+## Do this instead
+
+1. Load skill **`github-delivery`** (usually `~/.agents/skills/github-delivery` or `~/.cursor/skills/github-delivery`).
+2. Load `github-delivery` `SKILL.md`. Classification: `reuse` — this alias reuses github-delivery rather than competing with it. Then load the matching workflow (policy modules are declared there):
+   - Default for babysit/watch/monitor → `references/watch-pr.md`
+   - If they asked **merge-ready** → `references/fix-pr-bots.md`
+3. **First command every wake** (watch):
+
+   ```bash
+   node "<github-delivery>/scripts/watch-wake-gate.mjs" OWNER/REPO N
+   ```
+
+   Exit `1` → triage OWNER/MEMBER comments **in code** (rebase/drop overlap / keep leftovers); resolve DIRTY conflicts. ACK-only does not clear. **Never** report waiting on CI/CodeRabbit while exit `1`.
+4. Ordering: reviews/owners → tip update → CI. Never merge-`dev`-then-idle.
+
+## Do not
+
+- Follow only the built-in babysit steps (conflicts / CI / Bugbot stub).
+- Say “up to date with dev; waiting on windows-latest and CodeRabbit” while wake-gate fails.

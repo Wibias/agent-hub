@@ -1,0 +1,146 @@
+name: Release governance
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-governance-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Test public release safety
+        run: node --test tests/public-release/verify-public-release.test.mjs
+
+      - name: Test knowledge index portability
+        run: node --test tests/knowledge/build-index-portability.test.mjs
+
+      - name: Test GitHub delivery worktree portability
+        run: node --test skills/github-delivery/tests/worktree-locations.test.mjs
+
+      - name: Validate GitHub delivery skill structure
+        run: node skills/skill-ratchet/scripts/skill-ratchet.mjs validate --skill-root skills/github-delivery
+
+      - name: Verify public release safety
+        run: node scripts/verify-public-release.mjs
+
+      - name: Verify portable skills
+        run: node scripts/verify-portable-skills.mjs
+
+      - name: Verify runtime adapters
+        run: node scripts/render-agent-runtime.mjs --check
+
+      - name: Validate routing cases
+        run: node scripts/verify-skill-routing.mjs
+
+      - name: Test catalog discovery audit
+        run: node --test tests/skill-catalog/*.test.mjs
+
+      - name: Run catalog discovery audit
+        run: node scripts/audit-skill-catalog.mjs
+
+      - name: Test Skill Ratchet validator
+        run: node --test skills/skill-ratchet/tests/*.test.mjs
+
+      - name: Test extract approach memory initialization
+        run: node --test skills/extract-approach/tests/*.test.mjs
+
+      - name: Validate extract approach skill structure
+        run: node skills/skill-ratchet/scripts/skill-ratchet.mjs validate --skill-root skills/extract-approach
+
+      - name: Test read github target normalization
+        run: node --test skills/read-github/tests/*.test.mjs
+
+      - name: Test YouTube transcript portability
+        run: node --test skills/youtube-transcript/tests/*.test.mjs
+
+      - name: Validate read github skill structure
+        run: node skills/skill-ratchet/scripts/skill-ratchet.mjs validate --skill-root skills/read-github
+
+      - name: Validate source driven development skill structure
+        run: node skills/skill-ratchet/scripts/skill-ratchet.mjs validate --skill-root skills/source-driven-development
+
+      - name: Validate Playwright skill structure
+        run: node skills/skill-ratchet/scripts/skill-ratchet.mjs validate --skill-root skills/playwright
+
+      - name: Validate YouTube transcript skill structure
+        run: node skills/skill-ratchet/scripts/skill-ratchet.mjs validate --skill-root skills/youtube-transcript
+
+      - name: Validate Understand skill structure
+        run: node skills/skill-ratchet/scripts/skill-ratchet.mjs validate --skill-root skills/understand
+
+      - name: Validate dynamic workflows skill structure
+        run: node skills/skill-ratchet/scripts/skill-ratchet.mjs validate --skill-root skills/codex-dynamic-workflows
+
+      - name: Test bounded design guidance query
+        run: node --test knowledge/design-guidance/tests/*.test.mjs
+
+      - name: Test cluster-aware design taste gate
+        run: node --test skills/design-with-ai/tests/taste-gate.test.mjs
+
+      - name: Test source anti-slop calibration matrix
+        run: node --test skills/design-with-ai/tests/source-calibration.test.mjs
+
+      - name: Test rendered design taste gate
+        run: node --test skills/design-with-ai/tests/render-taste-gate.test.mjs
+
+      - name: Test source-render taste evidence fusion
+        run: node --test skills/design-with-ai/tests/taste-evidence-fusion.test.mjs
+
+      - name: Test unified taste evidence receipt
+        run: node --test skills/design-with-ai/tests/taste-evidence-receipt.test.mjs
+
+      - name: Test rendered design calibration matrix
+        run: node --test skills/design-with-ai/tests/render-calibration.test.mjs
+
+      - name: Test cross-surface design taste gate
+        run: node --test skills/design-with-ai/tests/compare-render-snapshots.test.mjs
+
+      - name: Stage repository as canonical agent home
+        run: |
+          rm -rf "$HOME/.agents"
+          ln -s "$GITHUB_WORKSPACE" "$HOME/.agents"
+
+      - name: Test verification harness contract
+        run: node --test skills/verification-harness/tests/*.test.mjs
+
+      - name: Validate verification harness skill structure
+        run: node skills/skill-ratchet/scripts/skill-ratchet.mjs validate --skill-root skills/verification-harness
+
+      - name: Validate design skill structure
+        run: node skills/skill-ratchet/scripts/skill-ratchet.mjs validate --skill-root skills/design-with-ai
+
+      - name: Run design skill local structural validator
+        shell: pwsh
+        run: ./skills/design-with-ai/tests/validate.ps1 -SkillRoot ./skills/design-with-ai
+
+      - name: Regenerate skill index
+        run: node knowledge/build-index.mjs
+
+      - name: Require generated index to be current
+        run: git diff --exit-code -- knowledge/INDEX.md knowledge/index.json
+
+      - name: Validate regenerated routing index
+        run: node scripts/verify-skill-routing.mjs --check-index
+
+      - name: Validate generated JSON
+        run: |
+          node -e "const fs=require('fs'); for (const p of ['knowledge/index.json','knowledge/schema.json','knowledge/design-guidance/catalog.json','skills/design-with-ai/references/slop-signals.json','skills/design-with-ai/tests/evals/regression-lock.json','skills/extract-approach/tests/evals/regression-lock.json','skills/read-github/tests/evals/regression-lock.json','skills/source-driven-development/tests/evals/regression-lock.json','skills/codex-dynamic-workflows/tests/evals/regression-lock.json','skills/understand/tests/evals/regression-lock.json','skills/youtube-transcript/tests/evals/regression-lock.json','skills/playwright/tests/evals/regression-lock.json']) JSON.parse(fs.readFileSync(p,'utf8')); for (const p of ['skills/design-with-ai/tests/evals/cases.jsonl','skills/design-with-ai/tests/evals/ui-routing-ownership.jsonl','skills/design-with-ai/tests/evals/regression-cases.jsonl','skills/design-with-ai/tests/source-calibration-cases.jsonl','skills/design-with-ai/tests/render-calibration-cases.jsonl','skills/extract-approach/tests/evals/cases.jsonl','skills/extract-approach/tests/evals/regression-cases.jsonl','skills/read-github/tests/evals/cases.jsonl','skills/read-github/tests/evals/regression-cases.jsonl','skills/source-driven-development/tests/evals/cases.jsonl','skills/source-driven-development/tests/evals/regression-cases.jsonl','skills/codex-dynamic-workflows/tests/evals/regression-cases.jsonl','skills/codex-dynamic-workflows/tests/evals/cases.jsonl','skills/understand/tests/evals/regression-cases.jsonl','skills/understand/tests/evals/cases.jsonl','skills/youtube-transcript/tests/evals/regression-cases.jsonl','skills/youtube-transcript/tests/evals/cases.jsonl','skills/playwright/tests/evals/regression-cases.jsonl','skills/playwright/tests/evals/cases.jsonl','tests/skill-catalog/catalog-routing.jsonl']) fs.readFileSync(p,'utf8').split(/\\r?\\n/).filter(Boolean).forEach(JSON.parse)"

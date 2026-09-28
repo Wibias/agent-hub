@@ -1,0 +1,79 @@
+{
+  "source": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills",
+  "license": "Apache-2.0",
+  "note": "Read-only catalog — skills are NOT installed. Fetch SKILL.md on demand from GitHub raw URL.",
+  "skills": [
+    {
+      "id": "testing-api-security-with-owasp-top-10",
+      "path": "skills/testing-api-security-with-owasp-top-10",
+      "tags": ["owasp", "api", "web"],
+      "triggers": ["OWASP API", "API top 10 review"]
+    },
+    {
+      "id": "testing-for-broken-access-control",
+      "path": "skills/testing-for-broken-access-control",
+      "tags": ["authz", "access-control"],
+      "triggers": ["broken access control", "IDOR review"]
+    },
+    {
+      "id": "testing-for-xss-vulnerabilities",
+      "path": "skills/testing-for-xss-vulnerabilities",
+      "tags": ["xss", "web"],
+      "triggers": ["XSS audit", "stored XSS"]
+    },
+    {
+      "id": "performing-csrf-attack-simulation",
+      "path": "skills/performing-csrf-attack-simulation",
+      "tags": ["csrf", "session"],
+      "triggers": ["CSRF", "session mutation CSRF"]
+    },
+    {
+      "id": "testing-jwt-token-security",
+      "path": "skills/testing-jwt-token-security",
+      "tags": ["jwt", "auth"],
+      "triggers": ["JWT hardening", "token validation"]
+    },
+    {
+      "id": "implementing-api-rate-limiting-and-throttling",
+      "path": "skills/implementing-api-rate-limiting-and-throttling",
+      "tags": ["rate-limit", "redis", "api"],
+      "triggers": ["rate limit design", "sliding window"]
+    },
+    {
+      "id": "implementing-secret-scanning-with-gitleaks",
+      "path": "skills/implementing-secret-scanning-with-gitleaks",
+      "tags": ["secrets", "ci"],
+      "triggers": ["gitleaks", "secret scan"]
+    },
+    {
+      "id": "performing-sca-dependency-scanning-with-snyk",
+      "path": "skills/performing-sca-dependency-scanning-with-snyk",
+      "tags": ["supply-chain", "dependencies"],
+      "triggers": ["SCA", "dependency CVE"]
+    },
+    {
+      "id": "exploiting-sql-injection-vulnerabilities",
+      "path": "skills/exploiting-sql-injection-vulnerabilities",
+      "tags": ["sql", "postgres", "defensive"],
+      "triggers": ["SQL injection review", "parameterized queries"]
+    },
+    {
+      "id": "testing-oauth2-implementation-flaws",
+      "path": "skills/testing-oauth2-implementation-flaws",
+      "tags": ["oauth", "auth"],
+      "triggers": ["OAuth review", "Twitch auth"]
+    },
+    {
+      "id": "detecting-broken-object-property-level-authorization",
+      "path": "skills/detecting-broken-object-property-level-authorization",
+      "tags": ["authz", "api"],
+      "triggers": ["BOLA", "property level auth"]
+    },
+    {
+      "id": "performing-threat-modeling-with-owasp-threat-dragon",
+      "path": "skills/performing-threat-modeling-with-owasp-threat-dragon",
+      "tags": ["threat-model", "design"],
+      "triggers": ["threat model", "STRIDE lite"]
+    }
+  ]
+}

@@ -1,0 +1,89 @@
+{
+  "version": 1,
+  "hosts": {
+    "cursor": {
+      "displayName": "Cursor",
+      "reviewed": "2026-09-04",
+      "sources": [
+        "https://cursor.com/docs/skills",
+        "https://cursor.com/docs/subagents"
+      ],
+      "skills": {
+        "agentsRoot": true,
+        "sharedSkillRoot": "~/.agents/skills",
+        "skillModelRouting": false
+      },
+      "agentProfiles": {
+        "supported": true,
+        "nativeRoot": ".cursor/agents",
+        "compatibleRoots": [
+          ".claude/agents",
+          ".codex/agents"
+        ]
+      },
+      "adapter": {
+        "configRenderer": "unsupported",
+        "note": "Cursor model selection belongs to agent profiles rather than portable skill frontmatter. A Hub renderer is intentionally not implemented until the exact desired profile schema and ownership are locked."
+      }
+    },
+    "grok": {
+      "displayName": "Grok Build",
+      "reviewed": "2026-09-04",
+      "sources": [
+        "https://docs.x.ai/build/features/skills-plugins-marketplaces"
+      ],
+      "skills": {
+        "agentsRoot": true,
+        "sharedSkillRoot": "~/.agents/skills",
+        "skillModelRouting": false
+      },
+      "agentProfiles": {
+        "supported": true,
+        "compatibleRoots": [
+          ".claude/agents"
+        ]
+      },
+      "adapter": {
+        "configRenderer": "unsupported",
+        "note": "Grok documents that model/effort fields in skill frontmatter are not applied. Keep routing outside shared skills."
+      }
+    },
+    "claude": {
+      "displayName": "Claude Code",
+      "reviewed": "2026-09-04",
+      "sources": [
+        "https://github.com/addyosmani/agent-skills/blob/main/docs/advanced-per-agent-configuration.md"
+      ],
+      "skills": {
+        "agentsRoot": false,
+        "skillModelRouting": false
+      },
+      "agentProfiles": {
+        "supported": "manual"
+      },
+      "adapter": {
+        "configRenderer": "unsupported",
+        "note": "The Hub keeps Claude-specific orchestration out of shared skills. Renderer remains disabled until this repository locks a current official/local schema and tests it."
+      }
+    },
+    "codex": {
+      "displayName": "OpenAI Codex",
+      "reviewed": "2026-09-04",
+      "sources": [
+        "https://developers.openai.com/"
+      ],
+      "skills": {
+        "agentsRoot": true,
+        "sharedSkillRoot": "~/.agents/skills",
+        "skillModelRouting": false
+      },
+      "agentProfiles": {
+        "supported": "manual"
+      },
+      "adapter": {
+        "configRenderer": "unsupported",
+        "note": "No Codex host-config renderer is inferred from generic model documentation. Keep the adapter manual until the exact current custom-agent schema is verified."
+      }
+    }
+  }
+}

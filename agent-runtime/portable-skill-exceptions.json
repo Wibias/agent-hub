@@ -1,0 +1,13 @@
+{
+  "skills/fortify/SKILL.md": [
+    "version",
+    "user-invocable"
+  ],
+  "skills/intent/SKILL.md": [
+    "version",
+    "user-invocable"
+  ],
+  "skills/read-github/SKILL.md": [
+    "user-invocable"
+  ]
+}

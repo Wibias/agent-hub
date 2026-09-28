@@ -1,0 +1,881 @@
+{
+  "schemaVersion": 1,
+  "model": "clustered-unmotivated-defaults",
+  "description": "Mechanical leads for design-with-ai. Contextual visual signals are evidence, not proof of AI authorship or automatic design failure.",
+  "sources": [
+    {
+      "id": "vibecoded-design-tells",
+      "url": "https://github.com/JCarterJohnson/vibecoded-design-tells",
+      "evidenceType": "large-community-observational",
+      "note": "Used for relative signal strength and scanner ideas. Community discourse does not establish AI authorship."
+    },
+    {
+      "id": "signs-of-ai-design",
+      "url": "https://github.com/febbhav/signs-of-ai-design",
+      "evidenceType": "curated-field-guide",
+      "note": "Used for long-tail compositional and chrome signals such as numbered markers and repeated kickers."
+    },
+    {
+      "id": "no-slop-ui",
+      "url": "https://github.com/LeoStehlik/no-slop-ui",
+      "evidenceType": "prescriptive-agent-guardrail",
+      "note": "Used for workflow ideas and product-vs-marketing mismatch, not universal style dimensions."
+    },
+    {
+      "id": "design-homogenization-paper",
+      "url": "https://arxiv.org/abs/2603.13036",
+      "evidenceType": "research-synthesis",
+      "note": "Supports intervention at unspecified design decisions and iterative refinement, not individual CSS-tell prevalence."
+    },
+    {
+      "id": "pols-slop",
+      "url": "https://pols.dev/slop.md",
+      "evidenceType": "prescriptive-field-guide",
+      "note": "Used for card-composition and anti-slop diagnostic concepts. Local rules remain contextual and do not infer AI authorship."
+    },
+    {
+      "id": "local-policy",
+      "url": "references/anti-slop-gates.md",
+      "evidenceType": "local-policy",
+      "note": "Wibias-owned policy for safety, hierarchy, contextual review semantics, and deliberately local thresholds. This source records policy provenance rather than external prevalence evidence."
+    }
+  ],
+  "clusterPolicy": {
+    "minimumIndependentFamilies": 3,
+    "minimumScore": 5,
+    "repeatAcrossFilesThreshold": 3,
+    "repeatAcrossFilesBonus": 1,
+    "note": "Count independent semantic families, not raw line hits. Repetition inside one family does not multiply the cluster linearly. The 3-family / 5-point threshold is a local review heuristic for calibration, not a probability of AI authorship and not a value reported by the cited studies.",
+    "status": "local-heuristic-v1"
+  },
+  "rules": [
+    {
+      "id": "G29",
+      "name": "em-dash-ui",
+      "family": "copy-convention",
+      "severity": "P1",
+      "hardGate": false,
+      "clusterEligible": false,
+      "weight": 0,
+      "patterns": [
+        "[\\u2014\\u2013]"
+      ],
+      "note": "Visible em/en dash; review the active copy convention.",
+      "evidence": {
+        "grade": "policy",
+        "falsePositiveRisk": "high",
+        "sources": [
+          "local-policy"
+        ]
+      }
+    },
+    {
+      "id": "G12",
+      "name": "purple-gradient-tailwind",
+      "family": "palette-gradient-default",
+      "severity": "P1",
+      "hardGate": false,
+      "clusterEligible": true,
+      "weight": 2,
+      "patterns": [
+        "(?:from|to|via)-(?:violet|purple|fuchsia|indigo)-\\d{2,3}"
+      ],
+      "note": "Purple/violet gradient lead; fail only when it is an unrequested default rather than project or brand intent.",
+      "evidence": {
+        "grade": "high",
+        "falsePositiveRisk": "medium",
+        "sources": [
+          "vibecoded-design-tells"
+        ]
+      }
+    },
+    {
+      "id": "G12",
+      "name": "purple-hex-cluster",
+      "family": "palette-gradient-default",
+      "severity": "P1",
+      "hardGate": false,
+      "clusterEligible": true,
+      "weight": 2,
+      "patterns": [
+        "#[67]c3aed",
+        "#[8a]55[cf]f7",
+        "#6366f1",
+        "#4f46e5",
+        "#a855f7"
+      ],
+      "note": "Common purple/indigo values; compare with explicit brand and selected direction.",
+      "evidence": {
+        "grade": "high",
+        "falsePositiveRisk": "medium",
+        "sources": [
+          "vibecoded-design-tells"
+        ]
+      }
+    },
+    {
+      "id": "G12",
+      "name": "gradient-text",
+      "family": "palette-gradient-default",
+      "severity": "P1",
+      "hardGate": false,
+      "clusterEligible": true,
+      "weight": 2,
+      "patterns": [
+        "bg-clip-text",
+        "background-clip:\\s*text"
+      ],
+      "note": "Gradient text; review as a generic premium default only in context.",
+      "evidence": {
+        "grade": "high",
+        "falsePositiveRisk": "medium",
+        "sources": [
+          "vibecoded-design-tells"
+        ]
+      }
+    },
+    {
+      "id": "G12",
+      "name": "bg-gradient-purple",
+      "family": "palette-gradient-default",
+      "severity": "P1",
+      "hardGate": false,
+      "clusterEligible": true,
+      "weight": 2,
+      "patterns": [
+        "bg-gradient-to-\\w+[^\\n]*(?:purple|violet|fuchsia|indigo)"
+      ],
+      "note": "Purple gradient utility; compare with project/brand direction.",
+      "evidence": {
+        "grade": "high",
+        "falsePositiveRisk": "medium",
+        "sources": [
+          "vibecoded-design-tells"
+        ]
+      }
+    },
+    {
+      "id": "G13",
+      "name": "generic-font-default",
+      "family": "typography-default",
+      "severity": "P1",
+      "hardGate": false,
+      "clusterEligible": true,
+      "weight": 2,
+      "patterns": [
+        "font-(?:sans|\\[?['\"]?(?:Inter|Roboto|Open Sans|Poppins|Montserrat|Lato|Geist|Space_?Grotesk|Plus_?Jakarta|Fraunces|Instrument_(?:Sans|Serif)))"
+      ],
+      "note": "Common font family; fail only when chosen by reflex instead of project/type direction.",
+      "evidence": {
+        "grade": "moderate",
+        "falsePositiveRisk": "high",
+        "sources": [
+          "vibecoded-design-tells"
+        ]
+      }
+    },
+    {
+      "id": "G13",
+      "name": "generic-google-font",
+      "family": "typography-default",
+      "severity": "P1",
+      "hardGate": false,
+      "clusterEligible": true,
+      "weight": 2,
+      "patterns": [
+        "fonts\\.googleapis\\.com/css2?\\?family=(?:Inter|Roboto|Poppins|Montserrat|Space\\+Grotesk|Plus\\+Jakarta)"
+      ],
+      "note": "Common Google Font import; compare with project/type direction.",
+      "evidence": {
+        "grade": "moderate",
+        "falsePositiveRisk": "high",
+        "sources": [
+          "vibecoded-design-tells"
+        ]
+      }
+    },
+    {
+      "id": "G13",
+      "name": "generic-font-extra",
+      "family": "typography-default",
+      "severity": "P1",
+      "hardGate": false,
+      "clusterEligible": true,
+      "weight": 2,
+      "patterns": [
+        "\\b(?:Sora|Syne|Archivo|Work Sans|Cormorant|Figtree|Outfit)\\b"
+      ],
+      "note": "Common display/body font; compare with project/type direction.",
+      "evidence": {
+        "grade": "moderate",
+        "falsePositiveRisk": "high",
+        "sources": [
+          "signs-of-ai-design"
+        ]
+      }
+    },
+    {
+      "id": "G22",
+      "name": "transition-all",
+      "family": "motion-safety",
+      "severity": "P0",
+      "hardGate": true,
+      "clusterEligible": false,
+      "weight": 0,
+      "patterns": [
+        "transition(?:-all|\\s*:\\s*all\\b)"
+      ],
+      "note": "transition: all is prohibited; declare intended properties.",
+      "evidence": {
+        "grade": "policy",
+        "falsePositiveRisk": "low",
+        "sources": [
+          "local-policy"
+        ]
+      }
+    },
+    {
+      "id": "G21",
+      "name": "layout-transition",
+      "family": "motion-default",
+      "severity": "P1",
+      "hardGate": false,
+      "clusterEligible": true,
+      "weight": 1,
+      "patterns": [
+        "transition(?:-property)?\\s*:\\s*[^;]*(?:width|height|top|left|right|bottom|margin|padding)"
+      ],
+      "note": "Possible layout-property animation; require an explicit workflow reason.",
+      "evidence": {
+        "grade": "policy",
+        "falsePositiveRisk": "medium",
+        "sources": [
+          "local-policy"
+        ]
+      }
+    },
+    {
+      "id": "G43",
+      "name": "perfect-fake-metric",
+      "family": "trust-content",
+      "severity": "P1",
+      "hardGate": false,
+      "clusterEligible": false,
+      "weight": 0,
+      "patterns": [
+        "99\\.99%",
+        "10[x×]",
+        "50,?000\\+",
+        "trusted by \\d"
+      ],
+      "note": "Likely metric or social-proof claim; verify the source before use.",
+      "evidence": {
+        "grade": "policy",
+        "falsePositiveRisk": "medium",
+        "sources": [
+          "signs-of-ai-design",
+          "no-slop-ui"
+        ]
+      }
+    },
+    {
+      "id": "G41",
+      "name": "ai-cliche",
+      "family": "copy-generic",
+      "severity": "P1",
+      "hardGate": false,
+      "clusterEligible": true,
+      "weight": 1,
+      "patterns": [
+        "\\b(?:Seamless|Unleash|Supercharge|Next-Gen|Next gen|Revolutionize|Game-changer|Game changer|Elevate your|Cutting-edge|World-class|Best-in-class)\\b"
+      ],
+      "note": "Possible generic marketing copy; replace only when it obscures product-specific meaning.",
+      "evidence": {
+        "grade": "moderate",
+        "falsePositiveRisk": "medium",
+        "sources": [
+          "signs-of-ai-design",
+          "no-slop-ui"
+        ]
+      }
+    },
+    {
+      "id": "G42",
+      "name": "placeholder-brand",
+      "family": "trust-content",
+      "severity": "P1",
+      "hardGate": false,
+      "clusterEligible": false,
+      "weight": 0,
+      "patterns": [
+        "\\b(?:Acme|Nexus|SmartFlow|Cloudify|SaaSify|John Doe|Jane Doe)\\b"
+      ],
+      "note": "Possible placeholder brand/person; confirm whether it is fixture data.",
+      "evidence": {
+        "grade": "policy",
+        "falsePositiveRisk": "medium",
+        "sources": [
+          "signs-of-ai-design"
+        ]
+      }
+    },
+    {
+      "id": "G06",
+      "name": "side-stripe",
+      "family": "decorative-accent",
+      "severity": "P1",
+      "hardGate": false,
+      "clusterEligible": true,
+      "weight": 1,
+      "patterns": [
+        "border-l-4",
+        "border-left:\\s*[3-9]px",
+        "border-left:\\s*\\d{2,}px"
+      ],
+      "note": "Thick side stripe; verify it belongs to the selected visual system.",
+      "evidence": {
+        "grade": "weak",
+        "falsePositiveRisk": "high",
+        "sources": [
+          "signs-of-ai-design"
+        ]
+      }
+    },
+    {
+      "id": "G34",
+      "name": "weak-or-enter-easing",
+      "family": "motion-default",
+      "severity": "P1",
+      "hardGate": false,
+      "clusterEligible": true,
+      "weight": 1,
+      "patterns": [
+        "ease-in-out",
+        "cubic-bezier\\(\\s*0\\.4\\s*,\\s*0\\s*,\\s*0\\.2\\s*,\\s*1\\s*\\)"
+      ],
+      "note": "Review easing in context; entrances normally need a responsive motion standard.",
+      "evidence": {
+        "grade": "policy",
+        "falsePositiveRisk": "high",
+        "sources": [
+          "local-policy"
+        ]
+      }
+    },
+    {
+      "id": "G32",
+      "name": "hover-scale-105",
+      "family": "motion-default",
+      "severity": "P1",
+      "hardGate": false,
+      "clusterEligible": true,
+      "weight": 1,
+      "patterns": [
+        "hover:scale-105",
+        "scale\\(1\\.05\\)"
+      ],
+      "note": "Possible uniform hover-scale pattern.",
+      "evidence": {
+        "grade": "moderate",
+        "falsePositiveRisk": "medium",
+        "sources": [
+          "vibecoded-design-tells",
+          "no-slop-ui"
+        ]
+      }
+    },
+    {
+      "id": "G39",
+      "name": "emoji-as-ui",
+      "family": "icon-default",
+      "severity": "P1",
+      "hardGate": false,
+      "clusterEligible": true,
+      "weight": 1,
+      "patterns": [
+        "[🚀✨⚡🔥🎯✅💡🌟]"
+      ],
+      "note": "Emoji used as UI ornament/icon; verify explicit brand intent.",
+      "evidence": {
+        "grade": "moderate",
+        "falsePositiveRisk": "medium",
+        "sources": [
+          "vibecoded-design-tells",
+          "signs-of-ai-design"
+        ]
+      }
+    },
+    {
+      "id": "G44",
+      "name": "scroll-cue",
+      "family": "decorative-navigation",
+      "severity": "P2",
+      "hardGate": false,
+      "clusterEligible": true,
+      "weight": 1,
+      "patterns": [
+        "Scroll to explore",
+        "scroll to discover",
+        "bounc(?:e|ing) chevron"
+      ],
+      "note": "Possible unnecessary scroll cue.",
+      "evidence": {
+        "grade": "weak",
+        "falsePositiveRisk": "high",
+        "sources": [
+          "signs-of-ai-design"
+        ]
+      }
+    },
+    {
+      "id": "G03",
+      "name": "min-h-screen-hero",
+      "family": "hero-structure",
+      "severity": "P2",
+      "hardGate": false,
+      "clusterEligible": true,
+      "weight": 1,
+      "patterns": [
+        "min-h-(?:screen|\\[100vh\\]|\\[100dvh\\])"
+      ],
+      "note": "Full-viewport hero lead; verify it is not a generic centered mega-stack.",
+      "evidence": {
+        "grade": "moderate",
+        "falsePositiveRisk": "high",
+        "sources": [
+          "vibecoded-design-tells",
+          "no-slop-ui"
+        ]
+      }
+    },
+    {
+      "id": "G59",
+      "name": "opacity-zero-initial",
+      "family": "motion-safety",
+      "severity": "P1",
+      "hardGate": false,
+      "clusterEligible": false,
+      "weight": 0,
+      "patterns": [
+        "initial=\\{\\{\\s*opacity:\\s*0"
+      ],
+      "note": "Possible invisible-content entrance; fail only when no visible fallback exists.",
+      "evidence": {
+        "grade": "policy",
+        "falsePositiveRisk": "medium",
+        "sources": [
+          "local-policy"
+        ]
+      }
+    },
+    {
+      "id": "G64",
+      "name": "icon-tile-class",
+      "family": "icon-default",
+      "severity": "P1",
+      "hardGate": false,
+      "clusterEligible": true,
+      "weight": 1,
+      "patterns": [
+        "rounded-(?:xl|2xl|full)[^\\n]*(?:bg-(?:primary|blue|purple|violet|indigo)|bg-\\[#)"
+      ],
+      "note": "Possible icon-in-coloured-tile pattern; verify it serves product identity.",
+      "evidence": {
+        "grade": "moderate",
+        "falsePositiveRisk": "high",
+        "sources": [
+          "signs-of-ai-design"
+        ]
+      }
+    },
+    {
+      "id": "G27",
+      "name": "tracked-uppercase-kicker",
+      "family": "section-chrome",
+      "severity": "P1",
+      "hardGate": false,
+      "clusterEligible": true,
+      "weight": 1,
+      "patterns": [
+        "\\buppercase\\b[^\\n]{0,120}\\btracking-(?:wide|wider|widest|\\[[^\\]]+\\])\\b",
+        "\\btracking-(?:wide|wider|widest|\\[[^\\]]+\\])\\b[^\\n]{0,120}\\buppercase\\b",
+        "text-transform:\\s*uppercase[^;\\n]*;?[^\\n]{0,120}letter-spacing:",
+        "letter-spacing:[^;\\n]*;?[^\\n]{0,120}text-transform:\\s*uppercase"
+      ],
+      "note": "Tiny uppercase tracked section chrome is a contextual lead, especially when repeated decoratively.",
+      "evidence": {
+        "grade": "moderate",
+        "falsePositiveRisk": "high",
+        "sources": [
+          "signs-of-ai-design"
+        ]
+      }
+    },
+    {
+      "id": "G28",
+      "name": "numbered-meta",
+      "family": "section-chrome",
+      "severity": "P1",
+      "hardGate": false,
+      "clusterEligible": true,
+      "weight": 1,
+      "patterns": [
+        "\\b0[1-9]\\b\\s*(?:[·•:./-]\\s*)?[A-Z][A-Z0-9][A-Z0-9 _-]{2,}\\b"
+      ],
+      "note": "01/02/03-style scaffolding is a lead only; real ordered processes are valid.",
+      "evidence": {
+        "grade": "moderate",
+        "falsePositiveRisk": "high",
+        "sources": [
+          "signs-of-ai-design"
+        ]
+      }
+    },
+    {
+      "id": "G31",
+      "name": "large-radius-default",
+      "family": "surface-radius",
+      "severity": "P2",
+      "hardGate": false,
+      "clusterEligible": true,
+      "weight": 1,
+      "patterns": [
+        "rounded-(?:2xl|3xl|full)"
+      ],
+      "note": "Large-radius usage is not a failure alone; review repeated unmotivated rounding as part of a cluster.",
+      "evidence": {
+        "grade": "moderate",
+        "falsePositiveRisk": "high",
+        "sources": [
+          "vibecoded-design-tells"
+        ]
+      }
+    }
+  ],
+  "derivedRules": [
+    {
+      "id": "G67",
+      "name": "emerging-tasteful-default",
+      "family": "replacement-default",
+      "severity": "P1",
+      "hardGate": false,
+      "clusterEligible": true,
+      "weight": 2,
+      "requiresAny": 2,
+      "note": "Cream/beige + expressive serif + sage/forest is an emerging replacement-default cluster. Never ban any member alone.",
+      "evidence": {
+        "grade": "emerging",
+        "falsePositiveRisk": "high",
+        "sources": [
+          "vibecoded-design-tells"
+        ]
+      },
+      "probes": [
+        {
+          "name": "cream-beige-surface",
+          "patterns": [
+            "(?:bg|from|to|via)-(?:stone|amber|orange)-(?:50|100|200)\\b",
+            "#(?:faf7f2|f8f5ef|f5f0e8|f7f3ea|f3eee4)\\b",
+            "\\b(?:cream|beige)\\b"
+          ]
+        },
+        {
+          "name": "expressive-serif",
+          "patterns": [
+            "\\b(?:Instrument Serif|Fraunces|Playfair(?: Display)?|Spectral|Cormorant(?: Garamond)?|DM Serif(?: Display)?)\\b"
+          ]
+        },
+        {
+          "name": "sage-forest-accent",
+          "patterns": [
+            "(?:bg|text|from|to|via|border)-(?:green|emerald|olive)-(?:600|700|800|900)\\b",
+            "\\b(?:sage|forest green|olive green)\\b"
+          ]
+        }
+      ]
+    }
+  ],
+  "renderRules": [
+    {
+      "id": "G03",
+      "name": "centered-mega-hero-render",
+      "family": "hero-structure",
+      "severity": "P1",
+      "weight": 2,
+      "note": "Rendered viewport-scale centered hero with kicker and CTA; review whether the surface role and selected direction actually justify it.",
+      "evidence": {
+        "grade": "moderate",
+        "falsePositiveRisk": "medium",
+        "sources": [
+          "vibecoded-design-tells",
+          "no-slop-ui"
+        ]
+      }
+    },
+    {
+      "id": "G04",
+      "name": "three-equal-cards-render",
+      "family": "repeated-card-structure",
+      "severity": "P1",
+      "weight": 2,
+      "note": "Exactly three equal-size structurally repeated children; review whether equal weighting follows content importance or a default feature-card recipe.",
+      "evidence": {
+        "grade": "moderate",
+        "falsePositiveRisk": "medium",
+        "sources": [
+          "vibecoded-design-tells",
+          "signs-of-ai-design"
+        ]
+      }
+    },
+    {
+      "id": "G05",
+      "name": "nested-cards-render",
+      "family": "containment-default",
+      "severity": "P1",
+      "weight": 2,
+      "note": "Repeated card-like containment nested inside card-like containment; verify the inner boundary has a structural job.",
+      "evidence": {
+        "grade": "moderate",
+        "falsePositiveRisk": "medium",
+        "sources": [
+          "vibecoded-design-tells",
+          "signs-of-ai-design"
+        ]
+      }
+    },
+    {
+      "id": "G27",
+      "name": "eyebrow-spam-render",
+      "family": "section-chrome",
+      "severity": "P1",
+      "weight": 1,
+      "note": "Tracked uppercase kickers repeat across multiple rendered sections; review whether they create hierarchy or decorative scaffolding.",
+      "evidence": {
+        "grade": "moderate",
+        "falsePositiveRisk": "medium",
+        "sources": [
+          "signs-of-ai-design"
+        ]
+      }
+    },
+    {
+      "id": "G28",
+      "name": "numbered-meta-render",
+      "family": "section-chrome",
+      "severity": "P1",
+      "weight": 1,
+      "note": "Numbered meta repeats across sections outside ordered-list semantics; review whether the numbers encode a real sequence.",
+      "evidence": {
+        "grade": "moderate",
+        "falsePositiveRisk": "medium",
+        "sources": [
+          "signs-of-ai-design"
+        ]
+      }
+    },
+    {
+      "id": "G71",
+      "name": "competing-titles-render",
+      "family": "hierarchy",
+      "severity": "P1",
+      "weight": 2,
+      "note": "Two large first-viewport headings have near-equal type size; verify one clear dominant page focal remains.",
+      "evidence": {
+        "grade": "policy",
+        "falsePositiveRisk": "medium",
+        "sources": [
+          "local-policy"
+        ]
+      }
+    },
+    {
+      "id": "G31",
+      "name": "over-round-render",
+      "family": "surface-radius",
+      "severity": "P1",
+      "weight": 1,
+      "note": "Large radii dominate rendered card-like surfaces. Review whether the radius language is project-owned or a generic soft-card default.",
+      "evidence": {
+        "grade": "moderate",
+        "falsePositiveRisk": "medium",
+        "sources": [
+          "vibecoded-design-tells",
+          "signs-of-ai-design"
+        ]
+      }
+    },
+    {
+      "id": "G64",
+      "name": "icon-in-tile-render",
+      "family": "icon-default",
+      "severity": "P1",
+      "weight": 1,
+      "note": "Several non-interactive icons sit in small rounded surfaced containers. Review whether the tile treatment belongs to the product system or is a generic feature-card reflex.",
+      "evidence": {
+        "grade": "moderate",
+        "falsePositiveRisk": "medium",
+        "sources": [
+          "signs-of-ai-design",
+          "no-slop-ui"
+        ]
+      }
+    },
+    {
+      "id": "G72",
+      "name": "icon-wallpaper-render",
+      "family": "icon-density",
+      "severity": "P1",
+      "weight": 1,
+      "note": "Icons appear across most rendered card-like content blocks. Review whether they improve recognition or merely fill space.",
+      "evidence": {
+        "grade": "policy",
+        "falsePositiveRisk": "medium",
+        "sources": [
+          "local-policy",
+          "signs-of-ai-design"
+        ]
+      }
+    },
+    {
+      "id": "G07",
+      "name": "generic-top-nav-render",
+      "family": "navigation-default",
+      "severity": "P1",
+      "weight": 1,
+      "note": "Top navigation renders as several plain links plus a single filled CTA. Review whether the information architecture and product role justify this familiar marketing-shell pattern.",
+      "evidence": {
+        "grade": "moderate",
+        "falsePositiveRisk": "high",
+        "sources": [
+          "vibecoded-design-tells",
+          "signs-of-ai-design",
+          "local-policy"
+        ]
+      }
+    },
+    {
+      "id": "G08",
+      "name": "generic-footer-columns-render",
+      "family": "footer-default",
+      "severity": "P1",
+      "weight": 1,
+      "note": "Footer renders as a repeated multi-column link directory. Review whether the actual information architecture requires this structure or a default SaaS footer was inherited.",
+      "evidence": {
+        "grade": "moderate",
+        "falsePositiveRisk": "high",
+        "sources": [
+          "vibecoded-design-tells",
+          "signs-of-ai-design",
+          "local-policy"
+        ]
+      }
+    },
+    {
+      "id": "G65",
+      "name": "repeated-default-cta-pair-render",
+      "family": "action-default",
+      "severity": "P1",
+      "weight": 1,
+      "note": "Filled-primary plus outlined-secondary action pairs repeat across multiple rendered sections. Review whether each pair reflects real action hierarchy or a stock CTA pattern.",
+      "evidence": {
+        "grade": "moderate",
+        "falsePositiveRisk": "medium",
+        "sources": [
+          "no-slop-ui",
+          "local-policy"
+        ]
+      }
+    },
+    {
+      "id": "G63",
+      "name": "saas-meta-template-render",
+      "family": "marketing-meta-template",
+      "severity": "P1",
+      "weight": 3,
+      "note": "Rendered page combines a centered hero, three-equal repeated content, pricing evidence, FAQ evidence, and a closing action zone. Review whether the sequence follows the product story or an inherited SaaS scaffold.",
+      "evidence": {
+        "grade": "high",
+        "falsePositiveRisk": "medium",
+        "sources": [
+          "vibecoded-design-tells",
+          "signs-of-ai-design",
+          "design-homogenization-paper",
+          "local-policy"
+        ]
+      }
+    },
+    {
+      "id": "G30",
+      "name": "ghost-card-render",
+      "family": "elevation-language",
+      "severity": "P1",
+      "weight": 1,
+      "note": "Bordered card-like surfaces also use large soft shadows at meaningful density. Review whether two elevation languages are competing or the combination is an owned surface system.",
+      "evidence": {
+        "grade": "moderate",
+        "falsePositiveRisk": "medium",
+        "sources": [
+          "signs-of-ai-design",
+          "local-policy"
+        ]
+      }
+    },
+    {
+      "id": "G55",
+      "name": "flat-section-rhythm-render",
+      "family": "section-rhythm",
+      "severity": "P2",
+      "weight": 1,
+      "note": "Most rendered section gaps fall into the same narrow spacing band across a sufficiently long page. Review whether repeated rhythm reflects content relationships or an unexamined section template.",
+      "evidence": {
+        "grade": "policy",
+        "falsePositiveRisk": "medium",
+        "sources": [
+          "local-policy",
+          "design-homogenization-paper"
+        ]
+      }
+    },
+    {
+      "id": "G66",
+      "name": "kitchen-sink-card-render",
+      "family": "card-composition-density",
+      "severity": "P1",
+      "weight": 2,
+      "note": "Rendered card composition accumulates too many independent adornment roles (icon, multiple pills/tags, price, status, action) in one repeated unit. Review whether each facet belongs to the card's core job or decorative density has replaced hierarchy.",
+      "evidence": {
+        "grade": "moderate",
+        "falsePositiveRisk": "medium-high",
+        "sources": [
+          "pols-slop",
+          "signs-of-ai-design",
+          "local-policy"
+        ]
+      }
+    }
+  ],
+  "crossSurfaceRules": [
+    {
+      "id": "G02",
+      "name": "macro-reuse-cross-surface",
+      "family": "macro-reuse",
+      "severity": "P1",
+      "hardGate": false,
+      "clusterEligible": false,
+      "weight": 0,
+      "minimumZones": 3,
+      "minimumSimilarity": 0.84,
+      "note": "Different routes share a highly similar rendered macro skeleton. Review whether a shared product/system grammar justifies the repetition or content has been poured into the same default template.",
+      "evidence": {
+        "grade": "moderate",
+        "falsePositiveRisk": "medium",
+        "sources": [
+          "design-homogenization-paper",
+          "vibecoded-design-tells",
+          "local-policy"
+        ]
+      }
+    }
+  ]
+}

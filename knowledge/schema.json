@@ -1,0 +1,237 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:agent-hub:knowledge:index-schema",
+  "title": "Agent Knowledge Index",
+  "type": "object",
+  "required": [
+    "entries",
+    "duplicateClusters",
+    "catalogs"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "entries": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/entry"
+      }
+    },
+    "duplicateClusters": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/duplicateCluster"
+      }
+    },
+    "catalogs": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/catalog"
+      }
+    }
+  },
+  "$defs": {
+    "entry": {
+      "type": "object",
+      "required": [
+        "id",
+        "path",
+        "type",
+        "harness",
+        "scope",
+        "name",
+        "description",
+        "tags",
+        "triggers",
+        "status",
+        "canonicalId",
+        "contentHash"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique entry identifier, e.g. claude/impeccable or cursor-rule/ui-screenshot-verify"
+        },
+        "path": {
+          "type": "string",
+          "description": "Portable source locator such as ~/.agents/..., <project>/..., ~/..., or a public URL"
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "skill",
+            "rule",
+            "soul",
+            "agents-md",
+            "plugin-skill",
+            "external-skill"
+          ]
+        },
+        "harness": {
+          "type": "string",
+          "enum": [
+            "cursor",
+            "claude",
+            "codex",
+            "opencode",
+            "hermes",
+            "agents",
+            "plugin",
+            "external"
+          ]
+        },
+        "scope": {
+          "type": "string",
+          "enum": [
+            "global",
+            "project"
+          ]
+        },
+        "name": {
+          "type": "string",
+          "description": "Display name from frontmatter or folder/file basename"
+        },
+        "description": {
+          "type": "string",
+          "description": "Description from frontmatter; may be empty"
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 10
+        },
+        "triggers": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "active",
+            "archived",
+            "duplicate",
+            "catalog-only"
+          ]
+        },
+        "canonicalId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "When status is duplicate, points at the canonical entry id; otherwise null"
+        },
+        "contentHash": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$",
+          "description": "SHA-256 hex digest of normalized file content (CRLF to LF, trimmed)"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "duplicate"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "canonicalId": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "canonicalId"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "enum": [
+                  "active",
+                  "archived",
+                  "catalog-only"
+                ]
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "canonicalId": {
+                "type": "null"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "duplicateCluster": {
+      "type": "object",
+      "required": [
+        "contentHash",
+        "canonicalId",
+        "memberIds"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "contentHash": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "canonicalId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "memberIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 2
+        }
+      }
+    },
+    "catalog": {
+      "type": "object",
+      "required": [
+        "id",
+        "path",
+        "name",
+        "description",
+        "queryCommand"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "queryCommand": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "defaults": {
+    "reasoning": "inherit",
+    "isolation": "inherit",
+    "mutation": "inherit"
+  },
+  "skills": {
+    "code-simplification": {
+      "reasoning": "medium"
+    },
+    "codebase-design": {
+      "reasoning": "high"
+    },
+    "codex-dynamic-workflows": {
+      "reasoning": "high",
+      "isolation": "prefer"
+    },
+    "design-with-ai": {
+      "reasoning": "high"
+    },
+    "diagnose": {
+      "reasoning": "high",
+      "isolation": "prefer"
+    },
+    "improve-codebase-architecture": {
+      "reasoning": "high",
+      "isolation": "prefer"
+    },
+    "security-review": {
+      "reasoning": "high",
+      "isolation": "prefer",
+      "mutation": "read-only"
+    },
+    "source-driven-development": {
+      "reasoning": "medium"
+    },
+    "writing-ticks": {
+      "reasoning": "low"
+    }
+  }
+}

@@ -1,0 +1,110 @@
+<!-- policy-modules:start -->
+Policy modules:
+- policy-kernel
+- mutation
+- evidence
+- issues
+- reviews
+- publication
+<!-- policy-modules:end -->
+
+# Research issue(s)
+
+**Trigger:** “Research issue #N”, “research issues #A #B”, “is #N still an issue on latest dev?”, “triage/research this issue”.
+
+## Goal
+
+On the **latest development branch tip**, determine for each issue: what it really is, whether it still reproduces / needs work, whether it’s already fixed on that branch, whether an open (or merged) PR already covers it, whether a duplicate issue exists, **security relevance** (`none` / `possible` / `likely`), and a **priority** (`low` / `middle` / `high`) with short obvious reasons. Then **post a research review comment on each issue**.
+
+Do **not** open a PR unless the user also asked to create one.
+
+## Differs from
+
+| Skill | Owns |
+|---|---|
+| **github-delivery / this workflow** | Codebase + GitHub evidence, still-broken-on-dev?, open PR?, duplicate?, priority, **comment on the issue** |
+| **issue-workflow** | Filing/breaking down tracker artifacts (PRDs, slices) — not live “is it fixed on tip?” research |
+
+## Inputs
+
+- One or many issue numbers (`#12`, `#12 #34`, “issues 12 and 34”).
+- Default research head: repo’s **development branch** (often `dev` / `develop` / default trunk — detect; fetch latest). Do not assume `main` is “most up to date” if a dedicated development branch exists.
+
+## Composition handoff to create-PR
+
+When the same user request also asks to **create a PR**, this workflow owns the research verdict, not exhaustive implementation design.
+
+Once every requested issue has the required verdict/priority/security-relevance evidence and its required research comment is published, **research is complete**. For an issue whose verdict is **Needs fix on development**, hand the captured development-tip SHA, issue-conversation contract, duplicate/covering-PR result, and research verdict directly to `references/create-pr-for-issue.md` and begin that workflow’s implementation phase. Do **not** continue repository-wide call-site or integration-surface discovery merely to make the future implementation map exhaustive.
+
+On an unchanged development tip and unchanged authoritative issue conversation, `create-pr-for-issue` may reuse this evidence instead of repeating its need-to-fix preflight. Re-run research only when new evidence can invalidate the verdict: the development tip or issue scope changed materially, a concrete existing fix/covering PR/duplicate is discovered, or implementation exposes a product/scope contradiction. Finding another code consumer, adapter, edge case, test, GUI surface, or documentation path is implementation discovery, **not a reason to reopen research**.
+
+## Per-issue checklist
+
+Run for **each** issue (batch in parallel when independent). If **>3** issues: fan out with **subagents** (shared **Multi-PR / multi-issue fan-out**) — one issue per subagent; parent aggregates the chat table.
+
+1. **Fetch** — title, body, labels, state, author, assignees, linked PRs, timeline.
+2. **Restate the claim** — one sentence: what exact bug/feature/ask is this? Separate reporter’s theory from observable symptom.
+3. **Latest-dev check** — update/fetch the development branch tip. Search code + history for the behavior. Prefer a minimal repro/test on that tip when feasible. When making a runtime claim, use `references/runtime-evidence.md`: bind the attempt to the exact development-tip SHA/environment and preserve trigger, expected vs actual observations, and evidence. `not-reproduced` is **not** proof of fixed/shipped; if not tested or the attempt is blocked/inconclusive, say so and why.
+4. **Already fixed on development?** — cite commit SHA / merged PR if yes. Runtime non-reproduction alone is insufficient for this verdict; pair it with concrete code/history/fix evidence. Note if fixed on development but **not** on release/default. If so: follow shared **Backport / release branch** (ask once before opening a backport PR).
+5. **Existing PR?** — `gh pr list --search` / issue timeline for open or recently merged PRs that fix or reference it. If open PR exists: link it; do not propose a second PR.
+6. **Duplicate / same issue?** — search open+closed issues by keywords/symptoms. If duplicate: link the canonical issue (prefer older or clearly maintained). Don’t claim duplicate without a link.
+7. **Security relevance** — classify from title, body, labels, and what the code path touches (not from vibes alone):
+
+| Level | When |
+|---|---|
+| **none** | No credible auth/secrets/injection/access-control/crypto/privacy angle |
+| **possible** | Touches API, auth-adjacent UI, permissions, tokens, user data, or security labels — impact unclear without deeper review |
+| **likely** | Clear vuln class (XSS, SQLi, auth bypass, secret exposure, RCE, privilege escalation, etc.) or reporter frames a security bug |
+
+   - If **possible** or **likely**: note a **high-level** threat class only in public text (e.g. “authz”, “token handling”) — never steps to abuse. Treat **likely** as a default **high** priority signal unless clearly fixed/shipped.
+   - **Ask the user once** in chat (per batch is fine), using this shape:
+
+     > Security relevance **possible/likely** on #<ids>. Want me to run a security review on these issues and **post** a review comment on each? (Exploit/abuse details stay in chat only — public posts are redacted.)
+
+     Do **not** auto-run. If they say yes → `references/security-review.md` with issue targets + post redacted public comments (shared disclosure rules).
+8. **Priority** — pick one; reasons must be obvious from impact, not taste:
+
+| Priority | Typical signals |
+|---|---|
+| **high** | Crash, data loss, **likely security**, broken primary path, clear regression, blocks release |
+| **middle** | Real bug with workaround, moderate user impact, incomplete feature users expect, **possible** security without confirmed exploitability |
+| **low** | Polish, rare edge case, unclear/unrepro, pure enhancement, docs nit, security relevance **none** |
+
+9. **Verdict** — one of:
+
+| Verdict | Meaning |
+|---|---|
+| Needs fix on development | Still present / unimplemented on latest development tip |
+| Fixed on development, not released | On development tip only; missing from release/default |
+| Already fixed / shipped | On release/default or closed with the fix landed |
+| Covered by open PR | Work in progress — cite PR |
+| Duplicate | Same as another issue — cite canonical |
+| Not actionable / not a bug | Misconfig, upstream, insufficient info — say what is missing |
+
+## Comment on the issue (required)
+
+Post on **each** researched issue. Use the **Research (issue)** template in `references/comment-depth.md` (structured table + Evidence / Gaps / Recommended next). Fill every field; name paths, SHAs, and commands — do not post a vague stub.
+
+Prefix agent research comments with `[GD]`. Edit if updating; never a truncated stub then a full second comment.
+
+Also summarize the same table(s) to the user in chat. For multiple issues, one chat summary with a row per issue, plus per-issue GitHub comments.
+
+When runtime reproduction was attempted, include its state (`reproduced`, `not-reproduced`, `blocked/inconclusive`) and the exact head/environment at a concise level. Do not publicly dump sensitive logs, credentials, or exploit material.
+
+When any issue is **possible** or **likely** security: ask in chat with the wording above (review + post, redacted public / full detail in chat). Do not auto-start.
+
+When verdict is **Fixed on development, not released**: ask the backport question (shared rules). Do not open a backport unless they say yes.
+
+When the real need is a **PRD / vertical-slice breakdown** rather than tip research: say so and hand off to `issue-workflow`.
+
+Research may batch **comments**; it must **not** open PRs. Opening PRs is `create-pr-for-issue` only, one at a time unless the user explicitly demands a batch (including backports).
+
+## Done when
+
+- Every requested issue has verdict + priority + **security relevance** + evidence
+- Each has a research comment on GitHub
+- Runtime claims distinguish reproduced / not-reproduced / blocked-inconclusive and are head/environment-bound when an attempt was made
+- Security-review ask made when relevance is possible/likely
+- No PR opened unless also requested
+- No security review started unless the user said yes
+- For a composed research + create-PR request, the completed verdict/evidence is handed off once; unchanged research is not repeated and implementation discovery does not reopen this phase

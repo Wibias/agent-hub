@@ -1,0 +1,132 @@
+#!/usr/bin/env node
+/**
+ * Produce one authoritative ship decision from live evidence.
+ * Replayed snapshot files are integrity-checked diagnostic evidence and can
+ * never produce an authoritative ready result.
+ * Usage: node scripts/ship-gate.mjs OWNER/REPO PR_NUMBER [--snapshot FILE]
+ */
+import { readDeliveryWorkflowCheckpoint } from "./lib/delivery-workflow-controller.mjs";
+import { captureLiveSnapshot } from "./lib/live-snapshot.mjs";
+import { evaluateBaseHealthSnapshot } from "./lib/base-health-policy.mjs";
+import {
+  extractMutationModeArgs,
+  mutationProfile,
+} from "./lib/mutation-policy.mjs";
+import {
+  evaluateCodeownersSnapshot,
+  evaluateRequiredChecksSnapshot,
+  evaluateReviewPolicySnapshot,
+  evaluateReviewThreadsSnapshot,
+  evaluateWakeSnapshot,
+} from "./lib/snapshot-evaluators.mjs";
+import {
+  bindSnapshotGateToController,
+  parseSnapshotGateArgs,
+  readValidatedSnapshot,
+} from "./lib/snapshot-input.mjs";
+import { shipGateFailureOutput } from "./lib/ship-gate-failure.mjs";
+import { combineShipGateResults } from "./lib/ship-gate-policy.mjs";
+import { validateWorkflowMutationMode } from "./lib/workflow-mode.mjs";
+import { ownedHelperEffect } from "./lib/watchdog-evidence-registry.mjs";
+
+const usage =
+  "Usage: node scripts/ship-gate.mjs [OWNER/REPO PR_NUMBER] [--checkpoint FILE] [--snapshot FILE] [--expected-head SHA] [--max-age-seconds N] [--mutation-mode MODE] [--workflow WORKFLOW]";
+
+let failureStage = "argument_validation";
+
+try {
+  const mutationArgs = extractMutationModeArgs(process.argv.slice(2));
+  let args = parseSnapshotGateArgs(mutationArgs.argv, { usage });
+  if (args.checkpointPath) {
+    failureStage = "checkpoint_read";
+    const controller = readDeliveryWorkflowCheckpoint(args.checkpointPath);
+    const bound = bindSnapshotGateToController({ gate: args, controller });
+    args = {
+      ...args,
+      ...bound,
+      workflow: args.workflow || controller.workflow || null,
+    };
+  }
+  failureStage = "argument_validation";
+  if (args.workflow) {
+    const compatibility = validateWorkflowMutationMode({
+      workflow: args.workflow,
+      mutationMode: mutationArgs.mode,
+    });
+    if (!compatibility.valid) {
+      throw new Error(
+        `Mutation mode "${compatibility.mutationMode}" is not compatible with workflow "${args.workflow}": ${compatibility.reason}${compatibility.allowedModes.length ? ` (allowed: ${compatibility.allowedModes.join(", ")})` : ""}`,
+      );
+    }
+  }
+  const replay = Boolean(args.snapshotPath);
+  failureStage = replay ? "snapshot_replay" : "live_snapshot_capture";
+  const snapshot = replay
+    ? readValidatedSnapshot({
+        path: args.snapshotPath,
+        repo: args.repo,
+        pr: args.pr,
+        expectedHead: args.expectedHead,
+        maxAgeSeconds: args.maxAgeSeconds,
+        requireIntegrity: true,
+      })
+    : captureLiveSnapshot({
+        repo: args.repo,
+        pr: args.pr,
+        expectedHead: args.expectedHead,
+        maxAgeSeconds: args.maxAgeSeconds,
+      });
+
+  failureStage = "evaluation";
+  const requiredChecks = evaluateRequiredChecksSnapshot(snapshot);
+  const authoritativeChecks = snapshot.evidence?.checks?.authoritative || null;
+  if (authoritativeChecks?.sha) {
+    requiredChecks.sha = authoritativeChecks.sha;
+    requiredChecks.authoritativeCheckSha = authoritativeChecks.sha;
+    requiredChecks.authoritativeCheckReason = authoritativeChecks.reason || null;
+  } else {
+    requiredChecks.authoritativeCheckSha = requiredChecks.sha || snapshot.headOid || null;
+    requiredChecks.authoritativeCheckReason = "legacy_head_snapshot";
+  }
+
+  const output = combineShipGateResults({
+    snapshot,
+    mutationProfile: mutationProfile(mutationArgs.mode),
+    requiredChecks,
+    baseHealth: evaluateBaseHealthSnapshot(snapshot),
+    reviewPolicy: evaluateReviewPolicySnapshot(snapshot),
+    reviewThreads: evaluateReviewThreadsSnapshot(snapshot),
+    wake: evaluateWakeSnapshot(snapshot),
+    codeowners: evaluateCodeownersSnapshot(snapshot),
+  });
+  output.workflow = args.workflow;
+  output.evidenceMode = replay ? "snapshot_replay" : "live_capture";
+  output.authoritative = !replay;
+  output.gdEffect = {
+    ...ownedHelperEffect("ship-gate.mjs"),
+    key: `pr-ship-gate:${args.repo}:${args.pr}`,
+    authoritative: !replay,
+  };
+  if (replay && output.ready) {
+    output.replayDecision = output.decision;
+    output.decision = "unknown";
+    output.ready = false;
+    output.blocked = false;
+    output.unknown = true;
+    output.complete = false;
+    output.unknowns = [
+      ...new Set([...(output.unknowns || []), "snapshot_replay_not_authoritative"]),
+    ];
+  }
+
+  process.stdout.write(`${JSON.stringify(output, null, 2)}\n`);
+  process.exitCode = output.ready ? 0 : output.blocked ? 1 : 2;
+} catch (error) {
+  if (failureStage === "live_snapshot_capture") {
+    const output = shipGateFailureOutput(error, { stage: failureStage });
+    process.stdout.write(`${JSON.stringify(output, null, 2)}\n`);
+  } else {
+    console.error(String(error?.message || error));
+  }
+  process.exitCode = 2;
+}

@@ -1,0 +1,56 @@
+{
+  "version": 1,
+  "profiles": {
+    "quick": { "min": 3, "default": 4, "max": 6 },
+    "standard": { "min": 8, "default": 12, "max": 16 },
+    "deep": { "min": 20, "default": 28, "max": 40 }
+  },
+  "primaryStrata": {
+    "direct-domain": { "productionTarget": 180, "deepMin": 6, "deepMax": 12 },
+    "adjacent-domain": { "productionTarget": 120, "deepMin": 5, "deepMax": 10 },
+    "outside-domain": { "productionTarget": 120, "deepMin": 4, "deepMax": 8 },
+    "evidence-craft": { "productionTarget": 180, "deepMin": 5, "deepMax": 10 }
+  },
+  "surfaceFamilies": {
+    "public-home": 40,
+    "authenticated-home": 50,
+    "operator-control": 60,
+    "library-launcher": 50,
+    "creation-setup": 50,
+    "realtime-multiplayer": 50,
+    "admin-settings": 40,
+    "auth-onboarding": 40,
+    "commerce-checkout": 40,
+    "mobile-responsive": 50,
+    "editorial-experimental": 60,
+    "design-system-craft": 70
+  },
+  "platformTargets": {
+    "web-responsive": 450,
+    "native-mobile": 150
+  },
+  "ttlDays": {
+    "current-gallery": 60,
+    "product-flow": 90,
+    "design-system": 180,
+    "research-craft": 365,
+    "access-pricing": 30
+  },
+  "status": ["candidate", "reviewed", "stale", "archived"],
+  "accessStatuses": ["AVAILABLE", "PAYWALLED", "BLOCKED", "UNAVAILABLE"],
+  "sourceKinds": [
+    "underlying-product",
+    "flow",
+    "case-study",
+    "guideline",
+    "design-system",
+    "interaction-example"
+  ],
+  "evidenceClasses": [
+    "TESTED",
+    "OBSERVED",
+    "INTERPRETED",
+    "INSPIRATION",
+    "MARKETING_CLAIM"
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id", "verdict", "reviewer", "reviewedAt", "sourceChecked",
+    "rightsChecked", "duplicateChecked", "notes"
+  ],
+  "properties": {
+    "id": { "type": "string", "pattern": "^(ref|pattern)-" },
+    "verdict": { "enum": ["approve", "reject"] },
+    "reviewer": { "type": "string", "minLength": 2 },
+    "reviewedAt": { "type": "string", "format": "date" },
+    "sourceChecked": { "const": true },
+    "rightsChecked": { "const": true },
+    "duplicateChecked": { "const": true },
+    "notes": { "type": "string", "minLength": 8 }
+  }
+}

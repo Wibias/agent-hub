@@ -1,0 +1,1617 @@
+{
+  "entries": [
+    {
+      "id": "agents/agents-md",
+      "path": "~/.agents/AGENTS.md",
+      "type": "agents-md",
+      "harness": "agents",
+      "scope": "global",
+      "name": "AGENTS.md",
+      "description": "",
+      "tags": [
+        "agents",
+        "md",
+        "agent",
+        "hub",
+        "canonical",
+        "rules"
+      ],
+      "triggers": [],
+      "status": "active",
+      "canonicalId": null,
+      "contentHash": "3363337d3dc91941c4f54418dd6bbda3e1f4e9ad42631d881ff8056906ae4b6a"
+    },
+    {
+      "id": "agents/ai-agent-security",
+      "path": "~/.agents/skills/ai-agent-security/SKILL.md",
+      "type": "skill",
+      "harness": "agents",
+      "scope": "global",
+      "name": "ai-agent-security",
+      "description": "Security assessment and hardening for LLM applications, AI agents, RAG, and MCP-based tool systems against prompt injection, tool poisoning, MCP server compromise, model and data poisoning, vector/embedding weaknesses, guardrail evasion, and LLM red-teaming. Use when threat-modeling, security-reviewing, hardening, or red-teaming an agent pipeline, RAG system, MCP integration, or LLM feature. Not for ordinary implementation of those systems without a security objective. Distinct from security-review (classic app/API code), audit-tooling (SARIF/Semgrep toolchain selection), fuzzing-and-testing (native-code harness fuzzing), and smart-contract-security (blockchain/Solidity). Does not cover C2 infrastructure or offensive adversarial exploitation of production systems you do not own.",
+      "tags": [
+        "ai",
+        "agent",
+        "security"
+      ],
+      "triggers": [
+        "Security assessment and hardening for LLM applications",
+        "AI agents",
+        "RAG",
+        "and MCP-based tool systems against prompt injection",
+        "tool poisoning",
+        "MCP server compromise",
+        "model and data poisoning",
+        "vector/embedding weaknesses"
+      ],
+      "status": "active",
+      "canonicalId": null,
+      "contentHash": "07153a707cef6e44e23e50de06d732b1ac45c2d6ce15f37762defa798f701d23"
+    },
+    {
+      "id": "agents/babysit",
+      "path": "~/.agents/skills/babysit-redirect/SKILL.md",
+      "type": "skill",
+      "harness": "agents",
+      "scope": "global",
+      "name": "babysit",
+      "description": "Compatibility redirect for the explicit babysit alias and requests to watch or monitor a GitHub PR or CI loop. Routes to github-delivery; not a standalone PR or CI workflow.",
+      "tags": [
+        "babysit",
+        "github-delivery"
+      ],
+      "triggers": [
+        "not a standalone PR or CI workflow"
+      ],
+      "status": "active",
+      "canonicalId": null,
+      "contentHash": "98c158429e892cf515ec6fb27435a747878ebc49d835a13fff162e55f7bac9b0"
+    },
+    {
+      "id": "agents/babysit-pr",
+      "path": "~/.agents/skills/babysit-pr-redirect/SKILL.md",
+      "type": "skill",
+      "harness": "agents",
+      "scope": "global",
+      "name": "babysit-pr",
+      "description": "Compatibility redirect for the explicit babysit-pr alias and requests to babysit a GitHub pull request. Routes to github-delivery; not a standalone PR or CI workflow.",
+      "tags": [
+        "babysit",
+        "pr",
+        "babysit-pr",
+        "github-delivery"
+      ],
+      "triggers": [
+        "not a standalone PR or CI workflow"
+      ],
+      "status": "active",
+      "canonicalId": null,
+      "contentHash": "83ed5059de9387a94b584487bae81c2e380fc0823a6fc95fc549d90bc31f85d2"
+    },
+    {
+      "id": "agents/babysit-pr~2",
+      "path": "~/.agents/skills/github-delivery/overrides/babysit-pr/SKILL.md",
+      "type": "skill",
+      "harness": "agents",
+      "scope": "global",
+      "name": "babysit-pr",
+      "description": "Compatibility redirect for the explicit babysit-pr alias and requests to babysit a GitHub pull request. Routes to github-delivery; not a standalone PR or CI workflow.",
+      "tags": [
+        "babysit",
+        "pr",
+        "babysit-pr",
+        "github-delivery"
+      ],
+      "triggers": [
+        "not a standalone PR or CI workflow"
+      ],
+      "status": "duplicate",
+      "canonicalId": "agents/babysit-pr",
+      "contentHash": "83ed5059de9387a94b584487bae81c2e380fc0823a6fc95fc549d90bc31f85d2"
+    },
+    {
+      "id": "agents/babysit~2",
+      "path": "~/.agents/skills/github-delivery/overrides/babysit/SKILL.md",
+      "type": "skill",
+      "harness": "agents",
+      "scope": "global",
+      "name": "babysit",
+      "description": "Compatibility redirect for the explicit babysit alias and requests to watch or monitor a GitHub PR or CI loop. Routes to github-delivery; not a standalone PR or CI workflow.",
+      "tags": [
+        "babysit",
+        "github-delivery"
+      ],
+      "triggers": [
+        "not a standalone PR or CI workflow"
+      ],
+      "status": "duplicate",
+      "canonicalId": "agents/babysit",
+      "contentHash": "98c158429e892cf515ec6fb27435a747878ebc49d835a13fff162e55f7bac9b0"
+    },
+    {
+      "id": "agents/code-simplification",
+      "path": "~/.agents/skills/code-simplification/SKILL.md",
+      "type": "skill",
+      "harness": "agents",
+      "scope": "global",
+      "name": "code-simplification",
+      "description": "Specialist behavior-preserving readability refactor for already-working code. Use only when the user explicitly names code-simplification or asks for that named specialist. Covers guard clauses, descriptive names, local deduplication, and extraction of duplicated logic without changing behavior. Not for ordinary cleanup or generic simplify requests; use simplify.",
+      "tags": [
+        "code",
+        "simplification"
+      ],
+      "triggers": [
+        "descriptive names",
+        "local deduplication",
+        "and extraction of duplicated logic without changing behavior. Not for ordinary cleanup or generic simplify requests",
+        "use simplify"
+      ],
+      "status": "active",
+      "canonicalId": null,
+      "contentHash": "5229d81ac6464b04ffc973f81e56ee539cdfcb1d658ee5712c4c6642d57df5e0"
+    },
+    {
+      "id": "agents/codebase-design",
+      "path": "~/.agents/skills/codebase-design/SKILL.md",
+      "type": "skill",
+      "harness": "agents",
+      "scope": "global",
+      "name": "codebase-design",
+      "description": "Shared vocabulary for designing deep modules, plus the design-it-twice pass that generates radically different module interfaces and compares them. Use when the user wants to design or improve a module interface, explore interface shapes, compare calling patterns, mentions \"design it twice\", find deepening opportunities, decide where a seam goes, make code more testable or AI-navigable, or design/evolve a public interface contract. Not visual UI (design-with-ai / impeccable) and not the architecture HTML scan (improve-codebase-architecture).",
+      "tags": [
+        "codebase",
+        "design"
+      ],
+      "triggers": [
+        "Shared vocabulary for designing deep modules",
+        "plus the design-it-twice pass that generates radically different module interfaces and compares them.",
+        "the user wants to design or improve a module interface",
+        "explore interface shapes",
+        "compare calling patterns",
+        "mentions \"design it twice\"",
+        "find deepening opportunities",
+        "decide where a seam goes"
+      ],
+      "status": "active",
+      "canonicalId": null,
+      "contentHash": "3af1cc0da38857b243a7c08c79db9c26d84c940bc01ed1b22e2ba69b4f8d468d"
+    },
+    {
+      "id": "agents/codex-dynamic-workflows",
+      "path": "~/.agents/skills/codex-dynamic-workflows/SKILL.md",
+      "type": "skill",
+      "harness": "agents",
+      "scope": "global",
+      "name": "codex-dynamic-workflows",
+      "description": "Plans and runs explicit AI-agent orchestration for complex work. Use when the user explicitly asks for a swarm, subagents, parallel agents, a dynamic workflow, multi-track orchestration, goal mode, or Claude Code-style orchestration. A migration, audit, or research task does not trigger this merely because it is large; the domain skill keeps primary ownership unless orchestration is requested. Differs from superpowers:dispatching-parallel-agents (agent dispatch only) and superpowers:subagent-driven-development (dev-focused) by providing an artifact-backed orchestration loop with reusable workflow recipes.",
+      "tags": [
+        "codex",
+        "dynamic",
+        "workflows",
+        "agent"
+      ],
+      "triggers": [
+        "Plans and runs explicit AI-agent orchestration for complex work.",
+        "the user explicitly asks for a swarm",
+        "subagents",
+        "parallel agents",
+        "a dynamic workflow",
+        "multi-track orchestration",
+        "goal mode",
+        "or Claude Code-style orchestration. A migration"
+      ],
+      "status": "active",
+      "canonicalId": null,
+      "contentHash": "9da038144f72bbb2a9c91ec1ee82d99d6ebd25b7811ab58b0a28929b1ef0c82a"
+    },
+    {
+      "id": "agents/context-engineering",
+      "path": "~/.agents/skills/context-engineering/SKILL.md",
+      "type": "skill",
+      "harness": "agents",
+      "scope": "global",
+      "name": "context-engineering",
+      "description": "Author or repair project rules files (AGENTS.md, CLAUDE.md, .cursorrules) and pack task-local context. Use when creating or rewriting those files, when the agent ignores project conventions, or when a feature needs a packed brief. Do not use at the start of every session; hub AGENTS.md already owns default operating rules.",
+      "tags": [
+        "context",
+        "engineering"
+      ],
+      "triggers": [
+        "Author or repair project rules files (AGENTS.md",
+        "CLAUDE.md",
+        ".cursorrules) and pack task-local context.",
+        "creating or rewriting those files",
+        "when the agent ignores project conventions",
+        "or when a feature needs a packed brief. Do not use at the start of every session",
+        "hub AGENTS.md already owns default operating rules"
+      ],
+      "status": "active",
+      "canonicalId": null,
+      "contentHash": "6231dc82078339176c0515842656eef6a0a08b17b68bd128f7be5c967395a04d"
+    },
+    {
+      "id": "agents/context-md",
+      "path": "~/.agents/CONTEXT.md",
+      "type": "agents-md",
+      "harness": "agents",
+      "scope": "global",
+      "name": "CONTEXT.md",
+      "description": "",
+      "tags": [
+        "agents",
+        "md",
+        "context",
+        "shared",
+        "language"
+      ],
+      "triggers": [],
+      "status": "active",
+      "canonicalId": null,
+      "contentHash": "411e3799ef60f0ba29425bf2e27441e0a2ce6035ac7545a5379b01dca2925e6a"
+    },
+    {
+      "id": "agents/conversion-pages",
+      "path": "~/.agents/skills/conversion-pages/SKILL.md",
+      "type": "skill",
+      "harness": "agents",
+      "scope": "global",
+      "name": "conversion-pages",
+      "description": "Designs and writes high-conversion landing pages and pricing pages for SaaS products and services. Use when the user asks to build, rewrite, audit, or optimize a landing page or pricing page with conversion, persuasion, or CRO goals. Differentiator: covers CRO/AIDA frameworks, objection handling, SEO/AEO setup, and page-type-specific layout patterns for both landing and pricing pages -- distinct from impeccable (general frontend quality workflow), design-styles (visual style and taste), and writing-ticks (prose anti-slop). Product microcopy stays with `intent` plus `references/content-strategy.md` because `articulate` is not installed.",
+      "tags": [
+        "conversion",
+        "pages",
+        "landing",
+        "pricing"
+      ],
+      "triggers": [
+        "Designs and writes high-conversion landing pages and pricing pages for SaaS products and services.",
+        "the user asks to build",
+        "rewrite",
+        "audit",
+        "or optimize a landing page or pricing page with conversion",
+        "persuasion",
+        "or CRO goals. Differentiator: covers CRO/AIDA frameworks",
+        "objection handling"
+      ],
+      "status": "active",
+      "canonicalId": null,
+      "contentHash": "20842d58f6807e99d10cc5d93b6b74fbca55fdfa4e45f3fafe909c2ed0df635c"
+    },
+    {
+      "id": "agents/create-pr-from-local-work",
+      "path": "~/.agents/skills/create-pr-from-local-work-redirect/SKILL.md",
+      "type": "skill",
+      "harness": "agents",
+      "scope": "global",
+      "name": "create-pr-from-local-work",
+      "description": "Compatibility redirect for publishing already-existing local work as a GitHub pull request when no issue number is supplied. Use when the user says create a PR, open a PR, push and create a PR, or publish local work as a pull request. Routes to github-delivery. Not for issue-linked PR creation or non-GitHub publication.",
+      "tags": [
+        "create",
+        "pr",
+        "from",
+        "local",
+        "work",
+        "create-pr-from-local-work",
+        "github-delivery"
+      ],
+      "triggers": [
+        "the user says create a PR",
+        "open a PR",
+        "push and create a PR"
+      ],
+      "status": "active",
+      "canonicalId": null,
+      "contentHash": "8e97f1849d7b7724106b5ff0d566883e9f71c15dfc3c3d0274d63bb3755dfeb9"
+    },
+    {
+      "id": "agents/deprecation-and-migration",
+      "path": "~/.agents/skills/deprecation-and-migration/SKILL.md",
+      "type": "skill",
+      "harness": "agents",
+      "scope": "global",
+      "name": "deprecation-and-migration",
+      "description": "Plan and execute safe retirement or migration of an API, feature, subsystem, dependency, data model, or database schema. Use when replacing legacy systems, removing old behavior, migrating consumers, sunsetting features, or making production schema changes that need expand/backfill/contract safety. Not for changelog/release communication alone (github-delivery), code simplification without migration semantics, or greenfield interface design.",
+      "tags": [
+        "deprecation",
+        "and",
+        "migration"
+      ],
+      "triggers": [
+        "Plan and execute safe retirement or migration of an API",
+        "feature",
+        "subsystem",
+        "dependency",
+        "data model",
+        "or database schema.",
+        "replacing legacy systems",
+        "removing old behavior"
+      ],
+      "status": "active",
+      "canonicalId": null,
+      "contentHash": "0e4014456c7c77e6c714dd9841d5c5ca7a9989ab74284dc0782a1c90a9cb63ac"
+    },
+    {
+      "id": "agents/design-with-ai",
+      "path": "~/.agents/skills/design-with-ai/SKILL.md",
+      "type": "skill",
+      "harness": "agents",
+      "scope": "global",
+      "name": "design-with-ai",
+      "description": "Canonical default visible-UI design owner for intentional, anti-slop product surfaces. Use for generic look-better/polish and visual-hierarchy requests, surface audits, restyles, redesigns, new product UI, product-UI charts/data visualization, native/mobile UI, design specs/prompts, motion opportunities/audits/reviews, animation performance, or naming a motion effect. Commands: audit-surface, improve-existing, restyle-existing, redesign-existing, build-product-surface, design-spec, motion-opportunities, motion-audit, motion-review, motion-optimize, motion-name. Not for backend-only work, standalone analytical/report chart generation, API/module interface design (use codebase-design), copy-only edits, general code review, or explicit impeccable invocations.",
+      "tags": [
+        "design",
+        "with",
+        "ai"
+      ],
+      "triggers": [
+        "Canonical default visible-UI design owner for intentional",
+        "anti-slop product surfaces.",
+        "generic look-better/polish and visual-hierarchy requests",
+        "surface audits",
+        "restyles",
+        "redesigns",
+        "new product UI",
+        "product-UI charts/data visualization"
+      ],
+      "status": "active",
+      "canonicalId": null,
+      "contentHash": "7a9a4edaab7eb6102925039ec75c177d077bd12e0634ea8a831833541b1444ab"
+    },
+    {
+      "id": "agents/diagnose",
+      "path": "~/.agents/skills/diagnose/SKILL.md",
+      "type": "skill",
+      "harness": "agents",
+      "scope": "global",
+      "name": "diagnose",
+      "description": "Disciplined diagnosis loop for hard bugs, false-success writes, and performance regressions: reproduce, minimise, hypothesise, instrument, fix, regression-test. Use when a bug resists quick investigation, a write/patch/apply tool reports success but the file is unchanged, the same edit path fails more than once, you need a structured feedback-loop strategy, or the user says \"diagnose this\". Differentiator: superpowers:systematic-debugging is a lightweight first-pass for any bug; this skill is for the hard cases that require deliberate loop-building, bisection, and instrumentation discipline.",
+      "tags": [
+        "diagnose"
+      ],
+      "triggers": [
+        "Disciplined diagnosis loop for hard bugs",
+        "false-success writes",
+        "and performance regressions: reproduce",
+        "minimise",
+        "hypothesise",
+        "instrument",
+        "fix",
+        "regression-test."
+      ],
+      "status": "active",
+      "canonicalId": null,
+      "contentHash": "0aa4f7af6d0ab61a7e9271c28bd9fc25042afac7b2bd88e1e3c2c02685b88c60"
+    },
+    {
+      "id": "agents/domain-modeling",
+      "path": "~/.agents/skills/domain-modeling/SKILL.md",
+      "type": "skill",
+      "harness": "agents",
+      "scope": "global",
+      "name": "domain-modeling",
+      "description": "Build and sharpen a project's domain model. Use when the user wants to pin down domain terminology or a ubiquitous language, record an architectural decision, or when another skill needs to maintain the domain model.",
+      "tags": [
+        "domain",
+        "modeling"
+      ],
+      "triggers": [
+        "Build and sharpen a project's domain model.",
+        "the user wants to pin down domain terminology or a ubiquitous language",
+        "record an architectural decision",
+        "or when another skill needs to maintain the domain model"
+      ],
+      "status": "active",
+      "canonicalId": null,
+      "contentHash": "c98974d5c8464ddf955398b15f46d7afe10f352d3095227825d7b89107fff2dc"
+    },
+    {
+      "id": "agents/extract-approach",
+      "path": "~/.agents/skills/extract-approach/SKILL.md",
+      "type": "skill",
+      "harness": "agents",
+      "scope": "global",
+      "name": "extract-approach",
+      "description": "Capture a reusable decision rule into local ~/.agents/memory after a verified solve that produced a non-obvious insight. Use when the user explicitly asks to extract an approach, write a learning, remember a verified lesson, or when a completed solve clearly passes the reusable-insight trigger gate. Do not use for routine work, unverified attempts, stable reference facts, or session narration.",
+      "tags": [
+        "extract",
+        "approach"
+      ],
+      "triggers": [
+        "Capture a reusable decision rule into local ~/.agents/memory after a verified solve that produced a non-obvious insight.",
+        "the user explicitly asks to extract an approach",
+        "write a learning",
+        "remember a verified lesson",
+        "or when a completed solve clearly passes the reusable-insight trigger gate. Do not",
+        "routine work",
+        "unverified attempts",
+        "stable reference facts"
+      ],
+      "status": "active",
+      "canonicalId": null,
+      "contentHash": "ea182fd1e4f26004fb784ffb125a0b7cb87dee485a8361e5cbea6fe1c68c4dcb"
+    },
+    {
+      "id": "agents/firecrawl",
+      "path": "~/.agents/skills/firecrawl/SKILL.md",
+      "type": "skill",
+      "harness": "agents",
+      "scope": "global",
+      "name": "firecrawl",
+      "description": "Firecrawl web search, scrape, and interact tooling for agents. Use when installing or driving the Firecrawl CLI, integrating Firecrawl into app code, or producing research/SEO/lead workflows from live web data.",
+      "tags": [
+        "firecrawl"
+      ],
+      "triggers": [
+        "Firecrawl web search",
+        "scrape",
+        "and interact tooling for agents.",
+        "installing or driving the Firecrawl CLI",
+        "integrating Firecrawl into app code",
+        "or producing research/SEO/lead workflows from live web data"
+      ],
+      "status": "active",
+      "canonicalId": null,
+      "contentHash": "97d988af25702b5164a2768f9cdcf932ea88398da472474321d7360168531891"
+    },
+    {
+      "id": "agents/fortify",
+      "path": "~/.agents/skills/fortify/SKILL.md",
+      "type": "skill",
+      "harness": "agents",
+      "scope": "global",
+      "name": "fortify",
+      "description": "Harden designs for real-world use outside the happy path: state inventories, error recovery, empty/loading/offline states, first-run, stress tests, i18n readiness, and latency. Use for edge cases, \"what happens when\", \"what if the user\", harden this design, or failure-mode review.",
+      "tags": [
+        "fortify"
+      ],
+      "triggers": [
+        "Harden designs for real-world use outside the happy path: state inventories",
+        "error recovery",
+        "empty/loading/offline states",
+        "first-run",
+        "stress tests",
+        "i18n readiness",
+        "and latency.",
+        "edge cases"
+      ],
+      "status": "active",
+      "canonicalId": null,
+      "contentHash": "cb5e6ced27979254c66186b5d641348a1aa18c3e8ab850551be28bdcadf31382"
+    },
+    {
+      "id": "agents/github-delivery",
+      "path": "~/.agents/skills/github-delivery/SKILL.md",
+      "type": "skill",
+      "harness": "agents",
+      "scope": "global",
+      "name": "github-delivery",
+      "description": "Owns Git/GitHub delivery from scoped repository work through pull requests, reviews and CI handling, backports, release preparation, merge, and closure. Use for GitHub pull request or PR delivery, PR security reviews, branch or commit operations, release preparation, stacked or backport PRs, ongoing PR and CI watch or monitoring. Default mode is read-only. Not for general local debugging, non-GitHub planning, or skill authoring.",
+      "tags": [
+        "github",
+        "delivery"
+      ],
+      "triggers": [
+        "Owns Git/GitHub delivery from scoped repository work through pull requests",
+        "reviews and CI handling",
+        "backports",
+        "release preparation",
+        "merge",
+        "and closure.",
+        "GitHub pull request or PR delivery",
+        "PR security reviews"
+      ],
+      "status": "active",
+      "canonicalId": null,
+      "contentHash": "42787f40b312a422780fde7816926ffdf626256b1e617439d55a50f610bbe81b"
+    },
+    {
+      "id": "agents/grilling",
+      "path": "~/.agents/skills/grilling/SKILL.md",
+      "type": "skill",
+      "harness": "agents",
+      "scope": "global",
+      "name": "grilling",
+      "description": "Interview the user to reach shared understanding before acting. Use when the user says grill, grill me, stress-test this plan/decision/idea, wants a decision-tree interview, or explicitly wants intent extracted before a spec. `decision` mode preserves the multi-question frontier/tree workflow; `intent` mode asks one question at a time to discover outcome, user, success, binding constraint and out-of-scope. Called by improve-codebase-architecture after a candidate is picked. Not a code review and not an implementation skill.",
+      "tags": [
+        "grilling"
+      ],
+      "triggers": [
+        "Interview the user to reach shared understanding before acting.",
+        "the user says grill",
+        "grill me",
+        "stress-test this plan/decision/idea",
+        "wants a decision-tree interview",
+        "or explicitly wants intent extracted before a spec. `decision` mode preserves the multi-question frontier/tree workflow",
+        "`intent` mode asks one question at a time to discover outcome",
+        "user"
+      ],
+      "status": "active",
+      "canonicalId": null,
+      "contentHash": "655d0a2872e624a07828dc3ee3a2c438d6f0db20a836ae425040c4416bce05a2"
+    },
+    {
+      "id": "agents/handoff",
+      "path": "~/.agents/skills/handoff/SKILL.md",
+      "type": "skill",
+      "harness": "agents",
+      "scope": "global",
+      "name": "handoff",
+      "description": "Compacts the current conversation into a structured handoff document so a fresh agent or session can continue the work without the original chat history. Captures current goal, completed steps, open decisions, files touched, known failures, next concrete steps, and a suggested-skills section. Saves the document to the OS temp directory, not the workspace. Use when the user says \"create a handoff\", \"hand this off\", \"hitting context limits\", \"switching focus\", or before archiving a long session. Does not duplicate content already in PRDs, plans, ADRs, issues, or commits -- references those by path or URL instead.",
+      "tags": [
+        "handoff"
+      ],
+      "triggers": [
+        "completed steps",
+        "open decisions",
+        "files touched",
+        "known failures",
+        "next concrete steps",
+        "and a suggested-skills section. Saves the document to the OS temp directory",
+        "not the workspace.",
+        "the user says \"create a handoff\""
+      ],
+      "status": "active",
+      "canonicalId": null,
+      "contentHash": "f2211d1d0a735bdf069fe78352c15986b84a139c6bd908995df50a042dc18f15"
+    },
+    {
+      "id": "agents/impeccable",
+      "path": "~/.agents/skills/impeccable/SKILL.md",
+      "type": "skill",
+      "harness": "agents",
+      "scope": "global",
+      "name": "impeccable",
+      "description": "Explicit-only Impeccable frontend design specialist. Use only when the user explicitly names impeccable, invokes /impeccable, or explicitly asks to use this named specialist. Handles the Impeccable command set and its frontend design workflow. Not for ordinary UI polish, visual hierarchy, redesign, audit, motion, or generic frontend design requests; use design-with-ai instead. Not for backend-only or non-UI tasks.",
+      "tags": [
+        "impeccable"
+      ],
+      "triggers": [
+        "Explicit-only Impeccable frontend design specialist. Use only when the user explicitly names impeccable",
+        "invokes /impeccable",
+        "visual hierarchy",
+        "redesign",
+        "audit",
+        "motion",
+        "or generic frontend design requests",
+        "use design-with-ai instead. Not for backend-only or non-UI tasks"
+      ],
+      "status": "active",
+      "canonicalId": null,
+      "contentHash": "192ab5d85a53d4e6385f928af9b8b34adb20549444d6152d4997672061a9484d"
+    },
+    {
+      "id": "agents/improve-codebase-architecture",
+      "path": "~/.agents/skills/improve-codebase-architecture/SKILL.md",
+      "type": "skill",
+      "harness": "agents",
+      "scope": "global",
+      "name": "improve-codebase-architecture",
+      "description": "Scan a codebase for deepening opportunities, write a visual HTML report in the OS temp directory, then grill the chosen candidate. Use when the user wants an architecture review, shallow-module hunt, or deepening roadmap. Not the deep-module vocabulary or design-it-twice owner (codebase-design).",
+      "tags": [
+        "improve",
+        "codebase",
+        "architecture"
+      ],
+      "triggers": [
+        "Scan a codebase for deepening opportunities",
+        "write a visual HTML report in the OS temp directory",
+        "then grill the chosen candidate.",
+        "the user wants an architecture review",
+        "shallow-module hunt",
+        "or deepening roadmap. Not the deep-module vocabulary or design-it-twice owner (codebase-design)"
+      ],
+      "status": "active",
+      "canonicalId": null,
+      "contentHash": "7a021e1961cbcdf17703cf9fdfb7ff1de1f72fbd0c4b2f910ddc0ad256ea6645"
+    },
+    {
+      "id": "agents/improve-react",
+      "path": "~/.agents/skills/improve-react/SKILL.md",
+      "type": "skill",
+      "harness": "agents",
+      "scope": "global",
+      "name": "improve-react",
+      "description": "Survey a React codebase as a senior React engineer using React Doctor scan evidence, then write prioritized self-contained plans (read-only on source). Use when the user asks to improve React code, audit the React codebase, make the app faster or more robust, or wants a roadmap of React fixes. For regression checks or fix-now triage use the React Doctor CLI or a project-local React Doctor skill when installed. Not for visual taste (design-styles) or browser automation (playwright).",
+      "tags": [
+        "improve",
+        "react",
+        "improving"
+      ],
+      "triggers": [
+        "Survey a React codebase as a senior React engineer using React Doctor scan evidence",
+        "then write prioritized self-contained plans (read-only on source).",
+        "the user asks to improve React code",
+        "audit the React codebase",
+        "make the app faster or more robust"
+      ],
+      "status": "active",
+      "canonicalId": null,
+      "contentHash": "0349ac0a1a541d906347bccd1e7ce2910f208819c80dec8741558da6c14b4193"
+    },
+    {
+      "id": "agents/intent",
+      "path": "~/.agents/skills/intent/SKILL.md",
+      "type": "skill",
+      "harness": "agents",
+      "scope": "global",
+      "name": "intent",
+      "description": "UX strategy and experience-architecture owner. Use for product context, user journeys, information architecture, service blueprints, ethical design, research framing, accessibility strategy, localization strategy, measurement, and cross-surface experience decisions. Do not use as the general visual UI router, for look-better/polish/restyle/redesign requests, or for implementing frontend surfaces; those route through design-with-ai. Intent selects and sequences UX-strategy specialists, not visual craft skills.",
+      "tags": [
+        "intent"
+      ],
+      "triggers": [
+        "UX strategy and experience-architecture owner.",
+        "product context",
+        "user journeys",
+        "information architecture",
+        "service blueprints",
+        "ethical design",
+        "research framing",
+        "accessibility strategy"
+      ],
+      "status": "active",
+      "canonicalId": null,
+      "contentHash": "9fe155850b3a3fb7702f4030e305332fb2ddea60f60b86c94a143a679249d6c2"
+    },
+    {
+      "id": "agents/observability",
+      "path": "~/.agents/skills/observability/SKILL.md",
+      "type": "skill",
+      "harness": "agents",
+      "scope": "global",
+      "name": "observability",
+      "description": "Design and verify vendor-neutral production observability for a feature or service: structured logs, bounded-cardinality metrics, traces, correlation, alerts, and operational questions. Use when adding telemetry, instrumenting a production path, reviewing whether a feature can be operated, or when incidents are hard to diagnose because the system emits the wrong signals. Not for debugging the current incident (diagnose), generic performance optimisation, or vendor-specific Sentry/OpenTelemetry setup when the telemetry contract is already defined.",
+      "tags": [
+        "observability"
+      ],
+      "triggers": [
+        "Design and verify vendor-neutral production observability for a feature or service: structured logs",
+        "bounded-cardinality metrics",
+        "traces",
+        "correlation",
+        "alerts",
+        "and operational questions.",
+        "adding telemetry",
+        "instrumenting a production path"
+      ],
+      "status": "active",
+      "canonicalId": null,
+      "contentHash": "d0e1f3d99b840bc597f1185a3bab58ccb10345bc8cb83a0e425ecd8fa1fcc8ba"
+    },
+    {
+      "id": "agents/performance",
+      "path": "~/.agents/skills/performance/SKILL.md",
+      "type": "skill",
+      "harness": "agents",
+      "scope": "global",
+      "name": "performance",
+      "description": "Measure and improve cross-stack application performance across browser/network, backend/runtime, APIs, databases, queries, memory, CPU, and throughput. Use when users report slowness, a performance requirement or budget exists, profiling shows a bottleneck, or you need to investigate and guard a performance issue. Route hard regressions that first need a reproducible diagnosis loop to diagnose; React-specific audits to improve-react or project-local React Doctor; UI animation runtime work to design-with-ai; and SEO audits to seo-audit.",
+      "tags": [
+        "performance"
+      ],
+      "triggers": [
+        "Measure and improve cross-stack application performance across browser/network",
+        "backend/runtime",
+        "APIs",
+        "databases",
+        "queries",
+        "memory",
+        "CPU",
+        "and throughput."
+      ],
+      "status": "active",
+      "canonicalId": null,
+      "contentHash": "95912d4f0779862fed06eac04ab9b9beac9223ff5b0a3b63bd382241a1e8d65d"
+    },
+    {
+      "id": "agents/playwright",
+      "path": "~/.agents/skills/playwright/SKILL.md",
+      "type": "skill",
+      "harness": "agents",
+      "scope": "global",
+      "name": "playwright",
+      "description": "Automates a real browser via playwright-cli: open, snapshot, click, fill, screenshots, multi-tab, traces, video, request mocking, storage state. Use when the task needs browser automation, visual inspection, UI-flow debugging, or screenshots of a running app - even if the user does not say playwright. Prefer CLI over writing @playwright/test specs unless the user asks for tests. Source: microsoft/playwright-cli skill with cross-platform Hub wrappers.",
+      "tags": [
+        "playwright",
+        "cli"
+      ],
+      "triggers": [
+        "Automates a real browser via playwright-cli: open",
+        "snapshot",
+        "click",
+        "fill",
+        "screenshots",
+        "multi-tab",
+        "traces",
+        "video"
+      ],
+      "status": "active",
+      "canonicalId": null,
+      "contentHash": "49d6dd16ff8f1c2492f8134b3af0a379ac5b513016d429d4468e5c0c66bee144"
+    },
+    {
+      "id": "agents/pnpm",
+      "path": "~/.agents/skills/pnpm/SKILL.md",
+      "type": "skill",
+      "harness": "agents",
+      "scope": "global",
+      "name": "pnpm",
+      "description": "Node.js package manager with strict dependency resolution. Use when running pnpm specific commands, configuring workspaces via pnpm-workspace.yaml, or managing dependencies with catalogs, patches, overrides, config dependencies, or the global virtual store.",
+      "tags": [
+        "pnpm"
+      ],
+      "triggers": [
+        "Node.js package manager with strict dependency resolution.",
+        "running pnpm specific commands",
+        "configuring workspaces via pnpm-workspace.yaml",
+        "or managing dependencies with catalogs",
+        "patches",
+        "overrides",
+        "config dependencies",
+        "or the global virtual store"
+      ],
+      "status": "active",
+      "canonicalId": null,
+      "contentHash": "e566e11119186f5b4a7d06b60413ce57f9cb9a88fd223e2f57d64265b93afd87"
+    },
+    {
+      "id": "agents/ponytail-review",
+      "path": "~/.agents/skills/ponytail-review/SKILL.md",
+      "type": "skill",
+      "harness": "agents",
+      "scope": "global",
+      "name": "ponytail-review",
+      "description": "Specialist cut-list-only over-engineering review. Use only when the user explicitly names ponytail-review or invokes /ponytail-review. Finds what to delete, what stdlib or platform features replace, and speculative abstractions with no second caller, without applying edits. Not for ordinary cleanup or generic complexity review; use simplify.",
+      "tags": [
+        "ponytail",
+        "review"
+      ],
+      "triggers": [
+        "what stdlib or platform features replace",
+        "and speculative abstractions with no second caller",
+        "without applying edits. Not for ordinary cleanup or generic complexity review",
+        "use simplify"
+      ],
+      "status": "active",
+      "canonicalId": null,
+      "contentHash": "48b4110d0ceb6c7fcee9eeab653f441b2936917fde64c251b2f9bac2c87f0179"
+    },
+    {
+      "id": "agents/prototype",
+      "path": "~/.agents/skills/prototype/SKILL.md",
+      "type": "skill",
+      "harness": "agents",
+      "scope": "global",
+      "name": "prototype",
+      "description": "Build a throwaway prototype to flesh out a design before committing to it. Routes between two branches — a runnable terminal app for state/business-logic questions, or several radically different UI variations toggleable from one route. Use when the user wants to prototype, sanity-check a data model or state machine, mock up a UI, explore design options, says \"prototype this\", \"let me play with it\", or \"try a few designs\", or when a technical fork can be settled cheaply and safely by observing behavior, output, timing, rendering, or performance instead of asking the user.",
+      "tags": [
+        "prototype"
+      ],
+      "triggers": [
+        "or several radically different UI variations toggleable from one route.",
+        "the user wants to prototype",
+        "sanity-check a data model or state machine",
+        "mock up a UI",
+        "explore design options",
+        "says \"prototype this\"",
+        "\"let me play with it\"",
+        "or \"try a few designs\""
+      ],
+      "status": "active",
+      "canonicalId": null,
+      "contentHash": "74da2b88b0266db55437988f795338f57f69512546ef4a24504eddad9e2270cc"
+    },
+    {
+      "id": "agents/quality-constraints",
+      "path": "~/.agents/skills/quality-constraints/SKILL.md",
+      "type": "skill",
+      "harness": "agents",
+      "scope": "global",
+      "name": "quality-constraints",
+      "description": "Define and maintain a project's persistent quality bar in CONSTRAINTS.md: blocking versus warning checks, measured ratchets, exceptions, check cost placement, and guards against weakening tests or thresholds just to get green. Use when a project has no explicit quality contract, when standards are argued per PR, when autonomous agents keep silencing checks, or when the user asks to set quality gates or constraints. Not for running the real application (verification-harness), reviewing a PR (github-delivery), or ordinary test authoring.",
+      "tags": [
+        "quality",
+        "constraints"
+      ],
+      "triggers": [
+        "Define and maintain a project's persistent quality bar in CONSTRAINTS.md: blocking versus warning checks",
+        "measured ratchets",
+        "exceptions",
+        "check cost placement",
+        "and guards against weakening tests or thresholds just to get green.",
+        "a project has no explicit quality contract",
+        "when standards are argued per PR",
+        "when autonomous agents keep silencing checks"
+      ],
+      "status": "active",
+      "canonicalId": null,
+      "contentHash": "afab442a8c9e1e836a601035c4dafe2d9c74029e771539d2fce2a5d41b1b216f"
+    },
+    {
+      "id": "agents/read-github",
+      "path": "~/.agents/skills/read-github/SKILL.md",
+      "type": "skill",
+      "harness": "agents",
+      "scope": "global",
+      "name": "read-github",
+      "description": "Read and search GitHub repository documentation and source without cloning or mutating the repository. Use when the user provides a GitHub repository or file URL, asks what a repository does, needs an upstream SKILL.md or README, or wants read-only source inspection. Do not use for GitHub mutations, pull-request delivery, local-repository search, or official-doc-only implementation grounding.",
+      "tags": [
+        "read",
+        "github"
+      ],
+      "triggers": [
+        "Read and search GitHub repository documentation and source without cloning or mutating the repository.",
+        "the user provides a GitHub repository or file URL",
+        "asks what a repository does",
+        "needs an upstream SKILL.md or README",
+        "or wants read-only source inspection. Do not",
+        "GitHub mutations",
+        "pull-request delivery",
+        "local-repository search"
+      ],
+      "status": "active",
+      "canonicalId": null,
+      "contentHash": "070174c347b06dc4167cdd493ea95f116a97f1da2f163ad5713bf51af3f4c2fe"
+    },
+    {
+      "id": "agents/research-prompt",
+      "path": "~/.agents/skills/research-prompt/SKILL.md",
+      "type": "skill",
+      "harness": "agents",
+      "scope": "global",
+      "name": "research-prompt",
+      "description": "Writes a single-paragraph deep-research brief to hand to a human researcher or a deep-research AI. Use when the user wants a research brief, a \"deep research prompt\", a one-paragraph task for a researcher, or asks \"what should our researcher look for\". Produces ONE tight paragraph with full context, numbered sub-questions, and a per-finding output format. Does not run the research itself -- for that, see `vault-research` (this hub has no `deep-research` skill).",
+      "tags": [
+        "research",
+        "prompt"
+      ],
+      "triggers": [
+        "Writes a single-paragraph deep-research brief to hand to a human researcher or a deep-research AI.",
+        "the user wants a research brief",
+        "a \"deep research prompt\"",
+        "a one-paragraph task for a researcher",
+        "or asks \"what should our researcher look for\". Produces ONE tight paragraph with full context",
+        "numbered sub-questions",
+        "and a per-finding output format. Does not run the research itself -- for that",
+        "see `vault-research` (this hub has no `deep-research` skill)"
+      ],
+      "status": "active",
+      "canonicalId": null,
+      "contentHash": "f5326aca353bc60de16b967890a1c2c2e57957ef4a4d7df0b30748eaf958a630"
+    },
+    {
+      "id": "agents/review-security",
+      "path": "~/.agents/skills/github-delivery/overrides/review-security/SKILL.md",
+      "type": "skill",
+      "harness": "agents",
+      "scope": "global",
+      "name": "review-security",
+      "description": "Compatibility redirect for /review-security or requests for a security review of a GitHub PR or branch. Routes to github-delivery; not a standalone security review workflow.",
+      "tags": [
+        "review",
+        "security",
+        "review-security",
+        "github-delivery"
+      ],
+      "triggers": [
+        "not a standalone security review workflow"
+      ],
+      "status": "active",
+      "canonicalId": null,
+      "contentHash": "bca3324f83056270af044b430ec676b9294af6b17f63db23f9cfc2a4b4feffbb"
+    },
+    {
+      "id": "agents/review-security~2",
+      "path": "~/.agents/skills/review-security-redirect/SKILL.md",
+      "type": "skill",
+      "harness": "agents",
+      "scope": "global",
+      "name": "review-security",
+      "description": "Compatibility redirect for /review-security or requests for a security review of a GitHub PR or branch. Routes to github-delivery; not a standalone security review workflow.",
+      "tags": [
+        "review",
+        "security",
+        "review-security",
+        "github-delivery"
+      ],
+      "triggers": [
+        "not a standalone security review workflow"
+      ],
+      "status": "active",
+      "canonicalId": null,
+      "contentHash": "2df61254f24c27d113feec3695b6792fa8654c661419b5a389c7d45bd58dedb3"
+    },
+    {
+      "id": "agents/security-review",
+      "path": "~/.agents/skills/security-review-redirect/SKILL.md",
+      "type": "skill",
+      "harness": "agents",
+      "scope": "global",
+      "name": "security-review",
+      "description": "Practical security checklist and category depth for app/API/SaaS/CI audits: authn/authz, secrets scanning, CORS/headers, uploads, webhooks, deps, Semgrep/CodeQL leads, and variant analysis. Use for a standalone security review of a codebase before launch when no GitHub pull request is involved, or as depth after github-delivery already owns a PR security review. Do NOT use as the entrypoint for “security review on PR #N”, merge-ready, full-review, or GitHub babysit; those belong to github-delivery. Not audit-tooling, fuzz harnesses, or smart-contract-security.",
+      "tags": [
+        "security",
+        "review"
+      ],
+      "triggers": [
+        "Practical security checklist and category depth for app/API/SaaS/CI audits: authn/authz",
+        "secrets scanning",
+        "CORS/headers",
+        "uploads",
+        "webhooks",
+        "deps",
+        "Semgrep/CodeQL leads",
+        "and variant analysis."
+      ],
+      "status": "active",
+      "canonicalId": null,
+      "contentHash": "76304a5fe6195ad9a75e82d406bf1302539a99d4ee722c1cf06afcdf392d045b"
+    },
+    {
+      "id": "agents/seo-audit",
+      "path": "~/.agents/skills/seo-audit/SKILL.md",
+      "type": "skill",
+      "harness": "agents",
+      "scope": "global",
+      "name": "seo-audit",
+      "description": "Audits websites for technical SEO, on-page optimization, and Core Web Vitals. Use when the user asks for an SEO audit, technical SEO review, ranking drop diagnosis, meta tags, page speed, crawl errors, or indexing issues. Not a UI redesign tool and not a copywriting tool.",
+      "tags": [
+        "seo",
+        "audit"
+      ],
+      "triggers": [
+        "Audits websites for technical SEO",
+        "on-page optimization",
+        "and Core Web Vitals.",
+        "the user asks for an SEO audit",
+        "technical SEO review",
+        "ranking drop diagnosis",
+        "meta tags",
+        "page speed"
+      ],
+      "status": "active",
+      "canonicalId": null,
+      "contentHash": "0e7c661298a6e39316e8296b37aa341239889f10416a33ac05c9f4affbd627fe"
+    },
+    {
+      "id": "agents/shadcn",
+      "path": "~/.agents/skills/shadcn/SKILL.md",
+      "type": "skill",
+      "harness": "agents",
+      "scope": "global",
+      "name": "shadcn",
+      "description": "Manages shadcn/ui components and projects: add, search, fix, compose, style, and update via CLI. Use when the project has components.json, user mentions shadcn, registry, presets, FieldGroup, or composing shadcn UI. Not for generic visible-UI taste, baseline polish, or micro craft (use design-with-ai). Source: shadcn-ui/ui skills/shadcn (MIT).",
+      "tags": [
+        "shadcn"
+      ],
+      "triggers": [
+        "Manages shadcn/ui components and projects: add",
+        "search",
+        "fix",
+        "compose",
+        "style",
+        "and update via CLI.",
+        "the project has components.json",
+        "user mentions shadcn"
+      ],
+      "status": "active",
+      "canonicalId": null,
+      "contentHash": "779ecb83b1282063640d48f1304a8c3d81f60ac371f4d2d07cf9bfdb4fb5d6ac"
+    },
+    {
+      "id": "agents/simplify",
+      "path": "~/.agents/skills/simplify/SKILL.md",
+      "type": "skill",
+      "harness": "agents",
+      "scope": "global",
+      "name": "simplify",
+      "description": "Canonical default owner for ordinary code cleanup and simplification across branch or uncommitted changes: over-engineering review, YAGNI/dead-code cuts, readability and reuse cleanup, and small behavior-preserving simplifications. Use for ordinary requests to simplify, shrink, clean up, review complexity, or ask what can be deleted. Not for explicit /ponytail-review or code-simplification invocations.",
+      "tags": [
+        "simplify"
+      ],
+      "triggers": [
+        "YAGNI/dead-code cuts",
+        "readability and reuse cleanup",
+        "and small behavior-preserving simplifications.",
+        "ordinary requests to simplify",
+        "shrink",
+        "clean up",
+        "review complexity",
+        "or ask what can be deleted. Not for explicit /ponytail-review or code-simplification invocations"
+      ],
+      "status": "active",
+      "canonicalId": null,
+      "contentHash": "ebc11f54fb2eece9853497793a603d2fe96dc1f15603269c73ed497e70aa5de4"
+    },
+    {
+      "id": "agents/skill-ratchet",
+      "path": "~/.agents/skills/skill-ratchet/SKILL.md",
+      "type": "skill",
+      "harness": "agents",
+      "scope": "global",
+      "name": "skill-ratchet",
+      "description": "Quality-gates the creation, modification, merging, debugging, and release of Agent Skills through capability preflight, canonical acceptance cases, deterministic validation, independent strong/weaker model review, and locked regressions. Use when authoring, auditing, repairing, consolidating, or preparing a SKILL.md for publication; checking whether it triggers for the right requests and stays inactive for similar requests; deciding whether an installed skill already owns a capability; or determining whether an Agent Skill is ready to publish. Use alongside the host's native skill creator when available. Do not use for ordinary execution of an existing domain skill, general code review, or application testing unrelated to Agent Skills.",
+      "tags": [
+        "skill",
+        "ratchet"
+      ],
+      "triggers": [
+        "Quality-gates the creation",
+        "modification",
+        "merging",
+        "debugging",
+        "and release of Agent Skills through capability preflight",
+        "canonical acceptance cases",
+        "deterministic validation",
+        "independent strong/weaker model review"
+      ],
+      "status": "active",
+      "canonicalId": null,
+      "contentHash": "569630cfb93b3b302ee9a4b710630bc926eafb8f7ff88a65ec9223eaef413bf3"
+    },
+    {
+      "id": "agents/soul",
+      "path": "~/.agents/SOUL.md",
+      "type": "soul",
+      "harness": "agents",
+      "scope": "global",
+      "name": "SOUL",
+      "description": "",
+      "tags": [
+        "soul",
+        "operator",
+        "voice"
+      ],
+      "triggers": [],
+      "status": "active",
+      "canonicalId": null,
+      "contentHash": "959b7d8e0c35ebe11d3c974434518190ff2321eacd1c1a7b9ef2a5451fd400ca"
+    },
+    {
+      "id": "agents/source-driven-development",
+      "path": "~/.agents/skills/source-driven-development/SKILL.md",
+      "type": "skill",
+      "harness": "agents",
+      "scope": "global",
+      "name": "source-driven-development",
+      "description": "Source-grounded implementation specialist. Use when the user explicitly asks to ground implementation in official documentation, source-cited verified patterns, or source-only evidence. Not the default for ordinary framework or library implementation; domain skills keep ownership unless source-grounding is requested. Complements available documentation connectors with stronger \"only claim with a source\" discipline.",
+      "tags": [
+        "source",
+        "driven",
+        "development",
+        "source-driven"
+      ],
+      "triggers": [
+        "Source-grounded implementation specialist.",
+        "the user explicitly asks to ground implementation in official documentation",
+        "source-cited verified patterns",
+        "or source-only evidence. Not the default for ordinary framework or library implementation"
+      ],
+      "status": "active",
+      "canonicalId": null,
+      "contentHash": "6f9d00d01dc3eb54f6b864a7e55c3e438ede6b4040c8a39554c5eb60aa0d43fd"
+    },
+    {
+      "id": "agents/teach",
+      "path": "~/.agents/skills/teach/SKILL.md",
+      "type": "skill",
+      "harness": "agents",
+      "scope": "global",
+      "name": "teach",
+      "description": "Explain a codebase, subsystem, change, or decision so the user understands both how it works now and why it ended up this way. Use when the user says \"teach me\", \"help me really understand this\", \"walk me through this\", or asks for a grounded explanation that combines current mechanics with historical rationale. Ground current behavior in live code, tests, config, and runtime evidence; ground rationale in Git history, PRs, issues, ADRs, specs, and other decision records. Read-only by default. Do not use for a persistent knowledge graph (understand), session transfer (handoff), changing the domain model (domain-modeling), or the explicit Impeccable UI `teach` alias.",
+      "tags": [
+        "teach"
+      ],
+      "triggers": [
+        "Explain a codebase",
+        "subsystem",
+        "change",
+        "or decision so the user understands both how it works now and why it ended up this way.",
+        "the user says \"teach me\"",
+        "\"help me really understand this\"",
+        "\"walk me through this\"",
+        "tests"
+      ],
+      "status": "active",
+      "canonicalId": null,
+      "contentHash": "8a436201ab3726e3d0cc3baadf112fe4c9c9946e61ccf5c5b32817e7823ecb0f"
+    },
+    {
+      "id": "agents/test-quality",
+      "path": "~/.agents/skills/test-quality/SKILL.md",
+      "type": "skill",
+      "harness": "agents",
+      "scope": "global",
+      "name": "test-quality",
+      "description": "Evaluate and improve the value of automated tests. Use when designing or materially changing tests, deciding whether a test is worth keeping, choosing the stable boundary a test should own, consolidating or deleting duplicate or implementation-coupled tests, removing test-only production seams, or auditing a subsystem's test surface. Not for generic TDD sequencing, framework syntax or configuration, project-wide quality thresholds, reusable real-application verification, or PR merge readiness.",
+      "tags": [
+        "test",
+        "quality"
+      ],
+      "triggers": [
+        "Evaluate and improve the value of automated tests.",
+        "designing or materially changing tests",
+        "deciding whether a test is worth keeping",
+        "choosing the stable boundary a test should own",
+        "consolidating or deleting duplicate or implementation-coupled tests",
+        "removing test-only production seams",
+        "or auditing a subsystem's test surface. Not for generic TDD sequencing",
+        "framework syntax or configuration"
+      ],
+      "status": "active",
+      "canonicalId": null,
+      "contentHash": "dff588385dcb052b4edcc114ee65e1833efdbf77bf65747004857b0fcefede2d"
+    },
+    {
+      "id": "agents/understand",
+      "path": "~/.agents/skills/understand/SKILL.md",
+      "type": "skill",
+      "harness": "agents",
+      "scope": "global",
+      "name": "understand",
+      "description": "Use when analyzing a codebase into a persistent knowledge graph for the Understand Anything dashboard, guided graph tours, or reusable node/edge/layer artifacts. Handles full and incremental analysis. Do not use for ordinary \"explain this repo\", architecture chat, or a one-off walkthrough; those stay with normal codebase reading.",
+      "tags": [
+        "understand"
+      ],
+      "triggers": [
+        "analyzing a codebase into a persistent knowledge graph for the Understand Anything dashboard",
+        "guided graph tours",
+        "or reusable node/edge/layer artifacts. Handles full and incremental analysis. Do not",
+        "ordinary \"explain this repo\"",
+        "architecture chat",
+        "or a one-off walkthrough",
+        "those stay with normal codebase reading"
+      ],
+      "status": "active",
+      "canonicalId": null,
+      "contentHash": "0e54d807bb00566ed026d12f334863d2079b397ea87bfb9773c8f287160010c5"
+    },
+    {
+      "id": "agents/vault-research",
+      "path": "~/.agents/skills/vault-research/SKILL.md",
+      "type": "skill",
+      "harness": "agents",
+      "scope": "global",
+      "name": "vault-research",
+      "description": "Canonical external-research workflow. Use automatically when the user asks to research, investigate, verify, compare, or check current evidence; when current external facts materially affect the answer; when cheap local inspection leaves material uncertainty that external evidence can resolve; or when a hard, novel, or high-consequence problem needs broader evidence. Do not trigger only because a task is large, and do not replace domain owners for self-contained local work. Search summaries are leads, not proof: fetch sources, track coverage, seek counter-evidence, and persist only durable findings.",
+      "tags": [
+        "vault",
+        "research"
+      ],
+      "triggers": [
+        "Canonical external-research workflow. Use automatically when the user asks to research",
+        "investigate",
+        "verify",
+        "compare",
+        "or check current evidence",
+        "when current external facts materially affect the answer",
+        "when cheap local inspection leaves material uncertainty that external evidence can resolve",
+        "or when a hard"
+      ],
+      "status": "active",
+      "canonicalId": null,
+      "contentHash": "1b64d99719d01219f04a9f58a80e026b4fa727bf9142e186e3c33fc66112de96"
+    },
+    {
+      "id": "agents/verification-harness",
+      "path": "~/.agents/skills/verification-harness/SKILL.md",
+      "type": "skill",
+      "harness": "agents",
+      "scope": "global",
+      "name": "verification-harness",
+      "description": "Create, repair, or maintain a portable project-local verification skill that lets agents launch the real application, health-check the intended instance, drive user-facing behavior through a reusable control surface, capture head-bound runtime evidence, and clean up owned resources. Use when a repository lacks a reusable agent-facing runtime proof layer, when an existing verify-* skill has drifted, or when a project verifier needs maintenance. Reuse existing Playwright/Cypress/CLI/PTY/CDP/HTTP harnesses instead of replacing them, and encode repeated interactions into persistent tooling instead of per-task throwaway scripts. Do not use merely to run an existing smoke suite, write ordinary unit tests, or review GitHub merge readiness.",
+      "tags": [
+        "verification",
+        "harness"
+      ],
+      "triggers": [
+        "Create",
+        "repair",
+        "or maintain a portable project-local verification skill that lets agents launch the real application",
+        "health-check the intended instance",
+        "drive user-facing behavior through a reusable control surface",
+        "capture head-bound runtime evidence",
+        "and clean up owned resources.",
+        "a repository lacks a reusable agent-facing runtime proof layer"
+      ],
+      "status": "active",
+      "canonicalId": null,
+      "contentHash": "ba32410b3a9e67d18e4fb48bbd02c2339f7341d19d5da49065dfbef3a4e36f5f"
+    },
+    {
+      "id": "agents/vite",
+      "path": "~/.agents/skills/vite/SKILL.md",
+      "type": "skill",
+      "harness": "agents",
+      "scope": "global",
+      "name": "vite",
+      "description": "Owns Vite-specific configuration and build behavior, including vite.config.*, Vite plugins, dev/build/SSR issues, and Vite or Rolldown migration. Use when the request is specifically about Vite or a Vite configuration, plugin, or build surface. Not for generic frontend implementation or non-Vite bundler problems.",
+      "tags": [
+        "vite"
+      ],
+      "triggers": [
+        "Owns Vite-specific configuration and build behavior",
+        "including vite.config.*",
+        "Vite plugins",
+        "dev/build/SSR issues",
+        "and Vite or Rolldown migration.",
+        "the request is specifically about Vite or a Vite configuration",
+        "plugin",
+        "or build surface. Not for generic frontend implementation or non-Vite bundler problems"
+      ],
+      "status": "active",
+      "canonicalId": null,
+      "contentHash": "0ee741b48283a818e125cead4d6bd19df1fd192bb8b67501920ebc85c8df57b4"
+    },
+    {
+      "id": "agents/vitest",
+      "path": "~/.agents/skills/vitest/SKILL.md",
+      "type": "skill",
+      "harness": "agents",
+      "scope": "global",
+      "name": "vitest",
+      "description": "Owns Vitest-specific test configuration and behavior, including vitest.config.*, failing Vitest tests, mocks and mocking, filtering, fixtures, and coverage. Use when the request or project explicitly uses Vitest or concerns a Vitest-specific failure or configuration. Not for generic test writing or other test frameworks.",
+      "tags": [
+        "vitest"
+      ],
+      "triggers": [
+        "Owns Vitest-specific test configuration and behavior",
+        "including vitest.config.*",
+        "failing Vitest tests",
+        "mocks and mocking",
+        "filtering",
+        "fixtures",
+        "and coverage."
+      ],
+      "status": "active",
+      "canonicalId": null,
+      "contentHash": "fecde8773fea9f8a7178eb1508483127d23d1b562c2d801046eeaff0da910eaf"
+    },
+    {
+      "id": "agents/work-recall",
+      "path": "~/.agents/skills/work-recall/SKILL.md",
+      "type": "skill",
+      "harness": "agents",
+      "scope": "global",
+      "name": "work-recall",
+      "description": "Reconstruct the user's current working state for a named project, feature, bug, or recent workstream from available conversation context, repository state, Git history, PRs/issues/tickets, project records, and other live sources. Use for \"catch me up\", \"where did I leave off\", \"what was I working on\", \"resume this\", or when the user needs verified current state before continuing. Not for packing implementation context (context-engineering), persisting reusable lessons (extract-approach), or building a persistent codebase graph (understand).",
+      "tags": [
+        "work",
+        "recall"
+      ],
+      "triggers": [
+        "Reconstruct the user's current working state for a named project",
+        "feature",
+        "bug",
+        "or recent workstream from available conversation context",
+        "repository state",
+        "Git history",
+        "PRs/issues/tickets",
+        "project records"
+      ],
+      "status": "active",
+      "canonicalId": null,
+      "contentHash": "a828e3baff3245ca07854d2301867e4c5067c1b0576649c9d88abdf1ccca838d"
+    },
+    {
+      "id": "agents/writing-ticks",
+      "path": "~/.agents/skills/writing-ticks/SKILL.md",
+      "type": "skill",
+      "harness": "agents",
+      "scope": "global",
+      "name": "writing-ticks",
+      "description": "Use when auditing prose for AI writing tells, humanizing LLM-sounding text, reviewing docs/blog/README/PR/email/essay copy for ChatGPT cadence, \"writing ticks\", signs of AI writing, AI slop in text, or when the user asks to make writing sound human. Distinct from design-with-ai (UI marketing anti-slop) and `intent` content strategy (product UX microcopy). `articulate` is not installed.",
+      "tags": [
+        "writing",
+        "ticks"
+      ],
+      "triggers": [
+        "auditing prose for AI writing tells",
+        "humanizing LLM-sounding text",
+        "reviewing docs/blog/README/PR/email/essay copy for ChatGPT cadence",
+        "\"writing ticks\"",
+        "signs of AI writing",
+        "AI slop in text"
+      ],
+      "status": "active",
+      "canonicalId": null,
+      "contentHash": "12bcc8a99dfff41546d8760581c9c479f0afe1cdefa1e66fd102a644c01a6db5"
+    },
+    {
+      "id": "agents/youtube-transcript",
+      "path": "~/.agents/skills/youtube-transcript/SKILL.md",
+      "type": "skill",
+      "harness": "agents",
+      "scope": "global",
+      "name": "youtube-transcript",
+      "description": "Fetches the transcript of a YouTube video -- fetching, extracting, downloading, or pulling captions, subtitles, or transcript text from a YouTube URL. Use when the user says \"get the transcript\", \"transcript of this video\", \"pull the captions\", \"download subtitles\", or \"what does this YouTube video say\". Primary path is local yt-dlp on any supported operating system; DeepAPI is an optional server-side alternative when DEEPAPI_API_KEY is available.",
+      "tags": [
+        "youtube",
+        "transcript"
+      ],
+      "triggers": [
+        "Fetches the transcript of a YouTube video -- fetching",
+        "extracting",
+        "downloading",
+        "or pulling captions",
+        "subtitles",
+        "or transcript text from a YouTube URL.",
+        "the user says \"get the transcript\"",
+        "\"transcript of this video\""
+      ],
+      "status": "active",
+      "canonicalId": null,
+      "contentHash": "c545776ac139973238ceb4d98005e9c403928be969e1bc9899cf85249e586ac0"
+    },
+    {
+      "id": "external/detecting-broken-object-property-level-authorization",
+      "path": "https://raw.githubusercontent.com/mukul975/Anthropic-Cybersecurity-Skills/main/skills/detecting-broken-object-property-level-authorization/SKILL.md",
+      "type": "external-skill",
+      "harness": "external",
+      "scope": "global",
+      "name": "detecting-broken-object-property-level-authorization",
+      "description": "Catalog-only (mukul975/Anthropic-Cybersecurity-Skills): BOLA",
+      "tags": [
+        "authz",
+        "api"
+      ],
+      "triggers": [
+        "BOLA",
+        "property level auth"
+      ],
+      "status": "catalog-only",
+      "canonicalId": null,
+      "contentHash": "92b835f0e990422b1b52d219ae983e88fb620f1db40705f73c76870b2716a923"
+    },
+    {
+      "id": "external/exploiting-sql-injection-vulnerabilities",
+      "path": "https://raw.githubusercontent.com/mukul975/Anthropic-Cybersecurity-Skills/main/skills/exploiting-sql-injection-vulnerabilities/SKILL.md",
+      "type": "external-skill",
+      "harness": "external",
+      "scope": "global",
+      "name": "exploiting-sql-injection-vulnerabilities",
+      "description": "Catalog-only (mukul975/Anthropic-Cybersecurity-Skills): SQL injection review",
+      "tags": [
+        "sql",
+        "postgres",
+        "defensive"
+      ],
+      "triggers": [
+        "SQL injection review",
+        "parameterized queries"
+      ],
+      "status": "catalog-only",
+      "canonicalId": null,
+      "contentHash": "9db0cabc291cc385df1a9edcafb540a730349debe008dcce13d8f9cff48f8a92"
+    },
+    {
+      "id": "external/implementing-api-rate-limiting-and-throttling",
+      "path": "https://raw.githubusercontent.com/mukul975/Anthropic-Cybersecurity-Skills/main/skills/implementing-api-rate-limiting-and-throttling/SKILL.md",
+      "type": "external-skill",
+      "harness": "external",
+      "scope": "global",
+      "name": "implementing-api-rate-limiting-and-throttling",
+      "description": "Catalog-only (mukul975/Anthropic-Cybersecurity-Skills): rate limit design",
+      "tags": [
+        "rate-limit",
+        "redis",
+        "api"
+      ],
+      "triggers": [
+        "rate limit design",
+        "sliding window"
+      ],
+      "status": "catalog-only",
+      "canonicalId": null,
+      "contentHash": "63edfdbbfc4f975e0af999a95d3bb5d34be8234340ce0b7fc7fc48644d78387d"
+    },
+    {
+      "id": "external/implementing-secret-scanning-with-gitleaks",
+      "path": "https://raw.githubusercontent.com/mukul975/Anthropic-Cybersecurity-Skills/main/skills/implementing-secret-scanning-with-gitleaks/SKILL.md",
+      "type": "external-skill",
+      "harness": "external",
+      "scope": "global",
+      "name": "implementing-secret-scanning-with-gitleaks",
+      "description": "Catalog-only (mukul975/Anthropic-Cybersecurity-Skills): gitleaks",
+      "tags": [
+        "secrets",
+        "ci"
+      ],
+      "triggers": [
+        "gitleaks",
+        "secret scan"
+      ],
+      "status": "catalog-only",
+      "canonicalId": null,
+      "contentHash": "fa6685765a8bc0f9a91624de81cfdff9b5bf303bc48b67c8161ad73a76b2cc39"
+    },
+    {
+      "id": "external/performing-csrf-attack-simulation",
+      "path": "https://raw.githubusercontent.com/mukul975/Anthropic-Cybersecurity-Skills/main/skills/performing-csrf-attack-simulation/SKILL.md",
+      "type": "external-skill",
+      "harness": "external",
+      "scope": "global",
+      "name": "performing-csrf-attack-simulation",
+      "description": "Catalog-only (mukul975/Anthropic-Cybersecurity-Skills): CSRF",
+      "tags": [
+        "csrf",
+        "session"
+      ],
+      "triggers": [
+        "CSRF",
+        "session mutation CSRF"
+      ],
+      "status": "catalog-only",
+      "canonicalId": null,
+      "contentHash": "3b0c4ccaeff86d9dfed47b31e52ac267ab62d916676ec5f743a6b424465f7dc4"
+    },
+    {
+      "id": "external/performing-sca-dependency-scanning-with-snyk",
+      "path": "https://raw.githubusercontent.com/mukul975/Anthropic-Cybersecurity-Skills/main/skills/performing-sca-dependency-scanning-with-snyk/SKILL.md",
+      "type": "external-skill",
+      "harness": "external",
+      "scope": "global",
+      "name": "performing-sca-dependency-scanning-with-snyk",
+      "description": "Catalog-only (mukul975/Anthropic-Cybersecurity-Skills): SCA",
+      "tags": [
+        "supply-chain",
+        "dependencies"
+      ],
+      "triggers": [
+        "SCA",
+        "dependency CVE"
+      ],
+      "status": "catalog-only",
+      "canonicalId": null,
+      "contentHash": "88ead15b2cf2b9340b978804d7e0543576fa3283b2273150a023d0890fa0f497"
+    },
+    {
+      "id": "external/performing-threat-modeling-with-owasp-threat-dragon",
+      "path": "https://raw.githubusercontent.com/mukul975/Anthropic-Cybersecurity-Skills/main/skills/performing-threat-modeling-with-owasp-threat-dragon/SKILL.md",
+      "type": "external-skill",
+      "harness": "external",
+      "scope": "global",
+      "name": "performing-threat-modeling-with-owasp-threat-dragon",
+      "description": "Catalog-only (mukul975/Anthropic-Cybersecurity-Skills): threat model",
+      "tags": [
+        "threat-model",
+        "design"
+      ],
+      "triggers": [
+        "threat model",
+        "STRIDE lite"
+      ],
+      "status": "catalog-only",
+      "canonicalId": null,
+      "contentHash": "5b205d76289319a11e7d92c21c0bd8c596f981d552b0e55c1ed95868470d0ab3"
+    },
+    {
+      "id": "external/testing-api-security-with-owasp-top-10",
+      "path": "https://raw.githubusercontent.com/mukul975/Anthropic-Cybersecurity-Skills/main/skills/testing-api-security-with-owasp-top-10/SKILL.md",
+      "type": "external-skill",
+      "harness": "external",
+      "scope": "global",
+      "name": "testing-api-security-with-owasp-top-10",
+      "description": "Catalog-only (mukul975/Anthropic-Cybersecurity-Skills): OWASP API",
+      "tags": [
+        "owasp",
+        "api",
+        "web"
+      ],
+      "triggers": [
+        "OWASP API",
+        "API top 10 review"
+      ],
+      "status": "catalog-only",
+      "canonicalId": null,
+      "contentHash": "0a1644806103b22795fdb81fb23ff6bf4ab8b2bb5d15d22bcbec4bf642a29eda"
+    },
+    {
+      "id": "external/testing-for-broken-access-control",
+      "path": "https://raw.githubusercontent.com/mukul975/Anthropic-Cybersecurity-Skills/main/skills/testing-for-broken-access-control/SKILL.md",
+      "type": "external-skill",
+      "harness": "external",
+      "scope": "global",
+      "name": "testing-for-broken-access-control",
+      "description": "Catalog-only (mukul975/Anthropic-Cybersecurity-Skills): broken access control",
+      "tags": [
+        "authz",
+        "access-control"
+      ],
+      "triggers": [
+        "broken access control",
+        "IDOR review"
+      ],
+      "status": "catalog-only",
+      "canonicalId": null,
+      "contentHash": "da9497ada525cae15cc348751a998cbdbb54e914ce7fe2c06d5568f1d4fcfa22"
+    },
+    {
+      "id": "external/testing-for-xss-vulnerabilities",
+      "path": "https://raw.githubusercontent.com/mukul975/Anthropic-Cybersecurity-Skills/main/skills/testing-for-xss-vulnerabilities/SKILL.md",
+      "type": "external-skill",
+      "harness": "external",
+      "scope": "global",
+      "name": "testing-for-xss-vulnerabilities",
+      "description": "Catalog-only (mukul975/Anthropic-Cybersecurity-Skills): XSS audit",
+      "tags": [
+        "xss",
+        "web"
+      ],
+      "triggers": [
+        "XSS audit",
+        "stored XSS"
+      ],
+      "status": "catalog-only",
+      "canonicalId": null,
+      "contentHash": "960349106a44eb21a7fb3d2b463450e8eccb9b5a0c0e4feae60b98e74de97437"
+    },
+    {
+      "id": "external/testing-jwt-token-security",
+      "path": "https://raw.githubusercontent.com/mukul975/Anthropic-Cybersecurity-Skills/main/skills/testing-jwt-token-security/SKILL.md",
+      "type": "external-skill",
+      "harness": "external",
+      "scope": "global",
+      "name": "testing-jwt-token-security",
+      "description": "Catalog-only (mukul975/Anthropic-Cybersecurity-Skills): JWT hardening",
+      "tags": [
+        "jwt",
+        "auth"
+      ],
+      "triggers": [
+        "JWT hardening",
+        "token validation"
+      ],
+      "status": "catalog-only",
+      "canonicalId": null,
+      "contentHash": "73546605227ae6651b8d9836ad6c7d820399cfc276d7c44c27ef824bf431721c"
+    },
+    {
+      "id": "external/testing-oauth2-implementation-flaws",
+      "path": "https://raw.githubusercontent.com/mukul975/Anthropic-Cybersecurity-Skills/main/skills/testing-oauth2-implementation-flaws/SKILL.md",
+      "type": "external-skill",
+      "harness": "external",
+      "scope": "global",
+      "name": "testing-oauth2-implementation-flaws",
+      "description": "Catalog-only (mukul975/Anthropic-Cybersecurity-Skills): OAuth review",
+      "tags": [
+        "oauth",
+        "auth"
+      ],
+      "triggers": [
+        "OAuth review",
+        "Twitch auth"
+      ],
+      "status": "catalog-only",
+      "canonicalId": null,
+      "contentHash": "b889013dc06237ce1c584691b716821b4a40b0551002e1370f9aecf578abaa3d"
+    }
+  ],
+  "duplicateClusters": [
+    {
+      "contentHash": "98c158429e892cf515ec6fb27435a747878ebc49d835a13fff162e55f7bac9b0",
+      "canonicalId": "agents/babysit",
+      "memberIds": [
+        "agents/babysit",
+        "agents/babysit~2"
+      ]
+    },
+    {
+      "contentHash": "83ed5059de9387a94b584487bae81c2e380fc0823a6fc95fc549d90bc31f85d2",
+      "canonicalId": "agents/babysit-pr",
+      "memberIds": [
+        "agents/babysit-pr",
+        "agents/babysit-pr~2"
+      ]
+    }
+  ],
+  "catalogs": [
+    {
+      "id": "design-references",
+      "path": "~/.agents/knowledge/design-references/index.json",
+      "name": "Design Reference Intelligence Library",
+      "description": "Curated design observations queried selectively by design-with-ai.",
+      "queryCommand": "node knowledge/design-references/scripts/query.mjs --profile deep --surface <surface> --job <job> --platform <platform> --dimensions <dimensions>"
+    }
+  ]
+}

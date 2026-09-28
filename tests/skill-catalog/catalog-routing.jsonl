@@ -1,0 +1,26 @@
+{"id":"D1","prompt":"Update vite.config.ts to add a Vite plugin","expected_skill":"vite"}
+{"id":"D2","prompt":"Fix this failing Vitest test and its mocks","expected_skill":"vitest"}
+{"id":"D3","prompt":"Watch this GitHub pull request until CI is green and reviews are resolved","expected_skill":"github-delivery"}
+{"id":"D4","prompt":"Diagnose this hard backend crash that survived the first debugging pass","expected_skill":"diagnose"}
+{"id":"D5","prompt":"Design the module interface and compare two different seam placements before implementation","expected_skill":"codebase-design"}
+{"id":"D6","prompt":"Rewrite AGENTS.md because the agent keeps ignoring project conventions","expected_skill":"context-engineering"}
+{"id":"D7","prompt":"Teach me how this subsystem works now and why it ended up this way","expected_skill":"teach"}
+{"id":"D8","prompt":"Catch me up on where I left off on the OpenCodex routing work","expected_skill":"work-recall"}
+{"id":"D9","prompt":"babysit-pr this pull request","expected_skill":"babysit-pr"}
+{"id":"D10","prompt":"Simplify this branch and remove obvious over-engineering without changing behavior","expected_skill":"simplify"}
+{"id":"D11","prompt":"Use /ponytail-review on this diff and give me only the cut list","expected_skill":"ponytail-review"}
+{"id":"D12","prompt":"Use code-simplification on this working function to make it easier to read without changing behavior","expected_skill":"code-simplification"}
+{"id":"D13","prompt":"Security review this codebase before launch; there is no pull request involved","expected_skill":"security-review"}
+{"id":"D14","prompt":"Security review GitHub PR #42 before it is merge-ready","expected_skill":"github-delivery"}
+{"id":"D15","prompt":"/review-security this GitHub PR #42","expected_skill":"review-security"}
+{"id":"D16","prompt":"Polish this dashboard and improve its visual hierarchy","expected_skill":"design-with-ai"}
+{"id":"D17","prompt":"Use impeccable to polish this dashboard","expected_skill":"impeccable"}
+{"id":"D18","prompt":"Use official documentation and source-cited verified patterns for this implementation","expected_skill":"source-driven-development"}
+{"id":"D19","prompt":"Remember this non-obvious debugging lesson and write a learning from it","expected_skill":"extract-approach"}
+{"id":"D20","prompt":"Use a swarm of parallel agents to orchestrate this migration","expected_skill":"codex-dynamic-workflows"}
+{"id":"D21","prompt":"Plan a large migration of this production database schema","expected_skill":"deprecation-and-migration"}
+{"id":"N1","prompt":"Write tests for this Python parser","expected_skill":null}
+{"id":"N2","prompt":"What is the capital of France?","expected_skill":null}
+{"id":"N3","prompt":"Summarise this paragraph in two sentences","expected_skill":null}
+{"id":"N4","prompt":"Building with frameworks and libraries is routine here; implement this feature","expected_skill":null}
+{"id":"N5","prompt":"We finished debugging tricky fixes and an assumption broke; do not persist anything","expected_skill":null}
