@@ -46,8 +46,10 @@ test('setup uses one shared database and distinct native project identities', as
   const dbB = fake.calls[1][fake.calls[1].indexOf('--db') + 1];
   assert.equal(dbA, dbB);
   assert.match(dbA, /\/tmp\/ratchet\/\.memory-ratchet-longmemory\.db$/);
-  assert.equal(fake.calls[0][fake.calls[0].indexOf('--project') + 1], 'mr-project-a');
-  assert.equal(fake.calls[1][fake.calls[1].indexOf('--project') + 1], 'mr-project-b');
+  assert.deepEqual(
+    new Set(fake.calls.map((call) => call[call.indexOf('--project') + 1])),
+    new Set(['mr-project-a', 'mr-project-b']),
+  );
 });
 
 test('ingest preserves event source and branch metadata without exposing benchmark trust', async () => {
