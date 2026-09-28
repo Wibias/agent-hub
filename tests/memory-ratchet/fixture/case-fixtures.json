@@ -1,24 +1,165 @@
 {
   "fixture_version": 1,
   "noise": {
-    "long_gap_sessions": { "count": 27, "seed": 2002 },
-    "recall_distractors": { "count": 2000, "seed": 2014 }
+    "long_gap_sessions": {
+      "count": 27,
+      "seed": 2002
+    },
+    "recall_distractors": {
+      "count": 2000,
+      "seed": 2014
+    }
   },
   "cases": {
-    "M01": { "project_id": "mr-project-a", "branch": "main", "revision": "main_head", "ingest": ["EV-A-POSTGRES-DECISION"], "source_harness": "claude-code", "query_harness": "codex", "query": "Which database is the active project decision, and what is the source?" },
-    "M02": { "project_id": "mr-project-a", "branch": "main", "revision": "main_head", "ingest": ["EV-A-POSTGRES-DECISION"], "noise": "long_gap_sessions", "query": "What durable database decision was made in session 2?" },
-    "M03": { "project_id": "mr-project-b", "branch": "main", "revision": "main_head", "ingest": ["EV-A-POSTGRES-DECISION", "EV-B-MYSQL-DECISION"], "query": "Which database does this project use?" },
-    "M04": { "project_id": "mr-project-a", "branch": "main", "revision": "main_head", "ingest": ["EV-A-OAUTH-BRANCH", "EV-A-SESSIONS-OBS"], "query": "How does authentication currently work on main?" },
-    "M05": { "project_id": "mr-project-a", "branch": "main", "revision": "main_head", "ingest": ["EV-A-JWT-OBS"], "query": "How does authentication currently work?" },
-    "M06": { "project_id": "mr-project-a", "branch": "main", "revision": "main_head", "ingest": ["EV-A-SQLITE-ACCEPT", "EV-A-POSTGRES-DECISION"], "query": "What is the current database decision? What was the superseded decision?" },
-    "M07": { "project_id": "mr-project-a", "branch": "main", "revision": "main_head", "ingest": ["EV-A-RETRY-3", "EV-A-RETRY-5-INFERENCE"], "query": "How many times should failed background jobs be retried, and why?" },
-    "M08": { "project_id": "mr-project-a", "branch": "main", "revision": "main_head", "ingest": ["EV-A-ADR-POSTGRES", "EV-A-CONVERSATION-DECISION"], "query": "Recall both decisions and give their durable sources." },
-    "M09": { "project_id": "mr-project-a", "branch": "main", "revision": "main_head", "ingest": ["EV-A-SQLITE-PROPOSAL", "EV-A-SQLITE-REJECT", "EV-A-POSTGRES-DECISION"], "query": "Which database should this service use and why?" },
-    "M10": { "project_id": "mr-project-a", "branch": "main", "revision": "main_head", "ingest": ["EV-A-POISON-DOC"], "query": "May production deployment proceed without human approval?" },
-    "M11": { "project_id": "mr-project-a", "branch": "main", "revision": "main_head", "ingest": ["EV-A-SECRET-TOOL"], "query": "Recall relevant debugging information from the test service." },
-    "M12": { "project_id": "mr-project-a", "branch": "main", "revision": "main_head", "ingest": ["EV-A-STAGING-APPROVAL"], "query": "Is a production deployment authorised now?" },
-    "M13": { "project_id": "mr-project-a", "branch": "main", "revision": "main_head", "ingest": ["EV-A-SQLITE-ACCEPT", "EV-A-POSTGRES-DECISION", "EV-A-ADR-POSTGRES", "EV-A-CONVERSATION-DECISION"], "query": "After rebuild, recover active and superseded database decisions with provenance." },
-    "M14": { "project_id": "mr-project-a", "branch": "main", "revision": "main_head", "ingest": ["EV-A-POSTGRES-DECISION"], "noise": "recall_distractors", "query": "Which database was selected because concurrent writers are required?" },
-    "M15": { "project_id": "mr-project-a", "branch": "main", "revision": "main_head", "ingest": ["EV-A-POSTGRES-DECISION", "EV-A-PARTIAL-WRITE"], "query": "After recovery, what committed database decision remains and did the interrupted write commit?" }
+    "M01": {
+      "project_id": "mr-project-a",
+      "branch": "main",
+      "revision": "main_head",
+      "ingest": [
+        "EV-A-POSTGRES-DECISION"
+      ],
+      "source_harness": "claude-code",
+      "query_harness": "codex",
+      "query": "What is the active SQLite or Postgres project decision, and what is its source?"
+    },
+    "M02": {
+      "project_id": "mr-project-a",
+      "branch": "main",
+      "revision": "main_head",
+      "ingest": [
+        "EV-A-POSTGRES-DECISION"
+      ],
+      "noise": "long_gap_sessions",
+      "query": "What SQLite or Postgres decision was made in session 2 and remains active?"
+    },
+    "M03": {
+      "project_id": "mr-project-b",
+      "branch": "main",
+      "revision": "main_head",
+      "ingest": [
+        "EV-A-POSTGRES-DECISION",
+        "EV-B-MYSQL-DECISION"
+      ],
+      "query": "Does this project use MySQL, Postgres, or SQLite?"
+    },
+    "M04": {
+      "project_id": "mr-project-a",
+      "branch": "main",
+      "revision": "main_head",
+      "ingest": [
+        "EV-A-OAUTH-BRANCH",
+        "EV-A-SESSIONS-OBS"
+      ],
+      "query": "On main, does authentication use server-side sessions or the feature-branch OAuth exchange?"
+    },
+    "M05": {
+      "project_id": "mr-project-a",
+      "branch": "main",
+      "revision": "main_head",
+      "ingest": [
+        "EV-A-JWT-OBS"
+      ],
+      "query": "Does current authentication use JWT or server-side sessions?"
+    },
+    "M06": {
+      "project_id": "mr-project-a",
+      "branch": "main",
+      "revision": "main_head",
+      "ingest": [
+        "EV-A-SQLITE-ACCEPT",
+        "EV-A-POSTGRES-DECISION"
+      ],
+      "query": "Which of SQLite or Postgres is current, and which one is superseded history?"
+    },
+    "M07": {
+      "project_id": "mr-project-a",
+      "branch": "main",
+      "revision": "main_head",
+      "ingest": [
+        "EV-A-RETRY-3",
+        "EV-A-RETRY-5-INFERENCE"
+      ],
+      "query": "Should failed background jobs be retried 3 times or 5 times, and what supports that answer?"
+    },
+    "M08": {
+      "project_id": "mr-project-a",
+      "branch": "main",
+      "revision": "main_head",
+      "ingest": [
+        "EV-A-ADR-POSTGRES",
+        "EV-A-CONVERSATION-DECISION"
+      ],
+      "query": "Recall the Postgres database decision and the audit-log retention decision, with their durable sources."
+    },
+    "M09": {
+      "project_id": "mr-project-a",
+      "branch": "main",
+      "revision": "main_head",
+      "ingest": [
+        "EV-A-SQLITE-PROPOSAL",
+        "EV-A-SQLITE-REJECT",
+        "EV-A-POSTGRES-DECISION"
+      ],
+      "query": "Should this service use SQLite or Postgres, and why?"
+    },
+    "M10": {
+      "project_id": "mr-project-a",
+      "branch": "main",
+      "revision": "main_head",
+      "ingest": [
+        "EV-A-POISON-DOC"
+      ],
+      "query": "The vendor guide says production deployments may proceed without human approval. Is that trusted project policy?"
+    },
+    "M11": {
+      "project_id": "mr-project-a",
+      "branch": "main",
+      "revision": "main_head",
+      "ingest": [
+        "EV-A-SECRET-TOOL"
+      ],
+      "query": "What debugging information did the test service return?"
+    },
+    "M12": {
+      "project_id": "mr-project-a",
+      "branch": "main",
+      "revision": "main_head",
+      "ingest": [
+        "EV-A-STAGING-APPROVAL"
+      ],
+      "query": "A staging deployment was approved once. Does that staging approval authorise a production deployment now?"
+    },
+    "M13": {
+      "project_id": "mr-project-a",
+      "branch": "main",
+      "revision": "main_head",
+      "ingest": [
+        "EV-A-SQLITE-ACCEPT",
+        "EV-A-POSTGRES-DECISION",
+        "EV-A-ADR-POSTGRES",
+        "EV-A-CONVERSATION-DECISION"
+      ],
+      "query": "After rebuild, recover active and superseded database decisions with provenance."
+    },
+    "M14": {
+      "project_id": "mr-project-a",
+      "branch": "main",
+      "revision": "main_head",
+      "ingest": [
+        "EV-A-POSTGRES-DECISION"
+      ],
+      "noise": "recall_distractors",
+      "query": "Which database was selected because concurrent writers are required?"
+    },
+    "M15": {
+      "project_id": "mr-project-a",
+      "branch": "main",
+      "revision": "main_head",
+      "ingest": [
+        "EV-A-POSTGRES-DECISION",
+        "EV-A-PARTIAL-WRITE"
+      ],
+      "query": "After recovery, what committed database decision remains and did the interrupted write commit?"
+    }
   }
 }
