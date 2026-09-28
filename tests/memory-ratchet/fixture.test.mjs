@@ -135,3 +135,28 @@ test('event corpus carries explicit relations and action scope instead of forcin
   assert.ok(schema.properties.relations);
   assert.ok(schema.properties.authority);
 });
+
+
+test('case relation dependencies are ingested before the referring event', async () => {
+  const plan = JSON.parse(await readFile(new URL('./fixture/case-fixtures.json', import.meta.url), 'utf8'));
+  const events = await readJsonl(new URL('./fixture/events.jsonl', import.meta.url));
+  const byId = new Map(events.map((event) => [event.id, event]));
+
+  for (const [caseId, entry] of Object.entries(plan.cases)) {
+    const seen = new Set();
+    for (const eventId of entry.ingest) {
+      const event = byId.get(eventId);
+      assert.ok(event, `${caseId} references unknown event ${eventId}`);
+
+      for (const targets of Object.values(event.relations ?? {})) {
+        for (const targetId of targets) {
+          assert.ok(
+            seen.has(targetId),
+            `${caseId} ingests ${eventId} before relation target ${targetId}`,
+          );
+        }
+      }
+      seen.add(eventId);
+    }
+  }
+});
