@@ -252,6 +252,8 @@ jobs:
           command -v longmemory >/dev/null
 
       - name: Run LongMemory M01-M12 core track
+        env:
+          LONGMEMORY_MODULE: ${{ runner.temp }}/longmemory/dist/index.js
         run: |
           mkdir -p artifacts/memory-ratchet
           node --input-type=module <<'NODE'
