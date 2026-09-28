@@ -44,10 +44,11 @@ test('M14 surrounds the target with 2,000 deterministic distractors and bounds r
   const root = await mkdtemp(join(tmpdir(), 'memory-ratchet-noise-'));
   const prepared = await prepareCase('M14', root);
 
-  assert.equal(prepared.events.length, 2001);
-  assert.equal(prepared.events[1000].id, 'EV-A-POSTGRES-DECISION');
+  assert.equal(prepared.events.length, 2002);
+  assert.equal(prepared.events[1000].id, 'EV-A-SQLITE-ACCEPT');
+  assert.equal(prepared.events[1001].id, 'EV-A-POSTGRES-DECISION');
   assert.ok(prepared.events.slice(0, 1000).every((event) => event.type === 'noise_memory'));
-  assert.ok(prepared.events.slice(1001).every((event) => event.type === 'noise_memory'));
+  assert.ok(prepared.events.slice(1002).every((event) => event.type === 'noise_memory'));
   assert.equal(prepared.recall.limit, 10);
 });
 
