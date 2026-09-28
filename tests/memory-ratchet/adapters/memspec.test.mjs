@@ -255,3 +255,11 @@ test('formats non-Error spawn failures with their message', () => {
     'spawnSync memspec ENOENT',
   );
 });
+
+
+test('formats signal-terminated candidate processes', () => {
+  assert.equal(
+    formatExecFailure({ message: 'memspec terminated', status: null, signal: 'SIGABRT', stdout: '', stderr: '' }),
+    'signal SIGABRT',
+  );
+});
