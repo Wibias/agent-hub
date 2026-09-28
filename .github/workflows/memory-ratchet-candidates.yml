@@ -81,3 +81,77 @@ jobs:
           path: artifacts/memory-ratchet/memspec-core.json
           if-no-files-found: error
           retention-days: 14
+
+
+  memspec-runtime-smoke:
+    name: memspec runtime smoke (Node ${{ matrix.node }})
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [20, 24]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+
+      - name: Build exact memspec revision
+        env:
+          MEMSPEC_REV: 7c0a47f36d75585db0701b9828592433a0fa1c7b
+        run: |
+          git clone --quiet https://github.com/siimvene/memspec.git "$RUNNER_TEMP/memspec"
+          git -C "$RUNNER_TEMP/memspec" checkout --quiet "$MEMSPEC_REV"
+          test "$(git -C "$RUNNER_TEMP/memspec" rev-parse HEAD)" = "$MEMSPEC_REV"
+          npm ci --prefix "$RUNNER_TEMP/memspec"
+          npm run build --prefix "$RUNNER_TEMP/memspec"
+          (cd "$RUNNER_TEMP/memspec" && npm link)
+
+      - name: Run init remember search smoke
+        shell: bash
+        run: |
+          ROOT="$RUNNER_TEMP/memspec-smoke"
+          mkdir -p "$ROOT"
+          git init --quiet --initial-branch=main "$ROOT"
+          git -C "$ROOT" config user.name "Memory Ratchet"
+          git -C "$ROOT" config user.email "memory-ratchet@example.invalid"
+          printf 'export const value = 1;\n' > "$ROOT/example.ts"
+          git -C "$ROOT" add .
+          git -C "$ROOT" commit --quiet -m bootstrap
+
+          memspec init --cwd "$ROOT" --no-interactive --skip-import --skip-patch --no-install-hooks
+
+          set +e
+          memspec remember fact "Smoke fact" --cwd "$ROOT" --body "Smoke fact body." --source agent:smoke >"$RUNNER_TEMP/remember.stdout" 2>"$RUNNER_TEMP/remember.stderr"
+          REMEMBER_STATUS=$?
+          if [ "$REMEMBER_STATUS" -eq 0 ]; then
+            memspec search "Smoke fact" --cwd "$ROOT" --json --full >"$RUNNER_TEMP/search.stdout" 2>"$RUNNER_TEMP/search.stderr"
+            SEARCH_STATUS=$?
+          else
+            SEARCH_STATUS=125
+            : >"$RUNNER_TEMP/search.stdout"
+            : >"$RUNNER_TEMP/search.stderr"
+          fi
+          set -e
+
+          {
+            printf 'node=%s\n' "$(node --version)"
+            printf 'remember_status=%s\n' "$REMEMBER_STATUS"
+            printf 'search_status=%s\n' "$SEARCH_STATUS"
+            printf '%s\n' '--- remember stderr ---'
+            cat "$RUNNER_TEMP/remember.stderr"
+            printf '%s\n' '--- remember stdout ---'
+            cat "$RUNNER_TEMP/remember.stdout"
+            printf '%s\n' '--- search stderr ---'
+            cat "$RUNNER_TEMP/search.stderr"
+            printf '%s\n' '--- search stdout ---'
+            cat "$RUNNER_TEMP/search.stdout"
+          } | tee "$RUNNER_TEMP/memspec-runtime-smoke.txt"
+
+      - name: Upload runtime smoke
+        uses: actions/upload-artifact@v4
+        with:
+          name: memspec-runtime-smoke-node-${{ matrix.node }}
+          path: ${{ runner.temp }}/memspec-runtime-smoke.txt
+          retention-days: 14
