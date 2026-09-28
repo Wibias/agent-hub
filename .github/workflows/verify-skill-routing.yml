@@ -33,6 +33,9 @@ jobs:
       - name: Test memory ratchet specification
         run: node --test tests/memory-ratchet/spec.test.mjs
 
+      - name: Test memory ratchet fixture
+        run: node --test tests/memory-ratchet/fixture.test.mjs
+
       - name: Test knowledge index portability
         run: node --test tests/knowledge/build-index-portability.test.mjs
 
