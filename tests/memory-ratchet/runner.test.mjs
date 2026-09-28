@@ -64,3 +64,13 @@ test('synthetic secret redaction works recursively without mutating non-secret e
   assert.equal(redacted.nested[1], 'safe');
   assert.equal(redacted.count, 2);
 });
+
+
+test('fixture revision includes corpus assets, not only generated repository commits', async () => {
+  const { computeFixtureRevision } = await import('./runner.mjs');
+  const base = computeFixtureRevision('repo-revision', ['events-a', 'plan-a', 'schema-a']);
+  assert.match(base, /^[0-9a-f]{64}$/);
+  assert.notEqual(base, computeFixtureRevision('repo-revision', ['events-b', 'plan-a', 'schema-a']));
+  assert.notEqual(base, computeFixtureRevision('repo-revision', ['events-a', 'plan-b', 'schema-a']));
+  assert.notEqual(base, computeFixtureRevision('repo-revision', ['events-a', 'plan-a', 'schema-b']));
+});
