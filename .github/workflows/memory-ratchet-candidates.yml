@@ -1,0 +1,83 @@
+name: Memory ratchet candidates
+
+on:
+  pull_request:
+    paths:
+      - "tests/memory-ratchet/**"
+      - ".github/workflows/memory-ratchet-candidates.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: memory-ratchet-candidates-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  memspec-core:
+    name: memspec core hard gates
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Build exact memspec revision
+        env:
+          MEMSPEC_REV: 7c0a47f36d75585db0701b9828592433a0fa1c7b
+        run: |
+          git clone --quiet https://github.com/siimvene/memspec.git "$RUNNER_TEMP/memspec"
+          git -C "$RUNNER_TEMP/memspec" checkout --quiet "$MEMSPEC_REV"
+          test "$(git -C "$RUNNER_TEMP/memspec" rev-parse HEAD)" = "$MEMSPEC_REV"
+          npm ci --prefix "$RUNNER_TEMP/memspec"
+          npm run build --prefix "$RUNNER_TEMP/memspec"
+          (cd "$RUNNER_TEMP/memspec" && npm link)
+
+      - name: Run memspec M01-M12 core track
+        run: |
+          mkdir -p artifacts/memory-ratchet
+          node --input-type=module <<'NODE'
+          import { writeFile } from 'node:fs/promises';
+          import { createMemspecAdapter } from './tests/memory-ratchet/adapters/memspec.mjs';
+          import { runCoreTrack } from './tests/memory-ratchet/core-track.mjs';
+
+          const caseIds = Array.from(
+            { length: 12 },
+            (_, index) => `M${String(index + 1).padStart(2, '0')}`,
+          );
+          const report = await runCoreTrack({
+            adapterFactory: () => createMemspecAdapter(),
+            caseIds,
+          });
+
+          await writeFile(
+            'artifacts/memory-ratchet/memspec-core.json',
+            JSON.stringify(report, null, 2) + '\n',
+            'utf8',
+          );
+
+          console.log(JSON.stringify(
+            report.cases.map(({ case_id, status, secret_leaked, error }) => ({
+              case_id,
+              status,
+              secret_leaked,
+              error: error?.message ?? null,
+            })),
+            null,
+            2,
+          ));
+          NODE
+
+      - name: Upload memspec raw core report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: memory-ratchet-memspec-core
+          path: artifacts/memory-ratchet/memspec-core.json
+          if-no-files-found: error
+          retention-days: 14
