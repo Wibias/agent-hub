@@ -179,7 +179,7 @@ jobs:
           npm ci --prefix "$RUNNER_TEMP/kage/mcp"
           npm run build --prefix "$RUNNER_TEMP/kage/mcp"
           (cd "$RUNNER_TEMP/kage/mcp" && npm link)
-          kage --help >/dev/null
+          command -v kage >/dev/null
 
       - name: Run Kage M01-M12 core track
         run: |
