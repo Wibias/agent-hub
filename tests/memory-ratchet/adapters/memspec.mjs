@@ -16,6 +16,7 @@ export function formatExecFailure(error) {
   const stdout = outputText(error?.stdout);
   if (stderr) parts.push(`stderr: ${stderr}`);
   if (stdout) parts.push(`stdout: ${stdout}`);
+  if (typeof error?.signal === 'string' && error.signal.length > 0) parts.push(`signal ${error.signal}`);
   if (Number.isInteger(error?.status)) parts.push(`exit ${error.status}`);
   if (parts.length === 0) parts.push(typeof error?.message === 'string' ? error.message : String(error));
   return parts.join('\n');
