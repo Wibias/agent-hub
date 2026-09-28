@@ -33,8 +33,8 @@ jobs:
       - name: Test memory ratchet specification
         run: node --test tests/memory-ratchet/spec.test.mjs
 
-      - name: Test memory ratchet fixture, runner, adapter contract, and receipts
-        run: node --test tests/memory-ratchet/fixture.test.mjs tests/memory-ratchet/runner.test.mjs tests/memory-ratchet/adapter-contract.test.mjs tests/memory-ratchet/receipt.test.mjs
+      - name: Test memory ratchet fixture, runner, adapter contract, receipts, and candidate adapters
+        run: node --test tests/memory-ratchet/fixture.test.mjs tests/memory-ratchet/runner.test.mjs tests/memory-ratchet/adapter-contract.test.mjs tests/memory-ratchet/receipt.test.mjs tests/memory-ratchet/adapters/*.test.mjs
 
       - name: Test knowledge index portability
         run: node --test tests/knowledge/build-index-portability.test.mjs
