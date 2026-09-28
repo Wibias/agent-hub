@@ -116,7 +116,6 @@ test('event schema pins the portable envelope used by every adapter', async () =
   }
 });
 
-
 test('event corpus carries explicit relations and action scope instead of forcing adapters to infer them from prose', async () => {
   const events = await readJsonl(new URL('./fixture/events.jsonl', import.meta.url));
   const byId = new Map(events.map((event) => [event.id, event]));
