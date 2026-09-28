@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { createMemspecAdapter } from './memspec.mjs';
+import { createMemspecAdapter, formatExecFailure } from './memspec.mjs';
 
 function fakeExecutor(outputs = []) {
   const calls = [];
@@ -217,4 +217,17 @@ test('recall uses bounded JSON search and returns the structured candidate paylo
   assert.equal(args[args.indexOf('--limit') + 1], '10');
   assert.equal(result.coverage, 'ok');
   assert.deepEqual(result.items, payload.results);
+});
+
+
+test('formats candidate CLI stderr and stdout for diagnosable blocked runs', () => {
+  const error = new Error('Command failed: memspec remember');
+  error.stderr = 'actual memspec validation error\n';
+  error.stdout = 'partial output\n';
+  error.status = 1;
+
+  const message = formatExecFailure(error);
+  assert.match(message, /actual memspec validation error/);
+  assert.match(message, /partial output/);
+  assert.match(message, /exit 1/);
 });
