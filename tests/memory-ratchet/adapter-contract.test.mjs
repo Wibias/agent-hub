@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { execFileSync } from 'node:child_process';
 
 import {
   assertAdapterContract,
@@ -76,4 +77,30 @@ test('teardown still runs when a candidate recall fails', async () => {
 
   await assert.rejects(() => runRecallCase(adapter, 'M01', root), /candidate recall failed/);
   assert.equal(adapter.calls.at(-1)[0], 'teardown');
+});
+
+
+test('runRecallCase checks out each event revision before ingest and restores current revision before recall', async () => {
+  const observations = [];
+  const adapter = recordingAdapter();
+  adapter.ingest = async (event) => {
+    const head = execFileSync('git', ['-C', event.repo_path, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+    const auth = execFileSync('git', ['-C', event.repo_path, 'show', 'HEAD:src/auth.ts'], { encoding: 'utf8' });
+    observations.push(['ingest', event.id, head, auth]);
+  };
+  adapter.recall = async (request) => {
+    const head = execFileSync('git', ['-C', request.repo_path, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+    const auth = execFileSync('git', ['-C', request.repo_path, 'show', 'HEAD:src/auth.ts'], { encoding: 'utf8' });
+    observations.push(['recall', head, auth]);
+    return { text: 'ok', items: [] };
+  };
+
+  const root = await mkdtemp(join(tmpdir(), 'memory-ratchet-revision-'));
+  await runRecallCase(adapter, 'M05', root);
+
+  assert.equal(observations[0][0], 'ingest');
+  assert.match(observations[0][3], /verifyJwt/);
+  assert.doesNotMatch(observations[1][2], /verifyJwt/);
+  assert.match(observations[1][2], /sessionStore\.get/);
+  assert.notEqual(observations[0][2], observations[1][1]);
 });
