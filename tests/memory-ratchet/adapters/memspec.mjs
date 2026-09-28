@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 
 const MEMSPEC_VERSION = '0.11.0';
 const MEMSPEC_SOURCE_REVISION = '7c0a47f36d75585db0701b9828592433a0fa1c7b';
@@ -21,15 +21,31 @@ export function formatExecFailure(error) {
   return parts.join('\n');
 }
 
-function defaultExecute(args) {
-  try {
-    return execFileSync(process.env.MEMSPEC_BIN ?? 'memspec', args, {
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe'],
-    }).trim();
-  } catch (error) {
-    throw new Error(formatExecFailure(error), { cause: error });
+export function executeMemspec(args, {
+  spawn = spawnSync,
+  bin = process.env.MEMSPEC_BIN ?? 'memspec',
+} = {}) {
+  const result = spawn(bin, args, {
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  if (result.error) {
+    throw new Error(formatExecFailure({
+      ...result,
+      message: result.error.message,
+    }), { cause: result.error });
   }
+  if (result.status !== 0) {
+    throw new Error(formatExecFailure({
+      ...result,
+      message: `memspec exited with status ${result.status}`,
+    }));
+  }
+  return outputText(result.stdout);
+}
+
+function defaultExecute(args) {
+  return executeMemspec(args);
 }
 
 function titleFor(event) {
