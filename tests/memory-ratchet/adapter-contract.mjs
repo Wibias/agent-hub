@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { performance } from 'node:perf_hooks';
 
 import { prepareCase } from './runner.mjs';
@@ -36,6 +37,11 @@ export function assertAdapterContract(adapter) {
   return adapter;
 }
 
+function checkoutRevision({ repo_path: repoPath, branch, revision_sha: revisionSha }) {
+  execFileSync('git', ['-C', repoPath, 'checkout', '--quiet', '--force', branch], { stdio: 'pipe' });
+  execFileSync('git', ['-C', repoPath, 'reset', '--hard', '--quiet', revisionSha], { stdio: 'pipe' });
+}
+
 function itemCount(recall) {
   return Array.isArray(recall?.items) ? recall.items.length : 0;
 }
@@ -54,10 +60,13 @@ export async function runRecallCase(adapter, caseId, root) {
     await adapter.setup(prepared);
 
     for (const event of prepared.events) {
+      checkoutRevision(event);
       const started = performance.now();
       await adapter.ingest(event);
       ingestLatency += performance.now() - started;
     }
+
+    checkoutRevision(prepared.current);
 
     const request = {
       case_id: prepared.case_id,
