@@ -224,3 +224,73 @@ jobs:
           path: artifacts/memory-ratchet/kage-core.json
           if-no-files-found: error
           retention-days: 14
+
+
+  longmemory-core:
+    name: LongMemory core hard gates
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Build exact LongMemory revision
+        env:
+          LONGMEMORY_REV: 9ee2c8e1ed42d83eb788afb9ffc3a82b84405da5
+        run: |
+          git clone --quiet https://github.com/CaviraOSS/LongMemory.git "$RUNNER_TEMP/longmemory"
+          git -C "$RUNNER_TEMP/longmemory" checkout --quiet "$LONGMEMORY_REV"
+          test "$(git -C "$RUNNER_TEMP/longmemory" rev-parse HEAD)" = "$LONGMEMORY_REV"
+          npm install --global pnpm@11.5.2
+          pnpm --dir "$RUNNER_TEMP/longmemory" install --frozen-lockfile
+          pnpm --dir "$RUNNER_TEMP/longmemory" build
+          (cd "$RUNNER_TEMP/longmemory" && npm link)
+          command -v longmemory >/dev/null
+
+      - name: Run LongMemory M01-M12 core track
+        run: |
+          mkdir -p artifacts/memory-ratchet
+          node --input-type=module <<'NODE'
+          import { writeFile } from 'node:fs/promises';
+          import { createLongMemoryAdapter } from './tests/memory-ratchet/adapters/longmemory.mjs';
+          import { runCoreTrack } from './tests/memory-ratchet/core-track.mjs';
+
+          const caseIds = Array.from(
+            { length: 12 },
+            (_, index) => `M${String(index + 1).padStart(2, '0')}`,
+          );
+          const report = await runCoreTrack({
+            adapterFactory: () => createLongMemoryAdapter(),
+            caseIds,
+          });
+
+          await writeFile(
+            'artifacts/memory-ratchet/longmemory-core.json',
+            JSON.stringify(report, null, 2) + '\n',
+            'utf8',
+          );
+
+          console.log(JSON.stringify(
+            report.cases.map(({ case_id, status, secret_leaked, error }) => ({
+              case_id,
+              status,
+              secret_leaked,
+              error: error?.message ?? null,
+            })),
+            null,
+            2,
+          ));
+          NODE
+
+      - name: Upload LongMemory raw core report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: memory-ratchet-longmemory-core
+          path: artifacts/memory-ratchet/longmemory-core.json
+          if-no-files-found: error
+          retention-days: 14
