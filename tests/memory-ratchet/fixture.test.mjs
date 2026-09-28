@@ -29,7 +29,7 @@ test('fixture repository history is deterministic and exposes the required truth
   const second = await buildFixture(rootB);
 
   assert.deepEqual(first.revisions, second.revisions);
-  assert.equal(first.fixture_revision, second.fixture_revision);
+  assert.equal(first.repository_revision, second.repository_revision);
 
   const projectA = first.projects['project-a'].path;
   const projectB = first.projects['project-b'].path;
@@ -114,4 +114,25 @@ test('event schema pins the portable envelope used by every adapter', async () =
     for (const key of required) assert.ok(key in event, `${event.id} is missing ${key}`);
     assert.ok(schema.properties.trust.enum.includes(event.trust), `${event.id} has unknown trust class`);
   }
+});
+
+
+test('event corpus carries explicit relations and action scope instead of forcing adapters to infer them from prose', async () => {
+  const events = await readJsonl(new URL('./fixture/events.jsonl', import.meta.url));
+  const byId = new Map(events.map((event) => [event.id, event]));
+
+  assert.deepEqual(byId.get('EV-A-POSTGRES-DECISION').relations.supersedes, ['EV-A-SQLITE-ACCEPT']);
+  assert.deepEqual(byId.get('EV-A-RETRY-5-INFERENCE').relations.conflicts_with, ['EV-A-RETRY-3']);
+  assert.deepEqual(byId.get('EV-A-SQLITE-REJECT').relations.rejects, ['EV-A-SQLITE-PROPOSAL']);
+  assert.deepEqual(byId.get('EV-A-STAGING-APPROVAL').authority, {
+    action: 'deploy',
+    environment: 'staging',
+    target: 'build-42',
+    one_time: true,
+    valid_until: '2026-01-11T23:59:59Z',
+  });
+
+  const schema = JSON.parse(await readFile(new URL('./fixture/event.schema.json', import.meta.url), 'utf8'));
+  assert.ok(schema.properties.relations);
+  assert.ok(schema.properties.authority);
 });
