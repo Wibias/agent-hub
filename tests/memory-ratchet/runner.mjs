@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 
 import { buildFixture } from './fixture/build-fixture.mjs';
@@ -5,15 +6,8 @@ import { buildFixture } from './fixture/build-fixture.mjs';
 export const SYNTHETIC_SECRET = 'sk-test-MEMORYRATCHET-7Yv5K9n2Qp4Z000000000000';
 const REDACTION = '[REDACTED_SYNTHETIC_SECRET]';
 
-async function readJson(name) {
-  return JSON.parse(await readFile(new URL(name, import.meta.url), 'utf8'));
-}
-
-async function readJsonl(name) {
-  return (await readFile(new URL(name, import.meta.url), 'utf8'))
-    .split(/\r?\n/)
-    .filter(Boolean)
-    .map((line) => JSON.parse(line));
+async function readText(name) {
+  return readFile(new URL(name, import.meta.url), 'utf8');
 }
 
 function projectKeyForId(fixture, projectId) {
@@ -71,6 +65,16 @@ function createNoise(casePlan, profile, config) {
     noiseBase(casePlan, index, config.seed, profile === 'long_gap_sessions' ? 'noise_session' : 'noise_memory'));
 }
 
+export function computeFixtureRevision(repositoryRevision, assets) {
+  const hash = createHash('sha256');
+  hash.update(repositoryRevision);
+  for (const asset of assets) {
+    hash.update('\0');
+    hash.update(asset);
+  }
+  return hash.digest('hex');
+}
+
 export function redactSyntheticSecret(value) {
   if (typeof value === 'string') return value.split(SYNTHETIC_SECRET).join(REDACTION);
   if (Array.isArray(value)) return value.map(redactSyntheticSecret);
@@ -82,10 +86,17 @@ export function redactSyntheticSecret(value) {
 
 export async function prepareCase(caseId, root) {
   const fixture = await buildFixture(root);
-  const [plan, corpus] = await Promise.all([
-    readJson('./fixture/case-fixtures.json'),
-    readJsonl('./fixture/events.jsonl'),
+  const [planText, eventsText, eventSchemaText] = await Promise.all([
+    readText('./fixture/case-fixtures.json'),
+    readText('./fixture/events.jsonl'),
+    readText('./fixture/event.schema.json'),
   ]);
+  const plan = JSON.parse(planText);
+  const corpus = eventsText.split(/\r?\n/).filter(Boolean).map((line) => JSON.parse(line));
+  const fixtureRevision = computeFixtureRevision(
+    fixture.repository_revision,
+    [eventsText, planText, eventSchemaText],
+  );
   const casePlan = plan.cases[caseId];
   if (!casePlan) throw new Error(`Unknown memory ratchet case: ${caseId}`);
 
@@ -115,7 +126,7 @@ export async function prepareCase(caseId, root) {
 
   return {
     case_id: caseId,
-    fixture_revision: fixture.fixture_revision,
+    fixture_revision: fixtureRevision,
     current: {
       project_id: casePlan.project_id,
       branch: casePlan.branch,
