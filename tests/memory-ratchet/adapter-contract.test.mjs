@@ -50,12 +50,12 @@ test('runRecallCase resets, sets up, ingests in fixture order, recalls with scop
 
   assert.deepEqual(adapter.calls[0], ['reset']);
   assert.deepEqual(adapter.calls[1], ['setup', 'M01']);
-  assert.equal(adapter.calls[2][0], 'ingest');
-  assert.equal(adapter.calls[2][1], 'EV-A-POSTGRES-DECISION');
-  assert.equal(adapter.calls[3][0], 'recall');
-  assert.equal(adapter.calls[3][1].project_id, 'mr-project-a');
-  assert.equal(adapter.calls[3][1].branch, 'main');
-  assert.match(adapter.calls[3][1].revision_sha, /^[0-9a-f]{40}$/);
+  assert.deepEqual(adapter.calls[2], ['ingest', 'EV-A-SQLITE-ACCEPT']);
+  assert.deepEqual(adapter.calls[3], ['ingest', 'EV-A-POSTGRES-DECISION']);
+  assert.equal(adapter.calls[4][0], 'recall');
+  assert.equal(adapter.calls[4][1].project_id, 'mr-project-a');
+  assert.equal(adapter.calls[4][1].branch, 'main');
+  assert.match(adapter.calls[4][1].revision_sha, /^[0-9a-f]{40}$/);
   assert.equal(adapter.calls.at(-1)[0], 'teardown');
 });
 
