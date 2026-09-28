@@ -30,6 +30,9 @@ jobs:
       - name: Test public release safety
         run: node --test tests/public-release/verify-public-release.test.mjs
 
+      - name: Test memory ratchet specification
+        run: node --test tests/memory-ratchet/spec.test.mjs
+
       - name: Test knowledge index portability
         run: node --test tests/knowledge/build-index-portability.test.mjs
 
