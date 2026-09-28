@@ -151,13 +151,13 @@ export async function buildFixture(root) {
     'project-a': await buildProjectA(projectA),
     'project-b': await buildProjectB(projectB),
   };
-  const fixture_revision = createHash('sha256')
+  const repository_revision = createHash('sha256')
     .update(JSON.stringify(revisions))
     .digest('hex');
 
   return {
     fixture_version: 1,
-    fixture_revision,
+    repository_revision,
     projects: {
       'project-a': { id: 'mr-project-a', path: projectA, default_branch: 'main' },
       'project-b': { id: 'mr-project-b', path: projectB, default_branch: 'main' },
