@@ -65,7 +65,6 @@ test('synthetic secret redaction works recursively without mutating non-secret e
   assert.equal(redacted.count, 2);
 });
 
-
 test('fixture revision includes corpus assets, not only generated repository commits', async () => {
   const { computeFixtureRevision } = await import('./runner.mjs');
   const base = computeFixtureRevision('repo-revision', ['events-a', 'plan-a', 'schema-a']);
