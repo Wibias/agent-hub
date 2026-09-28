@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { createMemspecAdapter, formatExecFailure } from './memspec.mjs';
+import { createMemspecAdapter, executeMemspec, formatExecFailure } from './memspec.mjs';
 
 function fakeExecutor(outputs = []) {
   const calls = [];
@@ -230,4 +230,20 @@ test('formats candidate CLI stderr and stdout for diagnosable blocked runs', () 
   assert.match(message, /actual memspec validation error/);
   assert.match(message, /partial output/);
   assert.match(message, /exit 1/);
+});
+
+
+test('executeMemspec reports spawn status, stderr, and stdout', () => {
+  const spawn = () => ({
+    status: 2,
+    signal: null,
+    error: undefined,
+    stdout: 'partial output\n',
+    stderr: 'schema validation failed\n',
+  });
+
+  assert.throws(
+    () => executeMemspec(['remember', 'fact', 'x'], { spawn }),
+    /stderr: schema validation failed[\s\S]*stdout: partial output[\s\S]*exit 2/,
+  );
 });
