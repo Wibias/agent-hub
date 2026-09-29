@@ -577,53 +577,61 @@ export class MemoryEngine {
   }
 
   exportCanonical() {
-    return {
-      format: 'agent-hub-memory-canonical',
-      version: 1,
-      projects: this.#db.prepare(`
-        SELECT project_id, canonical_remote, repo_identity, created_at
-        FROM project_registry
-        ORDER BY project_id
-      `).all(),
-      evidence: this.#db.prepare(`
-        SELECT
-          id, project_id, harness, session_id, source_kind, source_ref,
-          captured_at, branch, commit_sha, path, blob_oid, content_redacted,
-          sensitivity, authority_class, metadata_json
-        FROM evidence
-        ORDER BY id
-      `).all(),
-      claims: this.#db.prepare(`
-        SELECT
-          id, project_id, kind, subject, predicate, value_text, state,
-          branch_scope, created_from_evidence_id, created_at, valid_from,
-          valid_until, superseded_by_claim_id, rejected_by_evidence_id
-        FROM claims
-        ORDER BY id
-      `).all(),
-      lifecycle_events: this.#db.prepare(`
-        SELECT
-          id, project_id, action, source_claim_id, target_claim_id,
-          evidence_id, created_at
-        FROM lifecycle_events
-        ORDER BY id
-      `).all(),
-      conflicts: this.#db.prepare(`
-        SELECT
-          project_id, claim_a, claim_b, state, created_by_evidence_id,
-          created_at, resolved_by_evidence_id, resolved_at
-        FROM conflicts
-        ORDER BY project_id, claim_a, claim_b
-      `).all(),
-      approvals: this.#db.prepare(`
-        SELECT
-          id, project_id, actor, action, target, environment, artifact,
-          constraints_json, issued_at, expires_at, max_uses, uses,
-          revoked_at, source_evidence_id
-        FROM approvals
-        ORDER BY id
-      `).all(),
-    };
+    this.#db.exec('BEGIN');
+    try {
+      const payload = {
+        format: 'agent-hub-memory-canonical',
+        version: 1,
+        projects: this.#db.prepare(`
+          SELECT project_id, canonical_remote, repo_identity, created_at
+          FROM project_registry
+          ORDER BY project_id
+        `).all(),
+        evidence: this.#db.prepare(`
+          SELECT
+            id, project_id, harness, session_id, source_kind, source_ref,
+            captured_at, branch, commit_sha, path, blob_oid, content_redacted,
+            sensitivity, authority_class, metadata_json
+          FROM evidence
+          ORDER BY id
+        `).all(),
+        claims: this.#db.prepare(`
+          SELECT
+            id, project_id, kind, subject, predicate, value_text, state,
+            branch_scope, created_from_evidence_id, created_at, valid_from,
+            valid_until, superseded_by_claim_id, rejected_by_evidence_id
+          FROM claims
+          ORDER BY id
+        `).all(),
+        lifecycle_events: this.#db.prepare(`
+          SELECT
+            id, project_id, action, source_claim_id, target_claim_id,
+            evidence_id, created_at
+          FROM lifecycle_events
+          ORDER BY id
+        `).all(),
+        conflicts: this.#db.prepare(`
+          SELECT
+            project_id, claim_a, claim_b, state, created_by_evidence_id,
+            created_at, resolved_by_evidence_id, resolved_at
+          FROM conflicts
+          ORDER BY project_id, claim_a, claim_b
+        `).all(),
+        approvals: this.#db.prepare(`
+          SELECT
+            id, project_id, actor, action, target, environment, artifact,
+            constraints_json, issued_at, expires_at, max_uses, uses,
+            revoked_at, source_evidence_id
+          FROM approvals
+          ORDER BY id
+        `).all(),
+      };
+      this.#db.exec('COMMIT');
+      return payload;
+    } catch (error) {
+      this.#db.exec('ROLLBACK');
+      throw error;
+    }
   }
 
   clearDerivedState() {
@@ -708,14 +716,16 @@ export class MemoryEngine {
       }
     }
 
-    const occupied = this.#db.prepare(`
-      SELECT
-        (SELECT COUNT(*) FROM evidence)
-        + (SELECT COUNT(*) FROM claims)
-        + (SELECT COUNT(*) FROM lifecycle_events)
-        + (SELECT COUNT(*) FROM conflicts)
-        + (SELECT COUNT(*) FROM approvals) AS count
-    `).get().count;
+    this.#db.exec('BEGIN IMMEDIATE');
+    try {
+      const occupied = this.#db.prepare(`
+        SELECT
+          (SELECT COUNT(*) FROM evidence)
+          + (SELECT COUNT(*) FROM claims)
+          + (SELECT COUNT(*) FROM lifecycle_events)
+          + (SELECT COUNT(*) FROM conflicts)
+          + (SELECT COUNT(*) FROM approvals) AS count
+      `).get().count;
     if (occupied !== 0) {
       throw new Error('canonical import requires an empty memory store');
     }
@@ -876,8 +886,6 @@ export class MemoryEngine {
       }
     }
 
-    this.#db.exec('BEGIN IMMEDIATE');
-    try {
       for (const row of payload.projects) {
         const existing = this.#db.prepare(`
           SELECT canonical_remote, repo_identity
