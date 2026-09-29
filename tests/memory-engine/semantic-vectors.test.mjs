@@ -200,3 +200,44 @@ test('semantic vectors are derived state excluded from canonical export and clea
     null,
   );
 });
+
+
+test('semantic vector deletion can target an exact model revision', async (t) => {
+  const engine = await createEngine('delete-revision');
+  t.after(() => engine.close());
+  seedClaim(engine);
+
+  const base = {
+    claimId: 'c-postgres',
+    modelId: 'fake-e5',
+    textHash: hashEmbeddingText('passage: postgres'),
+    dimensions: 3,
+    vector: new Float32Array([0.25, 0.5, 0.75]),
+  };
+  engine.putClaimEmbedding({ ...base, modelRevision: 'rev-1' });
+  engine.putClaimEmbedding({ ...base, modelRevision: 'rev-2' });
+
+  assert.equal(
+    engine.deleteClaimEmbeddings({
+      modelId: 'fake-e5',
+      modelRevision: 'rev-1',
+    }),
+    1,
+  );
+  assert.equal(
+    engine.getClaimEmbedding({
+      claimId: 'c-postgres',
+      modelId: 'fake-e5',
+      modelRevision: 'rev-1',
+    }),
+    null,
+  );
+  assert.notEqual(
+    engine.getClaimEmbedding({
+      claimId: 'c-postgres',
+      modelId: 'fake-e5',
+      modelRevision: 'rev-2',
+    }),
+    null,
+  );
+});
