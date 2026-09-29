@@ -156,6 +156,13 @@ jobs:
         with:
           node-version: 24
 
+      - name: Generate memory provider lock snapshot
+        run: |
+          npm install --package-lock-only --prefix memory-engine --ignore-scripts
+          printf 'MEMORY_LOCK_B64='
+          base64 -w0 memory-engine/package-lock.json
+          printf '\n'
+
       - name: Test memory engine foundation
         run: node --test tests/memory-engine/*.test.mjs
 
