@@ -239,6 +239,18 @@ const answerEvidence = evaluateReliance({
 memory.close();
 ```
 
+## Bounded recall
+
+The Memory Ratchet M14 regression ingests 2,000 unrelated distractor memories plus the database decision history and requests at most 10 recalled items.
+
+The current FTS5 retrieval already satisfies the ratchet without a retrieval-code change:
+
+- the target Postgres decision appears in the top five;
+- no more than 10 current items are returned;
+- the serialized raw recall payload stays within 16 KiB.
+
+This is intentionally a measured invariant rather than a new ranking heuristic.
+
 ## Verification
 
 Foundation tests run under Node 24:
@@ -260,6 +272,7 @@ The suite includes direct engine invariants plus Memory Ratchet fixture coverage
 - M10 source-authority / poisoning resistance;
 - M11 pre-storage secret redaction;
 - M12 structured action trust boundary;
-- M13 portable export and rebuild.
+- M13 portable export and rebuild;
+- M14 bounded recall under 2,000 distractors.
 
-M14 bounded recall and M15 interrupted-write recovery remain deliberately deferred until the corresponding architecture exists rather than being approximated inside the adapter.
+M15 interrupted-write recovery remains deliberately deferred until the corresponding architecture exists rather than being approximated inside the adapter.
