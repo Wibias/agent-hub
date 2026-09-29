@@ -591,7 +591,9 @@ export class MemoryEngine {
       if (!Array.isArray(rows)) throw new TypeError(`canonical.${name} must be an array`);
     }
 
-    const nonProjectRows = [
+    this.#db.exec('BEGIN IMMEDIATE');
+    try {
+      const nonProjectRows = [
       ['evidence', 'evidence'],
       ['claims', 'claims'],
       ['lifecycle_events', 'lifecycle_events'],
@@ -792,8 +794,6 @@ export class MemoryEngine {
       }
     }
 
-    this.#db.exec('BEGIN IMMEDIATE');
-    try {
       this.#db.prepare('DELETE FROM claim_fts').run();
       this.#db.prepare('DELETE FROM repository_path_state').run();
 
