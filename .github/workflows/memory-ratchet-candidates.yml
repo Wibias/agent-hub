@@ -14,80 +14,101 @@ concurrency:
   group: memory-ratchet-candidates-${{ github.ref }}
   cancel-in-progress: true
 
-# Completed pinned candidate runs are recorded under tests/memory-ratchet/results/
-# with workflow run IDs and artifact digests. Only open candidates run here.
 jobs:
-  midas-core:
-    name: Midas core hard gates
+  agentmemory-full-smoke:
+    name: agentmemory full-server smoke
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:
           node-version: 24
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Install exact Midas revision
+      - name: Build exact agentmemory revision
         env:
-          MIDAS_REV: ee9953c15a977343eb783de0b9f217aaf46e5b4e
+          AGENTMEMORY_REV: a76224f0987ed8f3ea0e4961f3928736ded23f54
         run: |
-          git clone --quiet https://github.com/vornicx/Midas.git "$RUNNER_TEMP/midas"
-          git -C "$RUNNER_TEMP/midas" checkout --quiet "$MIDAS_REV"
-          test "$(git -C "$RUNNER_TEMP/midas" rev-parse HEAD)" = "$MIDAS_REV"
-          python -m pip install --disable-pip-version-check -e "$RUNNER_TEMP/midas"
-          python - <<'PY'
-          import midas
-          assert midas.__version__ == "1.0.0"
-          PY
+          git clone --quiet https://github.com/biencuong/agentmemory.git "$RUNNER_TEMP/agentmemory"
+          git -C "$RUNNER_TEMP/agentmemory" checkout --quiet "$AGENTMEMORY_REV"
+          test "$(git -C "$RUNNER_TEMP/agentmemory" rev-parse HEAD)" = "$AGENTMEMORY_REV"
+          npm ci --prefix "$RUNNER_TEMP/agentmemory"
+          npm run build --prefix "$RUNNER_TEMP/agentmemory"
+          test "$(node -p "require('$RUNNER_TEMP/agentmemory/package.json').version")" = "0.9.27"
 
-      - name: Run Midas M01-M12 core track
+      - name: Start full server and exercise project isolation
+        shell: bash
         env:
-          MIDAS_PYTHON: python
+          HOME: ${{ runner.temp }}/agentmemory-home
+          CI: "true"
+          III_REST_PORT: "3311"
+          AGENTMEMORY_AUTO_COMPRESS: "false"
+          AGENTMEMORY_INJECT_CONTEXT: "false"
+          AGENTMEMORY_ALLOW_AGENT_SDK: "false"
+          CONSOLIDATION_ENABLED: "false"
         run: |
-          mkdir -p artifacts/memory-ratchet
-          node --input-type=module <<'NODE'
-          import { writeFile } from 'node:fs/promises';
-          import { createMidasAdapter } from './tests/memory-ratchet/adapters/midas.mjs';
-          import { runCoreTrack } from './tests/memory-ratchet/core-track.mjs';
+          set -euo pipefail
+          mkdir -p "$HOME" artifacts/memory-ratchet
+          cd "$RUNNER_TEMP/agentmemory"
 
-          const caseIds = Array.from(
-            { length: 12 },
-            (_, index) => `M${String(index + 1).padStart(2, '0')}`,
-          );
-          const report = await runCoreTrack({
-            adapterFactory: () => createMidasAdapter(),
-            caseIds,
-          });
+          node dist/cli.mjs >"$RUNNER_TEMP/agentmemory.stdout" 2>"$RUNNER_TEMP/agentmemory.stderr" &
+          CLI_PID=$!
+          echo "$CLI_PID" > "$RUNNER_TEMP/agentmemory-cli.pid"
 
-          await writeFile(
-            'artifacts/memory-ratchet/midas-core.json',
-            JSON.stringify(report, null, 2) + '\n',
-            'utf8',
-          );
+          ready=0
+          for _ in $(seq 1 90); do
+            if curl --silent --fail http://127.0.0.1:3311/agentmemory/livez >"$RUNNER_TEMP/livez.json"; then
+              ready=1
+              break
+            fi
+            if ! kill -0 "$CLI_PID" 2>/dev/null; then
+              break
+            fi
+            sleep 1
+          done
 
-          console.log(JSON.stringify(
-            report.cases.map(({ case_id, status, secret_leaked, error }) => ({
-              case_id,
-              status,
-              secret_leaked,
-              error: error?.message ?? null,
-            })),
-            null,
-            2,
-          ));
-          NODE
+          {
+            echo "ready=$ready"
+            echo "--- livez ---"
+            cat "$RUNNER_TEMP/livez.json" 2>/dev/null || true
+            echo
+            echo "--- stderr ---"
+            cat "$RUNNER_TEMP/agentmemory.stderr" || true
+            echo "--- stdout ---"
+            cat "$RUNNER_TEMP/agentmemory.stdout" || true
+          } > artifacts/memory-ratchet/agentmemory-full-smoke.txt
 
-      - name: Upload Midas raw core report
+          if [ "$ready" -ne 1 ]; then
+            cat artifacts/memory-ratchet/agentmemory-full-smoke.txt
+            exit 1
+          fi
+
+          curl --silent --fail             -H 'content-type: application/json'             -d '{"content":"Project A uses Postgres.","type":"architecture","project":"mr-project-a"}'             http://127.0.0.1:3311/agentmemory/remember             >"$RUNNER_TEMP/remember.json"
+
+          curl --silent --fail             -H 'content-type: application/json'             -d '{"query":"Postgres","project":"mr-project-a","limit":10,"format":"full"}'             http://127.0.0.1:3311/agentmemory/search             >"$RUNNER_TEMP/search-a.json"
+
+          curl --silent --fail             -H 'content-type: application/json'             -d '{"query":"Postgres","project":"mr-project-b","limit":10,"format":"full"}'             http://127.0.0.1:3311/agentmemory/search             >"$RUNNER_TEMP/search-b.json"
+
+          {
+            echo
+            echo "--- remember ---"
+            cat "$RUNNER_TEMP/remember.json"
+            echo
+            echo "--- search project A ---"
+            cat "$RUNNER_TEMP/search-a.json"
+            echo
+            echo "--- search project B ---"
+            cat "$RUNNER_TEMP/search-b.json"
+            echo
+          } >> artifacts/memory-ratchet/agentmemory-full-smoke.txt
+
+          cat artifacts/memory-ratchet/agentmemory-full-smoke.txt
+
+      - name: Upload agentmemory smoke
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: memory-ratchet-midas-core
-          path: artifacts/memory-ratchet/midas-core.json
-          if-no-files-found: error
+          name: memory-ratchet-agentmemory-full-smoke
+          path: artifacts/memory-ratchet/agentmemory-full-smoke.txt
+          if-no-files-found: warn
           retention-days: 14
