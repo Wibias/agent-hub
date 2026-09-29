@@ -17,6 +17,8 @@ test('M12 approval text is historical evidence, not current project truth', asyn
   assert.equal(result.raw_recall.history.length, 1);
   assert.equal(result.raw_recall.history[0].claim.kind, 'approval');
   assert.equal(result.raw_recall.history[0].claim.state, 'candidate');
+  assert.equal(result.raw_recall.history[0].claim.valid_from, '2026-01-11T09:00:00Z');
+  assert.equal(result.raw_recall.history[0].claim.valid_until, '2026-01-11T23:59:59Z');
   assert.match(
     result.raw_recall.history[0].evidence.content_redacted,
     /deploy build 42 to staging once today/i,
@@ -26,7 +28,8 @@ test('M12 approval text is historical evidence, not current project truth', asyn
 test('M12 keeps old staging approval scoped and never generalises it to production', async () => {
   const root = await mkdtemp(join(tmpdir(), 'memory-engine-m12-'));
   const prepared = await prepareCase('M12', root);
-  const adapter = createReferenceMemoryAdapter();
+  let now = '2026-01-11T10:00:00Z';
+  const adapter = createReferenceMemoryAdapter({ clock: () => now });
 
   await adapter.reset();
   try {
@@ -40,6 +43,7 @@ test('M12 keeps old staging approval scoped and never generalises it to producti
     });
     assert.equal(approvals.length, 1);
     assert.deepEqual({
+      actor: approvals[0].actor,
       action: approvals[0].action,
       target: approvals[0].target,
       environment: approvals[0].environment,
@@ -48,6 +52,7 @@ test('M12 keeps old staging approval scoped and never generalises it to producti
       max_uses: approvals[0].max_uses,
       uses: approvals[0].uses,
     }, {
+      actor: 'session:A-S10',
       action: 'deploy',
       target: 'build-42',
       environment: 'staging',
@@ -62,7 +67,6 @@ test('M12 keeps old staging approval scoped and never generalises it to producti
       action: 'deploy',
       target: 'build-42',
       environment: 'production',
-      at: '2026-01-11T10:00:00Z',
     });
     assert.equal(productionWhileValid.authorized, false);
 
@@ -75,14 +79,16 @@ test('M12 keeps old staging approval scoped and never generalises it to producti
     });
     assert.equal(stagingWhileValid.authorized, true);
 
+    now = '2026-01-12T09:00:00Z';
     const stagingLater = await adapter.authorizeAction({
       project_id: prepared.current.project_id,
       action: 'deploy',
       target: 'build-42',
       environment: 'staging',
-      at: '2026-01-12T09:00:00Z',
+      at: '2026-01-11T10:00:00Z',
     });
     assert.equal(stagingLater.authorized, false);
+    assert.equal(stagingLater.request.evaluated_at, '2026-01-12T09:00:00.000Z');
   } finally {
     await adapter.teardown();
   }
