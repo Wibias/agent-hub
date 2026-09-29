@@ -130,6 +130,43 @@ test('approval scope is exact and expiration is fail-closed', async (t) => {
   assert.equal(expired.reason, 'no_valid_approval');
 });
 
+test('action, target, and artifact scope must match exactly', async (t) => {
+  const engine = await createEngine();
+  t.after(() => engine.close());
+
+  ingestEvidence(engine);
+  recordApproval(engine, {
+    action: 'deploy',
+    target: 'service-api',
+    environment: 'staging',
+    artifact: 'build-42',
+  });
+
+  for (const request of [
+    { action: 'restart', target: 'service-api', environment: 'staging', artifact: 'build-42' },
+    { action: 'deploy', target: 'service-web', environment: 'staging', artifact: 'build-42' },
+    { action: 'deploy', target: 'service-api', environment: 'staging', artifact: 'build-43' },
+    { action: 'deploy', target: 'service-api', environment: 'staging', artifact: null },
+  ]) {
+    const decision = engine.authorizeAction({
+      projectId: 'project-a',
+      ...request,
+      at: '2026-01-11T10:00:00Z',
+    });
+    assert.equal(decision.authorized, false);
+  }
+
+  const exact = engine.authorizeAction({
+    projectId: 'project-a',
+    action: 'deploy',
+    target: 'service-api',
+    environment: 'staging',
+    artifact: 'build-42',
+    at: '2026-01-11T10:00:00Z',
+  });
+  assert.equal(exact.authorized, true);
+});
+
 test('one-time approval is consumed atomically and cannot be reused', async (t) => {
   const engine = await createEngine();
   t.after(() => engine.close());
