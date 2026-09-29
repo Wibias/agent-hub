@@ -32,7 +32,7 @@ jobs:
           git clone --quiet https://github.com/biencuong/agentmemory.git "$RUNNER_TEMP/agentmemory"
           git -C "$RUNNER_TEMP/agentmemory" checkout --quiet "$AGENTMEMORY_REV"
           test "$(git -C "$RUNNER_TEMP/agentmemory" rev-parse HEAD)" = "$AGENTMEMORY_REV"
-          npm ci --prefix "$RUNNER_TEMP/agentmemory"
+          npm install --prefix "$RUNNER_TEMP/agentmemory" --no-audit --no-fund
           npm run build --prefix "$RUNNER_TEMP/agentmemory"
           test "$(node -p "require('$RUNNER_TEMP/agentmemory/package.json').version")" = "0.9.27"
 
