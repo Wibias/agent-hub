@@ -720,6 +720,100 @@ export class MemoryEngine {
       throw new Error('canonical import requires an empty memory store');
     }
 
+    const projectIds = new Set(payload.projects.map((row) => row.project_id));
+    const evidenceById = new Map(payload.evidence.map((row) => [row.id, row]));
+    const claimById = new Map(payload.claims.map((row) => [row.id, row]));
+
+    for (const row of payload.evidence) {
+      if (!projectIds.has(row.project_id)) {
+        throw new Error(`canonical import evidence references unknown project: ${row.id}`);
+      }
+    }
+
+    for (const row of payload.claims) {
+      const sourceEvidence = evidenceById.get(row.created_from_evidence_id);
+      if (!sourceEvidence) {
+        throw new Error(`canonical import claim references unknown evidence: ${row.id}`);
+      }
+      if (sourceEvidence.project_id !== row.project_id) {
+        throw new Error(`canonical import claim evidence crosses project boundary: ${row.id}`);
+      }
+
+      if (row.superseded_by_claim_id !== null) {
+        const successor = claimById.get(row.superseded_by_claim_id);
+        if (!successor) {
+          throw new Error(`canonical import claim references unknown successor: ${row.id}`);
+        }
+        if (successor.project_id !== row.project_id) {
+          throw new Error(`canonical import supersession crosses project boundary: ${row.id}`);
+        }
+      }
+
+      if (row.rejected_by_evidence_id !== null) {
+        const rejection = evidenceById.get(row.rejected_by_evidence_id);
+        if (!rejection) {
+          throw new Error(`canonical import claim references unknown rejection evidence: ${row.id}`);
+        }
+        if (rejection.project_id !== row.project_id) {
+          throw new Error(`canonical import rejection crosses project boundary: ${row.id}`);
+        }
+      }
+    }
+
+    for (const row of payload.lifecycle_events) {
+      const source = claimById.get(row.source_claim_id);
+      const target = claimById.get(row.target_claim_id);
+      const evidence = evidenceById.get(row.evidence_id);
+      if (!source || !target || !evidence) {
+        throw new Error(`canonical import lifecycle event has missing provenance: ${row.id}`);
+      }
+      if (
+        source.project_id !== row.project_id
+        || target.project_id !== row.project_id
+        || evidence.project_id !== row.project_id
+      ) {
+        throw new Error(`canonical import lifecycle event crosses project boundary: ${row.id}`);
+      }
+    }
+
+    for (const row of payload.conflicts) {
+      const a = claimById.get(row.claim_a);
+      const b = claimById.get(row.claim_b);
+      const createdEvidence = evidenceById.get(row.created_by_evidence_id);
+      const resolvedEvidence = row.resolved_by_evidence_id === null
+        ? null
+        : evidenceById.get(row.resolved_by_evidence_id);
+      if (!a || !b || !createdEvidence || (
+        row.resolved_by_evidence_id !== null && !resolvedEvidence
+      )) {
+        throw new Error(`canonical import conflict has missing provenance: ${row.claim_a}/${row.claim_b}`);
+      }
+      if (
+        a.project_id !== row.project_id
+        || b.project_id !== row.project_id
+        || createdEvidence.project_id !== row.project_id
+        || (resolvedEvidence && resolvedEvidence.project_id !== row.project_id)
+      ) {
+        throw new Error(`canonical import conflict crosses project boundary: ${row.claim_a}/${row.claim_b}`);
+      }
+    }
+
+    for (const row of payload.approvals) {
+      const sourceEvidence = evidenceById.get(row.source_evidence_id);
+      if (!sourceEvidence) {
+        throw new Error(`canonical import approval references unknown evidence: ${row.id}`);
+      }
+      if (sourceEvidence.project_id !== row.project_id) {
+        throw new Error(`canonical import approval evidence crosses project boundary: ${row.id}`);
+      }
+      if (sourceEvidence.authority_class !== 'user_direct') {
+        throw new Error(`canonical import approval source must be user_direct: ${row.id}`);
+      }
+      if (sourceEvidence.source_ref !== row.actor) {
+        throw new Error(`canonical import approval actor does not match source provenance: ${row.id}`);
+      }
+    }
+
     for (const row of payload.evidence) {
       assertAuthorityClass(row.authority_class);
       let metadata;
