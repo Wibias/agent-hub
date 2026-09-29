@@ -1328,3 +1328,23 @@ test('malformed query vectors fail closed to lexical recall', async (t) => {
     ['c-query-lexical'],
   );
 });
+
+
+test('reciprocal rank fusion tie breakers use locale-independent code-point order', async () => {
+  const { reciprocalRankFuse } = await import('../../memory-engine/hybrid-retrieval.mjs');
+
+  const createdAtById = new Map([
+    ['B', '2026-01-01T00:00:00Z'],
+    ['a', '2026-01-01T00:00:00Z'],
+  ]);
+
+  assert.deepEqual(
+    reciprocalRankFuse({
+      lexicalIds: ['B'],
+      semanticIds: ['a'],
+      createdAtById,
+    }),
+    ['B', 'a'],
+    'binary code-point order must win an exact RRF/time tie regardless of ICU locale',
+  );
+});
