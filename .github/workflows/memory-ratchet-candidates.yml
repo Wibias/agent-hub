@@ -15,11 +15,14 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  agentmemory-full-smoke:
-    name: agentmemory full-server smoke
+  agentmemory-core:
+    name: agentmemory core hard gates
     runs-on: ubuntu-24.04
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:
@@ -36,78 +39,63 @@ jobs:
           npm run build --prefix "$RUNNER_TEMP/agentmemory"
           test "$(node -p "require('$RUNNER_TEMP/agentmemory/package.json').version")" = "0.9.27"
 
-      - name: Start full server and exercise project isolation
-        shell: bash
+      - name: Install candidate-pinned iii-engine
         env:
-          HOME: ${{ runner.temp }}/agentmemory-home
-          CI: "true"
+          III_VERSION: 0.11.2
+        run: |
+          mkdir -p "$RUNNER_TEMP/agentmemory-iii"
+          curl -fsSL "https://github.com/iii-hq/iii/releases/download/iii/v${III_VERSION}/iii-x86_64-unknown-linux-gnu.tar.gz" |
+            tar -xz -C "$RUNNER_TEMP/agentmemory-iii"
+          chmod +x "$RUNNER_TEMP/agentmemory-iii/iii"
+          "$RUNNER_TEMP/agentmemory-iii/iii" --version
+          echo "$RUNNER_TEMP/agentmemory-iii" >> "$GITHUB_PATH"
+
+      - name: Run agentmemory M01-M12 core track
+        env:
+          AGENTMEMORY_DIST: ${{ runner.temp }}/agentmemory/dist
           AGENTMEMORY_AUTO_COMPRESS: "false"
           AGENTMEMORY_INJECT_CONTEXT: "false"
           AGENTMEMORY_ALLOW_AGENT_SDK: "false"
           CONSOLIDATION_ENABLED: "false"
         run: |
-          set -euo pipefail
-          mkdir -p "$HOME" "$GITHUB_WORKSPACE/artifacts/memory-ratchet"
-          cd "$RUNNER_TEMP/agentmemory"
+          mkdir -p artifacts/memory-ratchet
+          node --input-type=module <<'NODE'
+          import { writeFile } from 'node:fs/promises';
+          import { createAgentmemoryAdapter } from './tests/memory-ratchet/adapters/agentmemory.mjs';
+          import { runCoreTrack } from './tests/memory-ratchet/core-track.mjs';
 
-          node dist/cli.mjs >"$RUNNER_TEMP/agentmemory.stdout" 2>"$RUNNER_TEMP/agentmemory.stderr" &
-          CLI_PID=$!
-          echo "$CLI_PID" > "$RUNNER_TEMP/agentmemory-cli.pid"
+          const caseIds = Array.from(
+            { length: 12 },
+            (_, index) => `M${String(index + 1).padStart(2, '0')}`,
+          );
+          const report = await runCoreTrack({
+            adapterFactory: () => createAgentmemoryAdapter(),
+            caseIds,
+          });
 
-          ready=0
-          for _ in $(seq 1 90); do
-            if curl --silent --fail http://127.0.0.1:3111/agentmemory/livez >"$RUNNER_TEMP/livez.json"; then
-              ready=1
-              break
-            fi
-            if ! kill -0 "$CLI_PID" 2>/dev/null; then
-              break
-            fi
-            sleep 1
-          done
+          await writeFile(
+            'artifacts/memory-ratchet/agentmemory-core.json',
+            JSON.stringify(report, null, 2) + '\n',
+            'utf8',
+          );
 
-          {
-            echo "ready=$ready"
-            echo "--- livez ---"
-            cat "$RUNNER_TEMP/livez.json" 2>/dev/null || true
-            echo
-            echo "--- stderr ---"
-            cat "$RUNNER_TEMP/agentmemory.stderr" || true
-            echo "--- stdout ---"
-            cat "$RUNNER_TEMP/agentmemory.stdout" || true
-          } > "$GITHUB_WORKSPACE/artifacts/memory-ratchet/agentmemory-full-smoke.txt"
+          console.log(JSON.stringify(
+            report.cases.map(({ case_id, status, secret_leaked, error }) => ({
+              case_id,
+              status,
+              secret_leaked,
+              error: error?.message ?? null,
+            })),
+            null,
+            2,
+          ));
+          NODE
 
-          if [ "$ready" -ne 1 ]; then
-            cat "$GITHUB_WORKSPACE/artifacts/memory-ratchet/agentmemory-full-smoke.txt"
-            exit 1
-          fi
-
-          curl --silent --fail             -H 'content-type: application/json'             -d '{"content":"Project A uses Postgres.","type":"architecture","project":"mr-project-a"}'             http://127.0.0.1:3111/agentmemory/remember             >"$RUNNER_TEMP/remember.json"
-
-          curl --silent --fail             -H 'content-type: application/json'             -d '{"query":"Postgres","project":"mr-project-a","limit":10,"format":"full"}'             http://127.0.0.1:3111/agentmemory/search             >"$RUNNER_TEMP/search-a.json"
-
-          curl --silent --fail             -H 'content-type: application/json'             -d '{"query":"Postgres","project":"mr-project-b","limit":10,"format":"full"}'             http://127.0.0.1:3111/agentmemory/search             >"$RUNNER_TEMP/search-b.json"
-
-          {
-            echo
-            echo "--- remember ---"
-            cat "$RUNNER_TEMP/remember.json"
-            echo
-            echo "--- search project A ---"
-            cat "$RUNNER_TEMP/search-a.json"
-            echo
-            echo "--- search project B ---"
-            cat "$RUNNER_TEMP/search-b.json"
-            echo
-          } >> "$GITHUB_WORKSPACE/artifacts/memory-ratchet/agentmemory-full-smoke.txt"
-
-          cat "$GITHUB_WORKSPACE/artifacts/memory-ratchet/agentmemory-full-smoke.txt"
-
-      - name: Upload agentmemory smoke
+      - name: Upload agentmemory raw core report
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: memory-ratchet-agentmemory-full-smoke
-          path: ${{ github.workspace }}/artifacts/memory-ratchet/agentmemory-full-smoke.txt
-          if-no-files-found: warn
+          name: memory-ratchet-agentmemory-core
+          path: artifacts/memory-ratchet/agentmemory-core.json
+          if-no-files-found: error
           retention-days: 14
