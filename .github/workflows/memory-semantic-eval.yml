@@ -27,7 +27,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .cache/memory-engine/e5
-          key: ${{ runner.os }}-memory-e5-${{ hashFiles('memory-engine/package-lock.json') }}-fd1525a9fd15316a2d503bf26ab031a61d056e98
+          key: ${{ runner.os }}-memory-e5-${{ hashFiles('memory-engine/package-lock.json') }}-6a0d452a575215f80b8f66276dd4ee5d504942c6
 
       - name: Prepare pinned E5 model cache
         if: steps.e5-cache.outputs.cache-hit != 'true'
