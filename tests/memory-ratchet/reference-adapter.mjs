@@ -3,14 +3,16 @@ import { dirname, join } from 'node:path';
 
 import { MemoryEngine } from '../../memory-engine/index.mjs';
 
-function repositoryPath(source) {
+function repositoryPath(source, { repoPath = null, revisionSha = null } = {}) {
   if (typeof source !== 'string' || source.length === 0) return null;
   if (source.includes(':') || source.startsWith('/') || source.startsWith('\\')) return null;
-  return source.includes('/') ? source : null;
+  if (source.includes('/')) return source;
+  if (!repoPath || !revisionSha) return null;
+  return gitBlobOid(repoPath, revisionSha, source) ? source : null;
 }
 
-function sourceKind(event) {
-  if (repositoryPath(event.source)) return 'repository';
+function sourceKind(event, path) {
+  if (path) return 'repository';
   if (typeof event.source === 'string') {
     if (event.source.startsWith('session:')) return 'session';
     if (event.source.startsWith('tool:')) return 'tool';
@@ -90,7 +92,10 @@ export function createReferenceMemoryAdapter() {
     async ingest(event) {
       if (!engine) throw new Error('reference memory adapter is not set up');
 
-      const path = repositoryPath(event.source);
+      const path = repositoryPath(event.source, {
+        repoPath: event.repo_path,
+        revisionSha: event.revision_sha,
+      });
       const blobOid = path
         ? gitBlobOid(event.repo_path, event.revision_sha, path)
         : null;
@@ -104,7 +109,7 @@ export function createReferenceMemoryAdapter() {
           projectId: event.project_id,
           harness: event.harness,
           sessionId: event.session_id,
-          sourceKind: sourceKind(event),
+          sourceKind: sourceKind(event, path),
           sourceRef: event.source,
           capturedAt: event.at,
           branch: event.branch,
