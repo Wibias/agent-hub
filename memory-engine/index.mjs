@@ -169,6 +169,105 @@ function embeddingDocumentFromRow(row) {
   };
 }
 
+function normalizeRecallRow(row, revisionSha) {
+  return {
+    claim: normalizeClaim(row),
+    evidence: {
+      id: row.evidence_id,
+      project_id: row.project_id,
+      harness: row.evidence_harness,
+      session_id: row.evidence_session_id,
+      source_kind: row.evidence_source_kind,
+      source_ref: row.evidence_source_ref,
+      captured_at: row.evidence_captured_at,
+      branch: row.evidence_branch,
+      commit_sha: row.evidence_commit_sha,
+      path: row.evidence_path,
+      blob_oid: row.evidence_blob_oid,
+      content_redacted: row.evidence_content_redacted,
+      sensitivity: row.evidence_sensitivity,
+      authority_class: row.evidence_authority_class,
+      metadata: parseMetadata(row.evidence_metadata_json),
+    },
+    freshness: (
+      row.evidence_path !== null
+      ? {
+          status: (
+            revisionSha === null
+            || row.freshness_commit_sha === null
+            || row.freshness_commit_sha !== revisionSha
+          )
+            ? 'unchecked'
+            : (
+                row.evidence_blob_oid !== null
+                && row.freshness_blob_oid === row.evidence_blob_oid
+                  ? 'fresh'
+                  : 'stale'
+              ),
+          observed_blob_oid: row.evidence_blob_oid,
+          current_blob_oid: row.freshness_blob_oid,
+          current_commit_sha: row.freshness_commit_sha,
+          checked_at: row.freshness_checked_at,
+        }
+      : null
+    ),
+    rank: Number(row.rank),
+  };
+}
+
+function recallConflicts(db, {
+  projectId,
+  branch,
+  mode,
+  revisionSha,
+  itemIds,
+}) {
+  let currentEligibleIds = null;
+  if (mode === 'current') {
+    currentEligibleIds = new Set(db.prepare(`
+      SELECT c.id
+      FROM claims c
+      JOIN evidence e ON e.id = c.created_from_evidence_id
+      LEFT JOIN repository_path_state rps
+        ON rps.project_id = c.project_id
+       AND rps.branch = c.branch_scope
+       AND rps.path = e.path
+      WHERE c.project_id = ?
+        AND c.branch_scope = ?
+        AND ${CLAIM_ELIGIBILITY_SQL}
+    `).all(
+      projectId,
+      branch,
+      mode,
+      revisionSha,
+      revisionSha,
+    ).map((row) => row.id));
+  }
+
+  return db.prepare(`
+    SELECT
+      claim_a,
+      claim_b,
+      state,
+      created_by_evidence_id,
+      created_at,
+      resolved_by_evidence_id,
+      resolved_at
+    FROM conflicts
+    WHERE project_id = ?
+    ORDER BY claim_a, claim_b
+  `).all(projectId).filter(
+    (conflict) => (
+      (mode === 'historical' || (
+        conflict.state === 'open'
+        && currentEligibleIds.has(conflict.claim_a)
+        && currentEligibleIds.has(conflict.claim_b)
+      ))
+      && (itemIds.has(conflict.claim_a) || itemIds.has(conflict.claim_b))
+    ),
+  );
+}
+
 function normalizeApproval(row) {
   if (!row) return null;
   return {
@@ -743,6 +842,90 @@ export class MemoryEngine {
       }
     }
     return candidates;
+  }
+
+  materializeRecall({
+    projectId,
+    branch,
+    revisionSha = null,
+    mode = 'current',
+    claimIds,
+  }) {
+    assertNonEmptyString(projectId, 'projectId');
+    assertNonEmptyString(branch, 'branch');
+    if (revisionSha !== null) assertNonEmptyString(revisionSha, 'revisionSha');
+    if (!['current', 'historical'].includes(mode)) {
+      throw new Error(`unsupported recall mode: ${mode}`);
+    }
+    if (!Array.isArray(claimIds)) {
+      throw new TypeError('claimIds must be an array');
+    }
+    if (!this.getProject(projectId)) throw new Error(`unknown project: ${projectId}`);
+
+    const select = this.#db.prepare(`
+      SELECT
+        c.*,
+        e.id AS evidence_id,
+        e.harness AS evidence_harness,
+        e.session_id AS evidence_session_id,
+        e.source_kind AS evidence_source_kind,
+        e.source_ref AS evidence_source_ref,
+        e.captured_at AS evidence_captured_at,
+        e.branch AS evidence_branch,
+        e.commit_sha AS evidence_commit_sha,
+        e.path AS evidence_path,
+        e.blob_oid AS evidence_blob_oid,
+        e.content_redacted AS evidence_content_redacted,
+        e.sensitivity AS evidence_sensitivity,
+        e.authority_class AS evidence_authority_class,
+        e.metadata_json AS evidence_metadata_json,
+        rps.commit_sha AS freshness_commit_sha,
+        rps.blob_oid AS freshness_blob_oid,
+        rps.checked_at AS freshness_checked_at,
+        0.0 AS rank
+      FROM claims c
+      JOIN evidence e ON e.id = c.created_from_evidence_id
+      LEFT JOIN repository_path_state rps
+        ON rps.project_id = c.project_id
+       AND rps.branch = c.branch_scope
+       AND rps.path = e.path
+      WHERE c.id = ?
+        AND c.project_id = ?
+        AND c.branch_scope = ?
+        AND ${CLAIM_ELIGIBILITY_SQL}
+    `);
+
+    const items = [];
+    const seen = new Set();
+    for (const claimId of claimIds) {
+      assertNonEmptyString(claimId, 'claimIds item');
+      if (seen.has(claimId)) continue;
+      seen.add(claimId);
+      const row = select.get(
+        claimId,
+        projectId,
+        branch,
+        mode,
+        revisionSha,
+        revisionSha,
+      );
+      if (row) items.push(normalizeRecallRow(row, revisionSha));
+    }
+
+    const ids = new Set(items.map((item) => item.claim.id));
+    return {
+      project_id: projectId,
+      branch,
+      mode,
+      items,
+      conflicts: recallConflicts(this.#db, {
+        projectId,
+        branch,
+        mode,
+        revisionSha,
+        itemIds: ids,
+      }),
+    };
   }
 
   putClaimEmbedding({
@@ -2015,95 +2198,15 @@ export class MemoryEngine {
       `).all(projectId, branch, mode, revisionSha, revisionSha, limit);
     }
 
-    const items = rows.map((row) => ({
-      claim: normalizeClaim(row),
-      evidence: {
-        id: row.evidence_id,
-        project_id: row.project_id,
-        harness: row.evidence_harness,
-        session_id: row.evidence_session_id,
-        source_kind: row.evidence_source_kind,
-        source_ref: row.evidence_source_ref,
-        captured_at: row.evidence_captured_at,
-        branch: row.evidence_branch,
-        commit_sha: row.evidence_commit_sha,
-        path: row.evidence_path,
-        blob_oid: row.evidence_blob_oid,
-        content_redacted: row.evidence_content_redacted,
-        sensitivity: row.evidence_sensitivity,
-        authority_class: row.evidence_authority_class,
-        metadata: parseMetadata(row.evidence_metadata_json),
-      },
-      freshness: (
-        row.evidence_path !== null
-        ? {
-            status: (
-              revisionSha === null
-              || row.freshness_commit_sha === null
-              || row.freshness_commit_sha !== revisionSha
-            )
-              ? 'unchecked'
-              : (
-                  row.evidence_blob_oid !== null
-                  && row.freshness_blob_oid === row.evidence_blob_oid
-                    ? 'fresh'
-                    : 'stale'
-                ),
-            observed_blob_oid: row.evidence_blob_oid,
-            current_blob_oid: row.freshness_blob_oid,
-            current_commit_sha: row.freshness_commit_sha,
-            checked_at: row.freshness_checked_at,
-          }
-        : null
-      ),
-      rank: Number(row.rank),
-    }));
-
+    const items = rows.map((row) => normalizeRecallRow(row, revisionSha));
     const ids = new Set(items.map((item) => item.claim.id));
-    let currentEligibleIds = null;
-    if (mode === 'current') {
-      currentEligibleIds = new Set(this.#db.prepare(`
-        SELECT c.id
-        FROM claims c
-        JOIN evidence e ON e.id = c.created_from_evidence_id
-        LEFT JOIN repository_path_state rps
-          ON rps.project_id = c.project_id
-         AND rps.branch = c.branch_scope
-         AND rps.path = e.path
-        WHERE c.project_id = ?
-          AND c.branch_scope = ?
-          AND ${CLAIM_ELIGIBILITY_SQL}
-      `).all(
-        projectId,
-        branch,
-        mode,
-        revisionSha,
-        revisionSha,
-      ).map((row) => row.id));
-    }
-
-    const conflicts = this.#db.prepare(`
-      SELECT
-        claim_a,
-        claim_b,
-        state,
-        created_by_evidence_id,
-        created_at,
-        resolved_by_evidence_id,
-        resolved_at
-      FROM conflicts
-      WHERE project_id = ?
-      ORDER BY claim_a, claim_b
-    `).all(projectId).filter(
-      (conflict) => (
-        (mode === 'historical' || (
-          conflict.state === 'open'
-          && currentEligibleIds.has(conflict.claim_a)
-          && currentEligibleIds.has(conflict.claim_b)
-        ))
-        && (ids.has(conflict.claim_a) || ids.has(conflict.claim_b))
-      ),
-    );
+    const conflicts = recallConflicts(this.#db, {
+      projectId,
+      branch,
+      mode,
+      revisionSha,
+      itemIds: ids,
+    });
 
     return {
       project_id: projectId,
