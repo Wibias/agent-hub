@@ -49,7 +49,7 @@ test('M06 exposes superseded SQLite only through historical recall', async () =>
   assert.ok(currentTexts(result).every((text) => !/^Use SQLite\.?$/i.test(text)));
 
   const sqlite = result.raw_recall.history.find(
-    (item) => /^Use SQLite\.?$/i.test(item.evidence.content_redacted),
+    (item) => /Use SQLite as the project database/i.test(item.evidence.content_redacted),
   );
   assert.ok(sqlite);
   assert.equal(sqlite.claim.state, 'superseded');
@@ -64,9 +64,9 @@ test('M08 preserves durable repository and conversation provenance', async () =>
   assert.match(repo.evidence.commit_sha, /^[0-9a-f]{40}$/);
   assert.equal(repo.evidence.source_ref, 'docs/adr/0001-database.md');
 
-  const session = items.find((item) => item.evidence.source_ref === 'session:A-S8');
+  const session = items.find((item) => item.evidence.source_ref === 'session:A-S11');
   assert.ok(session);
-  assert.equal(session.evidence.session_id, 'A-S8');
+  assert.equal(session.evidence.session_id, 'A-S11');
 });
 
 test('M09 removes rejected and superseded SQLite claims from current truth', async () => {
@@ -78,11 +78,14 @@ test('M09 removes rejected and superseded SQLite claims from current truth', asy
   assert.ok(texts.every((text) => !/^Use SQLite\.?$/i.test(text)));
   assert.ok(texts.every((text) => !/could use SQLite/i.test(text)));
 
-  const historicalStates = new Map(
-    result.raw_recall.history.map((item) => [item.evidence.content_redacted, item.claim.state]),
+  const oldDecision = result.raw_recall.history.find(
+    (item) => /Use SQLite as the project database/i.test(item.evidence.content_redacted),
   );
-  assert.equal(historicalStates.get('Use SQLite.'), 'superseded');
-  assert.equal(historicalStates.get('We could use SQLite for this service.'), 'rejected');
+  const proposal = result.raw_recall.history.find(
+    (item) => /We could use SQLite for this service/i.test(item.evidence.content_redacted),
+  );
+  assert.equal(oldDecision?.claim.state, 'superseded');
+  assert.equal(proposal?.claim.state, 'rejected');
 });
 
 test('M11 redacts the synthetic credential before normal recall', async () => {
