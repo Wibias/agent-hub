@@ -563,7 +563,6 @@ export class MemoryEngine {
   recordApproval({
     id,
     projectId,
-    actor,
     action,
     target,
     environment,
@@ -577,7 +576,6 @@ export class MemoryEngine {
     for (const [value, name] of [
       [id, 'id'],
       [projectId, 'projectId'],
-      [actor, 'actor'],
       [action, 'action'],
       [target, 'target'],
       [environment, 'environment'],
@@ -602,6 +600,7 @@ export class MemoryEngine {
     if (sourceEvidence.authority_class !== 'user_direct') {
       throw new Error('approval source evidence must be user_direct');
     }
+    assertNonEmptyString(sourceEvidence.source_ref, 'approval source evidence source_ref');
 
     const normalizedIssuedAt = normalizeTimestamp(issuedAt, 'issuedAt');
     const normalizedExpiresAt = normalizeTimestamp(expiresAt, 'expiresAt');
@@ -609,7 +608,7 @@ export class MemoryEngine {
       throw new Error('approval expiresAt cannot be before issuedAt');
     }
 
-    const redactedActor = redactString(actor);
+    const redactedActor = redactString(sourceEvidence.source_ref);
     const redactedAction = redactString(action);
     const redactedTarget = redactString(target);
     const redactedEnvironment = redactString(environment);
