@@ -153,7 +153,7 @@ test('recall uses bank isolation plus strict branch tags and deterministic fixtu
       },
     ],
   };
-  const runtime = fakeRuntime([payload]);
+  const runtime = fakeRuntime([{}, payload]);
   const adapter = createHindsightAdapter({ runtime });
   await adapter.reset();
   await adapter.ingest({
