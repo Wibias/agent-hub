@@ -134,6 +134,46 @@ test('repository freshness is fail-closed and follows path blob identity, not co
   assert.equal(deletedHistory.items[0].freshness.current_blob_oid, null);
 });
 
+test('repositoryPaths keeps paths that are only referenced by historical claims', async (t) => {
+  const engine = await createEngine();
+  t.after(() => engine.close());
+  ingestRepositoryClaim(engine);
+
+  engine.ingest({
+    evidence: {
+      id: 'e-session',
+      projectId: 'project-a',
+      harness: 'codex',
+      sessionId: 'session-2',
+      sourceKind: 'session',
+      sourceRef: 'session:2',
+      capturedAt: '2026-01-04T10:00:00Z',
+      branch: 'main',
+      content: 'Authentication changed after the repository observation.',
+      authorityClass: 'unclassified',
+      metadata: {},
+    },
+    claim: {
+      id: 'c-session',
+      kind: 'session_observation',
+      subject: 'authentication',
+      predicate: 'changed',
+      value: 'session-based authentication',
+      branchScope: 'main',
+      createdAt: '2026-01-04T10:00:00Z',
+    },
+    lifecycle: {
+      supersedes: ['c-auth'],
+    },
+  });
+
+  assert.equal(engine.getClaim('c-auth').state, 'superseded');
+  assert.deepEqual(
+    engine.repositoryPaths({ projectId: 'project-a', branch: 'main' }),
+    ['src/auth.ts'],
+  );
+});
+
 test('M05 withholds the old JWT code observation after the file blob changes', async () => {
   const root = await mkdtemp(join(tmpdir(), 'memory-engine-m05-'));
   const result = await runRecallCase(createReferenceMemoryAdapter(), 'M05', root);
@@ -191,6 +231,33 @@ test('reference adapter treats repository-root files as repository evidence', as
     assert.equal(item.evidence.path, 'README.md');
     assert.match(item.evidence.blob_oid, /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/);
     assert.equal(item.freshness.status, 'fresh');
+  } finally {
+    await adapter.teardown();
+  }
+});
+
+
+test('reference adapter never stores a Git tree object as a file blob', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'memory-engine-tree-path-'));
+  const prepared = await prepareCase('M05', root);
+  const adapter = createReferenceMemoryAdapter();
+
+  await adapter.reset();
+  try {
+    await adapter.setup(prepared);
+
+    const observed = prepared.events[0];
+    const result = await adapter.ingest({
+      ...observed,
+      id: 'EV-A-ROOT-DIRECTORY',
+      type: 'document_read',
+      content: 'Source names the repository directory, not a file.',
+      source: 'src',
+    });
+
+    assert.equal(result.evidence.source_kind, 'event');
+    assert.equal(result.evidence.path, null);
+    assert.equal(result.evidence.blob_oid, null);
   } finally {
     await adapter.teardown();
   }
