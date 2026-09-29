@@ -1,7 +1,11 @@
 import { execFileSync } from 'node:child_process';
 import { dirname, join } from 'node:path';
 
-import { MemoryEngine } from '../../memory-engine/index.mjs';
+import {
+  MemoryEngine,
+  evaluateReliance,
+} from '../../memory-engine/index.mjs';
+import { createAuthorityPolicy } from '../../memory-engine/authority.mjs';
 
 function repositoryPath(source, { repoPath = null, revisionSha = null } = {}) {
   if (typeof source !== 'string' || source.length === 0) return null;
@@ -24,6 +28,16 @@ function sourceKind(event, path) {
 function claimId(eventId) {
   return `claim:${eventId}`;
 }
+
+const AUTHORITY_POLICY = createAuthorityPolicy({
+  trustedRepositoryPaths: [
+    'AGENTS.md',
+    'CONTEXT.md',
+    '.agents/**',
+    'docs/adr/**',
+    'docs/runtime.md',
+  ],
+});
 
 function gitBlobOid(repoPath, revisionSha, path) {
   const output = execFileSync(
@@ -58,10 +72,10 @@ export function createReferenceMemoryAdapter() {
     metadata: {
       candidate: {
         name: 'memory-engine-reference',
-        version: '0.2.0-git-freshness',
+        version: '0.3.0-authority-reliance',
         source_revision: 'workspace',
       },
-      adapter_revision: 'reference-git-freshness-v1',
+      adapter_revision: 'reference-authority-reliance-v1',
       network_required: false,
     },
 
@@ -104,13 +118,20 @@ export function createReferenceMemoryAdapter() {
         throw new Error(`repository evidence path missing at observed revision: ${path}`);
       }
 
+      const kind = sourceKind(event, path);
+      const authorityClass = AUTHORITY_POLICY.classify({
+        eventType: event.type,
+        sourceKind: kind,
+        sourceRef: event.source,
+      });
+
       return engine.ingest({
         evidence: {
           id: `evidence:${event.id}`,
           projectId: event.project_id,
           harness: event.harness,
           sessionId: event.session_id,
-          sourceKind: sourceKind(event, path),
+          sourceKind: kind,
           sourceRef: event.source,
           capturedAt: event.at,
           branch: event.branch,
@@ -118,7 +139,7 @@ export function createReferenceMemoryAdapter() {
           path,
           blobOid,
           content: event.content,
-          authorityClass: 'unclassified',
+          authorityClass,
           metadata: {
             event_id: event.id,
             event_type: event.type,
@@ -137,6 +158,7 @@ export function createReferenceMemoryAdapter() {
         lifecycle: {
           supersedes: (event.relations?.supersedes ?? []).map(claimId),
           rejects: (event.relations?.rejects ?? []).map(claimId),
+          conflictsWith: (event.relations?.conflicts_with ?? []).map(claimId),
         },
       });
     },
@@ -173,6 +195,11 @@ export function createReferenceMemoryAdapter() {
       return {
         ...current,
         history: historical.items,
+        reliance: {
+          planning: evaluateReliance({ ...current, use: 'planning' }),
+          answer: evaluateReliance({ ...current, use: 'answer' }),
+          project_policy: evaluateReliance({ ...current, use: 'project_policy' }),
+        },
       };
     },
 
