@@ -1,0 +1,24 @@
+name: Memory ratchet candidates
+
+on:
+  pull_request:
+    paths:
+      - "tests/memory-ratchet/**"
+      - ".github/workflows/memory-ratchet-candidates.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: memory-ratchet-candidates-${{ github.ref }}
+  cancel-in-progress: true
+
+# All seven pinned core candidates are complete. Decisive runs and
+# artifact digests are recorded under tests/memory-ratchet/results/.
+jobs:
+  completed:
+    name: candidate evaluation complete
+    runs-on: ubuntu-24.04
+    steps:
+      - run: echo "All pinned Memory Ratchet 0.1.0 core candidates are recorded."

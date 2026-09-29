@@ -1,0 +1,137 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Wibias/agent-hub/tests/memory-ratchet/fixture/event.schema.json",
+  "title": "Memory Ratchet Event",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "at",
+    "harness",
+    "session_id",
+    "project_id",
+    "branch",
+    "revision",
+    "trust",
+    "type",
+    "content",
+    "source"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^EV-[A-Z0-9-]+$"
+    },
+    "at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "harness": {
+      "type": "string",
+      "minLength": 1
+    },
+    "session_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "project_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "branch": {
+      "type": "string",
+      "minLength": 1
+    },
+    "revision": {
+      "type": "string",
+      "minLength": 1
+    },
+    "trust": {
+      "enum": [
+        "user_direct",
+        "repo_trusted",
+        "tool_observation",
+        "agent_inference",
+        "external_untrusted"
+      ]
+    },
+    "type": {
+      "type": "string",
+      "minLength": 1
+    },
+    "content": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source": {
+      "type": "string",
+      "minLength": 1
+    },
+    "relations": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "supersedes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^EV-[A-Z0-9-]+$"
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "conflicts_with": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^EV-[A-Z0-9-]+$"
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "rejects": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^EV-[A-Z0-9-]+$"
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        }
+      }
+    },
+    "authority": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "action",
+        "environment",
+        "target",
+        "one_time",
+        "valid_until"
+      ],
+      "properties": {
+        "action": {
+          "type": "string",
+          "minLength": 1
+        },
+        "environment": {
+          "type": "string",
+          "minLength": 1
+        },
+        "target": {
+          "type": "string",
+          "minLength": 1
+        },
+        "one_time": {
+          "type": "boolean"
+        },
+        "valid_until": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    }
+  }
+}
