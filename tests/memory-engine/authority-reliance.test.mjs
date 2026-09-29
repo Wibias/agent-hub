@@ -52,6 +52,48 @@ function claim(overrides = {}) {
   };
 }
 
+test('conflict reliance is order-independent after an earlier selection is blocked', () => {
+  const a = {
+    claim: { id: 'c-a' },
+    evidence: { authority_class: 'repo_trusted' },
+  };
+  const b = {
+    claim: { id: 'c-b' },
+    evidence: { authority_class: 'repo_trusted' },
+  };
+  const missingFirst = [
+    { claim_a: 'c-a', claim_b: 'c-x', state: 'open' },
+    { claim_a: 'c-a', claim_b: 'c-b', state: 'open' },
+  ];
+  const missingLast = [...missingFirst].reverse();
+
+  const first = evaluateReliance({
+    items: [a, b],
+    conflicts: missingFirst,
+    use: 'answer',
+  });
+  const last = evaluateReliance({
+    items: [a, b],
+    conflicts: missingLast,
+    use: 'answer',
+  });
+
+  assert.deepEqual(first.selected, []);
+  assert.deepEqual(last.selected, []);
+  assert.equal(
+    first.conflict_resolutions.find(
+      (resolution) => resolution.claim_a === 'c-a' && resolution.claim_b === 'c-b',
+    )?.status,
+    'unresolved',
+  );
+  assert.equal(
+    first.conflict_resolutions.find(
+      (resolution) => resolution.claim_a === 'c-a' && resolution.claim_b === 'c-b',
+    )?.winner_claim_id,
+    null,
+  );
+});
+
 test('authority layer preserves fail-closed repository freshness', async (t) => {
   const engine = await createEngine();
   t.after(() => engine.close());
