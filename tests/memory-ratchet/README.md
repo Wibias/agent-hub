@@ -23,17 +23,23 @@ The baseline is frozen before candidate adapters are implemented. Changes after 
 
 ## Initial research set
 
-The first planned adapters are:
+The initial seven-candidate core evaluation is complete:
 
-- memspec
-- Kage
-- LongMemory
-- GBrain
-- Midas
-- agentmemory
-- Hindsight
+- memspec 0.11.0
+- Kage 5.0.0
+- LongMemory 1.0.0
+- GBrain 0.59.3.0
+- Midas 1.0.0
+- agentmemory 0.9.27
+- Hindsight 0.10.1
 
-This list is not part of the benchmark contract. Adding or removing a candidate must not change the cases.
+No evaluated candidate passed every M01-M12 hard gate, so none is eligible for direct adoption under specification 0.1.0.
+
+Pinned candidate results, decisive run IDs, artifact digests, and configurations live in `results/`.
+
+The cross-candidate architecture decision is `results/SYNTHESIS.md`.
+
+This candidate list is not part of the benchmark contract. Adding or removing a candidate must not change the cases.
 
 ## Phases
 
@@ -44,6 +50,7 @@ This list is not part of the benchmark contract. Adding or removing a candidate 
 5. Run the native track when the project ships an official harness integration.
 6. Eliminate candidates that fail a hard gate.
 7. Compare surviving candidates using the raw receipts and secondary metrics.
+8. When no candidate survives, synthesize a reference architecture only from mechanisms demonstrated by the pinned runs.
 
 No adapter may repair a candidate's semantics. Adapter logic may translate formats and invoke documented APIs only.
 
