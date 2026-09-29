@@ -475,3 +475,127 @@ test('materialize recall keeps unresolved conflict visible when counterpart is o
   );
   assert.equal(reliance.conflict_resolutions[0].status, 'unresolved_missing_counterpart');
 });
+
+
+test('reciprocal rank fusion rewards agreement and uses deterministic tie breakers', async () => {
+  const { reciprocalRankFuse } = await import('../../memory-engine/hybrid-retrieval.mjs');
+
+  assert.deepEqual(
+    reciprocalRankFuse({
+      lexicalIds: ['a', 'b'],
+      semanticIds: ['b', 'c'],
+      createdAtById: new Map([
+        ['a', '2026-01-01T00:00:00Z'],
+        ['b', '2026-01-02T00:00:00Z'],
+        ['c', '2026-01-03T00:00:00Z'],
+      ]),
+    }),
+    ['b', 'a', 'c'],
+  );
+
+  assert.deepEqual(
+    reciprocalRankFuse({
+      lexicalIds: ['z'],
+      semanticIds: ['a'],
+      createdAtById: new Map([
+        ['z', '2026-01-01T00:00:00Z'],
+        ['a', '2026-01-01T00:00:00Z'],
+      ]),
+    }),
+    ['a', 'z'],
+    'claim id is the final ascending tie breaker',
+  );
+});
+
+test('reciprocal rank fusion defaults to k=60', async () => {
+  const { reciprocalRankFuse } = await import('../../memory-engine/hybrid-retrieval.mjs');
+
+  const lexicalIds = ['a', 'l2', 'l3', 'l4', 'l5', 'l6', 'l7', 'l8', 'l9', 'b'];
+  const semanticIds = ['s1', 's2', 's3', 's4', 's5', 's6', 's7', 's8', 's9', 'b'];
+  const ids = [...new Set([...lexicalIds, ...semanticIds])];
+  const createdAtById = new Map(ids.map((id) => [id, '2026-01-01T00:00:00Z']));
+
+  const defaults = reciprocalRankFuse({ lexicalIds, semanticIds, createdAtById });
+  const explicit60 = reciprocalRankFuse({
+    lexicalIds,
+    semanticIds,
+    createdAtById,
+    k: 60,
+  });
+  const explicit1 = reciprocalRankFuse({
+    lexicalIds,
+    semanticIds,
+    createdAtById,
+    k: 1,
+  });
+
+  assert.deepEqual(defaults, explicit60);
+  assert.ok(defaults.indexOf('b') < defaults.indexOf('a'));
+  assert.ok(explicit1.indexOf('a') < explicit1.indexOf('b'));
+});
+
+test('recall budget enforces item and serialized byte caps in fused order', async () => {
+  const { enforceRecallBudget } = await import('../../memory-engine/hybrid-retrieval.mjs');
+
+  const result = {
+    items: Array.from({ length: 12 }, (_, index) => ({
+      claim: { id: `c-${String(index).padStart(2, '0')}` },
+      evidence: { content_redacted: 'x'.repeat(4_000) },
+      freshness: null,
+      rank: index,
+    })),
+    conflicts: [],
+  };
+
+  const bounded = enforceRecallBudget(result, {
+    maxItems: 10,
+    maxSerializedBytes: 16_384,
+  });
+
+  assert.ok(bounded.items.length <= 10);
+  assert.ok(Buffer.byteLength(JSON.stringify(bounded), 'utf8') <= 16_384);
+  assert.deepEqual(
+    bounded.items.map((item) => item.claim.id),
+    result.items.slice(0, bounded.items.length).map((item) => item.claim.id),
+  );
+});
+
+test('recall budget preserves conflicts attached to retained items', async () => {
+  const { enforceRecallBudget } = await import('../../memory-engine/hybrid-retrieval.mjs');
+
+  const result = {
+    items: [
+      { claim: { id: 'a' }, evidence: {}, freshness: null, rank: 0 },
+      { claim: { id: 'b' }, evidence: {}, freshness: null, rank: 1 },
+      { claim: { id: 'c' }, evidence: {}, freshness: null, rank: 2 },
+    ],
+    conflicts: [
+      { claim_a: 'a', claim_b: 'b', state: 'open' },
+      { claim_a: 'b', claim_b: 'c', state: 'open' },
+    ],
+  };
+
+  const bounded = enforceRecallBudget(result, {
+    maxItems: 1,
+    maxSerializedBytes: 16_384,
+  });
+
+  assert.deepEqual(bounded.items.map((item) => item.claim.id), ['a']);
+  assert.deepEqual(bounded.conflicts, [
+    { claim_a: 'a', claim_b: 'b', state: 'open' },
+  ]);
+});
+
+test('recall budget rejects limits outside the architecture contract', async () => {
+  const { enforceRecallBudget } = await import('../../memory-engine/hybrid-retrieval.mjs');
+  const result = { items: [], conflicts: [] };
+
+  assert.throws(
+    () => enforceRecallBudget(result, { maxItems: 11, maxSerializedBytes: 16_384 }),
+    /maxItems/i,
+  );
+  assert.throws(
+    () => enforceRecallBudget(result, { maxItems: 10, maxSerializedBytes: 16_385 }),
+    /maxSerializedBytes/i,
+  );
+});
