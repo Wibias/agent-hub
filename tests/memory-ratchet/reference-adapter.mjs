@@ -155,6 +155,8 @@ export function createReferenceMemoryAdapter() {
           state: event.type === 'approval' ? 'candidate' : undefined,
           branchScope: event.branch,
           createdAt: event.at,
+          validFrom: event.type === 'approval' ? event.at : null,
+          validUntil: event.authority?.valid_until ?? null,
         },
         lifecycle: {
           supersedes: (event.relations?.supersedes ?? []).map(claimId),
@@ -175,7 +177,6 @@ export function createReferenceMemoryAdapter() {
         approval = engine.recordApproval({
           id: `approval:${event.id}`,
           projectId: event.project_id,
-          actor: event.source,
           action: event.authority.action,
           target: event.authority.target,
           environment: event.authority.environment,
