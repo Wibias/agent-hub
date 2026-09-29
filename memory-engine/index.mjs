@@ -195,6 +195,7 @@ export function evaluateReliance({
   const selected = [];
   const blocked = [];
   const selectedIds = new Set();
+  const authorityAllowedIds = new Set();
   const byId = new Map();
 
   for (const item of items ?? []) {
@@ -206,6 +207,7 @@ export function evaluateReliance({
     if (allowedClasses.has(authority)) {
       selected.push(item);
       selectedIds.add(claimId);
+      authorityAllowedIds.add(claimId);
     } else {
       blocked.push({
         item,
@@ -237,8 +239,8 @@ export function evaluateReliance({
       continue;
     }
 
-    const aAllowed = selectedIds.has(conflict.claim_a);
-    const bAllowed = selectedIds.has(conflict.claim_b);
+    const aAllowed = authorityAllowedIds.has(conflict.claim_a);
+    const bAllowed = authorityAllowedIds.has(conflict.claim_b);
 
     if (aAllowed !== bAllowed) {
       conflictResolutions.push({
