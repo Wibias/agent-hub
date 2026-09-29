@@ -207,10 +207,6 @@ export class HybridMemoryRetriever {
     maxItems = 10,
     maxSerializedBytes = 16_384,
   }) {
-    if (this.#embedder === null) {
-      throw new Error('no semantic embedder configured');
-    }
-
     const lexical = this.#memory.recall({
       projectId,
       branch,
@@ -220,7 +216,22 @@ export class HybridMemoryRetriever {
       limit: this.#lexicalCandidateLimit,
     });
 
-    const queryVector = await this.#embedder.embedQuery(query);
+    if (this.#embedder === null) {
+      return enforceRecallBudget(lexical, {
+        maxItems,
+        maxSerializedBytes,
+      });
+    }
+
+    let queryVector;
+    try {
+      queryVector = await this.#embedder.embedQuery(query);
+    } catch {
+      return enforceRecallBudget(lexical, {
+        maxItems,
+        maxSerializedBytes,
+      });
+    }
     const semantic = this.#memory.semanticCandidates({
       projectId,
       branch,
