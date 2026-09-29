@@ -26,6 +26,20 @@ test('M01 keeps the later Postgres decision as current cross-harness truth', asy
   assert.ok(texts.every((text) => !/^Use SQLite\.?$/i.test(text)));
 });
 
+test('M02 recalls the active database decision after 27 unrelated sessions', async () => {
+  const result = await runCase('M02');
+  const texts = currentTexts(result);
+
+  assert.ok(
+    texts.some((text) => /Postgres/i.test(text)),
+    JSON.stringify(result.raw_recall, null, 2),
+  );
+  assert.ok(
+    texts.every((text) => !/^Use SQLite\.?$/i.test(text)),
+    JSON.stringify(result.raw_recall, null, 2),
+  );
+});
+
 test('M03 hard-isolates project B from project A memory', async () => {
   const result = await runCase('M03');
   const texts = currentTexts(result);
