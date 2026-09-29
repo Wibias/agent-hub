@@ -1,5 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdtemp } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 function makeTensor(count, dimensions = 384, {
   value = 0.25,
@@ -358,5 +361,16 @@ test('model cache preparation rejects an invalid readiness vector', async () => 
       log: () => {},
     }),
     /384|dimension/i,
+  );
+});
+
+
+test('normal E5 provider fails offline against an empty model cache', async () => {
+  const { createE5Embedder } = await import('../../memory-engine/e5-embedder.mjs');
+  const cacheDir = await mkdtemp(join(tmpdir(), 'memory-engine-e5-empty-cache-'));
+
+  await assert.rejects(
+    () => createE5Embedder({ cacheDir }),
+    /local|file|model|config|cache|not found|could not/i,
   );
 });
