@@ -14,88 +14,11 @@ concurrency:
   group: memory-ratchet-candidates-${{ github.ref }}
   cancel-in-progress: true
 
+# Completed pinned candidate runs are recorded under tests/memory-ratchet/results/
+# with their run IDs and artifact digests. Only open candidates run here.
 jobs:
-  agentmemory-core:
-    name: agentmemory core hard gates
+  open-candidates:
+    name: open candidate placeholder
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-
-      - name: Build exact agentmemory revision
-        env:
-          AGENTMEMORY_REV: a76224f0987ed8f3ea0e4961f3928736ded23f54
-        run: |
-          git clone --quiet https://github.com/biencuong/agentmemory.git "$RUNNER_TEMP/agentmemory"
-          git -C "$RUNNER_TEMP/agentmemory" checkout --quiet "$AGENTMEMORY_REV"
-          test "$(git -C "$RUNNER_TEMP/agentmemory" rev-parse HEAD)" = "$AGENTMEMORY_REV"
-          npm install --prefix "$RUNNER_TEMP/agentmemory" --no-audit --no-fund
-          npm run build --prefix "$RUNNER_TEMP/agentmemory"
-          test "$(node -p "require('$RUNNER_TEMP/agentmemory/package.json').version")" = "0.9.27"
-
-      - name: Install candidate-pinned iii-engine
-        env:
-          III_VERSION: 0.11.2
-        run: |
-          mkdir -p "$RUNNER_TEMP/agentmemory-iii"
-          curl -fsSL "https://github.com/iii-hq/iii/releases/download/iii/v${III_VERSION}/iii-x86_64-unknown-linux-gnu.tar.gz" |
-            tar -xz -C "$RUNNER_TEMP/agentmemory-iii"
-          chmod +x "$RUNNER_TEMP/agentmemory-iii/iii"
-          "$RUNNER_TEMP/agentmemory-iii/iii" --version
-          echo "$RUNNER_TEMP/agentmemory-iii" >> "$GITHUB_PATH"
-
-      - name: Run agentmemory M01-M12 core track
-        env:
-          AGENTMEMORY_DIST: ${{ runner.temp }}/agentmemory/dist
-          AGENTMEMORY_AUTO_COMPRESS: "false"
-          AGENTMEMORY_INJECT_CONTEXT: "false"
-          AGENTMEMORY_ALLOW_AGENT_SDK: "false"
-          CONSOLIDATION_ENABLED: "false"
-        run: |
-          mkdir -p artifacts/memory-ratchet
-          node --input-type=module <<'NODE'
-          import { writeFile } from 'node:fs/promises';
-          import { createAgentmemoryAdapter } from './tests/memory-ratchet/adapters/agentmemory.mjs';
-          import { runCoreTrack } from './tests/memory-ratchet/core-track.mjs';
-
-          const caseIds = Array.from(
-            { length: 12 },
-            (_, index) => `M${String(index + 1).padStart(2, '0')}`,
-          );
-          const report = await runCoreTrack({
-            adapterFactory: () => createAgentmemoryAdapter(),
-            caseIds,
-          });
-
-          await writeFile(
-            'artifacts/memory-ratchet/agentmemory-core.json',
-            JSON.stringify(report, null, 2) + '\n',
-            'utf8',
-          );
-
-          console.log(JSON.stringify(
-            report.cases.map(({ case_id, status, secret_leaked, error }) => ({
-              case_id,
-              status,
-              secret_leaked,
-              error: error?.message ?? null,
-            })),
-            null,
-            2,
-          ));
-          NODE
-
-      - name: Upload agentmemory raw core report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: memory-ratchet-agentmemory-core
-          path: artifacts/memory-ratchet/agentmemory-core.json
-          if-no-files-found: error
-          retention-days: 14
+      - run: echo "Hindsight is the only remaining candidate; its job is added after adapter validation."
