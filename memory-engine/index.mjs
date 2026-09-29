@@ -1,6 +1,11 @@
 import { DatabaseSync } from 'node:sqlite';
 
 import { assertAuthorityClass } from './authority.mjs';
+import {
+  decodeFloat32Vector,
+  encodeFloat32Vector,
+  hashEmbeddingText,
+} from './semantic-vectors.mjs';
 
 export const REDACTED_SECRET = '[REDACTED_SECRET]';
 
@@ -127,6 +132,142 @@ function normalizeClaim(row) {
   };
 }
 
+function normalizeClaimEmbedding(row) {
+  if (!row) return null;
+  return {
+    claim_id: row.claim_id,
+    model_id: row.model_id,
+    model_revision: row.model_revision,
+    text_hash: row.text_hash,
+    dimensions: row.dimensions,
+    vector: decodeFloat32Vector(Buffer.from(row.vector_blob), row.dimensions),
+    indexed_at: row.indexed_at,
+  };
+}
+
+function embeddingDocumentFromRow(row) {
+  const text = [
+    'passage:',
+    row.kind,
+    row.subject,
+    row.predicate,
+    row.value_text,
+    row.content_redacted,
+  ]
+    .filter((value) => value !== null && value !== undefined && String(value).trim().length > 0)
+    .join(' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  return {
+    claim_id: row.id,
+    project_id: row.project_id,
+    branch_scope: row.branch_scope,
+    created_at: row.created_at,
+    text,
+    text_hash: hashEmbeddingText(text),
+  };
+}
+
+function normalizeRecallRow(row, revisionSha) {
+  return {
+    claim: normalizeClaim(row),
+    evidence: {
+      id: row.evidence_id,
+      project_id: row.project_id,
+      harness: row.evidence_harness,
+      session_id: row.evidence_session_id,
+      source_kind: row.evidence_source_kind,
+      source_ref: row.evidence_source_ref,
+      captured_at: row.evidence_captured_at,
+      branch: row.evidence_branch,
+      commit_sha: row.evidence_commit_sha,
+      path: row.evidence_path,
+      blob_oid: row.evidence_blob_oid,
+      content_redacted: row.evidence_content_redacted,
+      sensitivity: row.evidence_sensitivity,
+      authority_class: row.evidence_authority_class,
+      metadata: parseMetadata(row.evidence_metadata_json),
+    },
+    freshness: (
+      row.evidence_path !== null
+      ? {
+          status: (
+            revisionSha === null
+            || row.freshness_commit_sha === null
+            || row.freshness_commit_sha !== revisionSha
+          )
+            ? 'unchecked'
+            : (
+                row.evidence_blob_oid !== null
+                && row.freshness_blob_oid === row.evidence_blob_oid
+                  ? 'fresh'
+                  : 'stale'
+              ),
+          observed_blob_oid: row.evidence_blob_oid,
+          current_blob_oid: row.freshness_blob_oid,
+          current_commit_sha: row.freshness_commit_sha,
+          checked_at: row.freshness_checked_at,
+        }
+      : null
+    ),
+    rank: Number(row.rank),
+  };
+}
+
+function recallConflicts(db, {
+  projectId,
+  branch,
+  mode,
+  revisionSha,
+  itemIds,
+}) {
+  let currentEligibleIds = null;
+  if (mode === 'current') {
+    currentEligibleIds = new Set(db.prepare(`
+      SELECT c.id
+      FROM claims c
+      JOIN evidence e ON e.id = c.created_from_evidence_id
+      LEFT JOIN repository_path_state rps
+        ON rps.project_id = c.project_id
+       AND rps.branch = c.branch_scope
+       AND rps.path = e.path
+      WHERE c.project_id = ?
+        AND c.branch_scope = ?
+        AND ${CLAIM_ELIGIBILITY_SQL}
+    `).all(
+      projectId,
+      branch,
+      mode,
+      revisionSha,
+      revisionSha,
+    ).map((row) => row.id));
+  }
+
+  return db.prepare(`
+    SELECT
+      claim_a,
+      claim_b,
+      state,
+      created_by_evidence_id,
+      created_at,
+      resolved_by_evidence_id,
+      resolved_at
+    FROM conflicts
+    WHERE project_id = ?
+    ORDER BY claim_a, claim_b
+  `).all(projectId).filter(
+    (conflict) => (
+      (mode === 'historical' || (
+        conflict.state === 'open'
+        && currentEligibleIds.has(conflict.claim_a)
+        && currentEligibleIds.has(conflict.claim_b)
+      ))
+      && (itemIds.has(conflict.claim_a) || itemIds.has(conflict.claim_b))
+    ),
+  );
+}
+
 function normalizeApproval(row) {
   if (!row) return null;
   return {
@@ -223,6 +364,24 @@ function searchableText(claim, evidenceContent) {
 
   return `${raw} ${lexicalTerms(raw).join(' ')}`;
 }
+
+const CLAIM_ELIGIBILITY_SQL = `
+  (
+    ? = 'historical'
+    OR (
+      c.state = 'active'
+      AND (
+        e.path IS NULL
+        OR (
+          ? IS NOT NULL
+          AND e.blob_oid IS NOT NULL
+          AND rps.commit_sha = ?
+          AND rps.blob_oid = e.blob_oid
+        )
+      )
+    )
+  )
+`;
 
 const RELIANCE_ALLOWED = {
   planning: new Set([
@@ -466,6 +625,17 @@ export class MemoryEngine {
         PRIMARY KEY (project_id, branch, path)
       ) STRICT;
 
+      CREATE TABLE IF NOT EXISTS claim_embeddings (
+        claim_id TEXT NOT NULL REFERENCES claims(id),
+        model_id TEXT NOT NULL,
+        model_revision TEXT NOT NULL,
+        text_hash TEXT NOT NULL,
+        dimensions INTEGER NOT NULL CHECK (dimensions > 0),
+        vector_blob BLOB NOT NULL,
+        indexed_at TEXT NOT NULL,
+        PRIMARY KEY (claim_id, model_id, model_revision)
+      ) STRICT;
+
       CREATE VIRTUAL TABLE IF NOT EXISTS claim_fts USING fts5(
         claim_id UNINDEXED,
         project_id UNINDEXED,
@@ -558,6 +728,408 @@ export class MemoryEngine {
     );
   }
 
+  embeddingDocument({ claimId }) {
+    assertNonEmptyString(claimId, 'claimId');
+
+    const row = this.#db.prepare(`
+      SELECT
+        c.id,
+        c.project_id,
+        c.branch_scope,
+        c.created_at,
+        c.kind,
+        c.subject,
+        c.predicate,
+        c.value_text,
+        e.content_redacted
+      FROM claims c
+      JOIN evidence e ON e.id = c.created_from_evidence_id
+      WHERE c.id = ?
+    `).get(claimId);
+
+    return row ? embeddingDocumentFromRow(row) : null;
+  }
+
+  listEmbeddingDocuments({ projectId, branch }) {
+    assertNonEmptyString(projectId, 'projectId');
+    assertNonEmptyString(branch, 'branch');
+    if (!this.getProject(projectId)) throw new Error(`unknown project: ${projectId}`);
+
+    return this.#db.prepare(`
+      SELECT
+        c.id,
+        c.project_id,
+        c.branch_scope,
+        c.created_at,
+        c.kind,
+        c.subject,
+        c.predicate,
+        c.value_text,
+        e.content_redacted
+      FROM claims c
+      JOIN evidence e ON e.id = c.created_from_evidence_id
+      WHERE c.project_id = ?
+        AND c.branch_scope = ?
+      ORDER BY c.id ASC
+    `).all(projectId, branch).map(embeddingDocumentFromRow);
+  }
+
+  semanticCandidates({
+    projectId,
+    branch,
+    revisionSha = null,
+    mode = 'current',
+    modelId,
+    modelRevision,
+  }) {
+    for (const [value, name] of [
+      [projectId, 'projectId'],
+      [branch, 'branch'],
+      [modelId, 'modelId'],
+      [modelRevision, 'modelRevision'],
+    ]) {
+      assertNonEmptyString(value, name);
+    }
+    if (revisionSha !== null) assertNonEmptyString(revisionSha, 'revisionSha');
+    if (!['current', 'historical'].includes(mode)) {
+      throw new Error(`unsupported recall mode: ${mode}`);
+    }
+    if (!this.getProject(projectId)) throw new Error(`unknown project: ${projectId}`);
+
+    const rows = this.#db.prepare(`
+      SELECT
+        c.id,
+        c.project_id,
+        c.branch_scope,
+        c.kind,
+        c.subject,
+        c.predicate,
+        c.value_text,
+        c.created_at,
+        e.content_redacted,
+        ce.text_hash,
+        ce.dimensions,
+        ce.vector_blob
+      FROM claim_embeddings ce
+      JOIN claims c ON c.id = ce.claim_id
+      JOIN evidence e ON e.id = c.created_from_evidence_id
+      LEFT JOIN repository_path_state rps
+        ON rps.project_id = c.project_id
+       AND rps.branch = c.branch_scope
+       AND rps.path = e.path
+      WHERE ce.model_id = ?
+        AND ce.model_revision = ?
+        AND c.project_id = ?
+        AND c.branch_scope = ?
+        AND ${CLAIM_ELIGIBILITY_SQL}
+      ORDER BY c.created_at DESC, c.id ASC
+    `).all(
+      modelId,
+      modelRevision,
+      projectId,
+      branch,
+      mode,
+      revisionSha,
+      revisionSha,
+    );
+
+    const candidates = [];
+    for (const row of rows) {
+      try {
+        const document = embeddingDocumentFromRow(row);
+        if (row.text_hash !== document.text_hash) continue;
+
+        candidates.push({
+          claim_id: row.id,
+          created_at: row.created_at,
+          text_hash: row.text_hash,
+          dimensions: row.dimensions,
+          vector: decodeFloat32Vector(Buffer.from(row.vector_blob), row.dimensions),
+        });
+      } catch {
+        // Semantic vectors are derived state. Corrupt or stale rows fail closed
+        // locally without making canonical or lexical memory unavailable.
+      }
+    }
+    return candidates;
+  }
+
+  materializeRecall({
+    projectId,
+    branch,
+    revisionSha = null,
+    mode = 'current',
+    claimIds,
+  }) {
+    assertNonEmptyString(projectId, 'projectId');
+    assertNonEmptyString(branch, 'branch');
+    if (revisionSha !== null) assertNonEmptyString(revisionSha, 'revisionSha');
+    if (!['current', 'historical'].includes(mode)) {
+      throw new Error(`unsupported recall mode: ${mode}`);
+    }
+    if (!Array.isArray(claimIds)) {
+      throw new TypeError('claimIds must be an array');
+    }
+    if (!this.getProject(projectId)) throw new Error(`unknown project: ${projectId}`);
+
+    const select = this.#db.prepare(`
+      SELECT
+        c.*,
+        e.id AS evidence_id,
+        e.harness AS evidence_harness,
+        e.session_id AS evidence_session_id,
+        e.source_kind AS evidence_source_kind,
+        e.source_ref AS evidence_source_ref,
+        e.captured_at AS evidence_captured_at,
+        e.branch AS evidence_branch,
+        e.commit_sha AS evidence_commit_sha,
+        e.path AS evidence_path,
+        e.blob_oid AS evidence_blob_oid,
+        e.content_redacted AS evidence_content_redacted,
+        e.sensitivity AS evidence_sensitivity,
+        e.authority_class AS evidence_authority_class,
+        e.metadata_json AS evidence_metadata_json,
+        rps.commit_sha AS freshness_commit_sha,
+        rps.blob_oid AS freshness_blob_oid,
+        rps.checked_at AS freshness_checked_at,
+        0.0 AS rank
+      FROM claims c
+      JOIN evidence e ON e.id = c.created_from_evidence_id
+      LEFT JOIN repository_path_state rps
+        ON rps.project_id = c.project_id
+       AND rps.branch = c.branch_scope
+       AND rps.path = e.path
+      WHERE c.id = ?
+        AND c.project_id = ?
+        AND c.branch_scope = ?
+        AND ${CLAIM_ELIGIBILITY_SQL}
+    `);
+
+    const items = [];
+    const seen = new Set();
+    for (const claimId of claimIds) {
+      assertNonEmptyString(claimId, 'claimIds item');
+      if (seen.has(claimId)) continue;
+      seen.add(claimId);
+      const row = select.get(
+        claimId,
+        projectId,
+        branch,
+        mode,
+        revisionSha,
+        revisionSha,
+      );
+      if (row) items.push(normalizeRecallRow(row, revisionSha));
+    }
+
+    const ids = new Set(items.map((item) => item.claim.id));
+    return {
+      project_id: projectId,
+      branch,
+      mode,
+      items,
+      conflicts: recallConflicts(this.#db, {
+        projectId,
+        branch,
+        mode,
+        revisionSha,
+        itemIds: ids,
+      }),
+    };
+  }
+
+  putClaimEmbedding({
+    claimId,
+    modelId,
+    modelRevision,
+    textHash,
+    dimensions,
+    vector,
+    indexedAt = this.#clock(),
+  }) {
+    for (const [value, name] of [
+      [claimId, 'claimId'],
+      [modelId, 'modelId'],
+      [modelRevision, 'modelRevision'],
+      [indexedAt, 'indexedAt'],
+    ]) {
+      assertNonEmptyString(value, name);
+    }
+    if (!/^[0-9a-f]{64}$/.test(textHash)) {
+      throw new TypeError('text hash must be lowercase SHA-256 hex');
+    }
+    if (!Number.isInteger(dimensions) || dimensions < 1) {
+      throw new RangeError('dimensions must be a positive integer');
+    }
+    if (!(vector instanceof Float32Array) || vector.length !== dimensions) {
+      throw new RangeError('vector dimensions must match dimensions');
+    }
+    if (!this.getClaim(claimId)) throw new Error(`unknown claim: ${claimId}`);
+
+    const vectorBlob = encodeFloat32Vector(vector);
+    this.#db.prepare(`
+      INSERT INTO claim_embeddings (
+        claim_id, model_id, model_revision, text_hash,
+        dimensions, vector_blob, indexed_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(claim_id, model_id, model_revision) DO UPDATE SET
+        text_hash = excluded.text_hash,
+        dimensions = excluded.dimensions,
+        vector_blob = excluded.vector_blob,
+        indexed_at = excluded.indexed_at
+    `).run(
+      claimId,
+      modelId,
+      modelRevision,
+      textHash,
+      dimensions,
+      vectorBlob,
+      indexedAt,
+    );
+
+    return this.getClaimEmbedding({ claimId, modelId, modelRevision });
+  }
+
+  getClaimEmbedding({ claimId, modelId, modelRevision }) {
+    for (const [value, name] of [
+      [claimId, 'claimId'],
+      [modelId, 'modelId'],
+      [modelRevision, 'modelRevision'],
+    ]) {
+      assertNonEmptyString(value, name);
+    }
+    return normalizeClaimEmbedding(this.#db.prepare(`
+      SELECT
+        claim_id, model_id, model_revision, text_hash,
+        dimensions, vector_blob, indexed_at
+      FROM claim_embeddings
+      WHERE claim_id = ? AND model_id = ? AND model_revision = ?
+    `).get(claimId, modelId, modelRevision));
+  }
+
+  deleteClaimEmbeddings({ modelId = null, modelRevision = null } = {}) {
+    if (modelId !== null) assertNonEmptyString(modelId, 'modelId');
+    if (modelRevision !== null) assertNonEmptyString(modelRevision, 'modelRevision');
+
+    if (modelId !== null && modelRevision !== null) {
+      return Number(this.#db.prepare(`
+        DELETE FROM claim_embeddings
+        WHERE model_id = ? AND model_revision = ?
+      `).run(modelId, modelRevision).changes);
+    }
+    if (modelId !== null) {
+      return Number(this.#db.prepare(
+        'DELETE FROM claim_embeddings WHERE model_id = ?',
+      ).run(modelId).changes);
+    }
+    if (modelRevision !== null) {
+      return Number(this.#db.prepare(
+        'DELETE FROM claim_embeddings WHERE model_revision = ?',
+      ).run(modelRevision).changes);
+    }
+    return Number(this.#db.prepare('DELETE FROM claim_embeddings').run().changes);
+  }
+
+  replaceClaimEmbeddings({
+    projectId,
+    branch,
+    modelId,
+    modelRevision,
+    rows,
+    indexedAt = this.#clock(),
+  }) {
+    for (const [value, name] of [
+      [projectId, 'projectId'],
+      [branch, 'branch'],
+      [modelId, 'modelId'],
+      [modelRevision, 'modelRevision'],
+      [indexedAt, 'indexedAt'],
+    ]) {
+      assertNonEmptyString(value, name);
+    }
+    if (!Array.isArray(rows)) throw new TypeError('rows must be an array');
+    if (!this.getProject(projectId)) throw new Error(`unknown project: ${projectId}`);
+
+    const prepared = [];
+    const seen = new Set();
+    for (const row of rows) {
+      if (!row || typeof row !== 'object') {
+        throw new TypeError('embedding row must be an object');
+      }
+      assertNonEmptyString(row.claimId, 'embedding row claimId');
+      if (seen.has(row.claimId)) {
+        throw new Error(`duplicate embedding row claim: ${row.claimId}`);
+      }
+      seen.add(row.claimId);
+      if (!/^[0-9a-f]{64}$/.test(row.textHash ?? '')) {
+        throw new TypeError('embedding row text hash must be lowercase SHA-256 hex');
+      }
+      if (!Number.isInteger(row.dimensions) || row.dimensions < 1) {
+        throw new RangeError('embedding row dimensions must be a positive integer');
+      }
+      if (!(row.vector instanceof Float32Array) || row.vector.length !== row.dimensions) {
+        throw new RangeError('embedding row vector dimensions must match dimensions');
+      }
+      prepared.push({
+        ...row,
+        vectorBlob: encodeFloat32Vector(row.vector),
+      });
+    }
+
+    this.#db.exec('BEGIN IMMEDIATE');
+    try {
+      const claimScope = this.#db.prepare(`
+        SELECT project_id, branch_scope
+        FROM claims
+        WHERE id = ?
+      `);
+      for (const row of prepared) {
+        const claim = claimScope.get(row.claimId);
+        if (!claim) throw new Error(`unknown claim: ${row.claimId}`);
+        if (claim.project_id !== projectId || claim.branch_scope !== branch) {
+          throw new Error(`embedding row claim is outside requested project/branch: ${row.claimId}`);
+        }
+      }
+
+      this.#db.prepare(`
+        DELETE FROM claim_embeddings
+        WHERE model_id = ?
+          AND model_revision = ?
+          AND claim_id IN (
+            SELECT id
+            FROM claims
+            WHERE project_id = ?
+              AND branch_scope = ?
+          )
+      `).run(modelId, modelRevision, projectId, branch);
+
+      const insert = this.#db.prepare(`
+        INSERT INTO claim_embeddings (
+          claim_id, model_id, model_revision, text_hash,
+          dimensions, vector_blob, indexed_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+      `);
+      for (const row of prepared) {
+        insert.run(
+          row.claimId,
+          modelId,
+          modelRevision,
+          row.textHash,
+          row.dimensions,
+          row.vectorBlob,
+          indexedAt,
+        );
+      }
+
+      this.#db.exec('COMMIT');
+      return prepared.length;
+    } catch (error) {
+      this.#db.exec('ROLLBACK');
+      throw error;
+    }
+  }
+
+
   getApproval(id) {
     return normalizeApproval(
       this.#db.prepare('SELECT * FROM approvals WHERE id = ?').get(id),
@@ -638,6 +1210,7 @@ export class MemoryEngine {
     this.#db.exec('BEGIN IMMEDIATE');
     try {
       this.#db.prepare('DELETE FROM claim_fts').run();
+      this.#db.prepare('DELETE FROM claim_embeddings').run();
       this.#db.prepare('DELETE FROM repository_path_state').run();
       this.#db.exec('COMMIT');
     } catch (error) {
@@ -650,6 +1223,7 @@ export class MemoryEngine {
     this.#db.exec('BEGIN IMMEDIATE');
     try {
       this.#db.prepare('DELETE FROM claim_fts').run();
+      this.#db.prepare('DELETE FROM claim_embeddings').run();
       const rows = this.#db.prepare(`
         SELECT
           c.id,
@@ -1077,6 +1651,7 @@ export class MemoryEngine {
           }, row.content_redacted),
         );
       }
+      this.#db.prepare('DELETE FROM claim_embeddings').run();
       this.#db.prepare('DELETE FROM repository_path_state').run();
 
       this.#db.exec('COMMIT');
@@ -1692,21 +2267,7 @@ export class MemoryEngine {
         WHERE claim_fts MATCH ?
           AND c.project_id = ?
           AND c.branch_scope = ?
-          AND (
-            ? = 'historical'
-            OR (
-              c.state = 'active'
-              AND (
-                e.path IS NULL
-                OR (
-                  ? IS NOT NULL
-                  AND e.blob_oid IS NOT NULL
-                  AND rps.commit_sha = ?
-                  AND rps.blob_oid = e.blob_oid
-                )
-              )
-            )
-          )
+          AND ${CLAIM_ELIGIBILITY_SQL}
         ORDER BY rank ASC, c.created_at DESC, c.id ASC
         LIMIT ?
       `).all(ftsQuery, projectId, branch, mode, revisionSha, revisionSha, limit);
@@ -1740,118 +2301,21 @@ export class MemoryEngine {
          AND rps.path = e.path
         WHERE c.project_id = ?
           AND c.branch_scope = ?
-          AND (
-            ? = 'historical'
-            OR (
-              c.state = 'active'
-              AND (
-                e.path IS NULL
-                OR (
-                  ? IS NOT NULL
-                  AND e.blob_oid IS NOT NULL
-                  AND rps.commit_sha = ?
-                  AND rps.blob_oid = e.blob_oid
-                )
-              )
-            )
-          )
+          AND ${CLAIM_ELIGIBILITY_SQL}
         ORDER BY c.created_at DESC, c.id ASC
         LIMIT ?
       `).all(projectId, branch, mode, revisionSha, revisionSha, limit);
     }
 
-    const items = rows.map((row) => ({
-      claim: normalizeClaim(row),
-      evidence: {
-        id: row.evidence_id,
-        project_id: row.project_id,
-        harness: row.evidence_harness,
-        session_id: row.evidence_session_id,
-        source_kind: row.evidence_source_kind,
-        source_ref: row.evidence_source_ref,
-        captured_at: row.evidence_captured_at,
-        branch: row.evidence_branch,
-        commit_sha: row.evidence_commit_sha,
-        path: row.evidence_path,
-        blob_oid: row.evidence_blob_oid,
-        content_redacted: row.evidence_content_redacted,
-        sensitivity: row.evidence_sensitivity,
-        authority_class: row.evidence_authority_class,
-        metadata: parseMetadata(row.evidence_metadata_json),
-      },
-      freshness: (
-        row.evidence_path !== null
-        ? {
-            status: (
-              revisionSha === null
-              || row.freshness_commit_sha === null
-              || row.freshness_commit_sha !== revisionSha
-            )
-              ? 'unchecked'
-              : (
-                  row.evidence_blob_oid !== null
-                  && row.freshness_blob_oid === row.evidence_blob_oid
-                    ? 'fresh'
-                    : 'stale'
-                ),
-            observed_blob_oid: row.evidence_blob_oid,
-            current_blob_oid: row.freshness_blob_oid,
-            current_commit_sha: row.freshness_commit_sha,
-            checked_at: row.freshness_checked_at,
-          }
-        : null
-      ),
-      rank: Number(row.rank),
-    }));
-
+    const items = rows.map((row) => normalizeRecallRow(row, revisionSha));
     const ids = new Set(items.map((item) => item.claim.id));
-    let currentEligibleIds = null;
-    if (mode === 'current') {
-      currentEligibleIds = new Set(this.#db.prepare(`
-        SELECT c.id
-        FROM claims c
-        JOIN evidence e ON e.id = c.created_from_evidence_id
-        LEFT JOIN repository_path_state rps
-          ON rps.project_id = c.project_id
-         AND rps.branch = c.branch_scope
-         AND rps.path = e.path
-        WHERE c.project_id = ?
-          AND c.branch_scope = ?
-          AND c.state = 'active'
-          AND (
-            e.path IS NULL
-            OR (
-              ? IS NOT NULL
-              AND e.blob_oid IS NOT NULL
-              AND rps.commit_sha = ?
-              AND rps.blob_oid = e.blob_oid
-            )
-          )
-      `).all(projectId, branch, revisionSha, revisionSha).map((row) => row.id));
-    }
-
-    const conflicts = this.#db.prepare(`
-      SELECT
-        claim_a,
-        claim_b,
-        state,
-        created_by_evidence_id,
-        created_at,
-        resolved_by_evidence_id,
-        resolved_at
-      FROM conflicts
-      WHERE project_id = ?
-      ORDER BY claim_a, claim_b
-    `).all(projectId).filter(
-      (conflict) => (
-        (mode === 'historical' || (
-          conflict.state === 'open'
-          && currentEligibleIds.has(conflict.claim_a)
-          && currentEligibleIds.has(conflict.claim_b)
-        ))
-        && (ids.has(conflict.claim_a) || ids.has(conflict.claim_b))
-      ),
-    );
+    const conflicts = recallConflicts(this.#db, {
+      projectId,
+      branch,
+      mode,
+      revisionSha,
+      itemIds: ids,
+    });
 
     return {
       project_id: projectId,
