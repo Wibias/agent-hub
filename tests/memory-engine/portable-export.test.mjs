@@ -266,3 +266,52 @@ test('canonical import rejects tampered approval scope before storage', async (t
   );
   assert.equal(target.exportCanonical().approvals.length, 0);
 });
+
+test('canonical import preserves approval authority provenance invariants', async (t) => {
+  const source = await createEngine('authority-source');
+  const target = await createEngine('authority-target');
+  t.after(() => source.close());
+  t.after(() => target.close());
+
+  for (const engine of [source, target]) {
+    engine.registerProject({
+      projectId: 'project-a',
+      repoIdentity: 'project-a',
+      createdAt: '2026-01-01T00:00:00Z',
+    });
+  }
+
+  ingestDecision(source, {
+    evidenceId: 'e-user',
+    claimId: 'c-user',
+    content: 'Approve staging deployment.',
+    createdAt: '2026-01-02T09:00:00Z',
+  });
+  source.recordApproval({
+    id: 'approval-deploy',
+    projectId: 'project-a',
+    action: 'deploy',
+    target: 'build-42',
+    environment: 'staging',
+    issuedAt: '2026-01-02T09:00:00Z',
+    expiresAt: '2026-01-02T23:59:59Z',
+    sourceEvidenceId: 'e-user',
+  });
+
+  const actorTampered = structuredClone(source.exportCanonical());
+  actorTampered.approvals[0].actor = 'session:forged';
+  assert.throws(
+    () => target.importCanonical(actorTampered),
+    /actor does not match source provenance/,
+  );
+
+  const authorityTampered = structuredClone(source.exportCanonical());
+  authorityTampered.evidence[0].authority_class = 'agent_inference';
+  assert.throws(
+    () => target.importCanonical(authorityTampered),
+    /approval source must be user_direct/,
+  );
+
+  assert.equal(target.exportCanonical().evidence.length, 0);
+  assert.equal(target.exportCanonical().approvals.length, 0);
+});
