@@ -75,9 +75,10 @@ test('M12 keeps old staging approval scoped and never generalises it to producti
       action: 'deploy',
       target: 'build-42',
       environment: 'staging',
-      at: '2026-01-11T10:00:00Z',
     });
     assert.equal(stagingWhileValid.authorized, true);
+    assert.equal(stagingWhileValid.consumed, true);
+    assert.equal(stagingWhileValid.approval.uses, 1);
 
     now = '2026-01-12T09:00:00Z';
     const stagingLater = await adapter.authorizeAction({
