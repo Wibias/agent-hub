@@ -812,3 +812,203 @@ test('semantic rebuild replaces only the current model revision for one branch',
     null,
   );
 });
+
+
+test('hybrid recall recovers a lexical-light Postgres paraphrase through semantic ranking', async (t) => {
+  const { HybridMemoryRetriever } = await import('../../memory-engine/hybrid-retrieval.mjs');
+  const engine = await createEngine('semantic-recall');
+  t.after(() => engine.close());
+  engine.registerProject({ projectId: 'project-a', repoIdentity: 'project-a' });
+
+  ingestRawHybridClaim(engine, {
+    evidenceId: 'e-semantic-postgres',
+    claimId: 'c-semantic-postgres',
+    value: 'Postgres for concurrent writers',
+    createdAt: '2026-01-02T09:00:00Z',
+  });
+  ingestRawHybridClaim(engine, {
+    evidenceId: 'e-semantic-sqlite',
+    claimId: 'c-semantic-sqlite',
+    value: 'SQLite for embedded tests',
+    createdAt: '2026-01-02T09:05:00Z',
+  });
+
+  const hybrid = new HybridMemoryRetriever({
+    memory: engine,
+    embedder: createFakeEmbedder(),
+  });
+  await hybrid.rebuildSemanticIndex({ projectId: 'project-a', branch: 'main' });
+
+  const lexical = engine.recall({
+    projectId: 'project-a',
+    branch: 'main',
+    query: 'Which storage engine did we choose to handle multiple processes writing at once?',
+    mode: 'current',
+    limit: 10,
+  });
+  assert.equal(
+    lexical.items.some((item) => item.claim.id === 'c-semantic-postgres'),
+    false,
+  );
+
+  const result = await hybrid.recall({
+    projectId: 'project-a',
+    branch: 'main',
+    query: 'Which storage engine did we choose to handle multiple processes writing at once?',
+    mode: 'current',
+  });
+
+  assert.equal(result.items[0].claim.id, 'c-semantic-postgres');
+});
+
+test('hybrid recall preserves lexical exact matches that semantic ranking omits', async (t) => {
+  const { HybridMemoryRetriever } = await import('../../memory-engine/hybrid-retrieval.mjs');
+  const engine = await createEngine('lexical-preserved');
+  t.after(() => engine.close());
+  engine.registerProject({ projectId: 'project-a', repoIdentity: 'project-a' });
+
+  ingestRawHybridClaim(engine, {
+    evidenceId: 'e-lexical-token',
+    claimId: 'c-lexical-token',
+    value: 'ZXQ-991 exact deployment marker',
+    createdAt: '2026-01-02T09:00:00Z',
+  });
+  ingestRawHybridClaim(engine, {
+    evidenceId: 'e-semantic-other',
+    claimId: 'c-semantic-other',
+    value: 'Postgres for concurrent writers',
+    createdAt: '2026-01-02T09:05:00Z',
+  });
+
+  const embedder = createFakeEmbedder();
+  const hybrid = new HybridMemoryRetriever({ memory: engine, embedder });
+  await hybrid.indexClaim('c-semantic-other');
+
+  const result = await hybrid.recall({
+    projectId: 'project-a',
+    branch: 'main',
+    query: 'ZXQ-991',
+    mode: 'current',
+  });
+
+  assert.ok(result.items.some((item) => item.claim.id === 'c-lexical-token'));
+});
+
+test('hybrid recall cannot surface semantically similar claims outside correctness scope', async (t) => {
+  const { HybridMemoryRetriever } = await import('../../memory-engine/hybrid-retrieval.mjs');
+  const engine = await createEngine('semantic-scope');
+  t.after(() => engine.close());
+  engine.registerProject({ projectId: 'project-a', repoIdentity: 'project-a' });
+  engine.registerProject({ projectId: 'project-b', repoIdentity: 'project-b' });
+
+  ingestRawHybridClaim(engine, {
+    evidenceId: 'e-scope-current',
+    claimId: 'c-scope-current',
+    value: 'Postgres for concurrent writers',
+    createdAt: '2026-01-02T09:00:00Z',
+  });
+  ingestSemanticClaim(engine, {
+    evidenceId: 'e-scope-old',
+    claimId: 'c-scope-old',
+    value: 'Postgres old duplicate',
+    createdAt: '2026-01-02T08:00:00Z',
+  });
+  engine.ingest({
+    evidence: {
+      id: 'e-scope-new',
+      projectId: 'project-a',
+      harness: 'codex',
+      sessionId: 'e-scope-new',
+      sourceKind: 'session',
+      sourceRef: 'session:e-scope-new',
+      capturedAt: '2026-01-02T09:10:00Z',
+      branch: 'main',
+      commitSha: null,
+      path: null,
+      blobOid: null,
+      content: 'Use Redis now.',
+      authorityClass: 'user_direct',
+      metadata: {},
+    },
+    claim: {
+      id: 'c-scope-new',
+      kind: 'decision',
+      subject: 'storage',
+      predicate: 'uses',
+      value: 'Redis',
+      branchScope: 'main',
+      createdAt: '2026-01-02T09:10:00Z',
+    },
+    lifecycle: { supersedes: ['c-scope-old'] },
+  });
+  ingestSemanticClaim(engine, {
+    projectId: 'project-b',
+    evidenceId: 'e-scope-other-project',
+    claimId: 'c-scope-other-project',
+    value: 'Postgres for concurrent writers',
+    createdAt: '2026-01-02T09:15:00Z',
+  });
+  ingestSemanticClaim(engine, {
+    evidenceId: 'e-scope-feature',
+    claimId: 'c-scope-feature',
+    value: 'Postgres for concurrent writers',
+    branch: 'feature/search',
+    createdAt: '2026-01-02T09:20:00Z',
+  });
+
+  const hybrid = new HybridMemoryRetriever({
+    memory: engine,
+    embedder: createFakeEmbedder(),
+  });
+  await hybrid.indexClaim('c-scope-current');
+
+  const result = await hybrid.recall({
+    projectId: 'project-a',
+    branch: 'main',
+    query: 'Which storage engine did we choose to handle multiple processes writing at once?',
+    mode: 'current',
+  });
+
+  assert.deepEqual(
+    result.items.map((item) => item.claim.id),
+    ['c-scope-current'],
+  );
+});
+
+test('hybrid recall materializes fused ids in deterministic RRF order', async (t) => {
+  const { HybridMemoryRetriever } = await import('../../memory-engine/hybrid-retrieval.mjs');
+  const engine = await createEngine('fused-order');
+  t.after(() => engine.close());
+  engine.registerProject({ projectId: 'project-a', repoIdentity: 'project-a' });
+
+  ingestRawHybridClaim(engine, {
+    evidenceId: 'e-fused-a',
+    claimId: 'c-fused-a',
+    value: 'Postgres alpha',
+    createdAt: '2026-01-02T09:00:00Z',
+  });
+  ingestRawHybridClaim(engine, {
+    evidenceId: 'e-fused-b',
+    claimId: 'c-fused-b',
+    value: 'Postgres beta ZXQ-991',
+    createdAt: '2026-01-02T09:10:00Z',
+  });
+
+  const hybrid = new HybridMemoryRetriever({
+    memory: engine,
+    embedder: createFakeEmbedder(),
+    lexicalCandidateLimit: 32,
+    semanticCandidateLimit: 32,
+  });
+  await hybrid.rebuildSemanticIndex({ projectId: 'project-a', branch: 'main' });
+
+  const result = await hybrid.recall({
+    projectId: 'project-a',
+    branch: 'main',
+    query: 'ZXQ-991 multiple processes writing at once',
+    mode: 'current',
+  });
+
+  assert.equal(result.items[0].claim.id, 'c-fused-b');
+  assert.ok(result.items.some((item) => item.claim.id === 'c-fused-a'));
+});
