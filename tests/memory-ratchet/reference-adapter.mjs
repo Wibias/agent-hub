@@ -8,6 +8,16 @@ function repositoryPath(source) {
   return source.includes('/') ? source : null;
 }
 
+function sourceKind(event) {
+  if (repositoryPath(event.source)) return 'repository';
+  if (typeof event.source === 'string') {
+    if (event.source.startsWith('session:')) return 'session';
+    if (event.source.startsWith('tool:')) return 'tool';
+    if (event.source.startsWith('agent:')) return 'agent';
+  }
+  return 'event';
+}
+
 function claimId(eventId) {
   return `claim:${eventId}`;
 }
@@ -41,10 +51,10 @@ export function createReferenceMemoryAdapter() {
         if (!projects.has(event.project_id)) projects.set(event.project_id, event.repo_path);
       }
 
-      for (const [projectId, repoPath] of projects) {
+      for (const [projectId] of projects) {
         engine.registerProject({
           projectId,
-          repoIdentity: repoPath,
+          repoIdentity: projectId,
         });
       }
     },
@@ -58,7 +68,7 @@ export function createReferenceMemoryAdapter() {
           projectId: event.project_id,
           harness: event.harness,
           sessionId: event.session_id,
-          sourceKind: event.trust,
+          sourceKind: sourceKind(event),
           sourceRef: event.source,
           capturedAt: event.at,
           branch: event.branch,
@@ -66,7 +76,7 @@ export function createReferenceMemoryAdapter() {
           path: repositoryPath(event.source),
           blobOid: null,
           content: event.content,
-          authorityClass: event.trust,
+          authorityClass: 'unclassified',
           metadata: {
             event_id: event.id,
             event_type: event.type,
