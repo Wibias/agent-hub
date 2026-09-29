@@ -1013,3 +1013,116 @@ test('hybrid recall materializes fused ids in deterministic RRF order', async (t
   assert.equal(result.items[0].claim.id, 'c-fused-b');
   assert.ok(result.items.some((item) => item.claim.id === 'c-fused-a'));
 });
+
+
+test('hybrid recall falls back to bounded lexical recall when no embedder is configured', async (t) => {
+  const { HybridMemoryRetriever } = await import('../../memory-engine/hybrid-retrieval.mjs');
+  const engine = await createEngine('fallback-no-embedder');
+  t.after(() => engine.close());
+  engine.registerProject({ projectId: 'project-a', repoIdentity: 'project-a' });
+  ingestRawHybridClaim(engine, {
+    evidenceId: 'e-fallback-no-embedder',
+    claimId: 'c-fallback-no-embedder',
+    value: 'ZXQ-991 lexical marker',
+  });
+
+  const hybrid = new HybridMemoryRetriever({ memory: engine });
+  const result = await hybrid.recall({
+    projectId: 'project-a',
+    branch: 'main',
+    query: 'ZXQ-991',
+    maxItems: 10,
+    maxSerializedBytes: 16_384,
+  });
+
+  assert.deepEqual(
+    result.items.map((item) => item.claim.id),
+    ['c-fallback-no-embedder'],
+  );
+  assert.ok(Buffer.byteLength(JSON.stringify(result), 'utf8') <= 16_384);
+});
+
+test('hybrid recall falls back to lexical recall when query embedding fails', async (t) => {
+  const { HybridMemoryRetriever } = await import('../../memory-engine/hybrid-retrieval.mjs');
+  const engine = await createEngine('fallback-query-failure');
+  t.after(() => engine.close());
+  engine.registerProject({ projectId: 'project-a', repoIdentity: 'project-a' });
+  ingestRawHybridClaim(engine, {
+    evidenceId: 'e-fallback-query',
+    claimId: 'c-fallback-query',
+    value: 'ZXQ-991 lexical marker',
+  });
+
+  const hybrid = new HybridMemoryRetriever({
+    memory: engine,
+    embedder: createFakeEmbedder({ failQuery: true }),
+  });
+  const result = await hybrid.recall({
+    projectId: 'project-a',
+    branch: 'main',
+    query: 'ZXQ-991',
+  });
+
+  assert.deepEqual(result.items.map((item) => item.claim.id), ['c-fallback-query']);
+});
+
+test('hybrid recall remains lexical when no compatible semantic rows exist', async (t) => {
+  const { HybridMemoryRetriever } = await import('../../memory-engine/hybrid-retrieval.mjs');
+  const engine = await createEngine('fallback-no-vectors');
+  t.after(() => engine.close());
+  engine.registerProject({ projectId: 'project-a', repoIdentity: 'project-a' });
+  ingestRawHybridClaim(engine, {
+    evidenceId: 'e-fallback-no-vectors',
+    claimId: 'c-fallback-no-vectors',
+    value: 'ZXQ-991 lexical marker',
+  });
+
+  const hybrid = new HybridMemoryRetriever({
+    memory: engine,
+    embedder: createFakeEmbedder(),
+  });
+  const result = await hybrid.recall({
+    projectId: 'project-a',
+    branch: 'main',
+    query: 'ZXQ-991',
+  });
+
+  assert.deepEqual(
+    result.items.map((item) => item.claim.id),
+    ['c-fallback-no-vectors'],
+  );
+});
+
+test('hybrid recall preserves lexical claims missing from a partial semantic index', async (t) => {
+  const { HybridMemoryRetriever } = await import('../../memory-engine/hybrid-retrieval.mjs');
+  const engine = await createEngine('fallback-partial-index');
+  t.after(() => engine.close());
+  engine.registerProject({ projectId: 'project-a', repoIdentity: 'project-a' });
+  ingestRawHybridClaim(engine, {
+    evidenceId: 'e-partial-lexical',
+    claimId: 'c-partial-lexical',
+    value: 'ZXQ-991 lexical marker',
+    createdAt: '2026-01-02T09:00:00Z',
+  });
+  ingestRawHybridClaim(engine, {
+    evidenceId: 'e-partial-semantic',
+    claimId: 'c-partial-semantic',
+    value: 'Postgres for concurrent writers',
+    createdAt: '2026-01-02T09:10:00Z',
+  });
+
+  const hybrid = new HybridMemoryRetriever({
+    memory: engine,
+    embedder: createFakeEmbedder(),
+  });
+  await hybrid.indexClaim('c-partial-semantic');
+
+  const result = await hybrid.recall({
+    projectId: 'project-a',
+    branch: 'main',
+    query: 'ZXQ-991 multiple processes writing at once',
+  });
+
+  assert.ok(result.items.some((item) => item.claim.id === 'c-partial-lexical'));
+  assert.ok(result.items.some((item) => item.claim.id === 'c-partial-semantic'));
+});
