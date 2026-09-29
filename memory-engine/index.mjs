@@ -231,6 +231,16 @@ export class MemoryEngine {
         created_at TEXT NOT NULL
       ) STRICT;
 
+      CREATE TABLE IF NOT EXISTS repository_path_state (
+        project_id TEXT NOT NULL REFERENCES project_registry(project_id),
+        branch TEXT NOT NULL,
+        path TEXT NOT NULL,
+        commit_sha TEXT NOT NULL,
+        blob_oid TEXT,
+        checked_at TEXT,
+        PRIMARY KEY (project_id, branch, path)
+      ) STRICT;
+
       CREATE VIRTUAL TABLE IF NOT EXISTS claim_fts USING fts5(
         claim_id UNINDEXED,
         project_id UNINDEXED,
@@ -321,6 +331,62 @@ export class MemoryEngine {
     return normalizeClaim(
       this.#db.prepare('SELECT * FROM claims WHERE id = ?').get(id),
     );
+  }
+
+  repositoryPaths({ projectId, branch }) {
+    assertNonEmptyString(projectId, 'projectId');
+    assertNonEmptyString(branch, 'branch');
+
+    return this.#db.prepare(`
+      SELECT DISTINCT e.path
+      FROM claims c
+      JOIN evidence e ON e.id = c.created_from_evidence_id
+      WHERE c.project_id = ?
+        AND c.branch_scope = ?
+        AND c.state = 'active'
+        AND e.path IS NOT NULL
+      ORDER BY e.path ASC
+    `).all(projectId, branch).map((row) => row.path);
+  }
+
+  recordRepositoryPathState({
+    projectId,
+    branch,
+    path,
+    commitSha,
+    blobOid = null,
+    checkedAt = null,
+  }) {
+    for (const [value, name] of [
+      [projectId, 'projectId'],
+      [branch, 'branch'],
+      [path, 'path'],
+      [commitSha, 'commitSha'],
+    ]) {
+      assertNonEmptyString(value, name);
+    }
+    if (blobOid !== null) assertNonEmptyString(blobOid, 'blobOid');
+    if (checkedAt !== null) assertNonEmptyString(checkedAt, 'checkedAt');
+    if (!this.getProject(projectId)) throw new Error(`unknown project: ${projectId}`);
+
+    this.#db.prepare(`
+      INSERT INTO repository_path_state (
+        project_id, branch, path, commit_sha, blob_oid, checked_at
+      ) VALUES (?, ?, ?, ?, ?, ?)
+      ON CONFLICT(project_id, branch, path) DO UPDATE SET
+        commit_sha = excluded.commit_sha,
+        blob_oid = excluded.blob_oid,
+        checked_at = excluded.checked_at
+    `).run(projectId, branch, path, commitSha, blobOid, checkedAt);
+
+    return {
+      project_id: projectId,
+      branch,
+      path,
+      commit_sha: commitSha,
+      blob_oid: blobOid,
+      checked_at: checkedAt,
+    };
   }
 
   ingest({ evidence, claim, lifecycle = {} }) {
@@ -563,14 +629,34 @@ export class MemoryEngine {
           e.sensitivity AS evidence_sensitivity,
           e.authority_class AS evidence_authority_class,
           e.metadata_json AS evidence_metadata_json,
+          rps.commit_sha AS freshness_commit_sha,
+          rps.blob_oid AS freshness_blob_oid,
+          rps.checked_at AS freshness_checked_at,
           bm25(claim_fts) AS rank
         FROM claim_fts
         JOIN claims c ON c.id = claim_fts.claim_id
         JOIN evidence e ON e.id = c.created_from_evidence_id
+        LEFT JOIN repository_path_state rps
+          ON rps.project_id = c.project_id
+         AND rps.branch = c.branch_scope
+         AND rps.path = e.path
         WHERE claim_fts MATCH ?
           AND c.project_id = ?
           AND c.branch_scope = ?
-          AND (? = 'historical' OR c.state = 'active')
+          AND (
+            ? = 'historical'
+            OR (
+              c.state = 'active'
+              AND (
+                e.path IS NULL
+                OR (
+                  e.blob_oid IS NOT NULL
+                  AND rps.commit_sha IS NOT NULL
+                  AND rps.blob_oid = e.blob_oid
+                )
+              )
+            )
+          )
         ORDER BY rank ASC, c.created_at DESC, c.id ASC
         LIMIT ?
       `).all(ftsQuery, projectId, branch, mode, limit);
@@ -592,12 +678,32 @@ export class MemoryEngine {
           e.sensitivity AS evidence_sensitivity,
           e.authority_class AS evidence_authority_class,
           e.metadata_json AS evidence_metadata_json,
+          rps.commit_sha AS freshness_commit_sha,
+          rps.blob_oid AS freshness_blob_oid,
+          rps.checked_at AS freshness_checked_at,
           0.0 AS rank
         FROM claims c
         JOIN evidence e ON e.id = c.created_from_evidence_id
+        LEFT JOIN repository_path_state rps
+          ON rps.project_id = c.project_id
+         AND rps.branch = c.branch_scope
+         AND rps.path = e.path
         WHERE c.project_id = ?
           AND c.branch_scope = ?
-          AND (? = 'historical' OR c.state = 'active')
+          AND (
+            ? = 'historical'
+            OR (
+              c.state = 'active'
+              AND (
+                e.path IS NULL
+                OR (
+                  e.blob_oid IS NOT NULL
+                  AND rps.commit_sha IS NOT NULL
+                  AND rps.blob_oid = e.blob_oid
+                )
+              )
+            )
+          )
         ORDER BY c.created_at DESC, c.id ASC
         LIMIT ?
       `).all(projectId, branch, mode, limit);
@@ -626,6 +732,24 @@ export class MemoryEngine {
           authority_class: row.evidence_authority_class,
           metadata: parseMetadata(row.evidence_metadata_json),
         },
+        freshness: (
+          row.evidence_path !== null
+          ? {
+              status: row.freshness_commit_sha === null
+                ? 'unchecked'
+                : (
+                    row.evidence_blob_oid !== null
+                    && row.freshness_blob_oid === row.evidence_blob_oid
+                      ? 'fresh'
+                      : 'stale'
+                  ),
+              observed_blob_oid: row.evidence_blob_oid,
+              current_blob_oid: row.freshness_blob_oid,
+              current_commit_sha: row.freshness_commit_sha,
+              checked_at: row.freshness_checked_at,
+            }
+          : null
+        ),
         rank: Number(row.rank),
       })),
     };
