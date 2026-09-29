@@ -478,6 +478,464 @@ export class MemoryEngine {
     return this.#db.prepare('PRAGMA journal_mode').get().journal_mode;
   }
 
+  exportMemory({ projectId = null } = {}) {
+    if (projectId !== null) {
+      assertNonEmptyString(projectId, 'projectId');
+      if (!this.getProject(projectId)) throw new Error(`unknown project: ${projectId}`);
+    }
+
+    const params = projectId === null ? [] : [projectId];
+    const where = projectId === null ? '' : ' WHERE project_id = ?';
+
+    const projects = this.#db.prepare(`
+      SELECT project_id, canonical_remote, repo_identity, created_at
+      FROM project_registry
+      ${projectId === null ? '' : 'WHERE project_id = ?'}
+      ORDER BY project_id
+    `).all(...params).map((row) => ({
+      project_id: row.project_id,
+      canonical_remote: row.canonical_remote,
+      repo_identity: row.repo_identity,
+      created_at: row.created_at,
+    }));
+
+    const evidence = this.#db.prepare(`
+      SELECT *
+      FROM evidence${where}
+      ORDER BY project_id, captured_at, id
+    `).all(...params).map(normalizeEvidence);
+
+    const claims = this.#db.prepare(`
+      SELECT *
+      FROM claims${where}
+      ORDER BY project_id, created_at, id
+    `).all(...params).map(normalizeClaim);
+
+    const lifecycleEvents = this.#db.prepare(`
+      SELECT id, project_id, action, source_claim_id, target_claim_id, evidence_id, created_at
+      FROM lifecycle_events${where}
+      ORDER BY project_id, id
+    `).all(...params).map((row) => ({ ...row }));
+
+    const conflicts = this.#db.prepare(`
+      SELECT
+        project_id,
+        claim_a,
+        claim_b,
+        state,
+        created_by_evidence_id,
+        created_at,
+        resolved_by_evidence_id,
+        resolved_at
+      FROM conflicts${where}
+      ORDER BY project_id, claim_a, claim_b
+    `).all(...params).map((row) => ({ ...row }));
+
+    const approvals = this.#db.prepare(`
+      SELECT *
+      FROM approvals${where}
+      ORDER BY project_id, issued_at, id
+    `).all(...params).map(normalizeApproval);
+
+    return {
+      format: 'agent-hub-memory-export',
+      version: 1,
+      exported_at: normalizeTimestamp(this.#clock(), 'clock()'),
+      canonical: {
+        projects,
+        evidence,
+        claims,
+        lifecycle_events: lifecycleEvents,
+        conflicts,
+        approvals,
+      },
+    };
+  }
+
+  importMemory(portable) {
+    if (!portable || typeof portable !== 'object' || Array.isArray(portable)) {
+      throw new TypeError('portable memory export must be an object');
+    }
+    if (portable.format !== 'agent-hub-memory-export' || portable.version !== 1) {
+      throw new Error('unsupported portable memory export');
+    }
+
+    const canonical = portable.canonical;
+    if (!canonical || typeof canonical !== 'object' || Array.isArray(canonical)) {
+      throw new TypeError('portable memory export canonical state is required');
+    }
+
+    const projects = canonical.projects ?? [];
+    const evidence = canonical.evidence ?? [];
+    const claims = canonical.claims ?? [];
+    const lifecycleEvents = canonical.lifecycle_events ?? [];
+    const conflicts = canonical.conflicts ?? [];
+    const approvals = canonical.approvals ?? [];
+    for (const [rows, name] of [
+      [projects, 'projects'],
+      [evidence, 'evidence'],
+      [claims, 'claims'],
+      [lifecycleEvents, 'lifecycle_events'],
+      [conflicts, 'conflicts'],
+      [approvals, 'approvals'],
+    ]) {
+      if (!Array.isArray(rows)) throw new TypeError(`canonical.${name} must be an array`);
+    }
+
+    const nonProjectRows = [
+      ['evidence', 'evidence'],
+      ['claims', 'claims'],
+      ['lifecycle_events', 'lifecycle_events'],
+      ['conflicts', 'conflicts'],
+      ['approvals', 'approvals'],
+    ];
+    for (const [table, label] of nonProjectRows) {
+      const count = this.#db.prepare(`SELECT COUNT(*) AS count FROM ${table}`).get().count;
+      if (count !== 0) {
+        throw new Error(`cannot import into non-empty canonical table: ${label}`);
+      }
+    }
+
+    const projectById = new Map();
+    for (const project of projects) {
+      assertNonEmptyString(project.project_id, 'project.project_id');
+      if (projectById.has(project.project_id)) {
+        throw new Error(`duplicate project in portable export: ${project.project_id}`);
+      }
+      projectById.set(project.project_id, project);
+
+      const existing = this.#db.prepare(`
+        SELECT canonical_remote, repo_identity
+        FROM project_registry
+        WHERE project_id = ?
+      `).get(project.project_id);
+      if (
+        existing
+        && project.canonical_remote !== null
+        && existing.canonical_remote !== null
+        && project.canonical_remote !== existing.canonical_remote
+      ) {
+        throw new Error(`project ${project.project_id} canonical remote conflicts with import`);
+      }
+      if (
+        existing
+        && project.repo_identity !== null
+        && existing.repo_identity !== null
+        && project.repo_identity !== existing.repo_identity
+      ) {
+        throw new Error(`project ${project.project_id} repository identity conflicts with import`);
+      }
+    }
+
+    const existingProjects = this.#db.prepare(
+      'SELECT project_id FROM project_registry ORDER BY project_id',
+    ).all();
+    for (const existing of existingProjects) {
+      if (!projectById.has(existing.project_id)) {
+        throw new Error(`fresh import contains unrelated existing project: ${existing.project_id}`);
+      }
+    }
+
+    const evidenceById = new Map();
+    for (const row of evidence) {
+      assertNonEmptyString(row.id, 'evidence.id');
+      assertNonEmptyString(row.project_id, 'evidence.project_id');
+      if (!projectById.has(row.project_id)) {
+        throw new Error(`evidence ${row.id} references unknown project`);
+      }
+      if (evidenceById.has(row.id)) throw new Error(`duplicate evidence in portable export: ${row.id}`);
+      assertAuthorityClass(row.authority_class);
+
+      const secretCheck = redactValue({
+        source_ref: row.source_ref,
+        content_redacted: row.content_redacted,
+        metadata: row.metadata ?? {},
+      });
+      if (secretCheck.redacted) {
+        throw new Error(`portable export contains unredacted secret in evidence ${row.id}`);
+      }
+      evidenceById.set(row.id, row);
+    }
+
+    const claimById = new Map();
+    for (const row of claims) {
+      assertNonEmptyString(row.id, 'claim.id');
+      assertNonEmptyString(row.project_id, 'claim.project_id');
+      if (!projectById.has(row.project_id)) throw new Error(`claim ${row.id} references unknown project`);
+      if (claimById.has(row.id)) throw new Error(`duplicate claim in portable export: ${row.id}`);
+      if (!CLAIM_STATES.has(row.state)) throw new Error(`unsupported claim state in import: ${row.state}`);
+
+      const sourceEvidence = evidenceById.get(row.created_from_evidence_id);
+      if (!sourceEvidence || sourceEvidence.project_id !== row.project_id) {
+        throw new Error(`claim ${row.id} has invalid source evidence`);
+      }
+
+      const secretCheck = redactValue({
+        subject: row.subject,
+        predicate: row.predicate,
+        value: row.value,
+      });
+      if (secretCheck.redacted) {
+        throw new Error(`portable export contains unredacted secret in claim ${row.id}`);
+      }
+      claimById.set(row.id, row);
+    }
+
+    for (const row of claims) {
+      if (row.superseded_by_claim_id !== null) {
+        const target = claimById.get(row.superseded_by_claim_id);
+        if (!target || target.project_id !== row.project_id) {
+          throw new Error(`claim ${row.id} has invalid supersession reference`);
+        }
+      }
+      if (row.rejected_by_evidence_id !== null) {
+        const target = evidenceById.get(row.rejected_by_evidence_id);
+        if (!target || target.project_id !== row.project_id) {
+          throw new Error(`claim ${row.id} has invalid rejection evidence`);
+        }
+      }
+    }
+
+    for (const row of lifecycleEvents) {
+      const source = claimById.get(row.source_claim_id);
+      const target = claimById.get(row.target_claim_id);
+      const sourceEvidence = evidenceById.get(row.evidence_id);
+      if (
+        !projectById.has(row.project_id)
+        || !source
+        || !target
+        || !sourceEvidence
+        || source.project_id !== row.project_id
+        || target.project_id !== row.project_id
+        || sourceEvidence.project_id !== row.project_id
+      ) {
+        throw new Error(`invalid lifecycle event in portable export: ${row.id}`);
+      }
+      if (!['supersede', 'reject'].includes(row.action)) {
+        throw new Error(`unsupported lifecycle action in import: ${row.action}`);
+      }
+    }
+
+    for (const row of conflicts) {
+      const a = claimById.get(row.claim_a);
+      const b = claimById.get(row.claim_b);
+      const createdBy = evidenceById.get(row.created_by_evidence_id);
+      const resolvedBy = row.resolved_by_evidence_id === null
+        ? null
+        : evidenceById.get(row.resolved_by_evidence_id);
+      if (
+        !projectById.has(row.project_id)
+        || !a
+        || !b
+        || !createdBy
+        || a.project_id !== row.project_id
+        || b.project_id !== row.project_id
+        || createdBy.project_id !== row.project_id
+        || (row.resolved_by_evidence_id !== null && (!resolvedBy || resolvedBy.project_id !== row.project_id))
+      ) {
+        throw new Error(`invalid conflict in portable export: ${row.claim_a}/${row.claim_b}`);
+      }
+    }
+
+    for (const row of approvals) {
+      const sourceEvidence = evidenceById.get(row.source_evidence_id);
+      if (
+        !projectById.has(row.project_id)
+        || !sourceEvidence
+        || sourceEvidence.project_id !== row.project_id
+        || sourceEvidence.authority_class !== 'user_direct'
+      ) {
+        throw new Error(`invalid approval in portable export: ${row.id}`);
+      }
+      const secretCheck = redactValue({
+        actor: row.actor,
+        action: row.action,
+        target: row.target,
+        environment: row.environment,
+        artifact: row.artifact,
+        constraints: row.constraints ?? {},
+      });
+      if (secretCheck.redacted) {
+        throw new Error(`portable export contains unredacted secret in approval ${row.id}`);
+      }
+    }
+
+    this.#db.exec('BEGIN IMMEDIATE');
+    try {
+      this.#db.prepare('DELETE FROM claim_fts').run();
+      this.#db.prepare('DELETE FROM repository_path_state').run();
+
+      for (const row of projects) {
+        this.#db.prepare(`
+          INSERT INTO project_registry (
+            project_id, canonical_remote, repo_identity, created_at
+          ) VALUES (?, ?, ?, ?)
+          ON CONFLICT(project_id) DO UPDATE SET
+            canonical_remote = excluded.canonical_remote,
+            repo_identity = excluded.repo_identity,
+            created_at = excluded.created_at
+        `).run(
+          row.project_id,
+          row.canonical_remote ?? null,
+          row.repo_identity ?? null,
+          row.created_at,
+        );
+      }
+
+      for (const row of evidence) {
+        this.#db.prepare(`
+          INSERT INTO evidence (
+            id, project_id, harness, session_id, source_kind, source_ref,
+            captured_at, branch, commit_sha, path, blob_oid, content_redacted,
+            sensitivity, authority_class, metadata_json
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          row.id,
+          row.project_id,
+          row.harness ?? null,
+          row.session_id ?? null,
+          row.source_kind,
+          row.source_ref ?? null,
+          row.captured_at,
+          row.branch ?? null,
+          row.commit_sha ?? null,
+          row.path ?? null,
+          row.blob_oid ?? null,
+          row.content_redacted,
+          row.sensitivity,
+          row.authority_class,
+          JSON.stringify(row.metadata ?? {}),
+        );
+      }
+
+      for (const row of claims) {
+        this.#db.prepare(`
+          INSERT INTO claims (
+            id, project_id, kind, subject, predicate, value_text, state,
+            branch_scope, created_from_evidence_id, created_at, valid_from,
+            valid_until, superseded_by_claim_id, rejected_by_evidence_id
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL)
+        `).run(
+          row.id,
+          row.project_id,
+          row.kind,
+          row.subject,
+          row.predicate,
+          row.value,
+          row.state,
+          row.branch_scope,
+          row.created_from_evidence_id,
+          row.created_at,
+          row.valid_from ?? null,
+          row.valid_until ?? null,
+        );
+      }
+
+      for (const row of claims) {
+        this.#db.prepare(`
+          UPDATE claims
+          SET superseded_by_claim_id = ?, rejected_by_evidence_id = ?
+          WHERE id = ?
+        `).run(
+          row.superseded_by_claim_id ?? null,
+          row.rejected_by_evidence_id ?? null,
+          row.id,
+        );
+      }
+
+      for (const row of lifecycleEvents) {
+        this.#db.prepare(`
+          INSERT INTO lifecycle_events (
+            id, project_id, action, source_claim_id, target_claim_id, evidence_id, created_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          row.id,
+          row.project_id,
+          row.action,
+          row.source_claim_id,
+          row.target_claim_id,
+          row.evidence_id,
+          row.created_at,
+        );
+      }
+
+      for (const row of conflicts) {
+        this.#db.prepare(`
+          INSERT INTO conflicts (
+            project_id, claim_a, claim_b, state, created_by_evidence_id,
+            created_at, resolved_by_evidence_id, resolved_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          row.project_id,
+          row.claim_a,
+          row.claim_b,
+          row.state,
+          row.created_by_evidence_id,
+          row.created_at,
+          row.resolved_by_evidence_id ?? null,
+          row.resolved_at ?? null,
+        );
+      }
+
+      for (const row of approvals) {
+        this.#db.prepare(`
+          INSERT INTO approvals (
+            id, project_id, actor, action, target, environment, artifact,
+            constraints_json, issued_at, expires_at, max_uses, uses,
+            revoked_at, source_evidence_id
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          row.id,
+          row.project_id,
+          row.actor,
+          row.action,
+          row.target,
+          row.environment,
+          row.artifact ?? null,
+          JSON.stringify(row.constraints ?? {}),
+          row.issued_at,
+          row.expires_at,
+          row.max_uses,
+          row.uses,
+          row.revoked_at ?? null,
+          row.source_evidence_id,
+        );
+      }
+
+      for (const row of claims) {
+        const sourceEvidence = evidenceById.get(row.created_from_evidence_id);
+        this.#db.prepare(`
+          INSERT INTO claim_fts (claim_id, project_id, branch_scope, text)
+          VALUES (?, ?, ?, ?)
+        `).run(
+          row.id,
+          row.project_id,
+          row.branch_scope,
+          searchableText({
+            kind: row.kind,
+            subject: row.subject,
+            predicate: row.predicate,
+            value: row.value,
+          }, sourceEvidence.content_redacted),
+        );
+      }
+
+      this.#db.exec('COMMIT');
+    } catch (error) {
+      this.#db.exec('ROLLBACK');
+      throw error;
+    }
+
+    return {
+      projects: projects.length,
+      evidence: evidence.length,
+      claims: claims.length,
+      lifecycle_events: lifecycleEvents.length,
+      conflicts: conflicts.length,
+      approvals: approvals.length,
+    };
+  }
+
   registerProject({
     projectId,
     canonicalRemote = null,
