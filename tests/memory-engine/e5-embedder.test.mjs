@@ -205,3 +205,81 @@ test('e5 provider rejects wrong tensor dimensions and non-finite values', async 
     /finite/i,
   );
 });
+
+
+test('model cache preparation parser requires one non-empty cache directory', async () => {
+  const { parsePrepareModelArgs } = await import(
+    '../../scripts/prepare-memory-embedding-model.mjs'
+  );
+
+  assert.throws(() => parsePrepareModelArgs([]), /--cache-dir/i);
+  assert.throws(
+    () => parsePrepareModelArgs(['--cache-dir', '']),
+    /cache-dir|non-empty/i,
+  );
+  assert.throws(
+    () => parsePrepareModelArgs([
+      '--cache-dir',
+      '.cache/one',
+      '--cache-dir',
+      '.cache/two',
+    ]),
+    /duplicate|once|cache-dir/i,
+  );
+  assert.throws(
+    () => parsePrepareModelArgs(['--unknown', 'value']),
+    /unknown|argument/i,
+  );
+
+  assert.deepEqual(
+    parsePrepareModelArgs(['--cache-dir', '.cache/memory-engine/e5']),
+    { cacheDir: '.cache/memory-engine/e5' },
+  );
+});
+
+test('prepared cache can be reopened by the normal offline provider path', async () => {
+  const { createE5Embedder } = await import('../../memory-engine/e5-embedder.mjs');
+  const { calls, pipelineFactory } = createPipelineHarness();
+
+  const prepared = await createE5Embedder({
+    cacheDir: '/tmp/agent-hub-e5',
+    allowRemoteModels: true,
+    pipelineFactory,
+  });
+  await prepared.embedQuery('memory cache readiness probe');
+
+  const offline = await createE5Embedder({
+    cacheDir: '/tmp/agent-hub-e5',
+    pipelineFactory,
+  });
+  await offline.embedQuery('memory cache readiness probe');
+
+  assert.equal(calls.factory.length, 2);
+  assert.equal(calls.factory[0].options.local_files_only, false);
+  assert.equal(calls.factory[1].options.local_files_only, true);
+  assert.deepEqual(
+    calls.factory.map((call) => ({
+      model: call.model,
+      revision: call.options.revision,
+      cache_dir: call.options.cache_dir,
+      dtype: call.options.dtype,
+      device: call.options.device,
+    })),
+    [
+      {
+        model: 'intfloat/multilingual-e5-small',
+        revision: 'fd1525a9fd15316a2d503bf26ab031a61d056e98',
+        cache_dir: '/tmp/agent-hub-e5',
+        dtype: 'fp32',
+        device: 'cpu',
+      },
+      {
+        model: 'intfloat/multilingual-e5-small',
+        revision: 'fd1525a9fd15316a2d503bf26ab031a61d056e98',
+        cache_dir: '/tmp/agent-hub-e5',
+        dtype: 'fp32',
+        device: 'cpu',
+      },
+    ],
+  );
+});
