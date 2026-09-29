@@ -933,13 +933,49 @@ export class MemoryEngine {
         );
       }
 
+      this.#db.prepare('DELETE FROM claim_fts').run();
+      const searchRows = this.#db.prepare(`
+        SELECT
+          c.id,
+          c.project_id,
+          c.branch_scope,
+          c.kind,
+          c.subject,
+          c.predicate,
+          c.value_text,
+          e.content_redacted
+        FROM claims c
+        JOIN evidence e ON e.id = c.created_from_evidence_id
+        ORDER BY c.id
+      `).all();
+      const insertSearch = this.#db.prepare(`
+        INSERT INTO claim_fts (claim_id, project_id, branch_scope, text)
+        VALUES (?, ?, ?, ?)
+      `);
+      for (const row of searchRows) {
+        insertSearch.run(
+          row.id,
+          row.project_id,
+          row.branch_scope,
+          searchableText({
+            kind: row.kind,
+            subject: row.subject,
+            predicate: row.predicate,
+            value: row.value_text,
+          }, row.content_redacted),
+        );
+      }
+      this.#db.prepare('DELETE FROM repository_path_state').run();
+
       this.#db.exec('COMMIT');
+      return {
+        indexed_claims: searchRows.length,
+        repository_path_snapshots: 0,
+      };
     } catch (error) {
       this.#db.exec('ROLLBACK');
       throw error;
     }
-
-    return this.rebuildDerivedState();
   }
 
   recordApproval({
