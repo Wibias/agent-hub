@@ -50,6 +50,20 @@ Derived state:
 
 FTS data is never the source of truth. Claim lifecycle and provenance remain valid even if search indexes are rebuilt later.
 
+## Reference adapter trust boundary
+
+The Memory Ratchet reference adapter deliberately does **not** consume the fixture's hidden `trust` oracle.
+
+At this foundation stage it derives only observable source kinds such as `repository`, `session`, `tool`, or `agent`, and stores:
+
+```text
+authority_class = unclassified
+```
+
+Authority classification and reliance policy are deferred to the dedicated follow-up layer. This prevents benchmark-only labels from silently making the reference implementation smarter than a real harness integration.
+
+Project identity is likewise stable and path-independent. Temporary checkout paths are not used as canonical repository identity.
+
 ## Evidence and claims
 
 Evidence records what was observed or stated.
