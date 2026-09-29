@@ -64,7 +64,7 @@ function gitBlobOid(repoPath, revisionSha, path) {
   return oid;
 }
 
-export function createReferenceMemoryAdapter({ clock } = {}) {
+export function createReferenceMemoryAdapter({ clock, dbPath: configuredDbPath = null } = {}) {
   let engine = null;
   let projectRepos = new Map();
 
@@ -86,7 +86,7 @@ export function createReferenceMemoryAdapter({ clock } = {}) {
     },
 
     async setup(prepared) {
-      const dbPath = join(dirname(prepared.current.repo_path), '.memory-engine-reference.sqlite3');
+      const dbPath = configuredDbPath ?? join(dirname(prepared.current.repo_path), '.memory-engine-reference.sqlite3');
       engine = new MemoryEngine({ dbPath, clock });
 
       const projects = new Map();
@@ -208,6 +208,16 @@ export function createReferenceMemoryAdapter({ clock } = {}) {
     async listApprovals({ project_id: projectId }) {
       if (!engine) throw new Error('reference memory adapter is not set up');
       return engine.listApprovals({ projectId });
+    },
+
+    async exportMemory({ project_id: projectId = null } = {}) {
+      if (!engine) throw new Error('reference memory adapter is not set up');
+      return engine.exportMemory({ projectId });
+    },
+
+    async importMemory(portable) {
+      if (!engine) throw new Error('reference memory adapter is not set up');
+      return engine.importMemory(portable);
     },
 
     async recall(request) {
