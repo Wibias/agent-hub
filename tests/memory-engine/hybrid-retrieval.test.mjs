@@ -5,7 +5,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
-import { MemoryEngine } from '../../memory-engine/index.mjs';
+import {
+  MemoryEngine,
+  evaluateReliance,
+} from '../../memory-engine/index.mjs';
 import { hashEmbeddingText } from '../../memory-engine/semantic-vectors.mjs';
 
 async function createEngine(name) {
@@ -340,4 +343,135 @@ test('semantic candidates skip corrupt derived vectors instead of failing recall
   });
 
   assert.deepEqual(candidates.map((row) => row.claim_id), ['c-good']);
+});
+
+
+test('materialize recall preserves requested eligible order and rechecks lifecycle state', async (t) => {
+  const engine = await createEngine('materialize-order');
+  t.after(() => engine.close());
+  engine.registerProject({ projectId: 'project-a', repoIdentity: 'project-a' });
+
+  ingestSemanticClaim(engine, {
+    evidenceId: 'e-old-materialize',
+    claimId: 'c-old-materialize',
+    value: 'SQLite',
+    createdAt: '2026-01-02T08:00:00Z',
+  });
+  ingestSemanticClaim(engine, {
+    evidenceId: 'e-current-materialize',
+    claimId: 'c-current-materialize',
+    value: 'Postgres',
+    createdAt: '2026-01-02T09:00:00Z',
+    lifecycle: { supersedes: ['c-old-materialize'] },
+  });
+  ingestSemanticClaim(engine, {
+    evidenceId: 'e-secondary-materialize',
+    claimId: 'c-secondary-materialize',
+    value: 'Redis',
+    createdAt: '2026-01-02T09:10:00Z',
+  });
+
+  const materialized = engine.materializeRecall({
+    projectId: 'project-a',
+    branch: 'main',
+    mode: 'current',
+    claimIds: [
+      'c-secondary-materialize',
+      'c-old-materialize',
+      'c-current-materialize',
+    ],
+  });
+
+  assert.deepEqual(
+    materialized.items.map((item) => item.claim.id),
+    ['c-secondary-materialize', 'c-current-materialize'],
+  );
+
+  const lexical = engine.recall({
+    projectId: 'project-a',
+    branch: 'main',
+    query: 'Postgres',
+    mode: 'current',
+  });
+  assert.deepEqual(
+    Object.keys(materialized.items[1]).sort(),
+    Object.keys(lexical.items[0]).sort(),
+  );
+  assert.deepEqual(
+    Object.keys(materialized.items[1].claim).sort(),
+    Object.keys(lexical.items[0].claim).sort(),
+  );
+  assert.deepEqual(
+    Object.keys(materialized.items[1].evidence).sort(),
+    Object.keys(lexical.items[0].evidence).sort(),
+  );
+});
+
+test('materialize recall keeps unresolved conflict visible when counterpart is omitted', async (t) => {
+  const engine = await createEngine('materialize-conflict');
+  t.after(() => engine.close());
+  engine.registerProject({ projectId: 'project-a', repoIdentity: 'project-a' });
+
+  ingestSemanticClaim(engine, {
+    evidenceId: 'e-conflict-a',
+    claimId: 'c-conflict-a',
+    value: 'retry 3 times',
+    createdAt: '2026-01-02T09:00:00Z',
+  });
+
+  engine.ingest({
+    evidence: {
+      id: 'e-conflict-b',
+      projectId: 'project-a',
+      harness: 'codex',
+      sessionId: 'e-conflict-b',
+      sourceKind: 'session',
+      sourceRef: 'session:e-conflict-b',
+      capturedAt: '2026-01-02T09:10:00Z',
+      branch: 'main',
+      commitSha: null,
+      path: null,
+      blobOid: null,
+      content: 'Memory says retry 5 times.',
+      authorityClass: 'user_direct',
+      metadata: {},
+    },
+    claim: {
+      id: 'c-conflict-b',
+      kind: 'decision',
+      subject: 'retry',
+      predicate: 'count',
+      value: '5',
+      branchScope: 'main',
+      createdAt: '2026-01-02T09:10:00Z',
+    },
+    lifecycle: { conflictsWith: ['c-conflict-a'] },
+  });
+
+  const materialized = engine.materializeRecall({
+    projectId: 'project-a',
+    branch: 'main',
+    mode: 'current',
+    claimIds: ['c-conflict-a'],
+  });
+
+  assert.deepEqual(materialized.items.map((item) => item.claim.id), ['c-conflict-a']);
+  assert.equal(materialized.conflicts.length, 1);
+  assert.deepEqual(
+    [materialized.conflicts[0].claim_a, materialized.conflicts[0].claim_b],
+    ['c-conflict-a', 'c-conflict-b'],
+  );
+
+  const reliance = evaluateReliance({
+    items: materialized.items,
+    conflicts: materialized.conflicts,
+    use: 'answer',
+  });
+
+  assert.deepEqual(reliance.selected, []);
+  assert.equal(
+    reliance.blocked.find((entry) => entry.item.claim.id === 'c-conflict-a')?.reason,
+    'unresolved_conflict_counterpart_not_retrieved',
+  );
+  assert.equal(reliance.conflict_resolutions[0].status, 'unresolved_missing_counterpart');
 });
