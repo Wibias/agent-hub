@@ -357,8 +357,15 @@ export class MemoryEngine {
         state TEXT NOT NULL CHECK (state IN ('open','resolved')),
         created_by_evidence_id TEXT NOT NULL REFERENCES evidence(id),
         created_at TEXT NOT NULL,
+        resolved_by_evidence_id TEXT REFERENCES evidence(id),
+        resolved_at TEXT,
         PRIMARY KEY (project_id, claim_a, claim_b),
-        CHECK (claim_a < claim_b)
+        CHECK (claim_a < claim_b),
+        CHECK (
+          (state = 'open' AND resolved_by_evidence_id IS NULL AND resolved_at IS NULL)
+          OR
+          (state = 'resolved' AND resolved_by_evidence_id IS NOT NULL AND resolved_at IS NOT NULL)
+        )
       ) STRICT;
 
       CREATE TABLE IF NOT EXISTS repository_path_state (
@@ -678,6 +685,16 @@ export class MemoryEngine {
             project_id, action, source_claim_id, target_claim_id, evidence_id, created_at
           ) VALUES (?, 'supersede', ?, ?, ?, ?)
         `).run(evidence.projectId, claim.id, targetId, evidence.id, claim.createdAt);
+
+        this.#db.prepare(`
+          UPDATE conflicts
+          SET state = 'resolved',
+              resolved_by_evidence_id = ?,
+              resolved_at = ?
+          WHERE project_id = ?
+            AND state = 'open'
+            AND (claim_a = ? OR claim_b = ?)
+        `).run(evidence.id, claim.createdAt, evidence.projectId, targetId, targetId);
       }
 
       for (const targetId of rejects) {
@@ -703,11 +720,25 @@ export class MemoryEngine {
             project_id, action, source_claim_id, target_claim_id, evidence_id, created_at
           ) VALUES (?, 'reject', ?, ?, ?, ?)
         `).run(evidence.projectId, claim.id, targetId, evidence.id, claim.createdAt);
+
+        this.#db.prepare(`
+          UPDATE conflicts
+          SET state = 'resolved',
+              resolved_by_evidence_id = ?,
+              resolved_at = ?
+          WHERE project_id = ?
+            AND state = 'open'
+            AND (claim_a = ? OR claim_b = ?)
+        `).run(evidence.id, claim.createdAt, evidence.projectId, targetId, targetId);
+      }
+
+      if (conflictsWith.length > 0 && state !== 'active') {
+        throw new Error('only active claims can open conflicts');
       }
 
       for (const targetId of conflictsWith) {
         const target = this.#db
-          .prepare('SELECT project_id, branch_scope FROM claims WHERE id = ?')
+          .prepare('SELECT project_id, branch_scope, state FROM claims WHERE id = ?')
           .get(targetId);
         if (!target) throw new Error(`cannot conflict with unknown claim: ${targetId}`);
         if (target.project_id !== evidence.projectId) {
@@ -715,6 +746,9 @@ export class MemoryEngine {
         }
         if (target.branch_scope !== branchScope) {
           throw new Error('conflict relations cannot cross branch boundaries');
+        }
+        if (target.state !== 'active') {
+          throw new Error(`cannot conflict with claim ${targetId} in state ${target.state}`);
         }
 
         const [claimA, claimB] = [claim.id, targetId].sort();
@@ -915,12 +949,22 @@ export class MemoryEngine {
 
     const ids = new Set(items.map((item) => item.claim.id));
     const conflicts = this.#db.prepare(`
-      SELECT claim_a, claim_b, state
+      SELECT
+        claim_a,
+        claim_b,
+        state,
+        created_by_evidence_id,
+        created_at,
+        resolved_by_evidence_id,
+        resolved_at
       FROM conflicts
-      WHERE project_id = ? AND state = 'open'
+      WHERE project_id = ?
       ORDER BY claim_a, claim_b
     `).all(projectId).filter(
-      (conflict) => ids.has(conflict.claim_a) || ids.has(conflict.claim_b),
+      (conflict) => (
+        (mode === 'historical' || conflict.state === 'open')
+        && (ids.has(conflict.claim_a) || ids.has(conflict.claim_b))
+      ),
     );
 
     return {
