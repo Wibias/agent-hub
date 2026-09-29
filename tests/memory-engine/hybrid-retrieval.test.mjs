@@ -1126,3 +1126,205 @@ test('hybrid recall preserves lexical claims missing from a partial semantic ind
   assert.ok(result.items.some((item) => item.claim.id === 'c-partial-lexical'));
   assert.ok(result.items.some((item) => item.claim.id === 'c-partial-semantic'));
 });
+
+
+test('semantic candidates ignore vectors whose text hash does not match canonical passage', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'memory-engine-hybrid-hash-mismatch-'));
+  const dbPath = join(root, 'memory.sqlite3');
+  const engine = new MemoryEngine({ dbPath });
+  t.after(() => engine.close());
+  engine.registerProject({ projectId: 'project-a', repoIdentity: 'project-a' });
+
+  ingestSemanticClaim(engine, {
+    evidenceId: 'e-hash-mismatch',
+    claimId: 'c-hash-mismatch',
+    value: 'Postgres',
+    createdAt: '2026-01-02T09:00:00Z',
+  });
+
+  const tamper = new DatabaseSync(dbPath);
+  t.after(() => tamper.close());
+  tamper.prepare(`
+    UPDATE claim_embeddings
+    SET text_hash = ?
+    WHERE claim_id = ? AND model_id = ? AND model_revision = ?
+  `).run('0'.repeat(64), 'c-hash-mismatch', 'fake-e5', 'rev-1');
+
+  const candidates = engine.semanticCandidates({
+    projectId: 'project-a',
+    branch: 'main',
+    mode: 'current',
+    modelId: 'fake-e5',
+    modelRevision: 'rev-1',
+  });
+
+  assert.deepEqual(candidates, []);
+});
+
+test('semantic rebuild is all-or-nothing when any passage embedding fails', async (t) => {
+  const { HybridMemoryRetriever } = await import('../../memory-engine/hybrid-retrieval.mjs');
+  const engine = await createEngine('atomic-rebuild');
+  t.after(() => engine.close());
+  engine.registerProject({ projectId: 'project-a', repoIdentity: 'project-a' });
+
+  ingestRawHybridClaim(engine, {
+    evidenceId: 'e-atomic-a',
+    claimId: 'c-atomic-a',
+    value: 'First Postgres choice',
+    createdAt: '2026-01-02T09:00:00Z',
+  });
+  ingestRawHybridClaim(engine, {
+    evidenceId: 'e-atomic-b',
+    claimId: 'c-atomic-b',
+    value: 'Second SQLite choice',
+    createdAt: '2026-01-02T09:10:00Z',
+  });
+
+  for (const claimId of ['c-atomic-a', 'c-atomic-b']) {
+    const document = engine.embeddingDocument({ claimId });
+    engine.putClaimEmbedding({
+      claimId,
+      modelId: 'fake-e5',
+      modelRevision: 'rev-1',
+      textHash: document.text_hash,
+      dimensions: 3,
+      vector: new Float32Array([0, 0, 1]),
+    });
+  }
+
+  const failingEmbedder = {
+    modelId: 'fake-e5',
+    modelRevision: 'rev-1',
+    dimensions: 3,
+    async embedQuery() {
+      return new Float32Array([1, 0, 0]);
+    },
+    async embedPassages(texts) {
+      if (texts.some((text) => /Second SQLite choice/.test(text))) {
+        throw new Error('forced second passage failure');
+      }
+      return texts.map(() => new Float32Array([1, 0, 0]));
+    },
+  };
+
+  const hybrid = new HybridMemoryRetriever({
+    memory: engine,
+    embedder: failingEmbedder,
+  });
+
+  assert.deepEqual(
+    await hybrid.rebuildSemanticIndex({
+      projectId: 'project-a',
+      branch: 'main',
+    }),
+    { indexed: 0, failed: 2 },
+  );
+
+  for (const claimId of ['c-atomic-a', 'c-atomic-b']) {
+    assert.deepEqual(
+      [...engine.getClaimEmbedding({
+        claimId,
+        modelId: 'fake-e5',
+        modelRevision: 'rev-1',
+      }).vector],
+      [0, 0, 1],
+      'failed rebuild must leave the previous complete semantic index intact',
+    );
+  }
+});
+
+test('hybrid retriever validates embedder identity and fixed dimensions at construction', async (t) => {
+  const { HybridMemoryRetriever } = await import('../../memory-engine/hybrid-retrieval.mjs');
+  const engine = await createEngine('embedder-contract');
+  t.after(() => engine.close());
+
+  const base = {
+    modelId: 'fake-e5',
+    modelRevision: 'rev-1',
+    dimensions: 3,
+    async embedQuery() {
+      return new Float32Array([1, 0, 0]);
+    },
+    async embedPassages() {
+      return [new Float32Array([1, 0, 0])];
+    },
+  };
+
+  assert.throws(
+    () => new HybridMemoryRetriever({
+      memory: engine,
+      embedder: { ...base, modelId: '' },
+    }),
+    /modelId/i,
+  );
+  assert.throws(
+    () => new HybridMemoryRetriever({
+      memory: engine,
+      embedder: { ...base, modelRevision: '' },
+    }),
+    /modelRevision/i,
+  );
+  assert.throws(
+    () => new HybridMemoryRetriever({
+      memory: engine,
+      embedder: { ...base, dimensions: 0 },
+    }),
+    /dimensions/i,
+  );
+});
+
+test('malformed query vectors fail closed to lexical recall', async (t) => {
+  const { HybridMemoryRetriever } = await import('../../memory-engine/hybrid-retrieval.mjs');
+  const engine = await createEngine('query-vector-validation');
+  t.after(() => engine.close());
+  engine.registerProject({ projectId: 'project-a', repoIdentity: 'project-a' });
+
+  ingestRawHybridClaim(engine, {
+    evidenceId: 'e-query-lexical',
+    claimId: 'c-query-lexical',
+    value: 'ZXQ-991 lexical marker',
+    createdAt: '2026-01-02T09:00:00Z',
+  });
+  ingestRawHybridClaim(engine, {
+    evidenceId: 'e-query-semantic',
+    claimId: 'c-query-semantic',
+    value: 'Postgres for concurrent writers',
+    createdAt: '2026-01-02T09:10:00Z',
+  });
+
+  const semanticDocument = engine.embeddingDocument({ claimId: 'c-query-semantic' });
+  engine.putClaimEmbedding({
+    claimId: 'c-query-semantic',
+    modelId: 'fake-e5',
+    modelRevision: 'rev-1',
+    textHash: semanticDocument.text_hash,
+    dimensions: 3,
+    vector: new Float32Array([1, 0, 0]),
+  });
+
+  const hybrid = new HybridMemoryRetriever({
+    memory: engine,
+    embedder: {
+      modelId: 'fake-e5',
+      modelRevision: 'rev-1',
+      dimensions: 3,
+      async embedQuery() {
+        return new Float32Array([Number.NaN, 0, 0]);
+      },
+      async embedPassages(texts) {
+        return texts.map(() => new Float32Array([1, 0, 0]));
+      },
+    },
+  });
+
+  const result = await hybrid.recall({
+    projectId: 'project-a',
+    branch: 'main',
+    query: 'ZXQ-991',
+  });
+
+  assert.deepEqual(
+    result.items.map((item) => item.claim.id),
+    ['c-query-lexical'],
+  );
+});
