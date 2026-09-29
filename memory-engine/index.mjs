@@ -655,28 +655,6 @@ export class MemoryEngine {
     `).get(claimId, modelId, modelRevision));
   }
 
-  deleteClaimEmbeddings({ modelId = null, modelRevision = null } = {}) {
-    if (modelId !== null) assertNonEmptyString(modelId, 'modelId');
-    if (modelRevision !== null) assertNonEmptyString(modelRevision, 'modelRevision');
-
-    if (modelId !== null && modelRevision !== null) {
-      return Number(this.#db.prepare(`
-        DELETE FROM claim_embeddings
-        WHERE model_id = ? AND model_revision = ?
-      `).run(modelId, modelRevision).changes);
-    }
-    if (modelId !== null) {
-      return Number(this.#db.prepare(
-        'DELETE FROM claim_embeddings WHERE model_id = ?',
-      ).run(modelId).changes);
-    }
-    if (modelRevision !== null) {
-      return Number(this.#db.prepare(
-        'DELETE FROM claim_embeddings WHERE model_revision = ?',
-      ).run(modelRevision).changes);
-    }
-    return Number(this.#db.prepare('DELETE FROM claim_embeddings').run().changes);
-  }
 
   getApproval(id) {
     return normalizeApproval(
