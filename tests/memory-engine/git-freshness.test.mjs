@@ -73,10 +73,23 @@ test('repository freshness is fail-closed and follows path blob identity, not co
     checkedAt: '2026-01-04T10:00:00Z',
   });
 
-  const unchanged = engine.recall(request);
+  const unchanged = engine.recall({
+    ...request,
+    revisionSha: 'b'.repeat(40),
+  });
   assert.deepEqual(unchanged.items.map((item) => item.claim.id), ['c-auth']);
   assert.equal(unchanged.items[0].freshness.status, 'fresh');
   assert.equal(unchanged.items[0].freshness.current_commit_sha, 'b'.repeat(40));
+
+  const staleSnapshot = engine.recall({
+    ...request,
+    revisionSha: 'c'.repeat(40),
+  });
+  assert.deepEqual(
+    staleSnapshot.items,
+    [],
+    'a freshness snapshot from another revision must fail closed',
+  );
 
   engine.recordRepositoryPathState({
     projectId: 'project-a',
@@ -87,9 +100,16 @@ test('repository freshness is fail-closed and follows path blob identity, not co
     checkedAt: '2026-01-05T10:00:00Z',
   });
 
-  assert.deepEqual(engine.recall(request).items, []);
+  assert.deepEqual(engine.recall({
+    ...request,
+    revisionSha: 'c'.repeat(40),
+  }).items, []);
 
-  const staleHistory = engine.recall({ ...request, mode: 'historical' });
+  const staleHistory = engine.recall({
+    ...request,
+    mode: 'historical',
+    revisionSha: 'c'.repeat(40),
+  });
   assert.deepEqual(staleHistory.items.map((item) => item.claim.id), ['c-auth']);
   assert.equal(staleHistory.items[0].freshness.status, 'stale');
   assert.equal(staleHistory.items[0].freshness.observed_blob_oid, '1'.repeat(40));
@@ -104,7 +124,11 @@ test('repository freshness is fail-closed and follows path blob identity, not co
     checkedAt: '2026-01-06T10:00:00Z',
   });
 
-  const deletedHistory = engine.recall({ ...request, mode: 'historical' });
+  const deletedHistory = engine.recall({
+    ...request,
+    mode: 'historical',
+    revisionSha: 'd'.repeat(40),
+  });
   assert.equal(deletedHistory.items[0].freshness.status, 'stale');
   assert.equal(deletedHistory.items[0].freshness.current_blob_oid, null);
 });
