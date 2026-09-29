@@ -10,9 +10,9 @@ Node.js 24 or newer is required.
 
 The foundation uses Node's built-in `node:sqlite` module so the hub does not need a native npm dependency or a platform-specific SQLite package.
 
-## Foundation scope
+## Current scope
 
-This first implementation owns:
+The reference implementation currently owns:
 
 - canonical SQLite storage in WAL mode;
 - stable project registration;
@@ -23,17 +23,18 @@ This first implementation owns:
 - durable provenance fields;
 - mandatory secret redaction before canonical storage or indexing;
 - Git path/blob freshness checks for repository-grounded evidence;
+- explicit claim-conflict edges;
+- explicit source-authority classes;
+- retrieval separated from use-specific reliance;
 - a rebuildable FTS5 lexical index.
 
-Not implemented in this foundation:
+Not implemented yet:
 
-- conflict/authority resolution;
-- reliance policy for answers versus actions;
-- structured approval capabilities;
+- structured approval capabilities and action reliance;
 - local embeddings or RRF;
 - export/rebuild and interrupted-write recovery.
 
-Those belong in follow-up changes so the foundation remains independently auditable.
+Those belong in follow-up changes so each correctness layer remains independently auditable.
 
 ## Canonical versus derived state
 
@@ -43,6 +44,7 @@ Canonical state:
 - `evidence`
 - `claims`
 - `lifecycle_events`
+- `conflicts`
 
 Derived state:
 
@@ -71,13 +73,27 @@ The reference Ratchet adapter resolves object IDs with `git ls-tree` at the immu
 
 The Memory Ratchet reference adapter deliberately does **not** consume the fixture's hidden `trust` oracle.
 
-At this foundation stage it derives only observable source kinds such as `repository`, `session`, `tool`, or `agent`, and stores:
+Authority is derived from observable source channel, event semantics, and an explicit repository-policy allowlist:
 
 ```text
-authority_class = unclassified
+user_direct
+repo_trusted
+tool_observation
+agent_inference
+external_untrusted
+unclassified
 ```
 
-Authority classification and reliance policy are deferred to the dedicated follow-up layer. This prevents benchmark-only labels from silently making the reference implementation smarter than a real harness integration.
+Repository relevance does not grant repository authority. Only declared policy surfaces such as accepted ADRs and configured project-policy files become `repo_trusted`; other repository documents remain `external_untrusted`.
+
+Retrieval and reliance are separate. Retrieved evidence can remain visible while `evaluateReliance` refuses to use it for a stronger purpose:
+
+- planning may inspect all authority classes;
+- normal answers may rely on `user_direct`, `repo_trusted`, and `tool_observation`;
+- project policy may rely only on `user_direct` and `repo_trusted`;
+- external and destructive actions remain unauthorised until structured M12 approval capabilities exist.
+
+Authority never bypasses Git freshness. Repository-grounded evidence must first pass the revision-bound blob check before it can enter current recall and therefore before reliance can select it.
 
 Project identity is likewise stable and path-independent. Temporary checkout paths are not used as canonical repository identity.
 
@@ -113,7 +129,10 @@ The initial detector covers common API-key, bearer-token, token, secret, and pas
 ## Minimal API
 
 ```js
-import { MemoryEngine } from './memory-engine/index.mjs';
+import {
+  MemoryEngine,
+  evaluateReliance,
+} from './memory-engine/index.mjs';
 
 const memory = new MemoryEngine({ dbPath: './memory.sqlite3' });
 
@@ -157,6 +176,12 @@ const current = memory.recall({
   mode: 'current',
 });
 
+const answerEvidence = evaluateReliance({
+  items: current.items,
+  conflicts: current.conflicts,
+  use: 'answer',
+});
+
 memory.close();
 ```
 
@@ -168,14 +193,17 @@ Foundation tests run under Node 24:
 node --test tests/memory-engine/*.test.mjs
 ```
 
-The suite includes direct engine invariants plus unchanged Memory Ratchet fixture coverage for:
+The suite includes direct engine invariants plus Memory Ratchet fixture coverage for:
 
 - M01 cross-harness current truth;
 - M03 project isolation;
 - M04 branch isolation;
+- M05 Git blob freshness;
 - M06 explicit supersession/history;
+- M07 contradiction handling;
 - M08 provenance;
 - M09 rejection/history;
+- M10 source-authority / poisoning resistance;
 - M11 pre-storage secret redaction.
 
-The suite also covers M05 Git blob freshness. The remaining hard gates are deliberately deferred until the corresponding architecture exists rather than being approximated inside the adapter.
+M12 structured action approval and M13-M15 recovery/bounded-recall work remain deliberately deferred until the corresponding architecture exists rather than being approximated inside the adapter.
