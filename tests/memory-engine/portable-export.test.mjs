@@ -183,3 +183,86 @@ test('canonical import refuses to merge into an occupied memory store', async (t
     /requires an empty memory store/,
   );
 });
+
+test('canonical import validates portable JSON and rolls back malformed payloads', async (t) => {
+  const source = await createEngine('malformed-source');
+  const target = await createEngine('malformed-target');
+  t.after(() => source.close());
+  t.after(() => target.close());
+
+  source.registerProject({
+    projectId: 'project-a',
+    repoIdentity: 'project-a',
+    createdAt: '2026-01-01T00:00:00Z',
+  });
+  target.registerProject({
+    projectId: 'project-a',
+    repoIdentity: 'project-a',
+    createdAt: '2099-01-01T00:00:00Z',
+  });
+
+  ingestDecision(source, {
+    evidenceId: 'e-source',
+    claimId: 'c-source',
+    content: 'Source memory.',
+    createdAt: '2026-01-02T09:00:00Z',
+  });
+
+  const malformed = structuredClone(source.exportCanonical());
+  malformed.evidence[0].metadata_json = '{not-json';
+
+  assert.throws(
+    () => target.importCanonical(malformed),
+    /invalid evidence metadata JSON/,
+  );
+
+  const empty = target.exportCanonical();
+  assert.equal(empty.evidence.length, 0);
+  assert.equal(empty.claims.length, 0);
+  assert.equal(empty.lifecycle_events.length, 0);
+  assert.equal(empty.conflicts.length, 0);
+  assert.equal(empty.approvals.length, 0);
+});
+
+test('canonical import rejects tampered approval scope before storage', async (t) => {
+  const source = await createEngine('approval-source');
+  const target = await createEngine('approval-target');
+  t.after(() => source.close());
+  t.after(() => target.close());
+
+  for (const engine of [source, target]) {
+    engine.registerProject({
+      projectId: 'project-a',
+      repoIdentity: 'project-a',
+      createdAt: '2026-01-01T00:00:00Z',
+    });
+  }
+
+  ingestDecision(source, {
+    evidenceId: 'e-source',
+    claimId: 'c-source',
+    content: 'Approve staging deployment.',
+    createdAt: '2026-01-02T09:00:00Z',
+  });
+  source.recordApproval({
+    id: 'approval-deploy',
+    projectId: 'project-a',
+    action: 'deploy',
+    target: 'build-42',
+    environment: 'staging',
+    issuedAt: '2026-01-02T09:00:00Z',
+    expiresAt: '2026-01-02T23:59:59Z',
+    sourceEvidenceId: 'e-source',
+  });
+
+  const tampered = structuredClone(source.exportCanonical());
+  tampered.approvals[0].constraints_json = JSON.stringify({
+    password: 'supersecret-password-value',
+  });
+
+  assert.throws(
+    () => target.importCanonical(tampered),
+    /secret material in approval/,
+  );
+  assert.equal(target.exportCanonical().approvals.length, 0);
+});
