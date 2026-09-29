@@ -596,11 +596,13 @@ export class MemoryEngine {
     projectId,
     branch,
     query,
+    revisionSha = null,
     mode = 'current',
     limit = 10,
   }) {
     assertNonEmptyString(projectId, 'projectId');
     assertNonEmptyString(branch, 'branch');
+    if (revisionSha !== null) assertNonEmptyString(revisionSha, 'revisionSha');
     if (!['current', 'historical'].includes(mode)) {
       throw new Error(`unsupported recall mode: ${mode}`);
     }
@@ -650,8 +652,9 @@ export class MemoryEngine {
               AND (
                 e.path IS NULL
                 OR (
-                  e.blob_oid IS NOT NULL
-                  AND rps.commit_sha IS NOT NULL
+                  ? IS NOT NULL
+                  AND e.blob_oid IS NOT NULL
+                  AND rps.commit_sha = ?
                   AND rps.blob_oid = e.blob_oid
                 )
               )
@@ -659,7 +662,7 @@ export class MemoryEngine {
           )
         ORDER BY rank ASC, c.created_at DESC, c.id ASC
         LIMIT ?
-      `).all(ftsQuery, projectId, branch, mode, limit);
+      `).all(ftsQuery, projectId, branch, mode, revisionSha, revisionSha, limit);
     } else {
       rows = this.#db.prepare(`
         SELECT
@@ -697,8 +700,9 @@ export class MemoryEngine {
               AND (
                 e.path IS NULL
                 OR (
-                  e.blob_oid IS NOT NULL
-                  AND rps.commit_sha IS NOT NULL
+                  ? IS NOT NULL
+                  AND e.blob_oid IS NOT NULL
+                  AND rps.commit_sha = ?
                   AND rps.blob_oid = e.blob_oid
                 )
               )
@@ -706,7 +710,7 @@ export class MemoryEngine {
           )
         ORDER BY c.created_at DESC, c.id ASC
         LIMIT ?
-      `).all(projectId, branch, mode, limit);
+      `).all(projectId, branch, mode, revisionSha, revisionSha, limit);
     }
 
     return {
@@ -735,7 +739,11 @@ export class MemoryEngine {
         freshness: (
           row.evidence_path !== null
           ? {
-              status: row.freshness_commit_sha === null
+              status: (
+                revisionSha === null
+                || row.freshness_commit_sha === null
+                || row.freshness_commit_sha !== revisionSha
+              )
                 ? 'unchecked'
                 : (
                     row.evidence_blob_oid !== null

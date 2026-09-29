@@ -158,6 +158,7 @@ export function createReferenceMemoryAdapter() {
         projectId: request.project_id,
         branch: request.branch,
         query: request.query,
+        revisionSha: request.revision_sha,
         limit: request.limit ?? 10,
       };
       const current = engine.recall({ ...common, mode: 'current' });
