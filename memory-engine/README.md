@@ -29,12 +29,12 @@ The reference implementation currently owns:
 - structured, scoped action approval capabilities;
 - atomic one-time approval consumption and revocation;
 - a rebuildable FTS5 lexical index;
-- portable canonical export/import with derived-state rebuild.
+- portable canonical export/import with derived-state rebuild;
+- interrupted-write recovery through transactional canonical state and derived-state rebuild.
 
 Not implemented yet:
 
-- local embeddings or RRF;
-- interrupted-write recovery.
+- local embeddings or RRF.
 
 Those belong in follow-up changes so each correctness layer remains independently auditable.
 
@@ -239,6 +239,26 @@ const answerEvidence = evaluateReliance({
 memory.close();
 ```
 
+## Failure recovery
+
+Canonical writes rely on SQLite transactions in WAL mode. A partially executed ingest is not canonical memory until its transaction commits.
+
+The M15 regression exercises two recovery paths:
+
+- derived-state loss: `claim_fts` and repository freshness snapshots are removed, then rebuilt from canonical rows;
+- hard interruption: a separate Node process begins a real SQLite write transaction, inserts the first partial Evidence row, signals the write barrier, and is terminated with `SIGKILL` before commit.
+
+After recovery:
+
+- previously committed current memory remains available;
+- superseded history remains available;
+- source provenance remains intact;
+- the interrupted Evidence row is absent from canonical export;
+- no interrupted Claim is present;
+- interrupted content cannot surface as trusted recall.
+
+Recovery does not promote WAL fragments or partial writes. It checkpoints surviving committed SQLite state and regenerates derived indexes from canonical truth.
+
 ## Bounded recall
 
 The Memory Ratchet M14 regression ingests 2,000 unrelated distractor memories plus the database decision history and requests at most 10 recalled items.
@@ -273,6 +293,7 @@ The suite includes direct engine invariants plus Memory Ratchet fixture coverage
 - M11 pre-storage secret redaction;
 - M12 structured action trust boundary;
 - M13 portable export and rebuild;
-- M14 bounded recall under 2,000 distractors.
+- M14 bounded recall under 2,000 distractors;
+- M15 interrupted-write and derived-state recovery.
 
-M15 interrupted-write recovery remains deliberately deferred until the corresponding architecture exists rather than being approximated inside the adapter.
+The reference engine now has explicit regression coverage for Memory Ratchet M01-M15.
