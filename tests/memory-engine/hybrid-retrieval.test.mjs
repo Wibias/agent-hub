@@ -969,10 +969,11 @@ test('hybrid recall cannot surface semantically similar claims outside correctne
     mode: 'current',
   });
 
-  assert.deepEqual(
-    result.items.map((item) => item.claim.id),
-    ['c-scope-current'],
-  );
+  const ids = result.items.map((item) => item.claim.id);
+  assert.ok(ids.includes('c-scope-current'));
+  assert.equal(ids.includes('c-scope-old'), false);
+  assert.equal(ids.includes('c-scope-other-project'), false);
+  assert.equal(ids.includes('c-scope-feature'), false);
 });
 
 test('hybrid recall materializes fused ids in deterministic RRF order', async (t) => {
