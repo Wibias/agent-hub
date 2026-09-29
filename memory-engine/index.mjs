@@ -744,8 +744,31 @@ export class MemoryEngine {
         || !sourceEvidence
         || sourceEvidence.project_id !== row.project_id
         || sourceEvidence.authority_class !== 'user_direct'
+        || row.actor !== sourceEvidence.source_ref
       ) {
         throw new Error(`invalid approval in portable export: ${row.id}`);
+      }
+      for (const [value, name] of [
+        [row.id, 'approval.id'],
+        [row.action, 'approval.action'],
+        [row.target, 'approval.target'],
+        [row.environment, 'approval.environment'],
+      ]) {
+        assertNonEmptyString(value, name);
+      }
+      if (row.artifact !== null) assertNonEmptyString(row.artifact, 'approval.artifact');
+      const issuedAt = normalizeTimestamp(row.issued_at, 'approval.issued_at');
+      const expiresAt = normalizeTimestamp(row.expires_at, 'approval.expires_at');
+      if (expiresAt < issuedAt) throw new Error(`invalid approval validity window: ${row.id}`);
+      if (!Number.isInteger(row.max_uses) || row.max_uses < 1) {
+        throw new Error(`invalid approval max_uses: ${row.id}`);
+      }
+      if (!Number.isInteger(row.uses) || row.uses < 0 || row.uses > row.max_uses) {
+        throw new Error(`invalid approval uses: ${row.id}`);
+      }
+      if (row.revoked_at !== null) {
+        const revokedAt = normalizeTimestamp(row.revoked_at, 'approval.revoked_at');
+        if (revokedAt < issuedAt) throw new Error(`invalid approval revocation time: ${row.id}`);
       }
       const secretCheck = redactValue({
         actor: row.actor,
