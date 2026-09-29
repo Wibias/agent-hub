@@ -484,7 +484,9 @@ export class MemoryEngine {
       if (!this.getProject(projectId)) throw new Error(`unknown project: ${projectId}`);
     }
 
-    const params = projectId === null ? [] : [projectId];
+    this.#db.exec('BEGIN');
+    try {
+      const params = projectId === null ? [] : [projectId];
     const where = projectId === null ? '' : ' WHERE project_id = ?';
 
     const projects = this.#db.prepare(`
@@ -537,19 +539,25 @@ export class MemoryEngine {
       ORDER BY project_id, issued_at, id
     `).all(...params).map(normalizeApproval);
 
-    return {
-      format: 'agent-hub-memory-export',
-      version: 1,
-      exported_at: normalizeTimestamp(this.#clock(), 'clock()'),
-      canonical: {
-        projects,
-        evidence,
-        claims,
-        lifecycle_events: lifecycleEvents,
-        conflicts,
-        approvals,
-      },
-    };
+      const portable = {
+        format: 'agent-hub-memory-export',
+        version: 1,
+        exported_at: normalizeTimestamp(this.#clock(), 'clock()'),
+        canonical: {
+          projects,
+          evidence,
+          claims,
+          lifecycle_events: lifecycleEvents,
+          conflicts,
+          approvals,
+        },
+      };
+      this.#db.exec('COMMIT');
+      return portable;
+    } catch (error) {
+      this.#db.exec('ROLLBACK');
+      throw error;
+    }
   }
 
   importMemory(portable) {
