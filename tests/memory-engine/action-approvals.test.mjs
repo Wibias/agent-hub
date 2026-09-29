@@ -6,9 +6,9 @@ import { join } from 'node:path';
 
 import { MemoryEngine } from '../../memory-engine/index.mjs';
 
-async function createEngine() {
+async function createEngine(clock = () => '2026-01-11T10:00:00Z') {
   const root = await mkdtemp(join(tmpdir(), 'memory-engine-approval-'));
-  const engine = new MemoryEngine({ dbPath: join(root, 'memory.sqlite3') });
+  const engine = new MemoryEngine({ dbPath: join(root, 'memory.sqlite3'), clock });
   engine.registerProject({ projectId: 'project-a', repoIdentity: 'project-a' });
   engine.registerProject({ projectId: 'project-b', repoIdentity: 'project-b' });
   return engine;
@@ -53,7 +53,6 @@ function recordApproval(engine, overrides = {}) {
   return engine.recordApproval({
     id: 'approval-1',
     projectId: 'project-a',
-    actor: 'session:S1',
     action: 'deploy',
     target: 'build-42',
     environment: 'staging',
@@ -79,7 +78,6 @@ test('only user-direct evidence can mint an action approval', async (t) => {
     () => engine.recordApproval({
       id: 'approval-agent',
       projectId: 'project-a',
-      actor: 'agent:S1',
       action: 'deploy',
       target: 'build-42',
       environment: 'production',
@@ -93,7 +91,8 @@ test('only user-direct evidence can mint an action approval', async (t) => {
 });
 
 test('approval scope is exact and expiration is fail-closed', async (t) => {
-  const engine = await createEngine();
+  let now = '2026-01-11T10:00:00Z';
+  const engine = await createEngine(() => now);
   t.after(() => engine.close());
 
   ingestEvidence(engine);
@@ -104,7 +103,6 @@ test('approval scope is exact and expiration is fail-closed', async (t) => {
     action: 'deploy',
     target: 'build-42',
     environment: 'production',
-    at: '2026-01-11T10:00:00Z',
   });
   assert.equal(wrongEnvironment.authorized, false);
   assert.equal(wrongEnvironment.reason, 'no_valid_approval');
@@ -114,17 +112,16 @@ test('approval scope is exact and expiration is fail-closed', async (t) => {
     action: 'deploy',
     target: 'build-42',
     environment: 'staging',
-    at: '2026-01-11T10:00:00Z',
   });
   assert.equal(valid.authorized, true);
   assert.equal(valid.approval.id, 'approval-1');
 
+  now = '2026-01-12T00:00:00Z';
   const expired = engine.authorizeAction({
     projectId: 'project-a',
     action: 'deploy',
     target: 'build-42',
     environment: 'staging',
-    at: '2026-01-12T00:00:00Z',
   });
   assert.equal(expired.authorized, false);
   assert.equal(expired.reason, 'no_valid_approval');
@@ -151,8 +148,7 @@ test('action, target, and artifact scope must match exactly', async (t) => {
     const decision = engine.authorizeAction({
       projectId: 'project-a',
       ...request,
-      at: '2026-01-11T10:00:00Z',
-    });
+      });
     assert.equal(decision.authorized, false);
   }
 
@@ -162,7 +158,6 @@ test('action, target, and artifact scope must match exactly', async (t) => {
     target: 'service-api',
     environment: 'staging',
     artifact: 'build-42',
-    at: '2026-01-11T10:00:00Z',
   });
   assert.equal(exact.authorized, true);
 });
@@ -179,7 +174,6 @@ test('one-time approval is consumed atomically and cannot be reused', async (t) 
     action: 'deploy',
     target: 'build-42',
     environment: 'staging',
-    at: '2026-01-11T10:00:00Z',
     consume: true,
   });
   assert.equal(first.authorized, true);
@@ -191,7 +185,6 @@ test('one-time approval is consumed atomically and cannot be reused', async (t) 
     action: 'deploy',
     target: 'build-42',
     environment: 'staging',
-    at: '2026-01-11T10:01:00Z',
     consume: true,
   });
   assert.equal(second.authorized, false);
@@ -200,7 +193,8 @@ test('one-time approval is consumed atomically and cannot be reused', async (t) 
 });
 
 test('revocation disables an otherwise matching approval', async (t) => {
-  const engine = await createEngine();
+  let now = '2026-01-11T09:30:00Z';
+  const engine = await createEngine(() => now);
   t.after(() => engine.close());
 
   ingestEvidence(engine);
@@ -208,8 +202,26 @@ test('revocation disables an otherwise matching approval', async (t) => {
   engine.revokeApproval({
     approvalId: 'approval-1',
     projectId: 'project-a',
-    revokedAt: '2026-01-11T09:30:00Z',
   });
+  now = '2026-01-11T10:00:00Z';
+
+  const decision = engine.authorizeAction({
+    projectId: 'project-a',
+    action: 'deploy',
+    target: 'build-42',
+    environment: 'staging',
+  });
+  assert.equal(decision.authorized, false);
+  assert.equal(decision.reason, 'no_valid_approval');
+  assert.equal(engine.getApproval('approval-1').revoked_at, '2026-01-11T09:30:00.000Z');
+});
+
+test('caller-supplied timestamps cannot resurrect an expired approval', async (t) => {
+  const engine = await createEngine(() => '2026-01-12T09:00:00Z');
+  t.after(() => engine.close());
+
+  ingestEvidence(engine);
+  recordApproval(engine);
 
   const decision = engine.authorizeAction({
     projectId: 'project-a',
@@ -218,9 +230,10 @@ test('revocation disables an otherwise matching approval', async (t) => {
     environment: 'staging',
     at: '2026-01-11T10:00:00Z',
   });
+
   assert.equal(decision.authorized, false);
   assert.equal(decision.reason, 'no_valid_approval');
-  assert.equal(engine.getApproval('approval-1').revoked_at, '2026-01-11T09:30:00.000Z');
+  assert.equal(decision.request.evaluated_at, '2026-01-12T09:00:00.000Z');
 });
 
 test('approval source evidence cannot cross project boundaries', async (t) => {
@@ -257,7 +270,6 @@ test('approval constraints must be satisfied explicitly', async (t) => {
     action: 'deploy',
     target: 'build-42',
     environment: 'staging',
-    at: '2026-01-11T10:00:00Z',
     constraints: { region: 'eu-central' },
   });
   assert.equal(missing.authorized, false);
@@ -267,7 +279,6 @@ test('approval constraints must be satisfied explicitly', async (t) => {
     action: 'deploy',
     target: 'build-42',
     environment: 'staging',
-    at: '2026-01-11T10:00:00Z',
     constraints: {
       region: 'eu-central',
       checks: { review: true, tests: true },
