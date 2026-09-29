@@ -152,6 +152,7 @@ export function createReferenceMemoryAdapter() {
           subject: event.type,
           predicate: 'states',
           value: event.content,
+          state: event.type === 'approval' ? 'candidate' : undefined,
           branchScope: event.branch,
           createdAt: event.at,
         },
