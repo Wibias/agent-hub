@@ -98,6 +98,7 @@ test('M15 hard process termination cannot promote an interrupted write to commit
 
     const interrupted = await adapter.interruptIngest(partial);
     assert.equal(interrupted.interrupted, true);
+    assert.equal(interrupted.signal, 'SIGKILL');
 
     const recovery = await adapter.recover();
     assert.equal(recovery.indexed_claims, 2);
