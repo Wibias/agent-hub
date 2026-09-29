@@ -22,11 +22,11 @@ This first implementation owns:
 - current versus historical recall;
 - durable provenance fields;
 - mandatory secret redaction before canonical storage or indexing;
+- Git path/blob freshness checks for repository-grounded evidence;
 - a rebuildable FTS5 lexical index.
 
 Not implemented in this foundation:
 
-- Git blob freshness and stale-code transitions;
 - conflict/authority resolution;
 - reliance policy for answers versus actions;
 - structured approval capabilities;
@@ -46,9 +46,26 @@ Canonical state:
 
 Derived state:
 
+- `repository_path_state`
 - `claim_fts`
 
-FTS data is never the source of truth. Claim lifecycle and provenance remain valid even if search indexes are rebuilt later.
+Derived state is never the source of truth. Claim lifecycle, observed repository blob identity, and provenance remain valid even if freshness snapshots or search indexes are rebuilt later.
+
+`repository_path_state` is a rebuildable snapshot of the repository revision being queried. It stores the current commit and path object ID used to decide whether path-grounded evidence is still eligible for current recall. Portable export must not treat this snapshot as durable memory truth.
+
+## Git blob freshness
+
+Repository-grounded evidence can record both an immutable commit SHA and the Git object ID for its source path. Current recall is fail-closed for path-grounded evidence:
+
+- no recorded current path state means the evidence is not current truth;
+- the same blob ID at a later commit remains fresh;
+- a changed blob ID marks the old observation stale for current recall;
+- a deleted path is stale because its current blob ID is null;
+- historical recall keeps the old evidence and reports `fresh`, `stale`, or `unchecked` freshness metadata.
+
+This intentionally compares the path object ID, not only the commit SHA. Unrelated commits therefore do not invalidate unchanged repository evidence.
+
+The reference Ratchet adapter resolves object IDs with `git ls-tree` at the immutable observation revision and again at the requested current revision. The engine itself stays Git-provider agnostic.
 
 ## Reference adapter trust boundary
 
@@ -161,4 +178,4 @@ The suite includes direct engine invariants plus unchanged Memory Ratchet fixtur
 - M09 rejection/history;
 - M11 pre-storage secret redaction.
 
-The remaining hard gates are deliberately deferred until the corresponding architecture exists rather than being approximated inside the adapter.
+The suite also covers M05 Git blob freshness. The remaining hard gates are deliberately deferred until the corresponding architecture exists rather than being approximated inside the adapter.
