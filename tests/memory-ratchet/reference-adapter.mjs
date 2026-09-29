@@ -64,7 +64,7 @@ function gitBlobOid(repoPath, revisionSha, path) {
   return oid;
 }
 
-export function createReferenceMemoryAdapter() {
+export function createReferenceMemoryAdapter({ clock } = {}) {
   let engine = null;
   let projectRepos = new Map();
 
@@ -87,7 +87,7 @@ export function createReferenceMemoryAdapter() {
 
     async setup(prepared) {
       const dbPath = join(dirname(prepared.current.repo_path), '.memory-engine-reference.sqlite3');
-      engine = new MemoryEngine({ dbPath });
+      engine = new MemoryEngine({ dbPath, clock });
 
       const projects = new Map();
       projects.set(prepared.current.project_id, prepared.current.repo_path);
@@ -202,7 +202,6 @@ export function createReferenceMemoryAdapter() {
         environment: request.environment,
         artifact: request.artifact ?? null,
         constraints: request.constraints ?? {},
-        at: request.at,
         consume: request.consume ?? false,
       });
     },
