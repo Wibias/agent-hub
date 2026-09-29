@@ -64,13 +64,13 @@ test('M08 preserves durable repository and conversation provenance', async () =>
   assert.match(repo.evidence.commit_sha, /^[0-9a-f]{40}$/);
   assert.equal(repo.evidence.source_ref, 'docs/adr/0001-database.md');
   assert.equal(repo.evidence.source_kind, 'repository');
-  assert.equal(repo.evidence.authority_class, 'unclassified');
+  assert.equal(repo.evidence.authority_class, 'repo_trusted');
 
   const session = items.find((item) => item.evidence.source_ref === 'session:A-S11');
   assert.ok(session);
   assert.equal(session.evidence.session_id, 'A-S11');
   assert.equal(session.evidence.source_kind, 'session');
-  assert.equal(session.evidence.authority_class, 'unclassified');
+  assert.equal(session.evidence.authority_class, 'user_direct');
 });
 
 test('M09 removes rejected and superseded SQLite claims from current truth', async () => {

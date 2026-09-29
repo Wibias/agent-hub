@@ -1,5 +1,7 @@
 import { DatabaseSync } from 'node:sqlite';
 
+import { assertAuthorityClass } from './authority.mjs';
+
 export const REDACTED_SECRET = '[REDACTED_SECRET]';
 
 const CLAIM_STATES = new Set([
@@ -160,6 +162,125 @@ function searchableText(claim, evidenceContent) {
   return `${raw} ${lexicalTerms(raw).join(' ')}`;
 }
 
+const RELIANCE_ALLOWED = {
+  planning: new Set([
+    'user_direct',
+    'repo_trusted',
+    'tool_observation',
+    'agent_inference',
+    'external_untrusted',
+    'unclassified',
+  ]),
+  answer: new Set([
+    'user_direct',
+    'repo_trusted',
+    'tool_observation',
+  ]),
+  project_policy: new Set([
+    'user_direct',
+    'repo_trusted',
+  ]),
+  external_action: new Set(),
+  destructive_action: new Set(),
+};
+
+export function evaluateReliance({
+  items,
+  conflicts = [],
+  use,
+}) {
+  const allowedClasses = RELIANCE_ALLOWED[use];
+  if (!allowedClasses) throw new Error(`unsupported reliance use: ${use}`);
+
+  const selected = [];
+  const blocked = [];
+  const selectedIds = new Set();
+  const authorityAllowedIds = new Set();
+  const byId = new Map();
+
+  for (const item of items ?? []) {
+    const claimId = item?.claim?.id;
+    if (!claimId) continue;
+    byId.set(claimId, item);
+
+    const authority = item.evidence?.authority_class ?? 'unclassified';
+    if (allowedClasses.has(authority)) {
+      selected.push(item);
+      selectedIds.add(claimId);
+      authorityAllowedIds.add(claimId);
+    } else {
+      blocked.push({
+        item,
+        reason: `authority_not_allowed_for_${use}`,
+      });
+    }
+  }
+
+  const conflictResolutions = [];
+  for (const conflict of conflicts ?? []) {
+    const a = byId.get(conflict.claim_a);
+    const b = byId.get(conflict.claim_b);
+    if (!a && !b) continue;
+
+    if (!a || !b) {
+      const present = a ?? b;
+      const presentId = present.claim.id;
+      if (selectedIds.delete(presentId)) {
+        blocked.push({
+          item: present,
+          reason: 'unresolved_conflict_counterpart_not_retrieved',
+        });
+      }
+      conflictResolutions.push({
+        ...conflict,
+        status: 'unresolved_missing_counterpart',
+        winner_claim_id: null,
+      });
+      continue;
+    }
+
+    const aAllowed = authorityAllowedIds.has(conflict.claim_a);
+    const bAllowed = authorityAllowedIds.has(conflict.claim_b);
+
+    if (aAllowed !== bAllowed) {
+      conflictResolutions.push({
+        ...conflict,
+        status: 'resolved_by_authority',
+        winner_claim_id: aAllowed ? conflict.claim_a : conflict.claim_b,
+      });
+      continue;
+    }
+
+    if (aAllowed && bAllowed) {
+      selectedIds.delete(conflict.claim_a);
+      selectedIds.delete(conflict.claim_b);
+      blocked.push(
+        { item: a, reason: 'unresolved_conflict' },
+        { item: b, reason: 'unresolved_conflict' },
+      );
+      conflictResolutions.push({
+        ...conflict,
+        status: 'unresolved',
+        winner_claim_id: null,
+      });
+      continue;
+    }
+
+    conflictResolutions.push({
+      ...conflict,
+      status: 'blocked_by_authority',
+      winner_claim_id: null,
+    });
+  }
+
+  return {
+    use,
+    selected: selected.filter((item) => selectedIds.has(item.claim.id)),
+    blocked,
+    conflict_resolutions: conflictResolutions,
+  };
+}
+
 export class MemoryEngine {
   #db;
 
@@ -229,6 +350,24 @@ export class MemoryEngine {
         target_claim_id TEXT NOT NULL REFERENCES claims(id),
         evidence_id TEXT NOT NULL REFERENCES evidence(id),
         created_at TEXT NOT NULL
+      ) STRICT;
+
+      CREATE TABLE IF NOT EXISTS conflicts (
+        project_id TEXT NOT NULL REFERENCES project_registry(project_id),
+        claim_a TEXT NOT NULL REFERENCES claims(id),
+        claim_b TEXT NOT NULL REFERENCES claims(id),
+        state TEXT NOT NULL CHECK (state IN ('open','resolved')),
+        created_by_evidence_id TEXT NOT NULL REFERENCES evidence(id),
+        created_at TEXT NOT NULL,
+        resolved_by_evidence_id TEXT REFERENCES evidence(id),
+        resolved_at TEXT,
+        PRIMARY KEY (project_id, claim_a, claim_b),
+        CHECK (claim_a < claim_b),
+        CHECK (
+          (state = 'open' AND resolved_by_evidence_id IS NULL AND resolved_at IS NULL)
+          OR
+          (state = 'resolved' AND resolved_by_evidence_id IS NOT NULL AND resolved_at IS NOT NULL)
+        )
       ) STRICT;
 
       CREATE TABLE IF NOT EXISTS repository_path_state (
@@ -411,6 +550,7 @@ export class MemoryEngine {
     if (!this.getProject(evidence.projectId)) {
       throw new Error(`unknown project: ${evidence.projectId}`);
     }
+    assertAuthorityClass(evidence.authorityClass);
 
     const branchScope = claim.branchScope ?? evidence.branch;
     assertNonEmptyString(branchScope, 'claim.branchScope');
@@ -467,8 +607,13 @@ export class MemoryEngine {
 
     const supersedes = [...new Set(lifecycle.supersedes ?? [])];
     const rejects = [...new Set(lifecycle.rejects ?? [])];
+    const conflictsWith = [...new Set(lifecycle.conflictsWith ?? [])];
 
-    if (supersedes.includes(claim.id) || rejects.includes(claim.id)) {
+    if (
+      supersedes.includes(claim.id)
+      || rejects.includes(claim.id)
+      || conflictsWith.includes(claim.id)
+    ) {
       throw new Error('a claim cannot transition itself');
     }
 
@@ -542,6 +687,16 @@ export class MemoryEngine {
             project_id, action, source_claim_id, target_claim_id, evidence_id, created_at
           ) VALUES (?, 'supersede', ?, ?, ?, ?)
         `).run(evidence.projectId, claim.id, targetId, evidence.id, claim.createdAt);
+
+        this.#db.prepare(`
+          UPDATE conflicts
+          SET state = 'resolved',
+              resolved_by_evidence_id = ?,
+              resolved_at = ?
+          WHERE project_id = ?
+            AND state = 'open'
+            AND (claim_a = ? OR claim_b = ?)
+        `).run(evidence.id, claim.createdAt, evidence.projectId, targetId, targetId);
       }
 
       for (const targetId of rejects) {
@@ -567,6 +722,44 @@ export class MemoryEngine {
             project_id, action, source_claim_id, target_claim_id, evidence_id, created_at
           ) VALUES (?, 'reject', ?, ?, ?, ?)
         `).run(evidence.projectId, claim.id, targetId, evidence.id, claim.createdAt);
+
+        this.#db.prepare(`
+          UPDATE conflicts
+          SET state = 'resolved',
+              resolved_by_evidence_id = ?,
+              resolved_at = ?
+          WHERE project_id = ?
+            AND state = 'open'
+            AND (claim_a = ? OR claim_b = ?)
+        `).run(evidence.id, claim.createdAt, evidence.projectId, targetId, targetId);
+      }
+
+      if (conflictsWith.length > 0 && state !== 'active') {
+        throw new Error('only active claims can open conflicts');
+      }
+
+      for (const targetId of conflictsWith) {
+        const target = this.#db
+          .prepare('SELECT project_id, branch_scope, state FROM claims WHERE id = ?')
+          .get(targetId);
+        if (!target) throw new Error(`cannot conflict with unknown claim: ${targetId}`);
+        if (target.project_id !== evidence.projectId) {
+          throw new Error('conflict relations cannot cross project boundaries');
+        }
+        if (target.branch_scope !== branchScope) {
+          throw new Error('conflict relations cannot cross branch boundaries');
+        }
+        if (target.state !== 'active') {
+          throw new Error(`cannot conflict with claim ${targetId} in state ${target.state}`);
+        }
+
+        const [claimA, claimB] = [claim.id, targetId].sort();
+        this.#db.prepare(`
+          INSERT INTO conflicts (
+            project_id, claim_a, claim_b, state, created_by_evidence_id, created_at
+          ) VALUES (?, ?, ?, 'open', ?, ?)
+          ON CONFLICT(project_id, claim_a, claim_b) DO NOTHING
+        `).run(evidence.projectId, claimA, claimB, evidence.id, claim.createdAt);
       }
 
       this.#db.prepare(`
@@ -712,53 +905,105 @@ export class MemoryEngine {
       `).all(projectId, branch, mode, revisionSha, revisionSha, limit);
     }
 
+    const items = rows.map((row) => ({
+      claim: normalizeClaim(row),
+      evidence: {
+        id: row.evidence_id,
+        project_id: row.project_id,
+        harness: row.evidence_harness,
+        session_id: row.evidence_session_id,
+        source_kind: row.evidence_source_kind,
+        source_ref: row.evidence_source_ref,
+        captured_at: row.evidence_captured_at,
+        branch: row.evidence_branch,
+        commit_sha: row.evidence_commit_sha,
+        path: row.evidence_path,
+        blob_oid: row.evidence_blob_oid,
+        content_redacted: row.evidence_content_redacted,
+        sensitivity: row.evidence_sensitivity,
+        authority_class: row.evidence_authority_class,
+        metadata: parseMetadata(row.evidence_metadata_json),
+      },
+      freshness: (
+        row.evidence_path !== null
+        ? {
+            status: (
+              revisionSha === null
+              || row.freshness_commit_sha === null
+              || row.freshness_commit_sha !== revisionSha
+            )
+              ? 'unchecked'
+              : (
+                  row.evidence_blob_oid !== null
+                  && row.freshness_blob_oid === row.evidence_blob_oid
+                    ? 'fresh'
+                    : 'stale'
+                ),
+            observed_blob_oid: row.evidence_blob_oid,
+            current_blob_oid: row.freshness_blob_oid,
+            current_commit_sha: row.freshness_commit_sha,
+            checked_at: row.freshness_checked_at,
+          }
+        : null
+      ),
+      rank: Number(row.rank),
+    }));
+
+    const ids = new Set(items.map((item) => item.claim.id));
+    let currentEligibleIds = null;
+    if (mode === 'current') {
+      currentEligibleIds = new Set(this.#db.prepare(`
+        SELECT c.id
+        FROM claims c
+        JOIN evidence e ON e.id = c.created_from_evidence_id
+        LEFT JOIN repository_path_state rps
+          ON rps.project_id = c.project_id
+         AND rps.branch = c.branch_scope
+         AND rps.path = e.path
+        WHERE c.project_id = ?
+          AND c.branch_scope = ?
+          AND c.state = 'active'
+          AND (
+            e.path IS NULL
+            OR (
+              ? IS NOT NULL
+              AND e.blob_oid IS NOT NULL
+              AND rps.commit_sha = ?
+              AND rps.blob_oid = e.blob_oid
+            )
+          )
+      `).all(projectId, branch, revisionSha, revisionSha).map((row) => row.id));
+    }
+
+    const conflicts = this.#db.prepare(`
+      SELECT
+        claim_a,
+        claim_b,
+        state,
+        created_by_evidence_id,
+        created_at,
+        resolved_by_evidence_id,
+        resolved_at
+      FROM conflicts
+      WHERE project_id = ?
+      ORDER BY claim_a, claim_b
+    `).all(projectId).filter(
+      (conflict) => (
+        (mode === 'historical' || (
+          conflict.state === 'open'
+          && currentEligibleIds.has(conflict.claim_a)
+          && currentEligibleIds.has(conflict.claim_b)
+        ))
+        && (ids.has(conflict.claim_a) || ids.has(conflict.claim_b))
+      ),
+    );
+
     return {
       project_id: projectId,
       branch,
       mode,
-      items: rows.map((row) => ({
-        claim: normalizeClaim(row),
-        evidence: {
-          id: row.evidence_id,
-          project_id: row.project_id,
-          harness: row.evidence_harness,
-          session_id: row.evidence_session_id,
-          source_kind: row.evidence_source_kind,
-          source_ref: row.evidence_source_ref,
-          captured_at: row.evidence_captured_at,
-          branch: row.evidence_branch,
-          commit_sha: row.evidence_commit_sha,
-          path: row.evidence_path,
-          blob_oid: row.evidence_blob_oid,
-          content_redacted: row.evidence_content_redacted,
-          sensitivity: row.evidence_sensitivity,
-          authority_class: row.evidence_authority_class,
-          metadata: parseMetadata(row.evidence_metadata_json),
-        },
-        freshness: (
-          row.evidence_path !== null
-          ? {
-              status: (
-                revisionSha === null
-                || row.freshness_commit_sha === null
-                || row.freshness_commit_sha !== revisionSha
-              )
-                ? 'unchecked'
-                : (
-                    row.evidence_blob_oid !== null
-                    && row.freshness_blob_oid === row.evidence_blob_oid
-                      ? 'fresh'
-                      : 'stale'
-                  ),
-              observed_blob_oid: row.evidence_blob_oid,
-              current_blob_oid: row.freshness_blob_oid,
-              current_commit_sha: row.freshness_commit_sha,
-              checked_at: row.freshness_checked_at,
-            }
-          : null
-        ),
-        rank: Number(row.rank),
-      })),
+      items,
+      conflicts,
     };
   }
 }
