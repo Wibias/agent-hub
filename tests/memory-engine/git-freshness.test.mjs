@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import { MemoryEngine } from '../../memory-engine/index.mjs';
 import { runRecallCase } from '../memory-ratchet/adapter-contract.mjs';
 import { createReferenceMemoryAdapter } from '../memory-ratchet/reference-adapter.mjs';
+import { prepareCase } from '../memory-ratchet/runner.mjs';
 
 async function createEngine() {
   const root = await mkdtemp(join(tmpdir(), 'memory-engine-git-freshness-'));
@@ -152,4 +153,45 @@ test('M05 withholds the old JWT code observation after the file blob changes', a
   assert.match(stale.freshness.observed_blob_oid, /^[0-9a-f]{40}$/);
   assert.match(stale.freshness.current_blob_oid, /^[0-9a-f]{40}$/);
   assert.notEqual(stale.freshness.observed_blob_oid, stale.freshness.current_blob_oid);
+});
+
+
+test('reference adapter treats repository-root files as repository evidence', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'memory-engine-root-path-'));
+  const prepared = await prepareCase('M05', root);
+  const adapter = createReferenceMemoryAdapter();
+
+  await adapter.reset();
+  try {
+    await adapter.setup(prepared);
+
+    const observed = prepared.events[0];
+    await adapter.ingest({
+      ...observed,
+      id: 'EV-A-ROOT-README',
+      type: 'document_read',
+      content: 'README identifies Memory Ratchet Project A.',
+      source: 'README.md',
+    });
+
+    const recall = await adapter.recall({
+      project_id: prepared.current.project_id,
+      branch: prepared.current.branch,
+      revision_sha: prepared.current.revision_sha,
+      repo_path: prepared.current.repo_path,
+      query: 'README Memory Ratchet Project A',
+      limit: 10,
+    });
+
+    const item = recall.items.find(
+      (candidate) => candidate.evidence.source_ref === 'README.md',
+    );
+    assert.ok(item, JSON.stringify(recall, null, 2));
+    assert.equal(item.evidence.source_kind, 'repository');
+    assert.equal(item.evidence.path, 'README.md');
+    assert.match(item.evidence.blob_oid, /^[0-9a-f]{40}$/);
+    assert.equal(item.freshness.status, 'fresh');
+  } finally {
+    await adapter.teardown();
+  }
 });
