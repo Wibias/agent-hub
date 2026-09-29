@@ -2,9 +2,6 @@ name: Memory semantic eval
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - feat/memory-engine-e5-provider
 
 permissions:
   contents: read
