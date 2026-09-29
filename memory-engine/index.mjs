@@ -279,7 +279,12 @@ export class MemoryEngine {
     const row = this.#db
       .prepare('SELECT project_id, canonical_remote, repo_identity FROM project_registry WHERE project_id = ?')
       .get(projectId);
-    return row ?? null;
+    if (!row) return null;
+    return {
+      project_id: row.project_id,
+      canonical_remote: row.canonical_remote,
+      repo_identity: row.repo_identity,
+    };
   }
 
   getEvidence(id) {
