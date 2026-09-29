@@ -62,6 +62,16 @@ function redactValue(value) {
     let redacted = false;
     const next = {};
     for (const [key, item] of Object.entries(value)) {
+      if (
+        /^(?:api[_-]?key|access[_-]?token|secret|password)$/i.test(key)
+        && typeof item === 'string'
+        && item.length > 0
+      ) {
+        redacted = true;
+        next[key] = REDACTED_SECRET;
+        continue;
+      }
+
       const result = redactValue(item);
       redacted ||= result.redacted;
       next[key] = result.value;
