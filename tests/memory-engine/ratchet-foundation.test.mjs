@@ -38,7 +38,7 @@ test('M04 hard-isolates main from feature-only branch memory', async () => {
   const result = await runCase('M04');
   const texts = currentTexts(result);
 
-  assert.ok(texts.some((text) => /sessionStore\\.get/i.test(text)), JSON.stringify(result.raw_recall, null, 2));
+  assert.ok(texts.some((text) => /sessionStore\.get/i.test(text)), JSON.stringify(result.raw_recall, null, 2));
   assert.ok(texts.every((text) => !/OAuth exchange/i.test(text)));
 });
 
