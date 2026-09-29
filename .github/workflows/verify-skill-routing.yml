@@ -156,6 +156,9 @@ jobs:
         with:
           node-version: 24
 
+      - name: Install memory engine provider dependencies
+        run: npm ci --prefix memory-engine
+
       - name: Test memory engine foundation
         run: node --test tests/memory-engine/*.test.mjs
 
