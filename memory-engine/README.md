@@ -93,7 +93,7 @@ Retrieval and reliance are separate. Retrieved evidence can remain visible while
 - planning may inspect all authority classes;
 - normal answers may rely on `user_direct`, `repo_trusted`, and `tool_observation`;
 - project policy may rely only on `user_direct` and `repo_trusted`;
-- external and destructive actions remain unauthorised until structured M12 approval capabilities exist.
+- external and destructive actions are never authorised by ordinary reliance; they require a matching structured approval capability through `authorizeAction(...)`.
 
 Authority never bypasses Git freshness. Repository-grounded evidence must first pass the revision-bound blob check before it can enter current recall and therefore before reliance can select it.
 
