@@ -150,8 +150,8 @@ test('M05 withholds the old JWT code observation after the file blob changes', a
   );
   assert.ok(stale, JSON.stringify(result.raw_recall, null, 2));
   assert.equal(stale.freshness.status, 'stale');
-  assert.match(stale.freshness.observed_blob_oid, /^[0-9a-f]{40}$/);
-  assert.match(stale.freshness.current_blob_oid, /^[0-9a-f]{40}$/);
+  assert.match(stale.freshness.observed_blob_oid, /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/);
+  assert.match(stale.freshness.current_blob_oid, /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/);
   assert.notEqual(stale.freshness.observed_blob_oid, stale.freshness.current_blob_oid);
 });
 
@@ -189,7 +189,7 @@ test('reference adapter treats repository-root files as repository evidence', as
     assert.ok(item, JSON.stringify(recall, null, 2));
     assert.equal(item.evidence.source_kind, 'repository');
     assert.equal(item.evidence.path, 'README.md');
-    assert.match(item.evidence.blob_oid, /^[0-9a-f]{40}$/);
+    assert.match(item.evidence.blob_oid, /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/);
     assert.equal(item.freshness.status, 'fresh');
   } finally {
     await adapter.teardown();
