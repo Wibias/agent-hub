@@ -266,6 +266,24 @@ function searchableText(claim, evidenceContent) {
   return `${raw} ${lexicalTerms(raw).join(' ')}`;
 }
 
+const CLAIM_ELIGIBILITY_SQL = `
+  (
+    ? = 'historical'
+    OR (
+      c.state = 'active'
+      AND (
+        e.path IS NULL
+        OR (
+          ? IS NOT NULL
+          AND e.blob_oid IS NOT NULL
+          AND rps.commit_sha = ?
+          AND rps.blob_oid = e.blob_oid
+        )
+      )
+    )
+  )
+`;
+
 const RELIANCE_ALLOWED = {
   planning: new Set([
     'user_direct',
@@ -655,6 +673,76 @@ export class MemoryEngine {
         AND c.branch_scope = ?
       ORDER BY c.id ASC
     `).all(projectId, branch).map(embeddingDocumentFromRow);
+  }
+
+  semanticCandidates({
+    projectId,
+    branch,
+    revisionSha = null,
+    mode = 'current',
+    modelId,
+    modelRevision,
+  }) {
+    for (const [value, name] of [
+      [projectId, 'projectId'],
+      [branch, 'branch'],
+      [modelId, 'modelId'],
+      [modelRevision, 'modelRevision'],
+    ]) {
+      assertNonEmptyString(value, name);
+    }
+    if (revisionSha !== null) assertNonEmptyString(revisionSha, 'revisionSha');
+    if (!['current', 'historical'].includes(mode)) {
+      throw new Error(`unsupported recall mode: ${mode}`);
+    }
+    if (!this.getProject(projectId)) throw new Error(`unknown project: ${projectId}`);
+
+    const rows = this.#db.prepare(`
+      SELECT
+        ce.claim_id,
+        ce.text_hash,
+        ce.dimensions,
+        ce.vector_blob,
+        c.created_at
+      FROM claim_embeddings ce
+      JOIN claims c ON c.id = ce.claim_id
+      JOIN evidence e ON e.id = c.created_from_evidence_id
+      LEFT JOIN repository_path_state rps
+        ON rps.project_id = c.project_id
+       AND rps.branch = c.branch_scope
+       AND rps.path = e.path
+      WHERE ce.model_id = ?
+        AND ce.model_revision = ?
+        AND c.project_id = ?
+        AND c.branch_scope = ?
+        AND ${CLAIM_ELIGIBILITY_SQL}
+      ORDER BY c.created_at DESC, c.id ASC
+    `).all(
+      modelId,
+      modelRevision,
+      projectId,
+      branch,
+      mode,
+      revisionSha,
+      revisionSha,
+    );
+
+    const candidates = [];
+    for (const row of rows) {
+      try {
+        candidates.push({
+          claim_id: row.claim_id,
+          created_at: row.created_at,
+          text_hash: row.text_hash,
+          dimensions: row.dimensions,
+          vector: decodeFloat32Vector(Buffer.from(row.vector_blob), row.dimensions),
+        });
+      } catch {
+        // Semantic vectors are derived state. Corrupt rows fail closed locally
+        // without making canonical or lexical memory unavailable.
+      }
+    }
+    return candidates;
   }
 
   putClaimEmbedding({
@@ -1887,21 +1975,7 @@ export class MemoryEngine {
         WHERE claim_fts MATCH ?
           AND c.project_id = ?
           AND c.branch_scope = ?
-          AND (
-            ? = 'historical'
-            OR (
-              c.state = 'active'
-              AND (
-                e.path IS NULL
-                OR (
-                  ? IS NOT NULL
-                  AND e.blob_oid IS NOT NULL
-                  AND rps.commit_sha = ?
-                  AND rps.blob_oid = e.blob_oid
-                )
-              )
-            )
-          )
+          AND ${CLAIM_ELIGIBILITY_SQL}
         ORDER BY rank ASC, c.created_at DESC, c.id ASC
         LIMIT ?
       `).all(ftsQuery, projectId, branch, mode, revisionSha, revisionSha, limit);
@@ -1935,21 +2009,7 @@ export class MemoryEngine {
          AND rps.path = e.path
         WHERE c.project_id = ?
           AND c.branch_scope = ?
-          AND (
-            ? = 'historical'
-            OR (
-              c.state = 'active'
-              AND (
-                e.path IS NULL
-                OR (
-                  ? IS NOT NULL
-                  AND e.blob_oid IS NOT NULL
-                  AND rps.commit_sha = ?
-                  AND rps.blob_oid = e.blob_oid
-                )
-              )
-            )
-          )
+          AND ${CLAIM_ELIGIBILITY_SQL}
         ORDER BY c.created_at DESC, c.id ASC
         LIMIT ?
       `).all(projectId, branch, mode, revisionSha, revisionSha, limit);
@@ -2012,17 +2072,14 @@ export class MemoryEngine {
          AND rps.path = e.path
         WHERE c.project_id = ?
           AND c.branch_scope = ?
-          AND c.state = 'active'
-          AND (
-            e.path IS NULL
-            OR (
-              ? IS NOT NULL
-              AND e.blob_oid IS NOT NULL
-              AND rps.commit_sha = ?
-              AND rps.blob_oid = e.blob_oid
-            )
-          )
-      `).all(projectId, branch, revisionSha, revisionSha).map((row) => row.id));
+          AND ${CLAIM_ELIGIBILITY_SQL}
+      `).all(
+        projectId,
+        branch,
+        mode,
+        revisionSha,
+        revisionSha,
+      ).map((row) => row.id));
     }
 
     const conflicts = this.#db.prepare(`
