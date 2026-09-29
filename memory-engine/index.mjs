@@ -948,6 +948,31 @@ export class MemoryEngine {
     }));
 
     const ids = new Set(items.map((item) => item.claim.id));
+    let currentEligibleIds = null;
+    if (mode === 'current') {
+      currentEligibleIds = new Set(this.#db.prepare(`
+        SELECT c.id
+        FROM claims c
+        JOIN evidence e ON e.id = c.created_from_evidence_id
+        LEFT JOIN repository_path_state rps
+          ON rps.project_id = c.project_id
+         AND rps.branch = c.branch_scope
+         AND rps.path = e.path
+        WHERE c.project_id = ?
+          AND c.branch_scope = ?
+          AND c.state = 'active'
+          AND (
+            e.path IS NULL
+            OR (
+              ? IS NOT NULL
+              AND e.blob_oid IS NOT NULL
+              AND rps.commit_sha = ?
+              AND rps.blob_oid = e.blob_oid
+            )
+          )
+      `).all(projectId, branch, revisionSha, revisionSha).map((row) => row.id));
+    }
+
     const conflicts = this.#db.prepare(`
       SELECT
         claim_a,
@@ -962,7 +987,11 @@ export class MemoryEngine {
       ORDER BY claim_a, claim_b
     `).all(projectId).filter(
       (conflict) => (
-        (mode === 'historical' || conflict.state === 'open')
+        (mode === 'historical' || (
+          conflict.state === 'open'
+          && currentEligibleIds.has(conflict.claim_a)
+          && currentEligibleIds.has(conflict.claim_b)
+        ))
         && (ids.has(conflict.claim_a) || ids.has(conflict.claim_b))
       ),
     );
