@@ -137,6 +137,114 @@ test('explicit conflict remains visible while answer reliance resolves by author
   assert.equal(reliance.conflict_resolutions[0].winner_claim_id, 'c-policy');
 });
 
+test('limited recall keeps a known conflict visible and blocks reliance when the counterpart is omitted', async (t) => {
+  const engine = await createEngine();
+  t.after(() => engine.close());
+
+  engine.ingest({
+    evidence: evidence({
+      id: 'e-policy',
+      blobOid: 'c'.repeat(40),
+      content: 'Policy marker: failed jobs are retried 3 times.',
+    }),
+    claim: claim({
+      id: 'c-policy',
+    }),
+  });
+  engine.ingest({
+    evidence: evidence({
+      id: 'e-inference',
+      sourceKind: 'agent',
+      sourceRef: 'agent:S2',
+      path: null,
+      blobOid: null,
+      content: 'I infer failed jobs should be retried 5 times.',
+      authorityClass: 'agent_inference',
+    }),
+    claim: claim({
+      id: 'c-inference',
+      value: '5',
+      createdAt: '2026-01-02T00:00:00Z',
+    }),
+    lifecycle: { conflictsWith: ['c-policy'] },
+  });
+
+  engine.recordRepositoryPathState({
+    projectId: 'project-a',
+    branch: 'main',
+    path: 'docs/runtime.md',
+    commitSha: '2'.repeat(40),
+    blobOid: 'c'.repeat(40),
+  });
+
+  const recall = engine.recall({
+    projectId: 'project-a',
+    branch: 'main',
+    query: 'policy marker',
+    revisionSha: '2'.repeat(40),
+    mode: 'current',
+    limit: 1,
+  });
+
+  assert.deepEqual(recall.items.map((item) => item.claim.id), ['c-policy']);
+  assert.equal(recall.conflicts.length, 1);
+
+  const reliance = evaluateReliance({
+    items: recall.items,
+    conflicts: recall.conflicts,
+    use: 'answer',
+  });
+
+  assert.deepEqual(reliance.selected, []);
+  assert.equal(
+    reliance.blocked.find((entry) => entry.item.claim.id === 'c-policy')?.reason,
+    'unresolved_conflict_counterpart_not_retrieved',
+  );
+  assert.equal(
+    reliance.conflict_resolutions[0].status,
+    'unresolved_missing_counterpart',
+  );
+  assert.equal(reliance.conflict_resolutions[0].winner_claim_id, null);
+});
+
+test('conflict edges cannot cross branch boundaries', async (t) => {
+  const engine = await createEngine();
+  t.after(() => engine.close());
+
+  engine.ingest({
+    evidence: evidence({
+      id: 'e-policy',
+      blobOid: 'c'.repeat(40),
+    }),
+    claim: claim({
+      id: 'c-policy',
+    }),
+  });
+
+  assert.throws(
+    () => engine.ingest({
+      evidence: evidence({
+        id: 'e-feature',
+        sourceKind: 'agent',
+        sourceRef: 'agent:S2',
+        branch: 'feature/retries',
+        path: null,
+        blobOid: null,
+        content: 'Feature branch inference says retry 5 times.',
+        authorityClass: 'agent_inference',
+      }),
+      claim: claim({
+        id: 'c-feature',
+        value: '5',
+        branchScope: 'feature/retries',
+        createdAt: '2026-01-02T00:00:00Z',
+      }),
+      lifecycle: { conflictsWith: ['c-policy'] },
+    }),
+    /conflict relations cannot cross branch boundaries/,
+  );
+});
+
 test('project-policy reliance keeps untrusted repository text searchable but non-authoritative', async (t) => {
   const engine = await createEngine();
   t.after(() => engine.close());
