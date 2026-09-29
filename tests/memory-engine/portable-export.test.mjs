@@ -130,6 +130,42 @@ test('portable export rebuild preserves canonical state and regenerates FTS', as
   assert.deepEqual(reexported.canonical, portable.canonical);
 });
 
+test('failed export rolls back its read transaction', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'memory-export-rollback-'));
+  const engine = new MemoryEngine({
+    dbPath: join(root, 'memory.sqlite3'),
+    clock: () => {
+      throw new Error('clock failed');
+    },
+  });
+  t.after(() => engine.close());
+
+  engine.registerProject({
+    projectId: 'project-a',
+    repoIdentity: 'project-a',
+    createdAt: '2026-01-01T00:00:00Z',
+  });
+  ingestDecision(engine, {
+    evidenceId: 'e-before',
+    claimId: 'c-before',
+    content: 'Use Postgres.',
+    createdAt: '2026-01-02T09:00:00Z',
+  });
+
+  assert.throws(
+    () => engine.exportMemory(),
+    /clock failed/,
+  );
+
+  assert.doesNotThrow(() => ingestDecision(engine, {
+    evidenceId: 'e-after',
+    claimId: 'c-after',
+    content: 'Keep audit logs.',
+    createdAt: '2026-01-03T09:00:00Z',
+  }));
+  assert.equal(engine.getClaim('c-after').state, 'active');
+});
+
 test('portable rebuild does not import derived repository freshness', async (t) => {
   const root = await mkdtemp(join(tmpdir(), 'memory-export-freshness-'));
   const source = await createEngine(root, 'source.sqlite3');
