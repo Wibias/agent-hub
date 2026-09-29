@@ -1,5 +1,11 @@
 const DEFAULT_RRF_K = 60;
 
+function compareCodePoints(left, right) {
+  if (left < right) return -1;
+  if (left > right) return 1;
+  return 0;
+}
+
 function assertNonEmptyString(value, name) {
   if (typeof value !== 'string' || value.trim().length === 0) {
     throw new TypeError(`${name} must be a non-empty string`);
@@ -81,10 +87,10 @@ export function reciprocalRankFuse({
 
     const leftCreatedAt = createdAtById.get(left) ?? '';
     const rightCreatedAt = createdAtById.get(right) ?? '';
-    const createdAtDifference = rightCreatedAt.localeCompare(leftCreatedAt);
+    const createdAtDifference = compareCodePoints(rightCreatedAt, leftCreatedAt);
     if (createdAtDifference !== 0) return createdAtDifference;
 
-    return left.localeCompare(right);
+    return compareCodePoints(left, right);
   });
 }
 
@@ -315,8 +321,8 @@ export class HybridMemoryRetriever {
       }))
       .sort((left, right) => (
         (right.similarity - left.similarity)
-        || right.created_at.localeCompare(left.created_at)
-        || left.claim_id.localeCompare(right.claim_id)
+        || compareCodePoints(right.created_at, left.created_at)
+        || compareCodePoints(left.claim_id, right.claim_id)
       ))
       .slice(0, this.#semanticCandidateLimit);
 
