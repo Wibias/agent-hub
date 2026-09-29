@@ -1,5 +1,6 @@
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import {
   MemoryEngine,
@@ -28,6 +29,10 @@ function sourceKind(event, path) {
 function claimId(eventId) {
   return `claim:${eventId}`;
 }
+
+const INTERRUPT_WRITER = fileURLToPath(
+  new URL('./interrupt-sqlite-writer.mjs', import.meta.url),
+);
 
 const AUTHORITY_POLICY = createAuthorityPolicy({
   trustedRepositoryPaths: [
@@ -66,28 +71,33 @@ function gitBlobOid(repoPath, revisionSha, path) {
 
 export function createReferenceMemoryAdapter({ clock } = {}) {
   let engine = null;
+  let databasePath = null;
   let projectRepos = new Map();
 
   return {
     metadata: {
       candidate: {
         name: 'memory-engine-reference',
-        version: '0.5.0-portable-rebuild',
+        version: '0.6.0-failure-recovery',
         source_revision: 'workspace',
       },
-      adapter_revision: 'reference-portable-rebuild-v1',
+      adapter_revision: 'reference-failure-recovery-v1',
       network_required: false,
     },
 
     async reset() {
       if (engine) engine.close();
       engine = null;
+      databasePath = null;
       projectRepos = new Map();
     },
 
     async setup(prepared) {
-      const dbPath = join(dirname(prepared.current.repo_path), '.memory-engine-reference.sqlite3');
-      engine = new MemoryEngine({ dbPath, clock });
+      databasePath = join(
+        dirname(prepared.current.repo_path),
+        '.memory-engine-reference.sqlite3',
+      );
+      engine = new MemoryEngine({ dbPath: databasePath, clock });
 
       const projects = new Map();
       projects.set(prepared.current.project_id, prepared.current.repo_path);
@@ -240,6 +250,113 @@ export function createReferenceMemoryAdapter({ clock } = {}) {
       };
     },
 
+    async interruptIngest(event) {
+      if (!engine || !databasePath) {
+        throw new Error('reference memory adapter is not set up');
+      }
+
+      const path = repositoryPath(event.source, {
+        repoPath: event.repo_path,
+        revisionSha: event.revision_sha,
+      });
+      const blobOid = path
+        ? gitBlobOid(event.repo_path, event.revision_sha, path)
+        : null;
+      const kind = sourceKind(event, path);
+      const authorityClass = AUTHORITY_POLICY.classify({
+        eventType: event.type,
+        sourceKind: kind,
+        sourceRef: event.source,
+      });
+
+      const payload = {
+        id: `evidence:${event.id}`,
+        projectId: event.project_id,
+        harness: event.harness,
+        sessionId: event.session_id,
+        sourceKind: kind,
+        sourceRef: event.source,
+        capturedAt: event.at,
+        branch: event.branch,
+        commitSha: event.revision_sha,
+        path,
+        blobOid,
+        content: event.content,
+        sensitivity: 'normal',
+        authorityClass,
+        metadataJson: JSON.stringify({
+          event_id: event.id,
+          event_type: event.type,
+          revision: event.revision,
+        }),
+      };
+      const encoded = Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url');
+
+      return new Promise((resolve, reject) => {
+        const child = spawn(
+          process.execPath,
+          [INTERRUPT_WRITER, databasePath, encoded],
+          { stdio: ['ignore', 'pipe', 'pipe'] },
+        );
+
+        let stdout = '';
+        let stderr = '';
+        let sawReady = false;
+        let settled = false;
+
+        const finish = (error, value) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timeout);
+          if (error) reject(error);
+          else resolve(value);
+        };
+
+        const timeout = setTimeout(() => {
+          child.kill('SIGKILL');
+          finish(new Error('interrupted ingest helper did not reach partial-write barrier'));
+        }, 5_000);
+
+        child.stdout.on('data', (chunk) => {
+          stdout += chunk.toString();
+          if (!sawReady && stdout.includes('PARTIAL_WRITE_READY')) {
+            sawReady = true;
+            child.kill('SIGKILL');
+          }
+        });
+
+        child.stderr.on('data', (chunk) => {
+          stderr += chunk.toString();
+        });
+
+        child.on('error', (error) => finish(error));
+        child.on('exit', (code, signal) => {
+          if (!sawReady) {
+            finish(new Error(
+              `interrupted ingest helper exited before barrier: code=${code} signal=${signal} stderr=${stderr}`,
+            ));
+            return;
+          }
+
+          finish(null, {
+            interrupted: true,
+            exit_code: code,
+            signal,
+          });
+        });
+      });
+    },
+
+    async recover() {
+      if (!engine) throw new Error('reference memory adapter is not set up');
+      const checkpoint = engine.checkpoint();
+      const rebuilt = engine.rebuildDerivedState();
+      return {
+        checkpoint,
+        ...rebuilt,
+      };
+    },
+
     async recall(request) {
       if (!engine) throw new Error('reference memory adapter is not set up');
 
@@ -283,6 +400,7 @@ export function createReferenceMemoryAdapter({ clock } = {}) {
     async teardown() {
       if (engine) engine.close();
       engine = null;
+      databasePath = null;
       projectRepos = new Map();
     },
   };
