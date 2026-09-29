@@ -433,6 +433,8 @@ test('portable import rejects unredacted secrets before canonical storage', asyn
     /unredacted secret/,
   );
   assert.equal(rebuilt.getProject('project-a'), null);
+  assert.doesNotThrow(() => rebuilt.exportMemory());
+  assert.deepEqual(rebuilt.exportMemory().canonical.projects, []);
 });
 
 test('portable import refuses to merge with existing canonical memory', async (t) => {
