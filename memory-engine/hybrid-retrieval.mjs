@@ -1,5 +1,40 @@
 const DEFAULT_RRF_K = 60;
 
+function assertNonEmptyString(value, name) {
+  if (typeof value !== 'string' || value.trim().length === 0) {
+    throw new TypeError(`${name} must be a non-empty string`);
+  }
+}
+
+function validateEmbeddingVector(vector, dimensions, name) {
+  if (!(vector instanceof Float32Array)) {
+    throw new TypeError(`${name} must be a Float32Array`);
+  }
+  if (vector.length !== dimensions) {
+    throw new RangeError(`${name} dimensions must match embedder dimensions`);
+  }
+  for (const value of vector) {
+    if (!Number.isFinite(value)) {
+      throw new TypeError(`${name} values must be finite`);
+    }
+  }
+  return vector;
+}
+
+function validateEmbedder(embedder) {
+  assertNonEmptyString(embedder.modelId, 'embedder modelId');
+  assertNonEmptyString(embedder.modelRevision, 'embedder modelRevision');
+  if (!Number.isInteger(embedder.dimensions) || embedder.dimensions < 1) {
+    throw new RangeError('embedder dimensions must be a positive integer');
+  }
+  if (typeof embedder.embedQuery !== 'function') {
+    throw new TypeError('embedder embedQuery must be a function');
+  }
+  if (typeof embedder.embedPassages !== 'function') {
+    throw new TypeError('embedder embedPassages must be a function');
+  }
+}
+
 function assertIdList(value, name) {
   if (!Array.isArray(value)) throw new TypeError(`${name} must be an array`);
   for (const id of value) {
@@ -134,6 +169,7 @@ export class HybridMemoryRetriever {
     if (!memory || typeof memory !== 'object') {
       throw new TypeError('memory must be a MemoryEngine-like object');
     }
+    if (embedder !== null) validateEmbedder(embedder);
     for (const [value, name] of [
       [lexicalCandidateLimit, 'lexicalCandidateLimit'],
       [semanticCandidateLimit, 'semanticCandidateLimit'],
@@ -163,6 +199,11 @@ export class HybridMemoryRetriever {
     if (!Array.isArray(vectors) || vectors.length !== 1) {
       throw new Error('embedPassages must return one vector per passage');
     }
+    validateEmbeddingVector(
+      vectors[0],
+      this.#embedder.dimensions,
+      'passage embedding',
+    );
 
     this.#memory.putClaimEmbedding({
       claimId,
@@ -182,20 +223,39 @@ export class HybridMemoryRetriever {
     }
 
     const documents = this.#memory.listEmbeddingDocuments({ projectId, branch });
-    let indexed = 0;
-    let failed = 0;
-
-    for (const document of documents) {
-      try {
-        const result = await this.indexClaim(document.claim_id);
-        if (result.indexed) indexed += 1;
-        else failed += 1;
-      } catch {
-        failed += 1;
+    let vectors;
+    try {
+      vectors = await this.#embedder.embedPassages(
+        documents.map((document) => document.text),
+      );
+      if (!Array.isArray(vectors) || vectors.length !== documents.length) {
+        throw new Error('embedPassages must return one vector per passage');
       }
+      for (const vector of vectors) {
+        validateEmbeddingVector(
+          vector,
+          this.#embedder.dimensions,
+          'passage embedding',
+        );
+      }
+    } catch {
+      return { indexed: 0, failed: documents.length };
     }
 
-    return { indexed, failed };
+    this.#memory.replaceClaimEmbeddings({
+      projectId,
+      branch,
+      modelId: this.#embedder.modelId,
+      modelRevision: this.#embedder.modelRevision,
+      rows: documents.map((document, index) => ({
+        claimId: document.claim_id,
+        textHash: document.text_hash,
+        dimensions: this.#embedder.dimensions,
+        vector: vectors[index],
+      })),
+    });
+
+    return { indexed: documents.length, failed: 0 };
   }
 
   async recall({
@@ -226,6 +286,11 @@ export class HybridMemoryRetriever {
     let queryVector;
     try {
       queryVector = await this.#embedder.embedQuery(query);
+      validateEmbeddingVector(
+        queryVector,
+        this.#embedder.dimensions,
+        'query embedding',
+      );
     } catch {
       return enforceRecallBudget(lexical, {
         maxItems,
