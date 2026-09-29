@@ -16,6 +16,8 @@ import {
 const SCALES = [2_000, 10_000, 25_000];
 const MODEL_ID = 'benchmark-e5-shape';
 const MODEL_REVISION = 'benchmark-v1';
+const QUANTIZED_MODEL_REVISION = '6a0d452a575215f80b8f66276dd4ee5d504942c6';
+const QUANTIZED_MODEL_FILE = 'model_qint8_avx512_vnni';
 
 function median(values) {
   const sorted = [...values].sort((a, b) => a - b);
@@ -318,6 +320,268 @@ async function benchmarkRealE5() {
   }));
 }
 
+
+function prefixOnce(text, prefix) {
+  const trimmed = String(text).trim();
+  return trimmed.startsWith(prefix) ? trimmed : `${prefix}${trimmed}`;
+}
+
+function vectorsFromOutput(output, expectedCount) {
+  if (!(output?.data instanceof Float32Array)) {
+    throw new TypeError('candidate extractor must return Float32Array data');
+  }
+  if (!Array.isArray(output.dims) || output.dims.at(-1) !== E5_DIMENSIONS) {
+    throw new RangeError('candidate extractor must return 384-dimensional vectors');
+  }
+  if (output.data.length !== expectedCount * E5_DIMENSIONS) {
+    throw new RangeError('candidate extractor output count mismatch');
+  }
+
+  return Array.from({ length: expectedCount }, (_, index) => {
+    const start = index * E5_DIMENSIONS;
+    return new Float32Array(output.data.slice(start, start + E5_DIMENSIONS));
+  });
+}
+
+async function createQuantizedCandidateEmbedder({
+  cacheDir,
+  allowRemoteModels = false,
+}) {
+  const { pipeline } = await import('@huggingface/transformers');
+  const extractor = await pipeline(
+    'feature-extraction',
+    E5_MODEL_ID,
+    {
+      revision: QUANTIZED_MODEL_REVISION,
+      cache_dir: cacheDir,
+      local_files_only: !allowRemoteModels,
+      dtype: 'fp32',
+      device: 'cpu',
+      model_file_name: QUANTIZED_MODEL_FILE,
+    },
+  );
+
+  return {
+    modelId: E5_MODEL_ID,
+    modelRevision: QUANTIZED_MODEL_REVISION,
+    dimensions: E5_DIMENSIONS,
+    async embedQuery(text) {
+      const output = await extractor(prefixOnce(text, 'query: '), {
+        pooling: 'mean',
+        normalize: true,
+      });
+      return vectorsFromOutput(output, 1)[0];
+    },
+    async embedPassages(texts) {
+      const output = await extractor(
+        texts.map((text) => prefixOnce(text, 'passage: ')),
+        {
+          pooling: 'mean',
+          normalize: true,
+        },
+      );
+      return vectorsFromOutput(output, texts.length);
+    },
+  };
+}
+
+function dot(left, right) {
+  let score = 0;
+  for (let index = 0; index < left.length; index += 1) {
+    score += left[index] * right[index];
+  }
+  return score;
+}
+
+function cosine(left, right) {
+  let leftNorm = 0;
+  let rightNorm = 0;
+  let product = 0;
+  for (let index = 0; index < left.length; index += 1) {
+    const a = left[index];
+    const b = right[index];
+    product += a * b;
+    leftNorm += a * a;
+    rightNorm += b * b;
+  }
+  return product / (Math.sqrt(leftNorm) * Math.sqrt(rightNorm));
+}
+
+function semanticRank(passages, queryVector, targetIndex) {
+  const ranked = passages
+    .map((vector, index) => ({ index, similarity: dot(vector, queryVector) }))
+    .sort((left, right) => (
+      (right.similarity - left.similarity)
+      || (left.index - right.index)
+    ));
+  return ranked.findIndex((entry) => entry.index === targetIndex) + 1;
+}
+
+async function prepareQuantizedCandidate() {
+  const cacheDir = process.env.MEMORY_E5_QUANTIZED_CACHE;
+  if (!cacheDir) throw new Error('MEMORY_E5_QUANTIZED_CACHE is required');
+  const embedder = await createQuantizedCandidateEmbedder({
+    cacheDir,
+    allowRemoteModels: true,
+  });
+  const vector = await embedder.embedQuery('quantized candidate readiness probe');
+  if (vector.length !== E5_DIMENSIONS) {
+    throw new Error('quantized candidate readiness vector has wrong dimensions');
+  }
+  const cache = await directorySize(cacheDir);
+  console.log(JSON.stringify({
+    benchmark: 'quantized_candidate_prepare',
+    model_id: E5_MODEL_ID,
+    model_revision: QUANTIZED_MODEL_REVISION,
+    model_file_name: QUANTIZED_MODEL_FILE,
+    cache_bytes: cache.bytes,
+    cache_mib: round(cache.bytes / (1024 * 1024)),
+    cache_files: cache.files,
+  }));
+}
+
+async function benchmarkQuantizedCandidate() {
+  const baselineCacheDir = process.env.MEMORY_E5_MODEL_CACHE;
+  const quantizedCacheDir = process.env.MEMORY_E5_QUANTIZED_CACHE;
+  if (!baselineCacheDir || !quantizedCacheDir) {
+    console.log(JSON.stringify({
+      benchmark: 'quantized_candidate',
+      skipped: true,
+      reason: 'baseline or quantized cache is not configured',
+    }));
+    return;
+  }
+
+  const quantizedCache = await directorySize(quantizedCacheDir);
+
+  const quantizedInitStarted = performance.now();
+  const quantized = await createQuantizedCandidateEmbedder({
+    cacheDir: quantizedCacheDir,
+  });
+  const quantizedInitMs = performance.now() - quantizedInitStarted;
+
+  const firstStarted = performance.now();
+  await quantized.embedQuery(
+    'Which storage engine did we choose for concurrent writers?',
+  );
+  const firstQueryMs = performance.now() - firstStarted;
+
+  const warmQuery = await measureAsync(
+    7,
+    () => quantized.embedQuery(
+      'Welche Datenbank haben wir wegen paralleler Schreibzugriffe gewählt?',
+    ),
+    { warmups: 1 },
+  );
+
+  const timingPassages = Array.from(
+    { length: 32 },
+    (_, index) => `passage benchmark ${index}: durable project memory for semantic retrieval`,
+  );
+  const passageBatch = await measureAsync(
+    3,
+    () => quantized.embedPassages(timingPassages),
+    { warmups: 1 },
+  );
+
+  const baseline = await createE5Embedder({ cacheDir: baselineCacheDir });
+
+  const documents = [
+    'passage: decision database uses SQLite Accept SQLite for the initial local storage implementation.',
+    'passage: decision database uses Postgres Supersede SQLite. Use Postgres because concurrent writers are required.',
+    'passage: decision audit_logs retention 30 days Keep audit logs for 30 days.',
+    'passage: decision request_retry max_attempts 3 Retry failed requests 3 times before surfacing the error.',
+    ...Array.from(
+      { length: 32 },
+      (_, index) => `passage: decision build_preference_${index} value choice-${index} Unrelated build preference number ${index} for fixture noise.`,
+    ),
+  ];
+
+  const cases = [
+    {
+      query: 'Which database was selected because concurrent writers are required?',
+      targetIndex: 1,
+    },
+    {
+      query: 'Which storage engine did we choose to handle multiple processes writing at once?',
+      targetIndex: 1,
+    },
+    {
+      query: 'Welche Datenbank haben wir wegen paralleler Schreibzugriffe gewählt?',
+      targetIndex: 1,
+    },
+    {
+      query: 'For how long do we preserve security event records?',
+      targetIndex: 2,
+    },
+  ];
+
+  const baselinePassages = await baseline.embedPassages(documents);
+  const quantizedPassages = await quantized.embedPassages(documents);
+
+  const passageCosines = baselinePassages.map(
+    (vector, index) => cosine(vector, quantizedPassages[index]),
+  );
+  const queryCosines = [];
+  const ranks = [];
+
+  for (const entry of cases) {
+    const baselineQuery = await baseline.embedQuery(entry.query);
+    const quantizedQuery = await quantized.embedQuery(entry.query);
+    queryCosines.push(cosine(baselineQuery, quantizedQuery));
+
+    const baselineRank = semanticRank(
+      baselinePassages,
+      baselineQuery,
+      entry.targetIndex,
+    );
+    const quantizedRank = semanticRank(
+      quantizedPassages,
+      quantizedQuery,
+      entry.targetIndex,
+    );
+
+    ranks.push({
+      query: entry.query,
+      baseline_rank: baselineRank,
+      quantized_rank: quantizedRank,
+      rank_delta: quantizedRank - baselineRank,
+    });
+
+    if (quantizedRank > 5) {
+      throw new Error(
+        `quantized candidate failed top-five parity for: ${entry.query}`,
+      );
+    }
+  }
+
+  console.log(JSON.stringify({
+    benchmark: 'quantized_candidate',
+    model_id: E5_MODEL_ID,
+    model_revision: QUANTIZED_MODEL_REVISION,
+    model_file_name: QUANTIZED_MODEL_FILE,
+    cache_bytes: quantizedCache.bytes,
+    cache_mib: round(quantizedCache.bytes / (1024 * 1024)),
+    cache_files: quantizedCache.files,
+    init_ms: round(quantizedInitMs),
+    first_query_ms: round(firstQueryMs),
+    warm_query: warmQuery,
+    passage_batch_32: passageBatch,
+    passage_per_item_median_ms: round(passageBatch.median_ms / timingPassages.length),
+    passage_vector_cosine: {
+      min: round(Math.min(...passageCosines)),
+      median: round(median(passageCosines)),
+      max: round(Math.max(...passageCosines)),
+    },
+    query_vector_cosine: {
+      min: round(Math.min(...queryCosines)),
+      median: round(median(queryCosines)),
+      max: round(Math.max(...queryCosines)),
+    },
+    ranks,
+  }));
+}
+
 console.log(JSON.stringify({
   benchmark: 'environment',
   node: process.version,
@@ -328,5 +592,10 @@ console.log(JSON.stringify({
   total_memory_mib: round(os.totalmem() / (1024 * 1024)),
 }));
 
-await benchmarkBruteForce();
-await benchmarkRealE5();
+if (process.argv.includes('--prepare-quantized-cache')) {
+  await prepareQuantizedCandidate();
+} else {
+  await benchmarkBruteForce();
+  await benchmarkRealE5();
+  await benchmarkQuantizedCandidate();
+}
