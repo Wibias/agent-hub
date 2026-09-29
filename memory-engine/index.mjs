@@ -335,10 +335,16 @@ export function evaluateReliance({
 
 export class MemoryEngine {
   #db;
+  #clock;
 
-  constructor({ dbPath }) {
+  constructor({
+    dbPath,
+    clock = () => new Date().toISOString(),
+  }) {
     assertNonEmptyString(dbPath, 'dbPath');
+    if (typeof clock !== 'function') throw new TypeError('clock must be a function');
 
+    this.#clock = clock;
     this.#db = new DatabaseSync(dbPath, {
       timeout: 5_000,
       enableForeignKeyConstraints: true,
@@ -652,7 +658,6 @@ export class MemoryEngine {
   revokeApproval({
     approvalId,
     projectId,
-    revokedAt = new Date().toISOString(),
   }) {
     assertNonEmptyString(approvalId, 'approvalId');
     assertNonEmptyString(projectId, 'projectId');
@@ -665,7 +670,7 @@ export class MemoryEngine {
     }
     if (approval.revoked_at !== null) return approval;
 
-    const normalizedRevokedAt = normalizeTimestamp(revokedAt, 'revokedAt');
+    const normalizedRevokedAt = normalizeTimestamp(this.#clock(), 'clock()');
     if (normalizedRevokedAt < approval.issued_at) {
       throw new Error('approval cannot be revoked before it was issued');
     }
@@ -686,7 +691,6 @@ export class MemoryEngine {
     environment,
     artifact = null,
     constraints = {},
-    at = new Date().toISOString(),
     consume = false,
   }) {
     for (const [value, name] of [
@@ -704,7 +708,7 @@ export class MemoryEngine {
     if (typeof consume !== 'boolean') throw new TypeError('consume must be boolean');
     if (!this.getProject(projectId)) throw new Error(`unknown project: ${projectId}`);
 
-    const normalizedAt = normalizeTimestamp(at, 'at');
+    const normalizedAt = normalizeTimestamp(this.#clock(), 'clock()');
     const request = {
       project_id: projectId,
       action,
@@ -712,7 +716,7 @@ export class MemoryEngine {
       environment,
       artifact,
       constraints,
-      at: normalizedAt,
+      evaluated_at: normalizedAt,
     };
 
     const decide = () => {
