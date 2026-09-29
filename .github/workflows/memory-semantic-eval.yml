@@ -2,9 +2,6 @@ name: Memory semantic eval
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - "perf/memory-e5-qint8"
 
 permissions:
   contents: read
