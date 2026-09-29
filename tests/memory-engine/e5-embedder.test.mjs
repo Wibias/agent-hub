@@ -283,3 +283,80 @@ test('prepared cache can be reopened by the normal offline provider path', async
     ],
   );
 });
+
+
+test('model cache preparation enables remote loading only for a 384d readiness probe', async () => {
+  const { resolve } = await import('node:path');
+  const {
+    prepareMemoryEmbeddingModel,
+  } = await import('../../scripts/prepare-memory-embedding-model.mjs');
+
+  const calls = [];
+  const logs = [];
+  const createEmbedder = async (options) => {
+    calls.push({ stage: 'create', options: { ...options } });
+    return {
+      modelId: 'intfloat/multilingual-e5-small',
+      modelRevision: 'fd1525a9fd15316a2d503bf26ab031a61d056e98',
+      dimensions: 384,
+      async embedQuery(text) {
+        calls.push({ stage: 'query', text });
+        return new Float32Array(384).fill(0.125);
+      },
+    };
+  };
+
+  const result = await prepareMemoryEmbeddingModel({
+    cacheDir: '.cache/memory-engine/e5',
+    createEmbedder,
+    log: (line) => logs.push(line),
+  });
+
+  const expectedCache = resolve('.cache/memory-engine/e5');
+  assert.deepEqual(calls, [
+    {
+      stage: 'create',
+      options: {
+        cacheDir: expectedCache,
+        allowRemoteModels: true,
+      },
+    },
+    {
+      stage: 'query',
+      text: 'memory cache readiness probe',
+    },
+  ]);
+  assert.deepEqual(result, {
+    modelId: 'intfloat/multilingual-e5-small',
+    modelRevision: 'fd1525a9fd15316a2d503bf26ab031a61d056e98',
+    dimensions: 384,
+    cacheDir: expectedCache,
+  });
+  assert.equal(logs.length, 1);
+  assert.match(logs[0], /intfloat\/multilingual-e5-small/);
+  assert.match(logs[0], /fd1525a9fd15316a2d503bf26ab031a61d056e98/);
+  assert.match(logs[0], /384/);
+  assert.match(logs[0], /\.cache/);
+});
+
+test('model cache preparation rejects an invalid readiness vector', async () => {
+  const {
+    prepareMemoryEmbeddingModel,
+  } = await import('../../scripts/prepare-memory-embedding-model.mjs');
+
+  await assert.rejects(
+    () => prepareMemoryEmbeddingModel({
+      cacheDir: '.cache/memory-engine/e5',
+      createEmbedder: async () => ({
+        modelId: 'intfloat/multilingual-e5-small',
+        modelRevision: 'fd1525a9fd15316a2d503bf26ab031a61d056e98',
+        dimensions: 384,
+        async embedQuery() {
+          return new Float32Array(383);
+        },
+      }),
+      log: () => {},
+    }),
+    /384|dimension/i,
+  );
+});
