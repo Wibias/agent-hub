@@ -26,11 +26,12 @@ The reference implementation currently owns:
 - explicit claim-conflict edges;
 - explicit source-authority classes;
 - retrieval separated from use-specific reliance;
+- structured, scoped action approval capabilities;
+- atomic one-time approval consumption and revocation;
 - a rebuildable FTS5 lexical index.
 
 Not implemented yet:
 
-- structured approval capabilities and action reliance;
 - local embeddings or RRF;
 - export/rebuild and interrupted-write recovery.
 
@@ -45,6 +46,7 @@ Canonical state:
 - `claims`
 - `lifecycle_events`
 - `conflicts`
+- `approvals`
 
 Derived state:
 
@@ -96,6 +98,36 @@ Retrieval and reliance are separate. Retrieved evidence can remain visible while
 Authority never bypasses Git freshness. Repository-grounded evidence must first pass the revision-bound blob check before it can enter current recall and therefore before reliance can select it.
 
 Project identity is likewise stable and path-independent. Temporary checkout paths are not used as canonical repository identity.
+
+## Action approval boundary
+
+Action approval is a separate capability API. Normal recall cannot authorise an external or destructive action.
+
+An approval records exact structured scope:
+
+```text
+project
+actor/source
+action
+target
+environment
+artifact
+constraints
+issued_at
+expires_at
+max_uses
+uses
+revoked_at
+source_evidence_id
+```
+
+Only `user_direct` evidence can mint an approval. `agent_inference`, repository text, tool observations, and external documents cannot create action authority.
+
+`authorizeAction(...)` requires an exact action, target, environment, and artifact match. Required structured constraints must also match. Expired, revoked, exhausted, or not-yet-valid approvals fail closed.
+
+With `consume: true`, authorization and use-count increment run under one immediate SQLite transaction. A one-time approval cannot be reused.
+
+Free-text similarity is never used to decide action authority.
 
 ## Evidence and claims
 
@@ -204,6 +236,7 @@ The suite includes direct engine invariants plus Memory Ratchet fixture coverage
 - M08 provenance;
 - M09 rejection/history;
 - M10 source-authority / poisoning resistance;
-- M11 pre-storage secret redaction.
+- M11 pre-storage secret redaction;
+- M12 structured action trust boundary.
 
-M12 structured action approval and M13-M15 recovery/bounded-recall work remain deliberately deferred until the corresponding architecture exists rather than being approximated inside the adapter.
+M13-M15 recovery/bounded-recall work remains deliberately deferred until the corresponding architecture exists rather than being approximated inside the adapter.
