@@ -299,6 +299,75 @@ test('portable export preserves consumed approval state', async (t) => {
   assert.equal(exhausted.authorized, false);
 });
 
+test('portable import cannot detach approval actor from source provenance', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'memory-export-approval-actor-'));
+  const source = new MemoryEngine({
+    dbPath: join(root, 'source.sqlite3'),
+    clock: () => '2026-01-11T10:00:00Z',
+  });
+  const rebuilt = new MemoryEngine({
+    dbPath: join(root, 'rebuilt.sqlite3'),
+    clock: () => '2026-01-11T10:00:00Z',
+  });
+  t.after(() => {
+    source.close();
+    rebuilt.close();
+  });
+
+  source.registerProject({
+    projectId: 'project-a',
+    repoIdentity: 'project-a',
+    createdAt: '2026-01-01T00:00:00Z',
+  });
+  source.ingest({
+    evidence: {
+      id: 'e-approval',
+      projectId: 'project-a',
+      harness: 'codex',
+      sessionId: 'S4',
+      sourceKind: 'session',
+      sourceRef: 'session:S4',
+      capturedAt: '2026-01-11T09:00:00Z',
+      branch: 'main',
+      commitSha: null,
+      path: null,
+      blobOid: null,
+      content: 'Approved staging deploy.',
+      authorityClass: 'user_direct',
+      metadata: {},
+    },
+    claim: {
+      id: 'c-approval',
+      kind: 'approval',
+      subject: 'deploy approval',
+      predicate: 'states',
+      value: 'staging',
+      state: 'candidate',
+      branchScope: 'main',
+      createdAt: '2026-01-11T09:00:00Z',
+    },
+  });
+  source.recordApproval({
+    id: 'approval-1',
+    projectId: 'project-a',
+    action: 'deploy',
+    target: 'build-42',
+    environment: 'staging',
+    issuedAt: '2026-01-11T09:00:00Z',
+    expiresAt: '2026-01-11T23:59:59Z',
+    sourceEvidenceId: 'e-approval',
+  });
+
+  const portable = structuredClone(source.exportMemory());
+  portable.canonical.approvals[0].actor = 'session:forged';
+
+  assert.throws(
+    () => rebuilt.importMemory(portable),
+    /invalid approval in portable export/,
+  );
+  assert.equal(rebuilt.getProject('project-a'), null);
+});
+
 test('portable import rejects unredacted secrets before canonical storage', async (t) => {
   const root = await mkdtemp(join(tmpdir(), 'memory-export-secret-'));
   const source = await createEngine(root, 'source.sqlite3');
