@@ -191,11 +191,11 @@ test('explicit supersession removes old truth from current recall but preserves 
     mode: 'historical',
   });
   assert.deepEqual(
-    history.items.map((item) => [item.claim.id, item.claim.state]),
-    [
+    new Map(history.items.map((item) => [item.claim.id, item.claim.state])),
+    new Map([
       ['c-postgres', 'active'],
       ['c-sqlite', 'superseded'],
-    ],
+    ]),
   );
   assert.equal(engine.getClaim('c-sqlite').superseded_by_claim_id, 'c-postgres');
 });
@@ -273,4 +273,36 @@ test('secret filtering happens before canonical SQLite persistence', async (t) =
     const bytes = await readFile(path);
     assert.equal(bytes.includes(Buffer.from(secret)), false, `secret leaked into ${path}`);
   }
+});
+
+
+test('lexical recall normalizes camelCase code symbols and simple plurals', async (t) => {
+  const { engine } = await createEngine();
+  t.after(() => engine.close());
+  engine.registerProject({ projectId: 'project-a', repoIdentity: 'project-a' });
+
+  engine.ingest({
+    evidence: evidence({
+      id: 'e-auth',
+      sourceKind: 'tool_observation',
+      sourceRef: 'src/auth.ts',
+      content: 'src/auth.ts authenticates by calling sessionStore.get(sessionId).',
+      authorityClass: 'tool_observation',
+    }),
+    claim: claim({
+      id: 'c-auth',
+      kind: 'code_observation',
+      subject: 'authentication',
+      value: 'src/auth.ts authenticates by calling sessionStore.get(sessionId).',
+    }),
+  });
+
+  const result = engine.recall({
+    projectId: 'project-a',
+    branch: 'main',
+    query: 'Does authentication use server-side sessions?',
+    mode: 'current',
+  });
+
+  assert.deepEqual(result.items.map((item) => item.claim.id), ['c-auth']);
 });
