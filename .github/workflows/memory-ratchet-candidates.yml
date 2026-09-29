@@ -109,6 +109,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: memory-ratchet-agentmemory-full-smoke
-          path: "$GITHUB_WORKSPACE/artifacts/memory-ratchet/agentmemory-full-smoke.txt"
+          path: ${{ github.workspace }}/artifacts/memory-ratchet/agentmemory-full-smoke.txt
           if-no-files-found: warn
           retention-days: 14
