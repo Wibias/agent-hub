@@ -599,3 +599,216 @@ test('recall budget rejects limits outside the architecture contract', async () 
     /maxSerializedBytes/i,
   );
 });
+
+
+function createFakeEmbedder({
+  failQuery = false,
+  failPassages = false,
+} = {}) {
+  const calls = {
+    queries: [],
+    passages: [],
+  };
+
+  return {
+    modelId: 'fake-e5',
+    modelRevision: 'rev-1',
+    dimensions: 3,
+    calls,
+    async embedQuery(text) {
+      calls.queries.push(text);
+      if (failQuery) throw new Error('forced query embedding failure');
+      if (/multiple processes writing|paralleler Schreibzugriffe/i.test(text)) {
+        return new Float32Array([1, 0, 0]);
+      }
+      return new Float32Array([0, 1, 0]);
+    },
+    async embedPassages(texts) {
+      calls.passages.push([...texts]);
+      if (failPassages) throw new Error('forced passage embedding failure');
+      return texts.map((text) => (
+        /Postgres/i.test(text)
+          ? new Float32Array([1, 0, 0])
+          : new Float32Array([0, 1, 0])
+      ));
+    },
+  };
+}
+
+function ingestRawHybridClaim(engine, {
+  evidenceId,
+  claimId,
+  value,
+  createdAt = '2026-01-02T09:00:00Z',
+  branch = 'main',
+}) {
+  engine.ingest({
+    evidence: {
+      id: evidenceId,
+      projectId: 'project-a',
+      harness: 'codex',
+      sessionId: evidenceId,
+      sourceKind: 'session',
+      sourceRef: `session:${evidenceId}`,
+      capturedAt: createdAt,
+      branch,
+      commitSha: null,
+      path: null,
+      blobOid: null,
+      content: `Use ${value}.`,
+      authorityClass: 'user_direct',
+      metadata: {},
+    },
+    claim: {
+      id: claimId,
+      kind: 'decision',
+      subject: 'database',
+      predicate: 'uses',
+      value,
+      branchScope: branch,
+      createdAt,
+    },
+  });
+}
+
+test('hybrid retriever indexes one canonical claim with exact embedder identity', async (t) => {
+  const { HybridMemoryRetriever } = await import('../../memory-engine/hybrid-retrieval.mjs');
+  const engine = await createEngine('index-one');
+  t.after(() => engine.close());
+  engine.registerProject({ projectId: 'project-a', repoIdentity: 'project-a' });
+  ingestRawHybridClaim(engine, {
+    evidenceId: 'e-index-postgres',
+    claimId: 'c-index-postgres',
+    value: 'Postgres for concurrent writers',
+  });
+
+  const embedder = createFakeEmbedder();
+  const hybrid = new HybridMemoryRetriever({ memory: engine, embedder });
+  const result = await hybrid.indexClaim('c-index-postgres');
+
+  assert.deepEqual(result, { indexed: true });
+  assert.deepEqual(embedder.calls.passages, [[
+    engine.embeddingDocument({ claimId: 'c-index-postgres' }).text,
+  ]]);
+
+  const stored = engine.getClaimEmbedding({
+    claimId: 'c-index-postgres',
+    modelId: 'fake-e5',
+    modelRevision: 'rev-1',
+  });
+  assert.equal(stored.text_hash, engine.embeddingDocument({
+    claimId: 'c-index-postgres',
+  }).text_hash);
+  assert.equal(stored.dimensions, 3);
+  assert.deepEqual([...stored.vector], [1, 0, 0]);
+});
+
+test('hybrid retriever leaves canonical memory intact when semantic indexing is unavailable', async (t) => {
+  const { HybridMemoryRetriever } = await import('../../memory-engine/hybrid-retrieval.mjs');
+  const engine = await createEngine('index-fallback');
+  t.after(() => engine.close());
+  engine.registerProject({ projectId: 'project-a', repoIdentity: 'project-a' });
+  ingestRawHybridClaim(engine, {
+    evidenceId: 'e-index-sqlite',
+    claimId: 'c-index-sqlite',
+    value: 'SQLite',
+  });
+
+  const withoutEmbedder = new HybridMemoryRetriever({ memory: engine });
+  assert.deepEqual(
+    await withoutEmbedder.indexClaim('c-index-sqlite'),
+    { indexed: false, reason: 'no_embedder' },
+  );
+
+  const before = engine.getClaim('c-index-sqlite');
+  const failing = new HybridMemoryRetriever({
+    memory: engine,
+    embedder: createFakeEmbedder({ failPassages: true }),
+  });
+  await assert.rejects(
+    () => failing.indexClaim('c-index-sqlite'),
+    /forced passage embedding failure/,
+  );
+  assert.deepEqual(engine.getClaim('c-index-sqlite'), before);
+  assert.equal(
+    engine.getClaimEmbedding({
+      claimId: 'c-index-sqlite',
+      modelId: 'fake-e5',
+      modelRevision: 'rev-1',
+    }),
+    null,
+  );
+});
+
+test('semantic rebuild replaces only the current model revision for one branch', async (t) => {
+  const { HybridMemoryRetriever } = await import('../../memory-engine/hybrid-retrieval.mjs');
+  const engine = await createEngine('rebuild');
+  t.after(() => engine.close());
+  engine.registerProject({ projectId: 'project-a', repoIdentity: 'project-a' });
+
+  ingestRawHybridClaim(engine, {
+    evidenceId: 'e-rebuild-postgres',
+    claimId: 'c-rebuild-postgres',
+    value: 'Postgres',
+  });
+  ingestRawHybridClaim(engine, {
+    evidenceId: 'e-rebuild-feature',
+    claimId: 'c-rebuild-feature',
+    value: 'DuckDB',
+    branch: 'feature/search',
+    createdAt: '2026-01-02T09:10:00Z',
+  });
+
+  const mainDoc = engine.embeddingDocument({ claimId: 'c-rebuild-postgres' });
+  engine.putClaimEmbedding({
+    claimId: 'c-rebuild-postgres',
+    modelId: 'fake-e5',
+    modelRevision: 'rev-1',
+    textHash: mainDoc.text_hash,
+    dimensions: 3,
+    vector: new Float32Array([0, 0, 1]),
+  });
+  engine.putClaimEmbedding({
+    claimId: 'c-rebuild-postgres',
+    modelId: 'fake-e5',
+    modelRevision: 'rev-old',
+    textHash: mainDoc.text_hash,
+    dimensions: 3,
+    vector: new Float32Array([0, 0, 1]),
+  });
+
+  const embedder = createFakeEmbedder();
+  const hybrid = new HybridMemoryRetriever({ memory: engine, embedder });
+  assert.deepEqual(
+    await hybrid.rebuildSemanticIndex({
+      projectId: 'project-a',
+      branch: 'main',
+    }),
+    { indexed: 1, failed: 0 },
+  );
+
+  assert.deepEqual(
+    [...engine.getClaimEmbedding({
+      claimId: 'c-rebuild-postgres',
+      modelId: 'fake-e5',
+      modelRevision: 'rev-1',
+    }).vector],
+    [1, 0, 0],
+  );
+  assert.notEqual(
+    engine.getClaimEmbedding({
+      claimId: 'c-rebuild-postgres',
+      modelId: 'fake-e5',
+      modelRevision: 'rev-old',
+    }),
+    null,
+  );
+  assert.equal(
+    engine.getClaimEmbedding({
+      claimId: 'c-rebuild-feature',
+      modelId: 'fake-e5',
+      modelRevision: 'rev-1',
+    }),
+    null,
+  );
+});
