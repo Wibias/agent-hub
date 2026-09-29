@@ -72,10 +72,10 @@ export function createReferenceMemoryAdapter() {
     metadata: {
       candidate: {
         name: 'memory-engine-reference',
-        version: '0.3.0-authority-reliance',
+        version: '0.4.0-action-approvals',
         source_revision: 'workspace',
       },
-      adapter_revision: 'reference-authority-reliance-v1',
+      adapter_revision: 'reference-action-approvals-v1',
       network_required: false,
     },
 
@@ -125,7 +125,7 @@ export function createReferenceMemoryAdapter() {
         sourceRef: event.source,
       });
 
-      return engine.ingest({
+      const ingested = engine.ingest({
         evidence: {
           id: `evidence:${event.id}`,
           projectId: event.project_id,
@@ -161,6 +161,53 @@ export function createReferenceMemoryAdapter() {
           conflictsWith: (event.relations?.conflicts_with ?? []).map(claimId),
         },
       });
+
+      let approval = null;
+      if (event.authority) {
+        if (event.type !== 'approval') {
+          throw new Error('structured action authority requires an approval event');
+        }
+        if (event.authority.one_time !== true) {
+          throw new Error('reference adapter only accepts bounded one-time fixture approvals');
+        }
+
+        approval = engine.recordApproval({
+          id: `approval:${event.id}`,
+          projectId: event.project_id,
+          actor: event.source,
+          action: event.authority.action,
+          target: event.authority.target,
+          environment: event.authority.environment,
+          issuedAt: event.at,
+          expiresAt: event.authority.valid_until,
+          maxUses: 1,
+          sourceEvidenceId: `evidence:${event.id}`,
+        });
+      }
+
+      return {
+        ...ingested,
+        approval,
+      };
+    },
+
+    async authorizeAction(request) {
+      if (!engine) throw new Error('reference memory adapter is not set up');
+      return engine.authorizeAction({
+        projectId: request.project_id,
+        action: request.action,
+        target: request.target,
+        environment: request.environment,
+        artifact: request.artifact ?? null,
+        constraints: request.constraints ?? {},
+        at: request.at,
+        consume: request.consume ?? false,
+      });
+    },
+
+    async listApprovals({ project_id: projectId }) {
+      if (!engine) throw new Error('reference memory adapter is not set up');
+      return engine.listApprovals({ projectId });
     },
 
     async recall(request) {
