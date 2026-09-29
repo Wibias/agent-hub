@@ -4,8 +4,24 @@ import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import { runRecallCase } from '../memory-ratchet/adapter-contract.mjs';
 import { prepareCase } from '../memory-ratchet/runner.mjs';
 import { createReferenceMemoryAdapter } from '../memory-ratchet/reference-adapter.mjs';
+
+test('M12 approval text is historical evidence, not current project truth', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'memory-engine-m12-recall-'));
+  const result = await runRecallCase(createReferenceMemoryAdapter(), 'M12', root);
+
+  assert.deepEqual(result.raw_recall.items, []);
+  assert.deepEqual(result.raw_recall.reliance.answer.selected, []);
+  assert.equal(result.raw_recall.history.length, 1);
+  assert.equal(result.raw_recall.history[0].claim.kind, 'approval');
+  assert.equal(result.raw_recall.history[0].claim.state, 'candidate');
+  assert.match(
+    result.raw_recall.history[0].evidence.content_redacted,
+    /deploy build 42 to staging once today/i,
+  );
+});
 
 test('M12 keeps old staging approval scoped and never generalises it to production', async () => {
   const root = await mkdtemp(join(tmpdir(), 'memory-engine-m12-'));
