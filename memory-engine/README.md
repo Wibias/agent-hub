@@ -28,12 +28,13 @@ The reference implementation currently owns:
 - retrieval separated from use-specific reliance;
 - structured, scoped action approval capabilities;
 - atomic one-time approval consumption and revocation;
+- portable canonical export/rebuild;
 - a rebuildable FTS5 lexical index.
 
 Not implemented yet:
 
 - local embeddings or RRF;
-- export/rebuild and interrupted-write recovery.
+- interrupted-write recovery.
 
 Those belong in follow-up changes so each correctness layer remains independently auditable.
 
@@ -130,6 +131,34 @@ A successful `authorizeAction(...)` always consumes one use in the same immediat
 The evaluation timestamp comes from the engine clock, not from the action request. Callers cannot backdate a request to resurrect an expired approval. Tests may inject a deterministic clock when constructing the engine.
 
 Free-text similarity is never used to decide action authority.
+
+## Portable export and rebuild
+
+`exportMemory(...)` serializes canonical memory state, not the SQLite file and not derived caches.
+
+Portable canonical state includes:
+
+```text
+project_registry
+evidence
+claims
+lifecycle_events
+conflicts
+approvals
+```
+
+It excludes:
+
+```text
+claim_fts
+repository_path_state
+```
+
+On `importMemory(...)`, canonical relationships and authority provenance are validated before storage. The import rejects malformed cross-project references and unredacted secrets.
+
+The FTS index is regenerated from imported evidence and claims. Repository freshness is intentionally left empty. Repository-grounded current recall therefore remains fail-closed until the requested revision is checked again.
+
+Import is a rebuild operation, not a merge operation. Existing evidence, claims, lifecycle events, conflicts, or approvals cause the import to fail.
 
 ## Evidence and claims
 
@@ -239,6 +268,7 @@ The suite includes direct engine invariants plus Memory Ratchet fixture coverage
 - M09 rejection/history;
 - M10 source-authority / poisoning resistance;
 - M11 pre-storage secret redaction;
-- M12 structured action trust boundary.
+- M12 structured action trust boundary;
+- M13 portable export/rebuild.
 
-M13-M15 recovery/bounded-recall work remains deliberately deferred until the corresponding architecture exists rather than being approximated inside the adapter.
+M14 bounded recall and M15 failure recovery remain deliberately deferred until the corresponding architecture exists rather than being approximated inside the adapter.
