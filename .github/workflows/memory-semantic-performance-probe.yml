@@ -42,6 +42,19 @@ jobs:
           node scripts/prepare-memory-embedding-model.mjs \
             --cache-dir .cache/memory-engine/e5
 
+      - name: Restore qint8 E5 candidate cache
+        id: e5-qint8-cache
+        uses: actions/cache@v4
+        with:
+          path: .cache/memory-engine/e5-qint8-avx512-vnni
+          key: ${{ runner.os }}-memory-e5-qint8-6a0d452a575215f80b8f66276dd4ee5d504942c6
+
+      - name: Prepare qint8 E5 candidate cache
+        if: steps.e5-qint8-cache.outputs.cache-hit != 'true'
+        env:
+          MEMORY_E5_QUANTIZED_CACHE: .cache/memory-engine/e5-qint8-avx512-vnni
+        run: node scripts/benchmark-memory-semantic.mjs --prepare-quantized-cache
+
       - name: Recheck real semantic quality gate
         env:
           MEMORY_E5_MODEL_CACHE: .cache/memory-engine/e5
@@ -50,4 +63,5 @@ jobs:
       - name: Run semantic performance probe
         env:
           MEMORY_E5_MODEL_CACHE: .cache/memory-engine/e5
+          MEMORY_E5_QUANTIZED_CACHE: .cache/memory-engine/e5-qint8-avx512-vnni
         run: node --expose-gc scripts/benchmark-memory-semantic.mjs
