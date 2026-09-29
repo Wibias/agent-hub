@@ -29,14 +29,22 @@ The reference implementation currently owns:
 - structured, scoped action approval capabilities;
 - atomic one-time approval consumption and revocation;
 - a rebuildable FTS5 lexical index;
+- deterministic redacted embedding documents;
+- rebuildable semantic vector rows keyed by exact model ID and revision;
+- correctness-filtered semantic candidates that reuse project, branch, lifecycle, and Git-freshness eligibility;
+- deterministic Reciprocal Rank Fusion (RRF) with a fixed `k = 60`;
+- an asynchronous `HybridMemoryRetriever` with injected embedder ownership;
+- lexical fallback when the semantic provider is missing or query embedding fails;
+- explicit hybrid recall caps of at most 10 items and 16 KiB serialized payload;
 - portable canonical export/import with derived-state rebuild;
 - interrupted-write recovery through transactional canonical state and derived-state rebuild.
 
 Not implemented yet:
 
-- local embeddings or RRF.
+- the concrete pinned local E5 provider and its model-cache preparation flow;
+- the real-model semantic evaluation.
 
-Those belong in follow-up changes so each correctness layer remains independently auditable.
+The hybrid core intentionally has no ML runtime dependency. The pinned E5 provider is a separate follow-up delivery so the correctness layer remains independently auditable.
 
 ## Canonical versus derived state
 
@@ -53,6 +61,7 @@ Derived state:
 
 - `repository_path_state`
 - `claim_fts`
+- `claim_embeddings`
 
 Derived state is never the source of truth. Claim lifecycle, observed repository blob identity, and provenance remain valid even if freshness snapshots or search indexes are rebuilt later.
 
@@ -65,9 +74,10 @@ Derived state is never the source of truth. Claim lifecycle, observed repository
 It deliberately excludes:
 
 - `claim_fts`;
-- `repository_path_state`.
+- `repository_path_state`;
+- `claim_embeddings`.
 
-Those are derived state and are rebuilt instead of trusted during import.
+Those are derived state and are rebuilt instead of trusted during import. Canonical import rebuilds the lexical FTS index synchronously, but semantic vectors remain empty until an explicit asynchronous `HybridMemoryRetriever.rebuildSemanticIndex(...)` runs with a configured embedder.
 
 `importCanonical(...)` requires an otherwise empty memory store. The import validates authority classes, claim states, JSON fields, approval use counts, and secret boundaries before writing. Canonical rows and the rebuilt FTS index are committed in one transaction.
 
@@ -239,6 +249,69 @@ const answerEvidence = evaluateReliance({
 memory.close();
 ```
 
+## Hybrid retrieval core
+
+`HybridMemoryRetriever` is an asynchronous relevance layer above `MemoryEngine`. It accepts an injected embedder with the contract:
+
+```js
+{
+  modelId,
+  modelRevision,
+  dimensions,
+  embedQuery(text),
+  embedPassages(texts),
+}
+```
+
+The core does not import an ML package. Tests use a deterministic fake provider; the concrete pinned E5 provider is delivered separately.
+
+Semantic indexing uses deterministic passage text built only from already-redacted canonical memory. Vectors are stored in `claim_embeddings` as derived state together with exact model ID, model revision, text hash, dimensions, and index time.
+
+Hybrid recall proceeds as:
+
+```text
+correctness-scoped lexical top 32
+        +
+correctness-scoped semantic top 32
+        |
+        v
+deterministic RRF (k = 60)
+        |
+        v
+correctness-safe ID materialization
+        |
+        v
+<= 10 items and <= 16 KiB
+```
+
+Semantic similarity is relevance only. Project and branch isolation, lifecycle state, repository freshness, conflicts, reliance, and action approvals are never inferred from vectors.
+
+If no embedder is configured or query embedding fails, hybrid recall returns the bounded lexical result instead of making canonical memory unavailable.
+
+Semantic rebuild is explicit:
+
+```js
+import { HybridMemoryRetriever } from './memory-engine/hybrid-retrieval.mjs';
+
+const hybrid = new HybridMemoryRetriever({
+  memory,
+  embedder,
+});
+
+await hybrid.rebuildSemanticIndex({
+  projectId: 'project-a',
+  branch: 'main',
+});
+
+const recalled = await hybrid.recall({
+  projectId: 'project-a',
+  branch: 'main',
+  query: 'Which storage engine handles multiple processes writing at once?',
+  maxItems: 10,
+  maxSerializedBytes: 16_384,
+});
+```
+
 ## Failure recovery
 
 Canonical writes rely on SQLite transactions in WAL mode. A partially executed ingest is not canonical memory until its transaction commits.
@@ -263,13 +336,15 @@ Recovery does not promote WAL fragments or partial writes. It checkpoints surviv
 
 The Memory Ratchet M14 regression ingests 2,000 unrelated distractor memories plus the database decision history and requests at most 10 recalled items.
 
-The current FTS5 retrieval already satisfies the ratchet without a retrieval-code change:
+The existing FTS5 retrieval still satisfies the frozen ratchet:
 
-- the target Postgres decision appears in the top five;
+- the target Postgres decision appears in the top five under 2,000 distractors;
 - no more than 10 current items are returned;
 - the serialized raw recall payload stays within 16 KiB.
 
-This is intentionally a measured invariant rather than a new ranking heuristic.
+A separate deterministic fake-embedder regression now verifies the hybrid layer without changing the frozen Ratchet fixture. It covers lexical-light English and German paraphrases, requires the Postgres decision in the top five, and enforces the same <=10 item / <=16 KiB output limits.
+
+RRF does not replace FTS5. Lexical retrieval remains the deterministic exact-term path, while semantic ranking contributes relevance candidates when an embedder is available.
 
 ## Verification
 
@@ -294,6 +369,7 @@ The suite includes direct engine invariants plus Memory Ratchet fixture coverage
 - M12 structured action trust boundary;
 - M13 portable export and rebuild;
 - M14 bounded recall under 2,000 distractors;
-- M15 interrupted-write and derived-state recovery.
+- M15 interrupted-write and derived-state recovery;
+- deterministic hybrid fusion, semantic scope isolation, lexical fallback, and bounded paraphrase recall with an injected fake embedder.
 
-The reference engine now has explicit regression coverage for Memory Ratchet M01-M15.
+The reference engine now has explicit regression coverage for Memory Ratchet M01-M15 plus the dependency-free hybrid retrieval core. Real pinned-model coverage belongs to the separate E5 provider delivery.
