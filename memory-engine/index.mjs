@@ -218,7 +218,24 @@ export function evaluateReliance({
   for (const conflict of conflicts ?? []) {
     const a = byId.get(conflict.claim_a);
     const b = byId.get(conflict.claim_b);
-    if (!a || !b) continue;
+    if (!a && !b) continue;
+
+    if (!a || !b) {
+      const present = a ?? b;
+      const presentId = present.claim.id;
+      if (selectedIds.delete(presentId)) {
+        blocked.push({
+          item: present,
+          reason: 'unresolved_conflict_counterpart_not_retrieved',
+        });
+      }
+      conflictResolutions.push({
+        ...conflict,
+        status: 'unresolved_missing_counterpart',
+        winner_claim_id: null,
+      });
+      continue;
+    }
 
     const aAllowed = selectedIds.has(conflict.claim_a);
     const bAllowed = selectedIds.has(conflict.claim_b);
@@ -235,6 +252,10 @@ export function evaluateReliance({
     if (aAllowed && bAllowed) {
       selectedIds.delete(conflict.claim_a);
       selectedIds.delete(conflict.claim_b);
+      blocked.push(
+        { item: a, reason: 'unresolved_conflict' },
+        { item: b, reason: 'unresolved_conflict' },
+      );
       conflictResolutions.push({
         ...conflict,
         status: 'unresolved',
@@ -686,11 +707,14 @@ export class MemoryEngine {
 
       for (const targetId of conflictsWith) {
         const target = this.#db
-          .prepare('SELECT project_id FROM claims WHERE id = ?')
+          .prepare('SELECT project_id, branch_scope FROM claims WHERE id = ?')
           .get(targetId);
         if (!target) throw new Error(`cannot conflict with unknown claim: ${targetId}`);
         if (target.project_id !== evidence.projectId) {
           throw new Error('conflict relations cannot cross project boundaries');
+        }
+        if (target.branch_scope !== branchScope) {
+          throw new Error('conflict relations cannot cross branch boundaries');
         }
 
         const [claimA, claimB] = [claim.id, targetId].sort();
@@ -896,7 +920,7 @@ export class MemoryEngine {
       WHERE project_id = ? AND state = 'open'
       ORDER BY claim_a, claim_b
     `).all(projectId).filter(
-      (conflict) => ids.has(conflict.claim_a) && ids.has(conflict.claim_b),
+      (conflict) => ids.has(conflict.claim_a) || ids.has(conflict.claim_b),
     );
 
     return {
