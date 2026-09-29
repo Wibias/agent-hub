@@ -48,7 +48,7 @@ jobs:
           CONSOLIDATION_ENABLED: "false"
         run: |
           set -euo pipefail
-          mkdir -p "$HOME" artifacts/memory-ratchet
+          mkdir -p "$HOME" "$GITHUB_WORKSPACE/artifacts/memory-ratchet"
           cd "$RUNNER_TEMP/agentmemory"
 
           node dist/cli.mjs >"$RUNNER_TEMP/agentmemory.stdout" 2>"$RUNNER_TEMP/agentmemory.stderr" &
@@ -76,10 +76,10 @@ jobs:
             cat "$RUNNER_TEMP/agentmemory.stderr" || true
             echo "--- stdout ---"
             cat "$RUNNER_TEMP/agentmemory.stdout" || true
-          } > artifacts/memory-ratchet/agentmemory-full-smoke.txt
+          } > "$GITHUB_WORKSPACE/artifacts/memory-ratchet/agentmemory-full-smoke.txt"
 
           if [ "$ready" -ne 1 ]; then
-            cat artifacts/memory-ratchet/agentmemory-full-smoke.txt
+            cat "$GITHUB_WORKSPACE/artifacts/memory-ratchet/agentmemory-full-smoke.txt"
             exit 1
           fi
 
@@ -100,15 +100,15 @@ jobs:
             echo "--- search project B ---"
             cat "$RUNNER_TEMP/search-b.json"
             echo
-          } >> artifacts/memory-ratchet/agentmemory-full-smoke.txt
+          } >> "$GITHUB_WORKSPACE/artifacts/memory-ratchet/agentmemory-full-smoke.txt"
 
-          cat artifacts/memory-ratchet/agentmemory-full-smoke.txt
+          cat "$GITHUB_WORKSPACE/artifacts/memory-ratchet/agentmemory-full-smoke.txt"
 
       - name: Upload agentmemory smoke
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: memory-ratchet-agentmemory-full-smoke
-          path: artifacts/memory-ratchet/agentmemory-full-smoke.txt
+          path: "$GITHUB_WORKSPACE/artifacts/memory-ratchet/agentmemory-full-smoke.txt"
           if-no-files-found: warn
           retention-days: 14
