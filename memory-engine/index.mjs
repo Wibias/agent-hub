@@ -115,25 +115,49 @@ function normalizeClaim(row) {
   };
 }
 
-function buildFtsQuery(query) {
-  const tokens = String(query ?? '')
-    .match(QUERY_TOKEN)
-    ?.map((token) => token.toLowerCase())
-    .filter((token) => token.length > 1 && !STOPWORDS.has(token)) ?? [];
+function normalizeLexicalToken(token) {
+  let normalized = token.toLowerCase();
+  if (normalized.length > 4 && normalized.endsWith('ies')) {
+    normalized = `${normalized.slice(0, -3)}y`;
+  } else if (
+    normalized.length > 4
+    && normalized.endsWith('s')
+    && !normalized.endsWith('ss')
+  ) {
+    normalized = normalized.slice(0, -1);
+  }
+  return normalized;
+}
 
-  return [...new Set(tokens)]
+function lexicalTerms(value) {
+  const expanded = String(value ?? '')
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/[_-]+/g, ' ');
+
+  const tokens = expanded.match(QUERY_TOKEN) ?? [];
+  return [...new Set(
+    tokens
+      .map(normalizeLexicalToken)
+      .filter((token) => token.length > 1 && !STOPWORDS.has(token)),
+  )];
+}
+
+function buildFtsQuery(query) {
+  return lexicalTerms(query)
     .map((token) => `"${token.replaceAll('"', '""')}"`)
     .join(' OR ');
 }
 
 function searchableText(claim, evidenceContent) {
-  return [
+  const raw = [
     claim.kind,
     claim.subject,
     claim.predicate,
     claim.value,
     evidenceContent,
   ].filter(Boolean).join(' ');
+
+  return `${raw} ${lexicalTerms(raw).join(' ')}`;
 }
 
 export class MemoryEngine {
