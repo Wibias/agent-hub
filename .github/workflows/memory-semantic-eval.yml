@@ -1,0 +1,41 @@
+name: Memory semantic eval
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  semantic-eval:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Install memory engine provider dependencies
+        run: npm ci --prefix memory-engine
+
+      - name: Restore pinned E5 model cache
+        id: e5-cache
+        uses: actions/cache@v4
+        with:
+          path: .cache/memory-engine/e5
+          key: ${{ runner.os }}-memory-e5-${{ hashFiles('memory-engine/package-lock.json') }}-fd1525a9fd15316a2d503bf26ab031a61d056e98
+
+      - name: Prepare pinned E5 model cache
+        if: steps.e5-cache.outputs.cache-hit != 'true'
+        run: |
+          node scripts/prepare-memory-embedding-model.mjs \
+            --cache-dir .cache/memory-engine/e5
+
+      - name: Run real pinned E5 semantic evaluation
+        env:
+          MEMORY_E5_MODEL_CACHE: .cache/memory-engine/e5
+        run: node --test tests/memory-engine/e5-semantic-eval.test.mjs
