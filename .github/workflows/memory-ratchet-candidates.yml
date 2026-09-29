@@ -41,7 +41,6 @@ jobs:
         env:
           HOME: ${{ runner.temp }}/agentmemory-home
           CI: "true"
-          III_REST_PORT: "3311"
           AGENTMEMORY_AUTO_COMPRESS: "false"
           AGENTMEMORY_INJECT_CONTEXT: "false"
           AGENTMEMORY_ALLOW_AGENT_SDK: "false"
@@ -57,7 +56,7 @@ jobs:
 
           ready=0
           for _ in $(seq 1 90); do
-            if curl --silent --fail http://127.0.0.1:3311/agentmemory/livez >"$RUNNER_TEMP/livez.json"; then
+            if curl --silent --fail http://127.0.0.1:3111/agentmemory/livez >"$RUNNER_TEMP/livez.json"; then
               ready=1
               break
             fi
@@ -83,11 +82,11 @@ jobs:
             exit 1
           fi
 
-          curl --silent --fail             -H 'content-type: application/json'             -d '{"content":"Project A uses Postgres.","type":"architecture","project":"mr-project-a"}'             http://127.0.0.1:3311/agentmemory/remember             >"$RUNNER_TEMP/remember.json"
+          curl --silent --fail             -H 'content-type: application/json'             -d '{"content":"Project A uses Postgres.","type":"architecture","project":"mr-project-a"}'             http://127.0.0.1:3111/agentmemory/remember             >"$RUNNER_TEMP/remember.json"
 
-          curl --silent --fail             -H 'content-type: application/json'             -d '{"query":"Postgres","project":"mr-project-a","limit":10,"format":"full"}'             http://127.0.0.1:3311/agentmemory/search             >"$RUNNER_TEMP/search-a.json"
+          curl --silent --fail             -H 'content-type: application/json'             -d '{"query":"Postgres","project":"mr-project-a","limit":10,"format":"full"}'             http://127.0.0.1:3111/agentmemory/search             >"$RUNNER_TEMP/search-a.json"
 
-          curl --silent --fail             -H 'content-type: application/json'             -d '{"query":"Postgres","project":"mr-project-b","limit":10,"format":"full"}'             http://127.0.0.1:3311/agentmemory/search             >"$RUNNER_TEMP/search-b.json"
+          curl --silent --fail             -H 'content-type: application/json'             -d '{"query":"Postgres","project":"mr-project-b","limit":10,"format":"full"}'             http://127.0.0.1:3111/agentmemory/search             >"$RUNNER_TEMP/search-b.json"
 
           {
             echo
