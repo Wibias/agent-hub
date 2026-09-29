@@ -798,11 +798,18 @@ export class MemoryEngine {
 
     const rows = this.#db.prepare(`
       SELECT
-        ce.claim_id,
+        c.id,
+        c.project_id,
+        c.branch_scope,
+        c.kind,
+        c.subject,
+        c.predicate,
+        c.value_text,
+        c.created_at,
+        e.content_redacted,
         ce.text_hash,
         ce.dimensions,
-        ce.vector_blob,
-        c.created_at
+        ce.vector_blob
       FROM claim_embeddings ce
       JOIN claims c ON c.id = ce.claim_id
       JOIN evidence e ON e.id = c.created_from_evidence_id
@@ -829,16 +836,19 @@ export class MemoryEngine {
     const candidates = [];
     for (const row of rows) {
       try {
+        const document = embeddingDocumentFromRow(row);
+        if (row.text_hash !== document.text_hash) continue;
+
         candidates.push({
-          claim_id: row.claim_id,
+          claim_id: row.id,
           created_at: row.created_at,
           text_hash: row.text_hash,
           dimensions: row.dimensions,
           vector: decodeFloat32Vector(Buffer.from(row.vector_blob), row.dimensions),
         });
       } catch {
-        // Semantic vectors are derived state. Corrupt rows fail closed locally
-        // without making canonical or lexical memory unavailable.
+        // Semantic vectors are derived state. Corrupt or stale rows fail closed
+        // locally without making canonical or lexical memory unavailable.
       }
     }
     return candidates;
@@ -1018,6 +1028,105 @@ export class MemoryEngine {
       ).run(modelRevision).changes);
     }
     return Number(this.#db.prepare('DELETE FROM claim_embeddings').run().changes);
+  }
+
+  replaceClaimEmbeddings({
+    projectId,
+    branch,
+    modelId,
+    modelRevision,
+    rows,
+    indexedAt = this.#clock(),
+  }) {
+    for (const [value, name] of [
+      [projectId, 'projectId'],
+      [branch, 'branch'],
+      [modelId, 'modelId'],
+      [modelRevision, 'modelRevision'],
+      [indexedAt, 'indexedAt'],
+    ]) {
+      assertNonEmptyString(value, name);
+    }
+    if (!Array.isArray(rows)) throw new TypeError('rows must be an array');
+    if (!this.getProject(projectId)) throw new Error(`unknown project: ${projectId}`);
+
+    const prepared = [];
+    const seen = new Set();
+    for (const row of rows) {
+      if (!row || typeof row !== 'object') {
+        throw new TypeError('embedding row must be an object');
+      }
+      assertNonEmptyString(row.claimId, 'embedding row claimId');
+      if (seen.has(row.claimId)) {
+        throw new Error(`duplicate embedding row claim: ${row.claimId}`);
+      }
+      seen.add(row.claimId);
+      if (!/^[0-9a-f]{64}$/.test(row.textHash ?? '')) {
+        throw new TypeError('embedding row text hash must be lowercase SHA-256 hex');
+      }
+      if (!Number.isInteger(row.dimensions) || row.dimensions < 1) {
+        throw new RangeError('embedding row dimensions must be a positive integer');
+      }
+      if (!(row.vector instanceof Float32Array) || row.vector.length !== row.dimensions) {
+        throw new RangeError('embedding row vector dimensions must match dimensions');
+      }
+      prepared.push({
+        ...row,
+        vectorBlob: encodeFloat32Vector(row.vector),
+      });
+    }
+
+    this.#db.exec('BEGIN IMMEDIATE');
+    try {
+      const claimScope = this.#db.prepare(`
+        SELECT project_id, branch_scope
+        FROM claims
+        WHERE id = ?
+      `);
+      for (const row of prepared) {
+        const claim = claimScope.get(row.claimId);
+        if (!claim) throw new Error(`unknown claim: ${row.claimId}`);
+        if (claim.project_id !== projectId || claim.branch_scope !== branch) {
+          throw new Error(`embedding row claim is outside requested project/branch: ${row.claimId}`);
+        }
+      }
+
+      this.#db.prepare(`
+        DELETE FROM claim_embeddings
+        WHERE model_id = ?
+          AND model_revision = ?
+          AND claim_id IN (
+            SELECT id
+            FROM claims
+            WHERE project_id = ?
+              AND branch_scope = ?
+          )
+      `).run(modelId, modelRevision, projectId, branch);
+
+      const insert = this.#db.prepare(`
+        INSERT INTO claim_embeddings (
+          claim_id, model_id, model_revision, text_hash,
+          dimensions, vector_blob, indexed_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+      `);
+      for (const row of prepared) {
+        insert.run(
+          row.claimId,
+          modelId,
+          modelRevision,
+          row.textHash,
+          row.dimensions,
+          row.vectorBlob,
+          indexedAt,
+        );
+      }
+
+      this.#db.exec('COMMIT');
+      return prepared.length;
+    } catch (error) {
+      this.#db.exec('ROLLBACK');
+      throw error;
+    }
   }
 
 
