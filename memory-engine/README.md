@@ -410,6 +410,7 @@ node --test tests/memory-engine/*.test.mjs
 The suite includes direct engine invariants plus Memory Ratchet fixture coverage for:
 
 - M01 cross-harness current truth;
+- M02 long-gap cross-session continuity after 27 unrelated sessions;
 - M03 project isolation;
 - M04 branch isolation;
 - M05 Git blob freshness;
@@ -425,4 +426,4 @@ The suite includes direct engine invariants plus Memory Ratchet fixture coverage
 - M15 interrupted-write and derived-state recovery;
 - deterministic hybrid fusion, semantic scope isolation, lexical fallback, and bounded paraphrase recall with an injected fake embedder.
 
-The reference engine now has explicit regression coverage for Memory Ratchet M01-M15 plus the dependency-free hybrid retrieval core. Real pinned-model coverage belongs to the separate E5 provider delivery.
+The reference engine now has explicit regression coverage for every Memory Ratchet case M01-M15 plus the hybrid retrieval core. The separate manual `Memory semantic eval` workflow provides real pinned-model coverage for the E5 provider while ordinary CI keeps the model download-free.
