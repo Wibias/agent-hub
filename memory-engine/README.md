@@ -127,6 +127,8 @@ Only `user_direct` evidence can mint an approval. `agent_inference`, repository 
 
 A successful `authorizeAction(...)` always consumes one use in the same immediate SQLite transaction that checks the capability. A one-time approval cannot be checked successfully and then reused for another execution.
 
+The evaluation timestamp comes from the engine clock, not from the action request. Callers cannot backdate a request to resurrect an expired approval. Tests may inject a deterministic clock when constructing the engine.
+
 Free-text similarity is never used to decide action authority.
 
 ## Evidence and claims
