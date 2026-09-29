@@ -43,6 +43,7 @@ Canonical state:
 - `evidence`
 - `claims`
 - `lifecycle_events`
+- `repository_path_state`
 
 Derived state:
 
