@@ -1,5 +1,6 @@
 export const E5_MODEL_ID = 'intfloat/multilingual-e5-small';
-export const E5_MODEL_REVISION = 'fd1525a9fd15316a2d503bf26ab031a61d056e98';
+export const E5_MODEL_REVISION = '6a0d452a575215f80b8f66276dd4ee5d504942c6';
+export const E5_MODEL_FILE = 'model_qint8_avx512_vnni';
 export const E5_DIMENSIONS = 384;
 
 function assertNonEmptyString(value, name) {
@@ -78,6 +79,9 @@ export async function createE5Embedder({
       revision: E5_MODEL_REVISION,
       cache_dir: cacheDir,
       local_files_only: !allowRemoteModels,
+      // Select the internally quantized ONNX graph explicitly. Keep fp32 here
+      // because Transformers.js uses dtype for tensor I/O and filename suffixing.
+      model_file_name: E5_MODEL_FILE,
       dtype: 'fp32',
       device: 'cpu',
     },
