@@ -276,6 +276,36 @@ test('secret filtering happens before canonical SQLite persistence', async (t) =
 });
 
 
+test('structured sensitive metadata fields are redacted before persistence', async (t) => {
+  const { engine } = await createEngine();
+  t.after(() => engine.close());
+  engine.registerProject({ projectId: 'project-a', repoIdentity: 'project-a' });
+
+  engine.ingest({
+    evidence: evidence({
+      id: 'e-structured-secret',
+      content: 'Structured metadata secret test.',
+      metadata: {
+        password: 'structured-password-value',
+        nested: {
+          api_key: 'structured-api-key-value',
+        },
+      },
+    }),
+    claim: claim({
+      id: 'c-structured-secret',
+      kind: 'fact',
+      subject: 'structured metadata',
+      value: 'secret fields are redacted',
+    }),
+  });
+
+  const stored = engine.getEvidence('e-structured-secret');
+  assert.equal(stored.metadata.password, REDACTED_SECRET);
+  assert.equal(stored.metadata.nested.api_key, REDACTED_SECRET);
+  assert.equal(stored.sensitivity, 'secret_redacted');
+});
+
 test('lexical recall normalizes camelCase code symbols and simple plurals', async (t) => {
   const { engine } = await createEngine();
   t.after(() => engine.close());

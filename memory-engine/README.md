@@ -28,12 +28,13 @@ The reference implementation currently owns:
 - retrieval separated from use-specific reliance;
 - structured, scoped action approval capabilities;
 - atomic one-time approval consumption and revocation;
-- a rebuildable FTS5 lexical index.
+- a rebuildable FTS5 lexical index;
+- portable canonical export/import with derived-state rebuild.
 
 Not implemented yet:
 
 - local embeddings or RRF;
-- export/rebuild and interrupted-write recovery.
+- interrupted-write recovery.
 
 Those belong in follow-up changes so each correctness layer remains independently auditable.
 
@@ -56,6 +57,25 @@ Derived state:
 Derived state is never the source of truth. Claim lifecycle, observed repository blob identity, and provenance remain valid even if freshness snapshots or search indexes are rebuilt later.
 
 `repository_path_state` is a rebuildable snapshot of the repository revision being queried. It stores the current commit and path object ID used to decide whether path-grounded evidence is still eligible for current recall. Portable export must not treat this snapshot as durable memory truth.
+
+## Portable export and rebuild
+
+`exportCanonical()` emits only canonical memory state. It includes projects, evidence, claims, lifecycle events, conflicts, and approvals.
+
+It deliberately excludes:
+
+- `claim_fts`;
+- `repository_path_state`.
+
+Those are derived state and are rebuilt instead of trusted during import.
+
+`importCanonical(...)` requires an otherwise empty memory store. The import validates authority classes, claim states, JSON fields, approval use counts, and secret boundaries before writing. Canonical rows and the rebuilt FTS index are committed in one transaction.
+
+Claims are restored in two phases so `superseded_by_claim_id` references remain valid even when the target claim appears later in export order.
+
+Repository freshness snapshots remain empty after import. The reference adapter recomputes them against the revision being queried, so portable restore cannot accidentally preserve stale "current" state from another checkout.
+
+A failed import rolls back instead of leaving a partially restored canonical store.
 
 ## Git blob freshness
 
@@ -239,6 +259,7 @@ The suite includes direct engine invariants plus Memory Ratchet fixture coverage
 - M09 rejection/history;
 - M10 source-authority / poisoning resistance;
 - M11 pre-storage secret redaction;
-- M12 structured action trust boundary.
+- M12 structured action trust boundary;
+- M13 portable export and rebuild.
 
-M13-M15 recovery/bounded-recall work remains deliberately deferred until the corresponding architecture exists rather than being approximated inside the adapter.
+M14 bounded recall and M15 interrupted-write recovery remain deliberately deferred until the corresponding architecture exists rather than being approximated inside the adapter.

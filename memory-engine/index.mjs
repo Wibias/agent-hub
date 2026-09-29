@@ -62,6 +62,16 @@ function redactValue(value) {
     let redacted = false;
     const next = {};
     for (const [key, item] of Object.entries(value)) {
+      if (
+        /^(?:api[_-]?key|access[_-]?token|secret|password)$/i.test(key)
+        && typeof item === 'string'
+        && item.length > 0
+      ) {
+        redacted = true;
+        next[key] = REDACTED_SECRET;
+        continue;
+      }
+
       const result = redactValue(item);
       redacted ||= result.redacted;
       next[key] = result.value;
@@ -564,6 +574,512 @@ export class MemoryEngine {
       WHERE project_id = ?
       ORDER BY issued_at DESC, id ASC
     `).all(projectId).map(normalizeApproval);
+  }
+
+  exportCanonical() {
+    return {
+      format: 'agent-hub-memory-canonical',
+      version: 1,
+      projects: this.#db.prepare(`
+        SELECT project_id, canonical_remote, repo_identity, created_at
+        FROM project_registry
+        ORDER BY project_id
+      `).all(),
+      evidence: this.#db.prepare(`
+        SELECT
+          id, project_id, harness, session_id, source_kind, source_ref,
+          captured_at, branch, commit_sha, path, blob_oid, content_redacted,
+          sensitivity, authority_class, metadata_json
+        FROM evidence
+        ORDER BY id
+      `).all(),
+      claims: this.#db.prepare(`
+        SELECT
+          id, project_id, kind, subject, predicate, value_text, state,
+          branch_scope, created_from_evidence_id, created_at, valid_from,
+          valid_until, superseded_by_claim_id, rejected_by_evidence_id
+        FROM claims
+        ORDER BY id
+      `).all(),
+      lifecycle_events: this.#db.prepare(`
+        SELECT
+          id, project_id, action, source_claim_id, target_claim_id,
+          evidence_id, created_at
+        FROM lifecycle_events
+        ORDER BY id
+      `).all(),
+      conflicts: this.#db.prepare(`
+        SELECT
+          project_id, claim_a, claim_b, state, created_by_evidence_id,
+          created_at, resolved_by_evidence_id, resolved_at
+        FROM conflicts
+        ORDER BY project_id, claim_a, claim_b
+      `).all(),
+      approvals: this.#db.prepare(`
+        SELECT
+          id, project_id, actor, action, target, environment, artifact,
+          constraints_json, issued_at, expires_at, max_uses, uses,
+          revoked_at, source_evidence_id
+        FROM approvals
+        ORDER BY id
+      `).all(),
+    };
+  }
+
+  clearDerivedState() {
+    this.#db.exec('BEGIN IMMEDIATE');
+    try {
+      this.#db.prepare('DELETE FROM claim_fts').run();
+      this.#db.prepare('DELETE FROM repository_path_state').run();
+      this.#db.exec('COMMIT');
+    } catch (error) {
+      this.#db.exec('ROLLBACK');
+      throw error;
+    }
+  }
+
+  rebuildDerivedState() {
+    this.#db.exec('BEGIN IMMEDIATE');
+    try {
+      this.#db.prepare('DELETE FROM claim_fts').run();
+      const rows = this.#db.prepare(`
+        SELECT
+          c.id,
+          c.project_id,
+          c.branch_scope,
+          c.kind,
+          c.subject,
+          c.predicate,
+          c.value_text,
+          e.content_redacted
+        FROM claims c
+        JOIN evidence e ON e.id = c.created_from_evidence_id
+        ORDER BY c.id
+      `).all();
+
+      const insert = this.#db.prepare(`
+        INSERT INTO claim_fts (claim_id, project_id, branch_scope, text)
+        VALUES (?, ?, ?, ?)
+      `);
+      for (const row of rows) {
+        insert.run(
+          row.id,
+          row.project_id,
+          row.branch_scope,
+          searchableText({
+            kind: row.kind,
+            subject: row.subject,
+            predicate: row.predicate,
+            value: row.value_text,
+          }, row.content_redacted),
+        );
+      }
+
+      this.#db.prepare('DELETE FROM repository_path_state').run();
+      this.#db.exec('COMMIT');
+      return {
+        indexed_claims: rows.length,
+        repository_path_snapshots: 0,
+      };
+    } catch (error) {
+      this.#db.exec('ROLLBACK');
+      throw error;
+    }
+  }
+
+  importCanonical(payload) {
+    if (!payload || typeof payload !== 'object') {
+      throw new TypeError('canonical import payload must be an object');
+    }
+    if (payload.format !== 'agent-hub-memory-canonical' || payload.version !== 1) {
+      throw new Error('unsupported canonical memory export');
+    }
+
+    for (const field of [
+      'projects',
+      'evidence',
+      'claims',
+      'lifecycle_events',
+      'conflicts',
+      'approvals',
+    ]) {
+      if (!Array.isArray(payload[field])) {
+        throw new TypeError(`canonical import ${field} must be an array`);
+      }
+    }
+
+    const occupied = this.#db.prepare(`
+      SELECT
+        (SELECT COUNT(*) FROM evidence)
+        + (SELECT COUNT(*) FROM claims)
+        + (SELECT COUNT(*) FROM lifecycle_events)
+        + (SELECT COUNT(*) FROM conflicts)
+        + (SELECT COUNT(*) FROM approvals) AS count
+    `).get().count;
+    if (occupied !== 0) {
+      throw new Error('canonical import requires an empty memory store');
+    }
+
+    const projectIds = new Set(payload.projects.map((row) => row.project_id));
+    const evidenceById = new Map(payload.evidence.map((row) => [row.id, row]));
+    const claimById = new Map(payload.claims.map((row) => [row.id, row]));
+
+    for (const row of payload.evidence) {
+      if (!projectIds.has(row.project_id)) {
+        throw new Error(`canonical import evidence references unknown project: ${row.id}`);
+      }
+    }
+
+    for (const row of payload.claims) {
+      const sourceEvidence = evidenceById.get(row.created_from_evidence_id);
+      if (!sourceEvidence) {
+        throw new Error(`canonical import claim references unknown evidence: ${row.id}`);
+      }
+      if (sourceEvidence.project_id !== row.project_id) {
+        throw new Error(`canonical import claim evidence crosses project boundary: ${row.id}`);
+      }
+
+      if (row.superseded_by_claim_id !== null) {
+        const successor = claimById.get(row.superseded_by_claim_id);
+        if (!successor) {
+          throw new Error(`canonical import claim references unknown successor: ${row.id}`);
+        }
+        if (successor.project_id !== row.project_id) {
+          throw new Error(`canonical import supersession crosses project boundary: ${row.id}`);
+        }
+      }
+
+      if (row.rejected_by_evidence_id !== null) {
+        const rejection = evidenceById.get(row.rejected_by_evidence_id);
+        if (!rejection) {
+          throw new Error(`canonical import claim references unknown rejection evidence: ${row.id}`);
+        }
+        if (rejection.project_id !== row.project_id) {
+          throw new Error(`canonical import rejection crosses project boundary: ${row.id}`);
+        }
+      }
+    }
+
+    for (const row of payload.lifecycle_events) {
+      const source = claimById.get(row.source_claim_id);
+      const target = claimById.get(row.target_claim_id);
+      const evidence = evidenceById.get(row.evidence_id);
+      if (!source || !target || !evidence) {
+        throw new Error(`canonical import lifecycle event has missing provenance: ${row.id}`);
+      }
+      if (
+        source.project_id !== row.project_id
+        || target.project_id !== row.project_id
+        || evidence.project_id !== row.project_id
+      ) {
+        throw new Error(`canonical import lifecycle event crosses project boundary: ${row.id}`);
+      }
+    }
+
+    for (const row of payload.conflicts) {
+      const a = claimById.get(row.claim_a);
+      const b = claimById.get(row.claim_b);
+      const createdEvidence = evidenceById.get(row.created_by_evidence_id);
+      const resolvedEvidence = row.resolved_by_evidence_id === null
+        ? null
+        : evidenceById.get(row.resolved_by_evidence_id);
+      if (!a || !b || !createdEvidence || (
+        row.resolved_by_evidence_id !== null && !resolvedEvidence
+      )) {
+        throw new Error(`canonical import conflict has missing provenance: ${row.claim_a}/${row.claim_b}`);
+      }
+      if (
+        a.project_id !== row.project_id
+        || b.project_id !== row.project_id
+        || createdEvidence.project_id !== row.project_id
+        || (resolvedEvidence && resolvedEvidence.project_id !== row.project_id)
+      ) {
+        throw new Error(`canonical import conflict crosses project boundary: ${row.claim_a}/${row.claim_b}`);
+      }
+    }
+
+    for (const row of payload.approvals) {
+      const sourceEvidence = evidenceById.get(row.source_evidence_id);
+      if (!sourceEvidence) {
+        throw new Error(`canonical import approval references unknown evidence: ${row.id}`);
+      }
+      if (sourceEvidence.project_id !== row.project_id) {
+        throw new Error(`canonical import approval evidence crosses project boundary: ${row.id}`);
+      }
+      if (sourceEvidence.authority_class !== 'user_direct') {
+        throw new Error(`canonical import approval source must be user_direct: ${row.id}`);
+      }
+      if (sourceEvidence.source_ref !== row.actor) {
+        throw new Error(`canonical import approval actor does not match source provenance: ${row.id}`);
+      }
+    }
+
+    for (const row of payload.evidence) {
+      assertAuthorityClass(row.authority_class);
+      let metadata;
+      try {
+        metadata = JSON.parse(row.metadata_json);
+      } catch {
+        throw new Error(`canonical import has invalid evidence metadata JSON: ${row.id}`);
+      }
+      const scanned = redactValue({
+        source_ref: row.source_ref,
+        content_redacted: row.content_redacted,
+        metadata,
+      });
+      if (scanned.redacted) {
+        throw new Error(`canonical import contains unredacted secret material in evidence ${row.id}`);
+      }
+    }
+    for (const row of payload.claims) {
+      if (!CLAIM_STATES.has(row.state)) {
+        throw new Error(`canonical import has unsupported claim state: ${row.state}`);
+      }
+      const scanned = redactValue({
+        subject: row.subject,
+        predicate: row.predicate,
+        value_text: row.value_text,
+      });
+      if (scanned.redacted) {
+        throw new Error(`canonical import contains unredacted secret material in claim ${row.id}`);
+      }
+    }
+    for (const row of payload.approvals) {
+      let constraints;
+      try {
+        constraints = JSON.parse(row.constraints_json);
+      } catch {
+        throw new Error(`canonical import has invalid approval constraints JSON: ${row.id}`);
+      }
+      if (!constraints || typeof constraints !== 'object' || Array.isArray(constraints)) {
+        throw new Error(`canonical import approval constraints must be an object: ${row.id}`);
+      }
+      if (
+        !Number.isInteger(row.max_uses)
+        || row.max_uses < 1
+        || !Number.isInteger(row.uses)
+        || row.uses < 0
+        || row.uses > row.max_uses
+      ) {
+        throw new Error(`canonical import has invalid approval use counts: ${row.id}`);
+      }
+      const scanned = redactValue({
+        actor: row.actor,
+        action: row.action,
+        target: row.target,
+        environment: row.environment,
+        artifact: row.artifact,
+        constraints,
+      });
+      if (scanned.redacted) {
+        throw new Error(`canonical import contains secret material in approval ${row.id}`);
+      }
+    }
+
+    this.#db.exec('BEGIN IMMEDIATE');
+    try {
+      for (const row of payload.projects) {
+        const existing = this.#db.prepare(`
+          SELECT canonical_remote, repo_identity
+          FROM project_registry
+          WHERE project_id = ?
+        `).get(row.project_id);
+        if (existing) {
+          if (
+            existing.canonical_remote !== row.canonical_remote
+            || existing.repo_identity !== row.repo_identity
+          ) {
+            throw new Error(`project ${row.project_id} conflicts with canonical import`);
+          }
+          this.#db.prepare(`
+            UPDATE project_registry
+            SET created_at = ?
+            WHERE project_id = ?
+          `).run(row.created_at, row.project_id);
+          continue;
+        }
+
+        this.#db.prepare(`
+          INSERT INTO project_registry (
+            project_id, canonical_remote, repo_identity, created_at
+          ) VALUES (?, ?, ?, ?)
+        `).run(
+          row.project_id,
+          row.canonical_remote,
+          row.repo_identity,
+          row.created_at,
+        );
+      }
+
+      const insertEvidence = this.#db.prepare(`
+        INSERT INTO evidence (
+          id, project_id, harness, session_id, source_kind, source_ref,
+          captured_at, branch, commit_sha, path, blob_oid, content_redacted,
+          sensitivity, authority_class, metadata_json
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+      for (const row of payload.evidence) {
+        insertEvidence.run(
+          row.id,
+          row.project_id,
+          row.harness,
+          row.session_id,
+          row.source_kind,
+          row.source_ref,
+          row.captured_at,
+          row.branch,
+          row.commit_sha,
+          row.path,
+          row.blob_oid,
+          row.content_redacted,
+          row.sensitivity,
+          row.authority_class,
+          row.metadata_json,
+        );
+      }
+
+      const insertClaim = this.#db.prepare(`
+        INSERT INTO claims (
+          id, project_id, kind, subject, predicate, value_text, state,
+          branch_scope, created_from_evidence_id, created_at, valid_from,
+          valid_until, superseded_by_claim_id, rejected_by_evidence_id
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)
+      `);
+      for (const row of payload.claims) {
+        insertClaim.run(
+          row.id,
+          row.project_id,
+          row.kind,
+          row.subject,
+          row.predicate,
+          row.value_text,
+          row.state,
+          row.branch_scope,
+          row.created_from_evidence_id,
+          row.created_at,
+          row.valid_from,
+          row.valid_until,
+          row.rejected_by_evidence_id,
+        );
+      }
+
+      const updateSupersession = this.#db.prepare(`
+        UPDATE claims
+        SET superseded_by_claim_id = ?
+        WHERE id = ?
+      `);
+      for (const row of payload.claims) {
+        if (row.superseded_by_claim_id !== null) {
+          updateSupersession.run(row.superseded_by_claim_id, row.id);
+        }
+      }
+
+      const insertLifecycle = this.#db.prepare(`
+        INSERT INTO lifecycle_events (
+          id, project_id, action, source_claim_id, target_claim_id,
+          evidence_id, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+      `);
+      for (const row of payload.lifecycle_events) {
+        insertLifecycle.run(
+          row.id,
+          row.project_id,
+          row.action,
+          row.source_claim_id,
+          row.target_claim_id,
+          row.evidence_id,
+          row.created_at,
+        );
+      }
+
+      const insertConflict = this.#db.prepare(`
+        INSERT INTO conflicts (
+          project_id, claim_a, claim_b, state, created_by_evidence_id,
+          created_at, resolved_by_evidence_id, resolved_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+      for (const row of payload.conflicts) {
+        insertConflict.run(
+          row.project_id,
+          row.claim_a,
+          row.claim_b,
+          row.state,
+          row.created_by_evidence_id,
+          row.created_at,
+          row.resolved_by_evidence_id,
+          row.resolved_at,
+        );
+      }
+
+      const insertApproval = this.#db.prepare(`
+        INSERT INTO approvals (
+          id, project_id, actor, action, target, environment, artifact,
+          constraints_json, issued_at, expires_at, max_uses, uses,
+          revoked_at, source_evidence_id
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+      for (const row of payload.approvals) {
+        insertApproval.run(
+          row.id,
+          row.project_id,
+          row.actor,
+          row.action,
+          row.target,
+          row.environment,
+          row.artifact,
+          row.constraints_json,
+          row.issued_at,
+          row.expires_at,
+          row.max_uses,
+          row.uses,
+          row.revoked_at,
+          row.source_evidence_id,
+        );
+      }
+
+      this.#db.prepare('DELETE FROM claim_fts').run();
+      const searchRows = this.#db.prepare(`
+        SELECT
+          c.id,
+          c.project_id,
+          c.branch_scope,
+          c.kind,
+          c.subject,
+          c.predicate,
+          c.value_text,
+          e.content_redacted
+        FROM claims c
+        JOIN evidence e ON e.id = c.created_from_evidence_id
+        ORDER BY c.id
+      `).all();
+      const insertSearch = this.#db.prepare(`
+        INSERT INTO claim_fts (claim_id, project_id, branch_scope, text)
+        VALUES (?, ?, ?, ?)
+      `);
+      for (const row of searchRows) {
+        insertSearch.run(
+          row.id,
+          row.project_id,
+          row.branch_scope,
+          searchableText({
+            kind: row.kind,
+            subject: row.subject,
+            predicate: row.predicate,
+            value: row.value_text,
+          }, row.content_redacted),
+        );
+      }
+      this.#db.prepare('DELETE FROM repository_path_state').run();
+
+      this.#db.exec('COMMIT');
+      return {
+        indexed_claims: searchRows.length,
+        repository_path_snapshots: 0,
+      };
+    } catch (error) {
+      this.#db.exec('ROLLBACK');
+      throw error;
+    }
   }
 
   recordApproval({

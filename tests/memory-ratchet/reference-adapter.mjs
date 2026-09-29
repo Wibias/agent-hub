@@ -72,10 +72,10 @@ export function createReferenceMemoryAdapter({ clock } = {}) {
     metadata: {
       candidate: {
         name: 'memory-engine-reference',
-        version: '0.4.0-action-approvals',
+        version: '0.5.0-portable-rebuild',
         source_revision: 'workspace',
       },
-      adapter_revision: 'reference-action-approvals-v1',
+      adapter_revision: 'reference-portable-rebuild-v1',
       network_required: false,
     },
 
@@ -208,6 +208,36 @@ export function createReferenceMemoryAdapter({ clock } = {}) {
     async listApprovals({ project_id: projectId }) {
       if (!engine) throw new Error('reference memory adapter is not set up');
       return engine.listApprovals({ projectId });
+    },
+
+    async exportMemory() {
+      if (!engine) throw new Error('reference memory adapter is not set up');
+      return engine.exportCanonical();
+    },
+
+    async importMemory(request) {
+      if (!engine) throw new Error('reference memory adapter is not set up');
+      const payload = request?.payload ?? request;
+      return engine.importCanonical(payload);
+    },
+
+    async clearDerivedState() {
+      if (!engine) throw new Error('reference memory adapter is not set up');
+      engine.clearDerivedState();
+      return { cleared: true };
+    },
+
+    async inspectState() {
+      if (!engine) throw new Error('reference memory adapter is not set up');
+      const exported = engine.exportCanonical();
+      return {
+        projects: exported.projects.length,
+        evidence: exported.evidence.length,
+        claims: exported.claims.length,
+        lifecycle_events: exported.lifecycle_events.length,
+        conflicts: exported.conflicts.length,
+        approvals: exported.approvals.length,
+      };
     },
 
     async recall(request) {
