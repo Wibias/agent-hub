@@ -46,6 +46,7 @@ function gitBlobOid(repoPath, revisionSha, path) {
   if (!mode || !type || !oid || returnedPath !== path) {
     throw new Error(`unexpected git ls-tree record for ${path}`);
   }
+  if (type !== 'blob') return null;
   return oid;
 }
 

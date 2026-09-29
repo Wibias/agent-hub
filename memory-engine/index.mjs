@@ -343,7 +343,6 @@ export class MemoryEngine {
       JOIN evidence e ON e.id = c.created_from_evidence_id
       WHERE c.project_id = ?
         AND c.branch_scope = ?
-        AND c.state = 'active'
         AND e.path IS NOT NULL
       ORDER BY e.path ASC
     `).all(projectId, branch).map((row) => row.path);
