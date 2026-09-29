@@ -712,10 +712,16 @@ export class MemoryEngine {
 
     for (const row of payload.evidence) {
       assertAuthorityClass(row.authority_class);
+      let metadata;
+      try {
+        metadata = JSON.parse(row.metadata_json);
+      } catch {
+        throw new Error(`canonical import has invalid evidence metadata JSON: ${row.id}`);
+      }
       const scanned = redactValue({
         source_ref: row.source_ref,
         content_redacted: row.content_redacted,
-        metadata_json: row.metadata_json,
+        metadata,
       });
       if (scanned.redacted) {
         throw new Error(`canonical import contains unredacted secret material in evidence ${row.id}`);
@@ -732,6 +738,37 @@ export class MemoryEngine {
       });
       if (scanned.redacted) {
         throw new Error(`canonical import contains unredacted secret material in claim ${row.id}`);
+      }
+    }
+    for (const row of payload.approvals) {
+      let constraints;
+      try {
+        constraints = JSON.parse(row.constraints_json);
+      } catch {
+        throw new Error(`canonical import has invalid approval constraints JSON: ${row.id}`);
+      }
+      if (!constraints || typeof constraints !== 'object' || Array.isArray(constraints)) {
+        throw new Error(`canonical import approval constraints must be an object: ${row.id}`);
+      }
+      if (
+        !Number.isInteger(row.max_uses)
+        || row.max_uses < 1
+        || !Number.isInteger(row.uses)
+        || row.uses < 0
+        || row.uses > row.max_uses
+      ) {
+        throw new Error(`canonical import has invalid approval use counts: ${row.id}`);
+      }
+      const scanned = redactValue({
+        actor: row.actor,
+        action: row.action,
+        target: row.target,
+        environment: row.environment,
+        artifact: row.artifact,
+        constraints,
+      });
+      if (scanned.redacted) {
+        throw new Error(`canonical import contains secret material in approval ${row.id}`);
       }
     }
 
