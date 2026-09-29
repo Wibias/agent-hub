@@ -43,15 +43,15 @@ Canonical state:
 - `evidence`
 - `claims`
 - `lifecycle_events`
-- `repository_path_state`
 
 Derived state:
 
+- `repository_path_state`
 - `claim_fts`
 
-FTS data is never the source of truth. Claim lifecycle and provenance remain valid even if search indexes are rebuilt later.
+Derived state is never the source of truth. Claim lifecycle, observed repository blob identity, and provenance remain valid even if freshness snapshots or search indexes are rebuilt later.
 
-Repository path freshness is canonical context in `repository_path_state`. It stores the current commit and path object ID used to decide whether path-grounded evidence is still eligible for current recall.
+`repository_path_state` is a rebuildable snapshot of the repository revision being queried. It stores the current commit and path object ID used to decide whether path-grounded evidence is still eligible for current recall. Portable export must not treat this snapshot as durable memory truth.
 
 ## Git blob freshness
 
