@@ -96,7 +96,7 @@ test('approval scope is exact and expiration is fail-closed', async (t) => {
   t.after(() => engine.close());
 
   ingestEvidence(engine);
-  recordApproval(engine);
+  recordApproval(engine, { maxUses: 2 });
 
   const wrongEnvironment = engine.authorizeAction({
     projectId: 'project-a',
@@ -174,7 +174,6 @@ test('one-time approval is consumed atomically and cannot be reused', async (t) 
     action: 'deploy',
     target: 'build-42',
     environment: 'staging',
-    consume: true,
   });
   assert.equal(first.authorized, true);
   assert.equal(first.consumed, true);
@@ -185,7 +184,6 @@ test('one-time approval is consumed atomically and cannot be reused', async (t) 
     action: 'deploy',
     target: 'build-42',
     environment: 'staging',
-    consume: true,
   });
   assert.equal(second.authorized, false);
   assert.equal(second.reason, 'no_valid_approval');
