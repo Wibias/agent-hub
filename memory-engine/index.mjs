@@ -1,6 +1,10 @@
 import { DatabaseSync } from 'node:sqlite';
 
 import { assertAuthorityClass } from './authority.mjs';
+import {
+  decodeFloat32Vector,
+  encodeFloat32Vector,
+} from './semantic-vectors.mjs';
 
 export const REDACTED_SECRET = '[REDACTED_SECRET]';
 
@@ -124,6 +128,19 @@ function normalizeClaim(row) {
     valid_until: row.valid_until,
     superseded_by_claim_id: row.superseded_by_claim_id,
     rejected_by_evidence_id: row.rejected_by_evidence_id,
+  };
+}
+
+function normalizeClaimEmbedding(row) {
+  if (!row) return null;
+  return {
+    claim_id: row.claim_id,
+    model_id: row.model_id,
+    model_revision: row.model_revision,
+    text_hash: row.text_hash,
+    dimensions: row.dimensions,
+    vector: decodeFloat32Vector(row.vector_blob, row.dimensions),
+    indexed_at: row.indexed_at,
   };
 }
 
@@ -466,6 +483,17 @@ export class MemoryEngine {
         PRIMARY KEY (project_id, branch, path)
       ) STRICT;
 
+      CREATE TABLE IF NOT EXISTS claim_embeddings (
+        claim_id TEXT NOT NULL REFERENCES claims(id),
+        model_id TEXT NOT NULL,
+        model_revision TEXT NOT NULL,
+        text_hash TEXT NOT NULL,
+        dimensions INTEGER NOT NULL CHECK (dimensions > 0),
+        vector_blob BLOB NOT NULL,
+        indexed_at TEXT NOT NULL,
+        PRIMARY KEY (claim_id, model_id, model_revision)
+      ) STRICT;
+
       CREATE VIRTUAL TABLE IF NOT EXISTS claim_fts USING fts5(
         claim_id UNINDEXED,
         project_id UNINDEXED,
@@ -558,6 +586,98 @@ export class MemoryEngine {
     );
   }
 
+  putClaimEmbedding({
+    claimId,
+    modelId,
+    modelRevision,
+    textHash,
+    dimensions,
+    vector,
+    indexedAt = this.#clock(),
+  }) {
+    for (const [value, name] of [
+      [claimId, 'claimId'],
+      [modelId, 'modelId'],
+      [modelRevision, 'modelRevision'],
+      [indexedAt, 'indexedAt'],
+    ]) {
+      assertNonEmptyString(value, name);
+    }
+    if (!/^[0-9a-f]{64}$/.test(textHash)) {
+      throw new TypeError('text hash must be lowercase SHA-256 hex');
+    }
+    if (!Number.isInteger(dimensions) || dimensions < 1) {
+      throw new RangeError('dimensions must be a positive integer');
+    }
+    if (!(vector instanceof Float32Array) || vector.length !== dimensions) {
+      throw new RangeError('vector dimensions must match dimensions');
+    }
+    if (!this.getClaim(claimId)) throw new Error(`unknown claim: ${claimId}`);
+
+    const vectorBlob = encodeFloat32Vector(vector);
+    this.#db.prepare(`
+      INSERT INTO claim_embeddings (
+        claim_id, model_id, model_revision, text_hash,
+        dimensions, vector_blob, indexed_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(claim_id, model_id, model_revision) DO UPDATE SET
+        text_hash = excluded.text_hash,
+        dimensions = excluded.dimensions,
+        vector_blob = excluded.vector_blob,
+        indexed_at = excluded.indexed_at
+    `).run(
+      claimId,
+      modelId,
+      modelRevision,
+      textHash,
+      dimensions,
+      vectorBlob,
+      indexedAt,
+    );
+
+    return this.getClaimEmbedding({ claimId, modelId, modelRevision });
+  }
+
+  getClaimEmbedding({ claimId, modelId, modelRevision }) {
+    for (const [value, name] of [
+      [claimId, 'claimId'],
+      [modelId, 'modelId'],
+      [modelRevision, 'modelRevision'],
+    ]) {
+      assertNonEmptyString(value, name);
+    }
+    return normalizeClaimEmbedding(this.#db.prepare(`
+      SELECT
+        claim_id, model_id, model_revision, text_hash,
+        dimensions, vector_blob, indexed_at
+      FROM claim_embeddings
+      WHERE claim_id = ? AND model_id = ? AND model_revision = ?
+    `).get(claimId, modelId, modelRevision));
+  }
+
+  deleteClaimEmbeddings({ modelId = null, modelRevision = null } = {}) {
+    if (modelId !== null) assertNonEmptyString(modelId, 'modelId');
+    if (modelRevision !== null) assertNonEmptyString(modelRevision, 'modelRevision');
+
+    if (modelId !== null && modelRevision !== null) {
+      return Number(this.#db.prepare(`
+        DELETE FROM claim_embeddings
+        WHERE model_id = ? AND model_revision = ?
+      `).run(modelId, modelRevision).changes);
+    }
+    if (modelId !== null) {
+      return Number(this.#db.prepare(
+        'DELETE FROM claim_embeddings WHERE model_id = ?',
+      ).run(modelId).changes);
+    }
+    if (modelRevision !== null) {
+      return Number(this.#db.prepare(
+        'DELETE FROM claim_embeddings WHERE model_revision = ?',
+      ).run(modelRevision).changes);
+    }
+    return Number(this.#db.prepare('DELETE FROM claim_embeddings').run().changes);
+  }
+
   getApproval(id) {
     return normalizeApproval(
       this.#db.prepare('SELECT * FROM approvals WHERE id = ?').get(id),
@@ -638,6 +758,7 @@ export class MemoryEngine {
     this.#db.exec('BEGIN IMMEDIATE');
     try {
       this.#db.prepare('DELETE FROM claim_fts').run();
+      this.#db.prepare('DELETE FROM claim_embeddings').run();
       this.#db.prepare('DELETE FROM repository_path_state').run();
       this.#db.exec('COMMIT');
     } catch (error) {
@@ -650,6 +771,7 @@ export class MemoryEngine {
     this.#db.exec('BEGIN IMMEDIATE');
     try {
       this.#db.prepare('DELETE FROM claim_fts').run();
+      this.#db.prepare('DELETE FROM claim_embeddings').run();
       const rows = this.#db.prepare(`
         SELECT
           c.id,
@@ -1077,6 +1199,7 @@ export class MemoryEngine {
           }, row.content_redacted),
         );
       }
+      this.#db.prepare('DELETE FROM claim_embeddings').run();
       this.#db.prepare('DELETE FROM repository_path_state').run();
 
       this.#db.exec('COMMIT');
