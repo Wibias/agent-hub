@@ -157,5 +157,5 @@ jobs:
           node-version: 24
 
       - name: Test memory engine foundation
-        run: node --test tests/memory-engine/foundation.test.mjs
+        run: node --test tests/memory-engine/*.test.mjs
 
