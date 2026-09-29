@@ -137,6 +137,86 @@ test('explicit conflict remains visible while answer reliance resolves by author
   assert.equal(reliance.conflict_resolutions[0].winner_claim_id, 'c-policy');
 });
 
+test('superseding a conflicting claim resolves the conflict with lifecycle provenance', async (t) => {
+  const engine = await createEngine();
+  t.after(() => engine.close());
+
+  engine.ingest({
+    evidence: evidence({
+      id: 'e-policy',
+      blobOid: 'c'.repeat(40),
+    }),
+    claim: claim({
+      id: 'c-policy',
+    }),
+  });
+  engine.ingest({
+    evidence: evidence({
+      id: 'e-inference',
+      sourceKind: 'agent',
+      sourceRef: 'agent:S2',
+      path: null,
+      blobOid: null,
+      content: 'I infer failed jobs should be retried 5 times.',
+      authorityClass: 'agent_inference',
+    }),
+    claim: claim({
+      id: 'c-inference',
+      value: '5',
+      createdAt: '2026-01-02T00:00:00Z',
+    }),
+    lifecycle: { conflictsWith: ['c-policy'] },
+  });
+
+  engine.ingest({
+    evidence: evidence({
+      id: 'e-resolution',
+      sourceKind: 'session',
+      sourceRef: 'session:S3',
+      path: null,
+      blobOid: null,
+      content: 'Reject the 5-retry inference; use the repository policy.',
+      authorityClass: 'user_direct',
+    }),
+    claim: claim({
+      id: 'c-resolution',
+      kind: 'decision',
+      value: 'use repository retry policy',
+      createdAt: '2026-01-03T00:00:00Z',
+    }),
+    lifecycle: { supersedes: ['c-inference'] },
+  });
+
+  engine.recordRepositoryPathState({
+    projectId: 'project-a',
+    branch: 'main',
+    path: 'docs/runtime.md',
+    commitSha: '2'.repeat(40),
+    blobOid: 'c'.repeat(40),
+  });
+
+  const current = engine.recall({
+    projectId: 'project-a',
+    branch: 'main',
+    query: 'failed jobs retry repository policy',
+    revisionSha: '2'.repeat(40),
+    mode: 'current',
+  });
+  assert.deepEqual(current.conflicts, []);
+
+  const historical = engine.recall({
+    projectId: 'project-a',
+    branch: 'main',
+    query: 'failed jobs retry repository policy',
+    revisionSha: '2'.repeat(40),
+    mode: 'historical',
+  });
+  assert.equal(historical.conflicts.length, 1);
+  assert.equal(historical.conflicts[0].state, 'resolved');
+  assert.equal(historical.conflicts[0].resolved_by_evidence_id, 'e-resolution');
+  assert.equal(historical.conflicts[0].resolved_at, '2026-01-03T00:00:00Z');
+});
+
 test('limited recall keeps a known conflict visible and blocks reliance when the counterpart is omitted', async (t) => {
   const engine = await createEngine();
   t.after(() => engine.close());
