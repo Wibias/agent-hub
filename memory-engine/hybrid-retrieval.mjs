@@ -117,3 +117,84 @@ export function enforceRecallBudget(result, {
 
   return bounded;
 }
+
+
+export class HybridMemoryRetriever {
+  #memory;
+  #embedder;
+  #lexicalCandidateLimit;
+  #semanticCandidateLimit;
+
+  constructor({
+    memory,
+    embedder = null,
+    lexicalCandidateLimit = 32,
+    semanticCandidateLimit = 32,
+  }) {
+    if (!memory || typeof memory !== 'object') {
+      throw new TypeError('memory must be a MemoryEngine-like object');
+    }
+    for (const [value, name] of [
+      [lexicalCandidateLimit, 'lexicalCandidateLimit'],
+      [semanticCandidateLimit, 'semanticCandidateLimit'],
+    ]) {
+      if (!Number.isInteger(value) || value < 1) {
+        throw new RangeError(`${name} must be a positive integer`);
+      }
+    }
+
+    this.#memory = memory;
+    this.#embedder = embedder;
+    this.#lexicalCandidateLimit = lexicalCandidateLimit;
+    this.#semanticCandidateLimit = semanticCandidateLimit;
+  }
+
+  async indexClaim(claimId) {
+    if (this.#embedder === null) {
+      return { indexed: false, reason: 'no_embedder' };
+    }
+
+    const document = this.#memory.embeddingDocument({ claimId });
+    if (!document) {
+      return { indexed: false, reason: 'missing_claim' };
+    }
+
+    const vectors = await this.#embedder.embedPassages([document.text]);
+    if (!Array.isArray(vectors) || vectors.length !== 1) {
+      throw new Error('embedPassages must return one vector per passage');
+    }
+
+    this.#memory.putClaimEmbedding({
+      claimId,
+      modelId: this.#embedder.modelId,
+      modelRevision: this.#embedder.modelRevision,
+      textHash: document.text_hash,
+      dimensions: this.#embedder.dimensions,
+      vector: vectors[0],
+    });
+
+    return { indexed: true };
+  }
+
+  async rebuildSemanticIndex({ projectId, branch }) {
+    if (this.#embedder === null) {
+      return { indexed: 0, failed: 0 };
+    }
+
+    const documents = this.#memory.listEmbeddingDocuments({ projectId, branch });
+    let indexed = 0;
+    let failed = 0;
+
+    for (const document of documents) {
+      try {
+        const result = await this.indexClaim(document.claim_id);
+        if (result.indexed) indexed += 1;
+        else failed += 1;
+      } catch {
+        failed += 1;
+      }
+    }
+
+    return { indexed, failed };
+  }
+}
