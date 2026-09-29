@@ -750,6 +750,11 @@ export class MemoryEngine {
           ) {
             throw new Error(`project ${row.project_id} conflicts with canonical import`);
           }
+          this.#db.prepare(`
+            UPDATE project_registry
+            SET created_at = ?
+            WHERE project_id = ?
+          `).run(row.created_at, row.project_id);
           continue;
         }
 
