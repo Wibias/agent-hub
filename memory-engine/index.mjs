@@ -479,13 +479,14 @@ export class MemoryEngine {
   }
 
   exportMemory({ projectId = null } = {}) {
-    if (projectId !== null) {
-      assertNonEmptyString(projectId, 'projectId');
-      if (!this.getProject(projectId)) throw new Error(`unknown project: ${projectId}`);
-    }
+    if (projectId !== null) assertNonEmptyString(projectId, 'projectId');
 
     this.#db.exec('BEGIN');
     try {
+      if (projectId !== null && !this.getProject(projectId)) {
+        throw new Error(`unknown project: ${projectId}`);
+      }
+
       const params = projectId === null ? [] : [projectId];
     const where = projectId === null ? '' : ' WHERE project_id = ?';
 
