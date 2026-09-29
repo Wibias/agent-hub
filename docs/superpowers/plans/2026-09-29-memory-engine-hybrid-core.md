@@ -398,6 +398,7 @@ git commit -m "feat: add deterministic hybrid fusion budgets"
 The fake must:
 
 - expose fixed `modelId`, `modelRevision`, `dimensions`;
+- accept the raw query in `embedQuery(text)` and already-deterministic passage text in `embedPassages(texts)`;
 - return normalized `Float32Array` values;
 - map one lexical-light paraphrase to the same vector as the Postgres passage;
 - allow forced query and passage failures.
@@ -441,7 +442,7 @@ Flow:
 
 1. call `memory.recall(... limit: 32)`;
 2. if no embedder, bound and return lexical result;
-3. embed `query: <query>`;
+3. call `embedder.embedQuery(query)` with the raw query; the embedder owns the exact `query: ` prefix;
 4. load correctness-filtered semantic candidates for exact model/revision;
 5. dot-product normalized query vector against normalized stored vectors;
 6. sort semantic candidates by similarity descending, then creation time descending, then claim ID ascending;
