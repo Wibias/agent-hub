@@ -64,7 +64,7 @@ function gitBlobOid(repoPath, revisionSha, path) {
   return oid;
 }
 
-export function createReferenceMemoryAdapter() {
+export function createReferenceMemoryAdapter({ clock } = {}) {
   let engine = null;
   let projectRepos = new Map();
 
@@ -72,10 +72,10 @@ export function createReferenceMemoryAdapter() {
     metadata: {
       candidate: {
         name: 'memory-engine-reference',
-        version: '0.3.0-authority-reliance',
+        version: '0.4.0-action-approvals',
         source_revision: 'workspace',
       },
-      adapter_revision: 'reference-authority-reliance-v1',
+      adapter_revision: 'reference-action-approvals-v1',
       network_required: false,
     },
 
@@ -87,7 +87,7 @@ export function createReferenceMemoryAdapter() {
 
     async setup(prepared) {
       const dbPath = join(dirname(prepared.current.repo_path), '.memory-engine-reference.sqlite3');
-      engine = new MemoryEngine({ dbPath });
+      engine = new MemoryEngine({ dbPath, clock });
 
       const projects = new Map();
       projects.set(prepared.current.project_id, prepared.current.repo_path);
@@ -125,7 +125,7 @@ export function createReferenceMemoryAdapter() {
         sourceRef: event.source,
       });
 
-      return engine.ingest({
+      const ingested = engine.ingest({
         evidence: {
           id: `evidence:${event.id}`,
           projectId: event.project_id,
@@ -152,8 +152,11 @@ export function createReferenceMemoryAdapter() {
           subject: event.type,
           predicate: 'states',
           value: event.content,
+          state: event.type === 'approval' ? 'candidate' : undefined,
           branchScope: event.branch,
           createdAt: event.at,
+          validFrom: event.type === 'approval' ? event.at : null,
+          validUntil: event.authority?.valid_until ?? null,
         },
         lifecycle: {
           supersedes: (event.relations?.supersedes ?? []).map(claimId),
@@ -161,6 +164,50 @@ export function createReferenceMemoryAdapter() {
           conflictsWith: (event.relations?.conflicts_with ?? []).map(claimId),
         },
       });
+
+      let approval = null;
+      if (event.authority) {
+        if (event.type !== 'approval') {
+          throw new Error('structured action authority requires an approval event');
+        }
+        if (event.authority.one_time !== true) {
+          throw new Error('reference adapter only accepts bounded one-time fixture approvals');
+        }
+
+        approval = engine.recordApproval({
+          id: `approval:${event.id}`,
+          projectId: event.project_id,
+          action: event.authority.action,
+          target: event.authority.target,
+          environment: event.authority.environment,
+          issuedAt: event.at,
+          expiresAt: event.authority.valid_until,
+          maxUses: 1,
+          sourceEvidenceId: `evidence:${event.id}`,
+        });
+      }
+
+      return {
+        ...ingested,
+        approval,
+      };
+    },
+
+    async authorizeAction(request) {
+      if (!engine) throw new Error('reference memory adapter is not set up');
+      return engine.authorizeAction({
+        projectId: request.project_id,
+        action: request.action,
+        target: request.target,
+        environment: request.environment,
+        artifact: request.artifact ?? null,
+        constraints: request.constraints ?? {},
+      });
+    },
+
+    async listApprovals({ project_id: projectId }) {
+      if (!engine) throw new Error('reference memory adapter is not set up');
+      return engine.listApprovals({ projectId });
     },
 
     async recall(request) {

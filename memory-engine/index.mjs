@@ -117,6 +117,58 @@ function normalizeClaim(row) {
   };
 }
 
+function normalizeApproval(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    project_id: row.project_id,
+    actor: row.actor,
+    action: row.action,
+    target: row.target,
+    environment: row.environment,
+    artifact: row.artifact,
+    constraints: parseMetadata(row.constraints_json),
+    issued_at: row.issued_at,
+    expires_at: row.expires_at,
+    max_uses: row.max_uses,
+    uses: row.uses,
+    revoked_at: row.revoked_at,
+    source_evidence_id: row.source_evidence_id,
+  };
+}
+
+function normalizeTimestamp(value, name) {
+  assertNonEmptyString(value, name);
+  const milliseconds = Date.parse(value);
+  if (!Number.isFinite(milliseconds)) {
+    throw new TypeError(`${name} must be a valid timestamp`);
+  }
+  return new Date(milliseconds).toISOString();
+}
+
+function canonicalJson(value) {
+  if (Array.isArray(value)) return value.map(canonicalJson);
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.keys(value).sort().map((key) => [key, canonicalJson(value[key])]),
+    );
+  }
+  return value;
+}
+
+function jsonEquivalent(left, right) {
+  return JSON.stringify(canonicalJson(left)) === JSON.stringify(canonicalJson(right));
+}
+
+function constraintsMatch(required, actual) {
+  return Object.entries(required).every(
+    ([key, value]) => (
+      Object.hasOwn(actual, key)
+      && jsonEquivalent(value, actual[key])
+    ),
+  );
+}
+
 function normalizeLexicalToken(token) {
   let normalized = token.toLowerCase();
   if (normalized.length > 4 && normalized.endsWith('ies')) {
@@ -283,10 +335,16 @@ export function evaluateReliance({
 
 export class MemoryEngine {
   #db;
+  #clock;
 
-  constructor({ dbPath }) {
+  constructor({
+    dbPath,
+    clock = () => new Date().toISOString(),
+  }) {
     assertNonEmptyString(dbPath, 'dbPath');
+    if (typeof clock !== 'function') throw new TypeError('clock must be a function');
 
+    this.#clock = clock;
     this.#db = new DatabaseSync(dbPath, {
       timeout: 5_000,
       enableForeignKeyConstraints: true,
@@ -368,6 +426,24 @@ export class MemoryEngine {
           OR
           (state = 'resolved' AND resolved_by_evidence_id IS NOT NULL AND resolved_at IS NOT NULL)
         )
+      ) STRICT;
+
+      CREATE TABLE IF NOT EXISTS approvals (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL REFERENCES project_registry(project_id),
+        actor TEXT NOT NULL,
+        action TEXT NOT NULL,
+        target TEXT NOT NULL,
+        environment TEXT NOT NULL,
+        artifact TEXT,
+        constraints_json TEXT NOT NULL,
+        issued_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL,
+        max_uses INTEGER NOT NULL CHECK (max_uses >= 1),
+        uses INTEGER NOT NULL DEFAULT 0 CHECK (uses >= 0 AND uses <= max_uses),
+        revoked_at TEXT,
+        source_evidence_id TEXT NOT NULL REFERENCES evidence(id),
+        CHECK (expires_at >= issued_at)
       ) STRICT;
 
       CREATE TABLE IF NOT EXISTS repository_path_state (
@@ -470,6 +546,261 @@ export class MemoryEngine {
     return normalizeClaim(
       this.#db.prepare('SELECT * FROM claims WHERE id = ?').get(id),
     );
+  }
+
+  getApproval(id) {
+    return normalizeApproval(
+      this.#db.prepare('SELECT * FROM approvals WHERE id = ?').get(id),
+    );
+  }
+
+  listApprovals({ projectId }) {
+    assertNonEmptyString(projectId, 'projectId');
+    if (!this.getProject(projectId)) throw new Error(`unknown project: ${projectId}`);
+
+    return this.#db.prepare(`
+      SELECT *
+      FROM approvals
+      WHERE project_id = ?
+      ORDER BY issued_at DESC, id ASC
+    `).all(projectId).map(normalizeApproval);
+  }
+
+  recordApproval({
+    id,
+    projectId,
+    action,
+    target,
+    environment,
+    artifact = null,
+    constraints = {},
+    issuedAt,
+    expiresAt,
+    maxUses = 1,
+    sourceEvidenceId,
+  }) {
+    for (const [value, name] of [
+      [id, 'id'],
+      [projectId, 'projectId'],
+      [action, 'action'],
+      [target, 'target'],
+      [environment, 'environment'],
+      [sourceEvidenceId, 'sourceEvidenceId'],
+    ]) {
+      assertNonEmptyString(value, name);
+    }
+    if (artifact !== null) assertNonEmptyString(artifact, 'artifact');
+    if (!constraints || typeof constraints !== 'object' || Array.isArray(constraints)) {
+      throw new TypeError('constraints must be an object');
+    }
+    if (!Number.isInteger(maxUses) || maxUses < 1) {
+      throw new RangeError('maxUses must be a positive integer');
+    }
+    if (!this.getProject(projectId)) throw new Error(`unknown project: ${projectId}`);
+
+    const sourceEvidence = this.getEvidence(sourceEvidenceId);
+    if (!sourceEvidence) throw new Error(`unknown source evidence: ${sourceEvidenceId}`);
+    if (sourceEvidence.project_id !== projectId) {
+      throw new Error('approval source evidence cannot cross project boundaries');
+    }
+    if (sourceEvidence.authority_class !== 'user_direct') {
+      throw new Error('approval source evidence must be user_direct');
+    }
+    assertNonEmptyString(sourceEvidence.source_ref, 'approval source evidence source_ref');
+
+    const normalizedIssuedAt = normalizeTimestamp(issuedAt, 'issuedAt');
+    const normalizedExpiresAt = normalizeTimestamp(expiresAt, 'expiresAt');
+    if (normalizedExpiresAt < normalizedIssuedAt) {
+      throw new Error('approval expiresAt cannot be before issuedAt');
+    }
+
+    const redactedActor = redactString(sourceEvidence.source_ref);
+    const redactedAction = redactString(action);
+    const redactedTarget = redactString(target);
+    const redactedEnvironment = redactString(environment);
+    const redactedArtifact = redactString(artifact);
+    const redactedConstraints = redactValue(constraints);
+    if (
+      redactedActor.redacted
+      || redactedAction.redacted
+      || redactedTarget.redacted
+      || redactedEnvironment.redacted
+      || redactedArtifact.redacted
+      || redactedConstraints.redacted
+    ) {
+      throw new Error('approval scope cannot contain secrets');
+    }
+
+    this.#db.prepare(`
+      INSERT INTO approvals (
+        id, project_id, actor, action, target, environment, artifact,
+        constraints_json, issued_at, expires_at, max_uses, uses,
+        revoked_at, source_evidence_id
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL, ?)
+    `).run(
+      id,
+      projectId,
+      redactedActor.value,
+      redactedAction.value,
+      redactedTarget.value,
+      redactedEnvironment.value,
+      redactedArtifact.value,
+      JSON.stringify(redactedConstraints.value),
+      normalizedIssuedAt,
+      normalizedExpiresAt,
+      maxUses,
+      sourceEvidenceId,
+    );
+
+    return this.getApproval(id);
+  }
+
+  revokeApproval({
+    approvalId,
+    projectId,
+  }) {
+    assertNonEmptyString(approvalId, 'approvalId');
+    assertNonEmptyString(projectId, 'projectId');
+    if (!this.getProject(projectId)) throw new Error(`unknown project: ${projectId}`);
+
+    const approval = this.getApproval(approvalId);
+    if (!approval) throw new Error(`unknown approval: ${approvalId}`);
+    if (approval.project_id !== projectId) {
+      throw new Error('approval cannot be revoked across project boundaries');
+    }
+    if (approval.revoked_at !== null) return approval;
+
+    const normalizedRevokedAt = normalizeTimestamp(this.#clock(), 'clock()');
+    if (normalizedRevokedAt < approval.issued_at) {
+      throw new Error('approval cannot be revoked before it was issued');
+    }
+
+    this.#db.prepare(`
+      UPDATE approvals
+      SET revoked_at = ?
+      WHERE id = ? AND project_id = ? AND revoked_at IS NULL
+    `).run(normalizedRevokedAt, approvalId, projectId);
+
+    return this.getApproval(approvalId);
+  }
+
+  authorizeAction({
+    projectId,
+    action,
+    target,
+    environment,
+    artifact = null,
+    constraints = {},
+  }) {
+    for (const [value, name] of [
+      [projectId, 'projectId'],
+      [action, 'action'],
+      [target, 'target'],
+      [environment, 'environment'],
+    ]) {
+      assertNonEmptyString(value, name);
+    }
+    if (artifact !== null) assertNonEmptyString(artifact, 'artifact');
+    if (!constraints || typeof constraints !== 'object' || Array.isArray(constraints)) {
+      throw new TypeError('constraints must be an object');
+    }
+    if (!this.getProject(projectId)) throw new Error(`unknown project: ${projectId}`);
+
+    const normalizedAt = normalizeTimestamp(this.#clock(), 'clock()');
+    const request = {
+      project_id: projectId,
+      action,
+      target,
+      environment,
+      artifact,
+      constraints,
+      evaluated_at: normalizedAt,
+    };
+
+    const decide = () => {
+      const candidates = this.#db.prepare(`
+        SELECT *
+        FROM approvals
+        WHERE project_id = ?
+          AND action = ?
+          AND target = ?
+          AND environment = ?
+          AND artifact IS ?
+        ORDER BY expires_at ASC, issued_at DESC, id ASC
+      `).all(projectId, action, target, environment, artifact)
+        .map(normalizeApproval)
+        .filter((approval) => (
+          approval.issued_at <= normalizedAt
+          && approval.expires_at >= normalizedAt
+          && (approval.revoked_at === null || approval.revoked_at > normalizedAt)
+          && approval.uses < approval.max_uses
+          && constraintsMatch(approval.constraints, constraints)
+        ));
+
+      if (candidates.length === 0) {
+        return {
+          authorized: false,
+          reason: 'no_valid_approval',
+          request,
+          approval: null,
+        };
+      }
+
+      return {
+        authorized: true,
+        reason: 'valid_approval',
+        request,
+        approval: candidates[0],
+      };
+    };
+
+    this.#db.exec('BEGIN IMMEDIATE');
+    try {
+      const decision = decide();
+      if (!decision.authorized) {
+        this.#db.exec('COMMIT');
+        return decision;
+      }
+
+      const result = this.#db.prepare(`
+        UPDATE approvals
+        SET uses = uses + 1
+        WHERE id = ?
+          AND project_id = ?
+          AND uses < max_uses
+          AND issued_at <= ?
+          AND expires_at >= ?
+          AND (revoked_at IS NULL OR revoked_at > ?)
+      `).run(
+        decision.approval.id,
+        projectId,
+        normalizedAt,
+        normalizedAt,
+        normalizedAt,
+      );
+      if (result.changes !== 1) {
+        this.#db.exec('ROLLBACK');
+        return {
+          authorized: false,
+          reason: 'approval_no_longer_valid',
+          request,
+          approval: null,
+        };
+      }
+
+      const consumedApproval = this.getApproval(decision.approval.id);
+      this.#db.exec('COMMIT');
+      return {
+        authorized: true,
+        reason: 'valid_approval',
+        request,
+        approval: consumedApproval,
+        consumed: true,
+      };
+    } catch (error) {
+      this.#db.exec('ROLLBACK');
+      throw error;
+    }
   }
 
   repositoryPaths({ projectId, branch }) {
