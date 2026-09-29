@@ -137,6 +137,75 @@ test('explicit conflict remains visible while answer reliance resolves by author
   assert.equal(reliance.conflict_resolutions[0].winner_claim_id, 'c-policy');
 });
 
+test('stale repository evidence does not keep a fresh conflicting claim blocked', async (t) => {
+  const engine = await createEngine();
+  t.after(() => engine.close());
+
+  engine.ingest({
+    evidence: evidence({
+      id: 'e-policy',
+      blobOid: 'c'.repeat(40),
+      content: 'Repository policy marker: failed jobs are retried 3 times.',
+    }),
+    claim: claim({
+      id: 'c-policy',
+    }),
+  });
+  engine.ingest({
+    evidence: evidence({
+      id: 'e-user',
+      sourceKind: 'session',
+      sourceRef: 'session:S2',
+      path: null,
+      blobOid: null,
+      content: 'User marker: use 5 retries for the current work.',
+      authorityClass: 'user_direct',
+    }),
+    claim: claim({
+      id: 'c-user',
+      value: '5',
+      createdAt: '2026-01-02T00:00:00Z',
+    }),
+    lifecycle: { conflictsWith: ['c-policy'] },
+  });
+
+  engine.recordRepositoryPathState({
+    projectId: 'project-a',
+    branch: 'main',
+    path: 'docs/runtime.md',
+    commitSha: '2'.repeat(40),
+    blobOid: 'd'.repeat(40),
+  });
+
+  const current = engine.recall({
+    projectId: 'project-a',
+    branch: 'main',
+    query: 'user marker',
+    revisionSha: '2'.repeat(40),
+    mode: 'current',
+  });
+
+  assert.deepEqual(current.items.map((item) => item.claim.id), ['c-user']);
+  assert.deepEqual(current.conflicts, []);
+
+  const reliance = evaluateReliance({
+    items: current.items,
+    conflicts: current.conflicts,
+    use: 'answer',
+  });
+  assert.deepEqual(reliance.selected.map((item) => item.claim.id), ['c-user']);
+
+  const historical = engine.recall({
+    projectId: 'project-a',
+    branch: 'main',
+    query: 'repository policy user marker',
+    revisionSha: '2'.repeat(40),
+    mode: 'historical',
+  });
+  assert.equal(historical.conflicts.length, 1);
+  assert.equal(historical.conflicts[0].state, 'open');
+});
+
 test('superseding a conflicting claim resolves the conflict with lifecycle provenance', async (t) => {
   const engine = await createEngine();
   t.after(() => engine.close());
