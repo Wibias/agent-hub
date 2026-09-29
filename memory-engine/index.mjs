@@ -691,7 +691,6 @@ export class MemoryEngine {
     environment,
     artifact = null,
     constraints = {},
-    consume = false,
   }) {
     for (const [value, name] of [
       [projectId, 'projectId'],
@@ -705,7 +704,6 @@ export class MemoryEngine {
     if (!constraints || typeof constraints !== 'object' || Array.isArray(constraints)) {
       throw new TypeError('constraints must be an object');
     }
-    if (typeof consume !== 'boolean') throw new TypeError('consume must be boolean');
     if (!this.getProject(projectId)) throw new Error(`unknown project: ${projectId}`);
 
     const normalizedAt = normalizeTimestamp(this.#clock(), 'clock()');
@@ -755,8 +753,6 @@ export class MemoryEngine {
         approval: candidates[0],
       };
     };
-
-    if (!consume) return decide();
 
     this.#db.exec('BEGIN IMMEDIATE');
     try {
