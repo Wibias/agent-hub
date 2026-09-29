@@ -42,10 +42,11 @@ function createPipelineHarness({
   return { calls, pipelineFactory };
 }
 
-test('e5 provider pins exact researched model identity and offline CPU fp32 options', async () => {
+test('e5 provider pins the measured qint8 model file with fp32 tensor I/O', async () => {
   const {
     E5_MODEL_ID,
     E5_MODEL_REVISION,
+    E5_MODEL_FILE,
     E5_DIMENSIONS,
     createE5Embedder,
   } = await import('../../memory-engine/e5-embedder.mjs');
@@ -53,8 +54,9 @@ test('e5 provider pins exact researched model identity and offline CPU fp32 opti
   assert.equal(E5_MODEL_ID, 'intfloat/multilingual-e5-small');
   assert.equal(
     E5_MODEL_REVISION,
-    'fd1525a9fd15316a2d503bf26ab031a61d056e98',
+    '6a0d452a575215f80b8f66276dd4ee5d504942c6',
   );
+  assert.equal(E5_MODEL_FILE, 'model_qint8_avx512_vnni');
   assert.equal(E5_DIMENSIONS, 384);
 
   const { calls, pipelineFactory } = createPipelineHarness();
@@ -70,6 +72,7 @@ test('e5 provider pins exact researched model identity and offline CPU fp32 opti
       revision: E5_MODEL_REVISION,
       cache_dir: '/tmp/agent-hub-e5',
       local_files_only: true,
+      model_file_name: 'model_qint8_avx512_vnni',
       dtype: 'fp32',
       device: 'cpu',
     },
@@ -93,9 +96,10 @@ test('explicit preparation mode changes only local_files_only', async () => {
   assert.deepEqual(
     { ...calls.factory[0].options, local_files_only: true },
     {
-      revision: 'fd1525a9fd15316a2d503bf26ab031a61d056e98',
+      revision: '6a0d452a575215f80b8f66276dd4ee5d504942c6',
       cache_dir: '/tmp/agent-hub-e5',
       local_files_only: true,
+      model_file_name: 'model_qint8_avx512_vnni',
       dtype: 'fp32',
       device: 'cpu',
     },
@@ -265,21 +269,24 @@ test('prepared cache can be reopened by the normal offline provider path', async
       model: call.model,
       revision: call.options.revision,
       cache_dir: call.options.cache_dir,
+      model_file_name: call.options.model_file_name,
       dtype: call.options.dtype,
       device: call.options.device,
     })),
     [
       {
         model: 'intfloat/multilingual-e5-small',
-        revision: 'fd1525a9fd15316a2d503bf26ab031a61d056e98',
+        revision: '6a0d452a575215f80b8f66276dd4ee5d504942c6',
         cache_dir: '/tmp/agent-hub-e5',
+        model_file_name: 'model_qint8_avx512_vnni',
         dtype: 'fp32',
         device: 'cpu',
       },
       {
         model: 'intfloat/multilingual-e5-small',
-        revision: 'fd1525a9fd15316a2d503bf26ab031a61d056e98',
+        revision: '6a0d452a575215f80b8f66276dd4ee5d504942c6',
         cache_dir: '/tmp/agent-hub-e5',
+        model_file_name: 'model_qint8_avx512_vnni',
         dtype: 'fp32',
         device: 'cpu',
       },
@@ -300,7 +307,7 @@ test('model cache preparation enables remote loading only for a 384d readiness p
     calls.push({ stage: 'create', options: { ...options } });
     return {
       modelId: 'intfloat/multilingual-e5-small',
-      modelRevision: 'fd1525a9fd15316a2d503bf26ab031a61d056e98',
+      modelRevision: '6a0d452a575215f80b8f66276dd4ee5d504942c6',
       dimensions: 384,
       async embedQuery(text) {
         calls.push({ stage: 'query', text });
@@ -331,13 +338,13 @@ test('model cache preparation enables remote loading only for a 384d readiness p
   ]);
   assert.deepEqual(result, {
     modelId: 'intfloat/multilingual-e5-small',
-    modelRevision: 'fd1525a9fd15316a2d503bf26ab031a61d056e98',
+    modelRevision: '6a0d452a575215f80b8f66276dd4ee5d504942c6',
     dimensions: 384,
     cacheDir: expectedCache,
   });
   assert.equal(logs.length, 1);
   assert.match(logs[0], /intfloat\/multilingual-e5-small/);
-  assert.match(logs[0], /fd1525a9fd15316a2d503bf26ab031a61d056e98/);
+  assert.match(logs[0], /6a0d452a575215f80b8f66276dd4ee5d504942c6/);
   assert.match(logs[0], /384/);
   assert.match(logs[0], /\.cache/);
 });
@@ -352,7 +359,7 @@ test('model cache preparation rejects an invalid readiness vector', async () => 
       cacheDir: '.cache/memory-engine/e5',
       createEmbedder: async () => ({
         modelId: 'intfloat/multilingual-e5-small',
-        modelRevision: 'fd1525a9fd15316a2d503bf26ab031a61d056e98',
+        modelRevision: '6a0d452a575215f80b8f66276dd4ee5d504942c6',
         dimensions: 384,
         async embedQuery() {
           return new Float32Array(383);

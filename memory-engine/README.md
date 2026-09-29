@@ -43,8 +43,9 @@ The concrete local E5 provider is now isolated behind the hybrid embedder contra
 
 - `@huggingface/transformers@4.3.0`;
 - model `intfloat/multilingual-e5-small`;
-- revision `fd1525a9fd15316a2d503bf26ab031a61d056e98`;
-- 384-dimensional fp32 embeddings;
+- revision `6a0d452a575215f80b8f66276dd4ee5d504942c6`;
+- ONNX graph `model_qint8_avx512_vnni.onnx`;
+- qint8 model weights with 384-dimensional Float32 normalized embedding output;
 - CPU execution;
 - mean pooling with normalized output;
 - local-files-only normal runtime.
@@ -289,7 +290,7 @@ Model files live below the repository's ignored `.cache/` tree and are not commi
 
 The manual `Memory semantic eval` workflow installs the scoped provider dependency, restores or prepares the exact pinned model cache, then runs `tests/memory-engine/e5-semantic-eval.test.mjs` with normal provider creation (`local_files_only: true`).
 
-Measured against the pinned `intfloat/multilingual-e5-small` revision `fd1525a9fd15316a2d503bf26ab031a61d056e98`:
+Measured against the pinned `intfloat/multilingual-e5-small` revision `6a0d452a575215f80b8f66276dd4ee5d504942c6`:
 
 | Query | Target | Lexical rank | Semantic rank | Fused rank |
 | --- | --- | ---: | ---: | ---: |
@@ -300,7 +301,7 @@ Measured against the pinned `intfloat/multilingual-e5-small` revision `fd1525a9f
 
 Every evaluated hybrid result remains within the core limits of at most 10 items and 16 KiB serialized output.
 
-The first provider deliberately remains full-precision fp32 on CPU. No quantized conversion, ANN/vector database, GPU requirement, or learned reranker is part of this delivery.
+The provider uses the measured qint8 ONNX graph on CPU while preserving 384-dimensional Float32 normalized embedding output. ANN/vector database, GPU requirements, and learned reranking remain outside this delivery.
 
 ## Hybrid retrieval core
 
