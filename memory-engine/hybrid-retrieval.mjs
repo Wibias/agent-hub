@@ -197,4 +197,79 @@ export class HybridMemoryRetriever {
 
     return { indexed, failed };
   }
+
+  async recall({
+    projectId,
+    branch,
+    revisionSha = null,
+    query,
+    mode = 'current',
+    maxItems = 10,
+    maxSerializedBytes = 16_384,
+  }) {
+    if (this.#embedder === null) {
+      throw new Error('no semantic embedder configured');
+    }
+
+    const lexical = this.#memory.recall({
+      projectId,
+      branch,
+      revisionSha,
+      query,
+      mode,
+      limit: this.#lexicalCandidateLimit,
+    });
+
+    const queryVector = await this.#embedder.embedQuery(query);
+    const semantic = this.#memory.semanticCandidates({
+      projectId,
+      branch,
+      revisionSha,
+      mode,
+      modelId: this.#embedder.modelId,
+      modelRevision: this.#embedder.modelRevision,
+    })
+      .filter((candidate) => candidate.dimensions === queryVector.length)
+      .map((candidate) => ({
+        ...candidate,
+        similarity: candidate.vector.reduce(
+          (score, value, index) => score + (value * queryVector[index]),
+          0,
+        ),
+      }))
+      .sort((left, right) => (
+        (right.similarity - left.similarity)
+        || right.created_at.localeCompare(left.created_at)
+        || left.claim_id.localeCompare(right.claim_id)
+      ))
+      .slice(0, this.#semanticCandidateLimit);
+
+    const lexicalIds = lexical.items.map((item) => item.claim.id);
+    const semanticIds = semantic.map((candidate) => candidate.claim_id);
+    const createdAtById = new Map();
+    for (const item of lexical.items) {
+      createdAtById.set(item.claim.id, item.claim.created_at);
+    }
+    for (const candidate of semantic) {
+      createdAtById.set(candidate.claim_id, candidate.created_at);
+    }
+
+    const fusedIds = reciprocalRankFuse({
+      lexicalIds,
+      semanticIds,
+      createdAtById,
+    });
+    const materialized = this.#memory.materializeRecall({
+      projectId,
+      branch,
+      revisionSha,
+      mode,
+      claimIds: fusedIds,
+    });
+
+    return enforceRecallBudget(materialized, {
+      maxItems,
+      maxSerializedBytes,
+    });
+  }
 }
