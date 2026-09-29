@@ -139,7 +139,7 @@ function normalizeClaimEmbedding(row) {
     model_revision: row.model_revision,
     text_hash: row.text_hash,
     dimensions: row.dimensions,
-    vector: decodeFloat32Vector(row.vector_blob, row.dimensions),
+    vector: decodeFloat32Vector(Buffer.from(row.vector_blob), row.dimensions),
     indexed_at: row.indexed_at,
   };
 }
