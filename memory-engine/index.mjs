@@ -4,6 +4,7 @@ import { assertAuthorityClass } from './authority.mjs';
 import {
   decodeFloat32Vector,
   encodeFloat32Vector,
+  hashEmbeddingText,
 } from './semantic-vectors.mjs';
 
 export const REDACTED_SECRET = '[REDACTED_SECRET]';
@@ -141,6 +142,30 @@ function normalizeClaimEmbedding(row) {
     dimensions: row.dimensions,
     vector: decodeFloat32Vector(Buffer.from(row.vector_blob), row.dimensions),
     indexed_at: row.indexed_at,
+  };
+}
+
+function embeddingDocumentFromRow(row) {
+  const text = [
+    'passage:',
+    row.kind,
+    row.subject,
+    row.predicate,
+    row.value_text,
+    row.content_redacted,
+  ]
+    .filter((value) => value !== null && value !== undefined && String(value).trim().length > 0)
+    .join(' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  return {
+    claim_id: row.id,
+    project_id: row.project_id,
+    branch_scope: row.branch_scope,
+    created_at: row.created_at,
+    text,
+    text_hash: hashEmbeddingText(text),
   };
 }
 
@@ -584,6 +609,52 @@ export class MemoryEngine {
     return normalizeClaim(
       this.#db.prepare('SELECT * FROM claims WHERE id = ?').get(id),
     );
+  }
+
+  embeddingDocument({ claimId }) {
+    assertNonEmptyString(claimId, 'claimId');
+
+    const row = this.#db.prepare(`
+      SELECT
+        c.id,
+        c.project_id,
+        c.branch_scope,
+        c.created_at,
+        c.kind,
+        c.subject,
+        c.predicate,
+        c.value_text,
+        e.content_redacted
+      FROM claims c
+      JOIN evidence e ON e.id = c.created_from_evidence_id
+      WHERE c.id = ?
+    `).get(claimId);
+
+    return row ? embeddingDocumentFromRow(row) : null;
+  }
+
+  listEmbeddingDocuments({ projectId, branch }) {
+    assertNonEmptyString(projectId, 'projectId');
+    assertNonEmptyString(branch, 'branch');
+    if (!this.getProject(projectId)) throw new Error(`unknown project: ${projectId}`);
+
+    return this.#db.prepare(`
+      SELECT
+        c.id,
+        c.project_id,
+        c.branch_scope,
+        c.created_at,
+        c.kind,
+        c.subject,
+        c.predicate,
+        c.value_text,
+        e.content_redacted
+      FROM claims c
+      JOIN evidence e ON e.id = c.created_from_evidence_id
+      WHERE c.project_id = ?
+        AND c.branch_scope = ?
+      ORDER BY c.id ASC
+    `).all(projectId, branch).map(embeddingDocumentFromRow);
   }
 
   putClaimEmbedding({
