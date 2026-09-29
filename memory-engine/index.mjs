@@ -566,6 +566,340 @@ export class MemoryEngine {
     `).all(projectId).map(normalizeApproval);
   }
 
+  exportCanonical() {
+    return {
+      format: 'agent-hub-memory-canonical',
+      version: 1,
+      projects: this.#db.prepare(`
+        SELECT project_id, canonical_remote, repo_identity, created_at
+        FROM project_registry
+        ORDER BY project_id
+      `).all(),
+      evidence: this.#db.prepare(`
+        SELECT
+          id, project_id, harness, session_id, source_kind, source_ref,
+          captured_at, branch, commit_sha, path, blob_oid, content_redacted,
+          sensitivity, authority_class, metadata_json
+        FROM evidence
+        ORDER BY id
+      `).all(),
+      claims: this.#db.prepare(`
+        SELECT
+          id, project_id, kind, subject, predicate, value_text, state,
+          branch_scope, created_from_evidence_id, created_at, valid_from,
+          valid_until, superseded_by_claim_id, rejected_by_evidence_id
+        FROM claims
+        ORDER BY id
+      `).all(),
+      lifecycle_events: this.#db.prepare(`
+        SELECT
+          id, project_id, action, source_claim_id, target_claim_id,
+          evidence_id, created_at
+        FROM lifecycle_events
+        ORDER BY id
+      `).all(),
+      conflicts: this.#db.prepare(`
+        SELECT
+          project_id, claim_a, claim_b, state, created_by_evidence_id,
+          created_at, resolved_by_evidence_id, resolved_at
+        FROM conflicts
+        ORDER BY project_id, claim_a, claim_b
+      `).all(),
+      approvals: this.#db.prepare(`
+        SELECT
+          id, project_id, actor, action, target, environment, artifact,
+          constraints_json, issued_at, expires_at, max_uses, uses,
+          revoked_at, source_evidence_id
+        FROM approvals
+        ORDER BY id
+      `).all(),
+    };
+  }
+
+  clearDerivedState() {
+    this.#db.exec('BEGIN IMMEDIATE');
+    try {
+      this.#db.prepare('DELETE FROM claim_fts').run();
+      this.#db.prepare('DELETE FROM repository_path_state').run();
+      this.#db.exec('COMMIT');
+    } catch (error) {
+      this.#db.exec('ROLLBACK');
+      throw error;
+    }
+  }
+
+  rebuildDerivedState() {
+    this.#db.exec('BEGIN IMMEDIATE');
+    try {
+      this.#db.prepare('DELETE FROM claim_fts').run();
+      const rows = this.#db.prepare(`
+        SELECT
+          c.id,
+          c.project_id,
+          c.branch_scope,
+          c.kind,
+          c.subject,
+          c.predicate,
+          c.value_text,
+          e.content_redacted
+        FROM claims c
+        JOIN evidence e ON e.id = c.created_from_evidence_id
+        ORDER BY c.id
+      `).all();
+
+      const insert = this.#db.prepare(`
+        INSERT INTO claim_fts (claim_id, project_id, branch_scope, text)
+        VALUES (?, ?, ?, ?)
+      `);
+      for (const row of rows) {
+        insert.run(
+          row.id,
+          row.project_id,
+          row.branch_scope,
+          searchableText({
+            kind: row.kind,
+            subject: row.subject,
+            predicate: row.predicate,
+            value: row.value_text,
+          }, row.content_redacted),
+        );
+      }
+
+      this.#db.prepare('DELETE FROM repository_path_state').run();
+      this.#db.exec('COMMIT');
+      return {
+        indexed_claims: rows.length,
+        repository_path_snapshots: 0,
+      };
+    } catch (error) {
+      this.#db.exec('ROLLBACK');
+      throw error;
+    }
+  }
+
+  importCanonical(payload) {
+    if (!payload || typeof payload !== 'object') {
+      throw new TypeError('canonical import payload must be an object');
+    }
+    if (payload.format !== 'agent-hub-memory-canonical' || payload.version !== 1) {
+      throw new Error('unsupported canonical memory export');
+    }
+
+    for (const field of [
+      'projects',
+      'evidence',
+      'claims',
+      'lifecycle_events',
+      'conflicts',
+      'approvals',
+    ]) {
+      if (!Array.isArray(payload[field])) {
+        throw new TypeError(`canonical import ${field} must be an array`);
+      }
+    }
+
+    const occupied = this.#db.prepare(`
+      SELECT
+        (SELECT COUNT(*) FROM evidence)
+        + (SELECT COUNT(*) FROM claims)
+        + (SELECT COUNT(*) FROM lifecycle_events)
+        + (SELECT COUNT(*) FROM conflicts)
+        + (SELECT COUNT(*) FROM approvals) AS count
+    `).get().count;
+    if (occupied !== 0) {
+      throw new Error('canonical import requires an empty memory store');
+    }
+
+    for (const row of payload.evidence) {
+      assertAuthorityClass(row.authority_class);
+      const scanned = redactValue({
+        source_ref: row.source_ref,
+        content_redacted: row.content_redacted,
+        metadata_json: row.metadata_json,
+      });
+      if (scanned.redacted) {
+        throw new Error(`canonical import contains unredacted secret material in evidence ${row.id}`);
+      }
+    }
+    for (const row of payload.claims) {
+      if (!CLAIM_STATES.has(row.state)) {
+        throw new Error(`canonical import has unsupported claim state: ${row.state}`);
+      }
+      const scanned = redactValue({
+        subject: row.subject,
+        predicate: row.predicate,
+        value_text: row.value_text,
+      });
+      if (scanned.redacted) {
+        throw new Error(`canonical import contains unredacted secret material in claim ${row.id}`);
+      }
+    }
+
+    this.#db.exec('BEGIN IMMEDIATE');
+    try {
+      for (const row of payload.projects) {
+        const existing = this.#db.prepare(`
+          SELECT canonical_remote, repo_identity
+          FROM project_registry
+          WHERE project_id = ?
+        `).get(row.project_id);
+        if (existing) {
+          if (
+            existing.canonical_remote !== row.canonical_remote
+            || existing.repo_identity !== row.repo_identity
+          ) {
+            throw new Error(`project ${row.project_id} conflicts with canonical import`);
+          }
+          continue;
+        }
+
+        this.#db.prepare(`
+          INSERT INTO project_registry (
+            project_id, canonical_remote, repo_identity, created_at
+          ) VALUES (?, ?, ?, ?)
+        `).run(
+          row.project_id,
+          row.canonical_remote,
+          row.repo_identity,
+          row.created_at,
+        );
+      }
+
+      const insertEvidence = this.#db.prepare(`
+        INSERT INTO evidence (
+          id, project_id, harness, session_id, source_kind, source_ref,
+          captured_at, branch, commit_sha, path, blob_oid, content_redacted,
+          sensitivity, authority_class, metadata_json
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+      for (const row of payload.evidence) {
+        insertEvidence.run(
+          row.id,
+          row.project_id,
+          row.harness,
+          row.session_id,
+          row.source_kind,
+          row.source_ref,
+          row.captured_at,
+          row.branch,
+          row.commit_sha,
+          row.path,
+          row.blob_oid,
+          row.content_redacted,
+          row.sensitivity,
+          row.authority_class,
+          row.metadata_json,
+        );
+      }
+
+      const insertClaim = this.#db.prepare(`
+        INSERT INTO claims (
+          id, project_id, kind, subject, predicate, value_text, state,
+          branch_scope, created_from_evidence_id, created_at, valid_from,
+          valid_until, superseded_by_claim_id, rejected_by_evidence_id
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)
+      `);
+      for (const row of payload.claims) {
+        insertClaim.run(
+          row.id,
+          row.project_id,
+          row.kind,
+          row.subject,
+          row.predicate,
+          row.value_text,
+          row.state,
+          row.branch_scope,
+          row.created_from_evidence_id,
+          row.created_at,
+          row.valid_from,
+          row.valid_until,
+          row.rejected_by_evidence_id,
+        );
+      }
+
+      const updateSupersession = this.#db.prepare(`
+        UPDATE claims
+        SET superseded_by_claim_id = ?
+        WHERE id = ?
+      `);
+      for (const row of payload.claims) {
+        if (row.superseded_by_claim_id !== null) {
+          updateSupersession.run(row.superseded_by_claim_id, row.id);
+        }
+      }
+
+      const insertLifecycle = this.#db.prepare(`
+        INSERT INTO lifecycle_events (
+          id, project_id, action, source_claim_id, target_claim_id,
+          evidence_id, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+      `);
+      for (const row of payload.lifecycle_events) {
+        insertLifecycle.run(
+          row.id,
+          row.project_id,
+          row.action,
+          row.source_claim_id,
+          row.target_claim_id,
+          row.evidence_id,
+          row.created_at,
+        );
+      }
+
+      const insertConflict = this.#db.prepare(`
+        INSERT INTO conflicts (
+          project_id, claim_a, claim_b, state, created_by_evidence_id,
+          created_at, resolved_by_evidence_id, resolved_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+      for (const row of payload.conflicts) {
+        insertConflict.run(
+          row.project_id,
+          row.claim_a,
+          row.claim_b,
+          row.state,
+          row.created_by_evidence_id,
+          row.created_at,
+          row.resolved_by_evidence_id,
+          row.resolved_at,
+        );
+      }
+
+      const insertApproval = this.#db.prepare(`
+        INSERT INTO approvals (
+          id, project_id, actor, action, target, environment, artifact,
+          constraints_json, issued_at, expires_at, max_uses, uses,
+          revoked_at, source_evidence_id
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+      for (const row of payload.approvals) {
+        insertApproval.run(
+          row.id,
+          row.project_id,
+          row.actor,
+          row.action,
+          row.target,
+          row.environment,
+          row.artifact,
+          row.constraints_json,
+          row.issued_at,
+          row.expires_at,
+          row.max_uses,
+          row.uses,
+          row.revoked_at,
+          row.source_evidence_id,
+        );
+      }
+
+      this.#db.exec('COMMIT');
+    } catch (error) {
+      this.#db.exec('ROLLBACK');
+      throw error;
+    }
+
+    return this.rebuildDerivedState();
+  }
+
   recordApproval({
     id,
     projectId,
