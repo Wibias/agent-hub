@@ -202,7 +202,6 @@ export function createReferenceMemoryAdapter({ clock } = {}) {
         environment: request.environment,
         artifact: request.artifact ?? null,
         constraints: request.constraints ?? {},
-        consume: request.consume ?? false,
       });
     },
 
