@@ -125,7 +125,7 @@ Only `user_direct` evidence can mint an approval. `agent_inference`, repository 
 
 `authorizeAction(...)` requires an exact action, target, environment, and artifact match. Required structured constraints must also match. Expired, revoked, exhausted, or not-yet-valid approvals fail closed.
 
-With `consume: true`, authorization and use-count increment run under one immediate SQLite transaction. A one-time approval cannot be reused.
+A successful `authorizeAction(...)` always consumes one use in the same immediate SQLite transaction that checks the capability. A one-time approval cannot be checked successfully and then reused for another execution.
 
 Free-text similarity is never used to decide action authority.
 
