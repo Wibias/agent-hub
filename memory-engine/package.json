@@ -1,0 +1,11 @@
+{
+  "name": "@agent-hub/memory-engine",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "dependencies": {
+    "@huggingface/transformers": "4.3.0"
+  }
+}

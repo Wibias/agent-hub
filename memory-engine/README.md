@@ -39,12 +39,17 @@ The reference implementation currently owns:
 - portable canonical export/import with derived-state rebuild;
 - interrupted-write recovery through transactional canonical state and derived-state rebuild.
 
-Not implemented yet:
+The concrete local E5 provider is now isolated behind the hybrid embedder contract:
 
-- the concrete pinned local E5 provider and its model-cache preparation flow;
-- the real-model semantic evaluation.
+- `@huggingface/transformers@4.3.0`;
+- model `intfloat/multilingual-e5-small`;
+- revision `fd1525a9fd15316a2d503bf26ab031a61d056e98`;
+- 384-dimensional fp32 embeddings;
+- CPU execution;
+- mean pooling with normalized output;
+- local-files-only normal runtime.
 
-The hybrid core intentionally has no ML runtime dependency. The pinned E5 provider is a separate follow-up delivery so the correctness layer remains independently auditable.
+Real-model semantic evaluation is available through the explicit `Memory semantic eval` workflow. Normal tests and normal recall do not download the model.
 
 ## Canonical versus derived state
 
@@ -248,6 +253,54 @@ const answerEvidence = evaluateReliance({
 
 memory.close();
 ```
+
+## Pinned E5 provider
+
+Install the scoped provider dependency:
+
+```bash
+npm ci --prefix memory-engine
+```
+
+Populate the exact pinned model cache explicitly:
+
+```bash
+node scripts/prepare-memory-embedding-model.mjs \
+  --cache-dir .cache/memory-engine/e5
+```
+
+That preparation command is the only repository path that enables remote model loading. It resolves the cache directory, downloads the exact model/revision through the provider, and succeeds only after a 384-dimensional readiness embedding is produced.
+
+Normal runtime reuses the same cache with remote loading disabled:
+
+```js
+import { createE5Embedder } from './memory-engine/e5-embedder.mjs';
+
+const embedder = await createE5Embedder({
+  cacheDir: '.cache/memory-engine/e5',
+});
+```
+
+Normal provider creation passes `local_files_only: true`. A missing or incomplete cache therefore fails provider initialization instead of silently downloading model files. The surrounding `HybridMemoryRetriever` can still operate in lexical fallback mode when no semantic provider is available.
+
+Model files live below the repository's ignored `.cache/` tree and are not committed.
+
+### Real semantic evaluation
+
+The manual `Memory semantic eval` workflow installs the scoped provider dependency, restores or prepares the exact pinned model cache, then runs `tests/memory-engine/e5-semantic-eval.test.mjs` with normal provider creation (`local_files_only: true`).
+
+Measured against the pinned `intfloat/multilingual-e5-small` revision `fd1525a9fd15316a2d503bf26ab031a61d056e98`:
+
+| Query | Target | Lexical rank | Semantic rank | Fused rank |
+| --- | --- | ---: | ---: | ---: |
+| Which database was selected because concurrent writers are required? | Postgres | 1 | 1 | 1 |
+| Which storage engine did we choose to handle multiple processes writing at once? | Postgres | — | 1 | 1 |
+| Welche Datenbank haben wir wegen paralleler Schreibzugriffe gewählt? | Postgres | — | 1 | 1 |
+| For how long do we preserve security event records? | 30-day audit retention | — | 1 | 1 |
+
+Every evaluated hybrid result remains within the core limits of at most 10 items and 16 KiB serialized output.
+
+The first provider deliberately remains full-precision fp32 on CPU. No quantized conversion, ANN/vector database, GPU requirement, or learned reranker is part of this delivery.
 
 ## Hybrid retrieval core
 
