@@ -3,6 +3,8 @@ import { tmpdir } from 'node:os';
 import os from 'node:os';
 import { join } from 'node:path';
 import { performance } from 'node:perf_hooks';
+import { createRequire } from 'node:module';
+import { pathToFileURL } from 'node:url';
 
 import { MemoryEngine } from '../memory-engine/index.mjs';
 import { HybridMemoryRetriever } from '../memory-engine/hybrid-retrieval.mjs';
@@ -16,6 +18,7 @@ import {
 const SCALES = [2_000, 10_000, 25_000];
 const MODEL_ID = 'benchmark-e5-shape';
 const MODEL_REVISION = 'benchmark-v1';
+const requireFromMemoryEngine = createRequire(new URL('../memory-engine/package.json', import.meta.url));
 const QUANTIZED_MODEL_REVISION = '6a0d452a575215f80b8f66276dd4ee5d504942c6';
 const QUANTIZED_MODEL_FILE = 'model_qint8_avx512_vnni';
 
@@ -347,7 +350,8 @@ async function createQuantizedCandidateEmbedder({
   cacheDir,
   allowRemoteModels = false,
 }) {
-  const { pipeline } = await import('@huggingface/transformers');
+  const transformersEntry = requireFromMemoryEngine.resolve('@huggingface/transformers');
+  const { pipeline } = await import(pathToFileURL(transformersEntry).href);
   const extractor = await pipeline(
     'feature-extraction',
     E5_MODEL_ID,
