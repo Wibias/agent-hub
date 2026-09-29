@@ -38,7 +38,7 @@ test('M04 hard-isolates main from feature-only branch memory', async () => {
   const result = await runCase('M04');
   const texts = currentTexts(result);
 
-  assert.ok(texts.some((text) => /server-side session/i.test(text)));
+  assert.ok(texts.some((text) => /sessionStore\\.get/i.test(text)));
   assert.ok(texts.every((text) => !/OAuth exchange/i.test(text)));
 });
 
@@ -74,7 +74,7 @@ test('M09 removes rejected and superseded SQLite claims from current truth', asy
   const texts = currentTexts(result);
 
   assert.ok(texts.some((text) => /Postgres/i.test(text)));
-  assert.ok(texts.some((text) => /Reject SQLite/i.test(text)));
+  assert.ok(texts.some((text) => /SQLite is rejected/i.test(text)));
   assert.ok(texts.every((text) => !/^Use SQLite\.?$/i.test(text)));
   assert.ok(texts.every((text) => !/could use SQLite/i.test(text)));
 
