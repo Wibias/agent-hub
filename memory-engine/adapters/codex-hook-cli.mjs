@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -82,9 +81,18 @@ export async function runCodexMemoryHook({
   }
 }
 
+async function readStdin(stream = process.stdin) {
+  stream.setEncoding('utf8');
+  let raw = '';
+  for await (const chunk of stream) {
+    raw += chunk;
+  }
+  return raw;
+}
+
 async function main() {
   try {
-    const raw = await readFile(0, 'utf8');
+    const raw = await readStdin();
     const event = JSON.parse(raw);
     const output = await runCodexMemoryHook({ event });
     if (output !== null) {
