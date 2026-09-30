@@ -531,24 +531,37 @@ test('Codex CLI executes when invoked through an aliased engine path', () => {
       prompt: 'What database do we use for concurrent writers?',
     });
 
-    const result = spawnSync(
+    const env = {
+      ...process.env,
+      AGENT_HUB_MEMORY_DB: dbPath,
+      AGENT_HUB_MEMORY_PROJECT_ID: 'project-a',
+      AGENT_HUB_MEMORY_REPO_IDENTITY: 'github.com/example/project',
+      AGENT_HUB_MEMORY_CAPTURE_PROMPTS: 'false',
+    };
+
+    const realResult = spawnSync(
       process.execPath,
-      [join(aliasDir, 'adapters', 'codex-hook-cli.mjs')],
-      {
-        input: event,
-        encoding: 'utf8',
-        env: {
-          ...process.env,
-          AGENT_HUB_MEMORY_DB: dbPath,
-          AGENT_HUB_MEMORY_PROJECT_ID: 'project-a',
-          AGENT_HUB_MEMORY_REPO_IDENTITY: 'github.com/example/project',
-          AGENT_HUB_MEMORY_CAPTURE_PROMPTS: 'false',
-        },
-      },
+      [join(realEngineDir, 'adapters', 'codex-hook-cli.mjs')],
+      { input: event, encoding: 'utf8', env },
+    );
+    assert.equal(realResult.status, 0, realResult.stderr);
+    assert.match(
+      realResult.stdout,
+      /Postgres for concurrent writers/,
+      `real CLI stdout was empty; stderr: ${realResult.stderr}`,
     );
 
-    assert.equal(result.status, 0, result.stderr);
-    assert.match(result.stdout, /Postgres for concurrent writers/);
+    const aliasResult = spawnSync(
+      process.execPath,
+      [join(aliasDir, 'adapters', 'codex-hook-cli.mjs')],
+      { input: event, encoding: 'utf8', env },
+    );
+    assert.equal(aliasResult.status, 0, aliasResult.stderr);
+    assert.match(
+      aliasResult.stdout,
+      /Postgres for concurrent writers/,
+      `aliased CLI stdout was empty; stderr: ${aliasResult.stderr}`,
+    );
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
