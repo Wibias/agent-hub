@@ -10,6 +10,7 @@ import { createMemoryProtocol } from '../protocol.mjs';
 import {
   createCodexMemoryHookAdapter,
   parseExplicitMemoryPrompt,
+  resolveActiveDirectUserMemoryTarget,
 } from './codex-hooks.mjs';
 
 function nonEmpty(value) {
@@ -218,13 +219,24 @@ function authorizeCodexExplicitMemoryClaim({
       evidence?.metadata?.explicit_memory_mode !== 'forget'
       || claim?.kind !== 'memory_control'
       || claim?.predicate !== 'forgets'
-      || claim?.value !== parsed.value
       || claim?.state !== 'expired'
       || lifecycle.supersedes.length !== 0
       || lifecycle.rejects.length !== 1
-      || typeof memory?.getClaim !== 'function'
     ) {
       return false;
+    }
+
+    if (parsed.ref !== undefined) {
+      const target = resolveActiveDirectUserMemoryTarget(memory, {
+        projectId: evidence?.project_id,
+        branch: evidence?.branch,
+        ref: parsed.ref,
+      });
+      return (
+        target !== null
+        && target.id === lifecycle.rejects[0]
+        && claim?.value === target.value_text
+      );
     }
 
     const target = memory.getClaim(lifecycle.rejects[0]);
@@ -237,6 +249,7 @@ function authorizeCodexExplicitMemoryClaim({
       && target?.subject === 'user memory'
       && target?.predicate === 'states'
       && target?.value === parsed.value
+      && claim?.value === parsed.value
     );
   }
 
@@ -248,9 +261,20 @@ function authorizeCodexExplicitMemoryClaim({
     || claim?.value !== parsed.newValue
     || lifecycle.supersedes.length !== 1
     || lifecycle.rejects.length !== 0
-    || typeof memory?.getClaim !== 'function'
   ) {
     return false;
+  }
+
+  if (parsed.oldRef !== undefined) {
+    const target = resolveActiveDirectUserMemoryTarget(memory, {
+      projectId: evidence?.project_id,
+      branch: evidence?.branch,
+      ref: parsed.oldRef,
+    });
+    return (
+      target !== null
+      && target.id === lifecycle.supersedes[0]
+    );
   }
 
   const target = memory.getClaim(lifecycle.supersedes[0]);

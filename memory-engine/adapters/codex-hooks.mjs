@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import {
   refreshRepositoryFreshness,
   resolveGitContext,
@@ -17,6 +19,22 @@ function compactText(value, maxChars = 500) {
 
 function byteLength(value) {
   return Buffer.byteLength(value, 'utf8');
+}
+
+export function memoryClaimRef(claimId) {
+  if (!nonEmptyString(claimId)) {
+    throw new TypeError('claimId must be a non-empty string');
+  }
+  const digest = createHash('sha256')
+    .update(claimId, 'utf8')
+    .digest('hex');
+  return `@${digest.slice(0, 10)}`;
+}
+
+function normalizeMemoryRef(value) {
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim().toLowerCase();
+  return /^@[0-9a-f]{10}$/.test(normalized) ? normalized : null;
 }
 
 export function formatCodexMemoryContext(result, {
@@ -80,6 +98,13 @@ export function parseExplicitMemoryPrompt(prompt) {
   const forgetPrefix = prompt.match(/^\s*memory\s+forget:\s*/i);
   if (forgetPrefix) {
     const value = prompt.slice(forgetPrefix[0].length).trim();
+    const ref = normalizeMemoryRef(value);
+    if (ref !== null) {
+      return {
+        mode: 'forget',
+        ref,
+      };
+    }
     if (!/^memory:\s*\S/i.test(value)) return null;
     return {
       mode: 'forget',
@@ -102,14 +127,19 @@ export function parseExplicitMemoryPrompt(prompt) {
   if (delimiterIndex < 0) return null;
 
   const oldValue = body.slice(0, delimiterIndex).trim();
+  const oldRef = normalizeMemoryRef(oldValue);
   const newValue = body.slice(delimiterIndex + 2).trim();
-  if (
-    !/^memory:\s*\S/i.test(oldValue)
-    || !/^memory:\s*\S/i.test(newValue)
-  ) {
-    return null;
+  if (!/^memory:\s*\S/i.test(newValue)) return null;
+
+  if (oldRef !== null) {
+    return {
+      mode: 'replace',
+      oldRef,
+      newValue,
+    };
   }
 
+  if (!/^memory:\s*\S/i.test(oldValue)) return null;
   return {
     mode: 'replace',
     oldValue,
@@ -170,7 +200,10 @@ function formatActiveDirectUserMemories(memory, {
   ];
 
   for (const claim of memories) {
-    const line = `- ${compactText(claim.value_text ?? '', 500)}`;
+    const line = `- ${memoryClaimRef(claim.id)} ${compactText(
+      claim.value_text ?? '',
+      500,
+    )}`;
     const candidate = [...lines, line].join('\n');
     if (byteLength(candidate) > maxBytes) break;
     lines.push(line);
@@ -179,21 +212,34 @@ function formatActiveDirectUserMemories(memory, {
   return lines.join('\n');
 }
 
-function exactActiveReplacementTarget(memory, {
+export function resolveActiveDirectUserMemoryTarget(memory, {
   projectId,
   branch,
-  value,
+  value = null,
+  ref = null,
 }) {
-  if (typeof memory?.exportCanonical !== 'function') return null;
-  const exported = memory.exportCanonical();
-  if (!exported || !Array.isArray(exported.claims)) return null;
+  if ((value === null) === (ref === null)) return null;
 
-  const matches = exported.claims.filter((claim) => (
-    claim?.project_id === projectId
-    && claim?.branch_scope === branch
-    && claim?.state === 'active'
-    && claim?.value_text === value
-  ));
+  if (value !== null) {
+    if (typeof memory?.exportCanonical !== 'function') return null;
+    const exported = memory.exportCanonical();
+    if (!exported || !Array.isArray(exported.claims)) return null;
+    const matches = exported.claims.filter((claim) => (
+      claim?.project_id === projectId
+      && claim?.branch_scope === branch
+      && claim?.state === 'active'
+      && claim?.value_text === value
+    ));
+    return matches.length === 1 ? matches[0] : null;
+  }
+
+  const memories = activeDirectUserMemories(memory, {
+    projectId,
+    branch,
+  });
+  const matches = memories.filter(
+    (claim) => memoryClaimRef(claim.id) === ref,
+  );
   return matches.length === 1 ? matches[0] : null;
 }
 
@@ -384,10 +430,11 @@ export function createCodexMemoryHookAdapter({
                 let rejects = [];
 
                 if (parsedMemory.mode === 'replace') {
-                  const target = exactActiveReplacementTarget(memory, {
+                  const target = resolveActiveDirectUserMemoryTarget(memory, {
                     projectId,
                     branch: context.branch,
-                    value: parsedMemory.oldValue,
+                    value: parsedMemory.oldValue ?? null,
+                    ref: parsedMemory.oldRef ?? null,
                   });
                   if (target === null) {
                     value = null;
@@ -396,15 +443,16 @@ export function createCodexMemoryHookAdapter({
                     supersedes = [target.id];
                   }
                 } else if (parsedMemory.mode === 'forget') {
-                  const target = exactActiveReplacementTarget(memory, {
+                  const target = resolveActiveDirectUserMemoryTarget(memory, {
                     projectId,
                     branch: context.branch,
-                    value: parsedMemory.value,
+                    value: parsedMemory.value ?? null,
+                    ref: parsedMemory.ref ?? null,
                   });
                   if (target === null) {
                     value = null;
                   } else {
-                    value = parsedMemory.value;
+                    value = target.value_text;
                     kind = 'memory_control';
                     predicate = 'forgets';
                     state = 'expired';
