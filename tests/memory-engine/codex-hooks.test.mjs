@@ -903,3 +903,383 @@ test('Codex CLI auto-registers different repositories in one shared database', (
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+
+test('explicit memory: prompt captures and commits exact direct-user text before recall', async () => {
+  const calls = [];
+  const protocol = {
+    async handle(request) {
+      calls.push(request);
+      if (request.operation === 'capture_evidence') {
+        return {
+          protocol: 'memory.protocol.v1',
+          request_id: request.request_id,
+          ok: true,
+          result: {
+            evidence: {
+              id: request.payload.id,
+              project_id: request.payload.project_id,
+              harness: request.payload.harness,
+              session_id: request.payload.session_id,
+              source_kind: request.payload.source_kind,
+              source_ref: request.payload.source_ref,
+              captured_at: request.payload.captured_at,
+              branch: request.payload.branch,
+              commit_sha: request.payload.commit_sha,
+              path: null,
+              blob_oid: null,
+              content_redacted: request.payload.content,
+              sensitivity: 'normal',
+              authority_class: 'user_direct',
+              metadata: request.payload.metadata,
+            },
+          },
+        };
+      }
+      if (request.operation === 'assert_claim') {
+        return {
+          protocol: 'memory.protocol.v1',
+          request_id: request.request_id,
+          ok: true,
+          result: {
+            claim: {
+              id: request.payload.claim.id,
+              state: 'active',
+            },
+          },
+        };
+      }
+      return {
+        protocol: 'memory.protocol.v1',
+        request_id: request.request_id,
+        ok: true,
+        result: { items: [], conflicts: [] },
+      };
+    },
+  };
+
+  const adapter = createCodexMemoryHookAdapter({
+    protocol,
+    memory: {
+      getEvidence() { return null; },
+      getClaim() { return null; },
+    },
+    projectId: 'project-a',
+    explicitMemoryRequests: true,
+    clock: () => '2026-09-30T08:30:00.000Z',
+    git: fakeGit(),
+  });
+
+  const prompt = 'memory: Use Postgres for concurrent writers.';
+  const output = await adapter.handle(userPromptEvent({ prompt }));
+
+  assert.equal(output, null);
+  assert.deepEqual(calls.map((call) => call.operation), [
+    'capture_evidence',
+    'assert_claim',
+    'recall',
+  ]);
+
+  const capture = calls[0];
+  assert.equal(capture.payload.content, prompt);
+  assert.deepEqual(capture.payload.metadata, {
+    event_type: 'user_prompt',
+    hook_event_name: 'UserPromptSubmit',
+    turn_id: 'turn_456',
+    explicit_memory: true,
+  });
+
+  const assertion = calls[1];
+  assert.equal(assertion.payload.evidence_id, capture.payload.id);
+  assert.deepEqual(assertion.payload.claim, {
+    id: 'claim:codex:thr_123:turn_456:prompt',
+    kind: 'user_direct',
+    subject: 'user memory',
+    predicate: 'states',
+    value: prompt,
+    branch_scope: 'main',
+    created_at: '2026-09-30T08:30:00.000Z',
+  });
+  assert.deepEqual(assertion.payload.lifecycle, {
+    supersedes: [],
+    rejects: [],
+    conflicts_with: [],
+  });
+});
+
+test('explicit memory mode ignores ordinary prompts instead of persisting heuristically', async () => {
+  const operations = [];
+  const protocol = {
+    async handle(request) {
+      operations.push(request.operation);
+      return {
+        protocol: 'memory.protocol.v1',
+        request_id: request.request_id,
+        ok: true,
+        result: { items: [], conflicts: [] },
+      };
+    },
+  };
+
+  const adapter = createCodexMemoryHookAdapter({
+    protocol,
+    memory: {},
+    projectId: 'project-a',
+    explicitMemoryRequests: true,
+    git: fakeGit(),
+  });
+
+  await adapter.handle(userPromptEvent({
+    prompt: 'Please remember that we use Postgres.',
+  }));
+
+  assert.deepEqual(operations, ['recall']);
+});
+
+test('explicit memory commit failure remains fail-soft and still performs recall', async () => {
+  const operations = [];
+  const protocol = {
+    async handle(request) {
+      operations.push(request.operation);
+      if (request.operation === 'capture_evidence') {
+        return {
+          protocol: 'memory.protocol.v1',
+          request_id: request.request_id,
+          ok: true,
+          result: {
+            evidence: {
+              id: request.payload.id,
+              project_id: 'project-a',
+              harness: 'codex',
+              source_kind: 'session',
+              branch: 'main',
+              content_redacted: request.payload.content,
+              authority_class: 'user_direct',
+              metadata: request.payload.metadata,
+            },
+          },
+        };
+      }
+      if (request.operation === 'assert_claim') {
+        return {
+          protocol: 'memory.protocol.v1',
+          request_id: request.request_id,
+          ok: false,
+          error: {
+            code: 'claim_assertion_denied',
+            message: 'Claim assertion is not authorized.',
+          },
+        };
+      }
+      return {
+        protocol: 'memory.protocol.v1',
+        request_id: request.request_id,
+        ok: true,
+        result: recallResult(),
+      };
+    },
+  };
+
+  const adapter = createCodexMemoryHookAdapter({
+    protocol,
+    memory: {
+      getEvidence() { return null; },
+      getClaim() { return null; },
+    },
+    projectId: 'project-a',
+    explicitMemoryRequests: true,
+    git: fakeGit(),
+  });
+
+  const output = await adapter.handle(userPromptEvent({
+    prompt: 'memory: Preserve this exact statement.',
+  }));
+
+  assert.deepEqual(operations, [
+    'capture_evidence',
+    'assert_claim',
+    'recall',
+  ]);
+  assert.match(output.hookSpecificOutput.additionalContext, /Postgres/);
+});
+
+test('runCodexMemoryHook wires explicit memory mode and exact-text claim authorization', async () => {
+  const memory = {
+    getProject() {
+      return { project_id: 'project-a' };
+    },
+    close() {},
+  };
+  let protocolOptions = null;
+  let adapterOptions = null;
+
+  await runCodexMemoryHook({
+    event: userPromptEvent(),
+    env: {
+      AGENT_HUB_MEMORY_DB: '/shared/memory.sqlite3',
+      AGENT_HUB_MEMORY_PROJECT_ID: 'project-a',
+    },
+    configOptions: {
+      explicitMemoryRequests: true,
+    },
+    createEngine() {
+      return memory;
+    },
+    createProtocol(options) {
+      protocolOptions = options;
+      return { handle() {} };
+    },
+    createAdapter(options) {
+      adapterOptions = options;
+      return { async handle() { return null; } };
+    },
+  });
+
+  assert.equal(adapterOptions.explicitMemoryRequests, true);
+  assert.equal(typeof protocolOptions.authorizeClaim, 'function');
+
+  assert.equal(await protocolOptions.authorizeClaim({
+    evidence: {
+      project_id: 'project-a',
+      harness: 'codex',
+      source_kind: 'session',
+      branch: 'main',
+      content_redacted: 'memory: Keep this.',
+      authority_class: 'user_direct',
+      metadata: {
+        event_type: 'user_prompt',
+        explicit_memory: true,
+      },
+    },
+    claim: {
+      kind: 'user_direct',
+      subject: 'user memory',
+      predicate: 'states',
+      value: 'memory: Keep this.',
+      branchScope: 'main',
+    },
+    lifecycle: {
+      supersedes: [],
+      rejects: [],
+      conflictsWith: [],
+    },
+  }), true);
+
+  assert.equal(await protocolOptions.authorizeClaim({
+    evidence: {
+      project_id: 'project-a',
+      harness: 'codex',
+      source_kind: 'session',
+      branch: 'main',
+      content_redacted: 'memory: Keep this.',
+      authority_class: 'user_direct',
+      metadata: {
+        event_type: 'user_prompt',
+        explicit_memory: true,
+      },
+    },
+    claim: {
+      kind: 'user_direct',
+      subject: 'user memory',
+      predicate: 'states',
+      value: 'Agent rewrote the user statement.',
+      branchScope: 'main',
+    },
+    lifecycle: {
+      supersedes: [],
+      rejects: [],
+      conflictsWith: [],
+    },
+  }), false);
+});
+
+test('Codex CLI explicit-memory flag persists only memory: prompts in a real Git repo', () => {
+  const root = mkdtempSync(join(tmpdir(), 'agent-hub-codex-explicit-memory-'));
+  const repoDir = join(root, 'repo');
+  const stateHome = join(root, 'state');
+  const dbPath = join(stateHome, 'agent-hub', 'memory.sqlite3');
+  const cliPath = fileURLToPath(
+    new URL('../../memory-engine/adapters/codex-hook-cli.mjs', import.meta.url),
+  );
+
+  try {
+    mkdirSync(repoDir, { recursive: true });
+    execFileSync('git', ['init', '-b', 'main', repoDir], { stdio: 'ignore' });
+    execFileSync('git', ['-C', repoDir, 'config', 'user.email', 'test@example.com']);
+    execFileSync('git', ['-C', repoDir, 'config', 'user.name', 'Memory Test']);
+    execFileSync('git', [
+      '-C',
+      repoDir,
+      'remote',
+      'add',
+      'origin',
+      'git@github.com:example/explicit-memory.git',
+    ]);
+    writeFileSync(join(repoDir, 'README.md'), '# smoke\n');
+    execFileSync('git', ['-C', repoDir, 'add', 'README.md']);
+    execFileSync('git', ['-C', repoDir, 'commit', '-m', 'smoke'], { stdio: 'ignore' });
+
+    const ordinaryEvent = JSON.stringify({
+      session_id: 'thr-explicit',
+      transcript_path: null,
+      cwd: repoDir,
+      hook_event_name: 'UserPromptSubmit',
+      model: 'gpt-5.6-sol',
+      permission_mode: 'default',
+      turn_id: 'turn-ordinary',
+      prompt: 'Please remember this ordinary sentence.',
+    });
+    const memoryEvent = JSON.stringify({
+      session_id: 'thr-explicit',
+      transcript_path: null,
+      cwd: repoDir,
+      hook_event_name: 'UserPromptSubmit',
+      model: 'gpt-5.6-sol',
+      permission_mode: 'default',
+      turn_id: 'turn-memory',
+      prompt: 'memory: The production database is Postgres.',
+    });
+
+    for (const event of [ordinaryEvent, memoryEvent]) {
+      const result = spawnSync(process.execPath, [
+        cliPath,
+        '--ignore-memory-env',
+        '--explicit-memory-requests',
+      ], {
+        input: event,
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          XDG_STATE_HOME: stateHome,
+          AGENT_HUB_MEMORY_DB: join(root, 'stale.sqlite3'),
+          AGENT_HUB_MEMORY_CAPTURE_PROMPTS: 'true',
+        },
+      });
+      assert.equal(result.status, 0, result.stderr);
+    }
+
+    const memory = new MemoryEngine({ dbPath });
+    try {
+      const exported = memory.exportCanonical();
+      assert.equal(exported.evidence.length, 1);
+      assert.equal(exported.claims.length, 1);
+      assert.equal(
+        exported.evidence[0].content_redacted,
+        'memory: The production database is Postgres.',
+      );
+      assert.equal(exported.evidence[0].authority_class, 'user_direct');
+      assert.equal(exported.claims[0].kind, 'user_direct');
+      assert.equal(exported.claims[0].subject, 'user memory');
+      assert.equal(exported.claims[0].predicate, 'states');
+      assert.equal(
+        exported.claims[0].value_text,
+        'memory: The production database is Postgres.',
+      );
+      assert.equal(exported.claims[0].branch_scope, 'main');
+    } finally {
+      memory.close();
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
