@@ -491,6 +491,17 @@ The paired Evidence must also be `user_direct`. Superseded/rejected history,
 other branches, other projects, and non-user-direct Claims are excluded. The injected
 list is bounded by the normal Codex hook context budget.
 
+Each listed memory includes a stable opaque short reference derived from its Claim ID:
+
+```text
+- @7fa31c9e42 memory: database is Postgres
+```
+
+The reference is a 10-hex-character SHA-256 prefix and does not expose the underlying
+session/turn Claim ID. It is stable for the lifetime of that Claim. Reference resolution
+is limited to active durable user memories in the current Git project and branch, and
+requires exactly one match; zero matches or a collision fail closed.
+
 #### Forget an active durable memory
 
 A current durable memory can be explicitly removed from current recall with:
@@ -499,10 +510,12 @@ A current durable memory can be explicitly removed from current recall with:
 memory forget: <exact stored memory value>
 ```
 
-The target value must itself be a valid durable `memory:` value, for example:
+The target can be either the exact durable `memory:` value or the stable reference
+shown by `memory list`:
 
 ```text
 memory forget: memory: database is Postgres
+memory forget: @7fa31c9e42
 ```
 
 The adapter matches by exact value among active Claims in the current Git project and
@@ -534,11 +547,16 @@ selection:
 memory replace: <exact old stored value> => <exact new durable value>
 ```
 
-Both sides must themselves be valid `memory:` values. For example:
+The replacement value must be a valid `memory:` value. The old target can be either
+its exact stored value or the stable reference shown by `memory list`:
 
 ```text
 memory replace: memory: database is SQLite => memory: database is Postgres
+memory replace: @7fa31c9e42 => memory: database is Postgres
 ```
+
+Reference targeting is deterministic only; no lexical, embedding, or LLM similarity is
+used to choose a lifecycle target.
 
 The adapter matches the old value by exact equality among active Claims in the current
 Git project and branch. Replacement proceeds only when exactly one target matches.
