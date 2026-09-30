@@ -831,7 +831,8 @@ Measured against the pinned `intfloat/multilingual-e5-small` revision `6a0d452a5
 Every evaluated hybrid result remains within the core limits of at most 10 items and 16 KiB serialized output.
 
 The manual evaluation also emits a machine-readable recall-quality summary over
-positive and negative queries. The summary measures lexical, semantic, and fused:
+positive and negative queries, including domain-near hard negatives with lexical overlap.
+The summary measures lexical, semantic, and fused:
 
 - hit rate at 1, 5, and 10;
 - false-negative rate at 1, 5, and 10;
@@ -840,10 +841,12 @@ positive and negative queries. The summary measures lexical, semantic, and fused
 - relevant semantic similarity distribution;
 - negative-query top-1 semantic similarity distribution.
 
-It also reports a semantic threshold sweep at top 5 for thresholds 0.45 through 0.90,
-including query-level precision, recall, F1, positive hit rate, and negative suppression
-rate. These numbers are measurement evidence only. Production recall does not apply a
-semantic cutoff until a separate change chooses and justifies one from measured data.
+It also reports a finer semantic threshold sweep at top 5 around the observed decision
+boundary, plus per-case top-1/top-2 similarity margin and the target's margin over the
+best irrelevant candidate. The sweep includes query-level precision, recall, F1,
+positive hit rate, and negative suppression rate. These numbers are measurement evidence
+only. Production recall does not apply a semantic cutoff until a separate change chooses
+and justifies one from measured data.
 
 The provider uses the measured qint8 ONNX graph on CPU while preserving 384-dimensional Float32 normalized embedding output. ANN/vector database, GPU requirements, and learned reranking remain outside this delivery.
 
