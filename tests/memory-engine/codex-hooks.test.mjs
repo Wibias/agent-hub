@@ -1,5 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import {
   createCodexMemoryHookAdapter,
@@ -9,6 +14,7 @@ import {
   parseCodexMemoryConfig,
   runCodexMemoryHook,
 } from '../../memory-engine/adapters/codex-hook-cli.mjs';
+import { MemoryEngine } from '../../memory-engine/index.mjs';
 
 function userPromptEvent(overrides = {}) {
   return {
@@ -447,4 +453,103 @@ test('runCodexMemoryHook wires configured engine, protocol, adapter, and teardow
     },
   ]);
   assert.deepEqual(calls.at(-1), ['close']);
+});
+
+
+test('Codex CLI executes when invoked through an aliased engine path', () => {
+  const root = mkdtempSync(join(tmpdir(), 'agent-hub-codex-cli-'));
+  const repoDir = join(root, 'repo');
+  const aliasDir = join(root, 'memory-engine-alias');
+  const dbPath = join(root, 'memory.sqlite3');
+  const realEngineDir = dirname(dirname(fileURLToPath(
+    new URL('../../memory-engine/index.mjs', import.meta.url),
+  )));
+
+  try {
+    mkdirSync(repoDir, { recursive: true });
+    execFileSync('git', ['init', '-b', 'main', repoDir], { stdio: 'ignore' });
+    execFileSync('git', ['-C', repoDir, 'config', 'user.email', 'test@example.com']);
+    execFileSync('git', ['-C', repoDir, 'config', 'user.name', 'Memory Test']);
+    writeFileSync(join(repoDir, 'README.md'), '# smoke\n');
+    execFileSync('git', ['-C', repoDir, 'add', 'README.md']);
+    execFileSync('git', ['-C', repoDir, 'commit', '-m', 'smoke'], { stdio: 'ignore' });
+    const revisionSha = execFileSync(
+      'git',
+      ['-C', repoDir, 'rev-parse', 'HEAD'],
+      { encoding: 'utf8' },
+    ).trim();
+
+    const memory = new MemoryEngine({ dbPath });
+    memory.registerProject({
+      projectId: 'project-a',
+      repoIdentity: 'github.com/example/project',
+    });
+    const now = '2026-09-30T01:00:00.000Z';
+    memory.ingest({
+      evidence: {
+        id: 'e-cli-alias',
+        projectId: 'project-a',
+        harness: 'test',
+        sessionId: 'seed',
+        sourceKind: 'session',
+        sourceRef: 'session:seed',
+        capturedAt: now,
+        branch: 'main',
+        commitSha: revisionSha,
+        path: null,
+        blobOid: null,
+        content: 'Use Postgres for concurrent writers.',
+        authorityClass: 'user_direct',
+        metadata: {},
+      },
+      claim: {
+        id: 'c-cli-alias',
+        kind: 'decision',
+        subject: 'database',
+        predicate: 'uses',
+        value: 'Postgres for concurrent writers',
+        branchScope: 'main',
+        createdAt: now,
+      },
+    });
+    memory.close();
+
+    symlinkSync(
+      realEngineDir,
+      aliasDir,
+      process.platform === 'win32' ? 'junction' : 'dir',
+    );
+
+    const event = JSON.stringify({
+      session_id: 'thr-smoke',
+      transcript_path: null,
+      cwd: repoDir,
+      hook_event_name: 'UserPromptSubmit',
+      model: 'gpt-5.6-sol',
+      permission_mode: 'default',
+      turn_id: 'turn-smoke-1',
+      prompt: 'What database do we use for concurrent writers?',
+    });
+
+    const result = spawnSync(
+      process.execPath,
+      [join(aliasDir, 'adapters', 'codex-hook-cli.mjs')],
+      {
+        input: event,
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          AGENT_HUB_MEMORY_DB: dbPath,
+          AGENT_HUB_MEMORY_PROJECT_ID: 'project-a',
+          AGENT_HUB_MEMORY_REPO_IDENTITY: 'github.com/example/project',
+          AGENT_HUB_MEMORY_CAPTURE_PROMPTS: 'false',
+        },
+      },
+    );
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /Postgres for concurrent writers/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
