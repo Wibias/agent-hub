@@ -168,6 +168,24 @@ export function defaultEmbeddingIpcPath({
   return join(base, `agent-hub-memory-embedding-${userKey}.sock`);
 }
 
+function unixSocketIsActive(socketPath) {
+  return new Promise((resolve) => {
+    const socket = createConnection(socketPath);
+    let settled = false;
+
+    const finish = (active) => {
+      if (settled) return;
+      settled = true;
+      socket.destroy();
+      resolve(active);
+    };
+
+    socket.setTimeout(100, () => finish(false));
+    socket.once('connect', () => finish(true));
+    socket.once('error', () => finish(false));
+  });
+}
+
 async function removeStaleUnixSocket(socketPath, platform = process.platform) {
   if (platform === 'win32') return;
 
@@ -181,6 +199,9 @@ async function removeStaleUnixSocket(socketPath, platform = process.platform) {
 
   if (!stat.isSocket()) {
     throw new Error('embedding IPC path exists and is not a socket');
+  }
+  if (await unixSocketIsActive(socketPath)) {
+    throw new Error('embedding worker is already running');
   }
   await rm(socketPath, { force: true });
 }
