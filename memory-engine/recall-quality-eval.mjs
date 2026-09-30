@@ -301,10 +301,19 @@ export function sweepSemanticThresholds(rawCases, {
       (entry) => relevantPassesThreshold(entry, threshold, k),
     ).length;
     const falseNegativeQueries = positive.length - truePositiveQueries;
-    const falsePositiveQueries = negative.filter(
+    const wrongPositiveQueryRetrievals = positive.filter((entry) => (
+      !relevantPassesThreshold(entry, threshold, k)
+      && anyPassesThreshold(entry, threshold, k)
+    )).length;
+    const negativeFalsePositiveQueries = negative.filter(
       (entry) => anyPassesThreshold(entry, threshold, k),
     ).length;
-    const trueNegativeQueries = negative.length - falsePositiveQueries;
+    const falsePositiveQueries = (
+      wrongPositiveQueryRetrievals + negativeFalsePositiveQueries
+    );
+    const trueNegativeQueries = (
+      negative.length - negativeFalsePositiveQueries
+    );
 
     const precisionDenominator = truePositiveQueries + falsePositiveQueries;
     const precision = precisionDenominator === 0
