@@ -147,7 +147,8 @@ test('memory list includes stable refs and hides raw Claim IDs', async () => {
   });
 
   const output = await adapter.handle(event('memory list'));
-  const context = output.hookSpecificOutput.additionalContext;
+  assert.equal(output.decision, 'block');
+  const context = output.reason;
 
   for (const claim of state.claims) {
     assert.equal(context.includes(memoryClaimRef(claim.id)), true);
@@ -203,12 +204,14 @@ test('unknown memory ref fails closed without lifecycle mutation', async () => {
     git: fakeGit(),
   });
 
-  await adapter.handle(event('memory forget: @0000000000'));
+  const output = await adapter.handle(event('memory forget: @0000000000'));
 
   assert.deepEqual(
     calls.map((call) => call.operation),
-    ['capture_evidence', 'recall'],
+    ['capture_evidence'],
   );
+  assert.equal(output.decision, 'block');
+  assert.match(output.reason, /not found|not unique/i);
 });
 
 test('real Codex CLI supports list, replace, and forget by stable ref', () => {
@@ -313,11 +316,10 @@ test('real Codex CLI supports list, replace, and forget by stable ref', () => {
 
     const listed = run('memory list', 'turn-list');
     assert.equal(listed.status, 0, listed.stderr);
-    const listContext = JSON.parse(
-      listed.stdout,
-    ).hookSpecificOutput.additionalContext;
-    assert.equal(listContext.includes(dbRef), true);
-    assert.equal(listContext.includes(cameraRef), true);
+    const listOutput = JSON.parse(listed.stdout);
+    assert.equal(listOutput.decision, 'block');
+    assert.equal(listOutput.reason.includes(dbRef), true);
+    assert.equal(listOutput.reason.includes(cameraRef), true);
 
     const replaced = run(
       'memory replace: ' + dbRef + ' => memory: database is CockroachDB',
