@@ -142,3 +142,49 @@ test('embedding IPC rejects model identity mismatches', async (t) => {
     /embedding worker model identity mismatch/i,
   );
 });
+
+
+test('a second Unix worker cannot replace an active socket', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'agent-hub-embedding-ipc-active-'));
+  const socketPath = join(root, 'embedding.sock');
+  t.after(async () => {
+    await rm(root, { recursive: true, force: true });
+  });
+
+  const embedder = {
+    modelId: 'test/model',
+    modelRevision: 'test-revision',
+    dimensions: 3,
+    async embedQuery() {
+      return vector(1);
+    },
+    async embedPassages(texts) {
+      return texts.map(() => vector(1));
+    },
+  };
+
+  const first = await startEmbeddingIpcServer({
+    socketPath,
+    embedder,
+    platform: 'linux',
+  });
+  t.after(() => first.close());
+
+  await assert.rejects(
+    startEmbeddingIpcServer({
+      socketPath,
+      embedder,
+      platform: 'linux',
+    }),
+    /already running/i,
+  );
+
+  const client = createEmbeddingIpcClient({
+    socketPath,
+    modelId: embedder.modelId,
+    modelRevision: embedder.modelRevision,
+    dimensions: embedder.dimensions,
+    timeoutMs: 1_000,
+  });
+  assert.deepEqual([...await client.embedQuery('still alive')], [1, 2, 3]);
+});
