@@ -73,6 +73,10 @@ export function formatCodexMemoryContext(result, {
 export function parseExplicitMemoryPrompt(prompt) {
   if (typeof prompt !== 'string') return null;
 
+  if (/^\s*memory\s+list\s*$/i.test(prompt)) {
+    return { mode: 'list' };
+  }
+
   if (/^\s*memory:\s*\S/i.test(prompt)) {
     return {
       mode: 'remember',
@@ -101,6 +105,68 @@ export function parseExplicitMemoryPrompt(prompt) {
     oldValue,
     newValue,
   };
+}
+
+function activeDirectUserMemories(memory, {
+  projectId,
+  branch,
+}) {
+  if (typeof memory?.exportCanonical !== 'function') return [];
+  const exported = memory.exportCanonical();
+  if (
+    !exported
+    || !Array.isArray(exported.claims)
+    || !Array.isArray(exported.evidence)
+  ) {
+    return [];
+  }
+
+  const evidenceById = new Map(
+    exported.evidence.map((evidence) => [evidence.id, evidence]),
+  );
+
+  return exported.claims
+    .filter((claim) => {
+      const evidence = evidenceById.get(claim.created_from_evidence_id);
+      return (
+        claim?.project_id === projectId
+        && claim?.branch_scope === branch
+        && claim?.state === 'active'
+        && claim?.kind === 'user_direct'
+        && claim?.subject === 'user memory'
+        && claim?.predicate === 'states'
+        && evidence?.project_id === projectId
+        && evidence?.authority_class === 'user_direct'
+      );
+    })
+    .sort((a, b) => (
+      String(b.created_at ?? '').localeCompare(String(a.created_at ?? ''))
+      || String(a.id ?? '').localeCompare(String(b.id ?? ''))
+    ));
+}
+
+function formatActiveDirectUserMemories(memory, {
+  projectId,
+  branch,
+  maxBytes,
+}) {
+  const memories = activeDirectUserMemories(memory, { projectId, branch });
+  if (memories.length === 0) {
+    return 'No active durable user memories for the current project and branch.';
+  }
+
+  const lines = [
+    'Active durable user memories for the current project and branch:',
+  ];
+
+  for (const claim of memories) {
+    const line = `- ${compactText(claim.value_text ?? '', 500)}`;
+    const candidate = [...lines, line].join('\n');
+    if (byteLength(candidate) > maxBytes) break;
+    lines.push(line);
+  }
+
+  return lines.join('\n');
 }
 
 function exactActiveReplacementTarget(memory, {
@@ -209,6 +275,20 @@ export function createCodexMemoryHookAdapter({
             ? parseExplicitMemoryPrompt(event.prompt)
             : null
         );
+
+        if (explicitMemory?.mode === 'list') {
+          return {
+            hookSpecificOutput: {
+              hookEventName: 'UserPromptSubmit',
+              additionalContext: formatActiveDirectUserMemories(memory, {
+                projectId,
+                branch: context.branch,
+                maxBytes: maxContextBytes,
+              }),
+            },
+          };
+        }
+
         const shouldCapture = capturePrompts || explicitMemory !== null;
 
         if (shouldCapture) {
