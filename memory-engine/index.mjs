@@ -365,6 +365,301 @@ function searchableText(claim, evidenceContent) {
   return `${raw} ${lexicalTerms(raw).join(' ')}`;
 }
 
+
+function prepareEvidenceInput(evidence) {
+  if (!evidence || typeof evidence !== 'object') {
+    throw new TypeError('evidence is required');
+  }
+
+  for (const [value, name] of [
+    [evidence.id, 'evidence.id'],
+    [evidence.projectId, 'evidence.projectId'],
+    [evidence.sourceKind, 'evidence.sourceKind'],
+    [evidence.capturedAt, 'evidence.capturedAt'],
+    [evidence.authorityClass, 'evidence.authorityClass'],
+  ]) {
+    assertNonEmptyString(value, name);
+  }
+  assertAuthorityClass(evidence.authorityClass);
+
+  const redactedContent = redactString(String(evidence.content ?? ''));
+  const redactedSource = redactString(evidence.sourceRef);
+  const redactedMetadata = redactValue(evidence.metadata ?? {});
+
+  return {
+    id: evidence.id,
+    projectId: evidence.projectId,
+    harness: evidence.harness ?? null,
+    sessionId: evidence.sessionId ?? null,
+    sourceKind: evidence.sourceKind,
+    sourceRef: redactedSource.value ?? null,
+    capturedAt: evidence.capturedAt,
+    branch: evidence.branch ?? null,
+    commitSha: evidence.commitSha ?? null,
+    path: evidence.path ?? null,
+    blobOid: evidence.blobOid ?? null,
+    content: redactedContent.value,
+    sensitivity: (
+      redactedContent.redacted
+      || redactedSource.redacted
+      || redactedMetadata.redacted
+    ) ? 'secret_redacted' : (evidence.sensitivity ?? 'normal'),
+    authorityClass: evidence.authorityClass,
+    metadataJson: JSON.stringify(redactedMetadata.value),
+  };
+}
+
+function prepareClaimInput({ evidence, claim }) {
+  if (!claim || typeof claim !== 'object') {
+    throw new TypeError('claim is required');
+  }
+
+  for (const [value, name] of [
+    [claim.id, 'claim.id'],
+    [claim.kind, 'claim.kind'],
+    [claim.subject, 'claim.subject'],
+    [claim.predicate, 'claim.predicate'],
+    [claim.createdAt, 'claim.createdAt'],
+  ]) {
+    assertNonEmptyString(value, name);
+  }
+
+  const branchScope = claim.branchScope ?? evidence.branch;
+  assertNonEmptyString(branchScope, 'claim.branchScope');
+
+  const state = claim.state ?? 'active';
+  if (!CLAIM_STATES.has(state)) {
+    throw new Error(`unsupported claim state: ${state}`);
+  }
+
+  const redactedSubject = redactString(claim.subject);
+  const redactedPredicate = redactString(claim.predicate);
+  const redactedValue = redactString(String(claim.value ?? ''));
+
+  return {
+    id: claim.id,
+    projectId: evidence.projectId ?? evidence.project_id,
+    kind: claim.kind,
+    subject: redactedSubject.value,
+    predicate: redactedPredicate.value,
+    value: redactedValue.value,
+    valueRedacted: redactedValue.redacted,
+    state,
+    branchScope,
+    createdFromEvidenceId: evidence.id,
+    createdAt: claim.createdAt,
+    validFrom: claim.validFrom ?? null,
+    validUntil: claim.validUntil ?? null,
+  };
+}
+
+function prepareLifecycle(claimId, lifecycle = {}) {
+  const supersedes = [...new Set(lifecycle.supersedes ?? [])];
+  const rejects = [...new Set(lifecycle.rejects ?? [])];
+  const conflictsWith = [...new Set(lifecycle.conflictsWith ?? [])];
+
+  if (
+    supersedes.includes(claimId)
+    || rejects.includes(claimId)
+    || conflictsWith.includes(claimId)
+  ) {
+    throw new Error('a claim cannot transition itself');
+  }
+
+  return { supersedes, rejects, conflictsWith };
+}
+
+function insertEvidenceRow(db, evidence) {
+  db.prepare(`
+    INSERT INTO evidence (
+      id, project_id, harness, session_id, source_kind, source_ref,
+      captured_at, branch, commit_sha, path, blob_oid, content_redacted,
+      sensitivity, authority_class, metadata_json
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    evidence.id,
+    evidence.projectId,
+    evidence.harness,
+    evidence.sessionId,
+    evidence.sourceKind,
+    evidence.sourceRef,
+    evidence.capturedAt,
+    evidence.branch,
+    evidence.commitSha,
+    evidence.path,
+    evidence.blobOid,
+    evidence.content,
+    evidence.sensitivity,
+    evidence.authorityClass,
+    evidence.metadataJson,
+  );
+}
+
+function insertClaimAndLifecycle(db, {
+  claim,
+  evidenceContent,
+  lifecycle,
+}) {
+  db.prepare(`
+    INSERT INTO claims (
+      id, project_id, kind, subject, predicate, value_text, state,
+      branch_scope, created_from_evidence_id, created_at, valid_from,
+      valid_until
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    claim.id,
+    claim.projectId,
+    claim.kind,
+    claim.subject,
+    claim.predicate,
+    claim.value,
+    claim.state,
+    claim.branchScope,
+    claim.createdFromEvidenceId,
+    claim.createdAt,
+    claim.validFrom,
+    claim.validUntil,
+  );
+
+  for (const targetId of lifecycle.supersedes) {
+    const target = db
+      .prepare('SELECT project_id, state FROM claims WHERE id = ?')
+      .get(targetId);
+    if (!target) throw new Error(`cannot supersede unknown claim: ${targetId}`);
+    if (target.project_id !== claim.projectId) {
+      throw new Error('lifecycle transitions cannot cross project boundaries');
+    }
+    if (target.state !== 'active') {
+      throw new Error(`cannot supersede claim ${targetId} in state ${target.state}`);
+    }
+
+    db.prepare(`
+      UPDATE claims
+      SET state = 'superseded', superseded_by_claim_id = ?
+      WHERE id = ?
+    `).run(claim.id, targetId);
+
+    db.prepare(`
+      INSERT INTO lifecycle_events (
+        project_id, action, source_claim_id, target_claim_id, evidence_id, created_at
+      ) VALUES (?, 'supersede', ?, ?, ?, ?)
+    `).run(
+      claim.projectId,
+      claim.id,
+      targetId,
+      claim.createdFromEvidenceId,
+      claim.createdAt,
+    );
+
+    db.prepare(`
+      UPDATE conflicts
+      SET state = 'resolved',
+          resolved_by_evidence_id = ?,
+          resolved_at = ?
+      WHERE project_id = ?
+        AND state = 'open'
+        AND (claim_a = ? OR claim_b = ?)
+    `).run(
+      claim.createdFromEvidenceId,
+      claim.createdAt,
+      claim.projectId,
+      targetId,
+      targetId,
+    );
+  }
+
+  for (const targetId of lifecycle.rejects) {
+    const target = db
+      .prepare('SELECT project_id, state FROM claims WHERE id = ?')
+      .get(targetId);
+    if (!target) throw new Error(`cannot reject unknown claim: ${targetId}`);
+    if (target.project_id !== claim.projectId) {
+      throw new Error('lifecycle transitions cannot cross project boundaries');
+    }
+    if (target.state !== 'active') {
+      throw new Error(`cannot reject claim ${targetId} in state ${target.state}`);
+    }
+
+    db.prepare(`
+      UPDATE claims
+      SET state = 'rejected', rejected_by_evidence_id = ?
+      WHERE id = ?
+    `).run(claim.createdFromEvidenceId, targetId);
+
+    db.prepare(`
+      INSERT INTO lifecycle_events (
+        project_id, action, source_claim_id, target_claim_id, evidence_id, created_at
+      ) VALUES (?, 'reject', ?, ?, ?, ?)
+    `).run(
+      claim.projectId,
+      claim.id,
+      targetId,
+      claim.createdFromEvidenceId,
+      claim.createdAt,
+    );
+
+    db.prepare(`
+      UPDATE conflicts
+      SET state = 'resolved',
+          resolved_by_evidence_id = ?,
+          resolved_at = ?
+      WHERE project_id = ?
+        AND state = 'open'
+        AND (claim_a = ? OR claim_b = ?)
+    `).run(
+      claim.createdFromEvidenceId,
+      claim.createdAt,
+      claim.projectId,
+      targetId,
+      targetId,
+    );
+  }
+
+  if (lifecycle.conflictsWith.length > 0 && claim.state !== 'active') {
+    throw new Error('only active claims can open conflicts');
+  }
+
+  for (const targetId of lifecycle.conflictsWith) {
+    const target = db
+      .prepare('SELECT project_id, branch_scope, state FROM claims WHERE id = ?')
+      .get(targetId);
+    if (!target) throw new Error(`cannot conflict with unknown claim: ${targetId}`);
+    if (target.project_id !== claim.projectId) {
+      throw new Error('conflict relations cannot cross project boundaries');
+    }
+    if (target.branch_scope !== claim.branchScope) {
+      throw new Error('conflict relations cannot cross branch boundaries');
+    }
+    if (target.state !== 'active') {
+      throw new Error(`cannot conflict with claim ${targetId} in state ${target.state}`);
+    }
+
+    const [claimA, claimB] = [claim.id, targetId].sort();
+    db.prepare(`
+      INSERT INTO conflicts (
+        project_id, claim_a, claim_b, state, created_by_evidence_id, created_at
+      ) VALUES (?, ?, ?, 'open', ?, ?)
+      ON CONFLICT(project_id, claim_a, claim_b) DO NOTHING
+    `).run(
+      claim.projectId,
+      claimA,
+      claimB,
+      claim.createdFromEvidenceId,
+      claim.createdAt,
+    );
+  }
+
+  db.prepare(`
+    INSERT INTO claim_fts (claim_id, project_id, branch_scope, text)
+    VALUES (?, ?, ?, ?)
+  `).run(
+    claim.id,
+    claim.projectId,
+    claim.branchScope,
+    searchableText(claim, evidenceContent),
+  );
+}
+
 const CLAIM_ELIGIBILITY_SQL = `
   (
     ? = 'historical'
@@ -1957,251 +2252,47 @@ export class MemoryEngine {
     };
   }
 
-  ingest({ evidence, claim, lifecycle = {} }) {
-    if (!evidence || !claim) {
-      throw new TypeError('ingest requires evidence and claim');
-    }
-
-    for (const [value, name] of [
-      [evidence.id, 'evidence.id'],
-      [evidence.projectId, 'evidence.projectId'],
-      [evidence.sourceKind, 'evidence.sourceKind'],
-      [evidence.capturedAt, 'evidence.capturedAt'],
-      [evidence.authorityClass, 'evidence.authorityClass'],
-      [claim.id, 'claim.id'],
-      [claim.kind, 'claim.kind'],
-      [claim.subject, 'claim.subject'],
-      [claim.predicate, 'claim.predicate'],
-      [claim.createdAt, 'claim.createdAt'],
-    ]) {
-      assertNonEmptyString(value, name);
-    }
-
-    if (!this.getProject(evidence.projectId)) {
-      throw new Error(`unknown project: ${evidence.projectId}`);
-    }
-    assertAuthorityClass(evidence.authorityClass);
-
-    const branchScope = claim.branchScope ?? evidence.branch;
-    assertNonEmptyString(branchScope, 'claim.branchScope');
-
-    const state = claim.state ?? 'active';
-    if (!CLAIM_STATES.has(state)) {
-      throw new Error(`unsupported claim state: ${state}`);
-    }
-
-    const redactedContent = redactString(String(evidence.content ?? ''));
-    const redactedSource = redactString(evidence.sourceRef);
-    const redactedMetadata = redactValue(evidence.metadata ?? {});
-    const redactedClaim = redactString(String(claim.value ?? ''));
-
-    const sensitivity = (
-      redactedContent.redacted
-      || redactedSource.redacted
-      || redactedMetadata.redacted
-      || redactedClaim.redacted
-    ) ? 'secret_redacted' : (evidence.sensitivity ?? 'normal');
-
-    const sanitizedEvidence = {
-      id: evidence.id,
-      projectId: evidence.projectId,
-      harness: evidence.harness ?? null,
-      sessionId: evidence.sessionId ?? null,
-      sourceKind: evidence.sourceKind,
-      sourceRef: redactedSource.value ?? null,
-      capturedAt: evidence.capturedAt,
-      branch: evidence.branch ?? null,
-      commitSha: evidence.commitSha ?? null,
-      path: evidence.path ?? null,
-      blobOid: evidence.blobOid ?? null,
-      content: redactedContent.value,
-      sensitivity,
-      authorityClass: evidence.authorityClass,
-      metadataJson: JSON.stringify(redactedMetadata.value),
-    };
-
-    const sanitizedClaim = {
-      id: claim.id,
-      projectId: evidence.projectId,
-      kind: claim.kind,
-      subject: redactString(claim.subject).value,
-      predicate: redactString(claim.predicate).value,
-      value: redactedClaim.value,
-      state,
-      branchScope,
-      createdFromEvidenceId: evidence.id,
-      createdAt: claim.createdAt,
-      validFrom: claim.validFrom ?? null,
-      validUntil: claim.validUntil ?? null,
-    };
-
-    const supersedes = [...new Set(lifecycle.supersedes ?? [])];
-    const rejects = [...new Set(lifecycle.rejects ?? [])];
-    const conflictsWith = [...new Set(lifecycle.conflictsWith ?? [])];
-
-    if (
-      supersedes.includes(claim.id)
-      || rejects.includes(claim.id)
-      || conflictsWith.includes(claim.id)
-    ) {
-      throw new Error('a claim cannot transition itself');
+  recordEvidence(evidence) {
+    const preparedEvidence = prepareEvidenceInput(evidence);
+    if (!this.getProject(preparedEvidence.projectId)) {
+      throw new Error(`unknown project: ${preparedEvidence.projectId}`);
     }
 
     this.#db.exec('BEGIN IMMEDIATE');
     try {
-      this.#db.prepare(`
-        INSERT INTO evidence (
-          id, project_id, harness, session_id, source_kind, source_ref,
-          captured_at, branch, commit_sha, path, blob_oid, content_redacted,
-          sensitivity, authority_class, metadata_json
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(
-        sanitizedEvidence.id,
-        sanitizedEvidence.projectId,
-        sanitizedEvidence.harness,
-        sanitizedEvidence.sessionId,
-        sanitizedEvidence.sourceKind,
-        sanitizedEvidence.sourceRef,
-        sanitizedEvidence.capturedAt,
-        sanitizedEvidence.branch,
-        sanitizedEvidence.commitSha,
-        sanitizedEvidence.path,
-        sanitizedEvidence.blobOid,
-        sanitizedEvidence.content,
-        sanitizedEvidence.sensitivity,
-        sanitizedEvidence.authorityClass,
-        sanitizedEvidence.metadataJson,
-      );
+      insertEvidenceRow(this.#db, preparedEvidence);
+      this.#db.exec('COMMIT');
+    } catch (error) {
+      this.#db.exec('ROLLBACK');
+      throw error;
+    }
 
-      this.#db.prepare(`
-        INSERT INTO claims (
-          id, project_id, kind, subject, predicate, value_text, state,
-          branch_scope, created_from_evidence_id, created_at, valid_from,
-          valid_until
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(
-        sanitizedClaim.id,
-        sanitizedClaim.projectId,
-        sanitizedClaim.kind,
-        sanitizedClaim.subject,
-        sanitizedClaim.predicate,
-        sanitizedClaim.value,
-        sanitizedClaim.state,
-        sanitizedClaim.branchScope,
-        sanitizedClaim.createdFromEvidenceId,
-        sanitizedClaim.createdAt,
-        sanitizedClaim.validFrom,
-        sanitizedClaim.validUntil,
-      );
+    return this.getEvidence(preparedEvidence.id);
+  }
 
-      for (const targetId of supersedes) {
-        const target = this.#db
-          .prepare('SELECT project_id, state FROM claims WHERE id = ?')
-          .get(targetId);
-        if (!target) throw new Error(`cannot supersede unknown claim: ${targetId}`);
-        if (target.project_id !== evidence.projectId) {
-          throw new Error('lifecycle transitions cannot cross project boundaries');
-        }
-        if (target.state !== 'active') {
-          throw new Error(`cannot supersede claim ${targetId} in state ${target.state}`);
-        }
+  assertClaim({ evidenceId, claim, lifecycle = {} }) {
+    assertNonEmptyString(evidenceId, 'evidenceId');
 
-        this.#db.prepare(`
-          UPDATE claims
-          SET state = 'superseded', superseded_by_claim_id = ?
-          WHERE id = ?
-        `).run(claim.id, targetId);
+    const evidence = this.getEvidence(evidenceId);
+    if (!evidence) throw new Error(`unknown evidence: ${evidenceId}`);
 
-        this.#db.prepare(`
-          INSERT INTO lifecycle_events (
-            project_id, action, source_claim_id, target_claim_id, evidence_id, created_at
-          ) VALUES (?, 'supersede', ?, ?, ?, ?)
-        `).run(evidence.projectId, claim.id, targetId, evidence.id, claim.createdAt);
+    const preparedClaim = prepareClaimInput({
+      evidence: {
+        id: evidence.id,
+        projectId: evidence.project_id,
+        branch: evidence.branch,
+      },
+      claim,
+    });
+    const preparedLifecycle = prepareLifecycle(preparedClaim.id, lifecycle);
 
-        this.#db.prepare(`
-          UPDATE conflicts
-          SET state = 'resolved',
-              resolved_by_evidence_id = ?,
-              resolved_at = ?
-          WHERE project_id = ?
-            AND state = 'open'
-            AND (claim_a = ? OR claim_b = ?)
-        `).run(evidence.id, claim.createdAt, evidence.projectId, targetId, targetId);
-      }
-
-      for (const targetId of rejects) {
-        const target = this.#db
-          .prepare('SELECT project_id, state FROM claims WHERE id = ?')
-          .get(targetId);
-        if (!target) throw new Error(`cannot reject unknown claim: ${targetId}`);
-        if (target.project_id !== evidence.projectId) {
-          throw new Error('lifecycle transitions cannot cross project boundaries');
-        }
-        if (target.state !== 'active') {
-          throw new Error(`cannot reject claim ${targetId} in state ${target.state}`);
-        }
-
-        this.#db.prepare(`
-          UPDATE claims
-          SET state = 'rejected', rejected_by_evidence_id = ?
-          WHERE id = ?
-        `).run(evidence.id, targetId);
-
-        this.#db.prepare(`
-          INSERT INTO lifecycle_events (
-            project_id, action, source_claim_id, target_claim_id, evidence_id, created_at
-          ) VALUES (?, 'reject', ?, ?, ?, ?)
-        `).run(evidence.projectId, claim.id, targetId, evidence.id, claim.createdAt);
-
-        this.#db.prepare(`
-          UPDATE conflicts
-          SET state = 'resolved',
-              resolved_by_evidence_id = ?,
-              resolved_at = ?
-          WHERE project_id = ?
-            AND state = 'open'
-            AND (claim_a = ? OR claim_b = ?)
-        `).run(evidence.id, claim.createdAt, evidence.projectId, targetId, targetId);
-      }
-
-      if (conflictsWith.length > 0 && state !== 'active') {
-        throw new Error('only active claims can open conflicts');
-      }
-
-      for (const targetId of conflictsWith) {
-        const target = this.#db
-          .prepare('SELECT project_id, branch_scope, state FROM claims WHERE id = ?')
-          .get(targetId);
-        if (!target) throw new Error(`cannot conflict with unknown claim: ${targetId}`);
-        if (target.project_id !== evidence.projectId) {
-          throw new Error('conflict relations cannot cross project boundaries');
-        }
-        if (target.branch_scope !== branchScope) {
-          throw new Error('conflict relations cannot cross branch boundaries');
-        }
-        if (target.state !== 'active') {
-          throw new Error(`cannot conflict with claim ${targetId} in state ${target.state}`);
-        }
-
-        const [claimA, claimB] = [claim.id, targetId].sort();
-        this.#db.prepare(`
-          INSERT INTO conflicts (
-            project_id, claim_a, claim_b, state, created_by_evidence_id, created_at
-          ) VALUES (?, ?, ?, 'open', ?, ?)
-          ON CONFLICT(project_id, claim_a, claim_b) DO NOTHING
-        `).run(evidence.projectId, claimA, claimB, evidence.id, claim.createdAt);
-      }
-
-      this.#db.prepare(`
-        INSERT INTO claim_fts (claim_id, project_id, branch_scope, text)
-        VALUES (?, ?, ?, ?)
-      `).run(
-        claim.id,
-        evidence.projectId,
-        branchScope,
-        searchableText(sanitizedClaim, sanitizedEvidence.content),
-      );
-
+    this.#db.exec('BEGIN IMMEDIATE');
+    try {
+      insertClaimAndLifecycle(this.#db, {
+        claim: preparedClaim,
+        evidenceContent: evidence.content_redacted,
+        lifecycle: preparedLifecycle,
+      });
       this.#db.exec('COMMIT');
     } catch (error) {
       this.#db.exec('ROLLBACK');
@@ -2209,8 +2300,54 @@ export class MemoryEngine {
     }
 
     return {
-      evidence: this.getEvidence(evidence.id),
-      claim: this.getClaim(claim.id),
+      evidence: this.getEvidence(evidenceId),
+      claim: this.getClaim(preparedClaim.id),
+    };
+  }
+
+  ingest({ evidence, claim, lifecycle = {} }) {
+    if (!evidence || !claim) {
+      throw new TypeError('ingest requires evidence and claim');
+    }
+
+    const preparedEvidence = prepareEvidenceInput(evidence);
+    if (!this.getProject(preparedEvidence.projectId)) {
+      throw new Error(`unknown project: ${preparedEvidence.projectId}`);
+    }
+
+    const preparedClaim = prepareClaimInput({
+      evidence: {
+        id: preparedEvidence.id,
+        projectId: preparedEvidence.projectId,
+        branch: preparedEvidence.branch,
+      },
+      claim,
+    });
+    const preparedLifecycle = prepareLifecycle(preparedClaim.id, lifecycle);
+
+    // Preserve legacy ingest semantics: a secret appearing only in the claim
+    // still marks the paired evidence row as secret-redacted.
+    if (preparedClaim.valueRedacted) {
+      preparedEvidence.sensitivity = 'secret_redacted';
+    }
+
+    this.#db.exec('BEGIN IMMEDIATE');
+    try {
+      insertEvidenceRow(this.#db, preparedEvidence);
+      insertClaimAndLifecycle(this.#db, {
+        claim: preparedClaim,
+        evidenceContent: preparedEvidence.content,
+        lifecycle: preparedLifecycle,
+      });
+      this.#db.exec('COMMIT');
+    } catch (error) {
+      this.#db.exec('ROLLBACK');
+      throw error;
+    }
+
+    return {
+      evidence: this.getEvidence(preparedEvidence.id),
+      claim: this.getClaim(preparedClaim.id),
     };
   }
 
