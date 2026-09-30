@@ -70,6 +70,10 @@ export function formatCodexMemoryContext(result, {
   return output;
 }
 
+function explicitMemoryPrompt(prompt) {
+  return /^\s*memory:\s*\S/i.test(prompt);
+}
+
 function validUserPromptEvent(event) {
   return (
     event
@@ -99,6 +103,7 @@ export function createCodexMemoryHookAdapter({
   memory,
   projectId,
   capturePrompts = false,
+  explicitMemoryRequests = false,
   clock = () => new Date().toISOString(),
   git = null,
   maxContextBytes = 8_192,
@@ -114,6 +119,9 @@ export function createCodexMemoryHookAdapter({
   }
   if (typeof capturePrompts !== 'boolean') {
     throw new TypeError('capturePrompts must be a boolean');
+  }
+  if (typeof explicitMemoryRequests !== 'boolean') {
+    throw new TypeError('explicitMemoryRequests must be a boolean');
   }
   if (typeof clock !== 'function') {
     throw new TypeError('clock must be a function');
@@ -148,35 +156,105 @@ export function createCodexMemoryHookAdapter({
         });
 
         const requestPrefix = `codex:${event.session_id}:${event.turn_id}`;
+        const evidenceId = `evidence:${requestPrefix}:prompt`;
+        const explicitMemory = (
+          explicitMemoryRequests
+          && explicitMemoryPrompt(event.prompt)
+        );
+        const shouldCapture = capturePrompts || explicitMemory;
 
-        if (capturePrompts) {
+        if (shouldCapture) {
           try {
-            await protocol.handle({
-              protocol: 'memory.protocol.v1',
-              operation: 'capture_evidence',
-              request_id: `${requestPrefix}:capture`,
-              payload: {
-                id: `evidence:${requestPrefix}:prompt`,
-                project_id: projectId,
-                harness: 'codex',
-                session_id: event.session_id,
-                source_kind: 'session',
-                source_ref: `session:${event.session_id}`,
-                captured_at: clock(),
-                branch: context.branch,
-                commit_sha: context.revisionSha,
-                path: null,
-                blob_oid: null,
-                content: event.prompt,
-                metadata: {
-                  event_type: 'user_prompt',
-                  hook_event_name: 'UserPromptSubmit',
-                  turn_id: event.turn_id,
+            const capturedAt = clock();
+            let capturedEvidence = null;
+
+            if (
+              explicitMemory
+              && typeof memory.getEvidence === 'function'
+            ) {
+              capturedEvidence = memory.getEvidence(evidenceId);
+            }
+
+            if (capturedEvidence === null) {
+              const metadata = {
+                event_type: 'user_prompt',
+                hook_event_name: 'UserPromptSubmit',
+                turn_id: event.turn_id,
+              };
+              if (explicitMemory) metadata.explicit_memory = true;
+
+              const captured = await protocol.handle({
+                protocol: 'memory.protocol.v1',
+                operation: 'capture_evidence',
+                request_id: `${requestPrefix}:capture`,
+                payload: {
+                  id: evidenceId,
+                  project_id: projectId,
+                  harness: 'codex',
+                  session_id: event.session_id,
+                  source_kind: 'session',
+                  source_ref: `session:${event.session_id}`,
+                  captured_at: capturedAt,
+                  branch: context.branch,
+                  commit_sha: context.revisionSha,
+                  path: null,
+                  blob_oid: null,
+                  content: event.prompt,
+                  metadata,
                 },
-              },
-            });
+              });
+
+              if (captured?.ok) {
+                capturedEvidence = captured.result?.evidence ?? null;
+              } else if (
+                explicitMemory
+                && typeof memory.getEvidence === 'function'
+              ) {
+                capturedEvidence = memory.getEvidence(evidenceId);
+              }
+            }
+
+            if (
+              explicitMemory
+              && capturedEvidence
+              && nonEmptyString(capturedEvidence.content_redacted)
+            ) {
+              const claimId = `claim:${requestPrefix}:prompt`;
+              const existingClaim = (
+                typeof memory.getClaim === 'function'
+                  ? memory.getClaim(claimId)
+                  : null
+              );
+
+              if (existingClaim === null) {
+                await protocol.handle({
+                  protocol: 'memory.protocol.v1',
+                  operation: 'assert_claim',
+                  request_id: `${requestPrefix}:claim`,
+                  payload: {
+                    evidence_id: evidenceId,
+                    claim: {
+                      id: claimId,
+                      kind: 'user_direct',
+                      subject: 'user memory',
+                      predicate: 'states',
+                      value: capturedEvidence.content_redacted,
+                      branch_scope: context.branch,
+                      created_at: (
+                        capturedEvidence.captured_at ?? capturedAt
+                      ),
+                    },
+                    lifecycle: {
+                      supersedes: [],
+                      rejects: [],
+                      conflicts_with: [],
+                    },
+                  },
+                });
+              }
+            }
           } catch {
-            // Evidence capture is optional and must never block prompt recall.
+            // Evidence/Claim persistence is optional and must never block recall.
           }
         }
 
