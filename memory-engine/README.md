@@ -539,6 +539,41 @@ session/turn Claim ID. It is stable for the lifetime of that Claim. Reference re
 is limited to active durable user memories in the current Git project and branch, and
 requires exactly one match; zero matches or a collision fail closed.
 
+#### Explain a recall decision
+
+The read-only diagnostic command
+
+```text
+memory explain: <query>
+```
+
+runs the same current-project/current-branch retrieval path used by normal Codex recall
+and consumes the command with `decision: "block"`. It does not capture Evidence or
+assert a Claim.
+
+The diagnostic reports, for the bounded top candidates:
+
+- final retrieval rank;
+- lexical rank when present;
+- semantic rank and similarity when present;
+- RRF score when hybrid fusion ran;
+- lexical fallback reason when semantic query embedding was unavailable;
+- source authority class;
+- whether the existing `answer` reliance policy selected or blocked the candidate.
+
+Example shape:
+
+```text
+Recall diagnostics for the current project and branch:
+Mode: hybrid
+Fallback: none
+- @7fa31c9e42 | final #1 | lexical #2 | semantic #1 (0.9123) | RRF 0.032522 | answer: selected | authority: user_direct | memory: database is Postgres
+```
+
+The diagnostic API lives in the retrieval/Codex adapter layer. It does not add an
+operation to frozen `memory.protocol.v1`, and normal recall keeps the same result
+shape and bounded context contract.
+
 #### Forget an active durable memory
 
 A current durable memory can be explicitly removed from current recall with:

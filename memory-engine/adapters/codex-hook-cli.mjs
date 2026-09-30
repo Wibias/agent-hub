@@ -321,6 +321,7 @@ export async function runCodexMemoryHook({
   createAdapter = createCodexMemoryHookAdapter,
   createEmbeddingClient = createEmbeddingIpcClient,
   createHybridRetriever = (options) => new HybridMemoryRetriever(options),
+  createDiagnosticsRetriever = (options) => new HybridMemoryRetriever(options),
   resolveProjectScope = resolveCodexProjectScope,
   ensureDbDirectory = defaultEnsureDbDirectory,
 } = {}) {
@@ -371,6 +372,20 @@ export async function runCodexMemoryHook({
       }
     }
 
+    let diagnosticsRetriever = null;
+    if (
+      hybridRetriever !== null
+      && typeof hybridRetriever.diagnoseRecall === 'function'
+    ) {
+      diagnosticsRetriever = hybridRetriever;
+    } else {
+      try {
+        diagnosticsRetriever = createDiagnosticsRetriever({ memory });
+      } catch {
+        diagnosticsRetriever = null;
+      }
+    }
+
     const protocol = createProtocol({
       memory,
       hybridRetriever,
@@ -386,6 +401,12 @@ export async function runCodexMemoryHook({
       projectId: scope.projectId,
       capturePrompts: config.capturePrompts,
       explicitMemoryRequests: configOptions.explicitMemoryRequests === true,
+      diagnoseRecall: (
+        diagnosticsRetriever !== null
+        && typeof diagnosticsRetriever.diagnoseRecall === 'function'
+      )
+        ? (args) => diagnosticsRetriever.diagnoseRecall(args)
+        : null,
     });
 
     return await adapter.handle(event);

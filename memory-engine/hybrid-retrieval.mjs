@@ -50,7 +50,18 @@ function assertIdList(value, name) {
   }
 }
 
-export function reciprocalRankFuse({
+function rankMap(ids) {
+  const ranks = new Map();
+  let rank = 0;
+  for (const id of ids) {
+    if (ranks.has(id)) continue;
+    rank += 1;
+    ranks.set(id, rank);
+  }
+  return ranks;
+}
+
+function reciprocalRankDetails({
   lexicalIds,
   semanticIds,
   createdAtById,
@@ -65,33 +76,55 @@ export function reciprocalRankFuse({
     throw new RangeError('k must be greater than zero');
   }
 
-  const scores = new Map();
+  const lexicalRanks = rankMap(lexicalIds);
+  const semanticRanks = rankMap(semanticIds);
+  const ids = new Set([...lexicalRanks.keys(), ...semanticRanks.keys()]);
 
-  const addRanks = (ids) => {
-    const seen = new Set();
-    let rank = 0;
-    for (const id of ids) {
-      if (seen.has(id)) continue;
-      seen.add(id);
-      rank += 1;
-      scores.set(id, (scores.get(id) ?? 0) + (1 / (k + rank)));
-    }
-  };
+  const details = [...ids].map((id) => {
+    const lexicalRank = lexicalRanks.get(id) ?? null;
+    const semanticRank = semanticRanks.get(id) ?? null;
+    const score = (
+      (lexicalRank === null ? 0 : (1 / (k + lexicalRank)))
+      + (semanticRank === null ? 0 : (1 / (k + semanticRank)))
+    );
+    return {
+      id,
+      lexicalRank,
+      semanticRank,
+      score,
+    };
+  });
 
-  addRanks(lexicalIds);
-  addRanks(semanticIds);
-
-  return [...scores.keys()].sort((left, right) => {
-    const scoreDifference = scores.get(right) - scores.get(left);
+  details.sort((left, right) => {
+    const scoreDifference = right.score - left.score;
     if (scoreDifference !== 0) return scoreDifference;
 
-    const leftCreatedAt = createdAtById.get(left) ?? '';
-    const rightCreatedAt = createdAtById.get(right) ?? '';
+    const leftCreatedAt = createdAtById.get(left.id) ?? '';
+    const rightCreatedAt = createdAtById.get(right.id) ?? '';
     const createdAtDifference = compareCodePoints(rightCreatedAt, leftCreatedAt);
     if (createdAtDifference !== 0) return createdAtDifference;
 
-    return compareCodePoints(left, right);
+    return compareCodePoints(left.id, right.id);
   });
+
+  return details.map((detail, index) => ({
+    ...detail,
+    finalRank: index + 1,
+  }));
+}
+
+export function reciprocalRankFuse({
+  lexicalIds,
+  semanticIds,
+  createdAtById,
+  k = DEFAULT_RRF_K,
+}) {
+  return reciprocalRankDetails({
+    lexicalIds,
+    semanticIds,
+    createdAtById,
+    k,
+  }).map((detail) => detail.id);
 }
 
 function validateBudget(maxItems, maxSerializedBytes) {
@@ -264,14 +297,12 @@ export class HybridMemoryRetriever {
     return { indexed: documents.length, failed: 0 };
   }
 
-  async recall({
+  async #rankRecallCandidates({
     projectId,
     branch,
     revisionSha = null,
     query,
     mode = 'current',
-    maxItems = 10,
-    maxSerializedBytes = 16_384,
   }) {
     const lexical = this.#memory.recall({
       projectId,
@@ -282,11 +313,23 @@ export class HybridMemoryRetriever {
       limit: this.#lexicalCandidateLimit,
     });
 
+    const lexicalIds = lexical.items.map((item) => item.claim.id);
+    const lexicalFallback = (fallbackReason) => ({
+      retrievalMode: 'lexical',
+      fallbackReason,
+      lexical,
+      semantic: [],
+      ranking: lexicalIds.map((id, index) => ({
+        id,
+        lexicalRank: index + 1,
+        semanticRank: null,
+        score: null,
+        finalRank: index + 1,
+      })),
+    });
+
     if (this.#embedder === null) {
-      return enforceRecallBudget(lexical, {
-        maxItems,
-        maxSerializedBytes,
-      });
+      return lexicalFallback('embedder_unavailable');
     }
 
     let queryVector;
@@ -298,11 +341,9 @@ export class HybridMemoryRetriever {
         'query embedding',
       );
     } catch {
-      return enforceRecallBudget(lexical, {
-        maxItems,
-        maxSerializedBytes,
-      });
+      return lexicalFallback('query_embedding_failed');
     }
+
     const semantic = this.#memory.semanticCandidates({
       projectId,
       branch,
@@ -326,7 +367,6 @@ export class HybridMemoryRetriever {
       ))
       .slice(0, this.#semanticCandidateLimit);
 
-    const lexicalIds = lexical.items.map((item) => item.claim.id);
     const semanticIds = semantic.map((candidate) => candidate.claim_id);
     const createdAtById = new Map();
     for (const item of lexical.items) {
@@ -336,17 +376,118 @@ export class HybridMemoryRetriever {
       createdAtById.set(candidate.claim_id, candidate.created_at);
     }
 
-    const fusedIds = reciprocalRankFuse({
-      lexicalIds,
-      semanticIds,
-      createdAtById,
+    return {
+      retrievalMode: 'hybrid',
+      fallbackReason: null,
+      lexical,
+      semantic,
+      ranking: reciprocalRankDetails({
+        lexicalIds,
+        semanticIds,
+        createdAtById,
+      }),
+    };
+  }
+
+  async diagnoseRecall({
+    projectId,
+    branch,
+    revisionSha = null,
+    query,
+    mode = 'current',
+    maxItems = 10,
+  }) {
+    validateBudget(maxItems, 16_384);
+    const ranked = await this.#rankRecallCandidates({
+      projectId,
+      branch,
+      revisionSha,
+      query,
+      mode,
     });
+
+    let materialized;
+    if (ranked.retrievalMode === 'lexical') {
+      materialized = {
+        items: ranked.lexical.items.slice(0, maxItems),
+        conflicts: connectedConflicts(
+          ranked.lexical.conflicts,
+          new Set(
+            ranked.lexical.items
+              .slice(0, maxItems)
+              .map((item) => item.claim.id),
+          ),
+        ),
+      };
+    } else {
+      materialized = this.#memory.materializeRecall({
+        projectId,
+        branch,
+        revisionSha,
+        mode,
+        claimIds: ranked.ranking
+          .slice(0, maxItems)
+          .map((detail) => detail.id),
+      });
+    }
+
+    const itemById = new Map(
+      materialized.items.map((item) => [item.claim.id, item]),
+    );
+    const semanticById = new Map(
+      ranked.semantic.map((candidate) => [candidate.claim_id, candidate]),
+    );
+
+    return {
+      retrievalMode: ranked.retrievalMode,
+      fallbackReason: ranked.fallbackReason,
+      candidates: ranked.ranking
+        .slice(0, maxItems)
+        .map((detail) => ({
+          item: itemById.get(detail.id) ?? null,
+          lexicalRank: detail.lexicalRank,
+          semanticRank: detail.semanticRank,
+          semanticSimilarity: (
+            semanticById.get(detail.id)?.similarity ?? null
+          ),
+          finalRank: detail.finalRank,
+          rrfScore: detail.score,
+        }))
+        .filter((candidate) => candidate.item !== null),
+      conflicts: materialized.conflicts,
+    };
+  }
+
+  async recall({
+    projectId,
+    branch,
+    revisionSha = null,
+    query,
+    mode = 'current',
+    maxItems = 10,
+    maxSerializedBytes = 16_384,
+  }) {
+    const ranked = await this.#rankRecallCandidates({
+      projectId,
+      branch,
+      revisionSha,
+      query,
+      mode,
+    });
+
+    if (ranked.retrievalMode === 'lexical') {
+      return enforceRecallBudget(ranked.lexical, {
+        maxItems,
+        maxSerializedBytes,
+      });
+    }
+
     const materialized = this.#memory.materializeRecall({
       projectId,
       branch,
       revisionSha,
       mode,
-      claimIds: fusedIds,
+      claimIds: ranked.ranking.map((detail) => detail.id),
     });
 
     return enforceRecallBudget(materialized, {
