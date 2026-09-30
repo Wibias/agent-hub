@@ -362,3 +362,89 @@ test('runCodexMemoryHook is disabled cleanly when required config is absent', as
   assert.equal(output, null);
   assert.equal(created, false);
 });
+
+
+test('runCodexMemoryHook wires configured engine, protocol, adapter, and teardown', async () => {
+  const calls = [];
+  const memory = {
+    getProject(projectId) {
+      calls.push(['getProject', projectId]);
+      return null;
+    },
+    registerProject(value) {
+      calls.push(['registerProject', value]);
+      return value;
+    },
+    close() {
+      calls.push(['close']);
+    },
+  };
+  const expectedOutput = {
+    hookSpecificOutput: {
+      hookEventName: 'UserPromptSubmit',
+      additionalContext: 'memory context',
+    },
+  };
+
+  const output = await runCodexMemoryHook({
+    event: userPromptEvent(),
+    env: {
+      AGENT_HUB_MEMORY_DB: '/shared/memory.sqlite3',
+      AGENT_HUB_MEMORY_PROJECT_ID: 'project-a',
+      AGENT_HUB_MEMORY_REPO_IDENTITY: 'github.com/example/project',
+      AGENT_HUB_MEMORY_CAPTURE_PROMPTS: 'true',
+    },
+    createEngine(options) {
+      calls.push(['createEngine', options]);
+      return memory;
+    },
+    createProtocol(options) {
+      calls.push(['createProtocol', options.memory]);
+      assert.equal(options.memory, memory);
+      assert.equal(
+        options.classifyAuthority({
+          sourceKind: 'session',
+          metadata: { event_type: 'user_prompt' },
+        }),
+        'user_direct',
+      );
+      assert.equal(
+        options.classifyAuthority({
+          sourceKind: 'tool',
+          metadata: { event_type: 'tool_result' },
+        }),
+        'unclassified',
+      );
+      return { handle() {} };
+    },
+    createAdapter(options) {
+      calls.push([
+        'createAdapter',
+        options.projectId,
+        options.capturePrompts,
+      ]);
+      assert.equal(options.memory, memory);
+      return {
+        async handle(event) {
+          calls.push(['handle', event.hook_event_name]);
+          return expectedOutput;
+        },
+      };
+    },
+  });
+
+  assert.deepEqual(output, expectedOutput);
+  assert.deepEqual(calls[0], [
+    'createEngine',
+    { dbPath: '/shared/memory.sqlite3' },
+  ]);
+  assert.deepEqual(calls[1], ['getProject', 'project-a']);
+  assert.deepEqual(calls[2], [
+    'registerProject',
+    {
+      projectId: 'project-a',
+      repoIdentity: 'github.com/example/project',
+    },
+  ]);
+  assert.deepEqual(calls.at(-1), ['close']);
+});
