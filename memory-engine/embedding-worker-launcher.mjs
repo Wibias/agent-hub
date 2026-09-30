@@ -153,7 +153,15 @@ export async function acquireEmbeddingWorkerStartLock(lockFile, {
   if (!nonEmpty(lockFile)) {
     throw new TypeError('lockFile must be a non-empty string');
   }
-  positiveInteger(staleAfterMs, 'staleAfterMs');
+  if (
+    !Number.isInteger(staleAfterMs)
+    || staleAfterMs < 1
+    || staleAfterMs > 3_600_000
+  ) {
+    throw new RangeError(
+      'staleAfterMs must be an integer between 1 and 3600000',
+    );
+  }
   if (typeof now !== 'function') {
     throw new TypeError('now must be a function');
   }
@@ -189,14 +197,18 @@ export async function acquireEmbeddingWorkerStartLock(lockFile, {
   }
 }
 
-export async function releaseEmbeddingWorkerStartLock(handle) {
+export async function releaseEmbeddingWorkerStartLock(handle, {
+  remove = true,
+} = {}) {
   if (!handle || !nonEmpty(handle.path) || !handle.file) {
     throw new TypeError('lock handle is invalid');
   }
+  if (typeof remove !== 'boolean') {
+    throw new TypeError('remove must be a boolean');
+  }
 
-  try {
-    await handle.file.close();
-  } finally {
+  await handle.file.close();
+  if (remove) {
     await rm(handle.path, { force: true });
   }
 }
@@ -386,6 +398,7 @@ export async function launchEmbeddingWorker({
   }
 
   let child = null;
+  let keepLockFile = false;
   try {
     if (await probe()) {
       return {
@@ -409,13 +422,21 @@ export async function launchEmbeddingWorker({
       now,
     });
 
+    // If the detached child is still cold-starting after our bounded wait,
+    // keep the lock file as a short-lived lease. Another SessionStart can
+    // recover it after staleAfterMs, but cannot immediately start a second
+    // E5 runtime while the first process may still be loading.
+    keepLockFile = !ready;
+
     return {
       status: ready ? 'started' : 'start_failed',
       pid: child?.pid ?? null,
       socketPath,
     };
   } finally {
-    await releaseLock(lock);
+    await releaseLock(lock, {
+      remove: !keepLockFile,
+    });
   }
 }
 
