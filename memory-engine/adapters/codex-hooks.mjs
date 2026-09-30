@@ -220,15 +220,26 @@ export function resolveActiveDirectUserMemoryTarget(memory, {
 }) {
   if ((value === null) === (ref === null)) return null;
 
+  if (value !== null) {
+    if (typeof memory?.exportCanonical !== 'function') return null;
+    const exported = memory.exportCanonical();
+    if (!exported || !Array.isArray(exported.claims)) return null;
+    const matches = exported.claims.filter((claim) => (
+      claim?.project_id === projectId
+      && claim?.branch_scope === branch
+      && claim?.state === 'active'
+      && claim?.value_text === value
+    ));
+    return matches.length === 1 ? matches[0] : null;
+  }
+
   const memories = activeDirectUserMemories(memory, {
     projectId,
     branch,
   });
-  const matches = memories.filter((claim) => (
-    value !== null
-      ? claim?.value_text === value
-      : memoryClaimRef(claim.id) === ref
-  ));
+  const matches = memories.filter(
+    (claim) => memoryClaimRef(claim.id) === ref,
+  );
   return matches.length === 1 ? matches[0] : null;
 }
 
