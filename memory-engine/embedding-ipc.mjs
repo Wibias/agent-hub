@@ -226,7 +226,9 @@ async function handleRequest(request, embedder) {
     }
 
     let vectors;
-    if (request.operation === 'embed_query') {
+    if (request.operation === 'health') {
+      vectors = [];
+    } else if (request.operation === 'embed_query') {
       const text = validateText(request.payload.text, 'query');
       const vector = await embedder.embedQuery(text);
       vectors = [validateVector(vector, embedder.dimensions, 'query vector')];
@@ -449,6 +451,14 @@ export function createEmbeddingIpcClient({
     modelId,
     modelRevision,
     dimensions,
+
+    async health() {
+      const vectors = await run('health', {});
+      if (vectors.length !== 0) {
+        throw new Error('embedding worker returned an invalid health response');
+      }
+      return { ready: true };
+    },
 
     async embedQuery(text) {
       validateText(text, 'query');

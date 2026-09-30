@@ -397,18 +397,36 @@ Project identity is never derived from prompt text or the checkout path.
 
 ### Codex hook registration
 
-A Codex hook configuration can point `UserPromptSubmit` at the command:
+For production hybrid recall, register two independent command hooks:
+
+1. an asynchronous `SessionStart` launcher that makes sure the warm E5 worker exists;
+2. the normal `UserPromptSubmit` memory hook with `--hybrid-recall`.
 
 ```json
 {
   "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node /absolute/path/to/agent-hub/memory-engine/embedding-worker-launcher.mjs --cache-dir /absolute/path/to/agent-hub/.cache/memory-engine/e5",
+            "commandWindows": "node C:\\absolute\\path\\to\\agent-hub\\memory-engine\\embedding-worker-launcher.mjs --cache-dir C:\\absolute\\path\\to\\agent-hub\\.cache\\memory-engine\\e5",
+            "timeout": 45,
+            "async": true,
+            "statusMessage": "Starting project memory embeddings"
+          }
+        ]
+      }
+    ],
     "UserPromptSubmit": [
       {
         "hooks": [
           {
             "type": "command",
-            "command": "node /absolute/path/to/agent-hub/memory-engine/adapters/codex-hook-cli.mjs",
-            "commandWindows": "node C:\\absolute\\path\\to\\agent-hub\\memory-engine\\adapters\\codex-hook-cli.mjs",
+            "command": "node /absolute/path/to/agent-hub/memory-engine/adapters/codex-hook-cli.mjs --ignore-memory-env --explicit-memory-requests --hybrid-recall",
+            "commandWindows": "node C:\\absolute\\path\\to\\agent-hub\\memory-engine\\adapters\\codex-hook-cli.mjs --ignore-memory-env --explicit-memory-requests --hybrid-recall",
             "timeout": 10,
             "statusMessage": "Recalling project memory",
             "additionalContextLimit": 2500
@@ -420,9 +438,15 @@ A Codex hook configuration can point `UserPromptSubmit` at the command:
 }
 ```
 
-Replace the example path with the real checkout path. The command inherits the memory environment variables from the Codex process.
+Replace the example paths with the real checkout path. The prompt hook inherits the memory environment variables from the Codex process.
 
-The adapter currently handles only `UserPromptSubmit`. It deliberately does not capture `PostToolUse`, summarize on `SessionEnd`, or parse `transcript_path`. Codex documents the transcript path as a convenience rather than a stable hook interface.
+The launcher is idempotent. It first uses the IPC `health` operation, which verifies the pinned model identity without running inference. If no worker is ready, a cross-process lock ensures that only one concurrent Codex session spawns the detached worker. Other sessions wait for the same worker instead of loading another E5 runtime. A stale launcher lock is recoverable.
+
+The launcher writes no normal stdout because `SessionStart` stdout becomes developer context. Worker stdout/stderr instead append to `embedding-worker.log` beside the model-cache directory.
+
+Codex requires changed non-managed hooks to be reviewed again because hook trust is bound to the exact hook definition. After adding or changing these handlers, open `/hooks` in Codex and trust the current definitions.
+
+The main memory adapter handles only `UserPromptSubmit`. It deliberately does not capture `PostToolUse`, summarize on `SessionEnd`, or parse `transcript_path`. Codex documents the transcript path as a convenience rather than a stable hook interface.
 
 ### Explicit durable-memory prompts
 
@@ -689,12 +713,21 @@ node scripts/prepare-memory-embedding-model.mjs \
 
 That preparation command is the only repository path that enables remote model loading. It resolves the cache directory, downloads the exact model/revision through the provider, and succeeds only after a 384-dimensional readiness embedding is produced.
 
-Start the warm local worker from the same prepared cache:
+The worker can be started manually from the same prepared cache:
 
 ```bash
 node memory-engine/embedding-worker-cli.mjs \
   --cache-dir .cache/memory-engine/e5
 ```
+
+For normal Codex use, prefer the idempotent launcher through the asynchronous `SessionStart` hook shown above:
+
+```bash
+node memory-engine/embedding-worker-launcher.mjs \
+  --cache-dir .cache/memory-engine/e5
+```
+
+The launcher detaches the worker, waits for readiness in the background, and uses a start lock to prevent duplicate E5 cold starts across concurrent sessions. It is safe to invoke repeatedly.
 
 The worker opens the pinned provider with remote loading disabled, performs a readiness embedding before it reports `ready`, and listens only on a local IPC endpoint:
 
