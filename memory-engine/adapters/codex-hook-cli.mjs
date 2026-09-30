@@ -80,19 +80,21 @@ export function defaultCodexMemoryDbPath({
 }
 
 export function parseCodexMemoryConfig(env = process.env, options = {}) {
-  const dbPath = nonEmpty(env.AGENT_HUB_MEMORY_DB)
+  const ignoreMemoryEnv = options.ignoreMemoryEnv === true;
+  const dbPath = !ignoreMemoryEnv && nonEmpty(env.AGENT_HUB_MEMORY_DB)
     ? env.AGENT_HUB_MEMORY_DB.trim()
     : defaultCodexMemoryDbPath({ env, ...options });
 
   return {
     dbPath,
-    projectId: nonEmpty(env.AGENT_HUB_MEMORY_PROJECT_ID)
+    projectId: !ignoreMemoryEnv && nonEmpty(env.AGENT_HUB_MEMORY_PROJECT_ID)
       ? env.AGENT_HUB_MEMORY_PROJECT_ID.trim()
       : null,
-    repoIdentity: nonEmpty(env.AGENT_HUB_MEMORY_REPO_IDENTITY)
+    repoIdentity: !ignoreMemoryEnv && nonEmpty(env.AGENT_HUB_MEMORY_REPO_IDENTITY)
       ? env.AGENT_HUB_MEMORY_REPO_IDENTITY.trim()
       : null,
-    capturePrompts: env.AGENT_HUB_MEMORY_CAPTURE_PROMPTS === 'true',
+    capturePrompts: !ignoreMemoryEnv
+      && env.AGENT_HUB_MEMORY_CAPTURE_PROMPTS === 'true',
   };
 }
 
@@ -189,7 +191,10 @@ export async function runCodexMemoryHook({
   let memory = null;
   try {
     const scope = resolveProjectScope({ event, config });
-    if (!nonEmpty(env.AGENT_HUB_MEMORY_DB)) {
+    if (
+      configOptions.ignoreMemoryEnv === true
+      || !nonEmpty(env.AGENT_HUB_MEMORY_DB)
+    ) {
       ensureDbDirectory(config.dbPath);
     }
     memory = createEngine({ dbPath: config.dbPath });
@@ -243,7 +248,12 @@ async function main() {
   try {
     const raw = await readStdin();
     const event = JSON.parse(raw);
-    const output = await runCodexMemoryHook({ event });
+    const output = await runCodexMemoryHook({
+      event,
+      configOptions: {
+        ignoreMemoryEnv: process.argv.slice(2).includes('--ignore-memory-env'),
+      },
+    });
     if (output !== null) {
       process.stdout.write(`${JSON.stringify(output)}\n`);
     }
