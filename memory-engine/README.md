@@ -286,6 +286,81 @@ const answerEvidence = evaluateReliance({
 memory.close();
 ```
 
+## Cross-harness protocol v1
+
+`memory-engine/protocol.mjs` exposes the transport-neutral integration contract:
+
+```text
+memory.protocol.v1
+```
+
+The protocol does not define a socket, CLI, MCP server, or host hook. A trusted host adapter owns transport and calls `createMemoryProtocol(...).handle(request)`.
+
+Every request uses:
+
+```json
+{
+  "protocol": "memory.protocol.v1",
+  "operation": "recall",
+  "request_id": "request-123",
+  "payload": {}
+}
+```
+
+Every response echoes the protocol and request ID and returns either `ok: true` with `result`, or `ok: false` with a fixed error `code` and safe message.
+
+Frozen V1 operations:
+
+- `capture_evidence`: record standalone Evidence;
+- `assert_claim`: attach a Claim to existing Evidence;
+- `recall`: bounded current recall;
+- `history`: bounded historical recall;
+- `authorize`: exact structured action-capability evaluation;
+- `export`: canonical portable export;
+- `import`: canonical portable restore;
+- `status`: content-free canonical counts.
+
+Trust rules:
+
+- wire callers cannot provide `authority_class`;
+- `capture_evidence` requires an injected trusted `classifyAuthority(...)` callback;
+- `assert_claim` is default-deny and requires an injected trusted `authorizeClaim(...)` callback;
+- unknown wire fields fail closed instead of being silently accepted;
+- operation failures return fixed messages rather than raw Engine errors or payload values;
+- recall/history always enforce at most 10 items and at most 16 KiB serialized output.
+
+Example construction:
+
+```js
+import { createMemoryProtocol } from './memory-engine/protocol.mjs';
+
+const protocol = createMemoryProtocol({
+  memory,
+  classifyAuthority(channel) {
+    return classifyTrustedHostChannel(channel);
+  },
+  authorizeClaim(context) {
+    return trustedClaimPolicy(context);
+  },
+});
+
+const response = await protocol.handle({
+  protocol: 'memory.protocol.v1',
+  operation: 'recall',
+  request_id: 'request-123',
+  payload: {
+    project_id: 'project-a',
+    branch: 'main',
+    revision_sha: null,
+    query: 'Which database handles concurrent writers?',
+    max_items: 10,
+    max_serialized_bytes: 16_384,
+  },
+});
+```
+
+The protocol is a local integration boundary, not an untrusted network authorization layer. Host adapters remain responsible for resolving configured project identity and observed source channels outside prompt-controlled text.
+
 ## Pinned E5 provider
 
 Install the scoped provider dependency:
