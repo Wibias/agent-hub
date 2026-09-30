@@ -184,7 +184,8 @@ test('memory list returns only active direct-user memories in current project an
   const output = await adapter.handle(userPromptEvent());
 
   assert.equal(protocolCalled, false);
-  const context = output.hookSpecificOutput.additionalContext;
+  assert.equal(output.decision, 'block');
+  const context = output.reason;
   assert.match(context, /active durable user memories/i);
   assert.match(context, /memory: database is Postgres/);
   assert.match(context, /memory: camera quality is 720p HIGH/);
@@ -216,8 +217,9 @@ test('memory list reports an empty current scope without persisting anything', a
   const output = await adapter.handle(userPromptEvent());
 
   assert.equal(protocolCalled, false);
+  assert.equal(output.decision, 'block');
   assert.match(
-    output.hookSpecificOutput.additionalContext,
+    output.reason,
     /no active durable user memories/i,
   );
 });
@@ -263,7 +265,8 @@ test('memory list output stays bounded', async () => {
   });
 
   const output = await adapter.handle(userPromptEvent());
-  const context = output.hookSpecificOutput.additionalContext;
+  assert.equal(output.decision, 'block');
+  const context = output.reason;
   assert.ok(Buffer.byteLength(context, 'utf8') <= 1_024);
   assert.match(context, /active durable user memories/i);
 });
@@ -368,12 +371,13 @@ test('real Codex CLI memory list reads the production store without writing', ()
 
     assert.equal(result.status, 0, result.stderr);
     const output = JSON.parse(result.stdout);
+    assert.equal(output.decision, 'block');
     assert.match(
-      output.hookSpecificOutput.additionalContext,
+      output.reason,
       /active durable user memories/i,
     );
     assert.match(
-      output.hookSpecificOutput.additionalContext,
+      output.reason,
       /memory: current value/,
     );
 
