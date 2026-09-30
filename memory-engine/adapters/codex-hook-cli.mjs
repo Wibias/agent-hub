@@ -7,7 +7,10 @@ import { fileURLToPath } from 'node:url';
 
 import { MemoryEngine } from '../index.mjs';
 import { createMemoryProtocol } from '../protocol.mjs';
-import { createCodexMemoryHookAdapter } from './codex-hooks.mjs';
+import {
+  createCodexMemoryHookAdapter,
+  parseExplicitMemoryPrompt,
+} from './codex-hooks.mjs';
 
 function nonEmpty(value) {
   return typeof value === 'string' && value.trim().length > 0;
@@ -177,27 +180,56 @@ function classifyCodexAuthority(channel) {
 }
 
 function authorizeCodexExplicitMemoryClaim({
+  memory,
   evidence,
   claim,
   lifecycle,
 }) {
+  const parsed = parseExplicitMemoryPrompt(evidence?.content_redacted);
+  if (
+    evidence?.harness !== 'codex'
+    || evidence?.source_kind !== 'session'
+    || evidence?.authority_class !== 'user_direct'
+    || evidence?.metadata?.event_type !== 'user_prompt'
+    || evidence?.metadata?.explicit_memory !== true
+    || parsed === null
+    || claim?.kind !== 'user_direct'
+    || claim?.subject !== 'user memory'
+    || claim?.predicate !== 'states'
+    || claim?.branchScope !== evidence?.branch
+    || !Array.isArray(lifecycle?.supersedes)
+    || !Array.isArray(lifecycle?.rejects)
+    || lifecycle.rejects.length !== 0
+    || !Array.isArray(lifecycle?.conflictsWith)
+    || lifecycle.conflictsWith.length !== 0
+  ) {
+    return false;
+  }
+
+  if (parsed.mode === 'remember') {
+    return (
+      claim.value === evidence.content_redacted
+      && lifecycle.supersedes.length === 0
+    );
+  }
+
+  if (
+    parsed.mode !== 'replace'
+    || evidence?.metadata?.explicit_memory_mode !== 'replace'
+    || claim.value !== parsed.newValue
+    || lifecycle.supersedes.length !== 1
+    || typeof memory?.getClaim !== 'function'
+  ) {
+    return false;
+  }
+
+  const target = memory.getClaim(lifecycle.supersedes[0]);
   return (
-    evidence?.harness === 'codex'
-    && evidence?.source_kind === 'session'
-    && evidence?.authority_class === 'user_direct'
-    && evidence?.metadata?.event_type === 'user_prompt'
-    && evidence?.metadata?.explicit_memory === true
-    && claim?.kind === 'user_direct'
-    && claim?.subject === 'user memory'
-    && claim?.predicate === 'states'
-    && claim?.value === evidence?.content_redacted
-    && claim?.branchScope === evidence?.branch
-    && Array.isArray(lifecycle?.supersedes)
-    && lifecycle.supersedes.length === 0
-    && Array.isArray(lifecycle?.rejects)
-    && lifecycle.rejects.length === 0
-    && Array.isArray(lifecycle?.conflictsWith)
-    && lifecycle.conflictsWith.length === 0
+    target !== null
+    && target?.project_id === evidence?.project_id
+    && target?.branch_scope === evidence?.branch
+    && target?.state === 'active'
+    && target?.value === parsed.oldValue
   );
 }
 
@@ -238,7 +270,10 @@ export async function runCodexMemoryHook({
     const protocol = createProtocol({
       memory,
       classifyAuthority: classifyCodexAuthority,
-      authorizeClaim: authorizeCodexExplicitMemoryClaim,
+      authorizeClaim: (args) => authorizeCodexExplicitMemoryClaim({
+        memory,
+        ...args,
+      }),
     });
     const adapter = createAdapter({
       protocol,
