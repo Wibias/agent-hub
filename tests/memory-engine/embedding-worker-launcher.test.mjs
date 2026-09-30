@@ -231,3 +231,48 @@ test('detached worker spawn is hidden, unrefed, and logs outside hook stdout', a
   assert.equal(calls[0][3].stderrIsSameFd, true);
   assert.deepEqual(calls[1], ['unref']);
 });
+
+
+test('slow detached cold start retains the lock lease to prevent duplicate E5 loads', async () => {
+  const releases = [];
+  let spawned = 0;
+
+  const result = await launchEmbeddingWorker({
+    cacheDir: '.cache/memory-engine/e5',
+    socketPath: 'test-socket',
+    startupTimeoutMs: 100,
+    pollIntervalMs: 50,
+    async checkWorker() {
+      return false;
+    },
+    async acquireLock() {
+      return { token: 'lock' };
+    },
+    async releaseLock(handle, options) {
+      releases.push([handle.token, options]);
+    },
+    async spawnWorker() {
+      spawned += 1;
+      return { pid: 4343 };
+    },
+    async sleep() {},
+    now: (() => {
+      let current = 0;
+      return () => {
+        current += 50;
+        return current;
+      };
+    })(),
+  });
+
+  assert.equal(spawned, 1);
+  assert.deepEqual(result, {
+    status: 'start_failed',
+    pid: 4343,
+    socketPath: 'test-socket',
+  });
+  assert.deepEqual(releases, [[
+    'lock',
+    { remove: false },
+  ]]);
+});
