@@ -448,7 +448,8 @@ memory: Keep Survival camera quality at 720p HIGH.
 
 Ordinary prompts are not persisted, even if they contain natural-language wording such
 as "please remember". The adapter does not use semantic intent classification for this
-boundary.
+boundary. Leading whitespace and marker case are ignored, but `memory:` without a
+non-whitespace statement is not a durable-memory request.
 
 For an explicit `memory:` prompt, the `UserPromptSubmit` adapter:
 
