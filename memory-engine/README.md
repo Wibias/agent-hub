@@ -466,6 +466,34 @@ automatically.
 Capture or Claim failure remains fail-soft for the interactive Codex prompt. The
 ordinary recall path still runs.
 
+#### Explicit supersession
+
+An existing durable memory can be replaced without semantic or embedding-based target
+selection:
+
+```text
+memory replace: <exact old stored value> => <exact new durable value>
+```
+
+Both sides must themselves be valid `memory:` values. For example:
+
+```text
+memory replace: memory: database is SQLite => memory: database is Postgres
+```
+
+The adapter matches the old value by exact equality among active Claims in the current
+Git project and branch. Replacement proceeds only when exactly one target matches.
+Zero matches or multiple matches fail closed for mutation while normal recall continues.
+
+The replacement Evidence stores the exact user prompt. The new Claim value is the exact
+syntactic payload after `=>`; it is not semantically rewritten. The protocol
+authorizer independently verifies the parsed old/new values, target Claim identity,
+active state, project, and branch before allowing the `supersedes` lifecycle edge.
+
+After a successful replacement, current recall excludes the old Claim and retains the
+new Claim as active. Historical recall can still recover the old Claim as superseded
+history.
+
 ### Explicit Codex claim commit
 
 Durable, recallable memory is committed through a separate explicit CLI:
