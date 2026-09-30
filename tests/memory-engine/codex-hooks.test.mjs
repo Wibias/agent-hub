@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 import {
   createCodexMemoryHookAdapter,
   formatCodexMemoryContext,
+  parseExplicitMemoryPrompt,
 } from '../../memory-engine/adapters/codex-hooks.mjs';
 import {
   canonicalizeGitRemote,
@@ -1276,6 +1277,452 @@ test('Codex CLI explicit-memory flag persists only memory: prompts in a real Git
         'memory: The production database is Postgres.',
       );
       assert.equal(exported.claims[0].branch_scope, 'main');
+    } finally {
+      memory.close();
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+
+test('explicit memory replacement parser requires exact old and new durable values', () => {
+  assert.deepEqual(
+    parseExplicitMemoryPrompt(
+      'memory replace: memory: database is SQLite => memory: database is Postgres',
+    ),
+    {
+      mode: 'replace',
+      oldValue: 'memory: database is SQLite',
+      newValue: 'memory: database is Postgres',
+    },
+  );
+
+  assert.equal(
+    parseExplicitMemoryPrompt(
+      'memory replace: database is SQLite => memory: database is Postgres',
+    ),
+    null,
+  );
+  assert.equal(
+    parseExplicitMemoryPrompt(
+      'memory replace: memory: database is SQLite => database is Postgres',
+    ),
+    null,
+  );
+  assert.equal(
+    parseExplicitMemoryPrompt('memory replace: memory: only one side'),
+    null,
+  );
+});
+
+test('explicit memory replacement supersedes exactly one active same-scope Claim', async () => {
+  const calls = [];
+  const oldClaim = {
+    id: 'claim-old',
+    project_id: 'project-a',
+    kind: 'user_direct',
+    subject: 'user memory',
+    predicate: 'states',
+    value_text: 'memory: database is SQLite',
+    state: 'active',
+    branch_scope: 'main',
+  };
+  const protocol = {
+    async handle(request) {
+      calls.push(request);
+      if (request.operation === 'capture_evidence') {
+        return {
+          protocol: 'memory.protocol.v1',
+          request_id: request.request_id,
+          ok: true,
+          result: {
+            evidence: {
+              id: request.payload.id,
+              project_id: request.payload.project_id,
+              harness: 'codex',
+              session_id: request.payload.session_id,
+              source_kind: 'session',
+              source_ref: request.payload.source_ref,
+              captured_at: request.payload.captured_at,
+              branch: request.payload.branch,
+              commit_sha: request.payload.commit_sha,
+              path: null,
+              blob_oid: null,
+              content_redacted: request.payload.content,
+              sensitivity: 'normal',
+              authority_class: 'user_direct',
+              metadata: request.payload.metadata,
+            },
+          },
+        };
+      }
+      if (request.operation === 'assert_claim') {
+        return {
+          protocol: 'memory.protocol.v1',
+          request_id: request.request_id,
+          ok: true,
+          result: {
+            claim: {
+              id: request.payload.claim.id,
+              state: 'active',
+            },
+          },
+        };
+      }
+      return {
+        protocol: 'memory.protocol.v1',
+        request_id: request.request_id,
+        ok: true,
+        result: { items: [], conflicts: [] },
+      };
+    },
+  };
+
+  const memory = {
+    getEvidence() { return null; },
+    getClaim() { return null; },
+    exportCanonical() {
+      return { claims: [oldClaim] };
+    },
+  };
+
+  const adapter = createCodexMemoryHookAdapter({
+    protocol,
+    memory,
+    projectId: 'project-a',
+    explicitMemoryRequests: true,
+    clock: () => '2026-09-30T09:30:00.000Z',
+    git: fakeGit(),
+  });
+
+  const prompt = [
+    'memory replace:',
+    'memory: database is SQLite',
+    '=>',
+    'memory: database is Postgres',
+  ].join(' ');
+  await adapter.handle(userPromptEvent({ prompt }));
+
+  assert.deepEqual(calls.map((call) => call.operation), [
+    'capture_evidence',
+    'assert_claim',
+    'recall',
+  ]);
+
+  assert.deepEqual(calls[0].payload.metadata, {
+    event_type: 'user_prompt',
+    hook_event_name: 'UserPromptSubmit',
+    turn_id: 'turn_456',
+    explicit_memory: true,
+    explicit_memory_mode: 'replace',
+  });
+
+  assert.equal(
+    calls[1].payload.claim.value,
+    'memory: database is Postgres',
+  );
+  assert.deepEqual(calls[1].payload.lifecycle, {
+    supersedes: ['claim-old'],
+    rejects: [],
+    conflicts_with: [],
+  });
+});
+
+test('explicit memory replacement refuses zero or ambiguous exact active targets', async () => {
+  for (const claims of [
+    [],
+    [
+      {
+        id: 'claim-old-a',
+        project_id: 'project-a',
+        value_text: 'memory: database is SQLite',
+        state: 'active',
+        branch_scope: 'main',
+      },
+      {
+        id: 'claim-old-b',
+        project_id: 'project-a',
+        value_text: 'memory: database is SQLite',
+        state: 'active',
+        branch_scope: 'main',
+      },
+    ],
+  ]) {
+    const operations = [];
+    const protocol = {
+      async handle(request) {
+        operations.push(request.operation);
+        if (request.operation === 'capture_evidence') {
+          return {
+            protocol: 'memory.protocol.v1',
+            request_id: request.request_id,
+            ok: true,
+            result: {
+              evidence: {
+                id: request.payload.id,
+                content_redacted: request.payload.content,
+                captured_at: request.payload.captured_at,
+              },
+            },
+          };
+        }
+        return {
+          protocol: 'memory.protocol.v1',
+          request_id: request.request_id,
+          ok: true,
+          result: { items: [], conflicts: [] },
+        };
+      },
+    };
+
+    const adapter = createCodexMemoryHookAdapter({
+      protocol,
+      memory: {
+        getEvidence() { return null; },
+        getClaim() { return null; },
+        exportCanonical() { return { claims }; },
+      },
+      projectId: 'project-a',
+      explicitMemoryRequests: true,
+      git: fakeGit(),
+    });
+
+    await adapter.handle(userPromptEvent({
+      prompt: [
+        'memory replace:',
+        'memory: database is SQLite',
+        '=>',
+        'memory: database is Postgres',
+      ].join(' '),
+    }));
+
+    assert.deepEqual(operations, ['capture_evidence', 'recall']);
+  }
+});
+
+test('explicit replacement authorizer binds exact parsed values and lifecycle target', async () => {
+  let protocolOptions = null;
+  const oldClaim = {
+    id: 'claim-old',
+    project_id: 'project-a',
+    kind: 'user_direct',
+    subject: 'user memory',
+    predicate: 'states',
+    value: 'memory: database is SQLite',
+    state: 'active',
+    branch_scope: 'main',
+  };
+  const memory = {
+    getProject() {
+      return { project_id: 'project-a' };
+    },
+    getClaim(id) {
+      return id === oldClaim.id ? oldClaim : null;
+    },
+    close() {},
+  };
+
+  await runCodexMemoryHook({
+    event: userPromptEvent(),
+    env: {
+      AGENT_HUB_MEMORY_DB: '/shared/memory.sqlite3',
+      AGENT_HUB_MEMORY_PROJECT_ID: 'project-a',
+    },
+    configOptions: {
+      explicitMemoryRequests: true,
+    },
+    createEngine() {
+      return memory;
+    },
+    createProtocol(options) {
+      protocolOptions = options;
+      return { handle() {} };
+    },
+    createAdapter() {
+      return { async handle() { return null; } };
+    },
+  });
+
+  const evidence = {
+    project_id: 'project-a',
+    harness: 'codex',
+    source_kind: 'session',
+    branch: 'main',
+    content_redacted: [
+      'memory replace:',
+      'memory: database is SQLite',
+      '=>',
+      'memory: database is Postgres',
+    ].join(' '),
+    authority_class: 'user_direct',
+    metadata: {
+      event_type: 'user_prompt',
+      explicit_memory: true,
+      explicit_memory_mode: 'replace',
+    },
+  };
+  const lifecycle = {
+    supersedes: ['claim-old'],
+    rejects: [],
+    conflictsWith: [],
+  };
+
+  assert.equal(await protocolOptions.authorizeClaim({
+    evidence,
+    claim: {
+      kind: 'user_direct',
+      subject: 'user memory',
+      predicate: 'states',
+      value: 'memory: database is Postgres',
+      branchScope: 'main',
+    },
+    lifecycle,
+  }), true);
+
+  assert.equal(await protocolOptions.authorizeClaim({
+    evidence,
+    claim: {
+      kind: 'user_direct',
+      subject: 'user memory',
+      predicate: 'states',
+      value: 'memory: database is MySQL',
+      branchScope: 'main',
+    },
+    lifecycle,
+  }), false);
+
+  assert.equal(await protocolOptions.authorizeClaim({
+    evidence,
+    claim: {
+      kind: 'user_direct',
+      subject: 'user memory',
+      predicate: 'states',
+      value: 'memory: database is Postgres',
+      branchScope: 'main',
+    },
+    lifecycle: {
+      supersedes: ['another-claim'],
+      rejects: [],
+      conflictsWith: [],
+    },
+  }), false);
+});
+
+test('real Codex hook replacement keeps only the new memory current and old memory historical', () => {
+  const root = mkdtempSync(join(tmpdir(), 'agent-hub-codex-replace-memory-'));
+  const repoDir = join(root, 'repo');
+  const stateHome = join(root, 'state');
+  const dbPath = join(stateHome, 'agent-hub', 'memory.sqlite3');
+  const cliPath = fileURLToPath(
+    new URL('../../memory-engine/adapters/codex-hook-cli.mjs', import.meta.url),
+  );
+
+  try {
+    mkdirSync(repoDir, { recursive: true });
+    execFileSync('git', ['init', '-b', 'main', repoDir], { stdio: 'ignore' });
+    execFileSync('git', ['-C', repoDir, 'config', 'user.email', 'test@example.com']);
+    execFileSync('git', ['-C', repoDir, 'config', 'user.name', 'Memory Test']);
+    execFileSync('git', [
+      '-C',
+      repoDir,
+      'remote',
+      'add',
+      'origin',
+      'git@github.com:example/replacement-memory.git',
+    ]);
+    writeFileSync(join(repoDir, 'README.md'), '# smoke\n');
+    execFileSync('git', ['-C', repoDir, 'add', 'README.md']);
+    execFileSync('git', ['-C', repoDir, 'commit', '-m', 'smoke'], { stdio: 'ignore' });
+
+    const prompts = [
+      {
+        turn_id: 'turn-old',
+        prompt: 'memory: database is SQLite',
+      },
+      {
+        turn_id: 'turn-replace',
+        prompt: [
+          'memory replace:',
+          'memory: database is SQLite',
+          '=>',
+          'memory: database is Postgres',
+        ].join(' '),
+      },
+    ];
+
+    for (const item of prompts) {
+      const event = JSON.stringify({
+        session_id: 'thr-replace',
+        transcript_path: null,
+        cwd: repoDir,
+        hook_event_name: 'UserPromptSubmit',
+        model: 'gpt-5.6-sol',
+        permission_mode: 'default',
+        turn_id: item.turn_id,
+        prompt: item.prompt,
+      });
+      const result = spawnSync(process.execPath, [
+        cliPath,
+        '--ignore-memory-env',
+        '--explicit-memory-requests',
+      ], {
+        input: event,
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          XDG_STATE_HOME: stateHome,
+        },
+      });
+      assert.equal(result.status, 0, result.stderr);
+    }
+
+    const memory = new MemoryEngine({ dbPath });
+    try {
+      const state = memory.exportCanonical();
+      const projectId = 'github.com/example/replacement-memory';
+      const oldClaim = state.claims.find(
+        (claim) => claim.value_text === 'memory: database is SQLite',
+      );
+      const newClaim = state.claims.find(
+        (claim) => claim.value_text === 'memory: database is Postgres',
+      );
+
+      assert.ok(oldClaim);
+      assert.ok(newClaim);
+      assert.equal(oldClaim.state, 'superseded');
+      assert.equal(oldClaim.superseded_by_claim_id, newClaim.id);
+      assert.equal(newClaim.state, 'active');
+
+      const current = memory.recall({
+        projectId,
+        branch: 'main',
+        query: 'database',
+        mode: 'current',
+      });
+      assert.equal(
+        current.items.some((item) => item.claim.id === oldClaim.id),
+        false,
+      );
+      assert.equal(
+        current.items.some((item) => item.claim.id === newClaim.id),
+        true,
+      );
+
+      const history = memory.recall({
+        projectId,
+        branch: 'main',
+        query: 'database',
+        mode: 'historical',
+      });
+      assert.equal(
+        history.items.some(
+          (item) =>
+            item.claim.id === oldClaim.id
+            && item.claim.state === 'superseded',
+        ),
+        true,
+      );
     } finally {
       memory.close();
     }

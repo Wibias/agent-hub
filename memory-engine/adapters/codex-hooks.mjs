@@ -70,8 +70,55 @@ export function formatCodexMemoryContext(result, {
   return output;
 }
 
-function explicitMemoryPrompt(prompt) {
-  return /^\s*memory:\s*\S/i.test(prompt);
+export function parseExplicitMemoryPrompt(prompt) {
+  if (typeof prompt !== 'string') return null;
+
+  if (/^\s*memory:\s*\S/i.test(prompt)) {
+    return {
+      mode: 'remember',
+      value: prompt,
+    };
+  }
+
+  const prefix = prompt.match(/^\s*memory\s+replace:\s*/i);
+  if (!prefix) return null;
+
+  const body = prompt.slice(prefix[0].length);
+  const delimiterIndex = body.indexOf('=>');
+  if (delimiterIndex < 0) return null;
+
+  const oldValue = body.slice(0, delimiterIndex).trim();
+  const newValue = body.slice(delimiterIndex + 2).trim();
+  if (
+    !/^memory:\s*\S/i.test(oldValue)
+    || !/^memory:\s*\S/i.test(newValue)
+  ) {
+    return null;
+  }
+
+  return {
+    mode: 'replace',
+    oldValue,
+    newValue,
+  };
+}
+
+function exactActiveReplacementTarget(memory, {
+  projectId,
+  branch,
+  value,
+}) {
+  if (typeof memory?.exportCanonical !== 'function') return null;
+  const exported = memory.exportCanonical();
+  if (!exported || !Array.isArray(exported.claims)) return null;
+
+  const matches = exported.claims.filter((claim) => (
+    claim?.project_id === projectId
+    && claim?.branch_scope === branch
+    && claim?.state === 'active'
+    && claim?.value_text === value
+  ));
+  return matches.length === 1 ? matches[0] : null;
 }
 
 function validUserPromptEvent(event) {
@@ -159,9 +206,10 @@ export function createCodexMemoryHookAdapter({
         const evidenceId = `evidence:${requestPrefix}:prompt`;
         const explicitMemory = (
           explicitMemoryRequests
-          && explicitMemoryPrompt(event.prompt)
+            ? parseExplicitMemoryPrompt(event.prompt)
+            : null
         );
-        const shouldCapture = capturePrompts || explicitMemory;
+        const shouldCapture = capturePrompts || explicitMemory !== null;
 
         if (shouldCapture) {
           try {
@@ -181,7 +229,12 @@ export function createCodexMemoryHookAdapter({
                 hook_event_name: 'UserPromptSubmit',
                 turn_id: event.turn_id,
               };
-              if (explicitMemory) metadata.explicit_memory = true;
+              if (explicitMemory) {
+                metadata.explicit_memory = true;
+                if (explicitMemory.mode === 'replace') {
+                  metadata.explicit_memory_mode = 'replace';
+                }
+              }
 
               const captured = await protocol.handle({
                 protocol: 'memory.protocol.v1',
@@ -219,6 +272,9 @@ export function createCodexMemoryHookAdapter({
               && capturedEvidence
               && nonEmptyString(capturedEvidence.content_redacted)
             ) {
+              const parsedMemory = parseExplicitMemoryPrompt(
+                capturedEvidence.content_redacted,
+              );
               const claimId = `claim:${requestPrefix}:prompt`;
               const existingClaim = (
                 typeof memory.getClaim === 'function'
@@ -226,31 +282,50 @@ export function createCodexMemoryHookAdapter({
                   : null
               );
 
-              if (existingClaim === null) {
-                await protocol.handle({
-                  protocol: 'memory.protocol.v1',
-                  operation: 'assert_claim',
-                  request_id: `${requestPrefix}:claim`,
-                  payload: {
-                    evidence_id: evidenceId,
-                    claim: {
-                      id: claimId,
-                      kind: 'user_direct',
-                      subject: 'user memory',
-                      predicate: 'states',
-                      value: capturedEvidence.content_redacted,
-                      branch_scope: context.branch,
-                      created_at: (
-                        capturedEvidence.captured_at ?? capturedAt
-                      ),
+              if (existingClaim === null && parsedMemory !== null) {
+                let value = capturedEvidence.content_redacted;
+                let supersedes = [];
+
+                if (parsedMemory.mode === 'replace') {
+                  const target = exactActiveReplacementTarget(memory, {
+                    projectId,
+                    branch: context.branch,
+                    value: parsedMemory.oldValue,
+                  });
+                  if (target === null) {
+                    value = null;
+                  } else {
+                    value = parsedMemory.newValue;
+                    supersedes = [target.id];
+                  }
+                }
+
+                if (nonEmptyString(value)) {
+                  await protocol.handle({
+                    protocol: 'memory.protocol.v1',
+                    operation: 'assert_claim',
+                    request_id: `${requestPrefix}:claim`,
+                    payload: {
+                      evidence_id: evidenceId,
+                      claim: {
+                        id: claimId,
+                        kind: 'user_direct',
+                        subject: 'user memory',
+                        predicate: 'states',
+                        value,
+                        branch_scope: context.branch,
+                        created_at: (
+                          capturedEvidence.captured_at ?? capturedAt
+                        ),
+                      },
+                      lifecycle: {
+                        supersedes,
+                        rejects: [],
+                        conflicts_with: [],
+                      },
                     },
-                    lifecycle: {
-                      supersedes: [],
-                      rejects: [],
-                      conflicts_with: [],
-                    },
-                  },
-                });
+                  });
+                }
               }
             }
           } catch {
