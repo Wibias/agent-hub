@@ -370,6 +370,10 @@ test('real Codex CLI memory list reads the production store without writing', ()
     const output = JSON.parse(result.stdout);
     assert.match(
       output.hookSpecificOutput.additionalContext,
+      /active durable user memories/i,
+    );
+    assert.match(
+      output.hookSpecificOutput.additionalContext,
       /memory: current value/,
     );
 
