@@ -11,6 +11,10 @@ import {
   E5_MODEL_ID,
   E5_MODEL_REVISION,
 } from '../../memory-engine/e5-embedder.mjs';
+import {
+  summarizeRecallQuality,
+  sweepSemanticThresholds,
+} from '../../memory-engine/recall-quality-eval.mjs';
 
 const cacheDir = process.env.MEMORY_E5_MODEL_CACHE;
 
@@ -66,7 +70,7 @@ function ingestClaim(engine, {
 }
 
 test(
-  'real pinned E5 improves bounded semantic retrieval for required paraphrases',
+  'real pinned E5 reports positive recall quality and negative-query noise',
   { skip: !cacheDir },
   async (t) => {
     const root = await mkdtemp(join(tmpdir(), 'memory-engine-e5-eval-'));
@@ -145,26 +149,67 @@ test(
     });
     assert.deepEqual(rebuild, { indexed: 36, failed: 0 });
 
-    const cases = [
+    const positiveCases = [
       {
+        id: 'postgres-concurrent-writers',
         query: 'Which database was selected because concurrent writers are required?',
         targetClaimId: 'c-postgres',
       },
       {
+        id: 'postgres-storage-engine-paraphrase',
         query: 'Which storage engine did we choose to handle multiple processes writing at once?',
         targetClaimId: 'c-postgres',
       },
       {
+        id: 'postgres-german-paraphrase',
         query: 'Welche Datenbank haben wir wegen paralleler Schreibzugriffe gewählt?',
         targetClaimId: 'c-postgres',
       },
       {
+        id: 'audit-retention-paraphrase',
         query: 'For how long do we preserve security event records?',
         targetClaimId: 'c-audit',
       },
     ];
 
-    for (const entry of cases) {
+    const negativeCases = [
+      {
+        id: 'negative-marketing-color',
+        query: 'What color should the marketing homepage hero use?',
+      },
+      {
+        id: 'negative-company-offsite',
+        query: 'Which city hosts the next company offsite?',
+      },
+      {
+        id: 'negative-billing-owner',
+        query: 'Who owns the corporate billing account?',
+      },
+      {
+        id: 'negative-mobile-bundle',
+        query: 'What is the mobile application bundle identifier?',
+      },
+      {
+        id: 'negative-gpu',
+        query: 'Which GPU model is installed in the inference server?',
+      },
+      {
+        id: 'negative-support-phone',
+        query: 'What is the customer support phone number?',
+      },
+      {
+        id: 'negative-office-wifi',
+        query: 'What is the office Wi-Fi network name?',
+      },
+      {
+        id: 'negative-vacation-policy',
+        query: 'How many paid vacation days do employees receive?',
+      },
+    ];
+
+    const qualityCases = [];
+
+    for (const entry of [...positiveCases, ...negativeCases]) {
       const lexical = engine.recall({
         projectId: 'project-a',
         branch: 'main',
@@ -175,7 +220,7 @@ test(
       const lexicalIds = lexical.items.map((item) => item.claim.id);
 
       const queryVector = await embedder.embedQuery(entry.query);
-      const semanticIds = engine.semanticCandidates({
+      const semanticCandidates = engine.semanticCandidates({
         projectId: 'project-a',
         branch: 'main',
         mode: 'current',
@@ -195,8 +240,11 @@ test(
           || compareCodePoints(right.created_at, left.created_at)
           || compareCodePoints(left.claim_id, right.claim_id)
         ))
-        .slice(0, 32)
-        .map((candidate) => candidate.claim_id);
+        .slice(0, 32);
+
+      const semanticIds = semanticCandidates.map(
+        (candidate) => candidate.claim_id,
+      );
 
       const fused = await hybrid.recall({
         projectId: 'project-a',
@@ -208,29 +256,92 @@ test(
       });
       const fusedIds = fused.items.map((item) => item.claim.id);
 
+      qualityCases.push({
+        id: entry.id,
+        relevantClaimIds: entry.targetClaimId ? [entry.targetClaimId] : [],
+        rankings: {
+          lexical: lexicalIds,
+          semantic: semanticIds,
+          fused: fusedIds,
+        },
+        semanticCandidates: semanticCandidates.map((candidate) => ({
+          claimId: candidate.claim_id,
+          similarity: candidate.similarity,
+        })),
+      });
+
       const evidence = {
+        type: entry.targetClaimId ? 'positive_case' : 'negative_case',
+        id: entry.id,
         query: entry.query,
-        target_claim_id: entry.targetClaimId,
-        lexical_rank: rankOf(lexicalIds, entry.targetClaimId),
-        semantic_rank: rankOf(semanticIds, entry.targetClaimId),
-        fused_rank: rankOf(fusedIds, entry.targetClaimId),
+        target_claim_id: entry.targetClaimId ?? null,
+        lexical_rank: entry.targetClaimId
+          ? rankOf(lexicalIds, entry.targetClaimId)
+          : null,
+        semantic_rank: entry.targetClaimId
+          ? rankOf(semanticIds, entry.targetClaimId)
+          : null,
+        fused_rank: entry.targetClaimId
+          ? rankOf(fusedIds, entry.targetClaimId)
+          : null,
+        semantic_top1_similarity: semanticCandidates[0]?.similarity ?? null,
+        fused_count: fusedIds.length,
       };
       console.log(JSON.stringify(evidence));
 
-      assert.notEqual(
-        evidence.fused_rank,
-        null,
-        `target must be recalled for: ${entry.query}`,
-      );
-      assert.ok(
-        evidence.fused_rank <= 5,
-        `target must rank top five for: ${entry.query}`,
-      );
+      if (entry.targetClaimId) {
+        assert.notEqual(
+          evidence.fused_rank,
+          null,
+          `target must be recalled for: ${entry.query}`,
+        );
+        assert.ok(
+          evidence.fused_rank <= 5,
+          `target must rank top five for: ${entry.query}`,
+        );
+      }
+
       assert.ok(fused.items.length <= 10);
       assert.ok(
         Buffer.byteLength(JSON.stringify(fused), 'utf8') <= 16_384,
         `hybrid result exceeded 16 KiB for: ${entry.query}`,
       );
     }
+
+    const summary = summarizeRecallQuality(qualityCases, {
+      kValues: [1, 5, 10],
+    });
+    const thresholdSweep = sweepSemanticThresholds(qualityCases, {
+      thresholds: [
+        0.45,
+        0.50,
+        0.55,
+        0.60,
+        0.65,
+        0.70,
+        0.75,
+        0.80,
+        0.85,
+        0.90,
+      ],
+      k: 5,
+    });
+
+    console.log(JSON.stringify({
+      type: 'recall_quality_summary',
+      model_id: embedder.modelId,
+      model_revision: embedder.modelRevision,
+      summary,
+      semantic_threshold_sweep_at_5: thresholdSweep,
+    }));
+
+    assert.deepEqual(summary.counts, {
+      queries: 12,
+      positiveQueries: 4,
+      negativeQueries: 8,
+    });
+    assert.equal(summary.routes.fused.hitRateAtK[5], 1);
+    assert.equal(summary.routes.fused.falseNegativeRateAtK[5], 0);
+    assert.equal(thresholdSweep.length, 10);
   },
 );
