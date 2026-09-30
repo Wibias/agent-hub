@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { realpathSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -95,12 +96,19 @@ async function main() {
   }
 }
 
-const isMain = typeof import.meta.main === 'boolean'
-  ? import.meta.main
-  : (
-      process.argv[1]
-      && resolve(process.argv[1]) === fileURLToPath(import.meta.url)
-    );
+function sameFile(left, right) {
+  try {
+    return realpathSync(resolve(left)) === realpathSync(resolve(right));
+  } catch {
+    return resolve(left) === resolve(right);
+  }
+}
+
+const isMain = import.meta.main === true
+  || (
+    process.argv[1]
+    && sameFile(process.argv[1], fileURLToPath(import.meta.url))
+  );
 
 if (isMain) {
   await main();
