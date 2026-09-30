@@ -475,3 +475,107 @@ test('operation errors return fixed messages and never echo secret payload value
   });
   assert.equal(JSON.stringify(response).includes(secret), false);
 });
+
+
+test('assert_claim best-effort indexes a committed active Claim when hybrid retrieval is configured', async (t) => {
+  const engine = await createEngine('hybrid-index-active');
+  t.after(() => engine.close());
+  engine.registerProject({ projectId: 'project-a', repoIdentity: 'project-a' });
+
+  const indexed = [];
+  const hybridRetriever = {
+    async recall() {
+      return { items: [], conflicts: [] };
+    },
+    async indexClaim(claimId) {
+      indexed.push(claimId);
+      return { indexed: true };
+    },
+  };
+  const protocol = createMemoryProtocol({
+    memory: engine,
+    hybridRetriever,
+    classifyAuthority: () => 'user_direct',
+    authorizeClaim: () => true,
+  });
+
+  await capture(protocol);
+  const result = await assertClaim(protocol);
+
+  assert.equal(result.claim.id, 'c-1');
+  assert.equal(result.claim.state, 'active');
+  assert.deepEqual(indexed, ['c-1']);
+});
+
+test('semantic indexing failure cannot roll back a committed Claim', async (t) => {
+  const engine = await createEngine('hybrid-index-failure');
+  t.after(() => engine.close());
+  engine.registerProject({ projectId: 'project-a', repoIdentity: 'project-a' });
+
+  const protocol = createMemoryProtocol({
+    memory: engine,
+    hybridRetriever: {
+      async recall() {
+        return { items: [], conflicts: [] };
+      },
+      async indexClaim() {
+        throw new Error('embedding worker unavailable');
+      },
+    },
+    classifyAuthority: () => 'user_direct',
+    authorizeClaim: () => true,
+  });
+
+  await capture(protocol);
+  const response = await protocol.handle(
+    request('assert_claim', claimPayload(), 'claim-hybrid-failure'),
+  );
+
+  assert.equal(response.ok, true, JSON.stringify(response));
+  assert.equal(response.result.claim.id, 'c-1');
+  assert.equal(engine.getClaim('c-1').state, 'active');
+});
+
+test('non-active control Claims are not sent to semantic indexing', async (t) => {
+  const engine = await createEngine('hybrid-index-expired');
+  t.after(() => engine.close());
+  engine.registerProject({ projectId: 'project-a', repoIdentity: 'project-a' });
+
+  const indexed = [];
+  const protocol = createMemoryProtocol({
+    memory: engine,
+    hybridRetriever: {
+      async recall() {
+        return { items: [], conflicts: [] };
+      },
+      async indexClaim(claimId) {
+        indexed.push(claimId);
+      },
+    },
+    classifyAuthority: () => 'user_direct',
+    authorizeClaim: () => true,
+  });
+
+  await capture(protocol, capturePayload({
+    content: 'Forget the previous memory.',
+  }));
+
+  const response = await protocol.handle(request('assert_claim', {
+    evidence_id: 'e-1',
+    claim: {
+      id: 'c-control',
+      kind: 'memory_control',
+      subject: 'user memory',
+      predicate: 'forgets',
+      value: 'memory: old value',
+      state: 'expired',
+      branch_scope: 'main',
+      created_at: '2026-09-30T00:00:00Z',
+    },
+    lifecycle: {},
+  }, 'claim-control'));
+
+  assert.equal(response.ok, true, JSON.stringify(response));
+  assert.equal(response.result.claim.state, 'expired');
+  assert.deepEqual(indexed, []);
+});
