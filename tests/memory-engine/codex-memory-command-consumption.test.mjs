@@ -193,6 +193,7 @@ test('ordinary prompts still continue with recalled additionalContext', async ()
         result: {
           items: [{
             claim: {
+              id: 'c-postgres',
               kind: 'decision',
               subject: 'database',
               predicate: 'uses',
@@ -200,6 +201,7 @@ test('ordinary prompts still continue with recalled additionalContext', async ()
               state: 'active',
             },
             evidence: {
+              id: 'e-postgres',
               authority_class: 'user_direct',
               source_ref: 'session:decision',
               content_redacted: 'Use Postgres.',
