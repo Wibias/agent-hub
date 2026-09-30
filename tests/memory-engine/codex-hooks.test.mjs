@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import {
@@ -13,7 +13,7 @@ import {
 import {
   parseCodexMemoryConfig,
   runCodexMemoryHook,
-} from '../../memory-engine/adapters/codex-hook-runtime.mjs';
+} from '../../memory-engine/adapters/codex-hook-cli.mjs';
 import { MemoryEngine } from '../../memory-engine/index.mjs';
 
 function userPromptEvent(overrides = {}) {
@@ -456,14 +456,13 @@ test('runCodexMemoryHook wires configured engine, protocol, adapter, and teardow
 });
 
 
-test('Codex CLI executes when invoked through an aliased engine path', () => {
+test('Codex CLI reads hook JSON from stdin and writes recalled context', () => {
   const root = mkdtempSync(join(tmpdir(), 'agent-hub-codex-cli-'));
   const repoDir = join(root, 'repo');
-  const aliasDir = join(root, 'memory-engine-alias');
   const dbPath = join(root, 'memory.sqlite3');
-  const realEngineDir = dirname(fileURLToPath(
-    new URL('../../memory-engine/index.mjs', import.meta.url),
-  ));
+  const cliPath = fileURLToPath(
+    new URL('../../memory-engine/adapters/codex-hook-cli.mjs', import.meta.url),
+  );
 
   try {
     mkdirSync(repoDir, { recursive: true });
@@ -487,7 +486,7 @@ test('Codex CLI executes when invoked through an aliased engine path', () => {
     const now = '2026-09-30T01:00:00.000Z';
     memory.ingest({
       evidence: {
-        id: 'e-cli-alias',
+        id: 'e-cli-stdin',
         projectId: 'project-a',
         harness: 'test',
         sessionId: 'seed',
@@ -503,7 +502,7 @@ test('Codex CLI executes when invoked through an aliased engine path', () => {
         metadata: {},
       },
       claim: {
-        id: 'c-cli-alias',
+        id: 'c-cli-stdin',
         kind: 'decision',
         subject: 'database',
         predicate: 'uses',
@@ -513,12 +512,6 @@ test('Codex CLI executes when invoked through an aliased engine path', () => {
       },
     });
     memory.close();
-
-    symlinkSync(
-      realEngineDir,
-      aliasDir,
-      process.platform === 'win32' ? 'junction' : 'dir',
-    );
 
     const event = JSON.stringify({
       session_id: 'thr-smoke',
@@ -531,37 +524,20 @@ test('Codex CLI executes when invoked through an aliased engine path', () => {
       prompt: 'What database do we use for concurrent writers?',
     });
 
-    const env = {
-      ...process.env,
-      AGENT_HUB_MEMORY_DB: dbPath,
-      AGENT_HUB_MEMORY_PROJECT_ID: 'project-a',
-      AGENT_HUB_MEMORY_REPO_IDENTITY: 'github.com/example/project',
-      AGENT_HUB_MEMORY_CAPTURE_PROMPTS: 'false',
-    };
+    const result = spawnSync(process.execPath, [cliPath], {
+      input: event,
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        AGENT_HUB_MEMORY_DB: dbPath,
+        AGENT_HUB_MEMORY_PROJECT_ID: 'project-a',
+        AGENT_HUB_MEMORY_REPO_IDENTITY: 'github.com/example/project',
+        AGENT_HUB_MEMORY_CAPTURE_PROMPTS: 'false',
+      },
+    });
 
-    const realResult = spawnSync(
-      process.execPath,
-      [join(realEngineDir, 'adapters', 'codex-hook-cli.mjs')],
-      { input: event, encoding: 'utf8', env },
-    );
-    assert.equal(realResult.status, 0, realResult.stderr);
-    assert.match(
-      realResult.stdout,
-      /Postgres for concurrent writers/,
-      `real CLI stdout was empty; stderr: ${realResult.stderr}`,
-    );
-
-    const aliasResult = spawnSync(
-      process.execPath,
-      [join(aliasDir, 'adapters', 'codex-hook-cli.mjs')],
-      { input: event, encoding: 'utf8', env },
-    );
-    assert.equal(aliasResult.status, 0, aliasResult.stderr);
-    assert.match(
-      aliasResult.stdout,
-      /Postgres for concurrent writers/,
-      `aliased CLI stdout was empty; stderr: ${aliasResult.stderr}`,
-    );
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /Postgres for concurrent writers/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
