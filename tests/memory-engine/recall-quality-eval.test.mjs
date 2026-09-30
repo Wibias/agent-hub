@@ -98,22 +98,22 @@ test('recall quality summary measures hit rate, false negatives, MRR, and negati
 
   assert.deepEqual(summary.routes.fused, summary.routes.semantic);
 
-  assert.deepEqual(summary.semanticSimilarity, {
-    positiveRelevant: {
-      count: 2,
-      min: 0.74,
-      max: 0.84,
-      mean: 0.79,
-      median: 0.79,
-    },
-    negativeTop1: {
-      count: 2,
-      min: 0.58,
-      max: 0.72,
-      mean: 0.65,
-      median: 0.65,
-    },
+  assert.deepEqual(summary.semanticSimilarity.positiveRelevant, {
+    count: 2,
+    min: 0.74,
+    max: 0.84,
+    mean: 0.79,
+    median: 0.79,
   });
+  assert.equal(summary.semanticSimilarity.negativeTop1.count, 2);
+  assert.equal(summary.semanticSimilarity.negativeTop1.min, 0.58);
+  assert.equal(summary.semanticSimilarity.negativeTop1.max, 0.72);
+  assert.ok(
+    Math.abs(summary.semanticSimilarity.negativeTop1.mean - 0.65) < 1e-12,
+  );
+  assert.ok(
+    Math.abs(summary.semanticSimilarity.negativeTop1.median - 0.65) < 1e-12,
+  );
 });
 
 test('semantic threshold sweep separates relevant recall from negative-query noise', () => {
@@ -138,14 +138,14 @@ test('semantic threshold sweep separates relevant recall from negative-query noi
     {
       threshold: 0.75,
       truePositiveQueries: 1,
-      falsePositiveQueries: 1,
+      falsePositiveQueries: 0,
       falseNegativeQueries: 1,
-      trueNegativeQueries: 1,
-      precision: 0.5,
+      trueNegativeQueries: 2,
+      precision: 1,
       recall: 0.5,
-      f1: 0.5,
+      f1: 2 / 3,
       positiveHitRate: 0.5,
-      negativeSuppressionRate: 0.5,
+      negativeSuppressionRate: 1,
     },
     {
       threshold: 0.8,
