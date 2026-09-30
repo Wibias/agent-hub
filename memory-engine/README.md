@@ -456,15 +456,26 @@ For an explicit `memory:` prompt, the `UserPromptSubmit` adapter:
 1. stores the exact prompt as `user_direct` Evidence;
 2. marks that Evidence as an explicit memory request in trusted adapter metadata;
 3. asserts one fixed exact-text Claim on the current Git branch;
-4. performs normal bounded recall.
+4. returns a terminal `UserPromptSubmit` block result so the command itself is not
+   forwarded to the model.
+
+The terminal result uses Codex's documented command-hook shape:
+
+```json
+{
+  "decision": "block",
+  "reason": "Memory stored for the current project and branch."
+}
+```
 
 The Claim uses the same non-reinterpretation contract as the explicit commit CLI:
 `kind=user_direct`, `subject=user memory`, `predicate=states`, and the Claim value
 is the redacted Evidence content exactly. No lifecycle relation is inferred
 automatically.
 
-Capture or Claim failure remains fail-soft for the interactive Codex prompt. The
-ordinary recall path still runs.
+Capture or Claim failure remains fail-soft for the Codex process, but the explicit
+memory command is still consumed and reports that memory was not changed. Ordinary
+non-command prompts keep the existing bounded recall path.
 
 #### List active durable memories
 
@@ -475,8 +486,10 @@ memory list
 ```
 
 returns the active durable `user_direct` memories for the current Git project and
-branch. It does not capture Evidence, assert Claims, mutate lifecycle state, or fall
-back to semantic intent detection.
+branch in the terminal hook `reason`. The command is consumed with
+`decision: "block"`, so Codex does not reinterpret `memory list` as a normal task.
+It does not capture Evidence, assert Claims, mutate lifecycle state, or fall back to
+semantic intent detection.
 
 Only Claims with the fixed durable-user shape are listed:
 
@@ -520,7 +533,7 @@ memory forget: @7fa31c9e42
 
 The adapter matches by exact value among active Claims in the current Git project and
 branch. Forget proceeds only when exactly one target matches. Zero matches or multiple
-matches fail closed for lifecycle mutation while normal recall continues.
+matches fail closed for lifecycle mutation and return a terminal no-change result.
 
 The forget request is stored as direct-user Evidence. Its lifecycle source Claim is a
 non-current control Claim:
@@ -560,7 +573,8 @@ used to choose a lifecycle target.
 
 The adapter matches the old value by exact equality among active Claims in the current
 Git project and branch. Replacement proceeds only when exactly one target matches.
-Zero matches or multiple matches fail closed for mutation while normal recall continues.
+Zero matches or multiple matches fail closed for mutation and return a terminal
+no-change result.
 
 The replacement Evidence stores the exact user prompt. The new Claim value is the exact
 syntactic payload after `=>`; it is not semantically rewritten. The protocol

@@ -161,13 +161,16 @@ test('memory forget rejects exactly one active same-scope durable Claim', async 
     git: fakeGit(),
   });
 
-  await adapter.handle(userPromptEvent());
+  const output = await adapter.handle(userPromptEvent());
 
   assert.deepEqual(calls.map((call) => call.operation), [
     'capture_evidence',
     'assert_claim',
-    'recall',
   ]);
+  assert.deepEqual(output, {
+    decision: 'block',
+    reason: 'Memory forgotten for the current project and branch.',
+  });
   assert.deepEqual(calls[0].payload.metadata, {
     event_type: 'user_prompt',
     hook_event_name: 'UserPromptSubmit',
@@ -247,8 +250,10 @@ test('memory forget refuses zero or ambiguous exact active targets', async () =>
       git: fakeGit(),
     });
 
-    await adapter.handle(userPromptEvent());
-    assert.deepEqual(operations, ['capture_evidence', 'recall']);
+    const output = await adapter.handle(userPromptEvent());
+    assert.deepEqual(operations, ['capture_evidence']);
+    assert.equal(output.decision, 'block');
+    assert.match(output.reason, /not found|not unique/i);
   }
 });
 

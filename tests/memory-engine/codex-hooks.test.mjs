@@ -906,7 +906,7 @@ test('Codex CLI auto-registers different repositories in one shared database', (
 });
 
 
-test('explicit memory: prompt captures and commits exact direct-user text before recall', async () => {
+test('explicit memory: prompt captures, commits, and consumes the command', async () => {
   const calls = [];
   const protocol = {
     async handle(request) {
@@ -974,11 +974,13 @@ test('explicit memory: prompt captures and commits exact direct-user text before
   const prompt = 'memory: Use Postgres for concurrent writers.';
   const output = await adapter.handle(userPromptEvent({ prompt }));
 
-  assert.equal(output, null);
+  assert.deepEqual(output, {
+    decision: 'block',
+    reason: 'Memory stored for the current project and branch.',
+  });
   assert.deepEqual(calls.map((call) => call.operation), [
     'capture_evidence',
     'assert_claim',
-    'recall',
   ]);
 
   const capture = calls[0];
@@ -1037,7 +1039,7 @@ test('explicit memory mode ignores ordinary prompts instead of persisting heuris
   assert.deepEqual(operations, ['recall']);
 });
 
-test('explicit memory commit failure remains fail-soft and still performs recall', async () => {
+test('explicit memory commit failure is consumed without claiming success', async () => {
   const operations = [];
   const protocol = {
     async handle(request) {
@@ -1099,9 +1101,11 @@ test('explicit memory commit failure remains fail-soft and still performs recall
   assert.deepEqual(operations, [
     'capture_evidence',
     'assert_claim',
-    'recall',
   ]);
-  assert.match(output.hookSpecificOutput.additionalContext, /Postgres/);
+  assert.deepEqual(output, {
+    decision: 'block',
+    reason: 'Memory not changed: operation failed.',
+  });
 });
 
 test('runCodexMemoryHook wires explicit memory mode and exact-text claim authorization', async () => {
@@ -1402,13 +1406,16 @@ test('explicit memory replacement supersedes exactly one active same-scope Claim
     '=>',
     'memory: database is Postgres',
   ].join(' ');
-  await adapter.handle(userPromptEvent({ prompt }));
+  const output = await adapter.handle(userPromptEvent({ prompt }));
 
   assert.deepEqual(calls.map((call) => call.operation), [
     'capture_evidence',
     'assert_claim',
-    'recall',
   ]);
+  assert.deepEqual(output, {
+    decision: 'block',
+    reason: 'Memory replaced for the current project and branch.',
+  });
 
   assert.deepEqual(calls[0].payload.metadata, {
     event_type: 'user_prompt',
@@ -1488,7 +1495,7 @@ test('explicit memory replacement refuses zero or ambiguous exact active targets
       git: fakeGit(),
     });
 
-    await adapter.handle(userPromptEvent({
+    const output = await adapter.handle(userPromptEvent({
       prompt: [
         'memory replace:',
         'memory: database is SQLite',
@@ -1497,7 +1504,9 @@ test('explicit memory replacement refuses zero or ambiguous exact active targets
       ].join(' '),
     }));
 
-    assert.deepEqual(operations, ['capture_evidence', 'recall']);
+    assert.deepEqual(operations, ['capture_evidence']);
+    assert.equal(output.decision, 'block');
+    assert.match(output.reason, /not found|not unique/i);
   }
 });
 
