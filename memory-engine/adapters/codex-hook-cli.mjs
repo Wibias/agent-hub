@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { execFileSync } from 'node:child_process';
-import { mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join, resolve, win32 } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -9,6 +9,7 @@ import {
   createEmbeddingIpcClient,
   defaultEmbeddingIpcPath,
 } from '../embedding-ipc.mjs';
+import { launchEmbeddingWorker } from '../embedding-worker-launcher.mjs';
 import {
   E5_DIMENSIONS,
   E5_MODEL_ID,
@@ -73,6 +74,17 @@ export function canonicalizeGitRemote(value) {
   }
 
   return `${host}/${segments.join('/')}`;
+}
+
+export function defaultCodexEmbeddingCacheDir() {
+  return resolve(
+    dirname(fileURLToPath(import.meta.url)),
+    '..',
+    '..',
+    '.cache',
+    'memory-engine',
+    'e5',
+  );
 }
 
 export function defaultCodexMemoryDbPath({
@@ -324,6 +336,8 @@ export async function runCodexMemoryHook({
   createDiagnosticsRetriever = (options) => new HybridMemoryRetriever(options),
   resolveProjectScope = resolveCodexProjectScope,
   ensureDbDirectory = defaultEnsureDbDirectory,
+  embeddingCacheAvailable = existsSync,
+  ensureEmbeddingWorker = launchEmbeddingWorker,
 } = {}) {
   const config = parseCodexMemoryConfig(env, configOptions);
 
@@ -351,11 +365,37 @@ export async function runCodexMemoryHook({
 
     let hybridRetriever = null;
     if (configOptions.hybridRecall === true) {
+      const socketPath = nonEmpty(configOptions.embeddingSocketPath)
+        ? configOptions.embeddingSocketPath.trim()
+        : defaultEmbeddingIpcPath();
+      const cacheDir = nonEmpty(configOptions.embeddingCacheDir)
+        ? configOptions.embeddingCacheDir.trim()
+        : defaultCodexEmbeddingCacheDir();
+
+      if (
+        typeof embeddingCacheAvailable === 'function'
+        && typeof ensureEmbeddingWorker === 'function'
+        && embeddingCacheAvailable(cacheDir)
+      ) {
+        try {
+          await ensureEmbeddingWorker({
+            cacheDir,
+            socketPath,
+            startupTimeoutMs: Number.isInteger(
+              configOptions.embeddingStartupTimeoutMs,
+            )
+              ? configOptions.embeddingStartupTimeoutMs
+              : 5_000,
+          });
+        } catch {
+          // SessionStart is only an optimization. If a host skips it and
+          // prompt-time recovery also fails, hybrid recall remains fail-soft.
+        }
+      }
+
       try {
         const embedder = createEmbeddingClient({
-          socketPath: nonEmpty(configOptions.embeddingSocketPath)
-            ? configOptions.embeddingSocketPath.trim()
-            : defaultEmbeddingIpcPath(),
+          socketPath,
           modelId: E5_MODEL_ID,
           modelRevision: E5_MODEL_REVISION,
           dimensions: E5_DIMENSIONS,
