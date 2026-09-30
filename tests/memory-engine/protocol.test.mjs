@@ -222,15 +222,18 @@ test('recall and history preserve project/branch scope and enforce wire budgets'
     id: 'e-main-old',
     content: 'Use SQLite first.',
   }), 'capture-main-old');
-  await assertClaim(protocol, claimPayload({
-    id: 'c-main-old',
-    value: 'SQLite',
-    created_at: '2026-09-29T00:00:00Z',
-  }), 'claim-main-old');
+  await assertClaim(protocol, {
+    ...claimPayload({
+      id: 'c-main-old',
+      value: 'SQLite',
+      created_at: '2026-09-29T00:00:00Z',
+    }),
+    evidence_id: 'e-main-old',
+  }, 'claim-main-old');
 
   await capture(protocol, capturePayload({
     id: 'e-main-new',
-    content: 'Use Postgres with concurrent writers. '.repeat(900),
+    content: 'Use Postgres with concurrent writers. '.repeat(100),
   }), 'capture-main-new');
   await assertClaim(protocol, {
     ...claimPayload({
@@ -293,6 +296,19 @@ test('recall and history preserve project/branch scope and enforce wire budgets'
   assert.equal(
     current.result.items.some((item) => item.claim.id === 'c-other'),
     false,
+  );
+
+  const tinyBudget = await protocol.handle(request('recall', {
+    project_id: 'project-a',
+    branch: 'main',
+    revision_sha: null,
+    query: 'Postgres concurrent writers',
+    max_items: 10,
+    max_serialized_bytes: 512,
+  }, 'recall-tiny-budget'));
+  assert.equal(tinyBudget.ok, true);
+  assert.ok(
+    Buffer.byteLength(JSON.stringify(tinyBudget.result), 'utf8') <= 512,
   );
 
   const history = await protocol.handle(request('history', {
