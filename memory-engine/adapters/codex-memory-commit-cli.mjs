@@ -42,11 +42,6 @@ function requireString(value, name) {
   return value.trim();
 }
 
-function optionalString(value, name) {
-  if (value === undefined || value === null) return null;
-  return requireString(value, name);
-}
-
 function stringArray(value, name) {
   if (value === undefined) return [];
   if (!Array.isArray(value)) {
