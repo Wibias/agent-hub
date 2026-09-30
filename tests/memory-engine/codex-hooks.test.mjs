@@ -13,7 +13,7 @@ import {
 import {
   parseCodexMemoryConfig,
   runCodexMemoryHook,
-} from '../../memory-engine/adapters/codex-hook-cli.mjs';
+} from '../../memory-engine/adapters/codex-hook-runtime.mjs';
 import { MemoryEngine } from '../../memory-engine/index.mjs';
 
 function userPromptEvent(overrides = {}) {
