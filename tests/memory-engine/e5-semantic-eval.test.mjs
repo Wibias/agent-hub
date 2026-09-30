@@ -15,8 +15,12 @@ import {
   summarizeRecallQuality,
   sweepSemanticThresholds,
 } from '../../memory-engine/recall-quality-eval.mjs';
+import {
+  createMmarcoReranker,
+} from '../../memory-engine/mmarco-reranker.mjs';
 
 const cacheDir = process.env.MEMORY_E5_MODEL_CACHE;
+const rerankerCacheDir = process.env.MEMORY_RERANKER_MODEL_CACHE;
 
 function compareCodePoints(left, right) {
   if (left < right) return -1;
@@ -328,6 +332,7 @@ test(
 
       qualityCases.push({
         id: entry.id,
+        query: entry.query,
         relevantClaimIds: entry.targetClaimId ? [entry.targetClaimId] : [],
         rankings: {
           lexical: lexicalIds,
@@ -437,6 +442,115 @@ test(
       summary,
       semantic_threshold_sweep_at_5: thresholdSweep,
     }));
+
+    if (rerankerCacheDir) {
+      const reranker = await createMmarcoReranker({
+        cacheDir: rerankerCacheDir,
+      });
+      const rerankerCases = [];
+
+      for (const entry of qualityCases) {
+        const retrieved = entry.semanticCandidates.slice(0, 10);
+        const passages = retrieved.map((candidate) => {
+          const document = engine.embeddingDocument({
+            claimId: candidate.claimId,
+          });
+          assert.ok(
+            document?.text,
+            `missing reranker passage for ${candidate.claimId}`,
+          );
+          return document.text;
+        });
+        const scores = await reranker.score(entry.query, passages);
+        const reranked = retrieved
+          .map((candidate, index) => ({
+            claimId: candidate.claimId,
+            similarity: scores[index],
+            e5Similarity: candidate.similarity,
+          }))
+          .sort((left, right) => (
+            (right.similarity - left.similarity)
+            || compareCodePoints(left.claimId, right.claimId)
+          ));
+
+        const rerankedIds = reranked.map((candidate) => candidate.claimId);
+        const targetId = entry.relevantClaimIds[0] ?? null;
+        const top1 = reranked[0] ?? null;
+        const top2 = reranked[1] ?? null;
+        const target = targetId === null
+          ? null
+          : reranked.find((candidate) => candidate.claimId === targetId);
+
+        console.log(JSON.stringify({
+          type: targetId === null
+            ? 'reranker_negative_case'
+            : 'reranker_positive_case',
+          id: entry.id,
+          query: entry.query,
+          target_claim_id: targetId,
+          reranker_rank: targetId === null
+            ? null
+            : rankOf(rerankedIds, targetId),
+          reranker_target_score: target?.similarity ?? null,
+          reranker_top1_claim_id: top1?.claimId ?? null,
+          reranker_top1_score: top1?.similarity ?? null,
+          reranker_top2_score: top2?.similarity ?? null,
+          reranker_top1_margin: (
+            top1 && top2
+              ? top1.similarity - top2.similarity
+              : null
+          ),
+        }));
+
+        rerankerCases.push({
+          id: entry.id,
+          relevantClaimIds: entry.relevantClaimIds,
+          rankings: {
+            lexical: entry.rankings.lexical,
+            semantic: rerankedIds,
+            fused: rerankedIds,
+          },
+          semanticCandidates: reranked.map((candidate) => ({
+            claimId: candidate.claimId,
+            similarity: candidate.similarity,
+          })),
+        });
+      }
+
+      const rerankerSummary = summarizeRecallQuality(rerankerCases, {
+        kValues: [1, 5, 10],
+      });
+      const rerankerThresholdSweep = sweepSemanticThresholds(
+        rerankerCases,
+        {
+          thresholds: [
+            0.01,
+            0.025,
+            0.05,
+            0.10,
+            0.20,
+            0.35,
+            0.50,
+            0.65,
+            0.80,
+            0.90,
+            0.95,
+            0.975,
+            0.99,
+          ],
+          k: 10,
+        },
+      );
+
+      console.log(JSON.stringify({
+        type: 'reranker_quality_summary',
+        model_id: reranker.modelId,
+        model_revision: reranker.modelRevision,
+        candidate_source: 'e5_top_10',
+        summary: rerankerSummary,
+        reranker_threshold_sweep_at_10: rerankerThresholdSweep,
+      }));
+    }
 
     assert.deepEqual(summary.counts, {
       queries: 28,
