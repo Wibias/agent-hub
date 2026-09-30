@@ -24,6 +24,10 @@ export function renderHostReport(hostId, host, runtime) {
     `- skillModelRouting: ${state(host.skills?.skillModelRouting)}`,
     `- config renderer: ${host.adapter?.configRenderer ?? 'unsupported'}`,
   ];
+  if (host.hooks?.supported !== undefined) lines.push(`- lifecycle hooks: ${state(host.hooks.supported)}`);
+  if (host.hooks?.command !== undefined) lines.push(`- command hooks: ${state(host.hooks.command)}`);
+  if (host.hooks?.pluginBundled !== undefined) lines.push(`- plugin-bundled hooks: ${state(host.hooks.pluginBundled)}`);
+  if (host.hooks?.events?.length) lines.push(`- hook events: ${host.hooks.events.join(', ')}`);
   if (host.skills?.sharedSkillRoot) lines.push(`- shared skill root: \`${host.skills.sharedSkillRoot}\``);
   if (host.agentProfiles?.supported !== undefined) lines.push(`- agent profiles: ${state(host.agentProfiles.supported)}`);
   if (host.agentProfiles?.nativeRoot) lines.push(`- native agent root: \`${host.agentProfiles.nativeRoot}\``);
