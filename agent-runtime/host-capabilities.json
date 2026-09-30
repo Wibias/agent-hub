@@ -68,9 +68,10 @@
     },
     "codex": {
       "displayName": "OpenAI Codex",
-      "reviewed": "2026-09-04",
+      "reviewed": "2026-09-30",
       "sources": [
-        "https://developers.openai.com/"
+        "https://developers.openai.com/docs/hooks",
+        "https://developers.openai.com/plugins/build/plugins"
       ],
       "skills": {
         "agentsRoot": true,
@@ -82,7 +83,26 @@
       },
       "adapter": {
         "configRenderer": "unsupported",
-        "note": "No Codex host-config renderer is inferred from generic model documentation. Keep the adapter manual until the exact current custom-agent schema is verified."
+        "note": "General Codex host-config rendering remains unsupported. Documented lifecycle command hooks are supported; the memory integration uses UserPromptSubmit through the explicit Codex hook adapter."
+      },
+      "hooks": {
+        "supported": true,
+        "command": true,
+        "pluginBundled": true,
+        "events": [
+          "SessionStart",
+          "PreToolUse",
+          "PermissionRequest",
+          "PostToolUse",
+          "PreCompact",
+          "PostCompact",
+          "UserPromptSubmit",
+          "SubagentStart",
+          "SubagentStop",
+          "Stop",
+          "Interrupt",
+          "SessionEnd"
+        ]
       }
     }
   }
