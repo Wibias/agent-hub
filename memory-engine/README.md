@@ -424,6 +424,60 @@ Replace the example path with the real checkout path. The command inherits the m
 
 The adapter currently handles only `UserPromptSubmit`. It deliberately does not capture `PostToolUse`, summarize on `SessionEnd`, or parse `transcript_path`. Codex documents the transcript path as a convenience rather than a stable hook interface.
 
+### Explicit Codex claim commit
+
+Durable, recallable memory is committed through a separate explicit CLI:
+
+```text
+memory-engine/adapters/codex-memory-commit-cli.mjs
+```
+
+The command reads one JSON object from stdin:
+
+```json
+{
+  "evidence_id": "evidence:codex:...",
+  "lifecycle": {
+    "supersedes": [],
+    "rejects": [],
+    "conflicts_with": []
+  }
+}
+```
+
+The commit path deliberately does **not** accept caller-controlled project ID, branch,
+Claim ID, timestamp, subject, predicate, or value. It resolves project and branch from
+the current Git checkout, generates Claim identity and time itself, and promotes the
+exact redacted `user_direct` Evidence text as the Claim value.
+
+The fixed first-production Claim shape is:
+
+```text
+kind      = user_direct
+subject   = user memory
+predicate = states
+value     = exact redacted Evidence content
+```
+
+This prevents an agent from turning a real direct-user statement into a different
+higher-authority Claim. Structured semantic promotion can be added later only with a
+separate confirmation/grounding contract.
+
+The commit is denied unless:
+
+- the Evidence belongs to the current Git project;
+- the Evidence was classified `user_direct`;
+- the Evidence branch matches the current branch;
+- every lifecycle target exists in the same project and branch.
+
+Explicit write failures are fail-closed and return a non-zero exit code. Success output
+contains only project/branch/Evidence/Claim identifiers and Claim state, not remembered
+content.
+
+As with the recall hook, `--ignore-memory-env` makes the CLI ignore stale
+`AGENT_HUB_MEMORY_*` values inherited from a long-lived Codex process while retaining
+the platform default database location.
+
 ### Recall behavior
 
 Before current recall, the adapter:
