@@ -334,17 +334,21 @@ export function createCodexMemoryHookAdapter({
 
         if (explicitMemory?.mode === 'list') {
           return {
-            hookSpecificOutput: {
-              hookEventName: 'UserPromptSubmit',
-              additionalContext: formatActiveDirectUserMemories(memory, {
-                projectId,
-                branch: context.branch,
-                maxBytes: maxContextBytes,
-              }),
-            },
+            decision: 'block',
+            reason: formatActiveDirectUserMemories(memory, {
+              projectId,
+              branch: context.branch,
+              maxBytes: maxContextBytes,
+            }),
           };
         }
 
+        const explicitCommandResult = explicitMemory === null
+          ? null
+          : {
+              applied: false,
+              targetMissing: false,
+            };
         const shouldCapture = capturePrompts || explicitMemory !== null;
 
         if (shouldCapture) {
@@ -421,6 +425,10 @@ export function createCodexMemoryHookAdapter({
                   : null
               );
 
+              if (existingClaim !== null && parsedMemory !== null) {
+                explicitCommandResult.applied = true;
+              }
+
               if (existingClaim === null && parsedMemory !== null) {
                 let value = capturedEvidence.content_redacted;
                 let kind = 'user_direct';
@@ -438,6 +446,7 @@ export function createCodexMemoryHookAdapter({
                   });
                   if (target === null) {
                     value = null;
+                    explicitCommandResult.targetMissing = true;
                   } else {
                     value = parsedMemory.newValue;
                     supersedes = [target.id];
@@ -451,6 +460,7 @@ export function createCodexMemoryHookAdapter({
                   });
                   if (target === null) {
                     value = null;
+                    explicitCommandResult.targetMissing = true;
                   } else {
                     value = target.value_text;
                     kind = 'memory_control';
@@ -474,7 +484,7 @@ export function createCodexMemoryHookAdapter({
                   };
                   if (state !== null) claim.state = state;
 
-                  await protocol.handle({
+                  const asserted = await protocol.handle({
                     protocol: 'memory.protocol.v1',
                     operation: 'assert_claim',
                     request_id: `${requestPrefix}:claim`,
@@ -488,12 +498,35 @@ export function createCodexMemoryHookAdapter({
                       },
                     },
                   });
+                  if (asserted?.ok === true) {
+                    explicitCommandResult.applied = true;
+                  }
                 }
               }
             }
           } catch {
             // Evidence/Claim persistence is optional and must never block recall.
           }
+        }
+
+        if (explicitMemory !== null) {
+          let reason = 'Memory not changed: operation failed.';
+          if (explicitCommandResult?.applied === true) {
+            if (explicitMemory.mode === 'remember') {
+              reason = 'Memory stored for the current project and branch.';
+            } else if (explicitMemory.mode === 'replace') {
+              reason = 'Memory replaced for the current project and branch.';
+            } else if (explicitMemory.mode === 'forget') {
+              reason = 'Memory forgotten for the current project and branch.';
+            }
+          } else if (explicitCommandResult?.targetMissing === true) {
+            reason = 'Memory not changed: target was not found or was not unique in the current project and branch.';
+          }
+
+          return {
+            decision: 'block',
+            reason,
+          };
         }
 
         const recalled = await protocol.handle({
