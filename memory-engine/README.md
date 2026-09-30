@@ -371,7 +371,7 @@ Entrypoint:
 memory-engine/adapters/codex-hook-cli.mjs
 ```
 
-The command reads one Codex hook event as JSON from stdin. When current memory is available, it writes Codex-compatible `hookSpecificOutput.additionalContext` JSON to stdout. Missing configuration, Git-context failure, unavailable memory, or recall failure produces no output and does not block the user prompt.
+The command reads one Codex hook event as JSON from stdin. When current memory is available, it performs broad bounded recall, applies the engine's existing `answer` reliance policy, and writes only reliance-selected evidence as Codex-compatible `hookSpecificOutput.additionalContext` JSON to stdout. `user_direct`, `repo_trusted`, and `tool_observation` may enter normal answer context; `agent_inference`, `external_untrusted`, and `unclassified` remain retrievable but are not injected. Unresolved conflicts also fail closed at this boundary. Missing configuration, Git-context failure, unavailable memory, recall failure, or an empty reliance-selected result produces no output and does not block the user prompt.
 
 ### Configuration
 
