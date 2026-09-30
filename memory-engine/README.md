@@ -466,6 +466,31 @@ automatically.
 Capture or Claim failure remains fail-soft for the interactive Codex prompt. The
 ordinary recall path still runs.
 
+#### List active durable memories
+
+The read-only management prompt
+
+```text
+memory list
+```
+
+returns the active durable `user_direct` memories for the current Git project and
+branch. It does not capture Evidence, assert Claims, mutate lifecycle state, or fall
+back to semantic intent detection.
+
+Only Claims with the fixed durable-user shape are listed:
+
+```text
+kind      = user_direct
+subject   = user memory
+predicate = states
+state     = active
+```
+
+The paired Evidence must also be `user_direct`. Superseded/rejected history,
+other branches, other projects, and non-user-direct Claims are excluded. The injected
+list is bounded by the normal Codex hook context budget.
+
 #### Explicit supersession
 
 An existing durable memory can be replaced without semantic or embedding-based target
