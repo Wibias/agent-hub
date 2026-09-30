@@ -1,4 +1,4 @@
-import { lstat, rm } from 'node:fs/promises';
+import { chmod, lstat, rm } from 'node:fs/promises';
 import { createConnection, createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -316,6 +316,10 @@ export async function startEmbeddingIpcServer({
     server.once('listening', onListening);
     server.listen(socketPath);
   });
+
+  if (platform !== 'win32') {
+    await chmod(socketPath, 0o600);
+  }
 
   return {
     socketPath,
