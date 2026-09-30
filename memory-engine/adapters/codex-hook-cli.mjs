@@ -176,6 +176,31 @@ function classifyCodexAuthority(channel) {
   return 'unclassified';
 }
 
+function authorizeCodexExplicitMemoryClaim({
+  evidence,
+  claim,
+  lifecycle,
+}) {
+  return (
+    evidence?.harness === 'codex'
+    && evidence?.source_kind === 'session'
+    && evidence?.authority_class === 'user_direct'
+    && evidence?.metadata?.event_type === 'user_prompt'
+    && evidence?.metadata?.explicit_memory === true
+    && claim?.kind === 'user_direct'
+    && claim?.subject === 'user memory'
+    && claim?.predicate === 'states'
+    && claim?.value === evidence?.content_redacted
+    && claim?.branchScope === evidence?.branch
+    && Array.isArray(lifecycle?.supersedes)
+    && lifecycle.supersedes.length === 0
+    && Array.isArray(lifecycle?.rejects)
+    && lifecycle.rejects.length === 0
+    && Array.isArray(lifecycle?.conflictsWith)
+    && lifecycle.conflictsWith.length === 0
+  );
+}
+
 export async function runCodexMemoryHook({
   event,
   env = process.env,
@@ -213,12 +238,14 @@ export async function runCodexMemoryHook({
     const protocol = createProtocol({
       memory,
       classifyAuthority: classifyCodexAuthority,
+      authorizeClaim: authorizeCodexExplicitMemoryClaim,
     });
     const adapter = createAdapter({
       protocol,
       memory,
       projectId: scope.projectId,
       capturePrompts: config.capturePrompts,
+      explicitMemoryRequests: configOptions.explicitMemoryRequests === true,
     });
 
     return await adapter.handle(event);
@@ -252,6 +279,9 @@ async function main() {
       event,
       configOptions: {
         ignoreMemoryEnv: process.argv.slice(2).includes('--ignore-memory-env'),
+        explicitMemoryRequests: process.argv
+          .slice(2)
+          .includes('--explicit-memory-requests'),
       },
     });
     if (output !== null) {
