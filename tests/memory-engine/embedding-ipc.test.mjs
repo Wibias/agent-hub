@@ -191,3 +191,46 @@ test('a second Unix worker cannot replace an active socket', async (t) => {
   });
   assert.deepEqual([...await client.embedQuery('still alive')], [1, 2, 3]);
 });
+
+
+test('embedding IPC health probe verifies worker identity without running inference', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'agent-hub-embedding-ipc-health-'));
+  const socketPath = join(root, 'embedding.sock');
+  t.after(async () => {
+    await rm(root, { recursive: true, force: true });
+  });
+
+  let inferenceCalls = 0;
+  const embedder = {
+    modelId: 'test/model',
+    modelRevision: 'test-revision',
+    dimensions: 3,
+    async embedQuery() {
+      inferenceCalls += 1;
+      return vector(1);
+    },
+    async embedPassages(texts) {
+      inferenceCalls += 1;
+      return texts.map(() => vector(1));
+    },
+  };
+
+  const server = await startEmbeddingIpcServer({
+    socketPath,
+    embedder,
+  });
+  t.after(() => server.close());
+
+  const client = createEmbeddingIpcClient({
+    socketPath,
+    modelId: embedder.modelId,
+    modelRevision: embedder.modelRevision,
+    dimensions: embedder.dimensions,
+    timeoutMs: 1_000,
+  });
+
+  assert.deepEqual(await client.health(), {
+    ready: true,
+  });
+  assert.equal(inferenceCalls, 0);
+});
