@@ -461,9 +461,9 @@ test('Codex CLI executes when invoked through an aliased engine path', () => {
   const repoDir = join(root, 'repo');
   const aliasDir = join(root, 'memory-engine-alias');
   const dbPath = join(root, 'memory.sqlite3');
-  const realEngineDir = dirname(dirname(fileURLToPath(
+  const realEngineDir = dirname(fileURLToPath(
     new URL('../../memory-engine/index.mjs', import.meta.url),
-  )));
+  ));
 
   try {
     mkdirSync(repoDir, { recursive: true });
