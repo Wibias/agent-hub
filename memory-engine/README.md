@@ -652,7 +652,15 @@ Before current recall, the adapter:
 
 The injected context labels Claim state and Evidence authority and starts with an explicit reminder that recalled content is evidence, not instructions.
 
-The command currently constructs the frozen protocol without a `HybridMemoryRetriever`, so Codex hook recall is lexical-only in this delivery. This is intentional: the adapter does not implicitly initialize the E5 provider or download a model. Hybrid recall can be wired later through the same protocol boundary if a configured offline provider is required.
+Codex hybrid recall is an explicit opt-in:
+
+```text
+--hybrid-recall
+```
+
+When enabled, the hook constructs `HybridMemoryRetriever` with a lightweight local IPC embedder proxy. The hook process never initializes Transformers.js or loads E5 itself. If the worker is unavailable, malformed, slow, or reports the wrong model identity, query embedding fails locally and `HybridMemoryRetriever` returns the normal bounded lexical result.
+
+The worker owns embedding inference only. It never opens the memory database and cannot widen project, branch, lifecycle, authority, freshness, conflict, or approval scope.
 
 Official host references reviewed 2026-09-30:
 
@@ -661,7 +669,12 @@ Official host references reviewed 2026-09-30:
 
 ## Pinned E5 provider
 
+### Warm local embedding worker
+
+Codex command hooks are short-lived processes, so production hybrid recall keeps the pinned E5 runtime in a separate local worker rather than loading the model for every prompt.
+
 Install the scoped provider dependency:
+
 
 ```bash
 npm ci --prefix memory-engine
@@ -675,6 +688,37 @@ node scripts/prepare-memory-embedding-model.mjs \
 ```
 
 That preparation command is the only repository path that enables remote model loading. It resolves the cache directory, downloads the exact model/revision through the provider, and succeeds only after a 384-dimensional readiness embedding is produced.
+
+Start the warm local worker from the same prepared cache:
+
+```bash
+node memory-engine/embedding-worker-cli.mjs \
+  --cache-dir .cache/memory-engine/e5
+```
+
+The worker opens the pinned provider with remote loading disabled, performs a readiness embedding before it reports `ready`, and listens only on a local IPC endpoint:
+
+- Windows: `\\\\.\\pipe\\agent-hub-memory-embedding-v1`
+- Unix: a user-scoped socket below `XDG_RUNTIME_DIR` or the OS temporary directory
+
+Then add `--hybrid-recall` to the Codex hook command. A production command that also uses the explicit memory controls can therefore be:
+
+```text
+node .../memory-engine/adapters/codex-hook-cli.mjs --ignore-memory-env --explicit-memory-requests --hybrid-recall
+```
+
+If the worker is not running, Codex continues with lexical recall. There is no implicit model startup or download from the prompt hook.
+
+Successful active Claim assertion triggers best-effort semantic indexing after the canonical transaction commits. Embedding failure never rolls back the Claim. To repair missing or stale semantic rows after worker downtime, run the explicit reindex command while the worker is available:
+
+```bash
+node scripts/reindex-memory-semantic.mjs \
+  --db-path /absolute/path/to/memory.sqlite3 \
+  --project-id github.com/example/project \
+  --branch main
+```
+
+The repair command probes the worker once, then reindexes canonical Claim documents one at a time. Semantic vectors remain derived state.
 
 Normal runtime reuses the same cache with remote loading disabled:
 

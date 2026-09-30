@@ -302,6 +302,13 @@ export function createMemoryProtocol({
     throw new TypeError('hybridRetriever must expose recall()');
   }
   if (
+    hybridRetriever !== null
+    && hybridRetriever.indexClaim !== undefined
+    && typeof hybridRetriever.indexClaim !== 'function'
+  ) {
+    throw new TypeError('hybridRetriever indexClaim must be a function');
+  }
+  if (
     classifyAuthority !== null
     && typeof classifyAuthority !== 'function'
   ) {
@@ -368,7 +375,22 @@ export function createMemoryProtocol({
       );
     }
 
-    return memory.assertClaim(normalized);
+    const asserted = memory.assertClaim(normalized);
+
+    if (
+      asserted?.claim?.state === 'active'
+      && hybridRetriever !== null
+      && typeof hybridRetriever.indexClaim === 'function'
+    ) {
+      try {
+        await hybridRetriever.indexClaim(asserted.claim.id);
+      } catch {
+        // Semantic vectors are derived state. A failed embedding must not
+        // roll back or invalidate an already-committed canonical Claim.
+      }
+    }
+
+    return asserted;
   }
 
   async function recall(payload, mode) {

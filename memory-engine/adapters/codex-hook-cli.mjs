@@ -5,6 +5,16 @@ import { homedir } from 'node:os';
 import { dirname, join, resolve, win32 } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import {
+  createEmbeddingIpcClient,
+  defaultEmbeddingIpcPath,
+} from '../embedding-ipc.mjs';
+import {
+  E5_DIMENSIONS,
+  E5_MODEL_ID,
+  E5_MODEL_REVISION,
+} from '../e5-embedder.mjs';
+import { HybridMemoryRetriever } from '../hybrid-retrieval.mjs';
 import { MemoryEngine } from '../index.mjs';
 import { createMemoryProtocol } from '../protocol.mjs';
 import {
@@ -99,6 +109,18 @@ export function parseCodexMemoryConfig(env = process.env, options = {}) {
       : null,
     capturePrompts: !ignoreMemoryEnv
       && env.AGENT_HUB_MEMORY_CAPTURE_PROMPTS === 'true',
+  };
+}
+
+export function parseCodexHookCliOptions(argv = []) {
+  if (!Array.isArray(argv)) {
+    throw new TypeError('argv must be an array');
+  }
+
+  return {
+    ignoreMemoryEnv: argv.includes('--ignore-memory-env'),
+    explicitMemoryRequests: argv.includes('--explicit-memory-requests'),
+    hybridRecall: argv.includes('--hybrid-recall'),
   };
 }
 
@@ -297,6 +319,8 @@ export async function runCodexMemoryHook({
   createEngine = (options) => new MemoryEngine(options),
   createProtocol = createMemoryProtocol,
   createAdapter = createCodexMemoryHookAdapter,
+  createEmbeddingClient = createEmbeddingIpcClient,
+  createHybridRetriever = (options) => new HybridMemoryRetriever(options),
   resolveProjectScope = resolveCodexProjectScope,
   ensureDbDirectory = defaultEnsureDbDirectory,
 } = {}) {
@@ -324,8 +348,32 @@ export async function runCodexMemoryHook({
       memory.registerProject(registration);
     }
 
+    let hybridRetriever = null;
+    if (configOptions.hybridRecall === true) {
+      try {
+        const embedder = createEmbeddingClient({
+          socketPath: nonEmpty(configOptions.embeddingSocketPath)
+            ? configOptions.embeddingSocketPath.trim()
+            : defaultEmbeddingIpcPath(),
+          modelId: E5_MODEL_ID,
+          modelRevision: E5_MODEL_REVISION,
+          dimensions: E5_DIMENSIONS,
+          timeoutMs: Number.isInteger(configOptions.embeddingTimeoutMs)
+            ? configOptions.embeddingTimeoutMs
+            : 750,
+        });
+        hybridRetriever = createHybridRetriever({
+          memory,
+          embedder,
+        });
+      } catch {
+        hybridRetriever = null;
+      }
+    }
+
     const protocol = createProtocol({
       memory,
+      hybridRetriever,
       classifyAuthority: classifyCodexAuthority,
       authorizeClaim: (args) => authorizeCodexExplicitMemoryClaim({
         memory,
@@ -369,12 +417,7 @@ async function main() {
     const event = JSON.parse(raw);
     const output = await runCodexMemoryHook({
       event,
-      configOptions: {
-        ignoreMemoryEnv: process.argv.slice(2).includes('--ignore-memory-env'),
-        explicitMemoryRequests: process.argv
-          .slice(2)
-          .includes('--explicit-memory-requests'),
-      },
+      configOptions: parseCodexHookCliOptions(process.argv.slice(2)),
     });
     if (output !== null) {
       process.stdout.write(`${JSON.stringify(output)}\n`);
