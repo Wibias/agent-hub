@@ -2,7 +2,20 @@
 
 Date: 2026-09-29
 
-Status: approved for implementation planning
+Status: implemented on main; original design retained for historical context
+
+## Implementation status
+
+The design shipped in three reviewed deliveries:
+
+- PR #13, `feat: add hybrid memory retrieval core`, implemented the dependency-free semantic store, correctness-safe candidate APIs, deterministic RRF, lexical fallback, and item/byte budgets.
+- PR #14, `feat: add pinned offline E5 memory provider`, added the first real pinned CPU provider and real-model semantic evaluation.
+- PR #16, `perf: use measured qint8 E5 provider`, adopted the official qint8 graph only after an explicit parity/performance probe kept all four required semantic cases at rank 1 while materially reducing model footprint and inference cost.
+
+The fp32 revision and "quantization deferred" passages below describe the original first-delivery decision. They are historical design context, not the current provider contract. Current provider identity and measured status live in `memory-engine/README.md`.
+
+ANN/vector indexing remains deferred. The measured brute-force path is acceptable at the M14 2,000-item scale; the benchmark only showed a material scaling problem at substantially larger scoped memories.
+
 
 ## Context
 

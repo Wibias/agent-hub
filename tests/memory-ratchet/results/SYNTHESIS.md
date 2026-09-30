@@ -2,6 +2,23 @@
 
 Status: **research complete; no direct-adoption candidate**
 
+
+## Reference implementation status
+
+As of 2026-09-30, the architecture synthesized below is implemented on `main`, not only proposed.
+
+- Memory Ratchet M01-M15 have explicit regression coverage against the reference engine.
+- Canonical SQLite Evidence/Claim state, lifecycle, project/branch scope, Git blob freshness, secret redaction, authority/reliance rules, structured approvals, portable export/rebuild, and interrupted-write recovery are implemented.
+- Bounded hybrid FTS + local E5 retrieval is implemented with deterministic RRF and rebuildable derived vectors.
+- The E5 provider was later optimized to the measured qint8 graph without losing the required semantic eval cases.
+- `memory.protocol.v1` provides the small transport-neutral production protocol.
+- The first production harness adapter is Codex `UserPromptSubmit`, using documented command hooks, explicit project identity, repository freshness refresh, bounded context injection, and fail-soft behavior.
+
+The rough research protocol listed `forget` as a possible verb. V1 intentionally does not freeze a generic destructive delete because Evidence is provenance-bearing canonical state. Supersession, rejection, expiry semantics, and approval revocation remain explicit instead.
+
+The recommended implementation order 1-14 later in this document is therefore complete for the first production reference implementation. Further host adapters, ANN/vector indexing, summarization, reflection, graph traversal, and background consolidation remain optional follow-ups that require a verified need or host contract.
+
+
 Evaluated core candidates:
 
 - memspec 0.11.0
