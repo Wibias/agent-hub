@@ -15,6 +15,7 @@ import {
   launchEmbeddingWorker,
   parseEmbeddingWorkerLauncherArgs,
   releaseEmbeddingWorkerStartLock,
+  spawnDetachedEmbeddingWorker,
 } from '../../memory-engine/embedding-worker-launcher.mjs';
 
 test('embedding worker launcher parses explicit startup configuration', () => {
@@ -184,4 +185,49 @@ test('start lock is exclusive and stale lock files are recoverable', async (t) =
   const lockStat = await stat(lockFile);
   assert.equal(lockStat.isFile(), true);
   await releaseEmbeddingWorkerStartLock(recovered);
+});
+
+
+test('detached worker spawn is hidden, unrefed, and logs outside hook stdout', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'agent-hub-worker-spawn-'));
+  const cacheDir = join(root, 'e5');
+  const logFile = join(root, 'worker.log');
+  t.after(async () => {
+    await rm(root, { recursive: true, force: true });
+  });
+
+  const calls = [];
+  const child = {
+    pid: 4242,
+    unref() {
+      calls.push(['unref']);
+    },
+  };
+
+  const result = await spawnDetachedEmbeddingWorker({
+    cacheDir,
+    socketPath: 'test-socket',
+    logFile,
+    executable: 'node-test',
+    spawnProcess(executable, args, options) {
+      calls.push(['spawn', executable, args, {
+        detached: options.detached,
+        windowsHide: options.windowsHide,
+        stdin: options.stdio[0],
+        stdoutIsFd: Number.isInteger(options.stdio[1]),
+        stderrIsSameFd: options.stdio[2] === options.stdio[1],
+      }]);
+      return child;
+    },
+  });
+
+  assert.deepEqual(result, { pid: 4242 });
+  assert.equal(calls[0][0], 'spawn');
+  assert.equal(calls[0][1], 'node-test');
+  assert.equal(calls[0][3].detached, true);
+  assert.equal(calls[0][3].windowsHide, true);
+  assert.equal(calls[0][3].stdin, 'ignore');
+  assert.equal(calls[0][3].stdoutIsFd, true);
+  assert.equal(calls[0][3].stderrIsSameFd, true);
+  assert.deepEqual(calls[1], ['unref']);
 });
