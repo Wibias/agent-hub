@@ -226,16 +226,30 @@ function authorizeCodexExplicitMemoryClaim({
       return false;
     }
 
-    const target = resolveActiveDirectUserMemoryTarget(memory, {
-      projectId: evidence?.project_id,
-      branch: evidence?.branch,
-      value: parsed.value ?? null,
-      ref: parsed.ref ?? null,
-    });
+    if (parsed.ref !== undefined) {
+      const target = resolveActiveDirectUserMemoryTarget(memory, {
+        projectId: evidence?.project_id,
+        branch: evidence?.branch,
+        ref: parsed.ref,
+      });
+      return (
+        target !== null
+        && target.id === lifecycle.rejects[0]
+        && claim?.value === target.value_text
+      );
+    }
+
+    const target = memory.getClaim(lifecycle.rejects[0]);
     return (
       target !== null
-      && target.id === lifecycle.rejects[0]
-      && claim?.value === target.value_text
+      && target?.project_id === evidence?.project_id
+      && target?.branch_scope === evidence?.branch
+      && target?.state === 'active'
+      && target?.kind === 'user_direct'
+      && target?.subject === 'user memory'
+      && target?.predicate === 'states'
+      && target?.value === parsed.value
+      && claim?.value === parsed.value
     );
   }
 
@@ -251,15 +265,28 @@ function authorizeCodexExplicitMemoryClaim({
     return false;
   }
 
-  const target = resolveActiveDirectUserMemoryTarget(memory, {
-    projectId: evidence?.project_id,
-    branch: evidence?.branch,
-    value: parsed.oldValue ?? null,
-    ref: parsed.oldRef ?? null,
-  });
+  if (parsed.oldRef !== undefined) {
+    const target = resolveActiveDirectUserMemoryTarget(memory, {
+      projectId: evidence?.project_id,
+      branch: evidence?.branch,
+      ref: parsed.oldRef,
+    });
+    return (
+      target !== null
+      && target.id === lifecycle.supersedes[0]
+    );
+  }
+
+  const target = memory.getClaim(lifecycle.supersedes[0]);
   return (
     target !== null
-    && target.id === lifecycle.supersedes[0]
+    && target?.project_id === evidence?.project_id
+    && target?.branch_scope === evidence?.branch
+    && target?.state === 'active'
+    && target?.kind === 'user_direct'
+    && target?.subject === 'user memory'
+    && target?.predicate === 'states'
+    && target?.value === parsed.oldValue
   );
 }
 
