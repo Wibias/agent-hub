@@ -59,22 +59,8 @@ function normalizeCommitInput(input) {
   requireObject(input, 'input');
   requireAllowedKeys(
     input,
-    new Set(['evidence_id', 'claim', 'lifecycle']),
+    new Set(['evidence_id', 'lifecycle']),
     'input',
-  );
-
-  const claim = requireObject(input.claim, 'claim');
-  requireAllowedKeys(
-    claim,
-    new Set([
-      'kind',
-      'subject',
-      'predicate',
-      'value',
-      'valid_from',
-      'valid_until',
-    ]),
-    'claim',
   );
 
   const lifecycle = input.lifecycle ?? {};
@@ -87,14 +73,6 @@ function normalizeCommitInput(input) {
 
   return {
     evidenceId: requireString(input.evidence_id, 'evidence_id'),
-    claim: {
-      kind: requireString(claim.kind, 'claim.kind'),
-      subject: requireString(claim.subject, 'claim.subject'),
-      predicate: requireString(claim.predicate, 'claim.predicate'),
-      value: requireString(claim.value, 'claim.value'),
-      validFrom: optionalString(claim.valid_from, 'claim.valid_from'),
-      validUntil: optionalString(claim.valid_until, 'claim.valid_until'),
-    },
     lifecycle: {
       supersedes: stringArray(lifecycle.supersedes, 'lifecycle.supersedes'),
       rejects: stringArray(lifecycle.rejects, 'lifecycle.rejects'),
@@ -140,6 +118,10 @@ function createExplicitUserClaimAuthorizer({
     evidence.project_id === projectId
     && evidence.branch === branch
     && evidence.authority_class === 'user_direct'
+    && claim.kind === 'user_direct'
+    && claim.subject === 'user memory'
+    && claim.predicate === 'states'
+    && claim.value === evidence.content_redacted
     && claim.branchScope === branch
     && lifecycleTargetsStayInScope({
       memory,
@@ -195,6 +177,11 @@ export async function commitCodexMemoryClaim({
       memory.registerProject(registration);
     }
 
+    const sourceEvidence = memory.getEvidence(normalized.evidenceId);
+    if (!sourceEvidence) {
+      throw new Error('Memory claim commit was denied.');
+    }
+
     const claimId = requireString(claimIdFactory(), 'generated claim id');
     const createdAt = requireString(clock(), 'generated claim timestamp');
 
@@ -209,19 +196,13 @@ export async function commitCodexMemoryClaim({
 
     const claim = {
       id: claimId,
-      kind: normalized.claim.kind,
-      subject: normalized.claim.subject,
-      predicate: normalized.claim.predicate,
-      value: normalized.claim.value,
+      kind: 'user_direct',
+      subject: 'user memory',
+      predicate: 'states',
+      value: sourceEvidence.content_redacted,
       branch_scope: gitContext.branch,
       created_at: createdAt,
     };
-    if (normalized.claim.validFrom !== null) {
-      claim.valid_from = normalized.claim.validFrom;
-    }
-    if (normalized.claim.validUntil !== null) {
-      claim.valid_until = normalized.claim.validUntil;
-    }
 
     const response = await protocol.handle({
       protocol: 'memory.protocol.v1',
