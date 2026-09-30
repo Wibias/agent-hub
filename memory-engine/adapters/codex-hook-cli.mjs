@@ -193,13 +193,10 @@ function authorizeCodexExplicitMemoryClaim({
     || evidence?.metadata?.event_type !== 'user_prompt'
     || evidence?.metadata?.explicit_memory !== true
     || parsed === null
-    || claim?.kind !== 'user_direct'
     || claim?.subject !== 'user memory'
-    || claim?.predicate !== 'states'
     || claim?.branchScope !== evidence?.branch
     || !Array.isArray(lifecycle?.supersedes)
     || !Array.isArray(lifecycle?.rejects)
-    || lifecycle.rejects.length !== 0
     || !Array.isArray(lifecycle?.conflictsWith)
     || lifecycle.conflictsWith.length !== 0
   ) {
@@ -208,16 +205,49 @@ function authorizeCodexExplicitMemoryClaim({
 
   if (parsed.mode === 'remember') {
     return (
-      claim.value === evidence.content_redacted
+      claim?.kind === 'user_direct'
+      && claim?.predicate === 'states'
+      && claim?.value === evidence.content_redacted
       && lifecycle.supersedes.length === 0
+      && lifecycle.rejects.length === 0
+    );
+  }
+
+  if (parsed.mode === 'forget') {
+    if (
+      evidence?.metadata?.explicit_memory_mode !== 'forget'
+      || claim?.kind !== 'memory_control'
+      || claim?.predicate !== 'forgets'
+      || claim?.value !== parsed.value
+      || claim?.state !== 'expired'
+      || lifecycle.supersedes.length !== 0
+      || lifecycle.rejects.length !== 1
+      || typeof memory?.getClaim !== 'function'
+    ) {
+      return false;
+    }
+
+    const target = memory.getClaim(lifecycle.rejects[0]);
+    return (
+      target !== null
+      && target?.project_id === evidence?.project_id
+      && target?.branch_scope === evidence?.branch
+      && target?.state === 'active'
+      && target?.kind === 'user_direct'
+      && target?.subject === 'user memory'
+      && target?.predicate === 'states'
+      && target?.value === parsed.value
     );
   }
 
   if (
     parsed.mode !== 'replace'
     || evidence?.metadata?.explicit_memory_mode !== 'replace'
-    || claim.value !== parsed.newValue
+    || claim?.kind !== 'user_direct'
+    || claim?.predicate !== 'states'
+    || claim?.value !== parsed.newValue
     || lifecycle.supersedes.length !== 1
+    || lifecycle.rejects.length !== 0
     || typeof memory?.getClaim !== 'function'
   ) {
     return false;
@@ -229,6 +259,9 @@ function authorizeCodexExplicitMemoryClaim({
     && target?.project_id === evidence?.project_id
     && target?.branch_scope === evidence?.branch
     && target?.state === 'active'
+    && target?.kind === 'user_direct'
+    && target?.subject === 'user memory'
+    && target?.predicate === 'states'
     && target?.value === parsed.oldValue
   );
 }
