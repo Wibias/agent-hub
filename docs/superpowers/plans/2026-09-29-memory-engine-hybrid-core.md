@@ -1,5 +1,9 @@
 # Hybrid Memory Retrieval Core Implementation Plan
 
+**Execution status:** completed by PR #13 (`feat: add hybrid memory retrieval core`) and merged as `52497c21ab47fe0628d6462e36cd7b0437b5ed76`.
+
+The unchecked task boxes below are retained as the original execution plan and are not a live work queue.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add dependency-free semantic-vector storage, correctness-safe candidate materialization, deterministic RRF fusion, and bounded hybrid recall while keeping the canonical memory engine valid without any ML runtime.
