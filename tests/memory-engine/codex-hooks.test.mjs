@@ -386,6 +386,27 @@ test('Codex CLI has a deterministic platform default database and keeps override
   });
 });
 
+test('Codex production mode ignores stale memory environment overrides', () => {
+  const config = parseCodexMemoryConfig({
+    LOCALAPPDATA: 'C:\\Users\\<tester>\\AppData\\Local',
+    AGENT_HUB_MEMORY_DB: 'C:\\stale\\memory.sqlite3',
+    AGENT_HUB_MEMORY_PROJECT_ID: 'stale-project',
+    AGENT_HUB_MEMORY_REPO_IDENTITY: 'github.com/example/stale',
+    AGENT_HUB_MEMORY_CAPTURE_PROMPTS: 'true',
+  }, {
+    platform: 'win32',
+    homeDir: 'C:\\Users\\<tester>',
+    ignoreMemoryEnv: true,
+  });
+
+  assert.deepEqual(config, {
+    dbPath: 'C:\\Users\\<tester>\\AppData\\Local\\agent-hub\\memory.sqlite3',
+    projectId: null,
+    repoIdentity: null,
+    capturePrompts: false,
+  });
+});
+
 test('Git remote normalization maps equivalent HTTPS and SSH remotes to one identity', () => {
   assert.equal(
     canonicalizeGitRemote('https://github.com/Wibias/agent-hub.git'),
@@ -719,6 +740,75 @@ test('Codex CLI reads hook JSON from stdin and writes recalled context', () => {
   }
 });
 
+
+test('Codex CLI --ignore-memory-env bypasses stale daemon memory settings', () => {
+  const root = mkdtempSync(join(tmpdir(), 'agent-hub-codex-stale-env-'));
+  const repoDir = join(root, 'repo');
+  const stateHome = join(root, 'state');
+  const dbPath = join(stateHome, 'agent-hub', 'memory.sqlite3');
+  const staleDb = join(root, 'stale', 'memory.sqlite3');
+  const cliPath = fileURLToPath(
+    new URL('../../memory-engine/adapters/codex-hook-cli.mjs', import.meta.url),
+  );
+
+  try {
+    mkdirSync(repoDir, { recursive: true });
+    execFileSync('git', ['init', '-b', 'main', repoDir], { stdio: 'ignore' });
+    execFileSync('git', ['-C', repoDir, 'config', 'user.email', 'test@example.com']);
+    execFileSync('git', ['-C', repoDir, 'config', 'user.name', 'Memory Test']);
+    execFileSync('git', [
+      '-C',
+      repoDir,
+      'remote',
+      'add',
+      'origin',
+      'git@github.com:example/production-project.git',
+    ]);
+    writeFileSync(join(repoDir, 'README.md'), '# smoke\n');
+    execFileSync('git', ['-C', repoDir, 'add', 'README.md']);
+    execFileSync('git', ['-C', repoDir, 'commit', '-m', 'smoke'], { stdio: 'ignore' });
+
+    const event = JSON.stringify({
+      session_id: 'thr-stale-env',
+      transcript_path: null,
+      cwd: repoDir,
+      hook_event_name: 'UserPromptSubmit',
+      model: 'gpt-5.6-sol',
+      permission_mode: 'default',
+      turn_id: 'turn-stale-env',
+      prompt: 'Recall project memory.',
+    });
+
+    const result = spawnSync(process.execPath, [cliPath, '--ignore-memory-env'], {
+      input: event,
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        XDG_STATE_HOME: stateHome,
+        AGENT_HUB_MEMORY_DB: staleDb,
+        AGENT_HUB_MEMORY_PROJECT_ID: 'stale-project',
+        AGENT_HUB_MEMORY_REPO_IDENTITY: 'github.com/example/stale',
+        AGENT_HUB_MEMORY_CAPTURE_PROMPTS: 'true',
+      },
+    });
+
+    assert.equal(result.status, 0, result.stderr);
+
+    const memory = new MemoryEngine({ dbPath });
+    try {
+      assert.deepEqual(memory.getProject('github.com/example/production-project'), {
+        project_id: 'github.com/example/production-project',
+        canonical_remote: 'github.com/example/production-project',
+        repo_identity: 'github.com/example/production-project',
+      });
+      assert.equal(memory.getProject('stale-project'), null);
+    } finally {
+      memory.close();
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
 
 test('project-scope discovery failures stay fail-soft before opening the database', async () => {
   let created = false;
