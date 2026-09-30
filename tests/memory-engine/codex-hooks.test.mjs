@@ -12,6 +12,7 @@ import {
 } from '../../memory-engine/adapters/codex-hooks.mjs';
 import {
   canonicalizeGitRemote,
+  defaultCodexMemoryDbPath,
   parseCodexMemoryConfig,
   resolveCodexProjectScope,
   runCodexMemoryHook,
@@ -330,11 +331,31 @@ test('formatCodexMemoryContext stays bounded and labels evidence authority', () 
   assert.match(text, /user_direct/);
 });
 
-test('Codex CLI only requires the shared database and keeps project overrides optional', () => {
-  assert.equal(parseCodexMemoryConfig({}), null);
+test('Codex CLI has a deterministic platform default database and keeps overrides optional', () => {
+  assert.equal(
+    defaultCodexMemoryDbPath({
+      env: {},
+      platform: 'win32',
+      homeDir: 'C:\\Users\\tester',
+    }),
+    'C:\\Users\\tester\\AppData\\Local\\agent-hub\\memory.sqlite3',
+  );
+
+  assert.deepEqual(parseCodexMemoryConfig({}, {
+    platform: 'win32',
+    homeDir: 'C:\\Users\\tester',
+  }), {
+    dbPath: 'C:\\Users\\tester\\AppData\\Local\\agent-hub\\memory.sqlite3',
+    projectId: null,
+    repoIdentity: null,
+    capturePrompts: false,
+  });
 
   assert.deepEqual(parseCodexMemoryConfig({
     AGENT_HUB_MEMORY_DB: '/shared/memory.sqlite3',
+  }, {
+    platform: 'win32',
+    homeDir: 'C:\\Users\\tester',
   }), {
     dbPath: '/shared/memory.sqlite3',
     projectId: null,
@@ -461,19 +482,60 @@ test('repository discovery fails closed when no safe Git identity exists', () =>
   );
 });
 
-test('runCodexMemoryHook is disabled cleanly when required config is absent', async () => {
-  let created = false;
+test('runCodexMemoryHook uses the platform database default when hook env has no memory variables', async () => {
+  const calls = [];
+  const memory = {
+    getProject() {
+      return { project_id: 'github.com/example/project' };
+    },
+    close() {
+      calls.push(['close']);
+    },
+  };
+
   const output = await runCodexMemoryHook({
     event: userPromptEvent(),
     env: {},
-    createEngine() {
-      created = true;
-      throw new Error('must not create engine');
+    configOptions: {
+      platform: 'win32',
+      homeDir: 'C:\\Users\\tester',
+    },
+    resolveProjectScope() {
+      return {
+        projectId: 'github.com/example/project',
+        repoIdentity: 'github.com/example/project',
+        canonicalRemote: 'github.com/example/project',
+      };
+    },
+    ensureDbDirectory(dbPath) {
+      calls.push(['ensureDbDirectory', dbPath]);
+    },
+    createEngine(options) {
+      calls.push(['createEngine', options]);
+      return memory;
+    },
+    createProtocol() {
+      return { handle() {} };
+    },
+    createAdapter() {
+      return {
+        async handle() {
+          return null;
+        },
+      };
     },
   });
 
   assert.equal(output, null);
-  assert.equal(created, false);
+  assert.deepEqual(calls[0], [
+    'ensureDbDirectory',
+    'C:\\Users\\tester\\AppData\\Local\\agent-hub\\memory.sqlite3',
+  ]);
+  assert.deepEqual(calls[1], [
+    'createEngine',
+    { dbPath: 'C:\\Users\\tester\\AppData\\Local\\agent-hub\\memory.sqlite3' },
+  ]);
+  assert.deepEqual(calls.at(-1), ['close']);
 });
 
 
