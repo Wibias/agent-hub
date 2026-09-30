@@ -336,16 +336,16 @@ test('Codex CLI has a deterministic platform default database and keeps override
     defaultCodexMemoryDbPath({
       env: {},
       platform: 'win32',
-      homeDir: 'C:\\Users\\tester',
+      homeDir: 'C:\\Users\\<tester>',
     }),
-    'C:\\Users\\tester\\AppData\\Local\\agent-hub\\memory.sqlite3',
+    'C:\\Users\\<tester>\\AppData\\Local\\agent-hub\\memory.sqlite3',
   );
 
   assert.deepEqual(parseCodexMemoryConfig({}, {
     platform: 'win32',
-    homeDir: 'C:\\Users\\tester',
+    homeDir: 'C:\\Users\\<tester>',
   }), {
-    dbPath: 'C:\\Users\\tester\\AppData\\Local\\agent-hub\\memory.sqlite3',
+    dbPath: 'C:\\Users\\<tester>\\AppData\\Local\\agent-hub\\memory.sqlite3',
     projectId: null,
     repoIdentity: null,
     capturePrompts: false,
@@ -355,7 +355,7 @@ test('Codex CLI has a deterministic platform default database and keeps override
     AGENT_HUB_MEMORY_DB: '/shared/memory.sqlite3',
   }, {
     platform: 'win32',
-    homeDir: 'C:\\Users\\tester',
+    homeDir: 'C:\\Users\\<tester>',
   }), {
     dbPath: '/shared/memory.sqlite3',
     projectId: null,
@@ -498,7 +498,7 @@ test('runCodexMemoryHook uses the platform database default when hook env has no
     env: {},
     configOptions: {
       platform: 'win32',
-      homeDir: 'C:\\Users\\tester',
+      homeDir: 'C:\\Users\\<tester>',
     },
     resolveProjectScope() {
       return {
@@ -529,11 +529,11 @@ test('runCodexMemoryHook uses the platform database default when hook env has no
   assert.equal(output, null);
   assert.deepEqual(calls[0], [
     'ensureDbDirectory',
-    'C:\\Users\\tester\\AppData\\Local\\agent-hub\\memory.sqlite3',
+    'C:\\Users\\<tester>\\AppData\\Local\\agent-hub\\memory.sqlite3',
   ]);
   assert.deepEqual(calls[1], [
     'createEngine',
-    { dbPath: 'C:\\Users\\tester\\AppData\\Local\\agent-hub\\memory.sqlite3' },
+    { dbPath: 'C:\\Users\\<tester>\\AppData\\Local\\agent-hub\\memory.sqlite3' },
   ]);
   assert.deepEqual(calls.at(-1), ['close']);
 });
