@@ -166,9 +166,39 @@ test(
         targetClaimId: 'c-postgres',
       },
       {
+        id: 'postgres-replaced-sqlite',
+        query: 'Which active database replaced SQLite?',
+        targetClaimId: 'c-postgres',
+      },
+      {
+        id: 'postgres-simultaneous-writes',
+        query: 'Was Postgres chosen to support simultaneous writes?',
+        targetClaimId: 'c-postgres',
+      },
+      {
         id: 'audit-retention-paraphrase',
         query: 'For how long do we preserve security event records?',
         targetClaimId: 'c-audit',
+      },
+      {
+        id: 'audit-retention-direct',
+        query: 'What is the retention period for audit logs?',
+        targetClaimId: 'c-audit',
+      },
+      {
+        id: 'audit-retention-german',
+        query: 'Wie lange speichern wir Audit-Logs?',
+        targetClaimId: 'c-audit',
+      },
+      {
+        id: 'retry-failed-request-count',
+        query: 'How many times do we retry a failed request before surfacing the error?',
+        targetClaimId: 'c-retry',
+      },
+      {
+        id: 'retry-failed-request-german',
+        query: 'Wie viele Versuche machen wir bei fehlgeschlagenen Requests, bevor der Fehler angezeigt wird?',
+        targetClaimId: 'c-retry',
       },
     ];
 
@@ -204,6 +234,46 @@ test(
       {
         id: 'negative-vacation-policy',
         query: 'How many paid vacation days do employees receive?',
+      },
+      {
+        id: 'hard-negative-database-analytics',
+        query: 'Which database do we use for analytics workloads?',
+      },
+      {
+        id: 'hard-negative-storage-read-replicas',
+        query: 'Which storage engine is used for read replicas?',
+      },
+      {
+        id: 'hard-negative-build-log-retention',
+        query: 'How long do we retain build logs?',
+      },
+      {
+        id: 'hard-negative-backup-retention',
+        query: 'How long are database backups retained?',
+      },
+      {
+        id: 'hard-negative-migration-retries',
+        query: 'How many times do failed database migrations retry?',
+      },
+      {
+        id: 'hard-negative-login-attempts',
+        query: 'How many login attempts are allowed before account lockout?',
+      },
+      {
+        id: 'hard-negative-audit-database',
+        query: 'Which database stores the audit logs?',
+      },
+      {
+        id: 'hard-negative-websocket-retries',
+        query: 'How many retries do WebSocket reconnects use?',
+      },
+      {
+        id: 'hard-negative-sqlite-cache',
+        query: 'Do we use SQLite for the local cache?',
+      },
+      {
+        id: 'hard-negative-request-log-retention',
+        query: 'What is the retention period for request logs?',
       },
     ];
 
@@ -270,6 +340,19 @@ test(
         })),
       });
 
+      const targetCandidate = entry.targetClaimId
+        ? semanticCandidates.find(
+          (candidate) => candidate.claim_id === entry.targetClaimId,
+        )
+        : null;
+      const bestIrrelevant = entry.targetClaimId
+        ? semanticCandidates.find(
+          (candidate) => candidate.claim_id !== entry.targetClaimId,
+        )
+        : null;
+      const semanticTop1 = semanticCandidates[0] ?? null;
+      const semanticTop2 = semanticCandidates[1] ?? null;
+
       const evidence = {
         type: entry.targetClaimId ? 'positive_case' : 'negative_case',
         id: entry.id,
@@ -284,7 +367,19 @@ test(
         fused_rank: entry.targetClaimId
           ? rankOf(fusedIds, entry.targetClaimId)
           : null,
-        semantic_top1_similarity: semanticCandidates[0]?.similarity ?? null,
+        semantic_top1_similarity: semanticTop1?.similarity ?? null,
+        semantic_top2_similarity: semanticTop2?.similarity ?? null,
+        semantic_top1_margin: (
+          semanticTop1 && semanticTop2
+            ? semanticTop1.similarity - semanticTop2.similarity
+            : null
+        ),
+        target_similarity: targetCandidate?.similarity ?? null,
+        target_margin_over_best_irrelevant: (
+          targetCandidate && bestIrrelevant
+            ? targetCandidate.similarity - bestIrrelevant.similarity
+            : null
+        ),
         fused_count: fusedIds.length,
       };
       console.log(JSON.stringify(evidence));
@@ -313,16 +408,24 @@ test(
     });
     const thresholdSweep = sweepSemanticThresholds(qualityCases, {
       thresholds: [
-        0.45,
-        0.50,
-        0.55,
-        0.60,
-        0.65,
-        0.70,
+        0.74,
         0.75,
+        0.76,
+        0.77,
+        0.78,
+        0.7825,
+        0.785,
+        0.7875,
+        0.79,
+        0.7925,
+        0.795,
+        0.7975,
         0.80,
+        0.8025,
+        0.805,
+        0.81,
+        0.82,
         0.85,
-        0.90,
       ],
       k: 5,
     });
@@ -336,12 +439,12 @@ test(
     }));
 
     assert.deepEqual(summary.counts, {
-      queries: 12,
-      positiveQueries: 4,
-      negativeQueries: 8,
+      queries: 28,
+      positiveQueries: 10,
+      negativeQueries: 18,
     });
     assert.equal(summary.routes.fused.hitRateAtK[5], 1);
     assert.equal(summary.routes.fused.falseNegativeRateAtK[5], 0);
-    assert.equal(thresholdSweep.length, 10);
+    assert.equal(thresholdSweep.length, 18);
   },
 );
