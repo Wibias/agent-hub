@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 import { execFileSync } from 'node:child_process';
-import { resolve } from 'node:path';
+import { mkdirSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { dirname, join, resolve, win32 } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { MemoryEngine } from '../index.mjs';
@@ -59,9 +61,28 @@ export function canonicalizeGitRemote(value) {
   return `${host}/${segments.join('/')}`;
 }
 
-export function parseCodexMemoryConfig(env = process.env) {
-  const dbPath = env.AGENT_HUB_MEMORY_DB;
-  if (!nonEmpty(dbPath)) return null;
+export function defaultCodexMemoryDbPath({
+  env = process.env,
+  platform = process.platform,
+  homeDir = homedir(),
+} = {}) {
+  if (platform === 'win32') {
+    const localAppData = nonEmpty(env.LOCALAPPDATA)
+      ? env.LOCALAPPDATA.trim()
+      : win32.join(homeDir, 'AppData', 'Local');
+    return win32.join(localAppData, 'agent-hub', 'memory.sqlite3');
+  }
+
+  const stateHome = nonEmpty(env.XDG_STATE_HOME)
+    ? env.XDG_STATE_HOME.trim()
+    : join(homeDir, '.local', 'state');
+  return join(stateHome, 'agent-hub', 'memory.sqlite3');
+}
+
+export function parseCodexMemoryConfig(env = process.env, options = {}) {
+  const dbPath = nonEmpty(env.AGENT_HUB_MEMORY_DB)
+    ? env.AGENT_HUB_MEMORY_DB.trim()
+    : defaultCodexMemoryDbPath({ env, ...options });
 
   return {
     dbPath,
@@ -139,6 +160,10 @@ export function resolveCodexProjectScope({
   };
 }
 
+function defaultEnsureDbDirectory(dbPath) {
+  mkdirSync(dirname(dbPath), { recursive: true });
+}
+
 function classifyCodexAuthority(channel) {
   if (
     channel?.sourceKind === 'session'
@@ -152,17 +177,21 @@ function classifyCodexAuthority(channel) {
 export async function runCodexMemoryHook({
   event,
   env = process.env,
+  configOptions = {},
   createEngine = (options) => new MemoryEngine(options),
   createProtocol = createMemoryProtocol,
   createAdapter = createCodexMemoryHookAdapter,
   resolveProjectScope = resolveCodexProjectScope,
+  ensureDbDirectory = defaultEnsureDbDirectory,
 } = {}) {
-  const config = parseCodexMemoryConfig(env);
-  if (config === null) return null;
+  const config = parseCodexMemoryConfig(env, configOptions);
 
   let memory = null;
   try {
     const scope = resolveProjectScope({ event, config });
+    if (!nonEmpty(env.AGENT_HUB_MEMORY_DB)) {
+      ensureDbDirectory(config.dbPath);
+    }
     memory = createEngine({ dbPath: config.dbPath });
 
     if (!memory.getProject(scope.projectId)) {
