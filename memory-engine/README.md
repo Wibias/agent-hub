@@ -16,7 +16,7 @@ The reference implementation currently owns:
 
 - canonical SQLite storage in WAL mode;
 - stable project registration;
-- append-only evidence records;
+- append-only evidence records, including Evidence-only capture before Claim assertion;
 - deterministic claim lifecycle for `supersede` and `reject`;
 - strict project and branch filtering before lexical ranking;
 - current versus historical recall;
@@ -173,6 +173,14 @@ Evidence records what was observed or stated.
 
 Claims represent the current applicability of that evidence.
 
+The engine supports both write shapes:
+
+- `recordEvidence(...)` commits immutable Evidence without making it recallable as a Claim;
+- `assertClaim({ evidenceId, claim, lifecycle })` attaches a Claim later while preserving the original Evidence provenance;
+- `ingest({ evidence, claim, lifecycle })` remains the atomic combined path for callers that already have both.
+
+Standalone Evidence is included in canonical export/import, but it does not enter FTS, embeddings, or recall until a Claim references it.
+
 Evidence is inserted once and is not rewritten to hide later history. A lifecycle transition updates claim state instead:
 
 ```text
@@ -180,7 +188,11 @@ active -> superseded
 active -> rejected
 ```
 
-Historical recall can still return those claims with their state.
+`assertClaim(...)` and legacy `ingest(...)` apply Claim creation, lifecycle changes, conflicts, and FTS updates in one immediate SQLite transaction. A failed lifecycle validation cannot leave a partial Claim or mutate an existing target. Legacy `ingest(...)` also keeps Evidence + Claim atomic, so a failed Claim transaction does not leave orphaned Evidence.
+
+These primitives are trusted engine APIs. A future host protocol must derive source authority outside generic caller input rather than expose `authorityClass` as a self-assigned transport field.
+
+Historical recall can still return lifecycle-retained claims with their state.
 
 ## Secret boundary
 
@@ -211,6 +223,25 @@ memory.registerProject({
   repoIdentity: 'project-a',
 });
 
+// Evidence may be captured before a durable Claim is known.
+memory.recordEvidence({
+  id: 'evidence-observation',
+  projectId: 'project-a',
+  harness: 'codex',
+  sessionId: 'session-1',
+  sourceKind: 'tool',
+  sourceRef: 'tool:observer',
+  capturedAt: '2026-09-29T00:00:00Z',
+  branch: 'main',
+  commitSha: null,
+  path: null,
+  blobOid: null,
+  content: 'Observed the current database configuration.',
+  authorityClass: 'tool_observation',
+  metadata: {},
+});
+
+// Existing atomic Evidence + Claim ingestion remains supported.
 memory.ingest({
   evidence: {
     id: 'evidence-1',
