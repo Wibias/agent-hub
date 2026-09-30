@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { lstat, mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -57,6 +57,9 @@ test('embedding IPC client round-trips query and passage vectors', async (t) => 
     embedder,
   });
   t.after(() => server.close());
+
+  const stat = await lstat(socketPath);
+  assert.equal(stat.mode & 0o777, 0o600);
 
   const client = createEmbeddingIpcClient({
     socketPath,
