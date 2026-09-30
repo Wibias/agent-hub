@@ -96,6 +96,16 @@ export function parseExplicitMemoryPrompt(prompt) {
     return { mode: 'list' };
   }
 
+  const explainPrefix = prompt.match(/^\s*memory\s+explain:\s*/i);
+  if (explainPrefix) {
+    const query = prompt.slice(explainPrefix[0].length).trim();
+    if (!nonEmptyString(query)) return null;
+    return {
+      mode: 'explain',
+      query,
+    };
+  }
+
   const forgetPrefix = prompt.match(/^\s*memory\s+forget:\s*/i);
   if (forgetPrefix) {
     const value = prompt.slice(forgetPrefix[0].length).trim();
@@ -213,6 +223,86 @@ function formatActiveDirectUserMemories(memory, {
   return lines.join('\n');
 }
 
+function formatRecallDiagnostics(result, {
+  maxBytes,
+}) {
+  const candidates = Array.isArray(result?.candidates)
+    ? result.candidates.filter((candidate) => candidate?.item?.claim?.id)
+    : [];
+  const conflicts = Array.isArray(result?.conflicts) ? result.conflicts : [];
+  const reliance = evaluateReliance({
+    items: candidates.map((candidate) => candidate.item),
+    conflicts,
+    use: 'answer',
+  });
+
+  const selectedIds = new Set(
+    reliance.selected.map((item) => item.claim.id),
+  );
+  const blockedReasons = new Map();
+  for (const blocked of reliance.blocked) {
+    const claimId = blocked?.item?.claim?.id;
+    if (!claimId) continue;
+    const reasons = blockedReasons.get(claimId) ?? [];
+    if (!reasons.includes(blocked.reason)) reasons.push(blocked.reason);
+    blockedReasons.set(claimId, reasons);
+  }
+
+  const lines = [
+    'Recall diagnostics for the current project and branch:',
+    `Mode: ${result?.retrievalMode ?? 'unknown'}`,
+    `Fallback: ${result?.fallbackReason ?? 'none'}`,
+  ];
+
+  if (candidates.length === 0) {
+    lines.push('No recall candidates.');
+    return lines.join('\n');
+  }
+
+  for (const candidate of candidates) {
+    const claim = candidate.item.claim;
+    const evidence = candidate.item.evidence ?? {};
+    const rankParts = [`final #${candidate.finalRank}`];
+
+    if (candidate.lexicalRank !== null) {
+      rankParts.push(`lexical #${candidate.lexicalRank}`);
+    }
+    if (candidate.semanticRank !== null) {
+      const similarity = Number.isFinite(candidate.semanticSimilarity)
+        ? ` (${candidate.semanticSimilarity.toFixed(4)})`
+        : '';
+      rankParts.push(`semantic #${candidate.semanticRank}${similarity}`);
+    }
+    if (Number.isFinite(candidate.rrfScore)) {
+      rankParts.push(`RRF ${candidate.rrfScore.toFixed(6)}`);
+    }
+
+    const answerDecision = selectedIds.has(claim.id)
+      ? 'answer: selected'
+      : `answer: blocked (${
+          (blockedReasons.get(claim.id) ?? ['not_selected_for_answer']).join(',')
+        })`;
+
+    const value = compactText(
+      claim.value ?? evidence.content_redacted ?? '',
+      300,
+    );
+    const line = [
+      `- ${memoryClaimRef(claim.id)}`,
+      ...rankParts,
+      answerDecision,
+      `authority: ${evidence.authority_class ?? 'unclassified'}`,
+      value,
+    ].join(' | ');
+
+    const next = [...lines, line].join('\n');
+    if (byteLength(next) > maxBytes) break;
+    lines.push(line);
+  }
+
+  return lines.join('\n');
+}
+
 export function resolveActiveDirectUserMemoryTarget(memory, {
   projectId,
   branch,
@@ -274,6 +364,7 @@ export function createCodexMemoryHookAdapter({
   projectId,
   capturePrompts = false,
   explicitMemoryRequests = false,
+  diagnoseRecall = null,
   clock = () => new Date().toISOString(),
   git = null,
   maxContextBytes = 8_192,
@@ -292,6 +383,9 @@ export function createCodexMemoryHookAdapter({
   }
   if (typeof explicitMemoryRequests !== 'boolean') {
     throw new TypeError('explicitMemoryRequests must be a boolean');
+  }
+  if (diagnoseRecall !== null && typeof diagnoseRecall !== 'function') {
+    throw new TypeError('diagnoseRecall must be a function or null');
   }
   if (typeof clock !== 'function') {
     throw new TypeError('clock must be a function');
@@ -342,6 +436,37 @@ export function createCodexMemoryHookAdapter({
               maxBytes: maxContextBytes,
             }),
           };
+        }
+
+        if (explicitMemory?.mode === 'explain') {
+          if (diagnoseRecall === null) {
+            return {
+              decision: 'block',
+              reason: 'Recall diagnostics unavailable for the current configuration.',
+            };
+          }
+
+          try {
+            const diagnostic = await diagnoseRecall({
+              projectId,
+              branch: context.branch,
+              revisionSha: context.revisionSha,
+              query: explicitMemory.query,
+              mode: 'current',
+              maxItems: 10,
+            });
+            return {
+              decision: 'block',
+              reason: formatRecallDiagnostics(diagnostic, {
+                maxBytes: maxContextBytes,
+              }),
+            };
+          } catch {
+            return {
+              decision: 'block',
+              reason: 'Recall diagnostics unavailable: retrieval failed.',
+            };
+          }
         }
 
         const explicitCommandResult = explicitMemory === null
