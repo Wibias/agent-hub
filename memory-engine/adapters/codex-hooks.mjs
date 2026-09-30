@@ -77,6 +77,16 @@ export function parseExplicitMemoryPrompt(prompt) {
     return { mode: 'list' };
   }
 
+  const forgetPrefix = prompt.match(/^\s*memory\s+forget:\s*/i);
+  if (forgetPrefix) {
+    const value = prompt.slice(forgetPrefix[0].length).trim();
+    if (!/^memory:\s*\S/i.test(value)) return null;
+    return {
+      mode: 'forget',
+      value,
+    };
+  }
+
   if (/^\s*memory:\s*\S/i.test(prompt)) {
     return {
       mode: 'remember',
@@ -311,8 +321,11 @@ export function createCodexMemoryHookAdapter({
               };
               if (explicitMemory) {
                 metadata.explicit_memory = true;
-                if (explicitMemory.mode === 'replace') {
-                  metadata.explicit_memory_mode = 'replace';
+                if (
+                  explicitMemory.mode === 'replace'
+                  || explicitMemory.mode === 'forget'
+                ) {
+                  metadata.explicit_memory_mode = explicitMemory.mode;
                 }
               }
 
@@ -364,7 +377,11 @@ export function createCodexMemoryHookAdapter({
 
               if (existingClaim === null && parsedMemory !== null) {
                 let value = capturedEvidence.content_redacted;
+                let kind = 'user_direct';
+                let predicate = 'states';
+                let state = null;
                 let supersedes = [];
+                let rejects = [];
 
                 if (parsedMemory.mode === 'replace') {
                   const target = exactActiveReplacementTarget(memory, {
@@ -378,29 +395,47 @@ export function createCodexMemoryHookAdapter({
                     value = parsedMemory.newValue;
                     supersedes = [target.id];
                   }
+                } else if (parsedMemory.mode === 'forget') {
+                  const target = exactActiveReplacementTarget(memory, {
+                    projectId,
+                    branch: context.branch,
+                    value: parsedMemory.value,
+                  });
+                  if (target === null) {
+                    value = null;
+                  } else {
+                    value = parsedMemory.value;
+                    kind = 'memory_control';
+                    predicate = 'forgets';
+                    state = 'expired';
+                    rejects = [target.id];
+                  }
                 }
 
                 if (nonEmptyString(value)) {
+                  const claim = {
+                    id: claimId,
+                    kind,
+                    subject: 'user memory',
+                    predicate,
+                    value,
+                    branch_scope: context.branch,
+                    created_at: (
+                      capturedEvidence.captured_at ?? capturedAt
+                    ),
+                  };
+                  if (state !== null) claim.state = state;
+
                   await protocol.handle({
                     protocol: 'memory.protocol.v1',
                     operation: 'assert_claim',
                     request_id: `${requestPrefix}:claim`,
                     payload: {
                       evidence_id: evidenceId,
-                      claim: {
-                        id: claimId,
-                        kind: 'user_direct',
-                        subject: 'user memory',
-                        predicate: 'states',
-                        value,
-                        branch_scope: context.branch,
-                        created_at: (
-                          capturedEvidence.captured_at ?? capturedAt
-                        ),
-                      },
+                      claim,
                       lifecycle: {
                         supersedes,
-                        rejects: [],
+                        rejects,
                         conflicts_with: [],
                       },
                     },

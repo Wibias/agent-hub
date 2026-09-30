@@ -491,6 +491,40 @@ The paired Evidence must also be `user_direct`. Superseded/rejected history,
 other branches, other projects, and non-user-direct Claims are excluded. The injected
 list is bounded by the normal Codex hook context budget.
 
+#### Forget an active durable memory
+
+A current durable memory can be explicitly removed from current recall with:
+
+```text
+memory forget: <exact stored memory value>
+```
+
+The target value must itself be a valid durable `memory:` value, for example:
+
+```text
+memory forget: memory: database is Postgres
+```
+
+The adapter matches by exact value among active Claims in the current Git project and
+branch. Forget proceeds only when exactly one target matches. Zero matches or multiple
+matches fail closed for lifecycle mutation while normal recall continues.
+
+The forget request is stored as direct-user Evidence. Its lifecycle source Claim is a
+non-current control Claim:
+
+```text
+kind      = memory_control
+subject   = user memory
+predicate = forgets
+state     = expired
+value     = exact forgotten memory value
+```
+
+That control Claim rejects the target Claim through the existing lifecycle transaction.
+The forgotten Claim becomes `rejected` and disappears from current recall; historical
+recall can still recover both the rejected Claim and the Evidence that caused the
+transition. No Evidence rows or historical Claims are physically deleted.
+
 #### Explicit supersession
 
 An existing durable memory can be replaced without semantic or embedding-based target
