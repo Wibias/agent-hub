@@ -10,6 +10,7 @@ import { createMemoryProtocol } from '../protocol.mjs';
 import {
   createCodexMemoryHookAdapter,
   parseExplicitMemoryPrompt,
+  resolveActiveDirectUserMemoryTarget,
 } from './codex-hooks.mjs';
 
 function nonEmpty(value) {
@@ -227,16 +228,16 @@ function authorizeCodexExplicitMemoryClaim({
       return false;
     }
 
-    const target = memory.getClaim(lifecycle.rejects[0]);
+    const target = resolveActiveDirectUserMemoryTarget(memory, {
+      projectId: evidence?.project_id,
+      branch: evidence?.branch,
+      value: parsed.value ?? null,
+      ref: parsed.ref ?? null,
+    });
     return (
       target !== null
-      && target?.project_id === evidence?.project_id
-      && target?.branch_scope === evidence?.branch
-      && target?.state === 'active'
-      && target?.kind === 'user_direct'
-      && target?.subject === 'user memory'
-      && target?.predicate === 'states'
-      && target?.value === parsed.value
+      && target.id === lifecycle.rejects[0]
+      && claim?.value === target.value_text
     );
   }
 
@@ -253,16 +254,15 @@ function authorizeCodexExplicitMemoryClaim({
     return false;
   }
 
-  const target = memory.getClaim(lifecycle.supersedes[0]);
+  const target = resolveActiveDirectUserMemoryTarget(memory, {
+    projectId: evidence?.project_id,
+    branch: evidence?.branch,
+    value: parsed.oldValue ?? null,
+    ref: parsed.oldRef ?? null,
+  });
   return (
     target !== null
-    && target?.project_id === evidence?.project_id
-    && target?.branch_scope === evidence?.branch
-    && target?.state === 'active'
-    && target?.kind === 'user_direct'
-    && target?.subject === 'user memory'
-    && target?.predicate === 'states'
-    && target?.value === parsed.oldValue
+    && target.id === lifecycle.supersedes[0]
   );
 }
 
