@@ -97,12 +97,21 @@ export async function runEmbeddingWorker({
     allowRemoteModels: false,
   });
 
+  if (
+    embedder?.modelId !== E5_MODEL_ID
+    || embedder?.modelRevision !== E5_MODEL_REVISION
+    || embedder?.dimensions !== E5_DIMENSIONS
+  ) {
+    throw new Error('embedding worker provider identity mismatch');
+  }
+
   const readinessVector = await embedder.embedQuery(
     'memory worker readiness probe',
   );
   if (
     !(readinessVector instanceof Float32Array)
     || readinessVector.length !== E5_DIMENSIONS
+    || [...readinessVector].some((value) => !Number.isFinite(value))
   ) {
     throw new Error('embedding worker readiness probe failed');
   }
