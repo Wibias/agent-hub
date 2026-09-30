@@ -1,5 +1,11 @@
 # Pinned E5 Memory Embedder Implementation Plan
 
+**Execution status:** completed by PR #14 (`feat: add pinned offline E5 memory provider`) and merged as `a4081fb0c765acb993ff08d7a13ec254082980c4`.
+
+**Later measured optimization:** PR #16 (`perf: use measured qint8 E5 provider`) replaced the initial fp32 graph with the official qint8 graph after explicit semantic-parity and performance verification. The fp32/no-quantization constraints below are retained as the original implementation plan, not the current provider contract.
+
+The unchecked task boxes below are retained as the original execution plan and are not a live work queue.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add the exact researched multilingual E5 provider, explicit model-cache preparation, and a real semantic retrieval evaluation on top of the already-merged dependency-free hybrid core.
