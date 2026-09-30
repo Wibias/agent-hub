@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { execFileSync } from 'node:child_process';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -10,18 +11,131 @@ function nonEmpty(value) {
   return typeof value === 'string' && value.trim().length > 0;
 }
 
+function defaultExecFile(command, args) {
+  return execFileSync(command, args, {
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+}
+
+export function canonicalizeGitRemote(value) {
+  if (!nonEmpty(value)) return null;
+  const remote = value.trim();
+
+  let host;
+  let repoPath;
+
+  const scpLike = remote.match(/^[^@\s]+@([^:\s]+):(.+)$/);
+  if (scpLike) {
+    host = scpLike[1];
+    repoPath = scpLike[2];
+  } else {
+    let parsed;
+    try {
+      parsed = new URL(remote);
+    } catch {
+      return null;
+    }
+    host = parsed.hostname;
+    repoPath = parsed.pathname;
+  }
+
+  host = String(host || '').trim().toLowerCase();
+  repoPath = String(repoPath || '')
+    .trim()
+    .replace(/^\/+/, '')
+    .replace(/\/+$/, '')
+    .replace(/\.git$/i, '');
+
+  if (!host || !repoPath || /\s/.test(repoPath)) return null;
+  const segments = repoPath.split('/').filter(Boolean);
+  if (
+    segments.length < 2
+    || segments.some((segment) => segment === '.' || segment === '..')
+  ) {
+    return null;
+  }
+
+  return `${host}/${segments.join('/')}`;
+}
+
 export function parseCodexMemoryConfig(env = process.env) {
   const dbPath = env.AGENT_HUB_MEMORY_DB;
-  const projectId = env.AGENT_HUB_MEMORY_PROJECT_ID;
-  if (!nonEmpty(dbPath) || !nonEmpty(projectId)) return null;
+  if (!nonEmpty(dbPath)) return null;
 
   return {
     dbPath,
-    projectId,
+    projectId: nonEmpty(env.AGENT_HUB_MEMORY_PROJECT_ID)
+      ? env.AGENT_HUB_MEMORY_PROJECT_ID.trim()
+      : null,
     repoIdentity: nonEmpty(env.AGENT_HUB_MEMORY_REPO_IDENTITY)
-      ? env.AGENT_HUB_MEMORY_REPO_IDENTITY
-      : projectId,
+      ? env.AGENT_HUB_MEMORY_REPO_IDENTITY.trim()
+      : null,
     capturePrompts: env.AGENT_HUB_MEMORY_CAPTURE_PROMPTS === 'true',
+  };
+}
+
+export function resolveCodexProjectScope({
+  event,
+  config,
+  execFile = defaultExecFile,
+} = {}) {
+  if (!config || typeof config !== 'object') {
+    throw new TypeError('config must be an object');
+  }
+
+  if (nonEmpty(config.projectId)) {
+    return {
+      projectId: config.projectId.trim(),
+      repoIdentity: nonEmpty(config.repoIdentity)
+        ? config.repoIdentity.trim()
+        : config.projectId.trim(),
+      canonicalRemote: null,
+    };
+  }
+
+  if (nonEmpty(config.repoIdentity)) {
+    const repoIdentity = config.repoIdentity.trim();
+    return {
+      projectId: repoIdentity,
+      repoIdentity,
+      canonicalRemote: null,
+    };
+  }
+
+  const cwd = event?.cwd;
+  if (!nonEmpty(cwd)) {
+    throw new Error('Codex hook event has no cwd for repository identity discovery');
+  }
+  if (typeof execFile !== 'function') {
+    throw new TypeError('execFile must be a function');
+  }
+
+  const repoPath = String(
+    execFile('git', ['-C', cwd, 'rev-parse', '--show-toplevel']),
+  ).trim();
+  if (!repoPath) {
+    throw new Error('Git repository root could not be resolved');
+  }
+
+  let remote;
+  try {
+    remote = String(
+      execFile('git', ['-C', repoPath, 'remote', 'get-url', 'origin']),
+    ).trim();
+  } catch {
+    throw new Error('Git origin remote is required for repository identity discovery');
+  }
+
+  const repoIdentity = canonicalizeGitRemote(remote);
+  if (!repoIdentity) {
+    throw new Error('Git origin remote cannot be converted to a safe repository identity');
+  }
+
+  return {
+    projectId: repoIdentity,
+    repoIdentity,
+    canonicalRemote: repoIdentity,
   };
 }
 
@@ -41,19 +155,25 @@ export async function runCodexMemoryHook({
   createEngine = (options) => new MemoryEngine(options),
   createProtocol = createMemoryProtocol,
   createAdapter = createCodexMemoryHookAdapter,
+  resolveProjectScope = resolveCodexProjectScope,
 } = {}) {
   const config = parseCodexMemoryConfig(env);
   if (config === null) return null;
 
   let memory = null;
   try {
+    const scope = resolveProjectScope({ event, config });
     memory = createEngine({ dbPath: config.dbPath });
 
-    if (!memory.getProject(config.projectId)) {
-      memory.registerProject({
-        projectId: config.projectId,
-        repoIdentity: config.repoIdentity,
-      });
+    if (!memory.getProject(scope.projectId)) {
+      const registration = {
+        projectId: scope.projectId,
+        repoIdentity: scope.repoIdentity,
+      };
+      if (scope.canonicalRemote !== null) {
+        registration.canonicalRemote = scope.canonicalRemote;
+      }
+      memory.registerProject(registration);
     }
 
     const protocol = createProtocol({
@@ -63,7 +183,7 @@ export async function runCodexMemoryHook({
     const adapter = createAdapter({
       protocol,
       memory,
-      projectId: config.projectId,
+      projectId: scope.projectId,
       capturePrompts: config.capturePrompts,
     });
 

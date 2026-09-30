@@ -11,7 +11,9 @@ import {
   formatCodexMemoryContext,
 } from '../../memory-engine/adapters/codex-hooks.mjs';
 import {
+  canonicalizeGitRemote,
   parseCodexMemoryConfig,
+  resolveCodexProjectScope,
   runCodexMemoryHook,
 } from '../../memory-engine/adapters/codex-hook-cli.mjs';
 import { MemoryEngine } from '../../memory-engine/index.mjs';
@@ -328,8 +330,17 @@ test('formatCodexMemoryContext stays bounded and labels evidence authority', () 
   assert.match(text, /user_direct/);
 });
 
-test('Codex CLI configuration is explicit and prompt capture defaults off', () => {
+test('Codex CLI only requires the shared database and keeps project overrides optional', () => {
   assert.equal(parseCodexMemoryConfig({}), null);
+
+  assert.deepEqual(parseCodexMemoryConfig({
+    AGENT_HUB_MEMORY_DB: '/shared/memory.sqlite3',
+  }), {
+    dbPath: '/shared/memory.sqlite3',
+    projectId: null,
+    repoIdentity: null,
+    capturePrompts: false,
+  });
 
   assert.deepEqual(parseCodexMemoryConfig({
     AGENT_HUB_MEMORY_DB: '/shared/memory.sqlite3',
@@ -337,7 +348,7 @@ test('Codex CLI configuration is explicit and prompt capture defaults off', () =
   }), {
     dbPath: '/shared/memory.sqlite3',
     projectId: 'project-a',
-    repoIdentity: 'project-a',
+    repoIdentity: null,
     capturePrompts: false,
   });
 
@@ -352,6 +363,102 @@ test('Codex CLI configuration is explicit and prompt capture defaults off', () =
     repoIdentity: 'github.com/example/project',
     capturePrompts: true,
   });
+});
+
+test('Git remote normalization maps equivalent HTTPS and SSH remotes to one identity', () => {
+  assert.equal(
+    canonicalizeGitRemote('https://github.com/Wibias/agent-hub.git'),
+    'github.com/Wibias/agent-hub',
+  );
+  assert.equal(
+    canonicalizeGitRemote('git@github.com:Wibias/agent-hub.git'),
+    'github.com/Wibias/agent-hub',
+  );
+  assert.equal(
+    canonicalizeGitRemote('ssh://git@github.com/Wibias/agent-hub.git'),
+    'github.com/Wibias/agent-hub',
+  );
+});
+
+test('explicit project scope overrides repository discovery', () => {
+  let called = false;
+  const scope = resolveCodexProjectScope({
+    event: userPromptEvent(),
+    config: {
+      dbPath: '/shared/memory.sqlite3',
+      projectId: 'manual-project',
+      repoIdentity: 'manual-repo',
+      capturePrompts: false,
+    },
+    execFile() {
+      called = true;
+      throw new Error('must not inspect git');
+    },
+  });
+
+  assert.deepEqual(scope, {
+    projectId: 'manual-project',
+    repoIdentity: 'manual-repo',
+    canonicalRemote: null,
+  });
+  assert.equal(called, false);
+});
+
+test('repository discovery keeps different remotes in different project scopes', () => {
+  const calls = [];
+  const execFile = (command, args) => {
+    calls.push([command, args]);
+    const cwd = args[1];
+    if (args.slice(2).join(' ') === 'rev-parse --show-toplevel') return `${cwd}/root\n`;
+    if (args.slice(2).join(' ') === 'remote get-url origin') {
+      return cwd.includes('repo-a')
+        ? 'git@github.com:example/repo-a.git\n'
+        : 'https://github.com/example/repo-b.git\n';
+    }
+    throw new Error(`unexpected git call: ${args.join(' ')}`);
+  };
+
+  const config = {
+    dbPath: '/shared/memory.sqlite3',
+    projectId: null,
+    repoIdentity: null,
+    capturePrompts: false,
+  };
+  const a = resolveCodexProjectScope({
+    event: userPromptEvent({ cwd: '/work/repo-a' }),
+    config,
+    execFile,
+  });
+  const b = resolveCodexProjectScope({
+    event: userPromptEvent({ cwd: '/work/repo-b' }),
+    config,
+    execFile,
+  });
+
+  assert.equal(a.projectId, 'github.com/example/repo-a');
+  assert.equal(a.repoIdentity, 'github.com/example/repo-a');
+  assert.equal(b.projectId, 'github.com/example/repo-b');
+  assert.equal(b.repoIdentity, 'github.com/example/repo-b');
+  assert.notEqual(a.projectId, b.projectId);
+});
+
+test('repository discovery fails closed when no safe Git identity exists', () => {
+  assert.throws(
+    () => resolveCodexProjectScope({
+      event: userPromptEvent({ cwd: '/work/no-remote' }),
+      config: {
+        dbPath: '/shared/memory.sqlite3',
+        projectId: null,
+        repoIdentity: null,
+        capturePrompts: false,
+      },
+      execFile(command, args) {
+        if (args.includes('--show-toplevel')) return '/work/no-remote\n';
+        throw new Error('origin remote missing');
+      },
+    }),
+    /repository identity|origin/i,
+  );
 });
 
 test('runCodexMemoryHook is disabled cleanly when required config is absent', async () => {
@@ -469,6 +576,14 @@ test('Codex CLI reads hook JSON from stdin and writes recalled context', () => {
     execFileSync('git', ['init', '-b', 'main', repoDir], { stdio: 'ignore' });
     execFileSync('git', ['-C', repoDir, 'config', 'user.email', 'test@example.com']);
     execFileSync('git', ['-C', repoDir, 'config', 'user.name', 'Memory Test']);
+    execFileSync('git', [
+      '-C',
+      repoDir,
+      'remote',
+      'add',
+      'origin',
+      'git@github.com:example/project.git',
+    ]);
     writeFileSync(join(repoDir, 'README.md'), '# smoke\n');
     execFileSync('git', ['-C', repoDir, 'add', 'README.md']);
     execFileSync('git', ['-C', repoDir, 'commit', '-m', 'smoke'], { stdio: 'ignore' });
@@ -480,14 +595,15 @@ test('Codex CLI reads hook JSON from stdin and writes recalled context', () => {
 
     const memory = new MemoryEngine({ dbPath });
     memory.registerProject({
-      projectId: 'project-a',
+      projectId: 'github.com/example/project',
+      canonicalRemote: 'github.com/example/project',
       repoIdentity: 'github.com/example/project',
     });
     const now = '2026-09-30T01:00:00.000Z';
     memory.ingest({
       evidence: {
         id: 'e-cli-stdin',
-        projectId: 'project-a',
+        projectId: 'github.com/example/project',
         harness: 'test',
         sessionId: 'seed',
         sourceKind: 'session',
@@ -530,14 +646,107 @@ test('Codex CLI reads hook JSON from stdin and writes recalled context', () => {
       env: {
         ...process.env,
         AGENT_HUB_MEMORY_DB: dbPath,
-        AGENT_HUB_MEMORY_PROJECT_ID: 'project-a',
-        AGENT_HUB_MEMORY_REPO_IDENTITY: 'github.com/example/project',
         AGENT_HUB_MEMORY_CAPTURE_PROMPTS: 'false',
       },
     });
 
     assert.equal(result.status, 0, result.stderr);
     assert.match(result.stdout, /Postgres for concurrent writers/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+
+test('project-scope discovery failures stay fail-soft before opening the database', async () => {
+  let created = false;
+  const output = await runCodexMemoryHook({
+    event: userPromptEvent({ cwd: '/work/not-a-repository' }),
+    env: {
+      AGENT_HUB_MEMORY_DB: '/shared/memory.sqlite3',
+    },
+    resolveProjectScope() {
+      throw new Error('origin remote missing');
+    },
+    createEngine() {
+      created = true;
+      throw new Error('must not open the database');
+    },
+  });
+
+  assert.equal(output, null);
+  assert.equal(created, false);
+});
+
+test('Codex CLI auto-registers different repositories in one shared database', () => {
+  const root = mkdtempSync(join(tmpdir(), 'agent-hub-codex-multi-project-'));
+  const dbPath = join(root, 'memory.sqlite3');
+  const cliPath = fileURLToPath(
+    new URL('../../memory-engine/adapters/codex-hook-cli.mjs', import.meta.url),
+  );
+
+  function createRepo(name, remote) {
+    const repoDir = join(root, name);
+    mkdirSync(repoDir, { recursive: true });
+    execFileSync('git', ['init', '-b', 'main', repoDir], { stdio: 'ignore' });
+    execFileSync('git', ['-C', repoDir, 'config', 'user.email', 'test@example.com']);
+    execFileSync('git', ['-C', repoDir, 'config', 'user.name', 'Memory Test']);
+    execFileSync('git', ['-C', repoDir, 'remote', 'add', 'origin', remote]);
+    writeFileSync(join(repoDir, 'README.md'), `# ${name}\n`);
+    execFileSync('git', ['-C', repoDir, 'add', 'README.md']);
+    execFileSync('git', ['-C', repoDir, 'commit', '-m', 'smoke'], { stdio: 'ignore' });
+    return repoDir;
+  }
+
+  try {
+    const repos = [
+      {
+        cwd: createRepo('repo-a', 'git@github.com:example/repo-a.git'),
+        projectId: 'github.com/example/repo-a',
+      },
+      {
+        cwd: createRepo('repo-b', 'https://github.com/example/repo-b.git'),
+        projectId: 'github.com/example/repo-b',
+      },
+    ];
+
+    for (const [index, repoInfo] of repos.entries()) {
+      const event = JSON.stringify({
+        session_id: `thr-${index}`,
+        transcript_path: null,
+        cwd: repoInfo.cwd,
+        hook_event_name: 'UserPromptSubmit',
+        model: 'gpt-5.6-sol',
+        permission_mode: 'default',
+        turn_id: `turn-${index}`,
+        prompt: 'Recall project memory.',
+      });
+      const result = spawnSync(process.execPath, [cliPath], {
+        input: event,
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          AGENT_HUB_MEMORY_DB: dbPath,
+          AGENT_HUB_MEMORY_PROJECT_ID: '',
+          AGENT_HUB_MEMORY_REPO_IDENTITY: '',
+          AGENT_HUB_MEMORY_CAPTURE_PROMPTS: 'false',
+        },
+      });
+      assert.equal(result.status, 0, result.stderr);
+    }
+
+    const memory = new MemoryEngine({ dbPath });
+    try {
+      for (const repoInfo of repos) {
+        assert.deepEqual(memory.getProject(repoInfo.projectId), {
+          project_id: repoInfo.projectId,
+          canonical_remote: repoInfo.projectId,
+          repo_identity: repoInfo.projectId,
+        });
+      }
+    } finally {
+      memory.close();
+    }
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
