@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 
+import { evaluateReliance } from '../index.mjs';
 import {
   refreshRepositoryFreshness,
   resolveGitContext,
@@ -544,8 +545,18 @@ export function createCodexMemoryHookAdapter({
         });
         if (!recalled?.ok) return null;
 
+        const reliance = evaluateReliance({
+          items: recalled.result?.items ?? [],
+          conflicts: recalled.result?.conflicts ?? [],
+          use: 'answer',
+        });
         const additionalContext = formatCodexMemoryContext(
-          recalled.result,
+          {
+            items: reliance.selected,
+            conflicts: reliance.conflict_resolutions.filter(
+              (conflict) => String(conflict.status).startsWith('unresolved'),
+            ),
+          },
           { maxBytes: maxContextBytes },
         );
         if (!additionalContext) return null;
