@@ -442,6 +442,19 @@ Replace the example paths with the real checkout path. The prompt hook inherits 
 
 The launcher is idempotent. It first uses the IPC `health` operation, which verifies the pinned model identity without running inference. If no worker is ready, a cross-process lock ensures that only one concurrent Codex session spawns the detached worker. Other sessions wait for the same worker instead of loading another E5 runtime. A stale launcher lock is recoverable.
 
+
+`SessionStart` is a warm-start optimization, not a correctness dependency. Some Codex
+host paths can discover and trust lifecycle hooks without dispatching the command. When
+`--hybrid-recall` is enabled, the `UserPromptSubmit` adapter therefore performs the
+same idempotent worker check against the prepared local E5 cache before constructing the
+hybrid retriever. If the worker is absent, it may start the detached local worker and wait
+for readiness for at most 5 seconds. If startup fails, the prompt remains fail-soft and
+uses lexical recall.
+
+Prompt-time recovery never prepares or downloads a model. It only runs when the
+repository-local prepared cache already exists, and the worker still opens that cache with
+remote loading disabled.
+
 The launcher writes no normal stdout because `SessionStart` stdout becomes developer context. Worker stdout/stderr instead append to `embedding-worker.log` beside the model-cache directory.
 
 Codex requires changed non-managed hooks to be reviewed again because hook trust is bound to the exact hook definition. After adding or changing these handlers, open `/hooks` in Codex and trust the current definitions.

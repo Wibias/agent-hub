@@ -338,3 +338,169 @@ test('real Codex hybrid hook recovers a lexical-miss memory through the warm IPC
     /memory: database is Postgres/,
   );
 });
+
+
+test('hybrid UserPromptSubmit self-heals a missing worker from the prepared local cache', async () => {
+  const memory = {
+    getProject() {
+      return { project_id: 'github.com/example/project' };
+    },
+    close() {},
+  };
+
+  const calls = [];
+  const embedder = {
+    modelId: E5_MODEL_ID,
+    modelRevision: E5_MODEL_REVISION,
+    dimensions: E5_DIMENSIONS,
+    async embedQuery() {
+      return new Float32Array(E5_DIMENSIONS);
+    },
+    async embedPassages() {
+      return [new Float32Array(E5_DIMENSIONS)];
+    },
+  };
+  const hybridRetriever = {
+    async recall() {
+      return { items: [], conflicts: [] };
+    },
+    async indexClaim() {
+      return { indexed: true };
+    },
+  };
+
+  await runCodexMemoryHook({
+    event: event(),
+    env: {},
+    configOptions: {
+      hybridRecall: true,
+      embeddingCacheDir: 'C:/agent-hub/.cache/memory-engine/e5',
+      embeddingSocketPath: 'test-pipe',
+      embeddingStartupTimeoutMs: 4_000,
+    },
+    resolveProjectScope() {
+      return {
+        projectId: 'github.com/example/project',
+        repoIdentity: 'github.com/example/project',
+        canonicalRemote: 'github.com/example/project',
+      };
+    },
+    ensureDbDirectory() {},
+    createEngine() {
+      return memory;
+    },
+    embeddingCacheAvailable(cacheDir) {
+      calls.push(['cache', cacheDir]);
+      return true;
+    },
+    async ensureEmbeddingWorker(options) {
+      calls.push(['ensure', options]);
+      return {
+        status: 'started',
+        pid: 4242,
+        socketPath: options.socketPath,
+      };
+    },
+    createEmbeddingClient(options) {
+      calls.push(['client', options]);
+      return embedder;
+    },
+    createHybridRetriever(options) {
+      calls.push(['retriever', options]);
+      return hybridRetriever;
+    },
+    createProtocol() {
+      return { handle() {} };
+    },
+    createAdapter() {
+      return {
+        async handle() {
+          return null;
+        },
+      };
+    },
+  });
+
+  assert.deepEqual(calls[0], [
+    'cache',
+    'C:/agent-hub/.cache/memory-engine/e5',
+  ]);
+  assert.equal(calls[1][0], 'ensure');
+  assert.equal(calls[1][1].cacheDir, 'C:/agent-hub/.cache/memory-engine/e5');
+  assert.equal(calls[1][1].socketPath, 'test-pipe');
+  assert.equal(calls[1][1].startupTimeoutMs, 4_000);
+  assert.equal(calls.some(([name]) => name === 'client'), true);
+  assert.equal(calls.some(([name]) => name === 'retriever'), true);
+});
+
+test('hybrid UserPromptSubmit skips worker startup when the prepared cache is absent', async () => {
+  const memory = {
+    getProject() {
+      return { project_id: 'github.com/example/project' };
+    },
+    close() {},
+  };
+
+  let ensureCalls = 0;
+  await runCodexMemoryHook({
+    event: event(),
+    env: {},
+    configOptions: {
+      hybridRecall: true,
+      embeddingCacheDir: 'C:/agent-hub/.cache/memory-engine/e5',
+    },
+    resolveProjectScope() {
+      return {
+        projectId: 'github.com/example/project',
+        repoIdentity: 'github.com/example/project',
+        canonicalRemote: 'github.com/example/project',
+      };
+    },
+    ensureDbDirectory() {},
+    createEngine() {
+      return memory;
+    },
+    embeddingCacheAvailable() {
+      return false;
+    },
+    async ensureEmbeddingWorker() {
+      ensureCalls += 1;
+      throw new Error('must not be called without a prepared local cache');
+    },
+    createEmbeddingClient() {
+      return {
+        modelId: E5_MODEL_ID,
+        modelRevision: E5_MODEL_REVISION,
+        dimensions: E5_DIMENSIONS,
+        async embedQuery() {
+          throw new Error('worker unavailable');
+        },
+        async embedPassages() {
+          throw new Error('worker unavailable');
+        },
+      };
+    },
+    createHybridRetriever() {
+      return {
+        async recall() {
+          return { items: [], conflicts: [] };
+        },
+        async indexClaim() {
+          return { indexed: false };
+        },
+      };
+    },
+    createProtocol() {
+      return { handle() {} };
+    },
+    createAdapter() {
+      return {
+        async handle() {
+          return null;
+        },
+      };
+    },
+  });
+
+  assert.equal(ensureCalls, 0);
+});
