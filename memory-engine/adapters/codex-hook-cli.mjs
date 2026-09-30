@@ -95,8 +95,12 @@ async function main() {
   }
 }
 
-const isMain = process.argv[1]
-  && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+const isMain = typeof import.meta.main === 'boolean'
+  ? import.meta.main
+  : (
+      process.argv[1]
+      && resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+    );
 
 if (isMain) {
   await main();
