@@ -37,12 +37,6 @@ function userEvidence(overrides = {}) {
 function claimInput(overrides = {}) {
   return {
     evidence_id: 'e-user',
-    claim: {
-      kind: 'decision',
-      subject: 'database',
-      predicate: 'uses',
-      value: 'Postgres for concurrent writers',
-    },
     lifecycle: {},
     ...overrides,
   };
@@ -104,10 +98,10 @@ test('explicit Codex commit stamps current project, branch, id, and time', async
       assert.deepEqual(verify.getClaim('c-explicit-1'), {
         id: 'c-explicit-1',
         project_id: 'github.com/example/project',
-        kind: 'decision',
-        subject: 'database',
-        predicate: 'uses',
-        value: 'Postgres for concurrent writers',
+        kind: 'user_direct',
+        subject: 'user memory',
+        predicate: 'states',
+        value: 'Use Postgres for concurrent writers.',
         state: 'active',
         branch_scope: 'main',
         created_from_evidence_id: 'e-user',
@@ -274,24 +268,23 @@ test('explicit Codex commit forbids caller-controlled project, branch, ids, and 
       ...claimInput(),
       project_id: 'github.com/example/other',
     },
-    claimInput({
+    {
+      ...claimInput(),
+      branch_scope: 'feature/other',
+    },
+    {
+      ...claimInput(),
       claim: {
-        ...claimInput().claim,
-        branch_scope: 'feature/other',
+        kind: 'decision',
+        subject: 'database',
+        predicate: 'uses',
+        value: 'A model-rewritten claim must not be accepted.',
       },
-    }),
-    claimInput({
-      claim: {
-        ...claimInput().claim,
-        id: 'caller-chosen-id',
-      },
-    }),
-    claimInput({
-      claim: {
-        ...claimInput().claim,
-        created_at: '2000-01-01T00:00:00Z',
-      },
-    }),
+    },
+    {
+      ...claimInput(),
+      created_at: '2000-01-01T00:00:00Z',
+    },
   ];
 
   for (const input of forbidden) {
