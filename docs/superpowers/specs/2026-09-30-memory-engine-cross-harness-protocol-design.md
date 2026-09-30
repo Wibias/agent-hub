@@ -2,7 +2,20 @@
 
 Date: 2026-09-30
 
-Status: research complete; approved for implementation planning
+Status: implemented on main; original design retained for historical context
+
+## Implementation status
+
+The production integration track shipped as designed:
+
+- PR #18, `feat: add evidence-first memory primitives`, added standalone Evidence capture and later Claim assertion without weakening legacy ingest atomicity.
+- PR #19, `feat: add frozen memory protocol v1`, added the transport-neutral versioned protocol with fail-closed authority and Claim-assertion boundaries.
+- PR #20, `feat: add Codex memory hook adapter`, added the first real host adapter using the documented Codex `UserPromptSubmit` command-hook schema, Git blob freshness refresh, bounded context injection, explicit project identity, and fail-soft behavior.
+
+The first production adapter deliberately does not parse transcripts, persist every tool result, summarize sessions, or create Claims automatically. Direct prompt capture is off by default and, when enabled, stores Evidence only.
+
+Additional host adapters are not roadmap blockers. Add them only after their current official event/config schemas are verified.
+
 
 ## Context
 
