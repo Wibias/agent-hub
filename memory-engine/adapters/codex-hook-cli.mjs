@@ -219,11 +219,9 @@ function authorizeCodexExplicitMemoryClaim({
       evidence?.metadata?.explicit_memory_mode !== 'forget'
       || claim?.kind !== 'memory_control'
       || claim?.predicate !== 'forgets'
-      || claim?.value !== parsed.value
       || claim?.state !== 'expired'
       || lifecycle.supersedes.length !== 0
       || lifecycle.rejects.length !== 1
-      || typeof memory?.getClaim !== 'function'
     ) {
       return false;
     }
@@ -249,7 +247,6 @@ function authorizeCodexExplicitMemoryClaim({
     || claim?.value !== parsed.newValue
     || lifecycle.supersedes.length !== 1
     || lifecycle.rejects.length !== 0
-    || typeof memory?.getClaim !== 'function'
   ) {
     return false;
   }
