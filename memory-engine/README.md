@@ -424,6 +424,47 @@ Replace the example path with the real checkout path. The command inherits the m
 
 The adapter currently handles only `UserPromptSubmit`. It deliberately does not capture `PostToolUse`, summarize on `SessionEnd`, or parse `transcript_path`. Codex documents the transcript path as a convenience rather than a stable hook interface.
 
+### Explicit durable-memory prompts
+
+Production Codex can opt into durable direct-user memory with the hook CLI flag:
+
+```text
+--explicit-memory-requests
+```
+
+When enabled, only a prompt whose first non-whitespace text matches the strict,
+case-insensitive marker below is persisted:
+
+```text
+memory: <exact direct-user statement>
+```
+
+Examples:
+
+```text
+memory: The production database is Postgres.
+memory: Keep Survival camera quality at 720p HIGH.
+```
+
+Ordinary prompts are not persisted, even if they contain natural-language wording such
+as "please remember". The adapter does not use semantic intent classification for this
+boundary.
+
+For an explicit `memory:` prompt, the `UserPromptSubmit` adapter:
+
+1. stores the exact prompt as `user_direct` Evidence;
+2. marks that Evidence as an explicit memory request in trusted adapter metadata;
+3. asserts one fixed exact-text Claim on the current Git branch;
+4. performs normal bounded recall.
+
+The Claim uses the same non-reinterpretation contract as the explicit commit CLI:
+`kind=user_direct`, `subject=user memory`, `predicate=states`, and the Claim value
+is the redacted Evidence content exactly. No lifecycle relation is inferred
+automatically.
+
+Capture or Claim failure remains fail-soft for the interactive Codex prompt. The
+ordinary recall path still runs.
+
 ### Explicit Codex claim commit
 
 Durable, recallable memory is committed through a separate explicit CLI:
