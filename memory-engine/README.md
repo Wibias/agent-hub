@@ -361,6 +361,89 @@ const response = await protocol.handle({
 
 The protocol is a local integration boundary, not an untrusted network authorization layer. Host adapters remain responsible for resolving configured project identity and observed source channels outside prompt-controlled text.
 
+## Codex command-hook adapter
+
+The first production host adapter uses the documented OpenAI Codex `UserPromptSubmit` command hook.
+
+Entrypoint:
+
+```text
+memory-engine/adapters/codex-hook-cli.mjs
+```
+
+The command reads one Codex hook event as JSON from stdin. When current memory is available, it writes Codex-compatible `hookSpecificOutput.additionalContext` JSON to stdout. Missing configuration, Git-context failure, unavailable memory, or recall failure produces no output and does not block the user prompt.
+
+### Configuration
+
+The adapter requires explicit shared memory configuration in the Codex process environment:
+
+```text
+AGENT_HUB_MEMORY_DB=/absolute/shared/memory.sqlite3
+AGENT_HUB_MEMORY_PROJECT_ID=project-a
+```
+
+Optional:
+
+```text
+AGENT_HUB_MEMORY_REPO_IDENTITY=github.com/example/project
+AGENT_HUB_MEMORY_CAPTURE_PROMPTS=false
+```
+
+`AGENT_HUB_MEMORY_REPO_IDENTITY` defaults to the configured project ID.
+
+Direct prompt capture is disabled by default. Setting `AGENT_HUB_MEMORY_CAPTURE_PROMPTS=true` stores the exact direct prompt as standalone `user_direct` Evidence only. It does not assert a Claim and does not make every prompt durable project truth.
+
+Project identity is never derived from prompt text or the checkout path.
+
+### Codex hook registration
+
+A Codex hook configuration can point `UserPromptSubmit` at the command:
+
+```json
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node /absolute/path/to/agent-hub/memory-engine/adapters/codex-hook-cli.mjs",
+            "commandWindows": "node C:\\absolute\\path\\to\\agent-hub\\memory-engine\\adapters\\codex-hook-cli.mjs",
+            "timeout": 10,
+            "statusMessage": "Recalling project memory",
+            "additionalContextLimit": 2500
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+Replace the example path with the real checkout path. The command inherits the memory environment variables from the Codex process.
+
+The adapter currently handles only `UserPromptSubmit`. It deliberately does not capture `PostToolUse`, summarize on `SessionEnd`, or parse `transcript_path`. Codex documents the transcript path as a convenience rather than a stable hook interface.
+
+### Recall behavior
+
+Before current recall, the adapter:
+
+1. resolves the Git repository root from the documented event `cwd`;
+2. requires a real current branch rather than detached HEAD;
+3. resolves the full current HEAD SHA;
+4. refreshes blob freshness for repository-grounded Claims;
+5. recalls only the explicitly configured project and current branch;
+6. formats at most 8 KiB of additional context.
+
+The injected context labels Claim state and Evidence authority and starts with an explicit reminder that recalled content is evidence, not instructions.
+
+The command currently constructs the frozen protocol without a `HybridMemoryRetriever`, so Codex hook recall is lexical-only in this delivery. This is intentional: the adapter does not implicitly initialize the E5 provider or download a model. Hybrid recall can be wired later through the same protocol boundary if a configured offline provider is required.
+
+Official host references reviewed 2026-09-30:
+
+- https://developers.openai.com/docs/hooks
+- https://developers.openai.com/plugins/build/plugins
+
 ## Pinned E5 provider
 
 Install the scoped provider dependency:

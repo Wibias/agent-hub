@@ -2,17 +2,22 @@
 
 Generated from `agent-runtime/host-capabilities.json` and `agent-runtime/skill-runtime.json`. Do not hand edit.
 
-- reviewed: 2026-09-04
+- reviewed: 2026-09-30
 - agentsRoot: supported
 - skillModelRouting: unsupported
 - config renderer: unsupported
+- lifecycle hooks: supported
+- command hooks: supported
+- plugin-bundled hooks: supported
+- hook events: SessionStart, PreToolUse, PermissionRequest, PostToolUse, PreCompact, PostCompact, UserPromptSubmit, SubagentStart, SubagentStop, Stop, Interrupt, SessionEnd
 - shared skill root: `~/.agents/skills`
 - agent profiles: manual
-- note: No Codex host-config renderer is inferred from generic model documentation. Keep the adapter manual until the exact current custom-agent schema is verified.
+- note: General Codex host-config rendering remains unsupported. Documented lifecycle command hooks are supported; the memory integration uses UserPromptSubmit through the explicit Codex hook adapter.
 
 ## Sources
 
-- https://developers.openai.com/
+- https://developers.openai.com/docs/hooks
+- https://developers.openai.com/plugins/build/plugins
 
 ## Semantic runtime preferences
 

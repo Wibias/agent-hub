@@ -59,3 +59,27 @@ test('generated report check tolerates checkout line endings', async () => {
 
   assert.deepEqual(await renderAll(root, { check: true }), []);
 });
+
+
+test('host report renders documented lifecycle hook capability separately from config rendering', () => {
+  const host = {
+    displayName: 'OpenAI Codex',
+    reviewed: '2026-09-30',
+    sources: ['https://developers.openai.com/docs/hooks'],
+    skills: { agentsRoot: true, skillModelRouting: false },
+    hooks: {
+      supported: true,
+      command: true,
+      pluginBundled: true,
+      events: ['SessionStart', 'UserPromptSubmit'],
+    },
+    adapter: { configRenderer: 'unsupported' },
+  };
+
+  const report = renderHostReport('codex', host, runtime);
+  assert.match(report, /lifecycle hooks: supported/);
+  assert.match(report, /command hooks: supported/);
+  assert.match(report, /plugin-bundled hooks: supported/);
+  assert.match(report, /hook events: .*SessionStart.*UserPromptSubmit/);
+  assert.match(report, /config renderer: unsupported/);
+});
