@@ -24,6 +24,12 @@ import {
 import {
   runMemoryRestoreCli,
 } from '../../scripts/restore-memory.mjs';
+import {
+  runCodexMemoryHook,
+} from '../../memory-engine/adapters/codex-hook-cli.mjs';
+import {
+  memoryRestoreLockPath,
+} from '../../memory-engine/memory-maintenance-lock.mjs';
 
 function seedMemory(dbPath, {
   claimId,
@@ -318,6 +324,42 @@ test('restore rolls staged target files back when atomic swap cannot complete', 
   );
   assert.equal(current.getClaim('c-source-rollback'), null);
   current.close();
+});
+
+
+test('Codex memory hook fails soft without opening the DB while restore lock exists', async () => {
+  const calls = [];
+  const output = await runCodexMemoryHook({
+    event: {
+      hook_event_name: 'UserPromptSubmit',
+      cwd: 'C:/fixture/repo',
+      prompt: 'Which database do we use?',
+    },
+    env: {
+      AGENT_HUB_MEMORY_DB: 'C:/fixture/memory.sqlite3',
+      AGENT_HUB_MEMORY_PROJECT_ID: 'project',
+    },
+    restoreLockExists(dbPath) {
+      calls.push(['restoreLockExists', dbPath]);
+      return true;
+    },
+    createEngine() {
+      calls.push(['createEngine']);
+      throw new Error('engine must not open while restore is locked');
+    },
+  });
+
+  assert.equal(output, null);
+  assert.deepEqual(calls, [
+    ['restoreLockExists', 'C:/fixture/memory.sqlite3'],
+  ]);
+});
+
+test('restore lock path is adjacent to the canonical database', () => {
+  assert.equal(
+    memoryRestoreLockPath('C:/fixture/memory.sqlite3'),
+    'C:/fixture/memory.sqlite3.restore.lock',
+  );
 });
 
 test('backup CLI emits one JSON object', async () => {
