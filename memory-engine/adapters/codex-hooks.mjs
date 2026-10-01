@@ -472,17 +472,15 @@ export function resolveActiveDirectUserMemoryTarget(memory, {
   return matches.length === 1 ? matches[0] : null;
 }
 
-function resolveNeedsConfirmationCandidateTarget(memory, {
+function resolveScopedCandidateTarget(memory, {
   projectId,
   branch,
   ref,
 }) {
-  if (typeof memory?.listCandidates !== 'function') return null;
-  const candidates = memory.listCandidates({
+  if (typeof memory?.listScopedCandidates !== 'function') return null;
+  const candidates = memory.listScopedCandidates({
     projectId,
     branch,
-    status: 'needs_confirmation',
-    limit: 100,
   });
   const matches = candidates.filter(
     (candidate) => memoryCandidateRef(candidate.id) === ref,
@@ -645,6 +643,7 @@ export function createCodexMemoryHookAdapter({
           : {
               applied: false,
               targetMissing: false,
+              alreadyFinalized: false,
             };
 
         const candidateProposal = (
@@ -778,36 +777,63 @@ export function createCodexMemoryHookAdapter({
                 parsedMemory?.mode === 'candidate_confirm'
                 && typeof memory.confirmCandidate === 'function'
               ) {
-                const candidate = resolveNeedsConfirmationCandidateTarget(memory, {
+                const candidate = resolveScopedCandidateTarget(memory, {
                   projectId,
                   branch: context.branch,
                   ref: parsedMemory.candidateRef,
                 });
-                const target = parsedMemory.targetRef === null
-                  ? null
-                  : resolveActiveDirectUserMemoryTarget(memory, {
-                      projectId,
-                      branch: context.branch,
-                      ref: parsedMemory.targetRef,
-                    });
 
-                if (
-                  candidate === null
-                  || (parsedMemory.targetRef !== null && target === null)
-                ) {
+                if (candidate === null) {
                   explicitCommandResult.targetMissing = true;
                 } else {
-                  confirmMemoryCandidate({
-                    memory,
-                    projectId,
-                    branch: context.branch,
-                    candidateId: candidate.id,
-                    relation: parsedMemory.relation,
-                    targetClaimId: target?.id ?? null,
-                    confirmationEvidenceId: capturedEvidence.id,
-                    now: () => capturedEvidence.captured_at ?? capturedAt,
-                  });
-                  explicitCommandResult.applied = true;
+                  const prior = (
+                    typeof memory.getCandidateConfirmation === 'function'
+                      ? memory.getCandidateConfirmation(candidate.id)
+                      : null
+                  );
+
+                  if (prior !== null) {
+                    const priorTargetRef = prior.related_claim_id
+                      ? memoryClaimRef(prior.related_claim_id)
+                      : null;
+                    if (
+                      prior.relation === parsedMemory.relation
+                      && priorTargetRef === parsedMemory.targetRef
+                    ) {
+                      explicitCommandResult.applied = true;
+                    } else {
+                      explicitCommandResult.alreadyFinalized = true;
+                    }
+                  } else if (candidate.status !== 'needs_confirmation') {
+                    explicitCommandResult.targetMissing = true;
+                  } else {
+                    const target = parsedMemory.targetRef === null
+                      ? null
+                      : resolveActiveDirectUserMemoryTarget(memory, {
+                          projectId,
+                          branch: context.branch,
+                          ref: parsedMemory.targetRef,
+                        });
+
+                    if (
+                      parsedMemory.targetRef !== null
+                      && target === null
+                    ) {
+                      explicitCommandResult.targetMissing = true;
+                    } else {
+                      confirmMemoryCandidate({
+                        memory,
+                        projectId,
+                        branch: context.branch,
+                        candidateId: candidate.id,
+                        relation: parsedMemory.relation,
+                        targetClaimId: target?.id ?? null,
+                        confirmationEvidenceId: capturedEvidence.id,
+                        now: () => capturedEvidence.captured_at ?? capturedAt,
+                      });
+                      explicitCommandResult.applied = true;
+                    }
+                  }
                 }
               }
 
@@ -907,6 +933,8 @@ export function createCodexMemoryHookAdapter({
             } else if (explicitMemory.mode === 'candidate_confirm') {
               reason = 'Memory candidate confirmed for the current project and branch.';
             }
+          } else if (explicitCommandResult?.alreadyFinalized === true) {
+            reason = 'Memory candidate not changed: it was already confirmed with a different action.';
           } else if (explicitCommandResult?.targetMissing === true) {
             reason = explicitMemory.mode === 'candidate_confirm'
               ? 'Memory candidate not changed: candidate or target memory was not found or was not unique in the current project and branch.'
