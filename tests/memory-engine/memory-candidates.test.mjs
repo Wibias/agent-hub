@@ -290,7 +290,7 @@ test('candidate ledger rejects non-direct evidence and never enters current reca
     /user_direct/i,
   );
 
-  assert.equal(memory.listClaims({ projectId: 'project' }).length, 0);
+  assert.equal(memory.exportCanonical().claims.length, 0);
   memory.close();
 });
 
@@ -341,7 +341,7 @@ test('candidate capture stores only selected ordinary prompts as evidence+pendin
     candidates[0].proposed_value,
     'We decided to use Postgres for concurrent writers.',
   );
-  assert.equal(memory.listClaims({ projectId: 'project' }).length, 0);
+  assert.equal(memory.exportCanonical().claims.length, 0);
   assert.equal(memory.exportCanonical().evidence.length, 1);
 
   await adapter.handle({
@@ -475,7 +475,7 @@ test('memory candidates is a read-only terminal management command', async () =>
   assert.match(result.reason, /We must stay on GitHub Free/);
 
   assert.equal(memory.exportCanonical().evidence.length, 1);
-  assert.equal(memory.listClaims({ projectId: 'project' }).length, 0);
+  assert.equal(memory.exportCanonical().claims.length, 0);
   memory.close();
 });
 
@@ -497,6 +497,6 @@ test('candidate capture is explicit CLI opt-in', () => {
 
   assert.equal(
     parseCodexHookCliOptions([]).candidateCapture,
-    false,
+    undefined,
   );
 });
