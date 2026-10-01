@@ -2,6 +2,7 @@ import { DatabaseSync } from 'node:sqlite';
 
 import { assertAuthorityClass } from './authority.mjs';
 import { validateMemoryCandidateJudgment } from './memory-candidate-judge.mjs';
+import { validateMemoryCandidateRelation } from './memory-candidate-relation.mjs';
 import {
   decodeFloat32Vector,
   encodeFloat32Vector,
@@ -118,6 +119,19 @@ function normalizeEvidence(row) {
     sensitivity: row.sensitivity,
     authority_class: row.authority_class,
     metadata: parseMetadata(row.metadata_json),
+  };
+}
+
+function normalizeCandidateRelation(row) {
+  if (!row) return null;
+  return {
+    candidate_id: row.candidate_id,
+    relation: row.relation,
+    related_claim_id: row.related_claim_id,
+    evaluator_id: row.evaluator_id,
+    policy_version: row.policy_version,
+    evaluated_at: row.evaluated_at,
+    result_json: row.result_json,
   };
 }
 
@@ -937,6 +951,22 @@ export class MemoryEngine {
 
       CREATE INDEX IF NOT EXISTS memory_candidates_scope_status
       ON memory_candidates (project_id, branch, status, created_at DESC);
+
+
+      CREATE TABLE IF NOT EXISTS memory_candidate_relations (
+        candidate_id TEXT PRIMARY KEY REFERENCES memory_candidates(id),
+        relation TEXT NOT NULL CHECK (
+          relation IN ('same','update','contradict','unrelated')
+        ),
+        related_claim_id TEXT REFERENCES claims(id),
+        evaluator_id TEXT NOT NULL,
+        policy_version TEXT NOT NULL,
+        evaluated_at TEXT NOT NULL,
+        result_json TEXT NOT NULL
+      ) STRICT;
+
+      CREATE INDEX IF NOT EXISTS memory_candidate_relations_claim
+      ON memory_candidate_relations (related_claim_id);
 
       CREATE TABLE IF NOT EXISTS lifecycle_events (
         id INTEGER PRIMARY KEY,
@@ -2545,6 +2575,168 @@ export class MemoryEngine {
     if (Number(result.changes) !== 1) {
       throw new Error('memory candidate evaluation raced or was already applied');
     }
+    return this.getCandidate(candidateId);
+  }
+
+  listRelationPendingCandidates({
+    projectId,
+    branch,
+    limit = 10,
+  }) {
+    assertNonEmptyString(projectId, 'projectId');
+    assertNonEmptyString(branch, 'branch');
+    if (!Number.isInteger(limit) || limit < 1 || limit > 20) {
+      throw new RangeError('limit must be an integer between 1 and 20');
+    }
+
+    const rows = this.#db.prepare(
+      'SELECT * FROM memory_candidates '
+      + "WHERE project_id = ? AND branch = ? AND status = 'pending' "
+      + 'AND evaluated_at IS NOT NULL AND relation IS NULL '
+      + 'ORDER BY created_at ASC, id ASC LIMIT ?',
+    ).all(projectId, branch, limit * 4).map(normalizeCandidate);
+
+    const eligible = [];
+    for (const candidate of rows) {
+      let evaluation;
+      try {
+        evaluation = JSON.parse(candidate.evaluation_json);
+      } catch {
+        continue;
+      }
+
+      let normalized;
+      try {
+        normalized = validateMemoryCandidateJudgment(evaluation);
+      } catch {
+        continue;
+      }
+
+      if (normalized.decision !== 'promote') continue;
+      eligible.push(candidate);
+      if (eligible.length >= limit) break;
+    }
+
+    return eligible;
+  }
+
+  getCandidateRelation(candidateId) {
+    assertNonEmptyString(candidateId, 'candidateId');
+    return normalizeCandidateRelation(
+      this.#db.prepare(
+        'SELECT * FROM memory_candidate_relations WHERE candidate_id = ?',
+      ).get(candidateId),
+    );
+  }
+
+  evaluateCandidateRelation({
+    candidateId,
+    evaluatorId,
+    policyVersion,
+    relation,
+    relatedClaimId = null,
+    evaluatedAt = this.#clock(),
+  }) {
+    assertNonEmptyString(candidateId, 'candidateId');
+    assertNonEmptyString(evaluatorId, 'evaluatorId');
+    assertNonEmptyString(policyVersion, 'policyVersion');
+    assertNonEmptyString(evaluatedAt, 'evaluatedAt');
+
+    const candidate = this.getCandidate(candidateId);
+    if (!candidate) throw new Error('unknown memory candidate: ' + candidateId);
+    if (candidate.status !== 'pending') {
+      throw new Error('memory candidate is not pending');
+    }
+    if (candidate.evaluated_at === null || !candidate.evaluation_json) {
+      throw new Error('memory candidate has no importance evaluation');
+    }
+    if (candidate.relation !== null || this.getCandidateRelation(candidateId)) {
+      throw new Error('memory candidate relation is already evaluated');
+    }
+
+    let importance;
+    try {
+      importance = validateMemoryCandidateJudgment(
+        JSON.parse(candidate.evaluation_json),
+      );
+    } catch {
+      throw new Error('memory candidate importance evaluation is invalid');
+    }
+    if (importance.decision !== 'promote') {
+      throw new Error('memory candidate relation requires promote importance judgment');
+    }
+
+    const normalized = validateMemoryCandidateRelation(relation);
+    if (normalized.relation === 'unrelated') {
+      if (relatedClaimId !== null) {
+        throw new Error('unrelated relation cannot target a claim');
+      }
+    } else {
+      assertNonEmptyString(relatedClaimId, 'relatedClaimId');
+      const claim = this.getClaim(relatedClaimId);
+      if (!claim) throw new Error('related claim does not exist');
+      if (
+        claim.project_id !== candidate.project_id
+        || claim.branch_scope !== candidate.branch
+        || claim.state !== 'active'
+        || claim.kind !== 'user_direct'
+        || claim.subject !== 'user memory'
+        || claim.predicate !== 'states'
+      ) {
+        throw new Error(
+          'related claim must be an active durable user memory in candidate scope',
+        );
+      }
+      const evidence = this.getEvidence(claim.created_from_evidence_id);
+      if (
+        !evidence
+        || evidence.authority_class !== 'user_direct'
+        || evidence.project_id !== candidate.project_id
+      ) {
+        throw new Error('related claim authority invariant failed');
+      }
+    }
+
+    this.#db.exec('BEGIN IMMEDIATE');
+    try {
+      const inserted = this.#db.prepare(
+        'INSERT INTO memory_candidate_relations ('
+        + 'candidate_id, relation, related_claim_id, evaluator_id, '
+        + 'policy_version, evaluated_at, result_json'
+        + ') VALUES (?, ?, ?, ?, ?, ?, ?)',
+      ).run(
+        candidateId,
+        normalized.relation,
+        relatedClaimId,
+        evaluatorId,
+        policyVersion,
+        evaluatedAt,
+        JSON.stringify(normalized),
+      );
+
+      if (Number(inserted.changes) !== 1) {
+        throw new Error('memory candidate relation was not stored');
+      }
+
+      const updated = this.#db.prepare(
+        'UPDATE memory_candidates SET relation = ?, related_claim_id = ? '
+        + 'WHERE id = ? AND relation IS NULL',
+      ).run(
+        normalized.relation,
+        relatedClaimId,
+        candidateId,
+      );
+
+      if (Number(updated.changes) !== 1) {
+        throw new Error('memory candidate relation raced or was already applied');
+      }
+
+      this.#db.exec('COMMIT');
+    } catch (error) {
+      this.#db.exec('ROLLBACK');
+      throw error;
+    }
+
     return this.getCandidate(candidateId);
   }
 

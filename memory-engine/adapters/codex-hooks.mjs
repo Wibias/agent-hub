@@ -280,11 +280,21 @@ function formatPendingMemoryCandidates(memory, {
       }
     }
 
+    const relationSummary = candidate.relation
+      ? [
+          'relation=' + compactText(candidate.relation, 40),
+          candidate.related_claim_id
+            ? 'target=' + memoryClaimRef(candidate.related_claim_id)
+            : null,
+        ].filter(Boolean).join(' ')
+      : null;
+
     const line = [
       `- ${memoryCandidateRef(candidate.id)}`,
       `[${compactText(candidate.proposed_type, 80)}]`,
       compactText(candidate.proposed_value, 500),
       judgeSummary ? '| ' + judgeSummary : null,
+      relationSummary ? '| ' + relationSummary : null,
     ].filter(Boolean).join(' ');
 
     const next = [...lines, line].join('\n');
