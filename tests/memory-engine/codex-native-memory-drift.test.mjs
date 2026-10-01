@@ -15,6 +15,9 @@ import {
   runBootstrapDoctor,
   runBootstrapSetup,
 } from '../../skills/github-delivery/scripts/lib/bootstrap-maintenance.mjs';
+import {
+  main as runGitHubDeliveryCli,
+} from '../../skills/github-delivery/scripts/github-delivery-cli.mjs';
 
 test('drift guard reports isolated only when Agent Hub is active and all native memory controls are false', () => {
   const result = evaluateCodexNativeMemoryDrift({
@@ -353,4 +356,65 @@ test('bootstrap doctor surfaces the same native-memory drift result read-only', 
   assert.deepEqual(report.nativeCodexMemory, drift);
   assert.equal(report.integrity.clean, true);
   assert.equal(report.latest.relation, 'already_current');
+});
+
+
+test('human-readable doctor output makes native-memory drift visible', async () => {
+  let text = '';
+  const stdout = {
+    write(value) {
+      text += String(value);
+    },
+  };
+
+  await runGitHubDeliveryCli(
+    ['doctor'],
+    {
+      stdout,
+      async runBootstrap() {
+        return {
+          action: 'doctor',
+          environment: {
+            ok: true,
+            node: { ok: true, version: '24.0.0' },
+            git: { ok: true },
+            gh: { ok: true },
+            ghAuth: { ok: true },
+          },
+          installed: { version: '1.7.1' },
+          latest: {
+            version: '1.7.1',
+            relation: 'already_current',
+          },
+          integrity: {
+            ok: true,
+            clean: true,
+          },
+          activation: {
+            mode: 'hooks',
+            hooksConfigured: true,
+            hookTrustVerified: true,
+          },
+          authorityHost: {},
+          nativeCodexMemory: {
+            applicable: true,
+            ok: false,
+            status: 'drift_detected',
+            agentHubHookConfigured: true,
+            settings: {
+              featureEnabled: true,
+              useMemories: false,
+              generateMemories: false,
+            },
+            reasons: ['features.memories_not_false'],
+          },
+        };
+      },
+    },
+  );
+
+  assert.match(text, /Native Codex memory/i);
+  assert.match(text, /DRIFT/i);
+  assert.match(text, /features\.memories_not_false/);
+  assert.match(text, /isolate-native-codex-memory\.mjs/i);
 });
