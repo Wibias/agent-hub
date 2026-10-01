@@ -430,3 +430,109 @@ test('promotion CLI composes current scope without an AI dependency', () => {
   assert.equal(lines.length, 1);
   assert.equal(closed, true);
 });
+
+
+test('promotion finalization is exactly-once and cannot create a second claim', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'agent-hub-promotion-once-'));
+  const memory = new MemoryEngine({ dbPath: join(root, 'memory.sqlite3') });
+  createProject(memory);
+
+  const candidate = seedPromotedRelation(memory, {
+    id: 'candidate-once',
+    evidenceId: 'e-once',
+    value: 'We use Postgres for concurrent writers.',
+    canonicalFact: 'The project uses Postgres for concurrent writers.',
+    relation: 'unrelated',
+  });
+
+  const first = finalizePromotedMemoryCandidates({
+    memory,
+    projectId: 'project',
+    branch: 'main',
+    apply: true,
+    now: () => '2026-10-01T02:00:00.000Z',
+  });
+  assert.equal(first.summary.promoted, 1);
+
+  const claimId = memoryCandidatePromotionClaimId(candidate.id);
+  const before = memory.exportCanonical().claims;
+  const second = finalizePromotedMemoryCandidates({
+    memory,
+    projectId: 'project',
+    branch: 'main',
+    apply: true,
+    now: () => '2026-10-01T02:01:00.000Z',
+  });
+
+  assert.equal(second.summary.total, 0);
+  assert.deepEqual(memory.exportCanonical().claims, before);
+  assert.equal(memory.getClaim(claimId).state, 'active');
+  assert.equal(memory.getCandidatePromotion(candidate.id).claim_id, claimId);
+
+  memory.close();
+});
+
+test('promotion fails closed without partial mutation when relation target is no longer active', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'agent-hub-promotion-stale-target-'));
+  const memory = new MemoryEngine({ dbPath: join(root, 'memory.sqlite3') });
+  createProject(memory);
+
+  const existing = seedDurable(memory, {
+    value: 'The project uses SQLite.',
+  });
+  const candidate = seedPromotedRelation(memory, {
+    id: 'candidate-stale-target',
+    evidenceId: 'e-stale-target',
+    value: 'Correction: the project now uses Postgres instead of SQLite.',
+    canonicalFact: 'The project uses Postgres instead of SQLite.',
+    relation: 'update',
+    relatedClaim: existing,
+  });
+
+  const controlEvidence = memory.recordEvidence({
+    id: 'e-control',
+    projectId: 'project',
+    sourceKind: 'session',
+    sourceRef: 'session:control',
+    capturedAt: '2026-10-01T01:30:00.000Z',
+    branch: 'main',
+    content: 'A newer explicit control memory replaces the old database memory.',
+    authorityClass: 'user_direct',
+    metadata: { explicit_memory: true },
+  });
+  memory.assertClaim({
+    evidenceId: controlEvidence.id,
+    claim: {
+      id: 'claim-control',
+      kind: 'user_direct',
+      subject: 'user memory',
+      predicate: 'states',
+      value: 'A newer explicit control memory replaces the old database memory.',
+      branchScope: 'main',
+      createdAt: '2026-10-01T01:30:00.000Z',
+    },
+    lifecycle: {
+      supersedes: [existing.id],
+    },
+  });
+
+  const claimsBefore = memory.exportCanonical().claims;
+  const lifecycleBefore = memory.exportCanonical().lifecycle_events;
+
+  const result = finalizePromotedMemoryCandidates({
+    memory,
+    projectId: 'project',
+    branch: 'main',
+    apply: true,
+    now: () => '2026-10-01T02:00:00.000Z',
+  });
+
+  assert.equal(result.summary.failed, 1);
+  assert.equal(memory.getCandidate(candidate.id).status, 'pending');
+  assert.equal(memory.getCandidatePromotion(candidate.id), null);
+  assert.equal(memory.getClaim(memoryCandidatePromotionClaimId(candidate.id)), null);
+  assert.deepEqual(memory.exportCanonical().claims, claimsBefore);
+  assert.deepEqual(memory.exportCanonical().lifecycle_events, lifecycleBefore);
+
+  memory.close();
+});
