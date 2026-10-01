@@ -2,7 +2,10 @@ import { DatabaseSync } from 'node:sqlite';
 
 import { assertAuthorityClass } from './authority.mjs';
 import { validateMemoryCandidateJudgment } from './memory-candidate-judge.mjs';
-import {\n  memoryRelationClaimRef,\n  validateMemoryCandidateRelation,\n} from './memory-candidate-relation.mjs';
+import {
+  memoryRelationClaimRef,
+  validateMemoryCandidateRelation,
+} from './memory-candidate-relation.mjs';
 import {
   decodeFloat32Vector,
   encodeFloat32Vector,
