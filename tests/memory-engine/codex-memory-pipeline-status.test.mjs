@@ -80,6 +80,7 @@ test('memory pipeline reports current-scope stage readiness without protocol or 
   });
   let protocolCalls = 0;
 
+  let freshnessCalls = 0;
   const adapter = createCodexMemoryHookAdapter({
     protocol: {
       async handle() {
@@ -90,7 +91,18 @@ test('memory pipeline reports current-scope stage readiness without protocol or 
     memory,
     projectId: 'github.com/Wibias/agent-hub',
     explicitMemoryRequests: true,
-    git: fakeGit('feat/example'),
+    git: {
+      async resolveContext() {
+        return {
+          repoPath: '/repo',
+          branch: 'feat/example',
+          revisionSha: 'a'.repeat(40),
+        };
+      },
+      async refreshFreshness() {
+        freshnessCalls += 1;
+      },
+    },
   });
 
   const result = await adapter.handle({
@@ -113,6 +125,7 @@ test('memory pipeline reports current-scope stage readiness without protocol or 
   );
   assert.match(result.reason, /read-only/i);
   assert.equal(protocolCalls, 0);
+  assert.equal(freshnessCalls, 0);
 
   assert.deepEqual(
     memory.calls,
