@@ -2,6 +2,7 @@ import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 import {
+  recoverMemoryRestore,
   restoreMemoryBackup,
   validateMemoryBackup,
 } from '../memory-engine/memory-backup.mjs';
@@ -14,12 +15,18 @@ function parseArgs(argv) {
   let dbPath = defaultCodexMemoryDbPath();
   let backupRoot = null;
   let apply = false;
+  let recover = false;
 
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
 
     if (arg === '--apply') {
       apply = true;
+      continue;
+    }
+
+    if (arg === '--recover') {
+      recover = true;
       continue;
     }
 
@@ -44,7 +51,14 @@ function parseArgs(argv) {
     backupDir = resolve(arg);
   }
 
-  if (backupDir === null) {
+  if (recover) {
+    if (apply) {
+      throw new Error('--recover cannot be combined with --apply');
+    }
+    if (backupDir !== null) {
+      throw new Error('--recover does not accept a backup directory');
+    }
+  } else if (backupDir === null) {
     throw new Error('backup directory is required');
   }
 
@@ -52,6 +66,7 @@ function parseArgs(argv) {
     backupDir,
     dbPath,
     apply,
+    recover,
     ...(backupRoot === null ? {} : { backupRoot }),
   };
 }
@@ -61,8 +76,22 @@ export async function runMemoryRestoreCli({
   log = console.log,
   validateBackup = validateMemoryBackup,
   restoreBackup = restoreMemoryBackup,
+  recoverRestore = recoverMemoryRestore,
 } = {}) {
   const options = parseArgs(argv);
+
+  if (options.recover) {
+    const result = await recoverRestore({
+      dbPath: options.dbPath,
+    });
+    const output = {
+      type: 'agent_hub_memory_restore',
+      mode: 'recover',
+      result,
+    };
+    log(JSON.stringify(output));
+    return output;
+  }
 
   if (!options.apply) {
     const validation = await validateBackup({
