@@ -241,6 +241,10 @@ test('explicit update confirmation overrides an uncertain AI relation and atomic
   assert.equal(memory.getClaim(target.id).superseded_by_claim_id, claimId);
   assert.equal(memory.getCandidatePromotion(candidate.id).status, 'needs_confirmation');
 
+  const lifecycle = memory.exportCanonical().lifecycle_events;
+  assert.equal(lifecycle.length, 1);
+  assert.equal(lifecycle[0].evidence_id, evidence.id);
+
   const confirmation = memory.getCandidateConfirmation(candidate.id);
   assert.equal(confirmation.relation, 'update');
   assert.equal(confirmation.related_claim_id, target.id);
@@ -308,6 +312,7 @@ test('contradict confirmation keeps both claims active and opens a conflict', as
   const conflicts = memory.exportCanonical().conflicts;
   assert.equal(conflicts.length, 1);
   assert.equal(conflicts[0].state, 'open');
+  assert.equal(conflicts[0].created_by_evidence_id, evidence.id);
 
   memory.close();
 });
