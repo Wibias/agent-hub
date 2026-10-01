@@ -18,8 +18,11 @@ import {
 } from '../../memory-engine/e5-embedder.mjs';
 import {
   evaluateMemoryDoctorStatus,
+  inspectCodexIntegration,
   inspectEmbeddingCache,
+  inspectEmbeddingWorker,
   inspectMemoryDatabase,
+  inspectNativeCodexMemoryIsolation,
   runMemoryDoctor,
 } from '../../memory-engine/memory-doctor.mjs';
 import {
@@ -160,6 +163,143 @@ test('embedding cache doctor is metadata-only and does not manufacture a missing
   assert.equal(present.status, 'ok');
   assert.equal(present.exists, true);
   assert.equal(present.nonEmpty, true);
+});
+
+
+test('embedding worker doctor validates health plus a real query-vector canary contract', async () => {
+  let received = null;
+  const result = await inspectEmbeddingWorker({
+    socketPath: 'fixture-pipe',
+    createClient(options) {
+      received = options;
+      return {
+        async health() {
+          return { ready: true };
+        },
+        async embedQuery(text) {
+          assert.equal(text, 'memory doctor health probe');
+          return new Float32Array(E5_DIMENSIONS);
+        },
+      };
+    },
+  });
+
+  assert.equal(result.status, 'ok');
+  assert.equal(result.ready, true);
+  assert.equal(result.queryCanary, true);
+  assert.equal(received.modelId, E5_MODEL_ID);
+  assert.equal(received.modelRevision, E5_MODEL_REVISION);
+  assert.equal(received.dimensions, E5_DIMENSIONS);
+
+  const degraded = await inspectEmbeddingWorker({
+    socketPath: 'fixture-pipe',
+    createClient() {
+      return {
+        async health() {
+          throw new Error('worker unavailable');
+        },
+      };
+    },
+  });
+
+  assert.equal(degraded.status, 'degraded');
+  assert.equal(degraded.ready, false);
+  assert.equal(degraded.queryCanary, false);
+  assert.match(degraded.error, /worker unavailable/);
+});
+
+test('Codex integration doctor separates critical recall-hook failure from optional SessionStart degradation', async () => {
+  const healthyHook = {
+    configured: true,
+    userPromptSubmit: true,
+    sessionStartLauncher: true,
+    flags: {
+      ignoreMemoryEnv: true,
+      explicitMemoryRequests: true,
+      hybridRecall: true,
+    },
+  };
+
+  const healthy = await inspectCodexIntegration({
+    codexHome: 'fixture',
+    auditState: async () => ({
+      agentHubHook: healthyHook,
+      hookReadError: null,
+    }),
+  });
+  assert.equal(healthy.status, 'ok');
+
+  const noLauncher = await inspectCodexIntegration({
+    codexHome: 'fixture',
+    auditState: async () => ({
+      agentHubHook: {
+        ...healthyHook,
+        sessionStartLauncher: false,
+      },
+      hookReadError: null,
+    }),
+  });
+  assert.equal(noLauncher.status, 'degraded');
+  assert.equal(noLauncher.reason, 'session_start_launcher_missing');
+
+  const missingHybrid = await inspectCodexIntegration({
+    codexHome: 'fixture',
+    auditState: async () => ({
+      agentHubHook: {
+        ...healthyHook,
+        flags: {
+          ...healthyHook.flags,
+          hybridRecall: false,
+        },
+      },
+      hookReadError: null,
+    }),
+  });
+  assert.equal(missingHybrid.status, 'broken');
+  assert.equal(missingHybrid.reason, 'agent_hub_hook_incomplete');
+});
+
+test('native Codex isolation doctor requires every managed control to be explicitly false', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'agent-hub-memory-doctor-isolation-'));
+
+  await writeFile(
+    join(root, 'config.toml'),
+    [
+      '[features]',
+      'memories = false',
+      '',
+      '[memories]',
+      'use_memories = false',
+      'generate_memories = false',
+      '',
+    ].join('\n'),
+  );
+
+  const isolated = await inspectNativeCodexMemoryIsolation({
+    codexHome: root,
+    agentHubHookConfigured: true,
+  });
+  assert.equal(isolated.status, 'isolated');
+  assert.deepEqual(isolated.reasons, []);
+
+  await writeFile(
+    join(root, 'config.toml'),
+    [
+      '[features]',
+      'memories = false',
+      '',
+      '[memories]',
+      'generate_memories = false',
+      '',
+    ].join('\n'),
+  );
+
+  const drifted = await inspectNativeCodexMemoryIsolation({
+    codexHome: root,
+    agentHubHookConfigured: true,
+  });
+  assert.equal(drifted.status, 'broken');
+  assert.deepEqual(drifted.reasons, ['memories.use_memories_not_false']);
 });
 
 test('overall doctor status uses broken over degraded over healthy', () => {
