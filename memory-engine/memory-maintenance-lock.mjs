@@ -3,13 +3,11 @@ import {
   open,
   rm,
 } from 'node:fs/promises';
-import { resolve } from 'node:path';
-
 export function memoryRestoreLockPath(dbPath) {
   if (typeof dbPath !== 'string' || dbPath.trim().length === 0) {
     throw new TypeError('dbPath must be a non-empty string');
   }
-  return resolve(dbPath) + '.restore.lock';
+  return dbPath + '.restore.lock';
 }
 
 export function memoryRestoreLocked({
