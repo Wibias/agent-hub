@@ -3,12 +3,14 @@ import { createReadStream, existsSync } from 'node:fs';
 import {
   mkdir,
   readFile,
+  readdir,
   rename,
   rm,
   stat,
   writeFile,
 } from 'node:fs/promises';
 import {
+  basename,
   dirname,
   join,
   resolve,
@@ -22,6 +24,13 @@ import { inspectMemoryDatabase } from './memory-doctor.mjs';
 import {
   acquireMemoryRestoreLock,
 } from './memory-maintenance-lock.mjs';
+import {
+  clearMemoryRestoreJournal,
+  inspectMemoryRestoreTransaction,
+  memoryRestoreJournalPath,
+  memoryRestoreLockPath,
+  writeMemoryRestoreJournal,
+} from './memory-restore-journal.mjs';
 
 export const BACKUP_FORMAT_VERSION = 1;
 
@@ -405,11 +414,272 @@ async function rollbackStagedFiles({
   renameFile,
   removeFile,
 }) {
-  await removeDatabaseFamily(targetPath).catch(() => {});
+  const mappedOriginals = new Set(staged.map((item) => item.originalPath));
+
+  for (const suffix of SIDECAR_SUFFIXES) {
+    const originalPath = targetPath + suffix;
+    if (!mappedOriginals.has(originalPath)) {
+      await removeFile(originalPath, { force: true }).catch(() => {});
+    }
+  }
+
   for (const item of [...staged].reverse()) {
     if (!existsSync(item.stagedPath)) continue;
+    await removeFile(item.originalPath, { force: true }).catch(() => {});
     await renameFile(item.stagedPath, item.originalPath);
   }
+}
+
+async function removeRestoreMetadata({
+  dbPath,
+  removeFile = rm,
+}) {
+  await clearMemoryRestoreJournal({
+    dbPath,
+    removeFile,
+  }).catch(() => {});
+  await removeFile(memoryRestoreLockPath(dbPath), { force: true }).catch(() => {});
+}
+
+async function legacyRestoreArtifacts(dbPath) {
+  const directory = dirname(resolve(dbPath));
+  const targetName = basename(resolve(dbPath));
+  let entries = [];
+  try {
+    entries = await readdir(directory);
+  } catch {
+    return [];
+  }
+
+  return entries
+    .filter((name) => (
+      name.startsWith(targetName + '.pre-restore-')
+      || name.startsWith('.' + DATABASE_FILE + '.restore-candidate-')
+    ))
+    .map((name) => join(directory, name));
+}
+
+function installedMatchesExpected({
+  dbPath,
+  expectedCounts,
+}) {
+  try {
+    const inspection = inspectMemoryDatabase({ dbPath });
+    requireValidDatabaseInspection(inspection, 'restored database');
+    const counts = readCounts(dbPath);
+    return {
+      valid: countsEqual(counts, expectedCounts),
+      inspection,
+      counts,
+    };
+  } catch (error) {
+    return {
+      valid: false,
+      inspection: null,
+      counts: null,
+      error: message(error),
+    };
+  }
+}
+
+export async function recoverMemoryRestore({
+  dbPath,
+  dependencies = {},
+} = {}) {
+  if (typeof dbPath !== 'string' || dbPath.trim().length === 0) {
+    throw new TypeError('dbPath must be a non-empty string');
+  }
+
+  const targetPath = resolve(dbPath);
+  const inspectTransaction = dependencies.inspectRestoreTransaction
+    || inspectMemoryRestoreTransaction;
+  const renameFile = dependencies.renameFile || rename;
+  const removeFile = dependencies.removeFile || rm;
+
+  const transaction = await inspectTransaction({
+    dbPath: targetPath,
+    ...(dependencies.processAlive === undefined
+      ? {}
+      : { processAlive: dependencies.processAlive }),
+  });
+
+  if (transaction.status === 'none') {
+    return {
+      type: 'agent_hub_memory_restore_recovery',
+      status: 'not_needed',
+      action: 'none',
+      dbPath: targetPath,
+    };
+  }
+
+  if (transaction.status === 'active') {
+    throw new Error('restore recovery refused because the restore owner process is still active');
+  }
+
+  if (transaction.status === 'invalid') {
+    throw new Error(
+      'restore recovery refused because restore metadata is invalid: '
+      + (transaction.reason || 'unknown'),
+    );
+  }
+
+  const journal = transaction.journal;
+
+  if (journal === null) {
+    const artifacts = await legacyRestoreArtifacts(targetPath);
+    if (artifacts.length > 0) {
+      throw new Error(
+        'stale restore lock has unjournaled restore artifacts; manual inspection is required',
+      );
+    }
+
+    const inspection = inspectMemoryDatabase({ dbPath: targetPath });
+    requireValidDatabaseInspection(inspection, 'current target database');
+
+    await removeRestoreMetadata({
+      dbPath: targetPath,
+      removeFile,
+    });
+
+    return {
+      type: 'agent_hub_memory_restore_recovery',
+      status: 'recovered',
+      action: 'stale_lock_cleared',
+      dbPath: targetPath,
+    };
+  }
+
+  const preSwapPhases = new Set([
+    'preparing',
+    'candidate_ready',
+    'snapshot_ready',
+  ]);
+  const rollbackPhases = new Set([
+    'staging',
+    'installing',
+  ]);
+  const finishPhases = new Set([
+    'installed',
+    'verified',
+  ]);
+
+  if (preSwapPhases.has(journal.phase)) {
+    await removeDatabaseFamily(journal.candidatePath).catch(() => {});
+    await removeRestoreMetadata({
+      dbPath: targetPath,
+      removeFile,
+    });
+
+    return {
+      type: 'agent_hub_memory_restore_recovery',
+      status: 'recovered',
+      action: 'rolled_back_no_swap',
+      dbPath: targetPath,
+      operationId: journal.operationId,
+      preRestoreBackupDir: journal.preRestoreBackupDir ?? null,
+    };
+  }
+
+  if (rollbackPhases.has(journal.phase)) {
+    await rollbackStagedFiles({
+      staged: journal.staged,
+      targetPath,
+      renameFile,
+      removeFile,
+    });
+    await removeDatabaseFamily(journal.candidatePath).catch(() => {});
+
+    if (existsSync(targetPath)) {
+      const inspection = inspectMemoryDatabase({ dbPath: targetPath });
+      requireValidDatabaseInspection(inspection, 'rolled-back target database');
+    }
+
+    await removeRestoreMetadata({
+      dbPath: targetPath,
+      removeFile,
+    });
+
+    return {
+      type: 'agent_hub_memory_restore_recovery',
+      status: 'recovered',
+      action: 'rolled_back',
+      dbPath: targetPath,
+      operationId: journal.operationId,
+      preRestoreBackupDir: journal.preRestoreBackupDir ?? null,
+    };
+  }
+
+  if (finishPhases.has(journal.phase)) {
+    const installed = installedMatchesExpected({
+      dbPath: targetPath,
+      expectedCounts: journal.expectedCounts,
+    });
+
+    if (!installed.valid) {
+      await rollbackStagedFiles({
+        staged: journal.staged,
+        targetPath,
+        renameFile,
+        removeFile,
+      });
+      await removeDatabaseFamily(journal.candidatePath).catch(() => {});
+
+      if (existsSync(targetPath)) {
+        const inspection = inspectMemoryDatabase({ dbPath: targetPath });
+        requireValidDatabaseInspection(inspection, 'rolled-back target database');
+      }
+
+      await removeRestoreMetadata({
+        dbPath: targetPath,
+        removeFile,
+      });
+
+      return {
+        type: 'agent_hub_memory_restore_recovery',
+        status: 'recovered',
+        action: 'rolled_back',
+        dbPath: targetPath,
+        operationId: journal.operationId,
+        preRestoreBackupDir: journal.preRestoreBackupDir ?? null,
+      };
+    }
+
+    enableWal(targetPath);
+    const afterWal = installedMatchesExpected({
+      dbPath: targetPath,
+      expectedCounts: journal.expectedCounts,
+    });
+    if (!afterWal.valid) {
+      throw new Error('installed restore became invalid while re-enabling WAL');
+    }
+
+    for (const item of journal.staged) {
+      await removeFile(item.stagedPath, { force: true });
+    }
+    await removeDatabaseFamily(journal.candidatePath).catch(() => {});
+    await removeRestoreMetadata({
+      dbPath: targetPath,
+      removeFile,
+    });
+
+    return {
+      type: 'agent_hub_memory_restore_recovery',
+      status: 'recovered',
+      action: 'finished_install',
+      dbPath: targetPath,
+      operationId: journal.operationId,
+      preRestoreBackupDir: journal.preRestoreBackupDir ?? null,
+      postRestoreValidation: {
+        status: 'valid',
+        quickCheck: afterWal.inspection.quickCheck,
+        foreignKeyViolations: afterWal.inspection.foreignKeyViolations,
+        journalMode: afterWal.inspection.journalMode,
+        counts: afterWal.counts,
+      },
+    };
+  }
+
+  throw new Error('unsupported restore recovery phase: ' + journal.phase);
 }
 
 export async function restoreMemoryBackup({
@@ -443,24 +713,56 @@ export async function restoreMemoryBackup({
   const removeFile = dependencies.removeFile || rm;
   const acquireLock = dependencies.acquireRestoreLock
     || acquireMemoryRestoreLock;
+  const writeRestoreJournal = dependencies.writeRestoreJournal
+    || writeMemoryRestoreJournal;
+  const clearRestoreJournal = dependencies.clearRestoreJournal
+    || clearMemoryRestoreJournal;
 
-  await createRestoreCandidate({
-    validatedBackup,
+  const createdAt = isoNow(now);
+  let journal = {
+    operationId: token,
+    phase: 'preparing',
+    createdAt,
+    updatedAt: createdAt,
+    backupDir: validatedBackup.backupDir,
     candidatePath,
-    onlineBackup,
-  });
+    preRestoreBackupDir: null,
+    staged: [],
+    expectedCounts: validatedBackup.manifest.counts,
+  };
+
+  const persistPhase = async (phase, patch = {}) => {
+    journal = {
+      ...journal,
+      ...patch,
+      phase,
+      updatedAt: isoNow(now),
+    };
+    await writeRestoreJournal({
+      dbPath: targetPath,
+      journal,
+    });
+  };
 
   let lock = null;
   let liveDb = null;
   let preRestoreBackup = null;
-  const staged = [];
-  let installed = false;
+  let restoreSucceeded = false;
+  let rollbackSucceeded = false;
 
   try {
     lock = await acquireLock({
       dbPath: targetPath,
       now,
     });
+    await persistPhase('preparing');
+
+    await createRestoreCandidate({
+      validatedBackup,
+      candidatePath,
+      onlineBackup,
+    });
+    await persistPhase('candidate_ready');
 
     if (existsSync(targetPath)) {
       liveDb = openDatabase(targetPath);
@@ -475,6 +777,10 @@ export async function restoreMemoryBackup({
           onlineBackup,
         });
 
+        await persistPhase('snapshot_ready', {
+          preRestoreBackupDir: preRestoreBackup.backupDir,
+        });
+
         // The maintenance lock prevents new Agent Hub hooks from entering.
         // This exclusive transaction is a quiescence barrier for any writer
         // that was already in flight before the lock was created.
@@ -484,18 +790,26 @@ export async function restoreMemoryBackup({
         liveDb.close();
         liveDb = null;
       }
+    } else {
+      await persistPhase('snapshot_ready');
     }
 
     const currentPaths = await existingDatabaseFamily(targetPath);
-    for (const originalPath of currentPaths) {
-      const stagedPath = originalPath
-        + '.pre-restore-' + token + '.tmp';
-      await renameFile(originalPath, stagedPath);
-      staged.push({ originalPath, stagedPath });
+    const staged = currentPaths.map((originalPath) => ({
+      originalPath,
+      stagedPath: originalPath + '.pre-restore-' + token + '.tmp',
+    }));
+
+    await persistPhase('staging', { staged });
+
+    for (const item of staged) {
+      await renameFile(item.originalPath, item.stagedPath);
     }
 
+    await persistPhase('installing');
     await renameFile(candidatePath, targetPath);
-    installed = true;
+    await persistPhase('installed');
+
     enableWal(targetPath);
 
     const installedInspection = await inspectStandaloneDatabase(targetPath);
@@ -509,6 +823,8 @@ export async function restoreMemoryBackup({
       );
     }
 
+    await persistPhase('verified');
+
     for (const item of staged) {
       await removeFile(item.stagedPath, { force: true });
     }
@@ -520,6 +836,12 @@ export async function restoreMemoryBackup({
       journalMode: installedInspection.journalMode,
       counts: installedCounts,
     };
+
+    restoreSucceeded = true;
+    await clearRestoreJournal({
+      dbPath: targetPath,
+      removeFile,
+    });
 
     return {
       type: 'agent_hub_memory_restore',
@@ -544,25 +866,39 @@ export async function restoreMemoryBackup({
       }
     }
 
-    if (staged.length > 0 || installed) {
+    if (journal.staged.length > 0) {
       try {
         await rollbackStagedFiles({
-          staged,
+          staged: journal.staged,
           targetPath,
           renameFile,
           removeFile,
         });
+        rollbackSucceeded = true;
       } catch (rollbackError) {
         throw new AggregateError(
           [error, rollbackError],
           'restore failed and rollback also failed',
         );
       }
+    } else {
+      rollbackSucceeded = true;
+    }
+
+    await removeDatabaseFamily(candidatePath).catch(() => {});
+
+    if (rollbackSucceeded) {
+      await clearRestoreJournal({
+        dbPath: targetPath,
+        removeFile,
+      }).catch(() => {});
     }
 
     throw error;
   } finally {
-    await removeDatabaseFamily(candidatePath).catch(() => {});
+    if (restoreSucceeded) {
+      await removeDatabaseFamily(candidatePath).catch(() => {});
+    }
     if (lock !== null) {
       await lock.release().catch(() => {});
     }
