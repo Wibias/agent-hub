@@ -760,6 +760,47 @@ For `update` and `contradict`, Claim creation plus lifecycle/conflict mutation p
 
 Promotion decisions are recorded in the operational `memory_candidate_promotions` audit table. Like the candidate and relation ledgers, this table is not canonical memory and is excluded from portable canonical export.
 
+### Explicit candidate confirmation
+
+Candidates in `needs_confirmation` are visible through:
+
+```text
+memory candidates
+```
+
+The listing includes both `pending` and `needs_confirmation` candidates with stable opaque `~...` refs.
+
+Confirmation is not a generic yes/no action. The user must state the lifecycle meaning explicitly:
+
+```text
+memory candidate confirm: ~0123456789 => unrelated
+memory candidate confirm: ~0123456789 => same @abcdef0123
+memory candidate confirm: ~0123456789 => update @abcdef0123
+memory candidate confirm: ~0123456789 => contradict @abcdef0123
+```
+
+Semantics:
+
+```text
+unrelated   -> create one active durable Claim
+same        -> create no Claim; close the candidate as redundant
+update      -> create one active durable Claim and supersede the selected active memory
+contradict  -> create one active durable Claim and open a conflict with the selected active memory
+```
+
+The command accepts only a stable candidate `~...` ref. Every relation except `unrelated` also requires one stable active-memory `@...` ref. Unknown, ambiguous, inactive, cross-project, or cross-branch targets fail closed.
+
+The confirmation command itself is captured as separate direct-user Evidence and recorded in the operational `memory_candidate_confirmations` audit table. For a created durable Claim, the Claim value and provenance remain the candidate's exact original direct-user source text. An AI-generated `canonical_fact` is not promoted through the explicit confirmation path.
+
+Before mutation, the engine rechecks:
+
+- candidate status is exactly `needs_confirmation`;
+- candidate source Evidence is direct-user, same-project, same-branch, non-secret, and still exactly matches the candidate value;
+- confirmation Evidence is direct-user, same-project, same-branch, non-secret, and marked as a candidate-confirm command;
+- any selected target is still an active durable direct-user memory in the same project and branch.
+
+Confirmation finalization is exactly-once. Claim creation, lifecycle/conflict mutation, candidate status, and confirmation audit are one immediate SQLite transaction. Lifecycle and conflict provenance point to the explicit confirmation Evidence, while the durable Claim itself remains attached to the original candidate Evidence.
+
 ### Explicit durable-memory prompts
 
 Production Codex can opt into durable direct-user memory with the hook CLI flag:
