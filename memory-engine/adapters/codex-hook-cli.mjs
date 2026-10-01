@@ -452,6 +452,7 @@ export async function runCodexMemoryHook({
         : null,
     });
 
+    if (restoreLockExists(config.dbPath)) return null;
     return await adapter.handle(event);
   } catch {
     return null;
