@@ -161,6 +161,7 @@ test('apply mode executes only newly eligible stages in strict order', async () 
       resolveRuntime: runtime,
       createMemory: createMemoryFactory(state),
       async runImportance(args) {
+        assert.deepEqual(args.dependencies.resolveRuntime(), runtime());
         calls.push(['importance', args.argv]);
         state.importance = 0;
         state.relation = 2;
@@ -170,6 +171,7 @@ test('apply mode executes only newly eligible stages in strict order', async () 
         };
       },
       async runRelation(args) {
+        assert.deepEqual(args.dependencies.resolveRuntime(), runtime());
         calls.push(['relation', args.argv]);
         state.relation = 0;
         state.promotion = 2;
@@ -179,6 +181,7 @@ test('apply mode executes only newly eligible stages in strict order', async () 
         };
       },
       async runPromotion(args) {
+        assert.deepEqual(args.dependencies.resolveRuntime(), runtime());
         calls.push(['promotion', args.argv]);
         state.promotion = 0;
         return {
