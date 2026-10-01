@@ -134,6 +134,7 @@ export function parseCodexHookCliOptions(argv = []) {
     ignoreMemoryEnv: argv.includes('--ignore-memory-env'),
     explicitMemoryRequests: argv.includes('--explicit-memory-requests'),
     hybridRecall: argv.includes('--hybrid-recall'),
+    candidateCapture: argv.includes('--candidate-capture'),
   };
 }
 
@@ -444,6 +445,7 @@ export async function runCodexMemoryHook({
       projectId: scope.projectId,
       capturePrompts: config.capturePrompts,
       explicitMemoryRequests: configOptions.explicitMemoryRequests === true,
+      candidateCapture: configOptions.candidateCapture === true,
       diagnoseRecall: (
         diagnosticsRetriever !== null
         && typeof diagnosticsRetriever.diagnoseRecall === 'function'
