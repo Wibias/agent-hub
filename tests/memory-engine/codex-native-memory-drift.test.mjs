@@ -12,6 +12,7 @@ import {
   readCodexNativeMemoryDrift,
 } from '../../skills/github-delivery/scripts/lib/codex-native-memory-drift.mjs';
 import {
+  runBootstrapDoctor,
   runBootstrapSetup,
 } from '../../skills/github-delivery/scripts/lib/bootstrap-maintenance.mjs';
 
@@ -270,4 +271,86 @@ test('bootstrap setup remains ready when native Codex memory is isolated', async
 
   assert.equal(result.status, 'ready');
   assert.equal(result.nativeCodexMemory.status, 'isolated');
+});
+
+
+test('bootstrap doctor surfaces the same native-memory drift result read-only', async () => {
+  const target = resolve('C:/fixture/github-delivery');
+  const codexHome = resolve('C:/fixture/.codex');
+
+  const drift = {
+    applicable: true,
+    ok: false,
+    status: 'drift_detected',
+    agentHubHookConfigured: true,
+    settings: {
+      featureEnabled: false,
+      useMemories: true,
+      generateMemories: false,
+    },
+    reasons: ['memories.use_memories_not_false'],
+  };
+
+  const report = await runBootstrapDoctor({
+    target,
+    codexHome,
+    dependencies: {
+      checkBootstrapEnvironment() {
+        return { node: true };
+      },
+      discoverInstallations() {
+        return [{
+          valid: true,
+          target,
+          version: '1.7.1',
+        }];
+      },
+      readInstalledManifest() {
+        return { kind: 'fixture' };
+      },
+      compareInstalledManifest() {
+        return {
+          clean: true,
+          modifications: [],
+        };
+      },
+      readUserConfig() {
+        return {
+          source: 'fixture',
+          config: {
+            schemaVersion: 1,
+            authorityMode: 'off',
+          },
+        };
+      },
+      readInstalledAuthorityHost() {
+        return {
+          supported: false,
+          installed: false,
+          legacy: false,
+          version: null,
+          sourceCommit: null,
+        };
+      },
+      readActivationReceipt() {
+        return {
+          mode: 'hooks',
+          hookTrustVerified: true,
+        };
+      },
+      latestRelease: async () => ({
+        tag_name: 'v1.7.1',
+      }),
+      runtimeVersion() {
+        return '1.7.1';
+      },
+      async readCodexNativeMemoryDrift() {
+        return drift;
+      },
+    },
+  });
+
+  assert.deepEqual(report.nativeCodexMemory, drift);
+  assert.equal(report.integrity.clean, true);
+  assert.equal(report.latest.relation, 'already_current');
 });
