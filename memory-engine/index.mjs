@@ -1,6 +1,7 @@
 import { DatabaseSync } from 'node:sqlite';
 
 import { assertAuthorityClass } from './authority.mjs';
+import { validateMemoryCandidateJudgment } from './memory-candidate-judge.mjs';
 import {
   decodeFloat32Vector,
   encodeFloat32Vector,
@@ -2351,6 +2352,25 @@ export class MemoryEngine {
     );
   }
 
+  listUnevaluatedCandidates({
+    projectId,
+    branch,
+    limit = 10,
+  }) {
+    assertNonEmptyString(projectId, 'projectId');
+    assertNonEmptyString(branch, 'branch');
+    if (!Number.isInteger(limit) || limit < 1 || limit > 20) {
+      throw new RangeError('limit must be an integer between 1 and 20');
+    }
+
+    return this.#db.prepare(
+      'SELECT * FROM memory_candidates '
+      + "WHERE project_id = ? AND branch = ? AND status = 'pending' "
+      + 'AND evaluated_at IS NULL '
+      + 'ORDER BY created_at ASC, id ASC LIMIT ?',
+    ).all(projectId, branch, limit).map(normalizeCandidate);
+  }
+
   listCandidates({
     projectId,
     branch,
@@ -2463,6 +2483,69 @@ export class MemoryEngine {
     }
 
     return this.getCandidate(id);
+  }
+
+  evaluateCandidate({
+    candidateId,
+    evaluatorId,
+    evaluation,
+    evaluatedAt = this.#clock(),
+  }) {
+    assertNonEmptyString(candidateId, 'candidateId');
+    assertNonEmptyString(evaluatorId, 'evaluatorId');
+    assertNonEmptyString(evaluatedAt, 'evaluatedAt');
+
+    const candidate = this.getCandidate(candidateId);
+    if (!candidate) throw new Error('unknown memory candidate: ' + candidateId);
+    if (candidate.status !== 'pending') {
+      throw new Error('memory candidate is not pending');
+    }
+    if (candidate.evaluated_at !== null) {
+      throw new Error('memory candidate is already evaluated');
+    }
+
+    const evidence = this.getEvidence(candidate.source_evidence_id);
+    if (!evidence) throw new Error('candidate source evidence is missing');
+    if (
+      candidate.source_authority !== 'user_direct'
+      || evidence.authority_class !== 'user_direct'
+    ) {
+      throw new Error('candidate evaluation requires user_direct authority');
+    }
+    if (evidence.sensitivity === 'secret_redacted') {
+      throw new Error('secret-redacted evidence cannot be evaluated for promotion');
+    }
+    if (
+      evidence.project_id !== candidate.project_id
+      || evidence.branch !== candidate.branch
+      || evidence.content_redacted !== candidate.proposed_value
+    ) {
+      throw new Error('candidate source evidence invariant failed');
+    }
+
+    const normalized = validateMemoryCandidateJudgment(evaluation);
+    const nextStatus = normalized.decision === 'ignore'
+      ? 'ignored'
+      : normalized.decision === 'needs_confirmation'
+        ? 'needs_confirmation'
+        : 'pending';
+
+    const result = this.#db.prepare(
+      'UPDATE memory_candidates '
+      + 'SET status = ?, evaluated_at = ?, evaluator_id = ?, evaluation_json = ? '
+      + "WHERE id = ? AND status = 'pending' AND evaluated_at IS NULL",
+    ).run(
+      nextStatus,
+      evaluatedAt,
+      evaluatorId,
+      JSON.stringify(normalized),
+      candidateId,
+    );
+
+    if (Number(result.changes) !== 1) {
+      throw new Error('memory candidate evaluation raced or was already applied');
+    }
+    return this.getCandidate(candidateId);
   }
 
   recordEvidence(evidence) {
