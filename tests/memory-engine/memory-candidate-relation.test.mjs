@@ -20,6 +20,9 @@ import {
   parseMemoryCandidateRelationArgs,
   runMemoryCandidateRelationCli,
 } from '../../scripts/judge-memory-relations.mjs';
+import {
+  createCodexMemoryHookAdapter,
+} from '../../memory-engine/adapters/codex-hooks.mjs';
 
 function createProject(memory, projectId = 'project') {
   memory.registerProject({
@@ -418,6 +421,65 @@ test('only importance=promote pending candidates are eligible for relation evalu
   });
 
   assert.deepEqual(eligible.map((item) => item.id), [promoted.id]);
+  memory.close();
+});
+
+test('memory candidates exposes stored relation without changing durable memory', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'agent-hub-relation-list-'));
+  const memory = new MemoryEngine({ dbPath: join(root, 'memory.sqlite3') });
+  createProject(memory);
+  const existing = seedDurable(memory);
+  const candidate = seedPromoteCandidate(memory);
+
+  memory.evaluateCandidateRelation({
+    candidateId: candidate.id,
+    evaluatorId: 'codex:test:relation-v1',
+    policyVersion: CANDIDATE_RELATION_POLICY_VERSION,
+    relation: {
+      relation: 'same',
+      target_ref: memoryRelationClaimRef(existing.id),
+      confidence: 'high',
+      meaning_preserved: true,
+      reason: 'Equivalent durable fact.',
+    },
+    relatedClaimId: existing.id,
+    evaluatedAt: '2026-10-01T02:00:00.000Z',
+  });
+
+  const adapter = createCodexMemoryHookAdapter({
+    protocol: {
+      async handle() {
+        throw new Error('management command must not hit protocol');
+      },
+    },
+    memory,
+    projectId: 'project',
+    explicitMemoryRequests: true,
+    git: {
+      async resolveContext() {
+        return {
+          repoPath: '/repo',
+          branch: 'main',
+          revisionSha: 'a'.repeat(40),
+        };
+      },
+      async refreshFreshness() {},
+    },
+  });
+
+  const output = await adapter.handle({
+    hook_event_name: 'UserPromptSubmit',
+    session_id: 's1',
+    turn_id: 'list',
+    cwd: '/repo',
+    prompt: 'memory candidates',
+  });
+
+  assert.equal(output.decision, 'block');
+  assert.match(output.reason, /relation=same/);
+  assert.match(output.reason, new RegExp('target=' + memoryRelationClaimRef(existing.id)));
+  assert.equal(memory.exportCanonical().claims.length, 1);
+
   memory.close();
 });
 
