@@ -197,6 +197,11 @@ test('isolated Codex environment points at fresh CODEX_HOME and strips Agent Hub
   assert.equal('AGENT_HUB_MEMORY_CAPTURE_PROMPTS' in env, false);
 });
 
+test('real behavioral runner module imports without executing provider-backed work', async () => {
+  const runner = await import('../../scripts/eval-codex-memory-behavior.mjs');
+  assert.ok(runner && typeof runner === 'object');
+});
+
 test('behavioral runner evaluates every case and emits one aggregate pass/fail summary', async () => {
   const seen = [];
 
