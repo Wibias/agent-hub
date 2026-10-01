@@ -39,6 +39,150 @@ function rankOf(ids, targetId) {
   return index < 0 ? null : index + 1;
 }
 
+function gateThresholdCandidates(values) {
+  const thresholds = new Set([0]);
+  for (const value of values) {
+    if (Number.isFinite(value)) thresholds.add(value);
+  }
+  return [...thresholds].sort((left, right) => left - right);
+}
+
+function evaluateJointGate(cases, {
+  e5Threshold,
+  qnliThreshold,
+  marginThreshold = null,
+}) {
+  let truePositiveQueries = 0;
+  let falsePositiveQueries = 0;
+  let falseNegativeQueries = 0;
+  let trueNegativeQueries = 0;
+
+  for (const entry of cases) {
+    const accepted = (
+      entry.e5Similarity >= e5Threshold
+      && entry.qnliScore >= qnliThreshold
+      && (
+        marginThreshold === null
+        || entry.e5Margin >= marginThreshold
+      )
+    );
+
+    if (entry.relevant) {
+      if (accepted) truePositiveQueries += 1;
+      else falseNegativeQueries += 1;
+    } else if (accepted) {
+      falsePositiveQueries += 1;
+    } else {
+      trueNegativeQueries += 1;
+    }
+  }
+
+  const precisionDenominator = (
+    truePositiveQueries + falsePositiveQueries
+  );
+  const precision = precisionDenominator === 0
+    ? 0
+    : truePositiveQueries / precisionDenominator;
+  const positiveQueries = truePositiveQueries + falseNegativeQueries;
+  const negativeQueries = falsePositiveQueries + trueNegativeQueries;
+  const recall = positiveQueries === 0
+    ? 0
+    : truePositiveQueries / positiveQueries;
+  const f1 = precision + recall === 0
+    ? 0
+    : (2 * precision * recall) / (precision + recall);
+
+  return {
+    e5Threshold,
+    qnliThreshold,
+    marginThreshold,
+    truePositiveQueries,
+    falsePositiveQueries,
+    falseNegativeQueries,
+    trueNegativeQueries,
+    precision,
+    recall,
+    f1,
+    negativeSuppressionRate: negativeQueries === 0
+      ? 0
+      : trueNegativeQueries / negativeQueries,
+  };
+}
+
+function bestJointGatePoint(cases, {
+  useMargin,
+  maxFalseNegatives,
+}) {
+  const e5Thresholds = gateThresholdCandidates(
+    cases.map((entry) => entry.e5Similarity),
+  );
+  const qnliThresholds = gateThresholdCandidates(
+    cases.map((entry) => entry.qnliScore),
+  );
+  const marginThresholds = useMargin
+    ? gateThresholdCandidates(cases.map((entry) => entry.e5Margin))
+    : [null];
+
+  let best = null;
+  for (const e5Threshold of e5Thresholds) {
+    for (const qnliThreshold of qnliThresholds) {
+      for (const marginThreshold of marginThresholds) {
+        const candidate = evaluateJointGate(cases, {
+          e5Threshold,
+          qnliThreshold,
+          marginThreshold,
+        });
+        if (candidate.falseNegativeQueries > maxFalseNegatives) continue;
+
+        if (
+          best === null
+          || candidate.precision > best.precision
+          || (
+            candidate.precision === best.precision
+            && candidate.recall > best.recall
+          )
+          || (
+            candidate.precision === best.precision
+            && candidate.recall === best.recall
+            && candidate.f1 > best.f1
+          )
+          || (
+            candidate.precision === best.precision
+            && candidate.recall === best.recall
+            && candidate.f1 === best.f1
+            && candidate.negativeSuppressionRate
+              > best.negativeSuppressionRate
+          )
+        ) {
+          best = candidate;
+        }
+      }
+    }
+  }
+  return best;
+}
+
+function summarizeJointGateCeiling(cases, { useMargin }) {
+  return {
+    signalSet: useMargin
+      ? 'e5_similarity+qnli+e5_top1_margin'
+      : 'e5_similarity+qnli',
+    optimisticInSampleCeiling: true,
+    bestWithZeroFalseNegatives: bestJointGatePoint(cases, {
+      useMargin,
+      maxFalseNegatives: 0,
+    }),
+    bestWithAtMostOneFalseNegative: bestJointGatePoint(cases, {
+      useMargin,
+      maxFalseNegatives: 1,
+    }),
+    bestWithAtMostTwoFalseNegatives: bestJointGatePoint(cases, {
+      useMargin,
+      maxFalseNegatives: 2,
+    }),
+  };
+}
+
 function ingestClaim(engine, {
   evidenceId,
   claimId,
@@ -455,6 +599,7 @@ test(
         cacheDir: qnliCacheDir,
       });
       const qnliCases = [];
+      const qnliJointGateCases = [];
 
       for (const entry of qualityCases.filter(
         (candidate) => candidate.language === 'en',
@@ -500,6 +645,17 @@ test(
             similarity: score,
           }],
         });
+
+        const e5Top2 = entry.semanticCandidates[1] ?? null;
+        qnliJointGateCases.push({
+          id: entry.id,
+          relevant: targetId !== null,
+          e5Similarity: e5Top1.similarity,
+          e5Margin: e5Top2
+            ? e5Top1.similarity - e5Top2.similarity
+            : e5Top1.similarity,
+          qnliScore: score,
+        });
       }
 
       const qnliSummary = summarizeRecallQuality(qnliCases, {
@@ -534,6 +690,20 @@ test(
         candidate_source: 'e5_top_1',
         summary: qnliSummary,
         qnli_threshold_sweep_at_1: qnliThresholdSweep,
+      }));
+
+      console.log(JSON.stringify({
+        type: 'qnli_joint_gate_ceiling_summary',
+        language: 'en',
+        cases: qnliJointGateCases.length,
+        positives: qnliJointGateCases.filter((entry) => entry.relevant).length,
+        negatives: qnliJointGateCases.filter((entry) => !entry.relevant).length,
+        two_signal: summarizeJointGateCeiling(qnliJointGateCases, {
+          useMargin: false,
+        }),
+        three_signal: summarizeJointGateCeiling(qnliJointGateCases, {
+          useMargin: true,
+        }),
       }));
 
       assert.deepEqual(qnliSummary.counts, {
