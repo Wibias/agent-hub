@@ -330,13 +330,13 @@ export async function validateMemoryBackup({
   if (!info?.isFile()) {
     throw new Error('backup database is missing');
   }
-  if (info.size !== manifest.database.bytes) {
-    throw new Error('backup database byte size does not match manifest');
-  }
 
   const actualHash = await sha256File(databasePath);
   if (actualHash !== manifest.database.sha256) {
     throw new Error('backup database SHA-256 checksum mismatch');
+  }
+  if (info.size !== manifest.database.bytes) {
+    throw new Error('backup database byte size does not match manifest');
   }
 
   const inspection = await inspectStandaloneDatabase(databasePath);
@@ -464,7 +464,6 @@ export async function restoreMemoryBackup({
 
     if (existsSync(targetPath)) {
       liveDb = openDatabase(targetPath);
-      liveDb.exec('BEGIN EXCLUSIVE;');
 
       try {
         preRestoreBackup = await createBackupFromOpenDatabase({
@@ -475,12 +474,13 @@ export async function restoreMemoryBackup({
           nonce: () => token,
           onlineBackup,
         });
+
+        // The maintenance lock prevents new Agent Hub hooks from entering.
+        // This exclusive transaction is a quiescence barrier for any writer
+        // that was already in flight before the lock was created.
+        liveDb.exec('BEGIN EXCLUSIVE;');
+        liveDb.exec('ROLLBACK;');
       } finally {
-        try {
-          liveDb.exec('ROLLBACK;');
-        } catch {
-          // Closing the connection still releases the lock.
-        }
         liveDb.close();
         liveDb = null;
       }
