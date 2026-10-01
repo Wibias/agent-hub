@@ -13,6 +13,9 @@ import {
   classifyCodexStateEntry,
   inspectAgentHubHookConfiguration,
 } from '../../memory-engine/codex-state-audit.mjs';
+import {
+  runCodexStateAudit,
+} from '../../scripts/audit-codex-state.mjs';
 
 test('Codex state classifier distinguishes direct memory from adjacent persistent state', () => {
   const cases = [
@@ -223,4 +226,48 @@ test('Codex state audit reports missing Agent Hub hook distinctly', async () => 
   assert.equal(report.summary.directMemorySurfaces, 1);
   assert.equal(report.summary.agentHubHookConfigured, false);
   assert.equal(report.summary.status, 'agent_hub_hook_missing_with_legacy_memory');
+});
+
+
+test('audit CLI emits one machine-readable report without raw hook commands', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'agent-hub-codex-state-cli-'));
+  await writeFile(join(root, 'memories_1.sqlite'), 'fixture');
+  await writeFile(
+    join(root, 'hooks.json'),
+    JSON.stringify({
+      UserPromptSubmit: [
+        {
+          hooks: [
+            {
+              type: 'command',
+              command: 'node /secret/repo/memory-engine/adapters/codex-hook-cli.mjs --ignore-memory-env --explicit-memory-requests --hybrid-recall',
+            },
+          ],
+        },
+      ],
+    }),
+  );
+
+  const lines = [];
+  const output = await runCodexStateAudit({
+    argv: ['--codex-home', root],
+    log(value) {
+      lines.push(value);
+    },
+  });
+
+  assert.equal(lines.length, 1);
+  const parsed = JSON.parse(lines[0]);
+  assert.equal(parsed.type, 'codex_state_audit');
+  assert.equal(parsed.summary.status, 'legacy_memory_present');
+  assert.equal(parsed.agent_hub_hook.configured, true);
+  assert.deepEqual(parsed.direct_memory, [
+    {
+      name: 'memories_1.sqlite',
+      type: 'file',
+      classification: 'direct_memory',
+    },
+  ]);
+  assert.equal(lines[0].includes('/secret/repo'), false);
+  assert.deepEqual(parsed, output);
 });
