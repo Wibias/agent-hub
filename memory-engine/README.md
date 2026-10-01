@@ -978,6 +978,54 @@ When drift is detected, bootstrap setup no longer reports `ready`. It returns `n
 
 The guard is read-only. It does not start a background process, change `config.toml`, delete native memory state, or add model-backed CI work. If Agent Hub recall is not installed, the check reports `not_applicable`.
 
+### Agent Hub memory doctor
+
+Use the operational doctor when you want one read-only answer for the complete memory path:
+
+```powershell
+node .\scripts\doctor-memory.mjs
+```
+
+The command emits one machine-readable JSON object and exits with:
+
+- `0`: `healthy`
+- `1`: `degraded`
+- `2`: `broken`
+
+The doctor checks:
+
+- current Git project/branch/revision resolution;
+- the canonical memory SQLite file using `DatabaseSync(..., { readOnly: true })`;
+- `PRAGMA quick_check`, foreign keys, required schema, and WAL mode;
+- project registration plus lexical FTS coverage;
+- current pinned E5 embedding coverage and vector shape;
+- E5 cache presence without allowing remote downloads;
+- the already-running embedding worker with a health probe and a real query-vector canary;
+- the Agent Hub Codex hook, required recall flags, and SessionStart launcher;
+- native Codex memory isolation.
+
+Status semantics are deliberately asymmetric:
+
+- canonical DB corruption/missing schema, broken Git scope, missing critical Agent Hub hook controls, or unsafe native-memory isolation -> `broken`;
+- missing E5 cache, unavailable worker, missing SessionStart launcher, or incomplete derived lexical/semantic state -> `degraded`;
+- healthy required state with all resilience checks passing -> `healthy`.
+
+The doctor is strictly diagnostic. It does **not**:
+
+- checkpoint SQLite;
+- create or migrate schema;
+- rebuild FTS or semantic indexes;
+- launch the embedding worker;
+- download an E5 model;
+- modify Codex config/hooks;
+- write, replace, or forget any durable memory.
+
+Optional path overrides are available for controlled diagnostics:
+
+```powershell
+node .\scripts\doctor-memory.mjs --cwd C:\repo --db-path C:\state\memory.sqlite3 --cache-dir C:\repo\.cache\memory-engine\e5 --codex-home C:\path\.codex
+```
+
 ## Hybrid retrieval core
 
 `HybridMemoryRetriever` is an asynchronous relevance layer above `MemoryEngine`. It accepts an injected embedder with the contract:
