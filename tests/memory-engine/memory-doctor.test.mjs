@@ -197,7 +197,7 @@ test('memory doctor composes database, context, embedding, hook and native-isola
     cwd: 'C:/repo',
     dbPath: 'C:/state/memory.sqlite3',
     cacheDir: 'C:/repo/.cache/memory-engine/e5',
-    codexHome: 'C:/Users/ws/.codex',
+    codexHome: 'C:/fixture/.codex',
     dependencies: {
       resolveScope() {
         calls.push('scope');
