@@ -161,6 +161,7 @@ export function inspectAgentHubHookConfiguration(hooks) {
         recallText,
       ),
       hybridRecall: /(?:^|\s)--hybrid-recall(?:\s|$)/.test(recallText),
+      candidateCapture: /(?:^|\s)--candidate-capture(?:\s|$)/.test(recallText),
     },
   };
 }

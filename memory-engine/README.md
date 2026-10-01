@@ -425,8 +425,8 @@ For production hybrid recall, register two independent command hooks:
         "hooks": [
           {
             "type": "command",
-            "command": "node /absolute/path/to/agent-hub/memory-engine/adapters/codex-hook-cli.mjs --ignore-memory-env --explicit-memory-requests --hybrid-recall",
-            "commandWindows": "node C:\\absolute\\path\\to\\agent-hub\\memory-engine\\adapters\\codex-hook-cli.mjs --ignore-memory-env --explicit-memory-requests --hybrid-recall",
+            "command": "node /absolute/path/to/agent-hub/memory-engine/adapters/codex-hook-cli.mjs --ignore-memory-env --explicit-memory-requests --hybrid-recall --candidate-capture",
+            "commandWindows": "node C:\\absolute\\path\\to\\agent-hub\\memory-engine\\adapters\\codex-hook-cli.mjs --ignore-memory-env --explicit-memory-requests --hybrid-recall --candidate-capture",
             "timeout": 10,
             "statusMessage": "Recalling project memory",
             "additionalContextLimit": 2500
@@ -461,6 +461,89 @@ Codex requires changed non-managed hooks to be reviewed again because hook trust
 
 The main memory adapter handles only `UserPromptSubmit`. It deliberately does not capture `PostToolUse`, summarize on `SessionEnd`, or parse `transcript_path`. Codex documents the transcript path as a convenience rather than a stable hook interface.
 
+### Deterministic memory-candidate capture
+
+Production Codex can opt into conservative candidate capture with:
+
+```text
+--candidate-capture
+```
+
+This is **not automatic durable memory**. It is the first stage of the automatic-memory pipeline.
+
+For an ordinary direct-user prompt, the adapter first applies a deterministic `capture-v1` policy. The policy currently recognizes only strong signals in these categories:
+
+```text
+decision
+preference
+constraint
+correction
+rejected_approach
+known_issue
+```
+
+Examples that can become pending candidates:
+
+```text
+We decided to use Postgres for concurrent writers.
+Wir müssen bei GitHub Free bleiben.
+I prefer dark editorial UI over generic SaaS cards.
+Bei Rollenwechsel keinen Reconnect verwenden.
+Korrektur: Die Produktionsdatenbank ist Postgres, nicht SQLite.
+Known issue: Host camera crop is still incorrect.
+```
+
+The deterministic filter rejects at least:
+
+- short/transient task controls such as `go`, `Fahre fort`, `Run tests`;
+- tentative language such as `maybe`, `perhaps`, `vielleicht`, `sollten wir`;
+- questions;
+- assistant-directed task requests such as `I want you to run the tests`, `Ich will, dass du ...`, `Kannst du ...`;
+- explicit memory-management commands;
+- prompts containing material matched by the memory secret detector.
+
+When a prompt qualifies:
+
+1. the exact prompt is stored as redacted `user_direct` Evidence;
+2. a separate `memory_candidates` row is created with status `pending`;
+3. project, branch, and authority are derived from the Evidence, not supplied by the candidate classifier;
+4. the proposed value must exactly equal the redacted Evidence text;
+5. a stable project+branch fingerprint suppresses duplicate candidate Evidence;
+6. **no Claim is asserted**.
+
+Pending candidates therefore never enter lexical recall, semantic recall, answer-reliance selection, lifecycle conflict resolution, or `memory list`.
+
+The ledger intentionally separates operational capture state from canonical memory:
+
+```text
+User prompt
+   -> redacted Evidence
+   -> pending Candidate
+   -> future judge/promotion layer
+   -> canonical Claim
+```
+
+The v1 ledger reserves later evaluation fields but does not implement an AI judge, relation classifier, promotion, supersession, or confirmation workflow.
+
+Pending candidates for the current Git project and branch can be inspected read-only with:
+
+```text
+memory candidates
+```
+
+Example:
+
+```text
+Pending memory candidates for the current project and branch:
+- ~8d21f0a74c [constraint] We must stay on GitHub Free.
+```
+
+Candidate refs use `~` to remain distinct from durable Claim refs, which use `@`.
+
+Candidate capture is deliberately independent from `AGENT_HUB_MEMORY_CAPTURE_PROMPTS=true`. The legacy environment flag still means full direct-prompt Evidence capture. `--candidate-capture` instead stores only prompts accepted by the deterministic policy.
+
+The memory doctor treats a missing candidate ledger or a managed Codex hook without `--candidate-capture` as **degraded**, not broken. Canonical memory and recall remain usable, but automatic candidate capture is not ready.
+
 ### Explicit durable-memory prompts
 
 Production Codex can opt into durable direct-user memory with the hook CLI flag:
@@ -483,10 +566,13 @@ memory: The production database is Postgres.
 memory: Keep Survival camera quality at 720p HIGH.
 ```
 
-Ordinary prompts are not persisted, even if they contain natural-language wording such
-as "please remember". The adapter does not use semantic intent classification for this
-boundary. Leading whitespace and marker case are ignored, but `memory:` without a
-non-whitespace statement is not a durable-memory request.
+Without `--candidate-capture` or full prompt capture, ordinary prompts are not
+persisted, even if they contain natural-language wording such as "please remember".
+With `--candidate-capture`, qualifying ordinary prompts may become **pending
+candidates only**; they still do not become durable Claims. The explicit-memory boundary
+does not use semantic intent classification. Leading whitespace and marker case are
+ignored, but `memory:` without a non-whitespace statement is not a durable-memory
+request.
 
 For an explicit `memory:` prompt, the `UserPromptSubmit` adapter:
 
@@ -785,7 +871,7 @@ The worker opens the pinned provider with remote loading disabled, performs a re
 Then add `--hybrid-recall` to the Codex hook command. A production command that also uses the explicit memory controls can therefore be:
 
 ```text
-node .../memory-engine/adapters/codex-hook-cli.mjs --ignore-memory-env --explicit-memory-requests --hybrid-recall
+node .../memory-engine/adapters/codex-hook-cli.mjs --ignore-memory-env --explicit-memory-requests --hybrid-recall --candidate-capture
 ```
 
 If the worker is not running, Codex continues with lexical recall. There is no implicit model startup or download from the prompt hook.

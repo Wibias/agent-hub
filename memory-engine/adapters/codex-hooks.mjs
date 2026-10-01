@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 
 import { evaluateReliance } from '../index.mjs';
+import { classifyMemoryCandidatePrompt } from '../memory-capture-policy.mjs';
 import {
   refreshRepositoryFreshness,
   resolveGitContext,
@@ -30,6 +31,16 @@ export function memoryClaimRef(claimId) {
     .update(claimId, 'utf8')
     .digest('hex');
   return `@${digest.slice(0, 10)}`;
+}
+
+export function memoryCandidateRef(candidateId) {
+  if (!nonEmptyString(candidateId)) {
+    throw new TypeError('candidateId must be a non-empty string');
+  }
+  const digest = createHash('sha256')
+    .update(candidateId, 'utf8')
+    .digest('hex');
+  return `~${digest.slice(0, 10)}`;
 }
 
 function normalizeMemoryRef(value) {
@@ -94,6 +105,10 @@ export function parseExplicitMemoryPrompt(prompt) {
 
   if (/^\s*memory\s+list\s*$/i.test(prompt)) {
     return { mode: 'list' };
+  }
+
+  if (/^\s*memory\s+candidates\s*$/i.test(prompt)) {
+    return { mode: 'candidates' };
   }
 
   const explainPrefix = prompt.match(/^\s*memory\s+explain:\s*/i);
@@ -217,6 +232,45 @@ function formatActiveDirectUserMemories(memory, {
     )}`;
     const candidate = [...lines, line].join('\n');
     if (byteLength(candidate) > maxBytes) break;
+    lines.push(line);
+  }
+
+  return lines.join('\n');
+}
+
+function formatPendingMemoryCandidates(memory, {
+  projectId,
+  branch,
+  maxBytes,
+}) {
+  if (typeof memory?.listCandidates !== 'function') {
+    return 'Memory candidate ledger is unavailable.';
+  }
+
+  const candidates = memory.listCandidates({
+    projectId,
+    branch,
+    status: 'pending',
+    limit: 50,
+  });
+
+  if (candidates.length === 0) {
+    return 'No pending memory candidates for the current project and branch.';
+  }
+
+  const lines = [
+    'Pending memory candidates for the current project and branch:',
+  ];
+
+  for (const candidate of candidates) {
+    const line = [
+      `- ${memoryCandidateRef(candidate.id)}`,
+      `[${compactText(candidate.proposed_type, 80)}]`,
+      compactText(candidate.proposed_value, 500),
+    ].join(' ');
+
+    const next = [...lines, line].join('\n');
+    if (byteLength(next) > maxBytes) break;
     lines.push(line);
   }
 
@@ -364,6 +418,7 @@ export function createCodexMemoryHookAdapter({
   projectId,
   capturePrompts = false,
   explicitMemoryRequests = false,
+  candidateCapture = false,
   diagnoseRecall = null,
   clock = () => new Date().toISOString(),
   git = null,
@@ -383,6 +438,9 @@ export function createCodexMemoryHookAdapter({
   }
   if (typeof explicitMemoryRequests !== 'boolean') {
     throw new TypeError('explicitMemoryRequests must be a boolean');
+  }
+  if (typeof candidateCapture !== 'boolean') {
+    throw new TypeError('candidateCapture must be a boolean');
   }
   if (diagnoseRecall !== null && typeof diagnoseRecall !== 'function') {
     throw new TypeError('diagnoseRecall must be a function or null');
@@ -438,6 +496,17 @@ export function createCodexMemoryHookAdapter({
           };
         }
 
+        if (explicitMemory?.mode === 'candidates') {
+          return {
+            decision: 'block',
+            reason: formatPendingMemoryCandidates(memory, {
+              projectId,
+              branch: context.branch,
+              maxBytes: maxContextBytes,
+            }),
+          };
+        }
+
         if (explicitMemory?.mode === 'explain') {
           if (diagnoseRecall === null) {
             return {
@@ -475,7 +544,31 @@ export function createCodexMemoryHookAdapter({
               applied: false,
               targetMissing: false,
             };
-        const shouldCapture = capturePrompts || explicitMemory !== null;
+
+        const candidateProposal = (
+          candidateCapture && explicitMemory === null
+            ? classifyMemoryCandidatePrompt(event.prompt)
+            : null
+        );
+        const duplicateCandidate = (
+          candidateProposal !== null
+          && typeof memory.findCandidateByFingerprint === 'function'
+            ? memory.findCandidateByFingerprint({
+                projectId,
+                branch: context.branch,
+                fingerprint: candidateProposal.fingerprint,
+              })
+            : null
+        );
+        const shouldCaptureCandidate = (
+          candidateProposal !== null
+          && duplicateCandidate === null
+        );
+        const shouldCapture = (
+          capturePrompts
+          || explicitMemory !== null
+          || shouldCaptureCandidate
+        );
 
         if (shouldCapture) {
           try {
@@ -503,6 +596,12 @@ export function createCodexMemoryHookAdapter({
                 ) {
                   metadata.explicit_memory_mode = explicitMemory.mode;
                 }
+              }
+              if (shouldCaptureCandidate) {
+                metadata.candidate_capture = true;
+                metadata.candidate_type = candidateProposal.type;
+                metadata.candidate_policy = candidateProposal.policyVersion;
+                metadata.candidate_rule = candidateProposal.decisionReason;
               }
 
               const captured = await protocol.handle({
@@ -534,6 +633,23 @@ export function createCodexMemoryHookAdapter({
               ) {
                 capturedEvidence = memory.getEvidence(evidenceId);
               }
+            }
+
+            if (
+              shouldCaptureCandidate
+              && capturedEvidence
+              && typeof memory.recordCandidate === 'function'
+            ) {
+              memory.recordCandidate({
+                id: `candidate:${requestPrefix}:prompt`,
+                evidenceId: capturedEvidence.id,
+                type: candidateProposal.type,
+                proposedValue: capturedEvidence.content_redacted,
+                decisionReason: candidateProposal.decisionReason,
+                policyVersion: candidateProposal.policyVersion,
+                fingerprint: candidateProposal.fingerprint,
+                createdAt: capturedEvidence.captured_at ?? capturedAt,
+              });
             }
 
             if (
