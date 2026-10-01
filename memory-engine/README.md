@@ -951,6 +951,33 @@ The operation is idempotent. Once all three managed settings are `false`, later 
 
 Restart Codex after an applied change before validating effective behavior. The retained native-memory files are historical state only; the isolation change intentionally does not erase them.
 
+### Native Codex memory drift guard
+
+The existing GitHub Delivery maintenance path now checks the isolation read-only whenever the Agent Hub Codex recall hook is active.
+
+The guard requires all three managed settings to be explicitly `false`. A `true`, missing, duplicate, dotted alias, or invalid managed value is treated as drift rather than silently accepting Codex defaults.
+
+Run the normal doctor command to inspect the state:
+
+```powershell
+node .\skills\github-delivery\scripts\github-delivery-cli.mjs doctor --json
+```
+
+The machine report includes `nativeCodexMemory`. Human-readable doctor output also shows a dedicated `Native Codex memory` section.
+
+Expected healthy state:
+
+```text
+status: isolated
+features.memories = false
+memories.use_memories = false
+memories.generate_memories = false
+```
+
+When drift is detected, bootstrap setup no longer reports `ready`. It returns `native_memory_drift` with guidance to run the existing isolation command, review the dry-run, apply it explicitly, and restart Codex.
+
+The guard is read-only. It does not start a background process, change `config.toml`, delete native memory state, or add model-backed CI work. If Agent Hub recall is not installed, the check reports `not_applicable`.
+
 ## Hybrid retrieval core
 
 `HybridMemoryRetriever` is an asynchronous relevance layer above `MemoryEngine`. It accepts an injected embedder with the contract:
