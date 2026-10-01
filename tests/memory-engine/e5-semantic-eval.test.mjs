@@ -15,8 +15,12 @@ import {
   summarizeRecallQuality,
   sweepSemanticThresholds,
 } from '../../memory-engine/recall-quality-eval.mjs';
+import {
+  createQaAnswerabilityGate,
+} from '../../memory-engine/qa-answerability.mjs';
 
 const cacheDir = process.env.MEMORY_E5_MODEL_CACHE;
+const qaAnswerabilityCacheDir = process.env.MEMORY_QA_ANSWERABILITY_MODEL_CACHE;
 
 function compareCodePoints(left, right) {
   if (left < right) return -1;
@@ -328,6 +332,7 @@ test(
 
       qualityCases.push({
         id: entry.id,
+        query: entry.query,
         relevantClaimIds: entry.targetClaimId ? [entry.targetClaimId] : [],
         rankings: {
           lexical: lexicalIds,
@@ -437,6 +442,111 @@ test(
       summary,
       semantic_threshold_sweep_at_5: thresholdSweep,
     }));
+
+    if (qaAnswerabilityCacheDir) {
+      const qaGate = await createQaAnswerabilityGate({
+        cacheDir: qaAnswerabilityCacheDir,
+      });
+      const qaCases = [];
+
+      for (const entry of qualityCases) {
+        const retrieved = entry.semanticCandidates.slice(0, 10);
+        const passages = retrieved.map((candidate) => {
+          const document = engine.embeddingDocument({
+            claimId: candidate.claimId,
+          });
+          assert.ok(
+            document?.text,
+            `missing QA passage for ${candidate.claimId}`,
+          );
+          return document.text;
+        });
+
+        const scores = await qaGate.score(entry.query, passages);
+        const reranked = retrieved
+          .map((candidate, index) => ({
+            claimId: candidate.claimId,
+            answerabilityMargin: scores[index].answerabilityMargin,
+            bestSpanScore: scores[index].bestSpanScore,
+            nullScore: scores[index].nullScore,
+            e5Similarity: candidate.similarity,
+          }))
+          .sort((left, right) => (
+            (right.answerabilityMargin - left.answerabilityMargin)
+            || compareCodePoints(left.claimId, right.claimId)
+          ));
+
+        const rerankedIds = reranked.map((candidate) => candidate.claimId);
+        const targetId = entry.relevantClaimIds[0] ?? null;
+        const target = targetId === null
+          ? null
+          : reranked.find((candidate) => candidate.claimId === targetId);
+        const top1 = reranked[0] ?? null;
+
+        console.log(JSON.stringify({
+          type: targetId === null
+            ? 'qa_negative_case'
+            : 'qa_positive_case',
+          id: entry.id,
+          query: entry.query,
+          target_claim_id: targetId,
+          qa_target_rank: targetId === null
+            ? null
+            : rankOf(rerankedIds, targetId),
+          qa_target_margin: target?.answerabilityMargin ?? null,
+          qa_top1_claim_id: top1?.claimId ?? null,
+          qa_top1_margin: top1?.answerabilityMargin ?? null,
+          qa_top1_best_span_score: top1?.bestSpanScore ?? null,
+          qa_top1_null_score: top1?.nullScore ?? null,
+        }));
+
+        qaCases.push({
+          id: entry.id,
+          relevantClaimIds: entry.relevantClaimIds,
+          rankings: {
+            lexical: entry.rankings.lexical,
+            semantic: rerankedIds,
+            fused: rerankedIds,
+          },
+          semanticCandidates: reranked.map((candidate) => ({
+            claimId: candidate.claimId,
+            similarity: candidate.answerabilityMargin,
+          })),
+        });
+      }
+
+      const qaSummary = summarizeRecallQuality(qaCases, {
+        kValues: [1, 5, 10],
+      });
+      const qaThresholdSweep = sweepSemanticThresholds(qaCases, {
+        thresholds: [
+          -20,
+          -15,
+          -10,
+          -7.5,
+          -5,
+          -2.5,
+          0,
+          2.5,
+          5,
+          7.5,
+          10,
+          15,
+          20,
+        ],
+        k: 10,
+      });
+
+      console.log(JSON.stringify({
+        type: 'qa_answerability_quality_summary',
+        model_id: qaGate.modelId,
+        model_revision: qaGate.modelRevision,
+        candidate_source: 'e5_top_10',
+        score: 'best_context_span_minus_cls_null',
+        summary: qaSummary,
+        qa_threshold_sweep_at_10: qaThresholdSweep,
+      }));
+    }
 
     assert.deepEqual(summary.counts, {
       queries: 28,
