@@ -1002,12 +1002,13 @@ The doctor checks:
 - E5 cache presence without allowing remote downloads;
 - the already-running embedding worker with a health probe and a real query-vector canary;
 - the Agent Hub Codex hook, required recall flags, and SessionStart launcher;
-- native Codex memory isolation.
+- native Codex memory isolation;
+- active, stale, or malformed restore-maintenance state.
 
 Status semantics are deliberately asymmetric:
 
-- canonical DB corruption/missing schema, broken Git scope, missing critical Agent Hub hook controls, or unsafe native-memory isolation -> `broken`;
-- missing E5 cache, unavailable worker, missing SessionStart launcher, or incomplete derived lexical/semantic state -> `degraded`;
+- canonical DB corruption/missing schema, broken Git scope, missing critical Agent Hub hook controls, unsafe native-memory isolation, or a stale/malformed restore transaction -> `broken`;
+- missing E5 cache, unavailable worker, missing SessionStart launcher, incomplete derived lexical/semantic state, or an active restore transaction -> `degraded`;
 - healthy required state with all resilience checks passing -> `healthy`.
 
 The doctor is strictly diagnostic. It does **not**:
@@ -1076,6 +1077,56 @@ Before apply, the restore validates the manifest, SHA-256, byte size, SQLite `qu
 A restore lock is acquired with exclusive file creation. If another restore is active, apply fails closed instead of running concurrently. The lock is removed in the normal success and failure paths.
 
 For the smallest operational risk, close interactive Codex sessions before a production `--apply`. The maintenance lock prevents new Agent Hub hook entries during the restore, but it is not intended as a general process manager for unrelated software that may access the SQLite file directly.
+
+#### Interrupted restore recovery
+
+Every applied restore also maintains a durable journal beside the target database:
+
+```text
+memory.sqlite3.restore.lock
+memory.sqlite3.restore-journal.json
+```
+
+The journal records the operation id, current phase, restore candidate, pre-restore backup, deterministic staged-file mappings, and expected row counts.
+
+Restore phases are:
+
+```text
+preparing
+candidate_ready
+snapshot_ready
+staging
+installing
+installed
+verified
+```
+
+A normal success or successfully rolled-back ordinary exception removes the journal and lock. A hard process exit can leave them behind intentionally so the next operator can diagnose what happened.
+
+The memory doctor is read-only and reports this state through `restoreRecovery`:
+
+- no interrupted transaction -> `ok`;
+- currently active restore owner -> `degraded` with `restore_in_progress`;
+- stale transaction -> `broken` with `stale_restore_transaction`;
+- malformed recovery metadata -> `broken` and fail-closed.
+
+Recovery is always explicit:
+
+```powershell
+node .\scripts\restore-memory.mjs --recover
+```
+
+Recovery refuses to run while the recorded restore owner process is still alive.
+
+For a stale transaction it chooses the conservative action from the durable phase:
+
+- `preparing`, `candidate_ready`, `snapshot_ready`: remove the unused candidate and clear stale metadata because the target was not staged yet;
+- `staging`, `installing`: restore any staged original files and remove candidate/new artifacts;
+- `installed`, `verified`: validate the installed database against the journaled expected restore state; finish cleanup only when it is valid, otherwise restore the staged previous target;
+- stale lock with no journal: clear it only when the current target is healthy and no unjournaled restore artifacts exist;
+- ambiguous or malformed state: refuse automatic recovery.
+
+The doctor never invokes recovery itself.
 
 Custom target and pre-restore-backup locations are supported:
 
