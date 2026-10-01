@@ -67,6 +67,16 @@ const TENTATIVE = [
   /\bwir überlegen\b/iu,
 ];
 
+const ASSISTANT_DIRECTIVE = [
+  /^\s*please\b/iu,
+  /\bi\s+want\s+you\s+to\b/iu,
+  /\bi(?:'d| would)\s+like\s+you\s+to\b/iu,
+  /\bich\s+will\s*,?\s*dass\s+du\b/iu,
+  /\bich\s+möchte\s*,?\s*dass\s+du\b/iu,
+  /\bkannst\s+du\b/iu,
+  /\bkönntest\s+du\b/iu,
+];
+
 const RULES = [
   {
     type: 'correction',
@@ -150,6 +160,7 @@ export function classifyMemoryCandidatePrompt(prompt) {
   if (TRANSIENT_EXACT.has(normalized.toLowerCase())) return null;
   if (/[?？]\s*$/u.test(normalized)) return null;
   if (TENTATIVE.some((pattern) => pattern.test(normalized))) return null;
+  if (ASSISTANT_DIRECTIVE.some((pattern) => pattern.test(normalized))) return null;
 
   for (const rule of RULES) {
     if (!rule.patterns.some((pattern) => pattern.test(normalized))) continue;
