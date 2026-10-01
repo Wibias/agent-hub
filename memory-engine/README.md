@@ -523,7 +523,7 @@ User prompt
    -> canonical Claim
 ```
 
-The v1 ledger reserves later evaluation fields but does not implement an AI judge, relation classifier, promotion, supersession, or confirmation workflow.
+The v1 ledger separates capture from evaluation. The AI importance judge described below may populate the reserved evaluation fields, but relation classification, canonical promotion, supersession, and confirmation handling remain separate later stages.
 
 Pending candidates for the current Git project and branch can be inspected read-only with:
 
@@ -543,6 +543,105 @@ Candidate refs use `~` to remain distinct from durable Claim refs, which use `@`
 Candidate capture is deliberately independent from `AGENT_HUB_MEMORY_CAPTURE_PROMPTS=true`. The legacy environment flag still means full direct-prompt Evidence capture. `--candidate-capture` instead stores only prompts accepted by the deterministic policy.
 
 The memory doctor treats a missing candidate ledger or a managed Codex hook without `--candidate-capture` as **degraded**, not broken. Canonical memory and recall remain usable, but automatic candidate capture is not ready.
+
+### AI candidate importance judge
+
+Pending candidates can be evaluated with the isolated Codex importance judge:
+
+```powershell
+node .\scripts\judge-memory-candidates.mjs
+```
+
+The command is dry-run by default. Persisting evaluation metadata requires an explicit:
+
+```powershell
+node .\scripts\judge-memory-candidates.mjs --apply
+```
+
+Useful bounded options:
+
+```text
+--limit 1..20
+--model <codex-model>
+--reasoning-effort low|medium|high
+--cwd <repository>
+--db-path <memory.sqlite3>
+```
+
+The judge uses policy `importance-v1` and returns exactly one structured recommendation per candidate:
+
+```json
+{
+  "decision": "promote",
+  "suggested_type": "decision",
+  "durability": "long",
+  "future_utility": "high",
+  "specificity": "high",
+  "confidence": "high",
+  "meaning_preserved": true,
+  "canonical_fact": "The project uses Postgres for concurrent writers.",
+  "reason": "Explicit durable architecture decision likely to affect future work.",
+  "risk_flags": []
+}
+```
+
+Allowed decisions are:
+
+```text
+promote
+ignore
+keep_candidate
+needs_confirmation
+```
+
+`promote` is only a recommendation in this stage. It does **not** create a Claim and does not enter recall.
+
+A promote recommendation is rejected unless all deterministic postconditions hold:
+
+```text
+durability       = long
+future_utility   = high
+confidence       = high
+meaning_preserved = true
+canonical_fact   = non-empty
+risk_flags       = []
+```
+
+Invalid or malformed model output leaves the candidate unevaluated. The runner continues with later candidates instead of converting an evaluator failure into memory state.
+
+Persisted operational mapping is:
+
+```text
+ignore              -> status=ignored
+needs_confirmation  -> status=needs_confirmation
+promote             -> status=pending + evaluated_at/evaluation_json
+keep_candidate      -> status=pending + evaluated_at/evaluation_json
+```
+
+The evaluation write rechecks the source Evidence boundary before mutation:
+
+- candidate and Evidence must still be `user_direct`;
+- Evidence must not be secret-redacted;
+- project and branch must still match;
+- candidate value must still equal the exact redacted Evidence text;
+- a candidate can be evaluated only once.
+
+The judge itself runs through the locally authenticated `codex exec`, but not inside the user's normal Codex state. For every judge run Agent Hub creates:
+
+- a fresh temporary `CODEX_HOME` containing only copied `auth.json`;
+- an empty temporary Git repository;
+- an ephemeral Codex session;
+- no inherited hooks, config, Agent Hub memory environment, or legacy native memory.
+
+The prompt treats the candidate as untrusted quoted data, forbids tools/outside knowledge, and asks the model to prefer precision over recall. The temporary judge environment is removed after the run.
+
+An evaluated pending recommendation is visible through `memory candidates`, for example:
+
+```text
+- ~8d21f0a74c [constraint] We must stay on GitHub Free. | judge=promote durability=long utility=high confidence=high
+```
+
+Even then, `memory list` remains unchanged because no canonical Claim exists.
 
 ### Explicit durable-memory prompts
 
