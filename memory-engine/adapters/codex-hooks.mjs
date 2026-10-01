@@ -620,6 +620,12 @@ export function createCodexMemoryHookAdapter({
 
       try {
         const context = await gitRuntime.resolveContext({ cwd: event.cwd });
+        const explicitMemory = (
+          explicitMemoryRequests
+            ? parseExplicitMemoryPrompt(event.prompt)
+            : null
+        );
+
         await gitRuntime.refreshFreshness({
           memory,
           projectId,
@@ -630,11 +636,6 @@ export function createCodexMemoryHookAdapter({
 
         const requestPrefix = `codex:${event.session_id}:${event.turn_id}`;
         const evidenceId = `evidence:${requestPrefix}:prompt`;
-        const explicitMemory = (
-          explicitMemoryRequests
-            ? parseExplicitMemoryPrompt(event.prompt)
-            : null
-        );
 
         if (explicitMemory?.mode === 'list') {
           return {
