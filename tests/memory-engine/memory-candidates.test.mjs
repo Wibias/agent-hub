@@ -13,6 +13,9 @@ import {
   memoryCandidateFingerprint,
 } from '../../memory-engine/memory-capture-policy.mjs';
 import {
+  memoryCandidateConfirmationClaimId,
+} from '../../memory-engine/memory-candidate-confirmation.mjs';
+import {
   createCodexMemoryHookAdapter,
   memoryCandidateRef,
   parseExplicitMemoryPrompt,
@@ -473,7 +476,7 @@ test('memory candidates is a read-only terminal management command', async () =>
   });
 
   assert.equal(result.decision, 'block');
-  assert.match(result.reason, /Pending memory candidates/);
+  assert.match(result.reason, /Actionable memory candidates/);
   assert.match(result.reason, new RegExp(memoryCandidateRef(candidate.id)));
   assert.match(result.reason, /constraint/);
   assert.match(result.reason, /We must stay on GitHub Free/);
@@ -503,4 +506,233 @@ test('candidate capture is explicit CLI opt-in', () => {
     parseCodexHookCliOptions([]).candidateCapture,
     undefined,
   );
+});
+
+
+test('candidate confirmation command parser requires explicit relation semantics and stable refs', () => {
+  assert.deepEqual(
+    parseExplicitMemoryPrompt(
+      'memory candidate confirm: ~0123456789 => unrelated',
+    ),
+    {
+      mode: 'candidate_confirm',
+      candidateRef: '~0123456789',
+      relation: 'unrelated',
+      targetRef: null,
+    },
+  );
+
+  assert.deepEqual(
+    parseExplicitMemoryPrompt(
+      'memory candidate confirm: ~0123456789 => update @abcdef0123',
+    ),
+    {
+      mode: 'candidate_confirm',
+      candidateRef: '~0123456789',
+      relation: 'update',
+      targetRef: '@abcdef0123',
+    },
+  );
+
+  assert.equal(
+    parseExplicitMemoryPrompt(
+      'memory candidate confirm: ~0123456789 => update',
+    ),
+    null,
+  );
+  assert.equal(
+    parseExplicitMemoryPrompt(
+      'memory candidate confirm: ~0123456789 => unrelated @abcdef0123',
+    ),
+    null,
+  );
+  assert.equal(
+    parseExplicitMemoryPrompt(
+      'memory candidate confirm: candidate-1 => unrelated',
+    ),
+    null,
+  );
+});
+
+test('memory candidates surfaces needs_confirmation candidates instead of hiding them', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'agent-hub-candidate-confirm-list-'));
+  const memory = new MemoryEngine({
+    dbPath: join(root, 'memory.sqlite3'),
+  });
+  createProject(memory);
+
+  const evidence = memory.recordEvidence({
+    id: 'e-confirm-list',
+    projectId: 'project',
+    harness: 'codex',
+    sessionId: 's1',
+    sourceKind: 'session',
+    sourceRef: 'session:s1',
+    capturedAt: '2026-10-01T00:00:00.000Z',
+    branch: 'main',
+    content: 'We use Postgres for concurrent writers.',
+    authorityClass: 'user_direct',
+    metadata: { event_type: 'user_prompt', candidate_capture: true },
+  });
+  const candidate = memory.recordCandidate({
+    id: 'candidate-confirm-list',
+    evidenceId: evidence.id,
+    type: 'decision',
+    proposedValue: evidence.content_redacted,
+    decisionReason: 'rule:decision:definitive',
+    policyVersion: CAPTURE_POLICY_VERSION,
+    fingerprint: memoryCandidateFingerprint({
+      type: 'decision',
+      value: evidence.content_redacted,
+    }),
+    createdAt: '2026-10-01T00:00:00.000Z',
+  });
+  memory.evaluateCandidate({
+    candidateId: candidate.id,
+    evaluatorId: 'codex:test:importance-v1',
+    evaluatedAt: '2026-10-01T00:01:00.000Z',
+    evaluation: {
+      decision: 'needs_confirmation',
+      suggested_type: 'decision',
+      durability: 'long',
+      future_utility: 'high',
+      specificity: 'high',
+      confidence: 'medium',
+      meaning_preserved: true,
+      canonical_fact: evidence.content_redacted,
+      reason: 'Needs direct confirmation.',
+      risk_flags: ['scope_unclear'],
+    },
+  });
+
+  const adapter = createCodexMemoryHookAdapter({
+    protocol: {
+      async handle() {
+        throw new Error('read-only candidate listing must not hit protocol');
+      },
+    },
+    memory,
+    projectId: 'project',
+    explicitMemoryRequests: true,
+    git: fakeGit(),
+  });
+
+  const result = await adapter.handle({
+    hook_event_name: 'UserPromptSubmit',
+    session_id: 's1',
+    turn_id: 'list',
+    cwd: '/repo',
+    prompt: 'memory candidates',
+  });
+
+  assert.equal(result.decision, 'block');
+  assert.match(result.reason, /Actionable memory candidates/);
+  assert.match(result.reason, /status=needs_confirmation/);
+  assert.match(result.reason, new RegExp(memoryCandidateRef(candidate.id)));
+
+  memory.close();
+});
+
+test('candidate confirmation command captures direct-user authority and promotes exact candidate text', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'agent-hub-candidate-confirm-hook-'));
+  const memory = new MemoryEngine({
+    dbPath: join(root, 'memory.sqlite3'),
+  });
+  createProject(memory);
+
+  const source = memory.recordEvidence({
+    id: 'e-confirm-source',
+    projectId: 'project',
+    harness: 'codex',
+    sessionId: 's1',
+    sourceKind: 'session',
+    sourceRef: 'session:s1',
+    capturedAt: '2026-10-01T00:00:00.000Z',
+    branch: 'main',
+    content: 'We use Postgres for concurrent writers.',
+    authorityClass: 'user_direct',
+    metadata: { event_type: 'user_prompt', candidate_capture: true },
+  });
+  const candidate = memory.recordCandidate({
+    id: 'candidate-confirm-hook',
+    evidenceId: source.id,
+    type: 'decision',
+    proposedValue: source.content_redacted,
+    decisionReason: 'rule:decision:definitive',
+    policyVersion: CAPTURE_POLICY_VERSION,
+    fingerprint: memoryCandidateFingerprint({
+      type: 'decision',
+      value: source.content_redacted,
+    }),
+    createdAt: '2026-10-01T00:00:00.000Z',
+  });
+  memory.evaluateCandidate({
+    candidateId: candidate.id,
+    evaluatorId: 'codex:test:importance-v1',
+    evaluatedAt: '2026-10-01T00:01:00.000Z',
+    evaluation: {
+      decision: 'needs_confirmation',
+      suggested_type: 'decision',
+      durability: 'long',
+      future_utility: 'high',
+      specificity: 'high',
+      confidence: 'medium',
+      meaning_preserved: true,
+      canonical_fact: 'AI wording must not become the user-confirmed Claim.',
+      reason: 'Needs direct confirmation.',
+      risk_flags: ['scope_unclear'],
+    },
+  });
+
+  const protocol = createMemoryProtocol({
+    memory,
+    classifyAuthority(channel) {
+      if (
+        channel.sourceKind === 'session'
+        && channel.metadata?.event_type === 'user_prompt'
+      ) return 'user_direct';
+      return 'unclassified';
+    },
+  });
+  const adapter = createCodexMemoryHookAdapter({
+    protocol,
+    memory,
+    projectId: 'project',
+    explicitMemoryRequests: true,
+    clock: () => '2026-10-01T00:02:00.000Z',
+    git: fakeGit(),
+  });
+
+  const result = await adapter.handle({
+    hook_event_name: 'UserPromptSubmit',
+    session_id: 's1',
+    turn_id: 'confirm',
+    cwd: '/repo',
+    prompt:
+      'memory candidate confirm: '
+      + memoryCandidateRef(candidate.id)
+      + ' => unrelated',
+  });
+
+  assert.equal(result.decision, 'block');
+  assert.match(result.reason, /Memory candidate confirmed/);
+
+  const claimId = memoryCandidateConfirmationClaimId(candidate.id);
+  const claim = memory.getClaim(claimId);
+  assert.equal(claim.value, source.content_redacted);
+  assert.equal(claim.created_from_evidence_id, source.id);
+  assert.equal(memory.getCandidate(candidate.id).status, 'promoted');
+
+  const confirmation = memory.getCandidateConfirmation(candidate.id);
+  const confirmationEvidence = memory.getEvidence(
+    confirmation.confirmation_evidence_id,
+  );
+  assert.equal(confirmation.relation, 'unrelated');
+  assert.equal(
+    confirmationEvidence.metadata.explicit_memory_mode,
+    'candidate_confirm',
+  );
+  assert.equal(confirmationEvidence.authority_class, 'user_direct');
+
+  memory.close();
 });
