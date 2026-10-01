@@ -2655,6 +2655,20 @@ export class MemoryEngine {
     ).all(projectId, branch, limit).map(normalizeCandidate);
   }
 
+  listScopedCandidates({
+    projectId,
+    branch,
+  }) {
+    assertNonEmptyString(projectId, 'projectId');
+    assertNonEmptyString(branch, 'branch');
+
+    return this.#db.prepare(
+      'SELECT * FROM memory_candidates '
+      + 'WHERE project_id = ? AND branch = ? '
+      + 'ORDER BY created_at DESC, id ASC',
+    ).all(projectId, branch).map(normalizeCandidate);
+  }
+
   listCandidates({
     projectId,
     branch,
