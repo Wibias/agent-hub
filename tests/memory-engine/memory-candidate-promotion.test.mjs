@@ -18,6 +18,10 @@ import {
   CAPTURE_POLICY_VERSION,
   memoryCandidateFingerprint,
 } from '../../memory-engine/memory-capture-policy.mjs';
+import {
+  parseMemoryCandidatePromotionArgs,
+  runMemoryCandidatePromotionCli,
+} from '../../scripts/promote-memory-candidates.mjs';
 
 function createProject(memory) {
   memory.registerProject({
@@ -352,4 +356,77 @@ test('dry-run reports deterministic actions without mutating candidate or canoni
   assert.deepEqual(memory.exportCanonical(), before);
 
   memory.close();
+});
+
+
+test('promotion CLI defaults to dry-run and apply is explicit', () => {
+  assert.deepEqual(
+    parseMemoryCandidatePromotionArgs([]),
+    {
+      cwd: process.cwd(),
+      dbPath: null,
+      limit: 10,
+      apply: false,
+    },
+  );
+  assert.equal(
+    parseMemoryCandidatePromotionArgs(['--apply']).apply,
+    true,
+  );
+});
+
+test('promotion CLI composes current scope without an AI dependency', () => {
+  const lines = [];
+  let closed = false;
+
+  const output = runMemoryCandidatePromotionCli({
+    argv: ['--limit', '2'],
+    cwd: 'C:/repo',
+    log(value) {
+      lines.push(value);
+    },
+    dependencies: {
+      resolveRuntime() {
+        return {
+          cwd: 'C:/repo',
+          dbPath: 'C:/state/memory.sqlite3',
+          projectId: 'github.com/Wibias/agent-hub',
+          branch: 'main',
+        };
+      },
+      createMemory() {
+        return {
+          close() {
+            closed = true;
+          },
+        };
+      },
+      finalizeCandidates(args) {
+        assert.equal(args.apply, false);
+        assert.equal(args.limit, 2);
+        assert.equal(args.projectId, 'github.com/Wibias/agent-hub');
+        assert.equal(args.branch, 'main');
+        return {
+          type: 'agent_hub_memory_candidate_promotion',
+          mode: 'dry-run',
+          projectId: args.projectId,
+          branch: args.branch,
+          policyVersion: CANDIDATE_PROMOTION_POLICY_VERSION,
+          summary: {
+            total: 1,
+            promoted: 1,
+            superseded: 0,
+            needs_confirmation: 0,
+            failed: 0,
+            results: [],
+          },
+        };
+      },
+    },
+  });
+
+  assert.equal(output.mode, 'dry-run');
+  assert.equal(output.summary.promoted, 1);
+  assert.equal(lines.length, 1);
+  assert.equal(closed, true);
 });
