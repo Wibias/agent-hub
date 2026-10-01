@@ -410,7 +410,6 @@ async function rollbackStagedFiles({
     if (!existsSync(item.stagedPath)) continue;
     await renameFile(item.stagedPath, item.originalPath);
   }
-  await removeFile(targetPath, { force: true }).catch(() => {});
 }
 
 export async function restoreMemoryBackup({
