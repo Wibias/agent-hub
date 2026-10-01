@@ -8,7 +8,7 @@ import {
   writeFile,
 } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 import {
@@ -426,7 +426,7 @@ async function main() {
 }
 
 const entryUrl = process.argv[1]
-  ? pathToFileURL(process.argv[1]).href
+  ? pathToFileURL(resolve(process.argv[1])).href
   : null;
 
 if (entryUrl === import.meta.url) {
