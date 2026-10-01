@@ -626,6 +626,16 @@ export function createCodexMemoryHookAdapter({
             : null
         );
 
+        if (explicitMemory?.mode === 'pipeline') {
+          return {
+            decision: 'block',
+            reason: formatMemoryCandidatePipelineStatus(memory, {
+              projectId,
+              branch: context.branch,
+            }),
+          };
+        }
+
         await gitRuntime.refreshFreshness({
           memory,
           projectId,
@@ -655,16 +665,6 @@ export function createCodexMemoryHookAdapter({
               projectId,
               branch: context.branch,
               maxBytes: maxContextBytes,
-            }),
-          };
-        }
-
-        if (explicitMemory?.mode === 'pipeline') {
-          return {
-            decision: 'block',
-            reason: formatMemoryCandidatePipelineStatus(memory, {
-              projectId,
-              branch: context.branch,
             }),
           };
         }
