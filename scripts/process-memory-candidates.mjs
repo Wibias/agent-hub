@@ -160,6 +160,7 @@ async function executeStage({
   runner,
   argv,
   cwd,
+  runtime,
 }) {
   if (ready < 1) {
     return {
@@ -174,6 +175,11 @@ async function executeStage({
     argv,
     cwd,
     log() {},
+    dependencies: {
+      resolveRuntime() {
+        return runtime;
+      },
+    },
   });
 
   return {
@@ -223,6 +229,7 @@ export async function runMemoryCandidatePipelineCli({
       runner: runImportance,
       argv: stageArgv(runtime, options, { ai: true }),
       cwd: runtime.cwd,
+      runtime,
     }));
 
     const afterImportance = status();
@@ -232,6 +239,7 @@ export async function runMemoryCandidatePipelineCli({
       runner: runRelation,
       argv: stageArgv(runtime, options, { ai: true }),
       cwd: runtime.cwd,
+      runtime,
     }));
 
     const afterRelation = status();
@@ -241,6 +249,7 @@ export async function runMemoryCandidatePipelineCli({
       runner: runPromotion,
       argv: stageArgv(runtime, options),
       cwd: runtime.cwd,
+      runtime,
     }));
   }
 
