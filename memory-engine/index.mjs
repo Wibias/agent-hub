@@ -52,6 +52,14 @@ function redactString(value) {
   return { value: text, redacted };
 }
 
+export function inspectMemoryTextSensitivity(value) {
+  const result = redactString(String(value ?? ''));
+  return {
+    containsSecret: result.redacted,
+    redacted: result.value,
+  };
+}
+
 function redactValue(value) {
   if (typeof value === 'string') return redactString(value);
   if (Array.isArray(value)) {
@@ -109,6 +117,29 @@ function normalizeEvidence(row) {
     sensitivity: row.sensitivity,
     authority_class: row.authority_class,
     metadata: parseMetadata(row.metadata_json),
+  };
+}
+
+function normalizeCandidate(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    project_id: row.project_id,
+    branch: row.branch,
+    source_evidence_id: row.source_evidence_id,
+    proposed_type: row.proposed_type,
+    proposed_value: row.proposed_value,
+    source_authority: row.source_authority,
+    status: row.status,
+    decision_reason: row.decision_reason,
+    created_at: row.created_at,
+    evaluated_at: row.evaluated_at,
+    related_claim_id: row.related_claim_id,
+    relation: row.relation,
+    policy_version: row.policy_version,
+    evaluator_id: row.evaluator_id,
+    evaluation_json: row.evaluation_json,
+    fingerprint: row.fingerprint,
   };
 }
 
@@ -863,6 +894,48 @@ export class MemoryEngine {
         superseded_by_claim_id TEXT REFERENCES claims(id),
         rejected_by_evidence_id TEXT REFERENCES evidence(id)
       ) STRICT;
+
+      CREATE TABLE IF NOT EXISTS memory_candidates (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL REFERENCES project_registry(project_id),
+        branch TEXT NOT NULL,
+        source_evidence_id TEXT NOT NULL REFERENCES evidence(id),
+        proposed_type TEXT NOT NULL CHECK (
+          proposed_type IN (
+            'decision',
+            'preference',
+            'constraint',
+            'correction',
+            'rejected_approach',
+            'known_issue'
+          )
+        ),
+        proposed_value TEXT NOT NULL,
+        source_authority TEXT NOT NULL,
+        status TEXT NOT NULL CHECK (
+          status IN (
+            'pending',
+            'ignored',
+            'promoted',
+            'needs_confirmation',
+            'superseded',
+            'failed'
+          )
+        ),
+        decision_reason TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        evaluated_at TEXT,
+        related_claim_id TEXT REFERENCES claims(id),
+        relation TEXT,
+        policy_version TEXT NOT NULL,
+        evaluator_id TEXT,
+        evaluation_json TEXT,
+        fingerprint TEXT NOT NULL,
+        UNIQUE (project_id, branch, fingerprint)
+      ) STRICT;
+
+      CREATE INDEX IF NOT EXISTS memory_candidates_scope_status
+      ON memory_candidates (project_id, branch, status, created_at DESC);
 
       CREATE TABLE IF NOT EXISTS lifecycle_events (
         id INTEGER PRIMARY KEY,
@@ -2250,6 +2323,146 @@ export class MemoryEngine {
       blob_oid: blobOid,
       checked_at: checkedAt,
     };
+  }
+
+  getCandidate(id) {
+    assertNonEmptyString(id, 'id');
+    return normalizeCandidate(
+      this.#db.prepare(
+        'SELECT * FROM memory_candidates WHERE id = ?',
+      ).get(id),
+    );
+  }
+
+  findCandidateByFingerprint({
+    projectId,
+    branch,
+    fingerprint,
+  }) {
+    assertNonEmptyString(projectId, 'projectId');
+    assertNonEmptyString(branch, 'branch');
+    assertNonEmptyString(fingerprint, 'fingerprint');
+
+    return normalizeCandidate(
+      this.#db.prepare(
+        'SELECT * FROM memory_candidates '
+        + 'WHERE project_id = ? AND branch = ? AND fingerprint = ?',
+      ).get(projectId, branch, fingerprint),
+    );
+  }
+
+  listCandidates({
+    projectId,
+    branch,
+    status = 'pending',
+    limit = 50,
+  }) {
+    assertNonEmptyString(projectId, 'projectId');
+    assertNonEmptyString(branch, 'branch');
+    assertNonEmptyString(status, 'status');
+    if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
+      throw new RangeError('limit must be an integer between 1 and 100');
+    }
+
+    return this.#db.prepare(
+      'SELECT * FROM memory_candidates '
+      + 'WHERE project_id = ? AND branch = ? AND status = ? '
+      + 'ORDER BY created_at DESC, id ASC LIMIT ?',
+    ).all(projectId, branch, status, limit).map(normalizeCandidate);
+  }
+
+  recordCandidate({
+    id,
+    evidenceId,
+    type,
+    proposedValue,
+    decisionReason,
+    policyVersion,
+    fingerprint,
+    createdAt = this.#clock(),
+  }) {
+    assertNonEmptyString(id, 'id');
+    assertNonEmptyString(evidenceId, 'evidenceId');
+    assertNonEmptyString(type, 'type');
+    assertNonEmptyString(proposedValue, 'proposedValue');
+    assertNonEmptyString(decisionReason, 'decisionReason');
+    assertNonEmptyString(policyVersion, 'policyVersion');
+    assertNonEmptyString(fingerprint, 'fingerprint');
+    assertNonEmptyString(createdAt, 'createdAt');
+
+    const allowedTypes = new Set([
+      'decision',
+      'preference',
+      'constraint',
+      'correction',
+      'rejected_approach',
+      'known_issue',
+    ]);
+    if (!allowedTypes.has(type)) {
+      throw new Error('unsupported memory candidate type');
+    }
+    if (!/^[0-9a-f]{64}$/.test(fingerprint)) {
+      throw new Error('fingerprint must be a lowercase SHA-256 hex digest');
+    }
+
+    const evidence = this.getEvidence(evidenceId);
+    if (!evidence) throw new Error(`unknown evidence: ${evidenceId}`);
+    if (evidence.authority_class !== 'user_direct') {
+      throw new Error('memory candidates require user_direct evidence');
+    }
+    if (evidence.sensitivity === 'secret_redacted') {
+      throw new Error('secret-redacted evidence cannot become a memory candidate');
+    }
+    if (!evidence.branch) {
+      throw new Error('memory candidates require branch-scoped evidence');
+    }
+    if (proposedValue !== evidence.content_redacted) {
+      throw new Error('candidate value must exactly match redacted source evidence');
+    }
+
+    const existing = this.findCandidateByFingerprint({
+      projectId: evidence.project_id,
+      branch: evidence.branch,
+      fingerprint,
+    });
+    if (existing) return existing;
+
+    this.#db.exec('BEGIN IMMEDIATE');
+    try {
+      this.#db.prepare(
+        'INSERT INTO memory_candidates ('
+        + 'id, project_id, branch, source_evidence_id, proposed_type, '
+        + 'proposed_value, source_authority, status, decision_reason, '
+        + 'created_at, evaluated_at, related_claim_id, relation, policy_version, '
+        + 'evaluator_id, evaluation_json, fingerprint'
+        + ') VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, ?, NULL, NULL, ?)',
+      ).run(
+        id,
+        evidence.project_id,
+        evidence.branch,
+        evidence.id,
+        type,
+        proposedValue,
+        evidence.authority_class,
+        'pending',
+        decisionReason,
+        createdAt,
+        policyVersion,
+        fingerprint,
+      );
+      this.#db.exec('COMMIT');
+    } catch (error) {
+      this.#db.exec('ROLLBACK');
+      const raced = this.findCandidateByFingerprint({
+        projectId: evidence.project_id,
+        branch: evidence.branch,
+        fingerprint,
+      });
+      if (raced) return raced;
+      throw error;
+    }
+
+    return this.getCandidate(id);
   }
 
   recordEvidence(evidence) {
