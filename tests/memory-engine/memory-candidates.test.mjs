@@ -734,5 +734,38 @@ test('candidate confirmation command captures direct-user authority and promotes
   );
   assert.equal(confirmationEvidence.authority_class, 'user_direct');
 
+  const retry = await adapter.handle({
+    hook_event_name: 'UserPromptSubmit',
+    session_id: 's1',
+    turn_id: 'confirm',
+    cwd: '/repo',
+    prompt:
+      'memory candidate confirm: '
+      + memoryCandidateRef(candidate.id)
+      + ' => unrelated',
+  });
+  assert.equal(retry.decision, 'block');
+  assert.match(retry.reason, /Memory candidate confirmed/);
+  assert.equal(memory.exportCanonical().claims.length, 1);
+  assert.equal(memory.getCandidateConfirmation(candidate.id).claim_id, claimId);
+
+  const conflictingRetry = await adapter.handle({
+    hook_event_name: 'UserPromptSubmit',
+    session_id: 's1',
+    turn_id: 'confirm-different',
+    cwd: '/repo',
+    prompt:
+      'memory candidate confirm: '
+      + memoryCandidateRef(candidate.id)
+      + ' => same @abcdef0123',
+  });
+  assert.equal(conflictingRetry.decision, 'block');
+  assert.match(
+    conflictingRetry.reason,
+    /already confirmed with a different action/i,
+  );
+  assert.equal(memory.exportCanonical().claims.length, 1);
+  assert.equal(memory.getCandidateConfirmation(candidate.id).relation, 'unrelated');
+
   memory.close();
 });
