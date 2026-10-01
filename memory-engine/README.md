@@ -803,6 +803,29 @@ Confirmation finalization is exactly-once. Claim creation, lifecycle/conflict mu
 
 ### Candidate pipeline runner
 
+When explicit memory management commands are enabled, Codex can inspect the current pipeline without starting a judge or writing memory state:
+
+```text
+memory pipeline
+```
+
+The command reports:
+
+```text
+importance-ready
+relation-ready
+promotion-ready
+needs-confirmation
+```
+
+The first three values are the bounded next-batch counts using the pipeline maximum of 20. `needs-confirmation` is the exact count for the current project and branch. The response also prints the explicit operator command:
+
+```powershell
+node .\scripts\process-memory-candidates.mjs --apply
+```
+
+`memory pipeline` is strictly read-only with respect to the memory database. It resolves the current Git branch/repository context, but returns before repository-freshness recording, Evidence capture, protocol recall, AI judge execution, promotion, or lifecycle mutation.
+
 The three automatic candidate stages can be composed with one explicit operator command:
 
 ```powershell

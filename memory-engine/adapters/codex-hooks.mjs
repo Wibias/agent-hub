@@ -118,6 +118,10 @@ export function parseExplicitMemoryPrompt(prompt) {
     return { mode: 'candidates' };
   }
 
+  if (/^\s*memory\s+pipeline\s*$/i.test(prompt)) {
+    return { mode: 'pipeline' };
+  }
+
   const confirmPrefix = prompt.match(
     /^\s*memory\s+candidate\s+confirm:\s*/i,
   );
@@ -361,6 +365,60 @@ function formatPendingMemoryCandidates(memory, {
   return lines.join('\n');
 }
 
+function formatMemoryCandidatePipelineStatus(memory, {
+  projectId,
+  branch,
+}) {
+  const unavailable =
+    'Memory candidate pipeline status is unavailable for the current configuration.';
+
+  if (
+    typeof memory?.listUnevaluatedCandidates !== 'function'
+    || typeof memory?.listRelationPendingCandidates !== 'function'
+    || typeof memory?.listPromotionReadyCandidates !== 'function'
+    || typeof memory?.listScopedCandidates !== 'function'
+  ) {
+    return unavailable;
+  }
+
+  try {
+    const limit = 20;
+    const importanceReady = memory.listUnevaluatedCandidates({
+      projectId,
+      branch,
+      limit,
+    }).length;
+    const relationReady = memory.listRelationPendingCandidates({
+      projectId,
+      branch,
+      limit,
+    }).length;
+    const promotionReady = memory.listPromotionReadyCandidates({
+      projectId,
+      branch,
+      limit,
+    }).length;
+    const needsConfirmation = memory.listScopedCandidates({
+      projectId,
+      branch,
+    }).filter(
+      (candidate) => candidate?.status === 'needs_confirmation',
+    ).length;
+
+    return [
+      'Memory candidate pipeline status for the current project and branch:',
+      `importance-ready: ${importanceReady} (next batch, max ${limit})`,
+      `relation-ready: ${relationReady} (next batch, max ${limit})`,
+      `promotion-ready: ${promotionReady} (next batch, max ${limit})`,
+      `needs-confirmation: ${needsConfirmation}`,
+      'Read-only: no judges or promotion were run.',
+      'Run: node .\\scripts\\process-memory-candidates.mjs --apply',
+    ].join('\n');
+  } catch {
+    return unavailable;
+  }
+}
+
 function formatRecallDiagnostics(result, {
   maxBytes,
 }) {
@@ -569,6 +627,22 @@ export function createCodexMemoryHookAdapter({
 
       try {
         const context = await gitRuntime.resolveContext({ cwd: event.cwd });
+        const explicitMemory = (
+          explicitMemoryRequests
+            ? parseExplicitMemoryPrompt(event.prompt)
+            : null
+        );
+
+        if (explicitMemory?.mode === 'pipeline') {
+          return {
+            decision: 'block',
+            reason: formatMemoryCandidatePipelineStatus(memory, {
+              projectId,
+              branch: context.branch,
+            }),
+          };
+        }
+
         await gitRuntime.refreshFreshness({
           memory,
           projectId,
@@ -579,11 +653,6 @@ export function createCodexMemoryHookAdapter({
 
         const requestPrefix = `codex:${event.session_id}:${event.turn_id}`;
         const evidenceId = `evidence:${requestPrefix}:prompt`;
-        const explicitMemory = (
-          explicitMemoryRequests
-            ? parseExplicitMemoryPrompt(event.prompt)
-            : null
-        );
 
         if (explicitMemory?.mode === 'list') {
           return {
