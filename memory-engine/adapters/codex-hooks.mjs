@@ -369,47 +369,54 @@ function formatMemoryCandidatePipelineStatus(memory, {
   projectId,
   branch,
 }) {
+  const unavailable =
+    'Memory candidate pipeline status is unavailable for the current configuration.';
+
   if (
     typeof memory?.listUnevaluatedCandidates !== 'function'
     || typeof memory?.listRelationPendingCandidates !== 'function'
     || typeof memory?.listPromotionReadyCandidates !== 'function'
     || typeof memory?.listScopedCandidates !== 'function'
   ) {
-    return 'Memory candidate pipeline status is unavailable for the current configuration.';
+    return unavailable;
   }
 
-  const limit = 20;
-  const importanceReady = memory.listUnevaluatedCandidates({
-    projectId,
-    branch,
-    limit,
-  }).length;
-  const relationReady = memory.listRelationPendingCandidates({
-    projectId,
-    branch,
-    limit,
-  }).length;
-  const promotionReady = memory.listPromotionReadyCandidates({
-    projectId,
-    branch,
-    limit,
-  }).length;
-  const needsConfirmation = memory.listScopedCandidates({
-    projectId,
-    branch,
-  }).filter(
-    (candidate) => candidate?.status === 'needs_confirmation',
-  ).length;
+  try {
+    const limit = 20;
+    const importanceReady = memory.listUnevaluatedCandidates({
+      projectId,
+      branch,
+      limit,
+    }).length;
+    const relationReady = memory.listRelationPendingCandidates({
+      projectId,
+      branch,
+      limit,
+    }).length;
+    const promotionReady = memory.listPromotionReadyCandidates({
+      projectId,
+      branch,
+      limit,
+    }).length;
+    const needsConfirmation = memory.listScopedCandidates({
+      projectId,
+      branch,
+    }).filter(
+      (candidate) => candidate?.status === 'needs_confirmation',
+    ).length;
 
-  return [
-    'Memory candidate pipeline status for the current project and branch:',
-    `importance-ready: ${importanceReady} (next batch, max ${limit})`,
-    `relation-ready: ${relationReady} (next batch, max ${limit})`,
-    `promotion-ready: ${promotionReady} (next batch, max ${limit})`,
-    `needs-confirmation: ${needsConfirmation}`,
-    'Read-only: no judges or promotion were run.',
-    'Run: node .\\scripts\\process-memory-candidates.mjs --apply',
-  ].join('\n');
+    return [
+      'Memory candidate pipeline status for the current project and branch:',
+      `importance-ready: ${importanceReady} (next batch, max ${limit})`,
+      `relation-ready: ${relationReady} (next batch, max ${limit})`,
+      `promotion-ready: ${promotionReady} (next batch, max ${limit})`,
+      `needs-confirmation: ${needsConfirmation}`,
+      'Read-only: no judges or promotion were run.',
+      'Run: node .\\scripts\\process-memory-candidates.mjs --apply',
+    ].join('\n');
+  } catch {
+    return unavailable;
+  }
 }
 
 function formatRecallDiagnostics(result, {
