@@ -306,6 +306,90 @@ test('stale installed phase finishes a valid installed database and removes old 
   await assert.rejects(access(memoryRestoreJournalPath(dbPath)));
 });
 
+
+test('stale installed phase rolls back when installed target does not match expected restore counts', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'agent-hub-restore-installed-invalid-'));
+  const dbPath = join(root, 'memory.sqlite3');
+  const stagedPath = dbPath + '.pre-restore-op.tmp';
+
+  seedMemory(dbPath, {
+    claimId: 'c-wrong',
+    value: 'wrong installed target',
+  });
+  seedMemory(stagedPath, {
+    claimId: 'c-old',
+    value: 'previous target',
+  });
+
+  await writeLock(dbPath);
+  await writeMemoryRestoreJournal({
+    dbPath,
+    journal: {
+      operationId: 'op',
+      phase: 'installed',
+      createdAt: '2026-10-01T00:00:00.000Z',
+      updatedAt: '2026-10-01T00:00:01.000Z',
+      backupDir: join(root, 'source-backup'),
+      candidatePath: join(root, '.candidate.tmp'),
+      preRestoreBackupDir: join(root, 'pre-backup'),
+      staged: [{ originalPath: dbPath, stagedPath }],
+      expectedCounts: {
+        projects: 2,
+        evidence: 2,
+        claims: 2,
+        embeddings: 0,
+        conflicts: 0,
+        approvals: 0,
+      },
+    },
+  });
+
+  const recovered = await recoverMemoryRestore({
+    dbPath,
+    dependencies: {
+      processAlive() {
+        return false;
+      },
+    },
+  });
+
+  assert.equal(recovered.action, 'rolled_back');
+  assert.equal(claimValue(dbPath, 'c-old'), 'previous target');
+  assert.equal(claimValue(dbPath, 'c-wrong'), null);
+  await assert.rejects(access(stagedPath));
+  await assert.rejects(access(memoryRestoreLockPath(dbPath)));
+  await assert.rejects(access(memoryRestoreJournalPath(dbPath)));
+});
+
+test('stale unjournaled lock fails closed when restore artifacts remain', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'agent-hub-restore-legacy-artifacts-'));
+  const dbPath = join(root, 'memory.sqlite3');
+  seedMemory(dbPath, {
+    claimId: 'c-current',
+    value: 'current',
+  });
+  await writeLock(dbPath);
+  await writeFile(
+    dbPath + '.pre-restore-unknown.tmp',
+    'unknown staged artifact',
+  );
+
+  await assert.rejects(
+    recoverMemoryRestore({
+      dbPath,
+      dependencies: {
+        processAlive() {
+          return false;
+        },
+      },
+    }),
+    /manual inspection/i,
+  );
+
+  assert.equal(claimValue(dbPath, 'c-current'), 'current');
+  await access(memoryRestoreLockPath(dbPath));
+});
+
 test('active restore refuses recovery', async () => {
   const root = await mkdtemp(join(tmpdir(), 'agent-hub-restore-active-'));
   const dbPath = join(root, 'memory.sqlite3');
