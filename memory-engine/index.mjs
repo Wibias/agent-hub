@@ -548,6 +548,8 @@ function insertClaimAndLifecycle(db, {
   claim,
   evidenceContent,
   lifecycle,
+  lifecycleEvidenceId = claim.createdFromEvidenceId,
+  lifecycleCreatedAt = claim.createdAt,
 }) {
   db.prepare(`
     INSERT INTO claims (
@@ -596,8 +598,8 @@ function insertClaimAndLifecycle(db, {
       claim.projectId,
       claim.id,
       targetId,
-      claim.createdFromEvidenceId,
-      claim.createdAt,
+      lifecycleEvidenceId,
+      lifecycleCreatedAt,
     );
 
     db.prepare(`
@@ -609,8 +611,8 @@ function insertClaimAndLifecycle(db, {
         AND state = 'open'
         AND (claim_a = ? OR claim_b = ?)
     `).run(
-      claim.createdFromEvidenceId,
-      claim.createdAt,
+      lifecycleEvidenceId,
+      lifecycleCreatedAt,
       claim.projectId,
       targetId,
       targetId,
@@ -643,8 +645,8 @@ function insertClaimAndLifecycle(db, {
       claim.projectId,
       claim.id,
       targetId,
-      claim.createdFromEvidenceId,
-      claim.createdAt,
+      lifecycleEvidenceId,
+      lifecycleCreatedAt,
     );
 
     db.prepare(`
@@ -656,8 +658,8 @@ function insertClaimAndLifecycle(db, {
         AND state = 'open'
         AND (claim_a = ? OR claim_b = ?)
     `).run(
-      claim.createdFromEvidenceId,
-      claim.createdAt,
+      lifecycleEvidenceId,
+      lifecycleCreatedAt,
       claim.projectId,
       targetId,
       targetId,
@@ -693,8 +695,8 @@ function insertClaimAndLifecycle(db, {
       claim.projectId,
       claimA,
       claimB,
-      claim.createdFromEvidenceId,
-      claim.createdAt,
+      lifecycleEvidenceId,
+      lifecycleCreatedAt,
     );
   }
 
@@ -1200,6 +1202,25 @@ export class MemoryEngine {
 
       CREATE INDEX IF NOT EXISTS memory_candidate_promotions_claim
       ON memory_candidate_promotions (claim_id);
+
+      CREATE TABLE IF NOT EXISTS memory_candidate_confirmations (
+        candidate_id TEXT PRIMARY KEY REFERENCES memory_candidates(id),
+        confirmation_evidence_id TEXT NOT NULL REFERENCES evidence(id),
+        relation TEXT NOT NULL CHECK (
+          relation IN ('same','update','contradict','unrelated')
+        ),
+        related_claim_id TEXT REFERENCES claims(id),
+        claim_id TEXT REFERENCES claims(id),
+        status TEXT NOT NULL CHECK (
+          status IN ('promoted','superseded')
+        ),
+        policy_version TEXT NOT NULL,
+        confirmed_at TEXT NOT NULL,
+        result_json TEXT NOT NULL
+      ) STRICT;
+
+      CREATE INDEX IF NOT EXISTS memory_candidate_confirmations_claim
+      ON memory_candidate_confirmations (claim_id);
 
       CREATE TABLE IF NOT EXISTS lifecycle_events (
         id INTEGER PRIMARY KEY,
@@ -2994,6 +3015,219 @@ export class MemoryEngine {
       + ') '
       + 'ORDER BY c.created_at ASC, c.id ASC LIMIT ?',
     ).all(projectId, branch, limit).map(normalizeCandidate);
+  }
+
+  getCandidateConfirmation(candidateId) {
+    assertNonEmptyString(candidateId, 'candidateId');
+    const row = this.#db.prepare(
+      'SELECT * FROM memory_candidate_confirmations WHERE candidate_id = ?',
+    ).get(candidateId);
+    if (!row) return null;
+    return {
+      candidate_id: row.candidate_id,
+      confirmation_evidence_id: row.confirmation_evidence_id,
+      relation: row.relation,
+      related_claim_id: row.related_claim_id,
+      claim_id: row.claim_id,
+      status: row.status,
+      policy_version: row.policy_version,
+      confirmed_at: row.confirmed_at,
+      result_json: row.result_json,
+    };
+  }
+
+  confirmCandidate({
+    projectId,
+    branch,
+    candidateId,
+    relation,
+    targetClaimId = null,
+    claimId,
+    confirmationEvidenceId,
+    policyVersion,
+    confirmedAt = this.#clock(),
+  }) {
+    assertNonEmptyString(projectId, 'projectId');
+    assertNonEmptyString(branch, 'branch');
+    assertNonEmptyString(candidateId, 'candidateId');
+    assertNonEmptyString(relation, 'relation');
+    assertNonEmptyString(claimId, 'claimId');
+    assertNonEmptyString(confirmationEvidenceId, 'confirmationEvidenceId');
+    assertNonEmptyString(policyVersion, 'policyVersion');
+    assertNonEmptyString(confirmedAt, 'confirmedAt');
+
+    if (!['same', 'update', 'contradict', 'unrelated'].includes(relation)) {
+      throw new Error('unsupported candidate confirmation relation');
+    }
+    if (relation === 'unrelated' && targetClaimId !== null) {
+      throw new Error('unrelated candidate confirmation cannot target a claim');
+    }
+    if (relation !== 'unrelated') {
+      assertNonEmptyString(targetClaimId, 'targetClaimId');
+    }
+
+    this.#db.exec('BEGIN IMMEDIATE');
+    try {
+      if (this.getCandidateConfirmation(candidateId)) {
+        throw new Error('memory candidate confirmation is already finalized');
+      }
+
+      const candidate = normalizeCandidate(
+        this.#db.prepare('SELECT * FROM memory_candidates WHERE id = ?')
+          .get(candidateId),
+      );
+      if (!candidate) {
+        throw new Error('unknown memory candidate: ' + candidateId);
+      }
+      if (
+        candidate.project_id !== projectId
+        || candidate.branch !== branch
+      ) {
+        throw new Error('memory candidate confirmation scope mismatch');
+      }
+      if (candidate.status !== 'needs_confirmation') {
+        throw new Error('memory candidate is not in needs_confirmation state');
+      }
+
+      const sourceEvidence = normalizeEvidence(
+        this.#db.prepare('SELECT * FROM evidence WHERE id = ?')
+          .get(candidate.source_evidence_id),
+      );
+      if (!sourceEvidence) {
+        throw new Error('candidate source evidence is missing');
+      }
+      if (
+        candidate.source_authority !== 'user_direct'
+        || sourceEvidence.authority_class !== 'user_direct'
+        || sourceEvidence.sensitivity === 'secret_redacted'
+        || sourceEvidence.project_id !== projectId
+        || sourceEvidence.branch !== branch
+        || sourceEvidence.content_redacted !== candidate.proposed_value
+      ) {
+        throw new Error('candidate source evidence invariant failed');
+      }
+
+      const confirmationEvidence = normalizeEvidence(
+        this.#db.prepare('SELECT * FROM evidence WHERE id = ?')
+          .get(confirmationEvidenceId),
+      );
+      if (!confirmationEvidence) {
+        throw new Error('candidate confirmation evidence is missing');
+      }
+      if (
+        confirmationEvidence.authority_class !== 'user_direct'
+        || confirmationEvidence.sensitivity === 'secret_redacted'
+        || confirmationEvidence.project_id !== projectId
+        || confirmationEvidence.branch !== branch
+        || confirmationEvidence.metadata?.explicit_memory_mode !== 'candidate_confirm'
+      ) {
+        throw new Error('candidate confirmation requires direct-user confirmation evidence in scope');
+      }
+
+      let target = null;
+      if (relation !== 'unrelated') {
+        target = normalizeClaim(
+          this.#db.prepare('SELECT * FROM claims WHERE id = ?')
+            .get(targetClaimId),
+        );
+        if (
+          !target
+          || target.project_id !== projectId
+          || target.branch_scope !== branch
+          || target.state !== 'active'
+          || target.kind !== 'user_direct'
+          || target.subject !== 'user memory'
+          || target.predicate !== 'states'
+        ) {
+          throw new Error('candidate confirmation target must be one active durable user memory in scope');
+        }
+
+        const targetEvidence = normalizeEvidence(
+          this.#db.prepare('SELECT * FROM evidence WHERE id = ?')
+            .get(target.created_from_evidence_id),
+        );
+        if (
+          !targetEvidence
+          || targetEvidence.project_id !== projectId
+          || targetEvidence.authority_class !== 'user_direct'
+        ) {
+          throw new Error('candidate confirmation target authority invariant failed');
+        }
+      }
+
+      let status = 'superseded';
+      let createdClaimId = null;
+      if (relation !== 'same') {
+        const preparedClaim = prepareClaimInput({
+          evidence: {
+            id: sourceEvidence.id,
+            projectId: sourceEvidence.project_id,
+            branch: sourceEvidence.branch,
+          },
+          claim: {
+            id: claimId,
+            kind: 'user_direct',
+            subject: 'user memory',
+            predicate: 'states',
+            value: candidate.proposed_value,
+            state: 'active',
+            branchScope: branch,
+            createdAt: confirmedAt,
+          },
+        });
+        const lifecycle = prepareLifecycle(preparedClaim.id, {
+          supersedes: relation === 'update' ? [target.id] : [],
+          conflictsWith: relation === 'contradict' ? [target.id] : [],
+        });
+
+        insertClaimAndLifecycle(this.#db, {
+          claim: preparedClaim,
+          evidenceContent: sourceEvidence.content_redacted,
+          lifecycle,
+          lifecycleEvidenceId: confirmationEvidence.id,
+          lifecycleCreatedAt: confirmedAt,
+        });
+        status = 'promoted';
+        createdClaimId = preparedClaim.id;
+      }
+
+      const updated = this.#db.prepare(
+        'UPDATE memory_candidates SET status = ? '
+        + "WHERE id = ? AND status = 'needs_confirmation'",
+      ).run(status, candidateId);
+      if (Number(updated.changes) !== 1) {
+        throw new Error('memory candidate confirmation raced or was already finalized');
+      }
+
+      const audit = {
+        status,
+        relation,
+        claim_id: createdClaimId,
+        related_claim_id: target?.id ?? null,
+      };
+      this.#db.prepare(
+        'INSERT INTO memory_candidate_confirmations ('
+        + 'candidate_id, confirmation_evidence_id, relation, related_claim_id, '
+        + 'claim_id, status, policy_version, confirmed_at, result_json'
+        + ') VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      ).run(
+        candidateId,
+        confirmationEvidence.id,
+        relation,
+        target?.id ?? null,
+        createdClaimId,
+        status,
+        policyVersion,
+        confirmedAt,
+        JSON.stringify(audit),
+      );
+
+      this.#db.exec('COMMIT');
+      return audit;
+    } catch (error) {
+      this.#db.exec('ROLLBACK');
+      throw error;
+    }
   }
 
   getCandidatePromotion(candidateId) {
