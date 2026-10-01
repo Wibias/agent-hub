@@ -801,6 +801,52 @@ Before mutation, the engine rechecks:
 
 Confirmation finalization is exactly-once. Claim creation, lifecycle/conflict mutation, candidate status, and confirmation audit are one immediate SQLite transaction. Lifecycle and conflict provenance point to the explicit confirmation Evidence, while the durable Claim itself remains attached to the original candidate Evidence.
 
+### Candidate pipeline runner
+
+The three automatic candidate stages can be composed with one explicit operator command:
+
+```powershell
+node .\scripts\process-memory-candidates.mjs
+```
+
+Without `--apply`, the command is status-only. It reports the bounded next batch for importance, relation, and promotion plus the exact current-scope count of candidates that require user confirmation. It does not invoke either Codex judge and does not run promotion.
+
+To process one bounded batch through the available stages:
+
+```powershell
+node .\scripts\process-memory-candidates.mjs --apply
+```
+
+The order is fixed:
+
+```text
+importance-v1
+    ↓
+relation-v1
+    ↓
+promotion-v1
+```
+
+The runner rechecks eligibility after each completed stage. It starts a stage only when at least one candidate is currently eligible, so an empty relation queue does not start the relation judge and an empty importance queue does not start the importance judge.
+
+Project, branch, repository path, database path, and revision are resolved once when the pipeline starts. The same frozen runtime scope is injected into all three stage runners. A branch change during execution therefore cannot silently redirect a later stage to another candidate scope.
+
+`--limit N` sets the maximum next batch for each stage and accepts `1..20`. One invocation processes at most one bounded batch per stage. Run the command again to drain additional queued batches.
+
+The optional AI settings are shared by both judge stages:
+
+```powershell
+node .\scripts\process-memory-candidates.mjs --apply --model <model> --reasoning-effort high
+```
+
+Promotion receives no model options because it contains no model call.
+
+The runner adds no new decision policy. It delegates to the existing importance, relation, and deterministic promotion implementations. Infrastructure failure in a stage aborts later stages. Candidate-local failures that a stage runner already records fail closed for those candidates, while newly eligible successful candidates may continue to the next stage.
+
+Candidates in `needs_confirmation` are never auto-confirmed by this runner. They remain visible through `memory candidates` and require the explicit confirmation commands documented above.
+
+The pipeline is deliberately an explicit operator action. It is not executed inside `UserPromptSubmit` and it does not introduce hidden background consolidation.
+
 ### Explicit durable-memory prompts
 
 Production Codex can opt into durable direct-user memory with the hook CLI flag:
