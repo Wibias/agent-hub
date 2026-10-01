@@ -708,6 +708,58 @@ Stored relations are visible through `memory candidates`, for example:
 
 Relation evaluation is exactly-once. The write rechecks that the candidate still has a valid `promote` importance judgment and that any target is still an active durable direct-user memory in the candidate's current project and branch.
 
+### Deterministic candidate promotion policy
+
+Candidates with both a valid `importance-v1` `promote` recommendation and a stored relation can enter the final deterministic stage with:
+
+```powershell
+node .\scripts\promote-memory-candidates.mjs
+```
+
+The command is dry-run by default. Canonical mutation requires explicit `--apply`:
+
+```powershell
+node .\scripts\promote-memory-candidates.mjs --apply
+```
+
+Policy `promotion-v1` contains no model call. It maps the already stored importance and relation results to one fixed action:
+
+```text
+same        -> candidate status=superseded; no new Claim
+unrelated   -> create one active durable Claim
+update      -> create one active durable Claim and supersede the exact relation target
+contradict  -> create one active durable Claim and open a conflict with the exact relation target
+```
+
+Promotion is fail-closed. Before any mutation the engine rechecks:
+
+- the candidate is still pending;
+- the importance judgment still validates as `promote`;
+- the stored relation audit is present and consistent with candidate metadata;
+- the source Evidence is still same-project, same-branch, `user_direct`, non-secret, and exactly matches the captured candidate value;
+- any relation target is still an active durable direct-user Claim in the same project and branch;
+- the opaque target ref still resolves to that exact Claim;
+- relation confidence is `high`;
+- relation `meaning_preserved` is `true`.
+
+A relation with lower confidence or unsafe meaning preservation becomes `needs_confirmation` and creates no Claim.
+
+New automatically promoted Claims keep the durable direct-user shape used by explicit memory:
+
+```text
+kind=user_direct
+subject=user memory
+predicate=states
+```
+
+Their value is the validated `canonical_fact` from the importance judgment. The original direct-user Evidence remains attached as immutable provenance and is included in search text.
+
+For `update` and `contradict`, Claim creation plus lifecycle/conflict mutation plus candidate status plus promotion audit are committed in one immediate SQLite transaction. A crash cannot leave an automatically promoted Claim without its candidate finalization, or mutate a target without the new Claim.
+
+`contradict` never chooses a winner. Both Claims remain active and the existing recall/reliance conflict gate handles the unresolved conflict fail-closed.
+
+Promotion decisions are recorded in the operational `memory_candidate_promotions` audit table. Like the candidate and relation ledgers, this table is not canonical memory and is excluded from portable canonical export.
+
 ### Explicit durable-memory prompts
 
 Production Codex can opt into durable direct-user memory with the hook CLI flag:
