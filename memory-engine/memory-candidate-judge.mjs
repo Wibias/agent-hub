@@ -233,7 +233,7 @@ export function buildMemoryCandidateJudgePrompt(candidate) {
     'Judge only the durable future value of the direct-user statement provided.',
     '',
     'Importance rule:',
-    'Recommend durable memory only when forgetting this statement is likely to cause repeated work, a wrong future decision, or violation of an established project preference/constraint.',
+    'Recommend durable memory only when forgetting this statement is likely to cause repeated work, wrong future decisions, or violation of an established project preference/constraint.',
     'Prefer precision over recall. False durable memories are more harmful than missed memories.',
     '',
     'Decision rules:',
