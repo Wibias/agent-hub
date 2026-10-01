@@ -15,8 +15,18 @@ import {
   summarizeRecallQuality,
   sweepSemanticThresholds,
 } from '../../memory-engine/recall-quality-eval.mjs';
+import {
+  createQnliAnswerabilityGate,
+} from '../../memory-engine/qnli-answerability.mjs';
 
 const cacheDir = process.env.MEMORY_E5_MODEL_CACHE;
+const qnliCacheDir = process.env.MEMORY_QNLI_MODEL_CACHE;
+
+const GERMAN_CASE_IDS = new Set([
+  'postgres-german-paraphrase',
+  'audit-retention-german',
+  'retry-failed-request-german',
+]);
 
 function compareCodePoints(left, right) {
   if (left < right) return -1;
@@ -328,6 +338,8 @@ test(
 
       qualityCases.push({
         id: entry.id,
+        query: entry.query,
+        language: GERMAN_CASE_IDS.has(entry.id) ? 'de' : 'en',
         relevantClaimIds: entry.targetClaimId ? [entry.targetClaimId] : [],
         rankings: {
           lexical: lexicalIds,
@@ -437,6 +449,99 @@ test(
       summary,
       semantic_threshold_sweep_at_5: thresholdSweep,
     }));
+
+    if (qnliCacheDir) {
+      const qnliGate = await createQnliAnswerabilityGate({
+        cacheDir: qnliCacheDir,
+      });
+      const qnliCases = [];
+
+      for (const entry of qualityCases.filter(
+        (candidate) => candidate.language === 'en',
+      )) {
+        const e5Top1 = entry.semanticCandidates[0] ?? null;
+        assert.ok(e5Top1, `missing E5 top-1 candidate for ${entry.id}`);
+
+        const document = engine.embeddingDocument({
+          claimId: e5Top1.claimId,
+        });
+        assert.ok(
+          document?.text,
+          `missing QNLI passage for ${e5Top1.claimId}`,
+        );
+
+        const [score] = await qnliGate.score(entry.query, [document.text]);
+        const targetId = entry.relevantClaimIds[0] ?? null;
+
+        console.log(JSON.stringify({
+          type: targetId === null
+            ? 'qnli_negative_case'
+            : 'qnli_positive_case',
+          id: entry.id,
+          query: entry.query,
+          target_claim_id: targetId,
+          e5_top1_claim_id: e5Top1.claimId,
+          e5_top1_is_relevant: (
+            targetId !== null && e5Top1.claimId === targetId
+          ),
+          qnli_answerability_score: score,
+        }));
+
+        qnliCases.push({
+          id: entry.id,
+          relevantClaimIds: entry.relevantClaimIds,
+          rankings: {
+            lexical: entry.rankings.lexical,
+            semantic: [e5Top1.claimId],
+            fused: [e5Top1.claimId],
+          },
+          semanticCandidates: [{
+            claimId: e5Top1.claimId,
+            similarity: score,
+          }],
+        });
+      }
+
+      const qnliSummary = summarizeRecallQuality(qnliCases, {
+        kValues: [1],
+      });
+      const qnliThresholdSweep = sweepSemanticThresholds(qnliCases, {
+        thresholds: [
+          0.01,
+          0.025,
+          0.05,
+          0.10,
+          0.20,
+          0.30,
+          0.40,
+          0.50,
+          0.60,
+          0.70,
+          0.80,
+          0.90,
+          0.95,
+          0.975,
+          0.99,
+        ],
+        k: 1,
+      });
+
+      console.log(JSON.stringify({
+        type: 'qnli_e5_top1_gate_quality_summary',
+        model_id: qnliGate.modelId,
+        model_revision: qnliGate.modelRevision,
+        language: 'en',
+        candidate_source: 'e5_top_1',
+        summary: qnliSummary,
+        qnli_threshold_sweep_at_1: qnliThresholdSweep,
+      }));
+
+      assert.deepEqual(qnliSummary.counts, {
+        queries: 25,
+        positiveQueries: 7,
+        negativeQueries: 18,
+      });
+    }
 
     assert.deepEqual(summary.counts, {
       queries: 28,
