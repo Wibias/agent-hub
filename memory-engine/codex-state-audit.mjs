@@ -129,11 +129,22 @@ function eventCommands(hooks, eventName) {
 }
 
 export function inspectAgentHubHookConfiguration(hooks) {
-  const promptCommands = eventCommands(hooks, 'UserPromptSubmit');
+  const eventMap = (
+    hooks
+    && typeof hooks === 'object'
+    && !Array.isArray(hooks)
+    && hooks.hooks
+    && typeof hooks.hooks === 'object'
+    && !Array.isArray(hooks.hooks)
+  )
+    ? hooks.hooks
+    : hooks;
+
+  const promptCommands = eventCommands(eventMap, 'UserPromptSubmit');
   const recallCommands = promptCommands.filter((command) => (
     /memory-engine[\\/]adapters[\\/]codex-hook-cli\.mjs/i.test(command)
   ));
-  const startCommands = eventCommands(hooks, 'SessionStart');
+  const startCommands = eventCommands(eventMap, 'SessionStart');
   const launcherCommands = startCommands.filter((command) => (
     /memory-engine[\\/]embedding-worker-launcher\.mjs/i.test(command)
   ));
