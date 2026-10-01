@@ -219,6 +219,7 @@ test('Codex state audit reports legacy memory separately from conversation histo
       ignoreMemoryEnv: true,
       explicitMemoryRequests: true,
       hybridRecall: true,
+      candidateCapture: false,
     },
   });
 
