@@ -448,6 +448,7 @@ test(
         cacheDir: qaAnswerabilityCacheDir,
       });
       const qaCases = [];
+      const qaE5Top1GateCases = [];
 
       for (const entry of qualityCases) {
         const retrieved = entry.semanticCandidates.slice(0, 10);
@@ -463,6 +464,46 @@ test(
         });
 
         const scores = await qaGate.score(entry.query, passages);
+        const e5Top1Candidate = retrieved[0] ?? null;
+        const e5Top1Score = scores[0] ?? null;
+
+        assert.ok(e5Top1Candidate, `missing E5 top-1 candidate for ${entry.id}`);
+        assert.ok(e5Top1Score, `missing QA score for E5 top-1 candidate ${entry.id}`);
+
+        const e5Top1TargetId = entry.relevantClaimIds[0] ?? null;
+        const e5Top1IsRelevant = (
+          e5Top1TargetId !== null
+          && e5Top1Candidate.claimId === e5Top1TargetId
+        );
+
+        console.log(JSON.stringify({
+          type: e5Top1TargetId === null
+            ? 'qa_e5_top1_negative_case'
+            : 'qa_e5_top1_positive_case',
+          id: entry.id,
+          query: entry.query,
+          target_claim_id: e5Top1TargetId,
+          e5_top1_claim_id: e5Top1Candidate.claimId,
+          e5_top1_is_relevant: e5Top1IsRelevant,
+          qa_e5_top1_margin: e5Top1Score.answerabilityMargin,
+          qa_e5_top1_best_span_score: e5Top1Score.bestSpanScore,
+          qa_e5_top1_null_score: e5Top1Score.nullScore,
+        }));
+
+        qaE5Top1GateCases.push({
+          id: entry.id,
+          relevantClaimIds: entry.relevantClaimIds,
+          rankings: {
+            lexical: entry.rankings.lexical,
+            semantic: [e5Top1Candidate.claimId],
+            fused: [e5Top1Candidate.claimId],
+          },
+          semanticCandidates: [{
+            claimId: e5Top1Candidate.claimId,
+            similarity: e5Top1Score.answerabilityMargin,
+          }],
+        });
+
         const reranked = retrieved
           .map((candidate, index) => ({
             claimId: candidate.claimId,
@@ -514,6 +555,45 @@ test(
           })),
         });
       }
+
+      const qaE5Top1GateSummary = summarizeRecallQuality(
+        qaE5Top1GateCases,
+        {
+          kValues: [1],
+        },
+      );
+      const qaE5Top1GateThresholdSweep = sweepSemanticThresholds(
+        qaE5Top1GateCases,
+        {
+          thresholds: [
+            -10,
+            -7.5,
+            -5,
+            -2.5,
+            0,
+            0.5,
+            1,
+            1.5,
+            2,
+            2.5,
+            3,
+            5,
+            7.5,
+            10,
+          ],
+          k: 1,
+        },
+      );
+
+      console.log(JSON.stringify({
+        type: 'qa_e5_top1_gate_quality_summary',
+        model_id: qaGate.modelId,
+        model_revision: qaGate.modelRevision,
+        candidate_source: 'e5_top_1',
+        score: 'best_context_span_minus_cls_null',
+        summary: qaE5Top1GateSummary,
+        qa_threshold_sweep_at_1: qaE5Top1GateThresholdSweep,
+      }));
 
       const qaSummary = summarizeRecallQuality(qaCases, {
         kValues: [1, 5, 10],
