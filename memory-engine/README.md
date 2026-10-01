@@ -850,6 +850,38 @@ and justifies one from measured data.
 
 The provider uses the measured qint8 ONNX graph on CPU while preserving 384-dimensional Float32 normalized embedding output. ANN/vector database, GPU requirements, and learned reranking remain outside this delivery.
 
+### Codex memory behavioral evaluation
+
+The production reliance contract is covered by a separate manual end-to-end runner:
+
+```powershell
+$env:MEMORY_E5_MODEL_CACHE = (Resolve-Path .\.cache\memory-engine\e5).Path
+$env:MEMORY_BEHAVIORAL_MODEL = "gpt-5.6-sol"
+
+node .\scripts\eval-codex-memory-behavior.mjs
+```
+
+The runner creates an ephemeral SQLite memory store containing only this synthetic direct-user memory:
+
+```text
+memory: widget telemetry for compliance audits is retained for 37 days
+```
+
+It then rebuilds the real pinned E5 semantic index, routes every case through the real Codex memory hook adapter, and sends the exact resulting `additionalContext` to `codex exec --ephemeral`.
+
+The four behavioral cases are:
+
+- exact compliance-audit question -> supported, `37 days`;
+- paraphrased compliance question -> supported, `37 days`;
+- performance-debugging retention -> unsupported, null answer;
+- product-analytics retention -> unsupported, null answer.
+
+The Codex subprocess is deliberately isolated from existing local Codex state. The runner creates a fresh temporary `CODEX_HOME`, copies only `auth.json` from the authenticated source Codex home, and does not inherit `config.toml`, hooks, Codex memory databases, rollout/session state, or `AGENT_HUB_MEMORY_*` overrides. The temporary workspace contains no project policy or memory fixture beyond the injected Agent Hub context.
+
+If the authenticated Codex home is not the normal `CODEX_HOME` / `~/.codex`, point the runner at it with `MEMORY_BEHAVIORAL_SOURCE_CODEX_HOME`. The runner refuses to fall back to the full existing Codex home when `auth.json` is unavailable because doing so would make the result vulnerable to legacy-memory contamination.
+
+The runner emits one `codex_memory_behavioral_case` JSON record per case and a final `codex_memory_behavioral_summary`. A failing case exits non-zero. This remains a manual/provider-backed evaluation so normal PR CI does not spend Codex usage or download E5 model files. Ordinary CI tests the fixture, scoring, parser, isolation rules, and orchestration with deterministic fakes.
+
 ## Hybrid retrieval core
 
 `HybridMemoryRetriever` is an asynchronous relevance layer above `MemoryEngine`. It accepts an injected embedder with the contract:
