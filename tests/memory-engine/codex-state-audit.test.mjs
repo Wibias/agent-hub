@@ -92,6 +92,47 @@ test('hook inspection reports the exact Agent Hub recall controls without exposi
   );
 });
 
+test('hook inspection accepts the real Codex hooks.json root wrapper', () => {
+  const config = {
+    hooks: {
+      SessionStart: [
+        {
+          hooks: [
+            {
+              type: 'command',
+              commandWindows: 'node C:\\repo\\memory-engine\\embedding-worker-launcher.mjs --cache-dir C:\\repo\\.cache\\memory-engine\\e5',
+            },
+          ],
+        },
+      ],
+      UserPromptSubmit: [
+        {
+          hooks: [
+            {
+              type: 'command',
+              commandWindows: 'node C:\\repo\\memory-engine\\adapters\\codex-hook-cli.mjs --ignore-memory-env --explicit-memory-requests --hybrid-recall',
+            },
+          ],
+        },
+      ],
+    },
+  };
+
+  assert.deepEqual(
+    inspectAgentHubHookConfiguration(config),
+    {
+      configured: true,
+      userPromptSubmit: true,
+      sessionStartLauncher: true,
+      flags: {
+        ignoreMemoryEnv: true,
+        explicitMemoryRequests: true,
+        hybridRecall: true,
+      },
+    },
+  );
+});
+
 test('hook inspection fails closed for unrelated Codex hooks', () => {
   assert.deepEqual(
     inspectAgentHubHookConfiguration({
