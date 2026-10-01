@@ -14,6 +14,9 @@ import {
   planCodexNativeMemoryIsolation,
   applyCodexNativeMemoryIsolation,
 } from '../../memory-engine/codex-native-memory-isolation.mjs';
+import {
+  runCodexNativeMemoryIsolation,
+} from '../../scripts/isolate-native-codex-memory.mjs';
 
 test('isolation planner disables native Codex memory while preserving unrelated config and comments', () => {
   const input = [
@@ -256,4 +259,106 @@ test('apply is idempotent and does not create another backup when already isolat
 
   assert.equal(result.changed, false);
   assert.equal(result.backupPath, null);
+});
+
+
+test('CLI defaults to dry-run and leaves real state untouched', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'agent-hub-native-memory-cli-dry-'));
+  await mkdir(join(root, 'memories'));
+  await writeFile(join(root, 'memories', 'MEMORY.md'), 'legacy stays\n');
+  await writeFile(join(root, 'memories_1.sqlite'), 'legacy-db');
+  await writeFile(join(root, 'hooks.json'), '{"hooks":{}}\n');
+  await writeFile(
+    join(root, 'config.toml'),
+    [
+      '[features]',
+      'memories = true',
+      '',
+      '[memories]',
+      'use_memories = true',
+      'generate_memories = true',
+      '',
+    ].join('\n'),
+  );
+
+  const beforeConfig = await readFile(join(root, 'config.toml'), 'utf8');
+  const lines = [];
+
+  const output = await runCodexNativeMemoryIsolation({
+    argv: ['--codex-home', root],
+    env: {},
+    log(value) {
+      lines.push(value);
+    },
+  });
+
+  assert.equal(output.mode, 'dry-run');
+  assert.equal(output.changed, true);
+  assert.equal(output.backup_required, true);
+  assert.deepEqual(output.after, {
+    featureEnabled: false,
+    useMemories: false,
+    generateMemories: false,
+  });
+  assert.deepEqual(output.direct_memory, ['memories', 'memories_1.sqlite']);
+  assert.equal(
+    await readFile(join(root, 'config.toml'), 'utf8'),
+    beforeConfig,
+  );
+  assert.equal(
+    await readFile(join(root, 'memories', 'MEMORY.md'), 'utf8'),
+    'legacy stays\n',
+  );
+  assert.equal(lines.length, 1);
+  assert.deepEqual(JSON.parse(lines[0]), output);
+});
+
+test('CLI apply changes config only and reports restart requirement', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'agent-hub-native-memory-cli-apply-'));
+  await mkdir(join(root, 'memories'));
+  await writeFile(join(root, 'memories', 'MEMORY.md'), 'legacy stays\n');
+  await writeFile(join(root, 'memories_1.sqlite'), 'legacy-db');
+  await writeFile(join(root, 'hooks.json'), '{"hooks":{}}\n');
+  await writeFile(
+    join(root, 'config.toml'),
+    [
+      '[features]',
+      'memories = true',
+      '',
+      '[memories]',
+      'use_memories = true',
+      'generate_memories = true',
+      '',
+    ].join('\n'),
+  );
+
+  const lines = [];
+  const output = await runCodexNativeMemoryIsolation({
+    argv: ['--codex-home', root, '--apply'],
+    env: {},
+    log(value) {
+      lines.push(value);
+    },
+  });
+
+  assert.equal(output.mode, 'apply');
+  assert.equal(output.changed, true);
+  assert.equal(output.restart_required, true);
+  assert.equal(output.direct_memory_preserved, true);
+  assert.deepEqual(output.direct_memory, ['memories', 'memories_1.sqlite']);
+  assert.deepEqual(output.settings, {
+    featureEnabled: false,
+    useMemories: false,
+    generateMemories: false,
+  });
+  assert.match(
+    await readFile(join(root, 'config.toml'), 'utf8'),
+    /memories = false/,
+  );
+  assert.equal(
+    await readFile(join(root, 'memories_1.sqlite'), 'utf8'),
+    'legacy-db',
+  );
+  assert.equal(lines.length, 1);
+  assert.deepEqual(JSON.parse(lines[0]), output);
 });
