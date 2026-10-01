@@ -882,6 +882,33 @@ If the authenticated Codex home is not the normal `CODEX_HOME` / `~/.codex`, poi
 
 The runner emits one `codex_memory_behavioral_case` JSON record per case and a final `codex_memory_behavioral_summary`. A failing case exits non-zero. This remains a manual/provider-backed evaluation so normal PR CI does not spend Codex usage or download E5 model files. Ordinary CI tests the fixture, scoring, parser, isolation rules, and orchestration with deterministic fakes.
 
+### Codex state isolation audit
+
+Before changing normal Codex startup or deleting legacy state, inspect the active Codex home with:
+
+```powershell
+node .\scripts\audit-codex-state.mjs
+```
+
+The command uses `CODEX_HOME` when it is set and otherwise inspects the normal user `.codex` directory. A different location can be supplied explicitly:
+
+```powershell
+node .\scripts\audit-codex-state.mjs --codex-home C:\path\to\.codex
+```
+
+The audit is intentionally metadata-only. It lists top-level file and directory names, classifies known state surfaces, and reads only the structure of `hooks.json` to determine whether the Agent Hub `UserPromptSubmit` adapter and its required flags are configured. It does not open Codex memory, state, thread-history, or session databases and does not emit raw hook commands.
+
+The report distinguishes:
+
+- `direct_memory`: known memory database/directory naming patterns;
+- `conversation_state`: thread/session/history/rollout surfaces;
+- `persistent_runtime_state`: other known persistent Codex runtime databases;
+- `instruction_surface`: global instruction, skill, rule, or prompt locations;
+- `runtime_config`, `hooks`, and `auth`;
+- unknown top-level surfaces.
+
+Conversation/session state is reported separately and is **not** automatically labeled direct-memory contamination. The audit only treats explicitly memory-named surfaces as direct legacy memory risk. Its purpose is to decide whether a follow-up normal-runtime isolation change is justified, not to delete or migrate anything.
+
 ## Hybrid retrieval core
 
 `HybridMemoryRetriever` is an asynchronous relevance layer above `MemoryEngine`. It accepts an injected embedder with the contract:
