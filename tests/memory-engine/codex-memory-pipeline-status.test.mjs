@@ -210,3 +210,58 @@ test('memory pipeline fails closed when the candidate ledger status surface is u
     'Memory candidate pipeline status is unavailable for the current configuration.',
   );
 });
+
+
+test('memory pipeline consumes the command when a status query fails', async () => {
+  let freshnessCalls = 0;
+  const adapter = createCodexMemoryHookAdapter({
+    protocol: {
+      async handle() {
+        throw new Error('read-only pipeline status must not hit protocol');
+      },
+    },
+    memory: {
+      listUnevaluatedCandidates() {
+        throw new Error('candidate ledger unavailable');
+      },
+      listRelationPendingCandidates() {
+        return [];
+      },
+      listPromotionReadyCandidates() {
+        return [];
+      },
+      listScopedCandidates() {
+        return [];
+      },
+    },
+    projectId: 'project',
+    explicitMemoryRequests: true,
+    git: {
+      async resolveContext() {
+        return {
+          repoPath: '/repo',
+          branch: 'main',
+          revisionSha: 'a'.repeat(40),
+        };
+      },
+      async refreshFreshness() {
+        freshnessCalls += 1;
+      },
+    },
+  });
+
+  const result = await adapter.handle({
+    hook_event_name: 'UserPromptSubmit',
+    session_id: 's1',
+    turn_id: 'pipeline-error',
+    cwd: '/repo',
+    prompt: 'memory pipeline',
+  });
+
+  assert.deepEqual(result, {
+    decision: 'block',
+    reason:
+      'Memory candidate pipeline status is unavailable for the current configuration.',
+  });
+  assert.equal(freshnessCalls, 0);
+});
