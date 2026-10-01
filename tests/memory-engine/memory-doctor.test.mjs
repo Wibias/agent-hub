@@ -9,6 +9,7 @@ import {
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 
 import { MemoryEngine } from '../../memory-engine/index.mjs';
 import {
@@ -94,6 +95,8 @@ test('database doctor opens production memory read-only and reports canonical pl
   assert.equal(result.quickCheck, 'ok');
   assert.equal(result.foreignKeyViolations, 0);
   assert.equal(result.journalMode, 'wal');
+  assert.equal(result.candidateLedgerAvailable, true);
+  assert.equal(result.pendingCandidates, 0);
   assert.equal(result.projectRegistered, true);
   assert.equal(result.claims, 1);
   assert.equal(result.activeClaims, 1);
@@ -107,6 +110,28 @@ test('database doctor opens production memory read-only and reports canonical pl
   assert.equal(result.dimensions, E5_DIMENSIONS);
   assert.equal(after.size, before.size);
   assert.equal(after.mtimeMs, before.mtimeMs);
+});
+
+test('database doctor treats a pre-candidate-ledger database as degraded but structurally valid', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'agent-hub-memory-doctor-legacy-db-'));
+  const dbPath = await createHealthyFixtureDb(root);
+
+  const db = new DatabaseSync(dbPath);
+  db.exec('DROP TABLE memory_candidates;');
+  db.close();
+
+  const result = inspectMemoryDatabase({
+    dbPath,
+    projectId: 'github.com/Wibias/agent-hub',
+    branch: 'main',
+  });
+
+  assert.equal(result.status, 'degraded');
+  assert.deepEqual(result.missingTables, []);
+  assert.equal(result.candidateLedgerAvailable, false);
+  assert.equal(result.pendingCandidates, null);
+  assert.equal(result.quickCheck, 'ok');
+  assert.equal(result.foreignKeyViolations, 0);
 });
 
 test('database doctor fails closed for a missing or corrupt canonical database', async () => {
@@ -217,6 +242,7 @@ test('Codex integration doctor separates critical recall-hook failure from optio
       ignoreMemoryEnv: true,
       explicitMemoryRequests: true,
       hybridRecall: true,
+      candidateCapture: true,
     },
   };
 
@@ -241,6 +267,22 @@ test('Codex integration doctor separates critical recall-hook failure from optio
   });
   assert.equal(noLauncher.status, 'degraded');
   assert.equal(noLauncher.reason, 'session_start_launcher_missing');
+
+  const noCandidateCapture = await inspectCodexIntegration({
+    codexHome: 'fixture',
+    auditState: async () => ({
+      agentHubHook: {
+        ...healthyHook,
+        flags: {
+          ...healthyHook.flags,
+          candidateCapture: false,
+        },
+      },
+      hookReadError: null,
+    }),
+  });
+  assert.equal(noCandidateCapture.status, 'degraded');
+  assert.equal(noCandidateCapture.reason, 'candidate_capture_disabled');
 
   const missingHybrid = await inspectCodexIntegration({
     codexHome: 'fixture',
