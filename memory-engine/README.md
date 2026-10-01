@@ -909,6 +909,48 @@ The report distinguishes:
 
 Conversation/session state is reported separately and is **not** automatically labeled direct-memory contamination. The audit only treats explicitly memory-named surfaces as direct legacy memory risk. Its purpose is to decide whether a follow-up normal-runtime isolation change is justified, not to delete or migrate anything.
 
+### Native Codex memory isolation
+
+When a real state audit confirms that Agent Hub is active while native Codex durable memory is also present, isolate only the native memory feature rather than replacing the full `CODEX_HOME`.
+
+Preview the exact change first:
+
+```powershell
+node .\scripts\isolate-native-codex-memory.mjs
+```
+
+The default mode is dry-run. It reads `config.toml`, reports the current and planned memory settings, and does not write anything.
+
+After reviewing the dry-run, apply with:
+
+```powershell
+node .\scripts\isolate-native-codex-memory.mjs --apply
+```
+
+The command manages only:
+
+```toml
+[features]
+memories = false
+
+[memories]
+use_memories = false
+generate_memories = false
+```
+
+On apply it:
+
+- creates a timestamped backup of the existing `config.toml`;
+- atomically replaces only the config file;
+- preserves unrelated config lines and comments;
+- refuses ambiguous duplicate target sections/keys and non-boolean target values;
+- verifies that the known native memory surfaces present before the change remain present afterward;
+- never deletes or edits `memories/`, `memories_1.sqlite`, sessions/history, auth, hooks, skills, rules, or other Codex runtime databases.
+
+The operation is idempotent. Once all three managed settings are `false`, later runs report no change and create no additional backup.
+
+Restart Codex after an applied change before validating effective behavior. The retained native-memory files are historical state only; the isolation change intentionally does not erase them.
+
 ## Hybrid retrieval core
 
 `HybridMemoryRetriever` is an asynchronous relevance layer above `MemoryEngine`. It accepts an injected embedder with the contract:
