@@ -317,6 +317,10 @@ test('formatCodexMemoryContext gives the model an explicit direct-support relian
   assert.match(text, /missing qualifier.*not.*infer/i);
   assert.match(text, /directly support.*exact question/i);
   assert.match(text, /otherwise.*ignore/i);
+  assert.match(text, /user_direct.*direct user statement/i);
+  assert.match(text, /do not require.*repository.*corroboration/i);
+  assert.match(text, /absence.*workspace.*not.*invalidate/i);
+  assert.match(text, /directly contradict.*surface.*conflict/i);
 });
 
 test('formatCodexMemoryContext stays bounded and labels evidence authority', () => {
