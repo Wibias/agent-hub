@@ -28,7 +28,7 @@ export const MEMORY_CANDIDATE_PIPELINE_BEHAVIORAL_CASES = Object.freeze([
     seed_memories: Object.freeze([
       Object.freeze({
         branch: 'main',
-        value: 'memory: The production database is Postgres.',
+        value: 'The production database is Postgres.',
       }),
     ]),
     prompt: 'We decided to use Postgres as the production database.',
@@ -55,7 +55,7 @@ export const MEMORY_CANDIDATE_PIPELINE_BEHAVIORAL_CASES = Object.freeze([
     seed_memories: Object.freeze([
       Object.freeze({
         branch: 'other',
-        value: 'memory: The production database is Postgres.',
+        value: 'The production database is Postgres.',
       }),
     ]),
     prompt: 'We decided to use Postgres as the production database.',
