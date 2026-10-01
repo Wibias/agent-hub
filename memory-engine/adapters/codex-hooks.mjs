@@ -263,11 +263,29 @@ function formatPendingMemoryCandidates(memory, {
   ];
 
   for (const candidate of candidates) {
+    let judgeSummary = null;
+    if (typeof candidate.evaluation_json === 'string') {
+      try {
+        const evaluation = JSON.parse(candidate.evaluation_json);
+        if (evaluation && typeof evaluation === 'object') {
+          judgeSummary = [
+            'judge=' + compactText(evaluation.decision ?? 'unknown', 40),
+            'durability=' + compactText(evaluation.durability ?? 'unknown', 40),
+            'utility=' + compactText(evaluation.future_utility ?? 'unknown', 40),
+            'confidence=' + compactText(evaluation.confidence ?? 'unknown', 40),
+          ].join(' ');
+        }
+      } catch {
+        judgeSummary = 'judge=invalid';
+      }
+    }
+
     const line = [
       `- ${memoryCandidateRef(candidate.id)}`,
       `[${compactText(candidate.proposed_type, 80)}]`,
       compactText(candidate.proposed_value, 500),
-    ].join(' ');
+      judgeSummary ? '| ' + judgeSummary : null,
+    ].filter(Boolean).join(' ');
 
     const next = [...lines, line].join('\n');
     if (byteLength(next) > maxBytes) break;
