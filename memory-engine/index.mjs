@@ -2,7 +2,7 @@ import { DatabaseSync } from 'node:sqlite';
 
 import { assertAuthorityClass } from './authority.mjs';
 import { validateMemoryCandidateJudgment } from './memory-candidate-judge.mjs';
-import { validateMemoryCandidateRelation } from './memory-candidate-relation.mjs';
+import {\n  memoryRelationClaimRef,\n  validateMemoryCandidateRelation,\n} from './memory-candidate-relation.mjs';
 import {
   decodeFloat32Vector,
   encodeFloat32Vector,
@@ -843,6 +843,218 @@ export function evaluateReliance({
   };
 }
 
+
+function resolveCandidatePromotion(db, {
+  candidateId,
+  claimId,
+  policyVersion,
+  finalizedAt,
+}) {
+  assertNonEmptyString(candidateId, 'candidateId');
+  assertNonEmptyString(claimId, 'claimId');
+  assertNonEmptyString(policyVersion, 'policyVersion');
+  assertNonEmptyString(finalizedAt, 'finalizedAt');
+
+  const candidate = normalizeCandidate(
+    db.prepare('SELECT * FROM memory_candidates WHERE id = ?').get(candidateId),
+  );
+  if (!candidate) throw new Error('unknown memory candidate: ' + candidateId);
+  if (candidate.status !== 'pending') {
+    throw new Error('memory candidate is not pending');
+  }
+  if (candidate.evaluated_at === null || !candidate.evaluation_json) {
+    throw new Error('memory candidate has no importance evaluation');
+  }
+  if (candidate.relation === null) {
+    throw new Error('memory candidate has no relation evaluation');
+  }
+
+  let importance;
+  try {
+    importance = validateMemoryCandidateJudgment(
+      JSON.parse(candidate.evaluation_json),
+    );
+  } catch {
+    throw new Error('memory candidate importance evaluation is invalid');
+  }
+  if (importance.decision !== 'promote') {
+    throw new Error('memory candidate promotion requires promote importance judgment');
+  }
+
+  const relationAudit = normalizeCandidateRelation(
+    db.prepare(
+      'SELECT * FROM memory_candidate_relations WHERE candidate_id = ?',
+    ).get(candidateId),
+  );
+  if (!relationAudit) {
+    throw new Error('memory candidate relation audit is missing');
+  }
+
+  let relation;
+  try {
+    relation = validateMemoryCandidateRelation(
+      JSON.parse(relationAudit.result_json),
+    );
+  } catch {
+    throw new Error('memory candidate relation evaluation is invalid');
+  }
+  if (relation.relation !== candidate.relation) {
+    throw new Error('memory candidate relation invariant failed');
+  }
+  if (relationAudit.related_claim_id !== candidate.related_claim_id) {
+    throw new Error('memory candidate relation target invariant failed');
+  }
+
+  const evidence = normalizeEvidence(
+    db.prepare('SELECT * FROM evidence WHERE id = ?')
+      .get(candidate.source_evidence_id),
+  );
+  if (!evidence) throw new Error('candidate source evidence is missing');
+  if (
+    candidate.source_authority !== 'user_direct'
+    || evidence.authority_class !== 'user_direct'
+  ) {
+    throw new Error('candidate promotion requires user_direct authority');
+  }
+  if (evidence.sensitivity === 'secret_redacted') {
+    throw new Error('secret-redacted evidence cannot be promoted');
+  }
+  if (
+    evidence.project_id !== candidate.project_id
+    || evidence.branch !== candidate.branch
+    || evidence.content_redacted !== candidate.proposed_value
+  ) {
+    throw new Error('candidate source evidence invariant failed');
+  }
+
+  let target = null;
+  if (relation.relation === 'unrelated') {
+    if (
+      candidate.related_claim_id !== null
+      || relationAudit.related_claim_id !== null
+      || relation.target_ref !== null
+    ) {
+      throw new Error('unrelated promotion cannot target a claim');
+    }
+  } else {
+    if (!candidate.related_claim_id) {
+      throw new Error('related promotion requires a target claim');
+    }
+    target = normalizeClaim(
+      db.prepare('SELECT * FROM claims WHERE id = ?')
+        .get(candidate.related_claim_id),
+    );
+    if (!target) throw new Error('promotion relation target no longer exists');
+    if (
+      target.project_id !== candidate.project_id
+      || target.branch_scope !== candidate.branch
+      || target.state !== 'active'
+      || target.kind !== 'user_direct'
+      || target.subject !== 'user memory'
+      || target.predicate !== 'states'
+    ) {
+      throw new Error(
+        'promotion relation target must remain an active durable user memory in candidate scope',
+      );
+    }
+    const targetEvidence = normalizeEvidence(
+      db.prepare('SELECT * FROM evidence WHERE id = ?')
+        .get(target.created_from_evidence_id),
+    );
+    if (
+      !targetEvidence
+      || targetEvidence.authority_class !== 'user_direct'
+      || targetEvidence.project_id !== candidate.project_id
+    ) {
+      throw new Error('promotion relation target authority invariant failed');
+    }
+    if (relation.target_ref !== memoryRelationClaimRef(target.id)) {
+      throw new Error('promotion relation opaque target ref invariant failed');
+    }
+  }
+
+  if (
+    relation.confidence !== 'high'
+    || relation.meaning_preserved !== true
+  ) {
+    return {
+      candidate,
+      evidence,
+      relation,
+      status: 'needs_confirmation',
+      claim: null,
+      lifecycle: null,
+      claim_id: null,
+      related_claim_id: target?.id ?? null,
+      policy_version: policyVersion,
+      finalized_at: finalizedAt,
+    };
+  }
+
+  if (relation.relation === 'same') {
+    return {
+      candidate,
+      evidence,
+      relation,
+      status: 'superseded',
+      claim: null,
+      lifecycle: null,
+      claim_id: null,
+      related_claim_id: target.id,
+      policy_version: policyVersion,
+      finalized_at: finalizedAt,
+    };
+  }
+
+  const sensitivity = inspectMemoryTextSensitivity(importance.canonical_fact);
+  if (sensitivity.containsSecret) {
+    return {
+      candidate,
+      evidence,
+      relation,
+      status: 'needs_confirmation',
+      claim: null,
+      lifecycle: null,
+      claim_id: null,
+      related_claim_id: target?.id ?? null,
+      policy_version: policyVersion,
+      finalized_at: finalizedAt,
+    };
+  }
+
+  const claim = prepareClaimInput({
+    evidence,
+    claim: {
+      id: claimId,
+      kind: 'user_direct',
+      subject: 'user memory',
+      predicate: 'states',
+      value: importance.canonical_fact,
+      state: 'active',
+      branchScope: candidate.branch,
+      createdAt: finalizedAt,
+    },
+  });
+
+  const lifecycle = prepareLifecycle(claim.id, {
+    supersedes: relation.relation === 'update' ? [target.id] : [],
+    conflictsWith: relation.relation === 'contradict' ? [target.id] : [],
+  });
+
+  return {
+    candidate,
+    evidence,
+    relation,
+    status: 'promoted',
+    claim,
+    lifecycle,
+    claim_id: claim.id,
+    related_claim_id: target?.id ?? null,
+    policy_version: policyVersion,
+    finalized_at: finalizedAt,
+  };
+}
+
 export class MemoryEngine {
   #db;
   #clock;
@@ -967,6 +1179,24 @@ export class MemoryEngine {
 
       CREATE INDEX IF NOT EXISTS memory_candidate_relations_claim
       ON memory_candidate_relations (related_claim_id);
+
+      CREATE TABLE IF NOT EXISTS memory_candidate_promotions (
+        candidate_id TEXT PRIMARY KEY REFERENCES memory_candidates(id),
+        status TEXT NOT NULL CHECK (
+          status IN ('promoted','superseded','needs_confirmation')
+        ),
+        relation TEXT NOT NULL CHECK (
+          relation IN ('same','update','contradict','unrelated')
+        ),
+        claim_id TEXT REFERENCES claims(id),
+        related_claim_id TEXT REFERENCES claims(id),
+        policy_version TEXT NOT NULL,
+        finalized_at TEXT NOT NULL,
+        result_json TEXT NOT NULL
+      ) STRICT;
+
+      CREATE INDEX IF NOT EXISTS memory_candidate_promotions_claim
+      ON memory_candidate_promotions (claim_id);
 
       CREATE TABLE IF NOT EXISTS lifecycle_events (
         id INTEGER PRIMARY KEY,
@@ -2738,6 +2968,132 @@ export class MemoryEngine {
     }
 
     return this.getCandidate(candidateId);
+  }
+
+  listPromotionReadyCandidates({
+    projectId,
+    branch,
+    limit = 10,
+  }) {
+    assertNonEmptyString(projectId, 'projectId');
+    assertNonEmptyString(branch, 'branch');
+    if (!Number.isInteger(limit) || limit < 1 || limit > 20) {
+      throw new RangeError('limit must be an integer between 1 and 20');
+    }
+
+    return this.#db.prepare(
+      'SELECT c.* FROM memory_candidates c '
+      + 'JOIN memory_candidate_relations r ON r.candidate_id = c.id '
+      + "WHERE c.project_id = ? AND c.branch = ? AND c.status = 'pending' "
+      + 'AND c.evaluated_at IS NOT NULL AND c.relation IS NOT NULL '
+      + 'AND NOT EXISTS ('
+      + 'SELECT 1 FROM memory_candidate_promotions p WHERE p.candidate_id = c.id'
+      + ') '
+      + 'ORDER BY c.created_at ASC, c.id ASC LIMIT ?',
+    ).all(projectId, branch, limit).map(normalizeCandidate);
+  }
+
+  getCandidatePromotion(candidateId) {
+    assertNonEmptyString(candidateId, 'candidateId');
+    const row = this.#db.prepare(
+      'SELECT * FROM memory_candidate_promotions WHERE candidate_id = ?',
+    ).get(candidateId);
+    if (!row) return null;
+    return {
+      candidate_id: row.candidate_id,
+      status: row.status,
+      relation: row.relation,
+      claim_id: row.claim_id,
+      related_claim_id: row.related_claim_id,
+      policy_version: row.policy_version,
+      finalized_at: row.finalized_at,
+      result_json: row.result_json,
+    };
+  }
+
+  previewCandidatePromotion({
+    candidateId,
+    claimId,
+    policyVersion,
+    finalizedAt = this.#clock(),
+  }) {
+    const resolved = resolveCandidatePromotion(this.#db, {
+      candidateId,
+      claimId,
+      policyVersion,
+      finalizedAt,
+    });
+    return {
+      status: resolved.status,
+      relation: resolved.relation.relation,
+      claim_id: resolved.claim_id,
+      related_claim_id: resolved.related_claim_id,
+    };
+  }
+
+  finalizeCandidatePromotion({
+    candidateId,
+    claimId,
+    policyVersion,
+    finalizedAt = this.#clock(),
+  }) {
+    this.#db.exec('BEGIN IMMEDIATE');
+    try {
+      if (this.getCandidatePromotion(candidateId)) {
+        throw new Error('memory candidate promotion is already finalized');
+      }
+
+      const resolved = resolveCandidatePromotion(this.#db, {
+        candidateId,
+        claimId,
+        policyVersion,
+        finalizedAt,
+      });
+
+      if (resolved.status === 'promoted') {
+        insertClaimAndLifecycle(this.#db, {
+          claim: resolved.claim,
+          evidenceContent: resolved.evidence.content_redacted,
+          lifecycle: resolved.lifecycle,
+        });
+      }
+
+      const updated = this.#db.prepare(
+        'UPDATE memory_candidates SET status = ? '
+        + "WHERE id = ? AND status = 'pending'",
+      ).run(resolved.status, candidateId);
+      if (Number(updated.changes) !== 1) {
+        throw new Error('memory candidate promotion raced or was already finalized');
+      }
+
+      const audit = {
+        status: resolved.status,
+        relation: resolved.relation.relation,
+        claim_id: resolved.claim_id,
+        related_claim_id: resolved.related_claim_id,
+      };
+      this.#db.prepare(
+        'INSERT INTO memory_candidate_promotions ('
+        + 'candidate_id, status, relation, claim_id, related_claim_id, '
+        + 'policy_version, finalized_at, result_json'
+        + ') VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      ).run(
+        candidateId,
+        resolved.status,
+        resolved.relation.relation,
+        resolved.claim_id,
+        resolved.related_claim_id,
+        policyVersion,
+        finalizedAt,
+        JSON.stringify(audit),
+      );
+
+      this.#db.exec('COMMIT');
+      return audit;
+    } catch (error) {
+      this.#db.exec('ROLLBACK');
+      throw error;
+    }
   }
 
   recordEvidence(evidence) {
