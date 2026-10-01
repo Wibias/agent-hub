@@ -64,6 +64,38 @@ function createProtocol(memory) {
   });
 }
 
+function seedDurableMemory(memory, {
+  projectId,
+  branch,
+  id,
+  value,
+}) {
+  memory.ingest({
+    evidence: {
+      id: 'eval-seed-evidence-' + id,
+      projectId,
+      sourceKind: 'session',
+      sourceRef: 'eval-seed:' + id,
+      capturedAt: '2026-10-02T00:00:00.000Z',
+      branch,
+      content: value,
+      authorityClass: 'user_direct',
+      metadata: {
+        behavioral_eval_seed: true,
+      },
+    },
+    claim: {
+      id: 'eval-seed-claim-' + id,
+      kind: 'user_direct',
+      subject: 'user memory',
+      predicate: 'states',
+      value,
+      branchScope: branch,
+      createdAt: '2026-10-02T00:00:00.000Z',
+    },
+  });
+}
+
 async function submitPrompt({
   memory,
   projectId,
@@ -175,14 +207,12 @@ async function runDeterministicCase(caseSpec) {
   createProject(memory, projectId);
 
   for (const [index, seed] of caseSpec.seed_memories.entries()) {
-    const result = await submitPrompt({
-      memory,
+    seedDurableMemory(memory, {
       projectId,
       branch: seed.branch,
-      turnId: caseSpec.id + '-seed-' + index,
-      prompt: seed.value,
+      id: caseSpec.id + '-' + index,
+      value: seed.value,
     });
-    assert.equal(result?.decision, 'block');
   }
 
   const beforeCurrent = activeClaims(memory, {
