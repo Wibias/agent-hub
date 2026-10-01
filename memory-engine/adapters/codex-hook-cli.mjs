@@ -17,6 +17,7 @@ import {
 } from '../e5-embedder.mjs';
 import { HybridMemoryRetriever } from '../hybrid-retrieval.mjs';
 import { MemoryEngine } from '../index.mjs';
+import { memoryRestoreLocked } from '../memory-maintenance-lock.mjs';
 import { createMemoryProtocol } from '../protocol.mjs';
 import {
   createCodexMemoryHookAdapter,
@@ -338,8 +339,10 @@ export async function runCodexMemoryHook({
   ensureDbDirectory = defaultEnsureDbDirectory,
   embeddingCacheAvailable = existsSync,
   ensureEmbeddingWorker = launchEmbeddingWorker,
+  restoreLockExists = (dbPath) => memoryRestoreLocked({ dbPath }),
 } = {}) {
   const config = parseCodexMemoryConfig(env, configOptions);
+  if (restoreLockExists(config.dbPath)) return null;
 
   let memory = null;
   try {
@@ -449,6 +452,7 @@ export async function runCodexMemoryHook({
         : null,
     });
 
+    if (restoreLockExists(config.dbPath)) return null;
     return await adapter.handle(event);
   } catch {
     return null;

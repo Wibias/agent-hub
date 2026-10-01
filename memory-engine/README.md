@@ -1026,6 +1026,63 @@ Optional path overrides are available for controlled diagnostics:
 node .\scripts\doctor-memory.mjs --cwd C:\repo --db-path C:\state\memory.sqlite3 --cache-dir C:\repo\.cache\memory-engine\e5 --codex-home C:\path\.codex
 ```
 
+### Durable memory backup and restore
+
+Create a consistent backup of the live WAL-mode database with SQLite's online backup API:
+
+```powershell
+node .\scripts\backup-memory.mjs
+```
+
+By default backups are written below the canonical memory state directory in `backups/`. A backup directory contains:
+
+```text
+memory.sqlite3
+manifest.json
+```
+
+The backup database is a standalone SQLite file normalized to DELETE journal mode for portability. The manifest contains only operational metadata: backup format version, timestamp, SHA-256, byte size, page count, integrity result, and row counts. It does not copy absolute source paths into the manifest.
+
+The backup path can be overridden:
+
+```powershell
+node .\scripts\backup-memory.mjs --output-dir C:\safe\agent-hub-backups
+```
+
+Restore is validation-only by default:
+
+```powershell
+node .\scripts\restore-memory.mjs C:\safe\agent-hub-backups\agent-hub-memory-...
+```
+
+Only an explicit apply mutates the target:
+
+```powershell
+node .\scripts\restore-memory.mjs C:\safe\agent-hub-backups\agent-hub-memory-... --apply
+```
+
+Before apply, the restore validates the manifest, SHA-256, byte size, SQLite `quick_check`, foreign keys, schema, and row counts. During apply it:
+
+- creates a restore-maintenance lock beside the canonical database;
+- makes Agent Hub Codex hooks fail soft while the lock is present;
+- creates a full `pre_restore` backup of the current target database;
+- uses an exclusive SQLite transaction as a quiescence barrier for an in-flight writer;
+- builds and validates a temporary restore candidate;
+- stages the current main database and known `-wal`, `-shm`, and `-journal` sidecars;
+- swaps the candidate into place;
+- restores WAL mode and validates the installed database;
+- rolls staged files back if the swap or post-restore validation fails.
+
+A restore lock is acquired with exclusive file creation. If another restore is active, apply fails closed instead of running concurrently. The lock is removed in the normal success and failure paths.
+
+For the smallest operational risk, close interactive Codex sessions before a production `--apply`. The maintenance lock prevents new Agent Hub hook entries during the restore, but it is not intended as a general process manager for unrelated software that may access the SQLite file directly.
+
+Custom target and pre-restore-backup locations are supported:
+
+```powershell
+node .\scripts\restore-memory.mjs C:\safe\backup --db-path C:\state\memory.sqlite3 --backup-root C:\safe\pre-restore --apply
+```
+
 ## Hybrid retrieval core
 
 `HybridMemoryRetriever` is an asynchronous relevance layer above `MemoryEngine`. It accepts an injected embedder with the contract:
