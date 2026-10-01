@@ -309,6 +309,16 @@ test('unsupported hook events produce no output and no memory calls', async () =
   assert.equal(called, false);
 });
 
+test('formatCodexMemoryContext gives the model an explicit direct-support reliance contract', () => {
+  const text = formatCodexMemoryContext(recallResult());
+
+  assert.match(text, /semantic (?:match|similarity).*(?:not|isn't).*support/i);
+  assert.match(text, /same subject.*not.*same scope/i);
+  assert.match(text, /missing qualifier.*not.*infer/i);
+  assert.match(text, /directly support.*exact question/i);
+  assert.match(text, /otherwise.*ignore/i);
+});
+
 test('formatCodexMemoryContext stays bounded and labels evidence authority', () => {
   const huge = recallResult();
   huge.items = Array.from({ length: 10 }, (_, index) => ({
