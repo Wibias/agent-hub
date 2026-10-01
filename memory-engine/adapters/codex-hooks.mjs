@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 
 import { evaluateReliance } from '../index.mjs';
 import { classifyMemoryCandidatePrompt } from '../memory-capture-policy.mjs';
+import { confirmMemoryCandidate } from '../memory-candidate-confirmation.mjs';
 import {
   refreshRepositoryFreshness,
   resolveGitContext,
@@ -47,6 +48,12 @@ function normalizeMemoryRef(value) {
   if (typeof value !== 'string') return null;
   const normalized = value.trim().toLowerCase();
   return /^@[0-9a-f]{10}$/.test(normalized) ? normalized : null;
+}
+
+function normalizeCandidateRef(value) {
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim().toLowerCase();
+  return /^~[0-9a-f]{10}$/.test(normalized) ? normalized : null;
 }
 
 export function formatCodexMemoryContext(result, {
@@ -109,6 +116,42 @@ export function parseExplicitMemoryPrompt(prompt) {
 
   if (/^\s*memory\s+candidates\s*$/i.test(prompt)) {
     return { mode: 'candidates' };
+  }
+
+  const confirmPrefix = prompt.match(
+    /^\s*memory\s+candidate\s+confirm:\s*/i,
+  );
+  if (confirmPrefix) {
+    const body = prompt.slice(confirmPrefix[0].length).trim();
+    const delimiterIndex = body.indexOf('=>');
+    if (delimiterIndex < 0) return null;
+
+    const candidateRef = normalizeCandidateRef(
+      body.slice(0, delimiterIndex).trim(),
+    );
+    if (candidateRef === null) return null;
+
+    const action = body.slice(delimiterIndex + 2).trim();
+    if (/^unrelated$/i.test(action)) {
+      return {
+        mode: 'candidate_confirm',
+        candidateRef,
+        relation: 'unrelated',
+        targetRef: null,
+      };
+    }
+
+    const related = action.match(
+      /^(same|update|contradict)\s+(@[0-9a-f]{10})$/i,
+    );
+    if (!related) return null;
+
+    return {
+      mode: 'candidate_confirm',
+      candidateRef,
+      relation: related[1].toLowerCase(),
+      targetRef: normalizeMemoryRef(related[2]),
+    };
   }
 
   const explainPrefix = prompt.match(/^\s*memory\s+explain:\s*/i);
@@ -247,19 +290,31 @@ function formatPendingMemoryCandidates(memory, {
     return 'Memory candidate ledger is unavailable.';
   }
 
-  const candidates = memory.listCandidates({
+  const pending = memory.listCandidates({
     projectId,
     branch,
     status: 'pending',
     limit: 50,
   });
+  const needsConfirmation = memory.listCandidates({
+    projectId,
+    branch,
+    status: 'needs_confirmation',
+    limit: 50,
+  });
+  const candidates = [...needsConfirmation, ...pending]
+    .sort((left, right) => (
+      String(right.created_at ?? '').localeCompare(String(left.created_at ?? ''))
+      || String(left.id ?? '').localeCompare(String(right.id ?? ''))
+    ))
+    .slice(0, 50);
 
   if (candidates.length === 0) {
-    return 'No pending memory candidates for the current project and branch.';
+    return 'No actionable memory candidates for the current project and branch.';
   }
 
   const lines = [
-    'Pending memory candidates for the current project and branch:',
+    'Actionable memory candidates for the current project and branch:',
   ];
 
   for (const candidate of candidates) {
@@ -291,6 +346,7 @@ function formatPendingMemoryCandidates(memory, {
 
     const line = [
       `- ${memoryCandidateRef(candidate.id)}`,
+      `[status=${compactText(candidate.status, 40)}]`,
       `[${compactText(candidate.proposed_type, 80)}]`,
       compactText(candidate.proposed_value, 500),
       judgeSummary ? '| ' + judgeSummary : null,
@@ -412,6 +468,24 @@ export function resolveActiveDirectUserMemoryTarget(memory, {
   });
   const matches = memories.filter(
     (claim) => memoryClaimRef(claim.id) === ref,
+  );
+  return matches.length === 1 ? matches[0] : null;
+}
+
+function resolveNeedsConfirmationCandidateTarget(memory, {
+  projectId,
+  branch,
+  ref,
+}) {
+  if (typeof memory?.listCandidates !== 'function') return null;
+  const candidates = memory.listCandidates({
+    projectId,
+    branch,
+    status: 'needs_confirmation',
+    limit: 100,
+  });
+  const matches = candidates.filter(
+    (candidate) => memoryCandidateRef(candidate.id) === ref,
   );
   return matches.length === 1 ? matches[0] : null;
 }
@@ -621,6 +695,7 @@ export function createCodexMemoryHookAdapter({
                 if (
                   explicitMemory.mode === 'replace'
                   || explicitMemory.mode === 'forget'
+                  || explicitMemory.mode === 'candidate_confirm'
                 ) {
                   metadata.explicit_memory_mode = explicitMemory.mode;
                 }
@@ -699,7 +774,48 @@ export function createCodexMemoryHookAdapter({
                 explicitCommandResult.applied = true;
               }
 
-              if (existingClaim === null && parsedMemory !== null) {
+              if (
+                parsedMemory?.mode === 'candidate_confirm'
+                && typeof memory.confirmCandidate === 'function'
+              ) {
+                const candidate = resolveNeedsConfirmationCandidateTarget(memory, {
+                  projectId,
+                  branch: context.branch,
+                  ref: parsedMemory.candidateRef,
+                });
+                const target = parsedMemory.targetRef === null
+                  ? null
+                  : resolveActiveDirectUserMemoryTarget(memory, {
+                      projectId,
+                      branch: context.branch,
+                      ref: parsedMemory.targetRef,
+                    });
+
+                if (
+                  candidate === null
+                  || (parsedMemory.targetRef !== null && target === null)
+                ) {
+                  explicitCommandResult.targetMissing = true;
+                } else {
+                  confirmMemoryCandidate({
+                    memory,
+                    projectId,
+                    branch: context.branch,
+                    candidateId: candidate.id,
+                    relation: parsedMemory.relation,
+                    targetClaimId: target?.id ?? null,
+                    confirmationEvidenceId: capturedEvidence.id,
+                    now: () => capturedEvidence.captured_at ?? capturedAt,
+                  });
+                  explicitCommandResult.applied = true;
+                }
+              }
+
+              if (
+                existingClaim === null
+                && parsedMemory !== null
+                && parsedMemory.mode !== 'candidate_confirm'
+              ) {
                 let value = capturedEvidence.content_redacted;
                 let kind = 'user_direct';
                 let predicate = 'states';
@@ -788,9 +904,13 @@ export function createCodexMemoryHookAdapter({
               reason = 'Memory replaced for the current project and branch.';
             } else if (explicitMemory.mode === 'forget') {
               reason = 'Memory forgotten for the current project and branch.';
+            } else if (explicitMemory.mode === 'candidate_confirm') {
+              reason = 'Memory candidate confirmed for the current project and branch.';
             }
           } else if (explicitCommandResult?.targetMissing === true) {
-            reason = 'Memory not changed: target was not found or was not unique in the current project and branch.';
+            reason = explicitMemory.mode === 'candidate_confirm'
+              ? 'Memory candidate not changed: candidate or target memory was not found or was not unique in the current project and branch.'
+              : 'Memory not changed: target was not found or was not unique in the current project and branch.';
           }
 
           return {
