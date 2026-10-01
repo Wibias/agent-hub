@@ -161,6 +161,38 @@ function createProtocol(memory) {
   });
 }
 
+function seedDurableMemory(memory, {
+  projectId,
+  branch,
+  id,
+  value,
+}) {
+  memory.ingest({
+    evidence: {
+      id: 'eval-seed-evidence-' + id,
+      projectId,
+      sourceKind: 'session',
+      sourceRef: 'eval-seed:' + id,
+      capturedAt: '2026-10-02T00:00:00.000Z',
+      branch,
+      content: value,
+      authorityClass: 'user_direct',
+      metadata: {
+        behavioral_eval_seed: true,
+      },
+    },
+    claim: {
+      id: 'eval-seed-claim-' + id,
+      kind: 'user_direct',
+      subject: 'user memory',
+      predicate: 'states',
+      value,
+      branchScope: branch,
+      createdAt: '2026-10-02T00:00:00.000Z',
+    },
+  });
+}
+
 function activeClaims(memory, {
   projectId,
   branch,
@@ -306,18 +338,12 @@ export async function runProviderBackedMemoryCandidatePipelineCase({
     });
 
     for (const [index, seed] of caseSpec.seed_memories.entries()) {
-      const result = await submitPrompt({
-        memory,
-        runtime,
+      seedDurableMemory(memory, {
+        projectId: runtime.projectId,
         branch: seed.branch,
-        turnId: caseSpec.id + '-seed-' + index,
-        prompt: seed.value,
+        id: caseSpec.id + '-' + index,
+        value: seed.value,
       });
-      if (result?.decision !== 'block') {
-        throw new Error(
-          caseSpec.id + ' seed memory command was not consumed',
-        );
-      }
     }
 
     const beforeCurrent = activeClaims(memory, {
