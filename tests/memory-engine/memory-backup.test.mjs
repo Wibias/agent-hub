@@ -355,6 +355,59 @@ test('Codex memory hook fails soft without opening the DB while restore lock exi
   ]);
 });
 
+
+test('Codex memory hook rechecks restore lock immediately before adapter handling', async () => {
+  let checks = 0;
+  let handled = false;
+  let closed = false;
+
+  const output = await runCodexMemoryHook({
+    event: {
+      hook_event_name: 'UserPromptSubmit',
+      cwd: 'C:/fixture/repo',
+      prompt: 'Which database do we use?',
+    },
+    env: {
+      AGENT_HUB_MEMORY_DB: 'C:/fixture/memory.sqlite3',
+      AGENT_HUB_MEMORY_PROJECT_ID: 'project',
+    },
+    restoreLockExists() {
+      checks += 1;
+      return checks >= 2;
+    },
+    ensureDbDirectory() {},
+    createEngine() {
+      return {
+        getProject() {
+          return { project_id: 'project' };
+        },
+        registerProject() {
+          throw new Error('project is already registered');
+        },
+        close() {
+          closed = true;
+        },
+      };
+    },
+    createProtocol() {
+      return {};
+    },
+    createAdapter() {
+      return {
+        async handle() {
+          handled = true;
+          return { unexpected: true };
+        },
+      };
+    },
+  });
+
+  assert.equal(output, null);
+  assert.equal(checks, 2);
+  assert.equal(handled, false);
+  assert.equal(closed, true);
+});
+
 test('restore lock path is adjacent to the canonical database', () => {
   assert.equal(
     memoryRestoreLockPath('C:/fixture/memory.sqlite3'),
