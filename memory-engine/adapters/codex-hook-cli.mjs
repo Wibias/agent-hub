@@ -130,12 +130,15 @@ export function parseCodexHookCliOptions(argv = []) {
     throw new TypeError('argv must be an array');
   }
 
-  return {
+  const options = {
     ignoreMemoryEnv: argv.includes('--ignore-memory-env'),
     explicitMemoryRequests: argv.includes('--explicit-memory-requests'),
     hybridRecall: argv.includes('--hybrid-recall'),
-    candidateCapture: argv.includes('--candidate-capture'),
   };
+  if (argv.includes('--candidate-capture')) {
+    options.candidateCapture = true;
+  }
+  return options;
 }
 
 export function resolveCodexProjectScope({
