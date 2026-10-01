@@ -9,6 +9,7 @@ import { createEmbeddingIpcClient, defaultEmbeddingIpcPath } from './embedding-i
 import { resolveGitContext as defaultResolveGitContext } from './git-freshness.mjs';
 import { auditCodexState } from './codex-state-audit.mjs';
 import { inspectCodexNativeMemoryConfig } from './codex-native-memory-isolation.mjs';
+import { inspectMemoryRestoreTransaction } from './memory-restore-journal.mjs';
 import {
   defaultCodexEmbeddingCacheDir,
   defaultCodexMemoryDbPath,
@@ -394,6 +395,45 @@ export function evaluateMemoryDoctorStatus(checks) {
   return 'healthy';
 }
 
+function restoreRecoveryStatus(transaction) {
+  if (transaction?.status === 'none') {
+    return {
+      status: 'ok',
+      transactionStatus: 'none',
+      recoverable: false,
+      reason: null,
+    };
+  }
+
+  if (transaction?.status === 'active') {
+    return {
+      status: 'degraded',
+      transactionStatus: 'active',
+      recoverable: false,
+      reason: 'restore_in_progress',
+      transaction,
+    };
+  }
+
+  if (transaction?.status === 'stale') {
+    return {
+      status: 'broken',
+      transactionStatus: 'stale',
+      recoverable: transaction.recoverable === true,
+      reason: 'stale_restore_transaction',
+      transaction,
+    };
+  }
+
+  return {
+    status: 'broken',
+    transactionStatus: transaction?.status ?? 'invalid',
+    recoverable: false,
+    reason: 'invalid_restore_transaction',
+    transaction,
+  };
+}
+
 function recallStatus(database) {
   if (database?.status === 'broken') {
     return {
@@ -446,6 +486,7 @@ export async function runMemoryDoctor({
   const inspectWorker = dependencies.inspectWorker || inspectEmbeddingWorker;
   const inspectCodex = dependencies.inspectCodex || inspectCodexIntegration;
   const inspectNativeIsolation = dependencies.inspectNativeIsolation || inspectNativeCodexMemoryIsolation;
+  const inspectRestoreTransaction = dependencies.inspectRestoreTransaction || inspectMemoryRestoreTransaction;
 
   let scope = null;
   let git = null;
@@ -473,6 +514,9 @@ export async function runMemoryDoctor({
     };
   }
 
+  const restoreTransaction = await inspectRestoreTransaction({ dbPath });
+  const restoreRecovery = restoreRecoveryStatus(restoreTransaction);
+
   const database = await inspectDatabase({
     dbPath,
     projectId: context.projectId,
@@ -495,6 +539,7 @@ export async function runMemoryDoctor({
     recall,
     codex,
     nativeCodexMemory,
+    restoreRecovery,
   ]);
 
   return {
@@ -514,6 +559,7 @@ export async function runMemoryDoctor({
     recall,
     codex,
     nativeCodexMemory,
+    restoreRecovery,
     safety: {
       databaseReadOnly: true,
       checkpoint: false,
