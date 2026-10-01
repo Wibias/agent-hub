@@ -50,6 +50,8 @@ function baseDatabaseResult({ dbPath, exists, status, error = null }) {
     foreignKeyViolations: null,
     journalMode: null,
     missingTables: [],
+    candidateLedgerAvailable: null,
+    pendingCandidates: null,
     projectRegistered: null,
     claims: null,
     activeClaims: null,
@@ -107,6 +109,7 @@ export function inspectMemoryDatabase({ dbPath, projectId = null, branch = null 
         .map((row) => row.name),
     );
     const missingTables = REQUIRED_TABLES.filter((name) => !presentTables.has(name));
+    const candidateLedgerAvailable = presentTables.has('memory_candidates');
 
     if (quickCheck !== 'ok' || foreignKeyViolations > 0 || missingTables.length > 0) {
       return {
@@ -115,6 +118,7 @@ export function inspectMemoryDatabase({ dbPath, projectId = null, branch = null 
         foreignKeyViolations,
         journalMode,
         missingTables,
+        candidateLedgerAvailable,
         error: quickCheck !== 'ok'
           ? 'sqlite_quick_check_failed'
           : foreignKeyViolations > 0
@@ -124,6 +128,7 @@ export function inspectMemoryDatabase({ dbPath, projectId = null, branch = null 
     }
 
     let projectRegistered = null;
+    let pendingCandidates = null;
     let claims = null;
     let activeClaims = null;
     let ftsRows = null;
@@ -137,6 +142,15 @@ export function inspectMemoryDatabase({ dbPath, projectId = null, branch = null 
       projectRegistered = Boolean(
         db.prepare('SELECT 1 AS present FROM project_registry WHERE project_id = ?').get(projectId),
       );
+      if (candidateLedgerAvailable) {
+        pendingCandidates = scalar(
+          db.prepare(
+            "SELECT COUNT(*) AS count FROM memory_candidates "
+            + "WHERE project_id = ? AND branch = ? AND status = 'pending'",
+          ).get(projectId, branch),
+          'count',
+        );
+      }
       claims = scalar(
         db.prepare('SELECT COUNT(*) AS count FROM claims WHERE project_id = ? AND branch_scope = ?')
           .get(projectId, branch),
@@ -174,6 +188,7 @@ export function inspectMemoryDatabase({ dbPath, projectId = null, branch = null 
     }
 
     const degraded = journalMode !== 'wal'
+      || candidateLedgerAvailable === false
       || projectRegistered === false
       || lexicalCoverageComplete === false
       || semanticCoverageComplete === false;
@@ -187,6 +202,8 @@ export function inspectMemoryDatabase({ dbPath, projectId = null, branch = null 
       foreignKeyViolations,
       journalMode,
       missingTables,
+      candidateLedgerAvailable,
+      pendingCandidates,
       projectRegistered,
       claims,
       activeClaims,
@@ -336,6 +353,14 @@ export async function inspectCodexIntegration({ codexHome, auditState = auditCod
         hook,
         hookReadError: audit.hookReadError,
         reason: audit.hookReadError ? 'codex_hooks_unreadable' : 'agent_hub_hook_incomplete',
+      };
+    }
+    if (hook.flags?.candidateCapture !== true) {
+      return {
+        status: 'degraded',
+        hook,
+        hookReadError: null,
+        reason: 'candidate_capture_disabled',
       };
     }
     if (hook.sessionStartLauncher !== true) {
