@@ -110,7 +110,7 @@ export function parseMemoryCandidateRelation(text) {
   }
 
   let raw = text.trim();
-  const fenced = raw.match(/^\`\`\`(?:json)?\s*([\s\S]*?)\s*\`\`\`$/iu);
+  const fenced = raw.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/iu);
   if (fenced) raw = fenced[1].trim();
 
   let parsed;
