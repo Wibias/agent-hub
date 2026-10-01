@@ -643,6 +643,71 @@ An evaluated pending recommendation is visible through `memory candidates`, for 
 
 Even then, `memory list` remains unchanged because no canonical Claim exists.
 
+### AI candidate relation and dedupe judge
+
+Candidates that already have a valid `importance-v1` `promote` recommendation can be compared against existing active durable user memory with:
+
+```powershell
+node .\scripts\judge-memory-relations.mjs
+```
+
+The command is dry-run by default. Persisting relation metadata requires explicit `--apply`:
+
+```powershell
+node .\scripts\judge-memory-relations.mjs --apply
+```
+
+The relation policy is `relation-v1` and has exactly four outcomes:
+
+```text
+same
+update
+contradict
+unrelated
+```
+
+Definitions:
+
+- `same`: the candidate and one existing durable memory express the same durable proposition, allowing harmless paraphrase;
+- `update`: the candidate clearly presents a newer replacement/change to one existing memory;
+- `contradict`: the candidate is incompatible with one existing memory but does not safely establish replacement semantics;
+- `unrelated`: no supplied active durable memory is close enough to the same proposition.
+
+Only active durable `user_direct` Claims from the **same project and branch** are supplied to the judge. For `same`, `update`, and `contradict`, the model must return one opaque `@...` ref copied from that supplied set. Unknown refs fail closed.
+
+When no active durable memory exists in scope, Agent Hub resolves the candidate to `unrelated` deterministically without invoking the AI judge.
+
+Like the importance judge, the relation judge runs in a fresh isolated Codex home with auth only, an empty temporary Git repository, no inherited hooks/config/native memory, and no Agent Hub workspace context.
+
+Persisted relation state is operational only:
+
+```text
+importance=promote
+      ↓
+relation-v1
+      ↓
+memory_candidates.relation / related_claim_id
+      +
+memory_candidate_relations audit row
+```
+
+It does **not** mutate canonical memory. In particular:
+
+- `same` does not delete or merge Claims;
+- `update` does not supersede the existing Claim;
+- `contradict` does not open or resolve a lifecycle conflict;
+- `unrelated` does not create a new Claim.
+
+Those lifecycle actions belong to the later deterministic promotion policy.
+
+Stored relations are visible through `memory candidates`, for example:
+
+```text
+~8d21f0a74c [decision] We use Postgres. | judge=promote durability=long utility=high confidence=high | relation=same target=@7fa31c9e42
+```
+
+Relation evaluation is exactly-once. The write rechecks that the candidate still has a valid `promote` importance judgment and that any target is still an active durable direct-user memory in the candidate's current project and branch.
+
 ### Explicit durable-memory prompts
 
 Production Codex can opt into durable direct-user memory with the hook CLI flag:
