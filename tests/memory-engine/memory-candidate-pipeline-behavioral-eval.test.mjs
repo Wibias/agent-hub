@@ -356,7 +356,11 @@ test('deterministic fake judges drive real capture, relation, promotion, and ide
     runCase: runDeterministicCase,
   });
 
-  assert.equal(result.pass, true);
+  assert.equal(
+    result.pass,
+    true,
+    JSON.stringify(result, null, 2),
+  );
   assert.equal(result.totalCases, 3);
   assert.equal(result.passedCases, 3);
   assert.equal(result.failedCases, 0);
