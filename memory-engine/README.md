@@ -901,15 +901,17 @@ promotion-v1
 
 The importance and relation stages use the existing isolated Codex judge factories. Their subprocesses create fresh temporary `CODEX_HOME` directories, copy authentication only, and do not inherit hooks, config, legacy/native memory state, or the real project workspace.
 
-The three cases cover:
+The five cases cover:
 
 - a new durable decision becoming exactly one active memory;
 - a paraphrase of an existing durable memory resolving `same` and creating no duplicate Claim;
+- an explicit replacement resolving `update`, superseding the exact target, and leaving exactly one active replacement Claim;
+- an incompatible statement without replacement intent resolving `contradict`, keeping both Claims active, and creating one open conflict without choosing a winner;
 - the same fact existing only on another branch remaining invisible to relation matching, with no cross-branch lifecycle mutation.
 
 Every case runs the pipeline a second time and requires all automatic queues to remain empty, proving exactly-once finalization at the behavioral boundary. A failed case makes the manual runner exit non-zero.
 
-Normal PR CI does **not** call Codex. It runs the same three lifecycle expectations with deterministic injected importance/relation judges while still exercising the real candidate capture ledger, stage runners, relation evaluator, promotion policy, branch scoping, and second-run idempotency.
+Normal PR CI does **not** call Codex. It runs the same five lifecycle expectations with deterministic injected importance/relation judges while still exercising the real candidate capture ledger, stage runners, relation evaluator, promotion policy, branch scoping, exact update/conflict lifecycle effects, and second-run idempotency.
 
 This evaluation does not schedule the pipeline, inspect transcripts, add `SessionEnd` work, or put model calls in the normal prompt path.
 
