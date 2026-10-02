@@ -801,6 +801,29 @@ Before mutation, the engine rechecks:
 
 Confirmation finalization is exactly-once. Claim creation, lifecycle/conflict mutation, candidate status, and confirmation audit are one immediate SQLite transaction. Lifecycle and conflict provenance point to the explicit confirmation Evidence, while the durable Claim itself remains attached to the original candidate Evidence.
 
+### Candidate confirmation behavioral evaluation
+
+The explicit confirmation path has a separate deterministic end-to-end behavioral evaluation:
+
+```powershell
+node .\scripts\eval-memory-candidate-confirmation.mjs
+```
+
+It does not call Codex or any external model. Each case uses a temporary SQLite database, captures an ordinary prompt through the real `UserPromptSubmit` candidate path, drives the existing candidate pipeline deterministically into `needs_confirmation`, lists the candidate through `memory candidates`, and then submits the real explicit confirmation command through the hook adapter.
+
+The six cases cover:
+
+- `unrelated` confirmation creating one active durable Claim;
+- `same` confirmation closing the candidate without a duplicate Claim;
+- `update` confirmation superseding exactly the selected active memory;
+- `contradict` confirmation preserving both Claims and opening one conflict;
+- an unknown stable candidate ref failing closed without lifecycle mutation;
+- a target memory that exists only on another branch failing closed without cross-branch mutation.
+
+Successful confirmation cases replay the identical confirmation hook event and require no additional Evidence, Claim, lifecycle, conflict, or confirmation-audit mutation. Every case also reruns the automatic candidate pipeline and requires the importance, relation, and promotion queues to remain empty.
+
+The confirmation command itself is model-free. The behavioral runner executes `memory candidates` separately as the real read-only hook step, then snapshots the deterministic judge-call count immediately before `memory candidate confirm` and requires the confirmation-command delta to remain zero.
+
 ### Candidate pipeline runner
 
 When explicit memory management commands are enabled, Codex can inspect the current pipeline without starting a judge or writing memory state:
