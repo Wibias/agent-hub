@@ -941,6 +941,25 @@ A failing safety gate makes the manual runner exit non-zero. Normal PR CI never 
 
 The calibration runner does not write the production memory database, does not change judge prompts or promotion policy, and does not introduce background processing.
 
+### Memory judge adversarial holdout
+
+A separate holdout probes the judges outside the tuned calibration examples:
+
+```powershell
+node .\scripts\eval-codex-memory-judge-holdout.mjs
+```
+
+It uses separate bilingual adversarial fixtures for both importance and relation judgment. The importance output also reports whether each case is reachable through the current deterministic `capture-v1` policy. This distinction is intentional:
+
+- `pipeline_reachable=true` means the current production candidate-capture policy could send that statement to `importance-v1`;
+- `pipeline_reachable=false` means the case is judge-only distribution-shift evidence and must not be treated as a direct production-pipeline failure.
+
+The holdout quality gate remains deliberately strict for model errors: invalid outputs, false durable promotions, high-confidence wrong importance decisions, and high-confidence wrong relation/target decisions fail the run. The capture-reachability metadata is diagnostic only and does not change those scores.
+
+The holdout is not a target to tune against in place. A failing judge-only case should first be classified as a fixture ambiguity, a policy/lifecycle specification gap, or a genuine judge error. Production prompts or decision rules should change only when the desired product semantics are independently established.
+
+Normal PR CI does not call Codex for this holdout either. Deterministic tests cover fixture composition, scoring, isolation from expected labels, capture-reachability reporting, and resource cleanup.
+
 ### Candidate pipeline behavioral evaluation
 
 The complete candidate path has a separate manual, provider-backed end-to-end evaluation:
