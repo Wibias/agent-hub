@@ -8,6 +8,7 @@ import {
 } from '../../memory-engine/memory-judge-holdout.mjs';
 import {
   runMemoryJudgeHoldout,
+  summarizeImportanceCaptureReachability,
 } from '../../scripts/eval-codex-memory-judge-holdout.mjs';
 
 test('holdout fixture contains 32 balanced bilingual adversarial cases', () => {
@@ -102,6 +103,18 @@ test('holdout fixture contains 32 balanced bilingual adversarial cases', () => {
       'missing relation coverage tag: ' + required,
     );
   }
+});
+
+test('holdout reports which importance cases are reachable through capture-v1', () => {
+  const reachability = summarizeImportanceCaptureReachability();
+
+  assert.equal(reachability.policy_version, 'capture-v1');
+  assert.equal(reachability.total, 16);
+  assert.equal(reachability.reachable, 1);
+  assert.equal(reachability.judge_only, 15);
+  assert.deepEqual(reachability.reachable_ids, [
+    'holdout-importance-b2',
+  ]);
 });
 
 test('perfect holdout predictions pass and expose exact metrics', () => {
@@ -289,6 +302,53 @@ test('invalid or duplicate outputs are counted and fail closed', () => {
   assert.equal(score.invalid_outputs, 2);
   assert.equal(score.quality_gate.pass, false);
   assert.ok(score.quality_gate.failures.includes('invalid_outputs'));
+});
+
+test('holdout runner accepts synchronous resource close methods', async () => {
+  let closeCalls = 0;
+  const importanceCases = [IMPORTANCE_JUDGE_HOLDOUT_CASES[0]];
+  const relationCases = [RELATION_JUDGE_HOLDOUT_CASES[0]];
+
+  const result = await runMemoryJudgeHoldout({
+    importanceCases,
+    relationCases,
+    createImportanceJudge: async () => ({
+      async judge(candidate) {
+        return JSON.stringify({
+          decision: 'promote',
+          suggested_type: candidate.proposed_type,
+          durability: 'long',
+          future_utility: 'high',
+          specificity: 'high',
+          confidence: 'high',
+          meaning_preserved: true,
+          canonical_fact: candidate.proposed_value,
+          reason: 'Synchronous close contract fixture.',
+          risk_flags: [],
+        });
+      },
+      close() {
+        closeCalls += 1;
+      },
+    }),
+    createRelationJudge: async () => ({
+      async judge() {
+        return JSON.stringify({
+          relation: relationCases[0].expected.relation,
+          target_ref: relationCases[0].expected.target_ref,
+          confidence: 'high',
+          meaning_preserved: true,
+          reason: 'Synchronous close contract fixture.',
+        });
+      },
+      close() {
+        closeCalls += 1;
+      },
+    }),
+  });
+
+  assert.equal(result.score.quality_gate.pass, true);
+  assert.equal(closeCalls, 2);
 });
 
 test('holdout runner never exposes expected labels or fixture metadata to judges', async () => {
