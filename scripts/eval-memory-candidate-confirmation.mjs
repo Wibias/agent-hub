@@ -455,6 +455,7 @@ export async function runDeterministicMemoryCandidateConfirmationCase(
 
     const observed = {
       confirmation_applied: confirmationApplied,
+      confirmation_reason: confirmation.reason,
       candidate_status: candidateAfterConfirmation.status,
       ...lifecycle,
       other_active_claims: otherActiveClaims,
