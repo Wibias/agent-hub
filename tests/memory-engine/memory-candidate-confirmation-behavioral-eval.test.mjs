@@ -8,6 +8,7 @@ import {
 } from '../../memory-engine/memory-candidate-confirmation-behavioral-eval.mjs';
 import {
   runDeterministicMemoryCandidateConfirmationCase,
+  summarizeMemoryCandidateConfirmationBehavioralResult,
 } from '../../scripts/eval-memory-candidate-confirmation.mjs';
 
 test('candidate confirmation behavioral fixture covers all explicit relations and scope guards', () => {
@@ -127,4 +128,26 @@ test('deterministic runner drives real candidate pipeline, listing, confirmation
   assert.equal(result.totalCases, 6);
   assert.equal(result.passedCases, 6);
   assert.equal(result.failedCases, 0);
+});
+
+test('confirmation behavioral summary reports observed model-call deltas instead of a constant', () => {
+  assert.deepEqual(
+    summarizeMemoryCandidateConfirmationBehavioralResult({
+      pass: false,
+      totalCases: 2,
+      passedCases: 1,
+      failedCases: 1,
+      cases: [
+        { observed: { confirmation_model_calls: 0 } },
+        { observed: { confirmation_model_calls: 2 } },
+      ],
+    }),
+    {
+      pass: false,
+      total_cases: 2,
+      passed_cases: 1,
+      failed_cases: 1,
+      model_calls_during_confirmation: 2,
+    },
+  );
 });
