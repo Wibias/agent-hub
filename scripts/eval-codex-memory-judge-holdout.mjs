@@ -83,6 +83,7 @@ async function closeResource(resource) {
 export async function runMemoryJudgeHoldout({
   importanceCases = IMPORTANCE_JUDGE_HOLDOUT_CASES,
   relationCases = RELATION_JUDGE_HOLDOUT_CASES,
+  suite = 'holdout-v1',
   model = null,
   reasoningEffort = 'medium',
   cwd = process.cwd(),
@@ -100,6 +101,9 @@ export async function runMemoryJudgeHoldout({
   }
   if (!Array.isArray(relationCases) || relationCases.length === 0) {
     throw new TypeError('relationCases must be a non-empty array');
+  }
+  if (!nonEmpty(suite)) {
+    throw new TypeError('suite must be a non-empty string');
   }
   if (!['low', 'medium', 'high'].includes(reasoningEffort)) {
     throw new TypeError('reasoningEffort must be low, medium, or high');
@@ -216,7 +220,7 @@ export async function runMemoryJudgeHoldout({
     });
 
     return {
-      suite: 'holdout-v1',
+      suite,
       model: model ?? 'codex-default',
       reasoning_effort: reasoningEffort,
       policy_versions: {

@@ -970,6 +970,37 @@ The holdout is not a target to tune against in place. A failing judge-only case 
 
 Normal PR CI does not call Codex for this holdout either. Deterministic tests cover fixture composition, scoring, isolation from expected labels, capture-reachability reporting, and resource cleanup.
 
+### Pipeline-reachable memory judge holdout
+
+A second holdout isolates the distribution that the current production candidate pipeline can actually produce:
+
+```powershell
+node .\scripts\eval-codex-memory-judge-pipeline-holdout.mjs
+```
+
+This suite contains 32 separate bilingual cases:
+
+- 16 importance cases balanced across `promote`, `ignore`, `keep_candidate`, and `needs_confirmation`;
+- 16 relation cases balanced across `same`, `update`, `contradict`, and `unrelated`;
+- every importance statement must be accepted by the current deterministic `capture-v1` policy with the expected candidate type;
+- every relation candidate's original statement must also be accepted by `capture-v1` with the expected candidate type.
+
+The runner executes those deterministic reachability checks before model scoring and reports them separately. Its `pipeline_gate` passes only when both capture reachability and the existing judge safety gate pass.
+
+The real run uses the same production `importance-v1` and `relation-v1` prompts, strict parsers, isolated Codex homes, and default `codex-default` / `medium` settings as the other judge evaluations. Optional comparison overrides use:
+
+```powershell
+$env:MEMORY_JUDGE_PIPELINE_HOLDOUT_MODEL = "MODEL_ID"
+$env:MEMORY_JUDGE_PIPELINE_HOLDOUT_REASONING_EFFORT = "medium"
+node .\scripts\eval-codex-memory-judge-pipeline-holdout.mjs
+```
+
+A different authenticated source home can be selected with `MEMORY_JUDGE_PIPELINE_HOLDOUT_SOURCE_CODEX_HOME`.
+
+This is a generalisation holdout, not a prompt-tuning target. After its first real provider-backed run, failures must be classified as fixture ambiguity, product-policy/lifecycle gaps, or genuine judge errors before any production change. If a production policy or prompt is changed using evidence from this suite, a fresh unseen holdout is required for the next generalisation claim.
+
+Normal PR CI never calls Codex for this suite. It verifies fixture balance, bilingual coverage, full `capture-v1` reachability/type agreement, the distribution-drift gate, production parser use, scoring, and runner orchestration with deterministic injected judges.
+
 ### Candidate pipeline behavioral evaluation
 
 The complete candidate path has a separate manual, provider-backed end-to-end evaluation:
