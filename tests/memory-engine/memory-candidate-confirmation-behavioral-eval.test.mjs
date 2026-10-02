@@ -6,6 +6,9 @@ import {
   runMemoryCandidateConfirmationBehavioralCases,
   scoreMemoryCandidateConfirmationBehavioralCase,
 } from '../../memory-engine/memory-candidate-confirmation-behavioral-eval.mjs';
+import {
+  runDeterministicMemoryCandidateConfirmationCase,
+} from '../../scripts/eval-memory-candidate-confirmation.mjs';
 
 test('candidate confirmation behavioral fixture covers all explicit relations and scope guards', () => {
   assert.deepEqual(
@@ -105,6 +108,22 @@ test('confirmation behavioral runner scores every case independently', async () 
   });
 
   assert.equal(result.pass, true);
+  assert.equal(result.totalCases, 6);
+  assert.equal(result.passedCases, 6);
+  assert.equal(result.failedCases, 0);
+});
+
+test('deterministic runner drives real candidate pipeline, listing, confirmation commands, and scope guards', async () => {
+  const result = await runMemoryCandidateConfirmationBehavioralCases({
+    cases: MEMORY_CANDIDATE_CONFIRMATION_BEHAVIORAL_CASES,
+    runCase: runDeterministicMemoryCandidateConfirmationCase,
+  });
+
+  assert.equal(
+    result.pass,
+    true,
+    JSON.stringify(result, null, 2),
+  );
   assert.equal(result.totalCases, 6);
   assert.equal(result.passedCases, 6);
   assert.equal(result.failedCases, 0);
