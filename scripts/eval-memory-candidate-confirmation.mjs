@@ -483,6 +483,28 @@ export async function runDeterministicMemoryCandidateConfirmationCase(
   }
 }
 
+export function summarizeMemoryCandidateConfirmationBehavioralResult(result) {
+  if (!result || typeof result !== 'object' || Array.isArray(result)) {
+    throw new TypeError('result must be an object');
+  }
+  const cases = Array.isArray(result.cases) ? result.cases : [];
+  const modelCalls = cases.reduce((sum, item) => (
+    sum + (
+      Number.isInteger(item?.observed?.confirmation_model_calls)
+        ? item.observed.confirmation_model_calls
+        : 0
+    )
+  ), 0);
+
+  return {
+    pass: result.pass === true,
+    total_cases: result.totalCases,
+    passed_cases: result.passedCases,
+    failed_cases: result.failedCases,
+    model_calls_during_confirmation: modelCalls,
+  };
+}
+
 async function main() {
   const result = await runMemoryCandidateConfirmationBehavioralCases({
     cases: MEMORY_CANDIDATE_CONFIRMATION_BEHAVIORAL_CASES,
@@ -498,11 +520,7 @@ async function main() {
 
   console.log(JSON.stringify({
     type: 'memory_candidate_confirmation_behavioral_summary',
-    pass: result.pass,
-    total_cases: result.totalCases,
-    passed_cases: result.passedCases,
-    failed_cases: result.failedCases,
-    model_calls_during_confirmation: 0,
+    ...summarizeMemoryCandidateConfirmationBehavioralResult(result),
   }));
 
   if (!result.pass) process.exitCode = 1;
