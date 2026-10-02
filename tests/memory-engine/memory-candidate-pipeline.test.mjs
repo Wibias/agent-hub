@@ -21,12 +21,14 @@ function createLedgerState({
   relation = 0,
   promotion = 0,
   needsConfirmation = 0,
+  keptForReview = 0,
 } = {}) {
   return {
     importance,
     relation,
     promotion,
     needsConfirmation,
+    keptForReview,
     closes: 0,
   };
 }
@@ -52,13 +54,25 @@ function createMemoryFactory(state) {
       );
     },
     listScopedCandidates() {
-      return Array.from(
-        { length: state.needsConfirmation },
-        (_, index) => ({
-          id: 'confirm-' + index,
-          status: 'needs_confirmation',
-        }),
-      );
+      return [
+        ...Array.from(
+          { length: state.needsConfirmation },
+          (_, index) => ({
+            id: 'confirm-' + index,
+            status: 'needs_confirmation',
+          }),
+        ),
+        ...Array.from(
+          { length: state.keptForReview },
+          (_, index) => ({
+            id: 'kept-' + index,
+            status: 'pending',
+            evaluated_at: '2026-10-01T00:00:00.000Z',
+            evaluation_json: JSON.stringify({ decision: 'keep_candidate' }),
+            relation: null,
+          }),
+        ),
+      ];
     },
     close() {
       state.closes += 1;
@@ -99,6 +113,7 @@ test('status-only mode never invokes AI or promotion stages', async () => {
     relation: 2,
     promotion: 1,
     needsConfirmation: 4,
+    keptForReview: 3,
   });
   const calls = [];
   const lines = [];
@@ -132,6 +147,7 @@ test('status-only mode never invokes AI or promotion stages', async () => {
     relation_ready: 2,
     promotion_ready: 1,
     needs_confirmation: 4,
+    kept_for_review: 3,
   });
   assert.deepEqual(output.final, output.initial);
   assert.deepEqual(output.stages, []);
@@ -255,6 +271,7 @@ test('apply mode executes only newly eligible stages in strict order', async () 
     relation_ready: 0,
     promotion_ready: 0,
     needs_confirmation: 1,
+    kept_for_review: 0,
   });
 });
 
