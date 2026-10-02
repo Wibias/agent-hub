@@ -893,6 +893,73 @@ Candidates in `needs_confirmation` are never auto-confirmed by this runner. They
 
 The pipeline is deliberately an explicit operator action. It is not executed inside `UserPromptSubmit` and it does not introduce hidden background consolidation.
 
+### Memory judge calibration
+
+The two model-backed candidate judges have a separate manual calibration harness. The first baseline should use the same defaults as the normal judge path:
+
+```powershell
+node .\scripts\eval-codex-memory-judges.mjs
+```
+
+Optional comparison runs can override the Codex model or reasoning effort explicitly:
+
+```powershell
+$env:MEMORY_JUDGE_CALIBRATION_MODEL = "MODEL_ID"
+$env:MEMORY_JUDGE_CALIBRATION_REASONING_EFFORT = "medium"
+node .\scripts\eval-codex-memory-judges.mjs
+```
+
+Authentication defaults to the normal `CODEX_HOME` / `~/.codex`. A different authenticated source can be selected only for this evaluation:
+
+```powershell
+$env:MEMORY_JUDGE_CALIBRATION_SOURCE_CODEX_HOME = "C:\path\to\.codex"
+```
+
+The fixture contains 32 labeled cases:
+
+- 16 `importance-v1` cases, balanced across `promote`, `ignore`, `keep_candidate`, and `needs_confirmation`;
+- 16 `relation-v1` cases, balanced across `same`, `update`, `contradict`, and `unrelated`;
+- English and German examples in both stages;
+- transient, tentative, scope-unclear, repository-reconstructible, sensitive, and durable importance examples;
+- relation scope/domain hard negatives plus at least one distractor memory in every relation case.
+
+This harness deliberately isolates judge quality from the rest of the memory pipeline. Importance cases are sent directly through the existing isolated importance judge and strict response parser. Relation cases build the existing production relation prompt from one promoted synthetic candidate plus already-scoped active direct-user comparison memories, then use the existing isolated relation judge and strict parser. Candidate capture, branch resolution, persistence, promotion, and lifecycle mutation are covered by the separate behavioral evaluations and are not duplicated here.
+
+The summary reports:
+
+- importance exact accuracy and full confusion matrix;
+- durable-promotion precision and recall;
+- false durable promotions;
+- relation exact accuracy and full confusion matrix;
+- exact target-ref accuracy for related cases;
+- wrong high-confidence relation/target decisions;
+- invalid model outputs.
+
+The default quality gate is intentionally asymmetric and safety-focused. It fails on any invalid output, any false durable promotion, or any wrong high-confidence relation/target result. It does **not** invent a minimum recall or exact-accuracy threshold before a real baseline has been measured. Those metrics are evidence for later calibration decisions, not a production-policy change.
+
+A failing safety gate makes the manual runner exit non-zero. Normal PR CI never calls Codex: it exercises the fixture, strict parsers, relation prompt construction, runner orchestration, and scoring with deterministic injected judges.
+
+The calibration runner does not write the production memory database, does not change judge prompts or promotion policy, and does not introduce background processing.
+
+### Memory judge adversarial holdout
+
+A separate holdout probes the judges outside the tuned calibration examples:
+
+```powershell
+node .\scripts\eval-codex-memory-judge-holdout.mjs
+```
+
+It uses separate bilingual adversarial fixtures for both importance and relation judgment. The importance output also reports whether each case is reachable through the current deterministic `capture-v1` policy. This distinction is intentional:
+
+- `pipeline_reachable=true` means the current production candidate-capture policy could send that statement to `importance-v1`;
+- `pipeline_reachable=false` means the case is judge-only distribution-shift evidence and must not be treated as a direct production-pipeline failure.
+
+The holdout quality gate remains deliberately strict for model errors: invalid outputs, false durable promotions, high-confidence wrong importance decisions, and high-confidence wrong relation/target decisions fail the run. The capture-reachability metadata is diagnostic only and does not change those scores.
+
+The holdout is not a target to tune against in place. A failing judge-only case should first be classified as a fixture ambiguity, a policy/lifecycle specification gap, or a genuine judge error. Production prompts or decision rules should change only when the desired product semantics are independently established.
+
+Normal PR CI does not call Codex for this holdout either. Deterministic tests cover fixture composition, scoring, isolation from expected labels, capture-reachability reporting, and resource cleanup.
+
 ### Candidate pipeline behavioral evaluation
 
 The complete candidate path has a separate manual, provider-backed end-to-end evaluation:
