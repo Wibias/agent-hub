@@ -895,16 +895,21 @@ The pipeline is deliberately an explicit operator action. It is not executed ins
 
 ### Memory judge calibration
 
-The two model-backed candidate judges have a separate manual calibration harness:
+The two model-backed candidate judges have a separate manual calibration harness. The first baseline should use the same defaults as the normal judge path:
 
 ```powershell
-$env:MEMORY_JUDGE_CALIBRATION_MODEL = "gpt-5.6-sol"
-$env:MEMORY_JUDGE_CALIBRATION_REASONING_EFFORT = "medium"
-
 node .\scripts\eval-codex-memory-judges.mjs
 ```
 
-The model override is optional. Authentication defaults to the normal `CODEX_HOME` / `~/.codex`. A different authenticated source can be selected only for this evaluation:
+Optional comparison runs can override the Codex model or reasoning effort explicitly:
+
+```powershell
+$env:MEMORY_JUDGE_CALIBRATION_MODEL = "MODEL_ID"
+$env:MEMORY_JUDGE_CALIBRATION_REASONING_EFFORT = "medium"
+node .\scripts\eval-codex-memory-judges.mjs
+```
+
+Authentication defaults to the normal `CODEX_HOME` / `~/.codex`. A different authenticated source can be selected only for this evaluation:
 
 ```powershell
 $env:MEMORY_JUDGE_CALIBRATION_SOURCE_CODEX_HOME = "C:\path\to\.codex"
