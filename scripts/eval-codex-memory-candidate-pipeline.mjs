@@ -170,7 +170,7 @@ function seedDurableMemory(memory, {
   id,
   value,
 }) {
-  memory.ingest({
+  const stored = memory.ingest({
     evidence: {
       id: 'eval-seed-evidence-' + id,
       projectId,
@@ -194,6 +194,7 @@ function seedDurableMemory(memory, {
       createdAt: '2026-10-02T00:00:00.000Z',
     },
   });
+  return stored.claim;
 }
 
 function activeClaims(memory, {
@@ -340,13 +341,14 @@ export async function runProviderBackedMemoryCandidatePipelineCase({
       createdAt: '2026-10-02T00:00:00.000Z',
     });
 
+    const seededClaims = [];
     for (const [index, seed] of caseSpec.seed_memories.entries()) {
-      seedDurableMemory(memory, {
+      seededClaims.push(seedDurableMemory(memory, {
         projectId: runtime.projectId,
         branch: seed.branch,
         id: caseSpec.id + '-' + index,
         value: seed.value,
-      });
+      }));
     }
 
     const beforeCurrent = activeClaims(memory, {
@@ -418,6 +420,25 @@ export async function runProviderBackedMemoryCandidatePipelineCase({
       projectId: runtime.projectId,
       branch: caseSpec.other_branch,
     }).length;
+    const promotion = memory.getCandidatePromotion(candidate.id);
+    const target = seededClaims.find(
+      (claim) => claim.branch_scope === caseSpec.branch,
+    ) ?? null;
+    const targetAfterFirst = target ? memory.getClaim(target.id) : null;
+    const promotionClaim = promotion?.claim_id
+      ? memory.getClaim(promotion.claim_id)
+      : null;
+    const openConflicts = memory.exportCanonical().conflicts.filter(
+      (conflict) => conflict.state === 'open',
+    );
+    const openConflictLinksTargetAndPromotionClaim = Boolean(
+      targetAfterFirst
+      && promotionClaim
+      && openConflicts.some((conflict) => (
+        [conflict.claim_a, conflict.claim_b].includes(targetAfterFirst.id)
+        && [conflict.claim_a, conflict.claim_b].includes(promotionClaim.id)
+      )),
+    );
 
     const second = await runMemoryCandidatePipelineCli({
       argv,
@@ -451,6 +472,16 @@ export async function runProviderBackedMemoryCandidatePipelineCase({
       first_run_failed_stages: first.stages
         .filter((stage) => stage.result?.summary?.failed > 0)
         .map((stage) => stage.name),
+      target_claim_state_after_first_run: targetAfterFirst?.state ?? null,
+      promotion_claim_state_after_first_run: promotionClaim?.state ?? null,
+      target_superseded_by_promotion_claim: Boolean(
+        targetAfterFirst
+        && promotionClaim
+        && targetAfterFirst.superseded_by_claim_id === promotionClaim.id
+      ),
+      open_conflicts_after_first_run: openConflicts.length,
+      open_conflict_links_target_and_promotion_claim:
+        openConflictLinksTargetAndPromotionClaim,
     };
   } finally {
     if (memory) memory.close();
