@@ -58,7 +58,7 @@ export const MEMORY_CANDIDATE_PIPELINE_BEHAVIORAL_CASES = Object.freeze([
         value: 'Production deployments require two approvals.',
       }),
     ]),
-    prompt: 'We changed production deployments from two required approvals to three required approvals.',
+    prompt: 'We decided to require three approvals for production deployments instead of two.',
     expected: Object.freeze({
       candidate_status: 'promoted',
       relation: 'update',
@@ -88,7 +88,7 @@ export const MEMORY_CANDIDATE_PIPELINE_BEHAVIORAL_CASES = Object.freeze([
         value: 'Production deployments require two approvals.',
       }),
     ]),
-    prompt: 'Production deployments require one approval.',
+    prompt: 'We must require one approval for production deployments.',
     expected: Object.freeze({
       candidate_status: 'promoted',
       relation: 'contradict',
