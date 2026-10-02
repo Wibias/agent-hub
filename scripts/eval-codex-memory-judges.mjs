@@ -65,7 +65,11 @@ function relationCandidate(caseSpec) {
 
 async function closeResource(resource) {
   if (resource && typeof resource.close === 'function') {
-    await resource.close().catch(() => {});
+    try {
+      await resource.close();
+    } catch {
+      // Cleanup must never hide the calibration/holdout result or original error.
+    }
   }
 }
 
