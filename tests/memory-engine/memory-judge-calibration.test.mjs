@@ -62,6 +62,19 @@ test('judge calibration fixture contains 32 balanced bilingual cases', () => {
     ),
     'relation cases must include distractors',
   );
+
+  const keepCandidates = IMPORTANCE_JUDGE_CALIBRATION_CASES.filter(
+    (item) => item.expected.decision === 'keep_candidate',
+  );
+  assert.ok(
+    keepCandidates.every(
+      (item) => (
+        !item.tags.includes('tentative')
+        && !item.tags.includes('scope_unclear')
+      ),
+    ),
+    'keep_candidate fixtures must not conflict with explicit confirmation risks',
+  );
 });
 
 test('importance calibration fixtures match production secret-redaction inputs', () => {
