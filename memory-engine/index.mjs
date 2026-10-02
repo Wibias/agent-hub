@@ -3099,8 +3099,26 @@ export class MemoryEngine {
       ) {
         throw new Error('memory candidate confirmation scope mismatch');
       }
-      if (candidate.status !== 'needs_confirmation') {
-        throw new Error('memory candidate is not in needs_confirmation state');
+      let keepCandidate = false;
+      if (
+        candidate.status === 'pending'
+        && candidate.evaluated_at !== null
+        && typeof candidate.evaluation_json === 'string'
+        && candidate.relation === null
+      ) {
+        try {
+          keepCandidate = validateMemoryCandidateJudgment(
+            JSON.parse(candidate.evaluation_json),
+          ).decision === 'keep_candidate';
+        } catch {
+          keepCandidate = false;
+        }
+      }
+      if (
+        candidate.status !== 'needs_confirmation'
+        && !keepCandidate
+      ) {
+        throw new Error('memory candidate is not confirmable');
       }
 
       const sourceEvidence = normalizeEvidence(
@@ -3207,8 +3225,8 @@ export class MemoryEngine {
 
       const updated = this.#db.prepare(
         'UPDATE memory_candidates SET status = ? '
-        + "WHERE id = ? AND status = 'needs_confirmation'",
-      ).run(status, candidateId);
+        + 'WHERE id = ? AND status = ?',
+      ).run(status, candidateId, candidate.status);
       if (Number(updated.changes) !== 1) {
         throw new Error('memory candidate confirmation raced or was already finalized');
       }
