@@ -202,9 +202,9 @@ export const IMPORTANCE_JUDGE_CALIBRATION_CASES = Object.freeze([
     id: 'importance-confirm-global-retention-de',
     language: 'de',
     type: 'constraint',
-    value: 'Wir sollten diese Daten niemals löschen.',
+    value: 'Vielleicht sollten wir Audit-Daten niemals löschen.',
     decision: 'needs_confirmation',
-    tags: ['scope_unclear', 'high_impact'],
+    tags: ['tentative', 'high_impact'],
   }),
 ]);
 
