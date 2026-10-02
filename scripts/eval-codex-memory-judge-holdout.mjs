@@ -19,6 +19,10 @@ import {
   parseMemoryCandidateJudgment,
   validateMemoryCandidateJudgment,
 } from '../memory-engine/memory-candidate-judge.mjs';
+import {
+  CAPTURE_POLICY_VERSION,
+  classifyMemoryCandidatePrompt,
+} from '../memory-engine/memory-capture-policy.mjs';
 
 async function defaultCreateImportanceJudge(options) {
   const { createCodexMemoryCandidateJudge } = await import('./judge-memory-candidates.mjs');
@@ -68,7 +72,11 @@ function relationCandidate(caseSpec) {
 
 async function closeResource(resource) {
   if (resource && typeof resource.close === 'function') {
-    await resource.close().catch(() => {});
+    try {
+      await resource.close();
+    } catch {
+      // Cleanup must never hide the calibration/holdout result or original error.
+    }
   }
 }
 
@@ -237,6 +245,26 @@ function expectedById(cases) {
   return new Map(cases.map((item) => [item.id, item.expected]));
 }
 
+export function summarizeImportanceCaptureReachability(
+  cases = IMPORTANCE_JUDGE_HOLDOUT_CASES,
+) {
+  const caseReachability = cases.map((item) => ({
+    id: item.id,
+    pipeline_reachable: classifyMemoryCandidatePrompt(
+      item.candidate.proposed_value,
+    ) !== null,
+  }));
+  const reachable = caseReachability.filter((item) => item.pipeline_reachable);
+  return {
+    policy_version: CAPTURE_POLICY_VERSION,
+    total: caseReachability.length,
+    reachable: reachable.length,
+    judge_only: caseReachability.length - reachable.length,
+    reachable_ids: reachable.map((item) => item.id),
+    cases: caseReachability,
+  };
+}
+
 async function main() {
   const model = nonEmpty(process.env.MEMORY_JUDGE_HOLDOUT_MODEL)
     ? process.env.MEMORY_JUDGE_HOLDOUT_MODEL.trim()
@@ -259,10 +287,15 @@ async function main() {
   });
 
   const importanceExpected = expectedById(IMPORTANCE_JUDGE_HOLDOUT_CASES);
+  const captureReachability = summarizeImportanceCaptureReachability();
+  const reachableById = new Map(
+    captureReachability.cases.map((item) => [item.id, item.pipeline_reachable]),
+  );
   for (const prediction of result.importance_predictions) {
     console.log(JSON.stringify({
       type: 'memory_judge_holdout_importance_case',
       id: prediction.id,
+      pipeline_reachable: reachableById.get(prediction.id) ?? false,
       expected: importanceExpected.get(prediction.id),
       observed: prediction,
     }));
@@ -285,6 +318,7 @@ async function main() {
     reasoning_effort: result.reasoning_effort,
     policy_versions: result.policy_versions,
     isolation: result.isolation,
+    capture_reachability: captureReachability,
     score: result.score,
   }));
 
