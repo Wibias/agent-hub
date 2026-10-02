@@ -893,6 +893,49 @@ Candidates in `needs_confirmation` are never auto-confirmed by this runner. They
 
 The pipeline is deliberately an explicit operator action. It is not executed inside `UserPromptSubmit` and it does not introduce hidden background consolidation.
 
+### Memory judge calibration
+
+The two model-backed candidate judges have a separate manual calibration harness:
+
+```powershell
+$env:MEMORY_JUDGE_CALIBRATION_MODEL = "gpt-5.6-sol"
+$env:MEMORY_JUDGE_CALIBRATION_REASONING_EFFORT = "medium"
+
+node .\scripts\eval-codex-memory-judges.mjs
+```
+
+The model override is optional. Authentication defaults to the normal `CODEX_HOME` / `~/.codex`. A different authenticated source can be selected only for this evaluation:
+
+```powershell
+$env:MEMORY_JUDGE_CALIBRATION_SOURCE_CODEX_HOME = "C:\path\to\.codex"
+```
+
+The fixture contains 32 labeled cases:
+
+- 16 `importance-v1` cases, balanced across `promote`, `ignore`, `keep_candidate`, and `needs_confirmation`;
+- 16 `relation-v1` cases, balanced across `same`, `update`, `contradict`, and `unrelated`;
+- English and German examples in both stages;
+- transient, tentative, scope-unclear, repository-reconstructible, sensitive, and durable importance examples;
+- relation scope/domain hard negatives plus at least one distractor memory in every relation case.
+
+This harness deliberately isolates judge quality from the rest of the memory pipeline. Importance cases are sent directly through the existing isolated importance judge and strict response parser. Relation cases build the existing production relation prompt from one promoted synthetic candidate plus already-scoped active direct-user comparison memories, then use the existing isolated relation judge and strict parser. Candidate capture, branch resolution, persistence, promotion, and lifecycle mutation are covered by the separate behavioral evaluations and are not duplicated here.
+
+The summary reports:
+
+- importance exact accuracy and full confusion matrix;
+- durable-promotion precision and recall;
+- false durable promotions;
+- relation exact accuracy and full confusion matrix;
+- exact target-ref accuracy for related cases;
+- wrong high-confidence relation/target decisions;
+- invalid model outputs.
+
+The default quality gate is intentionally asymmetric and safety-focused. It fails on any invalid output, any false durable promotion, or any wrong high-confidence relation/target result. It does **not** invent a minimum recall or exact-accuracy threshold before a real baseline has been measured. Those metrics are evidence for later calibration decisions, not a production-policy change.
+
+A failing safety gate makes the manual runner exit non-zero. Normal PR CI never calls Codex: it exercises the fixture, strict parsers, relation prompt construction, runner orchestration, and scoring with deterministic injected judges.
+
+The calibration runner does not write the production memory database, does not change judge prompts or promotion policy, and does not introduce background processing.
+
 ### Candidate pipeline behavioral evaluation
 
 The complete candidate path has a separate manual, provider-backed end-to-end evaluation:
