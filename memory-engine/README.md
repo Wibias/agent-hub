@@ -870,6 +870,49 @@ Candidates in `needs_confirmation` are never auto-confirmed by this runner. They
 
 The pipeline is deliberately an explicit operator action. It is not executed inside `UserPromptSubmit` and it does not introduce hidden background consolidation.
 
+### Candidate pipeline behavioral evaluation
+
+The complete candidate path has a separate manual, provider-backed end-to-end evaluation:
+
+```powershell
+$env:MEMORY_CANDIDATE_PIPELINE_BEHAVIORAL_MODEL = "gpt-5.6-sol"
+$env:MEMORY_CANDIDATE_PIPELINE_BEHAVIORAL_REASONING_EFFORT = "medium"
+
+node .\scripts\eval-codex-memory-candidate-pipeline.mjs
+```
+
+The model override is optional. The runner uses the normal authenticated Codex home by default. When authentication lives elsewhere, point only the eval at it:
+
+```powershell
+$env:MEMORY_CANDIDATE_PIPELINE_SOURCE_CODEX_HOME = "C:\path\to\.codex"
+```
+
+Each behavioral case gets its own temporary Git repository and temporary SQLite database. Existing comparison memories are synthetic canonical `user_direct` fixtures; the candidate itself enters through the real `UserPromptSubmit` candidate-capture path. The runner then executes the real explicit pipeline in order:
+
+```text
+capture-v1
+    ↓
+importance-v1
+    ↓
+relation-v1
+    ↓
+promotion-v1
+```
+
+The importance and relation stages use the existing isolated Codex judge factories. Their subprocesses create fresh temporary `CODEX_HOME` directories, copy authentication only, and do not inherit hooks, config, legacy/native memory state, or the real project workspace.
+
+The three cases cover:
+
+- a new durable decision becoming exactly one active memory;
+- a paraphrase of an existing durable memory resolving `same` and creating no duplicate Claim;
+- the same fact existing only on another branch remaining invisible to relation matching, with no cross-branch lifecycle mutation.
+
+Every case runs the pipeline a second time and requires all automatic queues to remain empty, proving exactly-once finalization at the behavioral boundary. A failed case makes the manual runner exit non-zero.
+
+Normal PR CI does **not** call Codex. It runs the same three lifecycle expectations with deterministic injected importance/relation judges while still exercising the real candidate capture ledger, stage runners, relation evaluator, promotion policy, branch scoping, and second-run idempotency.
+
+This evaluation does not schedule the pipeline, inspect transcripts, add `SessionEnd` work, or put model calls in the normal prompt path.
+
 ### Explicit durable-memory prompts
 
 Production Codex can opt into durable direct-user memory with the hook CLI flag:
