@@ -139,7 +139,42 @@ function activeClaims(memory, {
   ));
 }
 
-function deterministicStageRunners() {
+function lifecycleStats(memory, {
+  projectId,
+  branch,
+}) {
+  const exported = memory.exportCanonical();
+  const scopedClaims = exported.claims.filter((claim) => (
+    claim.project_id === projectId
+    && claim.branch_scope === branch
+    && claim.kind === 'user_direct'
+    && claim.subject === 'user memory'
+    && claim.predicate === 'states'
+  ));
+  const scopedClaimIds = new Set(scopedClaims.map((claim) => claim.id));
+
+  return {
+    current_superseded_claims_after_second_run: scopedClaims.filter(
+      (claim) => claim.state === 'superseded',
+    ).length,
+    open_conflicts_after_second_run: exported.conflicts.filter((conflict) => (
+      conflict.project_id === projectId
+      && conflict.state === 'open'
+      && scopedClaimIds.has(conflict.claim_a)
+      && scopedClaimIds.has(conflict.claim_b)
+    )).length,
+    supersede_events_after_second_run: exported.lifecycle_events.filter(
+      (event) => (
+        event.project_id === projectId
+        && event.action === 'supersede'
+        && scopedClaimIds.has(event.source_claim_id)
+        && scopedClaimIds.has(event.target_claim_id)
+      ),
+    ).length,
+  };
+}
+
+function deterministicStageRunners(caseSpec) {
   let relationJudgeCalls = 0;
 
   return {
@@ -187,11 +222,11 @@ function deterministicStageRunners() {
               relationJudgeCalls += 1;
               assert.equal(memories.length, 1);
               return {
-                relation: 'same',
+                relation: caseSpec.expected.relation,
                 target_ref: memories[0].ref,
                 confidence: 'high',
                 meaning_preserved: true,
-                reason: 'Deterministic paraphrase match fixture.',
+                reason: 'Deterministic behavioral relation fixture.',
               };
             },
             async close() {},
@@ -248,7 +283,7 @@ async function runDeterministicCase(caseSpec) {
     branch: caseSpec.branch,
     revisionSha: 'a'.repeat(40),
   };
-  const stageRunners = deterministicStageRunners();
+  const stageRunners = deterministicStageRunners(caseSpec);
   const createMemory = ({ dbPath: candidateDbPath }) => (
     new MemoryEngine({ dbPath: candidateDbPath })
   );
@@ -295,6 +330,10 @@ async function runDeterministicCase(caseSpec) {
     projectId,
     branch: caseSpec.other_branch,
   }).length;
+  const lifecycle = lifecycleStats(memory, {
+    projectId,
+    branch: caseSpec.branch,
+  });
 
   const observed = {
     candidate_status: afterCandidate.status,
@@ -303,6 +342,7 @@ async function runDeterministicCase(caseSpec) {
     other_active_claim_delta: afterOther - beforeOther,
     current_active_claims_after_second_run: afterSecondCurrent,
     other_active_claims_after_second_run: afterSecondOther,
+    ...lifecycle,
     second_run_ready: {
       importance: second.final.importance_ready,
       relation: second.final.relation_ready,
@@ -318,7 +358,7 @@ async function runDeterministicCase(caseSpec) {
   return observed;
 }
 
-test('candidate pipeline behavioral fixture covers promotion, same dedupe, and branch isolation', () => {
+test('candidate pipeline behavioral fixture covers promotion, same, update, contradict, and branch isolation', () => {
   assert.deepEqual(
     MEMORY_CANDIDATE_PIPELINE_BEHAVIORAL_CASES.map((item) => ({
       id: item.id,
@@ -343,6 +383,20 @@ test('candidate pipeline behavioral fixture covers promotion, same dedupe, and b
         otherDelta: 0,
       },
       {
+        id: 'update-existing-memory',
+        relation: 'update',
+        candidateStatus: 'promoted',
+        currentDelta: 0,
+        otherDelta: 0,
+      },
+      {
+        id: 'contradict-existing-memory',
+        relation: 'contradict',
+        candidateStatus: 'promoted',
+        currentDelta: 1,
+        otherDelta: 0,
+      },
+      {
         id: 'cross-branch-isolation',
         relation: 'unrelated',
         candidateStatus: 'promoted',
@@ -350,6 +404,40 @@ test('candidate pipeline behavioral fixture covers promotion, same dedupe, and b
         otherDelta: 0,
       },
     ],
+  );
+});
+
+test('update and contradict fixtures require the correct lifecycle structure', () => {
+  const update = MEMORY_CANDIDATE_PIPELINE_BEHAVIORAL_CASES.find(
+    (item) => item.id === 'update-existing-memory',
+  );
+  const contradict = MEMORY_CANDIDATE_PIPELINE_BEHAVIORAL_CASES.find(
+    (item) => item.id === 'contradict-existing-memory',
+  );
+
+  assert.deepEqual(
+    {
+      superseded: update?.expected.current_superseded_claims_after_second_run,
+      openConflicts: update?.expected.open_conflicts_after_second_run,
+      supersedeEvents: update?.expected.supersede_events_after_second_run,
+    },
+    {
+      superseded: 1,
+      openConflicts: 0,
+      supersedeEvents: 1,
+    },
+  );
+  assert.deepEqual(
+    {
+      superseded: contradict?.expected.current_superseded_claims_after_second_run,
+      openConflicts: contradict?.expected.open_conflicts_after_second_run,
+      supersedeEvents: contradict?.expected.supersede_events_after_second_run,
+    },
+    {
+      superseded: 0,
+      openConflicts: 1,
+      supersedeEvents: 0,
+    },
   );
 });
 
@@ -394,8 +482,8 @@ test('deterministic fake judges drive real capture, relation, promotion, and ide
     true,
     JSON.stringify(result, null, 2),
   );
-  assert.equal(result.totalCases, 3);
-  assert.equal(result.passedCases, 3);
+  assert.equal(result.totalCases, 5);
+  assert.equal(result.passedCases, 5);
   assert.equal(result.failedCases, 0);
 
   const byId = new Map(result.cases.map((item) => [item.id, item]));
@@ -405,6 +493,14 @@ test('deterministic fake judges drive real capture, relation, promotion, and ide
   );
   assert.equal(
     byId.get('same-existing-memory').observed.relation_judge_calls,
+    1,
+  );
+  assert.equal(
+    byId.get('update-existing-memory').observed.relation_judge_calls,
+    1,
+  );
+  assert.equal(
+    byId.get('contradict-existing-memory').observed.relation_judge_calls,
     1,
   );
   assert.equal(
