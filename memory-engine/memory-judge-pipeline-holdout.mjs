@@ -104,7 +104,7 @@ export const PIPELINE_IMPORTANCE_HOLDOUT_CASES = Object.freeze([
     id: 'pipeline-importance-ignore-demo-db-de',
     language: 'de',
     type: 'decision',
-    value: 'Ich nutze SQLite nur für diese eine Demo.',
+    value: 'Wir verwenden SQLite nur für diese eine Demo.',
     decision: 'ignore',
     tags: ['transient', 'demo'],
   }),
