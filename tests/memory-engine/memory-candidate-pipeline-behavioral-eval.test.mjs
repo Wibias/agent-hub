@@ -11,6 +11,9 @@ import {
   createCodexMemoryHookAdapter,
 } from '../../memory-engine/adapters/codex-hooks.mjs';
 import {
+  canonicalizeGitRemote,
+} from '../../memory-engine/adapters/codex-hook-cli.mjs';
+import {
   createMemoryProtocol,
 } from '../../memory-engine/protocol.mjs';
 import {
@@ -419,9 +422,17 @@ test('deterministic fake judges drive real capture, relation, promotion, and ide
   }
 });
 
-test('manual provider-backed candidate pipeline eval runner imports without executing Codex', async () => {
+test('manual provider-backed candidate pipeline eval uses a safe synthetic repository identity', async () => {
   const runner = await import(
     '../../scripts/eval-codex-memory-candidate-pipeline.mjs'
   );
-  assert.ok(runner && typeof runner === 'object');
+
+  assert.equal(
+    runner.MEMORY_CANDIDATE_PIPELINE_EVAL_REMOTE,
+    'https://example.invalid/agent-hub/memory-candidate-eval.git',
+  );
+  assert.equal(
+    canonicalizeGitRemote(runner.MEMORY_CANDIDATE_PIPELINE_EVAL_REMOTE),
+    'example.invalid/agent-hub/memory-candidate-eval',
+  );
 });
