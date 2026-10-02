@@ -441,6 +441,24 @@ test('update and contradict fixtures require the correct lifecycle structure', (
   );
 });
 
+test('update and contradict fixtures require exact target-to-promotion claim identity links', () => {
+  const update = MEMORY_CANDIDATE_PIPELINE_BEHAVIORAL_CASES.find(
+    (item) => item.id === 'update-existing-memory',
+  );
+  const contradict = MEMORY_CANDIDATE_PIPELINE_BEHAVIORAL_CASES.find(
+    (item) => item.id === 'contradict-existing-memory',
+  );
+
+  assert.equal(
+    update?.expected.target_superseded_by_promotion_claim,
+    true,
+  );
+  assert.equal(
+    contradict?.expected.open_conflict_links_target_and_promotion_claim,
+    true,
+  );
+});
+
 test('candidate pipeline behavioral scorer rejects duplicate promotion or cross-branch mutation', () => {
   const caseSpec = MEMORY_CANDIDATE_PIPELINE_BEHAVIORAL_CASES[0];
   const good = {
