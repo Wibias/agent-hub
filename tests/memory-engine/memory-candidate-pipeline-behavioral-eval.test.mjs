@@ -73,7 +73,7 @@ function seedDurableMemory(memory, {
   id,
   value,
 }) {
-  memory.ingest({
+  const stored = memory.ingest({
     evidence: {
       id: 'eval-seed-evidence-' + id,
       projectId,
@@ -97,6 +97,7 @@ function seedDurableMemory(memory, {
       createdAt: '2026-10-02T00:00:00.000Z',
     },
   });
+  return stored.claim;
 }
 
 async function submitPrompt({
@@ -139,7 +140,7 @@ function activeClaims(memory, {
   ));
 }
 
-function deterministicStageRunners() {
+function deterministicStageRunners(caseSpec) {
   let relationJudgeCalls = 0;
 
   return {
@@ -187,11 +188,11 @@ function deterministicStageRunners() {
               relationJudgeCalls += 1;
               assert.equal(memories.length, 1);
               return {
-                relation: 'same',
+                relation: caseSpec.expected.relation,
                 target_ref: memories[0].ref,
                 confidence: 'high',
                 meaning_preserved: true,
-                reason: 'Deterministic paraphrase match fixture.',
+                reason: 'Deterministic behavioral-eval relation fixture.',
               };
             },
             async close() {},
@@ -209,13 +210,14 @@ async function runDeterministicCase(caseSpec) {
   const memory = new MemoryEngine({ dbPath });
   createProject(memory, projectId);
 
+  const seededClaims = [];
   for (const [index, seed] of caseSpec.seed_memories.entries()) {
-    seedDurableMemory(memory, {
+    seededClaims.push(seedDurableMemory(memory, {
       projectId,
       branch: seed.branch,
       id: caseSpec.id + '-' + index,
       value: seed.value,
-    });
+    }));
   }
 
   const beforeCurrent = activeClaims(memory, {
@@ -248,7 +250,7 @@ async function runDeterministicCase(caseSpec) {
     branch: caseSpec.branch,
     revisionSha: 'a'.repeat(40),
   };
-  const stageRunners = deterministicStageRunners();
+  const stageRunners = deterministicStageRunners(caseSpec);
   const createMemory = ({ dbPath: candidateDbPath }) => (
     new MemoryEngine({ dbPath: candidateDbPath })
   );
@@ -274,6 +276,25 @@ async function runDeterministicCase(caseSpec) {
     projectId,
     branch: caseSpec.other_branch,
   }).length;
+  const promotion = memory.getCandidatePromotion(candidate.id);
+  const target = seededClaims.find(
+    (claim) => claim.branch_scope === caseSpec.branch,
+  ) ?? null;
+  const targetAfterFirst = target ? memory.getClaim(target.id) : null;
+  const promotionClaim = promotion?.claim_id
+    ? memory.getClaim(promotion.claim_id)
+    : null;
+  const openConflicts = memory.exportCanonical().conflicts.filter(
+    (conflict) => conflict.state === 'open',
+  );
+  const openConflictLinksTargetAndPromotionClaim = Boolean(
+    targetAfterFirst
+    && promotionClaim
+    && openConflicts.some((conflict) => (
+      [conflict.claim_a, conflict.claim_b].includes(targetAfterFirst.id)
+      && [conflict.claim_a, conflict.claim_b].includes(promotionClaim.id)
+    )),
+  );
 
   const second = await runMemoryCandidatePipelineCli({
     argv: ['--apply', '--limit', '10'],
@@ -312,13 +333,23 @@ async function runDeterministicCase(caseSpec) {
     first_run_failed_stages: first.stages
       .filter((stage) => stage.result?.summary?.failed > 0)
       .map((stage) => stage.name),
+    target_claim_state_after_first_run: targetAfterFirst?.state ?? null,
+    promotion_claim_state_after_first_run: promotionClaim?.state ?? null,
+    target_superseded_by_promotion_claim: Boolean(
+      targetAfterFirst
+      && promotionClaim
+      && targetAfterFirst.superseded_by_claim_id === promotionClaim.id
+    ),
+    open_conflicts_after_first_run: openConflicts.length,
+    open_conflict_links_target_and_promotion_claim:
+      openConflictLinksTargetAndPromotionClaim,
   };
 
   memory.close();
   return observed;
 }
 
-test('candidate pipeline behavioral fixture covers promotion, same dedupe, and branch isolation', () => {
+test('candidate pipeline behavioral fixture covers promotion, dedupe, update, contradiction, and branch isolation', () => {
   assert.deepEqual(
     MEMORY_CANDIDATE_PIPELINE_BEHAVIORAL_CASES.map((item) => ({
       id: item.id,
@@ -340,6 +371,20 @@ test('candidate pipeline behavioral fixture covers promotion, same dedupe, and b
         relation: 'same',
         candidateStatus: 'superseded',
         currentDelta: 0,
+        otherDelta: 0,
+      },
+      {
+        id: 'update-existing-memory',
+        relation: 'update',
+        candidateStatus: 'promoted',
+        currentDelta: 0,
+        otherDelta: 0,
+      },
+      {
+        id: 'contradict-existing-memory',
+        relation: 'contradict',
+        candidateStatus: 'promoted',
+        currentDelta: 1,
         otherDelta: 0,
       },
       {
@@ -394,8 +439,8 @@ test('deterministic fake judges drive real capture, relation, promotion, and ide
     true,
     JSON.stringify(result, null, 2),
   );
-  assert.equal(result.totalCases, 3);
-  assert.equal(result.passedCases, 3);
+  assert.equal(result.totalCases, 5);
+  assert.equal(result.passedCases, 5);
   assert.equal(result.failedCases, 0);
 
   const byId = new Map(result.cases.map((item) => [item.id, item]));
@@ -408,8 +453,51 @@ test('deterministic fake judges drive real capture, relation, promotion, and ide
     1,
   );
   assert.equal(
+    byId.get('update-existing-memory').observed.relation_judge_calls,
+    1,
+  );
+  assert.equal(
+    byId.get('contradict-existing-memory').observed.relation_judge_calls,
+    1,
+  );
+  assert.equal(
     byId.get('cross-branch-isolation').observed.relation_judge_calls,
     0,
+  );
+
+  assert.equal(
+    byId.get('update-existing-memory').observed.target_claim_state_after_first_run,
+    'superseded',
+  );
+  assert.equal(
+    byId.get('update-existing-memory').observed.promotion_claim_state_after_first_run,
+    'active',
+  );
+  assert.equal(
+    byId.get('update-existing-memory').observed.target_superseded_by_promotion_claim,
+    true,
+  );
+  assert.equal(
+    byId.get('update-existing-memory').observed.open_conflicts_after_first_run,
+    0,
+  );
+
+  assert.equal(
+    byId.get('contradict-existing-memory').observed.target_claim_state_after_first_run,
+    'active',
+  );
+  assert.equal(
+    byId.get('contradict-existing-memory').observed.promotion_claim_state_after_first_run,
+    'active',
+  );
+  assert.equal(
+    byId.get('contradict-existing-memory').observed.open_conflicts_after_first_run,
+    1,
+  );
+  assert.equal(
+    byId.get('contradict-existing-memory')
+      .observed.open_conflict_links_target_and_promotion_claim,
+    true,
   );
 
   for (const item of result.cases) {
