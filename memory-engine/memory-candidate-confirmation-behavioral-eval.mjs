@@ -163,6 +163,7 @@ export const MEMORY_CANDIDATE_CONFIRMATION_BEHAVIORAL_CASES = Object.freeze([
     }),
     expected: Object.freeze({
       confirmation_applied: false,
+      confirmation_reason: 'Memory candidate not changed: candidate or target memory was not found or was not unique in the current project and branch.',
       candidate_status: 'needs_confirmation',
       current_active_claims: 0,
       current_superseded_claims: 0,
@@ -200,6 +201,7 @@ export const MEMORY_CANDIDATE_CONFIRMATION_BEHAVIORAL_CASES = Object.freeze([
     }),
     expected: Object.freeze({
       confirmation_applied: false,
+      confirmation_reason: 'Memory candidate not changed: candidate or target memory was not found or was not unique in the current project and branch.',
       candidate_status: 'needs_confirmation',
       current_active_claims: 0,
       current_superseded_claims: 0,
