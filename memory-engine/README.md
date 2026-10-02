@@ -817,7 +817,7 @@ The explicit confirmation path has a separate deterministic end-to-end behaviora
 node .\scripts\eval-memory-candidate-confirmation.mjs
 ```
 
-It does not call Codex or any external model. Each case uses a temporary SQLite database, captures an ordinary prompt through the real `UserPromptSubmit` candidate path, drives the existing candidate pipeline deterministically into `needs_confirmation`, lists the candidate through `memory candidates`, and then submits the real explicit confirmation command through the hook adapter.
+It does not call Codex or any external model. Each case uses a temporary SQLite database, captures an ordinary prompt through the real `UserPromptSubmit` candidate path, drives the existing candidate pipeline deterministically into an explicitly reviewable state (`needs_confirmation` or evaluated `keep_candidate`), lists the candidate through `memory candidates`, and then submits the real explicit confirmation command through the hook adapter.
 
 The seven cases cover:
 
@@ -899,7 +899,7 @@ Promotion receives no model options because it contains no model call.
 
 The runner adds no new decision policy. It delegates to the existing importance, relation, and deterministic promotion implementations. Infrastructure failure in a stage aborts later stages. Candidate-local failures that a stage runner already records fail closed for those candidates, while newly eligible successful candidates may continue to the next stage.
 
-Candidates in `needs_confirmation` are never auto-confirmed by this runner. They remain visible through `memory candidates` and require the explicit confirmation commands documented above.
+Candidates in `needs_confirmation` and evaluated `keep_candidate` backlog items are never auto-confirmed by this runner. They remain visible through `memory candidates` and require the explicit confirmation commands documented above.
 
 The pipeline is deliberately an explicit operator action. It is not executed inside `UserPromptSubmit` and it does not introduce hidden background consolidation.
 
