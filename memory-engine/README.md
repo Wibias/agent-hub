@@ -822,7 +822,7 @@ The six cases cover:
 
 Successful confirmation cases replay the identical confirmation hook event and require no additional Evidence, Claim, lifecycle, conflict, or confirmation-audit mutation. Every case also reruns the automatic candidate pipeline and requires the importance, relation, and promotion queues to remain empty.
 
-The confirmation command itself is model-free. The behavioral runner counts deterministic judge invocations before confirmation and requires the model-call delta across `memory candidates` plus `memory candidate confirm` to remain zero.
+The confirmation command itself is model-free. The behavioral runner executes `memory candidates` separately as the real read-only hook step, then snapshots the deterministic judge-call count immediately before `memory candidate confirm` and requires the confirmation-command delta to remain zero.
 
 ### Candidate pipeline runner
 
