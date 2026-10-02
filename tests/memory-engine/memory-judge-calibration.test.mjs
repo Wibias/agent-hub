@@ -318,3 +318,52 @@ test('calibration runner scores injected case subsets against that subset only',
   assert.equal(result.score.relation.exact_accuracy, 1);
   assert.equal(result.score.quality_gate.pass, true);
 });
+
+
+test('calibration runner treats invented relation target refs as invalid like production', async () => {
+  const importanceCases = [IMPORTANCE_JUDGE_CALIBRATION_CASES[0]];
+  const relationCases = [RELATION_JUDGE_CALIBRATION_CASES[0]];
+
+  const result = await runMemoryJudgeCalibration({
+    importanceCases,
+    relationCases,
+    createImportanceJudge: async () => ({
+      async judge(candidate) {
+        return JSON.stringify({
+          decision: 'promote',
+          suggested_type: candidate.proposed_type,
+          durability: 'long',
+          future_utility: 'high',
+          specificity: 'high',
+          confidence: 'high',
+          meaning_preserved: true,
+          canonical_fact: candidate.proposed_value,
+          reason: 'Fixture.',
+          risk_flags: [],
+        });
+      },
+      async close() {},
+    }),
+    createRelationJudge: async () => ({
+      async judge() {
+        return JSON.stringify({
+          relation: 'same',
+          target_ref: '@ffffffffff',
+          confidence: 'medium',
+          meaning_preserved: true,
+          reason: 'Invented relation target.',
+        });
+      },
+      async close() {},
+    }),
+  });
+
+  assert.equal(result.relation_predictions[0].ok, false);
+  assert.match(
+    result.relation_predictions[0].error,
+    /target.*supplied memory/i,
+  );
+  assert.equal(result.score.relation.invalid_outputs, 1);
+  assert.equal(result.score.quality_gate.pass, false);
+  assert.ok(result.score.quality_gate.failures.includes('invalid_outputs'));
+});
