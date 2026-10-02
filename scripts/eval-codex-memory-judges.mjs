@@ -202,6 +202,8 @@ export async function runMemoryJudgeCalibration({
     const score = scoreMemoryJudgeCalibration({
       importancePredictions,
       relationPredictions,
+      importanceCases,
+      relationCases,
     });
 
     return {
