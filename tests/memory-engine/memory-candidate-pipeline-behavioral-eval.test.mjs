@@ -318,7 +318,7 @@ async function runDeterministicCase(caseSpec) {
   return observed;
 }
 
-test('candidate pipeline behavioral fixture covers promotion, same dedupe, and branch isolation', () => {
+test('candidate pipeline behavioral fixture covers promotion, same, update, contradict, and branch isolation', () => {
   assert.deepEqual(
     MEMORY_CANDIDATE_PIPELINE_BEHAVIORAL_CASES.map((item) => ({
       id: item.id,
@@ -343,6 +343,20 @@ test('candidate pipeline behavioral fixture covers promotion, same dedupe, and b
         otherDelta: 0,
       },
       {
+        id: 'update-existing-memory',
+        relation: 'update',
+        candidateStatus: 'promoted',
+        currentDelta: 0,
+        otherDelta: 0,
+      },
+      {
+        id: 'contradict-existing-memory',
+        relation: 'contradict',
+        candidateStatus: 'promoted',
+        currentDelta: 1,
+        otherDelta: 0,
+      },
+      {
         id: 'cross-branch-isolation',
         relation: 'unrelated',
         candidateStatus: 'promoted',
@@ -350,6 +364,40 @@ test('candidate pipeline behavioral fixture covers promotion, same dedupe, and b
         otherDelta: 0,
       },
     ],
+  );
+});
+
+test('update and contradict fixtures require the correct lifecycle structure', () => {
+  const update = MEMORY_CANDIDATE_PIPELINE_BEHAVIORAL_CASES.find(
+    (item) => item.id === 'update-existing-memory',
+  );
+  const contradict = MEMORY_CANDIDATE_PIPELINE_BEHAVIORAL_CASES.find(
+    (item) => item.id === 'contradict-existing-memory',
+  );
+
+  assert.deepEqual(
+    {
+      superseded: update?.expected.current_superseded_claims_after_second_run,
+      openConflicts: update?.expected.open_conflicts_after_second_run,
+      supersedeEvents: update?.expected.supersede_events_after_second_run,
+    },
+    {
+      superseded: 1,
+      openConflicts: 0,
+      supersedeEvents: 1,
+    },
+  );
+  assert.deepEqual(
+    {
+      superseded: contradict?.expected.current_superseded_claims_after_second_run,
+      openConflicts: contradict?.expected.open_conflicts_after_second_run,
+      supersedeEvents: contradict?.expected.supersede_events_after_second_run,
+    },
+    {
+      superseded: 0,
+      openConflicts: 1,
+      supersedeEvents: 0,
+    },
   );
 });
 
@@ -394,8 +442,8 @@ test('deterministic fake judges drive real capture, relation, promotion, and ide
     true,
     JSON.stringify(result, null, 2),
   );
-  assert.equal(result.totalCases, 3);
-  assert.equal(result.passedCases, 3);
+  assert.equal(result.totalCases, 5);
+  assert.equal(result.passedCases, 5);
   assert.equal(result.failedCases, 0);
 
   const byId = new Map(result.cases.map((item) => [item.id, item]));
@@ -405,6 +453,14 @@ test('deterministic fake judges drive real capture, relation, promotion, and ide
   );
   assert.equal(
     byId.get('same-existing-memory').observed.relation_judge_calls,
+    1,
+  );
+  assert.equal(
+    byId.get('update-existing-memory').observed.relation_judge_calls,
+    1,
+  );
+  assert.equal(
+    byId.get('contradict-existing-memory').observed.relation_judge_calls,
     1,
   );
   assert.equal(
