@@ -285,6 +285,25 @@ function formatActiveDirectUserMemories(memory, {
   return lines.join('\n');
 }
 
+function isExplicitlyConfirmableCandidate(candidate) {
+  if (!candidate || typeof candidate !== 'object') return false;
+  if (candidate.status === 'needs_confirmation') return true;
+  if (
+    candidate.status !== 'pending'
+    || candidate.evaluated_at === null
+    || typeof candidate.evaluation_json !== 'string'
+    || candidate.relation !== null
+  ) {
+    return false;
+  }
+
+  try {
+    return JSON.parse(candidate.evaluation_json)?.decision === 'keep_candidate';
+  } catch {
+    return false;
+  }
+}
+
 function formatPendingMemoryCandidates(memory, {
   projectId,
   branch,
@@ -873,7 +892,7 @@ export function createCodexMemoryHookAdapter({
                     } else {
                       explicitCommandResult.alreadyFinalized = true;
                     }
-                  } else if (candidate.status !== 'needs_confirmation') {
+                  } else if (!isExplicitlyConfirmableCandidate(candidate)) {
                     explicitCommandResult.targetMissing = true;
                   } else {
                     const target = parsedMemory.targetRef === null
