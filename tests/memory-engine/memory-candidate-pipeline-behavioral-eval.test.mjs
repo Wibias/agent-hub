@@ -139,7 +139,42 @@ function activeClaims(memory, {
   ));
 }
 
-function deterministicStageRunners() {
+function lifecycleStats(memory, {
+  projectId,
+  branch,
+}) {
+  const exported = memory.exportCanonical();
+  const scopedClaims = exported.claims.filter((claim) => (
+    claim.project_id === projectId
+    && claim.branch_scope === branch
+    && claim.kind === 'user_direct'
+    && claim.subject === 'user memory'
+    && claim.predicate === 'states'
+  ));
+  const scopedClaimIds = new Set(scopedClaims.map((claim) => claim.id));
+
+  return {
+    current_superseded_claims_after_second_run: scopedClaims.filter(
+      (claim) => claim.state === 'superseded',
+    ).length,
+    open_conflicts_after_second_run: exported.conflicts.filter((conflict) => (
+      conflict.project_id === projectId
+      && conflict.state === 'open'
+      && scopedClaimIds.has(conflict.claim_a)
+      && scopedClaimIds.has(conflict.claim_b)
+    )).length,
+    supersede_events_after_second_run: exported.lifecycle_events.filter(
+      (event) => (
+        event.project_id === projectId
+        && event.action === 'supersede'
+        && scopedClaimIds.has(event.source_claim_id)
+        && scopedClaimIds.has(event.target_claim_id)
+      ),
+    ).length,
+  };
+}
+
+function deterministicStageRunners(caseSpec) {
   let relationJudgeCalls = 0;
 
   return {
@@ -187,11 +222,11 @@ function deterministicStageRunners() {
               relationJudgeCalls += 1;
               assert.equal(memories.length, 1);
               return {
-                relation: 'same',
+                relation: caseSpec.expected.relation,
                 target_ref: memories[0].ref,
                 confidence: 'high',
                 meaning_preserved: true,
-                reason: 'Deterministic paraphrase match fixture.',
+                reason: 'Deterministic behavioral relation fixture.',
               };
             },
             async close() {},
@@ -248,7 +283,7 @@ async function runDeterministicCase(caseSpec) {
     branch: caseSpec.branch,
     revisionSha: 'a'.repeat(40),
   };
-  const stageRunners = deterministicStageRunners();
+  const stageRunners = deterministicStageRunners(caseSpec);
   const createMemory = ({ dbPath: candidateDbPath }) => (
     new MemoryEngine({ dbPath: candidateDbPath })
   );
@@ -295,6 +330,10 @@ async function runDeterministicCase(caseSpec) {
     projectId,
     branch: caseSpec.other_branch,
   }).length;
+  const lifecycle = lifecycleStats(memory, {
+    projectId,
+    branch: caseSpec.branch,
+  });
 
   const observed = {
     candidate_status: afterCandidate.status,
@@ -303,6 +342,7 @@ async function runDeterministicCase(caseSpec) {
     other_active_claim_delta: afterOther - beforeOther,
     current_active_claims_after_second_run: afterSecondCurrent,
     other_active_claims_after_second_run: afterSecondOther,
+    ...lifecycle,
     second_run_ready: {
       importance: second.final.importance_ready,
       relation: second.final.relation_ready,
