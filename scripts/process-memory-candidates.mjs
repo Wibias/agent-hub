@@ -4,6 +4,9 @@ import { pathToFileURL } from 'node:url';
 
 import { MemoryEngine } from '../memory-engine/index.mjs';
 import {
+  validateMemoryCandidateJudgment,
+} from '../memory-engine/memory-candidate-judge.mjs';
+import {
   resolveMemoryCandidateJudgeRuntime,
   runMemoryCandidateJudgeCli,
 } from './judge-memory-candidates.mjs';
@@ -93,7 +96,9 @@ function isEvaluatedKeptCandidate(candidate) {
     return false;
   }
   try {
-    return JSON.parse(candidate.evaluation_json)?.decision === 'keep_candidate';
+    return validateMemoryCandidateJudgment(
+      JSON.parse(candidate.evaluation_json),
+    ).decision === 'keep_candidate';
   } catch {
     return false;
   }
