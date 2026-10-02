@@ -253,3 +253,53 @@ test('calibration runner uses judge parsers and scores deterministic provider ou
   assert.equal(result.importance_predictions.length, 16);
   assert.equal(result.relation_predictions.length, 16);
 });
+
+
+test('calibration runner scores injected case subsets against that subset only', async () => {
+  const importanceCases = [IMPORTANCE_JUDGE_CALIBRATION_CASES[0]];
+  const relationCases = [RELATION_JUDGE_CALIBRATION_CASES[0]];
+
+  const result = await runMemoryJudgeCalibration({
+    importanceCases,
+    relationCases,
+    createImportanceJudge: async () => ({
+      async judge(candidate) {
+        return JSON.stringify({
+          decision: 'promote',
+          suggested_type: candidate.proposed_type,
+          durability: 'long',
+          future_utility: 'high',
+          specificity: 'high',
+          confidence: 'high',
+          meaning_preserved: true,
+          canonical_fact: candidate.proposed_value,
+          reason: 'Subset fixture.',
+          risk_flags: [],
+        });
+      },
+      async close() {},
+    }),
+    createRelationJudge: async () => ({
+      async judge({ caseSpec }) {
+        return JSON.stringify({
+          relation: caseSpec.expected.relation,
+          target_ref: caseSpec.expected.target_ref,
+          confidence: 'high',
+          meaning_preserved: true,
+          reason: 'Subset fixture.',
+        });
+      },
+      async close() {},
+    }),
+  });
+
+  assert.deepEqual(result.score.fixture, {
+    importance_cases: 1,
+    relation_cases: 1,
+    total_cases: 2,
+  });
+  assert.equal(result.score.invalid_outputs, 0);
+  assert.equal(result.score.importance.exact_accuracy, 1);
+  assert.equal(result.score.relation.exact_accuracy, 1);
+  assert.equal(result.score.quality_gate.pass, true);
+});
