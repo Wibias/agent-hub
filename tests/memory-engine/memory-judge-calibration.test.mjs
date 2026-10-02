@@ -64,6 +64,21 @@ test('judge calibration fixture contains 32 balanced bilingual cases', () => {
   );
 });
 
+test('importance calibration fixtures match production secret-redaction inputs', () => {
+  const values = IMPORTANCE_JUDGE_CALIBRATION_CASES.map(
+    (item) => item.candidate.proposed_value,
+  );
+
+  assert.ok(
+    values.some((value) => value.includes('[REDACTED_SECRET]')),
+    'fixture must exercise the production redaction marker',
+  );
+  assert.ok(
+    values.every((value) => !/\bsk_[A-Za-z0-9_-]+/u.test(value)),
+    'fixture must not bypass production secret redaction',
+  );
+});
+
 test('judge calibration scorer is precision-first for durable promotion', () => {
   const importancePredictions = IMPORTANCE_JUDGE_CALIBRATION_CASES.map(
     (item) => ({
