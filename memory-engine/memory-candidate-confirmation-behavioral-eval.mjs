@@ -62,7 +62,7 @@ export const MEMORY_CANDIDATE_CONFIRMATION_BEHAVIORAL_CASES = Object.freeze([
         relation: 0,
         promotion: 0,
       }),
-      confirmation_model_calls: 1,
+      confirmation_model_calls: 0,
     }),
   }),
   Object.freeze({
