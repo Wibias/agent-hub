@@ -194,7 +194,7 @@ export const IMPORTANCE_JUDGE_CALIBRATION_CASES = Object.freeze([
     id: 'importance-confirm-sensitive-token-en',
     language: 'en',
     type: 'known_issue',
-    value: 'The production API token is sk_live_example_secret_value and we need it for deploys.',
+    value: 'The production API token is [REDACTED_SECRET] and we need it for deploys.',
     decision: 'needs_confirmation',
     tags: ['sensitive'],
   }),
