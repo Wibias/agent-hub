@@ -210,6 +210,41 @@ function activeClaims(memory, {
   ));
 }
 
+function lifecycleStats(memory, {
+  projectId,
+  branch,
+}) {
+  const exported = memory.exportCanonical();
+  const scopedClaims = exported.claims.filter((claim) => (
+    claim.project_id === projectId
+    && claim.branch_scope === branch
+    && claim.kind === 'user_direct'
+    && claim.subject === 'user memory'
+    && claim.predicate === 'states'
+  ));
+  const scopedClaimIds = new Set(scopedClaims.map((claim) => claim.id));
+
+  return {
+    current_superseded_claims_after_second_run: scopedClaims.filter(
+      (claim) => claim.state === 'superseded',
+    ).length,
+    open_conflicts_after_second_run: exported.conflicts.filter((conflict) => (
+      conflict.project_id === projectId
+      && conflict.state === 'open'
+      && scopedClaimIds.has(conflict.claim_a)
+      && scopedClaimIds.has(conflict.claim_b)
+    )).length,
+    supersede_events_after_second_run: exported.lifecycle_events.filter(
+      (event) => (
+        event.project_id === projectId
+        && event.action === 'supersede'
+        && scopedClaimIds.has(event.source_claim_id)
+        && scopedClaimIds.has(event.target_claim_id)
+      ),
+    ).length,
+  };
+}
+
 async function submitPrompt({
   memory,
   runtime,
@@ -434,6 +469,10 @@ export async function runProviderBackedMemoryCandidatePipelineCase({
       projectId: runtime.projectId,
       branch: caseSpec.other_branch,
     }).length;
+    const lifecycle = lifecycleStats(memory, {
+      projectId: runtime.projectId,
+      branch: caseSpec.branch,
+    });
 
     return {
       candidate_status: finalCandidate.status,
@@ -442,6 +481,7 @@ export async function runProviderBackedMemoryCandidatePipelineCase({
       other_active_claim_delta: afterOther - beforeOther,
       current_active_claims_after_second_run: afterSecondCurrent,
       other_active_claims_after_second_run: afterSecondOther,
+      ...lifecycle,
       second_run_ready: {
         importance: second.final.importance_ready,
         relation: second.final.relation_ready,
