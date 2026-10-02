@@ -179,6 +179,16 @@ export async function runMemoryJudgeCalibration({
           caseSpec,
         });
         const relation = parseRelation(raw);
+        if (
+          relation.target_ref !== null
+          && !caseSpec.memories.some(
+            (memory) => memory.ref === relation.target_ref,
+          )
+        ) {
+          throw new Error(
+            'relation target must reference a supplied memory',
+          );
+        }
         relationPredictions.push({
           id: caseSpec.id,
           ok: true,
