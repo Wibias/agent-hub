@@ -36,6 +36,9 @@ import {
   runMemoryCandidatePipelineCli,
 } from './process-memory-candidates.mjs';
 
+export const MEMORY_CANDIDATE_PIPELINE_EVAL_REMOTE =
+  'https://example.invalid/agent-hub/memory-candidate-eval.git';
+
 function nonEmpty(value) {
   return typeof value === 'string' && value.trim().length > 0;
 }
@@ -140,7 +143,7 @@ async function initializeWorkspace(workspace, env) {
       'remote',
       'add',
       'origin',
-      'https://example.invalid/agent-hub-memory-candidate-eval.git',
+      MEMORY_CANDIDATE_PIPELINE_EVAL_REMOTE,
     ],
     env,
   );
