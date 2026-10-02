@@ -481,7 +481,7 @@ function indexPredictions(predictions) {
   return { byId, duplicates };
 }
 
-function scoreImportance(predictions) {
+function scoreImportance(predictions, cases) {
   const indexed = indexPredictions(predictions);
   const confusion = Object.fromEntries(
     IMPORTANCE_DECISIONS.map((expected) => [
@@ -499,7 +499,7 @@ function scoreImportance(predictions) {
   let truePromotions = 0;
   let falsePromotions = 0;
 
-  for (const caseSpec of IMPORTANCE_JUDGE_CALIBRATION_CASES) {
+  for (const caseSpec of cases) {
     const expected = caseSpec.expected.decision;
     if (expected === 'promote') expectedPromotions += 1;
 
@@ -526,11 +526,11 @@ function scoreImportance(predictions) {
   }
 
   return {
-    total: IMPORTANCE_JUDGE_CALIBRATION_CASES.length,
+    total: cases.length,
     exact_correct: exactCorrect,
     exact_accuracy: safeRatio(
       exactCorrect,
-      IMPORTANCE_JUDGE_CALIBRATION_CASES.length,
+      cases.length,
     ),
     expected_promotions: expectedPromotions,
     predicted_promotions: predictedPromotions,
@@ -543,7 +543,7 @@ function scoreImportance(predictions) {
   };
 }
 
-function scoreRelation(predictions) {
+function scoreRelation(predictions, cases) {
   const indexed = indexPredictions(predictions);
   const confusion = Object.fromEntries(
     RELATIONS.map((expected) => [
@@ -561,7 +561,7 @@ function scoreRelation(predictions) {
   let targetErrors = 0;
   let relatedExpected = 0;
 
-  for (const caseSpec of RELATION_JUDGE_CALIBRATION_CASES) {
+  for (const caseSpec of cases) {
     const expected = caseSpec.expected;
     if (expected.relation !== 'unrelated') relatedExpected += 1;
 
@@ -599,11 +599,11 @@ function scoreRelation(predictions) {
   }
 
   return {
-    total: RELATION_JUDGE_CALIBRATION_CASES.length,
+    total: cases.length,
     exact_correct: exactCorrect,
     exact_accuracy: safeRatio(
       exactCorrect,
-      RELATION_JUDGE_CALIBRATION_CASES.length,
+      cases.length,
     ),
     related_expected: relatedExpected,
     target_correct: targetCorrect,
@@ -618,9 +618,18 @@ function scoreRelation(predictions) {
 export function scoreMemoryJudgeCalibration({
   importancePredictions,
   relationPredictions,
+  importanceCases = IMPORTANCE_JUDGE_CALIBRATION_CASES,
+  relationCases = RELATION_JUDGE_CALIBRATION_CASES,
 } = {}) {
-  const importance = scoreImportance(importancePredictions);
-  const relation = scoreRelation(relationPredictions);
+  if (!Array.isArray(importanceCases) || importanceCases.length === 0) {
+    throw new TypeError('importanceCases must be a non-empty array');
+  }
+  if (!Array.isArray(relationCases) || relationCases.length === 0) {
+    throw new TypeError('relationCases must be a non-empty array');
+  }
+
+  const importance = scoreImportance(importancePredictions, importanceCases);
+  const relation = scoreRelation(relationPredictions, relationCases);
   const invalidOutputs = (
     importance.invalid_outputs
     + relation.invalid_outputs
@@ -637,11 +646,11 @@ export function scoreMemoryJudgeCalibration({
 
   return {
     fixture: {
-      importance_cases: IMPORTANCE_JUDGE_CALIBRATION_CASES.length,
-      relation_cases: RELATION_JUDGE_CALIBRATION_CASES.length,
+      importance_cases: importanceCases.length,
+      relation_cases: relationCases.length,
       total_cases: (
-        IMPORTANCE_JUDGE_CALIBRATION_CASES.length
-        + RELATION_JUDGE_CALIBRATION_CASES.length
+        importanceCases.length
+        + relationCases.length
       ),
     },
     importance,
