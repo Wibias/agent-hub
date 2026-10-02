@@ -6,6 +6,9 @@ import {
   RELATION_JUDGE_CALIBRATION_CASES,
   scoreMemoryJudgeCalibration,
 } from '../../memory-engine/memory-judge-calibration.mjs';
+import {
+  runMemoryJudgeCalibration,
+} from '../../scripts/eval-codex-memory-judges.mjs';
 
 test('judge calibration fixture contains 32 balanced bilingual cases', () => {
   assert.equal(IMPORTANCE_JUDGE_CALIBRATION_CASES.length, 16);
@@ -190,4 +193,63 @@ test('perfect calibration predictions pass safety gates and expose exact metrics
     pass: true,
     failures: [],
   });
+});
+
+test('calibration runner uses judge parsers and scores deterministic provider outputs', async () => {
+  let importanceCalls = 0;
+  let relationCalls = 0;
+
+  const result = await runMemoryJudgeCalibration({
+    createImportanceJudge: async () => ({
+      evaluatorId: 'fixture:importance-v1',
+      isolation: { deterministicFixture: true },
+      async judge(candidate) {
+        importanceCalls += 1;
+        const caseSpec = IMPORTANCE_JUDGE_CALIBRATION_CASES.find(
+          (item) => item.id === candidate.calibration_id,
+        );
+        return JSON.stringify({
+          decision: caseSpec.expected.decision,
+          suggested_type: candidate.proposed_type,
+          durability: caseSpec.expected.decision === 'promote' ? 'long' : 'medium',
+          future_utility: caseSpec.expected.decision === 'promote' ? 'high' : 'medium',
+          specificity: 'high',
+          confidence: caseSpec.expected.decision === 'promote' ? 'high' : 'medium',
+          meaning_preserved: true,
+          canonical_fact: caseSpec.expected.decision === 'ignore'
+            ? null
+            : candidate.proposed_value,
+          reason: 'Deterministic calibration fixture.',
+          risk_flags: caseSpec.expected.decision === 'promote'
+            ? []
+            : ['tentative'],
+        });
+      },
+      async close() {},
+    }),
+    createRelationJudge: async () => ({
+      evaluatorId: 'fixture:relation-v1',
+      isolation: { deterministicFixture: true },
+      async judge({ caseSpec }) {
+        relationCalls += 1;
+        return JSON.stringify({
+          relation: caseSpec.expected.relation,
+          target_ref: caseSpec.expected.target_ref,
+          confidence: 'high',
+          meaning_preserved: true,
+          reason: 'Deterministic calibration fixture.',
+        });
+      },
+      async close() {},
+    }),
+  });
+
+  assert.equal(importanceCalls, 16);
+  assert.equal(relationCalls, 16);
+  assert.equal(result.score.fixture.total_cases, 32);
+  assert.equal(result.score.importance.exact_accuracy, 1);
+  assert.equal(result.score.relation.exact_accuracy, 1);
+  assert.equal(result.score.quality_gate.pass, true);
+  assert.equal(result.importance_predictions.length, 16);
+  assert.equal(result.relation_predictions.length, 16);
 });
