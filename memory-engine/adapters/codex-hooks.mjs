@@ -4,6 +4,9 @@ import { evaluateReliance } from '../index.mjs';
 import { classifyMemoryCandidatePrompt } from '../memory-capture-policy.mjs';
 import { confirmMemoryCandidate } from '../memory-candidate-confirmation.mjs';
 import {
+  validateMemoryCandidateJudgment,
+} from '../memory-candidate-judge.mjs';
+import {
   refreshRepositoryFreshness,
   resolveGitContext,
 } from '../git-freshness.mjs';
@@ -298,7 +301,9 @@ function isEvaluatedKeptCandidate(candidate) {
   }
 
   try {
-    return JSON.parse(candidate.evaluation_json)?.decision === 'keep_candidate';
+    return validateMemoryCandidateJudgment(
+      JSON.parse(candidate.evaluation_json),
+    ).decision === 'keep_candidate';
   } catch {
     return false;
   }
