@@ -69,6 +69,7 @@ export const MEMORY_CANDIDATE_PIPELINE_BEHAVIORAL_CASES = Object.freeze([
       current_superseded_claims_after_second_run: 1,
       open_conflicts_after_second_run: 0,
       supersede_events_after_second_run: 1,
+      target_superseded_by_promotion_claim: true,
       second_run_ready: Object.freeze({
         importance: 0,
         relation: 0,
@@ -99,6 +100,7 @@ export const MEMORY_CANDIDATE_PIPELINE_BEHAVIORAL_CASES = Object.freeze([
       current_superseded_claims_after_second_run: 0,
       open_conflicts_after_second_run: 1,
       supersede_events_after_second_run: 0,
+      open_conflict_links_target_and_promotion_claim: true,
       second_run_ready: Object.freeze({
         importance: 0,
         relation: 0,
