@@ -136,6 +136,29 @@ function importanceNeedsConfirmation(memory, candidate) {
   });
 }
 
+function importanceKeepsCandidate(memory, candidate) {
+  memory.evaluateCandidate({
+    candidateId: candidate.id,
+    evaluatorId: 'codex:test:importance-v1',
+    evaluatedAt: '2026-10-01T01:01:00.000Z',
+    evaluation: {
+      decision: 'keep_candidate',
+      suggested_type: 'decision',
+      durability: 'medium',
+      future_utility: 'medium',
+      specificity: 'high',
+      confidence: 'high',
+      meaning_preserved: true,
+      canonical_fact: candidate.proposed_value,
+      reason: 'Useful review backlog candidate.',
+      risk_flags: ['transient'],
+    },
+  });
+  const kept = memory.getCandidate(candidate.id);
+  assert.equal(kept.status, 'pending');
+  assert.notEqual(kept.evaluated_at, null);
+}
+
 function promotionNeedsConfirmation(memory, candidate, target) {
   memory.evaluateCandidate({
     candidateId: candidate.id,
@@ -206,6 +229,36 @@ test('user confirmation can promote an importance-confirmation candidate as unre
   assert.equal(claim.state, 'active');
   assert.equal(claim.created_from_evidence_id, candidate.source_evidence_id);
   assert.equal(memory.getCandidate(candidate.id).status, 'promoted');
+
+  memory.close();
+});
+
+test('user confirmation can explicitly promote an evaluated keep_candidate backlog item', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'agent-hub-confirm-kept-'));
+  const memory = new MemoryEngine({ dbPath: join(root, 'memory.sqlite3') });
+  createProject(memory);
+  const candidate = seedCandidate(memory, {
+    value: 'We use pnpm during the migration review cycle.',
+  });
+  importanceKeepsCandidate(memory, candidate);
+  const evidence = seedConfirmationEvidence(memory);
+
+  const result = confirmMemoryCandidate({
+    memory,
+    projectId: 'project',
+    branch: 'main',
+    candidateId: candidate.id,
+    relation: 'unrelated',
+    targetClaimId: null,
+    confirmationEvidenceId: evidence.id,
+    now: () => '2026-10-01T02:00:00.000Z',
+  });
+
+  assert.equal(result.status, 'promoted');
+  const claimId = memoryCandidateConfirmationClaimId(candidate.id);
+  assert.equal(memory.getClaim(claimId).value, candidate.proposed_value);
+  assert.equal(memory.getCandidate(candidate.id).status, 'promoted');
+  assert.equal(memory.getCandidateConfirmation(candidate.id).relation, 'unrelated');
 
   memory.close();
 });
@@ -334,7 +387,7 @@ test('confirmation fails closed for a non-confirmation candidate or inactive/cro
       targetClaimId: null,
       confirmationEvidenceId: evidence.id,
     }),
-    /needs_confirmation/i,
+    /not confirmable/i,
   );
 
   assert.equal(memory.getClaim(memoryCandidateConfirmationClaimId(candidate.id)), null);
