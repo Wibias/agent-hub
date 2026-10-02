@@ -24,6 +24,7 @@ function pipelineMemory({
   relation = 0,
   promotion = 0,
   needsConfirmation = 0,
+  keptForReview = 0,
 } = {}) {
   const calls = [];
   const memory = {
@@ -53,6 +54,24 @@ function pipelineMemory({
           id: 'confirm-' + index,
           status: 'needs_confirmation',
         })),
+        ...Array.from({ length: keptForReview }, (_, index) => ({
+          id: 'kept-' + index,
+          status: 'pending',
+          evaluated_at: '2026-10-01T00:00:00.000Z',
+          evaluation_json: JSON.stringify({
+            decision: 'keep_candidate',
+            suggested_type: 'decision',
+            durability: 'medium',
+            future_utility: 'medium',
+            specificity: 'high',
+            confidence: 'high',
+            meaning_preserved: true,
+            canonical_fact: 'Review backlog candidate.',
+            reason: 'Useful but not durable enough for automatic promotion.',
+            risk_flags: ['transient'],
+          }),
+          relation: null,
+        })),
         { id: 'done', status: 'promoted' },
       ];
     },
@@ -77,6 +96,7 @@ test('memory pipeline reports current-scope stage readiness without protocol or 
     relation: 1,
     promotion: 1,
     needsConfirmation: 3,
+    keptForReview: 2,
   });
   let protocolCalls = 0;
 
@@ -119,6 +139,7 @@ test('memory pipeline reports current-scope stage readiness without protocol or 
   assert.match(result.reason, /relation-ready:\s+1/);
   assert.match(result.reason, /promotion-ready:\s+1/);
   assert.match(result.reason, /needs-confirmation:\s+3/);
+  assert.match(result.reason, /kept-for-review:\s+2/);
   assert.match(
     result.reason,
     /node \.\\scripts\\process-memory-candidates\.mjs --apply/,
@@ -181,6 +202,7 @@ test('memory pipeline reports an empty pipeline without invoking any judge', asy
   assert.match(result.reason, /relation-ready:\s+0/);
   assert.match(result.reason, /promotion-ready:\s+0/);
   assert.match(result.reason, /needs-confirmation:\s+0/);
+  assert.match(result.reason, /kept-for-review:\s+0/);
 });
 
 test('memory pipeline fails closed when the candidate ledger status surface is unavailable', async () => {

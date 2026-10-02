@@ -4,6 +4,9 @@ import { evaluateReliance } from '../index.mjs';
 import { classifyMemoryCandidatePrompt } from '../memory-capture-policy.mjs';
 import { confirmMemoryCandidate } from '../memory-candidate-confirmation.mjs';
 import {
+  validateMemoryCandidateJudgment,
+} from '../memory-candidate-judge.mjs';
+import {
   refreshRepositoryFreshness,
   resolveGitContext,
 } from '../git-freshness.mjs';
@@ -285,6 +288,34 @@ function formatActiveDirectUserMemories(memory, {
   return lines.join('\n');
 }
 
+function isEvaluatedKeptCandidate(candidate) {
+  if (
+    !candidate
+    || typeof candidate !== 'object'
+    || candidate.status !== 'pending'
+    || candidate.evaluated_at === null
+    || typeof candidate.evaluation_json !== 'string'
+    || candidate.relation !== null
+  ) {
+    return false;
+  }
+
+  try {
+    return validateMemoryCandidateJudgment(
+      JSON.parse(candidate.evaluation_json),
+    ).decision === 'keep_candidate';
+  } catch {
+    return false;
+  }
+}
+
+function isExplicitlyConfirmableCandidate(candidate) {
+  return (
+    candidate?.status === 'needs_confirmation'
+    || isEvaluatedKeptCandidate(candidate)
+  );
+}
+
 function formatPendingMemoryCandidates(memory, {
   projectId,
   branch,
@@ -398,12 +429,14 @@ function formatMemoryCandidatePipelineStatus(memory, {
       branch,
       limit,
     }).length;
-    const needsConfirmation = memory.listScopedCandidates({
+    const scoped = memory.listScopedCandidates({
       projectId,
       branch,
-    }).filter(
+    });
+    const needsConfirmation = scoped.filter(
       (candidate) => candidate?.status === 'needs_confirmation',
     ).length;
+    const keptForReview = scoped.filter(isEvaluatedKeptCandidate).length;
 
     return [
       'Memory candidate pipeline status for the current project and branch:',
@@ -411,6 +444,7 @@ function formatMemoryCandidatePipelineStatus(memory, {
       `relation-ready: ${relationReady} (next batch, max ${limit})`,
       `promotion-ready: ${promotionReady} (next batch, max ${limit})`,
       `needs-confirmation: ${needsConfirmation}`,
+      `kept-for-review: ${keptForReview}`,
       'Read-only: no judges or promotion were run.',
       'Run: node .\\scripts\\process-memory-candidates.mjs --apply',
     ].join('\n');
@@ -873,7 +907,7 @@ export function createCodexMemoryHookAdapter({
                     } else {
                       explicitCommandResult.alreadyFinalized = true;
                     }
-                  } else if (candidate.status !== 'needs_confirmation') {
+                  } else if (!isExplicitlyConfirmableCandidate(candidate)) {
                     explicitCommandResult.targetMissing = true;
                   } else {
                     const target = parsedMemory.targetRef === null

@@ -4,6 +4,9 @@ import { pathToFileURL } from 'node:url';
 
 import { MemoryEngine } from '../memory-engine/index.mjs';
 import {
+  validateMemoryCandidateJudgment,
+} from '../memory-engine/memory-candidate-judge.mjs';
+import {
   resolveMemoryCandidateJudgeRuntime,
   runMemoryCandidateJudgeCli,
 } from './judge-memory-candidates.mjs';
@@ -82,6 +85,25 @@ export function parseMemoryCandidatePipelineArgs(
   return options;
 }
 
+function isEvaluatedKeptCandidate(candidate) {
+  if (
+    !candidate
+    || candidate.status !== 'pending'
+    || candidate.evaluated_at === null
+    || typeof candidate.evaluation_json !== 'string'
+    || candidate.relation !== null
+  ) {
+    return false;
+  }
+  try {
+    return validateMemoryCandidateJudgment(
+      JSON.parse(candidate.evaluation_json),
+    ).decision === 'keep_candidate';
+  } catch {
+    return false;
+  }
+}
+
 function readPipelineStatus({
   createMemory,
   runtime,
@@ -117,12 +139,14 @@ function readPipelineStatus({
       branch: runtime.branch,
       limit,
     }).length;
-    const needsConfirmation = memory.listScopedCandidates({
+    const scoped = memory.listScopedCandidates({
       projectId: runtime.projectId,
       branch: runtime.branch,
-    }).filter(
+    });
+    const needsConfirmation = scoped.filter(
       (candidate) => candidate.status === 'needs_confirmation',
     ).length;
+    const keptForReview = scoped.filter(isEvaluatedKeptCandidate).length;
 
     return {
       batch_limit: limit,
@@ -130,6 +154,7 @@ function readPipelineStatus({
       relation_ready: relationReady,
       promotion_ready: promotionReady,
       needs_confirmation: needsConfirmation,
+      kept_for_review: keptForReview,
     };
   } finally {
     if (memory && typeof memory.close === 'function') memory.close();

@@ -618,6 +618,8 @@ promote             -> status=pending + evaluated_at/evaluation_json
 keep_candidate      -> status=pending + evaluated_at/evaluation_json
 ```
 
+An evaluated `keep_candidate` is a review backlog item, not an automatic promotion queue. It is excluded from relation evaluation and deterministic promotion. It remains visible through `memory candidates`, is counted as `kept-for-review` / `kept_for_review` in pipeline status, and may become durable only through the explicit user confirmation path described below. Unevaluated `pending` candidates are never confirmable.
+
 The evaluation write rechecks the source Evidence boundary before mutation:
 
 - candidate and Evidence must still be `user_direct`;
@@ -762,7 +764,12 @@ Promotion decisions are recorded in the operational `memory_candidate_promotions
 
 ### Explicit candidate confirmation
 
-Candidates in `needs_confirmation` are visible through:
+Policy `confirmation-v2` accepts two explicitly reviewable candidate states:
+
+- `needs_confirmation`: the automatic path requires user clarification or approval;
+- evaluated `keep_candidate`: the importance judge kept the item as a review backlog candidate, but it is not eligible for automatic relation or promotion.
+
+Both are visible through:
 
 ```text
 memory candidates
@@ -794,7 +801,8 @@ The confirmation command itself is captured as separate direct-user Evidence and
 
 Before mutation, the engine rechecks:
 
-- candidate status is exactly `needs_confirmation`;
+- the candidate is either `needs_confirmation` or an evaluated `pending` candidate whose stored valid importance decision is exactly `keep_candidate`;
+- an unevaluated `pending` candidate is never confirmable;
 - candidate source Evidence is direct-user, same-project, same-branch, non-secret, and still exactly matches the candidate value;
 - confirmation Evidence is direct-user, same-project, same-branch, non-secret, and marked as a candidate-confirm command;
 - any selected target is still an active durable direct-user memory in the same project and branch.
@@ -809,11 +817,12 @@ The explicit confirmation path has a separate deterministic end-to-end behaviora
 node .\scripts\eval-memory-candidate-confirmation.mjs
 ```
 
-It does not call Codex or any external model. Each case uses a temporary SQLite database, captures an ordinary prompt through the real `UserPromptSubmit` candidate path, drives the existing candidate pipeline deterministically into `needs_confirmation`, lists the candidate through `memory candidates`, and then submits the real explicit confirmation command through the hook adapter.
+It does not call Codex or any external model. Each case uses a temporary SQLite database, captures an ordinary prompt through the real `UserPromptSubmit` candidate path, drives the existing candidate pipeline deterministically into an explicitly reviewable state (`needs_confirmation` or evaluated `keep_candidate`), lists the candidate through `memory candidates`, and then submits the real explicit confirmation command through the hook adapter.
 
-The six cases cover:
+The seven cases cover:
 
 - `unrelated` confirmation creating one active durable Claim;
+- explicit confirmation of an evaluated `keep_candidate` review-backlog item;
 - `same` confirmation closing the candidate without a duplicate Claim;
 - `update` confirmation superseding exactly the selected active memory;
 - `contradict` confirmation preserving both Claims and opening one conflict;
@@ -839,9 +848,10 @@ importance-ready
 relation-ready
 promotion-ready
 needs-confirmation
+kept-for-review
 ```
 
-The first three values are the bounded next-batch counts using the pipeline maximum of 20. `needs-confirmation` is the exact count for the current project and branch. The response also prints the explicit operator command:
+The first three values are the bounded next-batch counts using the pipeline maximum of 20. `needs-confirmation` and `kept-for-review` are exact current-scope counts. Kept candidates are review backlog only and do not enter the automatic relation or promotion queues. The response also prints the explicit operator command:
 
 ```powershell
 node .\scripts\process-memory-candidates.mjs --apply
@@ -855,7 +865,7 @@ The three automatic candidate stages can be composed with one explicit operator 
 node .\scripts\process-memory-candidates.mjs
 ```
 
-Without `--apply`, the command is status-only. It reports the bounded next batch for importance, relation, and promotion plus the exact current-scope count of candidates that require user confirmation. It does not invoke either Codex judge and does not run promotion.
+Without `--apply`, the command is status-only. It reports the bounded next batch for importance, relation, and promotion plus exact current-scope counts for `needs_confirmation` and evaluated `keep_candidate` review backlog items. It does not invoke either Codex judge and does not run promotion.
 
 To process one bounded batch through the available stages:
 
@@ -889,7 +899,7 @@ Promotion receives no model options because it contains no model call.
 
 The runner adds no new decision policy. It delegates to the existing importance, relation, and deterministic promotion implementations. Infrastructure failure in a stage aborts later stages. Candidate-local failures that a stage runner already records fail closed for those candidates, while newly eligible successful candidates may continue to the next stage.
 
-Candidates in `needs_confirmation` are never auto-confirmed by this runner. They remain visible through `memory candidates` and require the explicit confirmation commands documented above.
+Candidates in `needs_confirmation` and evaluated `keep_candidate` backlog items are never auto-confirmed by this runner. They remain visible through `memory candidates` and require the explicit confirmation commands documented above.
 
 The pipeline is deliberately an explicit operator action. It is not executed inside `UserPromptSubmit` and it does not introduce hidden background consolidation.
 

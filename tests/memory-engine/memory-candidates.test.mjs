@@ -633,6 +633,85 @@ test('memory candidates surfaces needs_confirmation candidates instead of hiding
   memory.close();
 });
 
+test('memory candidates surfaces evaluated keep_candidate backlog items for explicit review', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'agent-hub-candidate-kept-list-'));
+  const memory = new MemoryEngine({
+    dbPath: join(root, 'memory.sqlite3'),
+  });
+  createProject(memory);
+
+  const evidence = memory.recordEvidence({
+    id: 'e-kept-list',
+    projectId: 'project',
+    harness: 'codex',
+    sessionId: 's1',
+    sourceKind: 'session',
+    sourceRef: 'session:s1',
+    capturedAt: '2026-10-01T00:00:00.000Z',
+    branch: 'main',
+    content: 'We decided to use pnpm during the migration review cycle.',
+    authorityClass: 'user_direct',
+    metadata: { event_type: 'user_prompt', candidate_capture: true },
+  });
+  const candidate = memory.recordCandidate({
+    id: 'candidate-kept-list',
+    evidenceId: evidence.id,
+    type: 'decision',
+    proposedValue: evidence.content_redacted,
+    decisionReason: 'rule:decision:definitive',
+    policyVersion: CAPTURE_POLICY_VERSION,
+    fingerprint: memoryCandidateFingerprint({
+      type: 'decision',
+      value: evidence.content_redacted,
+    }),
+    createdAt: '2026-10-01T00:00:00.000Z',
+  });
+  memory.evaluateCandidate({
+    candidateId: candidate.id,
+    evaluatorId: 'codex:test:importance-v1',
+    evaluatedAt: '2026-10-01T00:01:00.000Z',
+    evaluation: {
+      decision: 'keep_candidate',
+      suggested_type: 'decision',
+      durability: 'medium',
+      future_utility: 'medium',
+      specificity: 'high',
+      confidence: 'high',
+      meaning_preserved: true,
+      canonical_fact: evidence.content_redacted,
+      reason: 'Keep for explicit user review.',
+      risk_flags: ['transient'],
+    },
+  });
+
+  const adapter = createCodexMemoryHookAdapter({
+    protocol: {
+      async handle() {
+        throw new Error('read-only candidate listing must not hit protocol');
+      },
+    },
+    memory,
+    projectId: 'project',
+    explicitMemoryRequests: true,
+    git: fakeGit(),
+  });
+
+  const result = await adapter.handle({
+    hook_event_name: 'UserPromptSubmit',
+    session_id: 's1',
+    turn_id: 'list-kept',
+    cwd: '/repo',
+    prompt: 'memory candidates',
+  });
+
+  assert.equal(result.decision, 'block');
+  assert.match(result.reason, /status=pending/);
+  assert.match(result.reason, /judge=keep_candidate/);
+  assert.match(result.reason, new RegExp(memoryCandidateRef(candidate.id)));
+
+  memory.close();
+});
+
 test('candidate confirmation command captures direct-user authority and promotes exact candidate text', async () => {
   const root = await mkdtemp(join(tmpdir(), 'agent-hub-candidate-confirm-hook-'));
   const memory = new MemoryEngine({

@@ -196,6 +196,21 @@ function deterministicStageRunners(caseSpec) {
                 };
               }
 
+              if (caseSpec.pipeline.importance === 'keep_candidate') {
+                return {
+                  decision: 'keep_candidate',
+                  suggested_type: candidate.proposed_type,
+                  durability: 'medium',
+                  future_utility: 'medium',
+                  specificity: 'high',
+                  confidence: 'high',
+                  meaning_preserved: true,
+                  canonical_fact: candidate.proposed_value,
+                  reason: 'Deterministic kept-candidate fixture.',
+                  risk_flags: ['transient'],
+                };
+              }
+
               return {
                 decision: 'promote',
                 suggested_type: candidate.proposed_type,
@@ -338,10 +353,17 @@ export async function runDeterministicMemoryCandidateConfirmationCase(
     });
 
     const readyCandidate = memory.getCandidate(candidate.id);
-    if (readyCandidate?.status !== 'needs_confirmation') {
+    const expectedReadyStatus = (
+      caseSpec.pipeline.importance === 'keep_candidate'
+        ? 'pending'
+        : 'needs_confirmation'
+    );
+    if (readyCandidate?.status !== expectedReadyStatus) {
       throw new Error(
         caseSpec.id
-        + ' expected needs_confirmation before explicit confirmation but got '
+        + ' expected '
+        + expectedReadyStatus
+        + ' before explicit confirmation but got '
         + String(readyCandidate?.status),
       );
     }

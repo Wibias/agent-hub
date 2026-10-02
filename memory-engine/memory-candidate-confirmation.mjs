@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 
-export const CANDIDATE_CONFIRMATION_POLICY_VERSION = 'confirmation-v1';
+export const CANDIDATE_CONFIRMATION_POLICY_VERSION = 'confirmation-v2';
 
 function nonEmptyString(value) {
   return typeof value === 'string' && value.trim().length > 0;
