@@ -27,6 +27,12 @@ test('candidate confirmation behavioral fixture covers all explicit relations an
         expectCandidateStatus: 'promoted',
       },
       {
+        id: 'confirm-keep-candidate',
+        relation: 'unrelated',
+        expectApplied: true,
+        expectCandidateStatus: 'promoted',
+      },
+      {
         id: 'confirm-same',
         relation: 'same',
         expectApplied: true,
@@ -109,8 +115,8 @@ test('confirmation behavioral runner scores every case independently', async () 
   });
 
   assert.equal(result.pass, true);
-  assert.equal(result.totalCases, 6);
-  assert.equal(result.passedCases, 6);
+  assert.equal(result.totalCases, 7);
+  assert.equal(result.passedCases, 7);
   assert.equal(result.failedCases, 0);
 });
 
@@ -125,8 +131,8 @@ test('deterministic runner drives real candidate pipeline, listing, confirmation
     true,
     JSON.stringify(result, null, 2),
   );
-  assert.equal(result.totalCases, 6);
-  assert.equal(result.passedCases, 6);
+  assert.equal(result.totalCases, 7);
+  assert.equal(result.passedCases, 7);
   assert.equal(result.failedCases, 0);
 });
 
