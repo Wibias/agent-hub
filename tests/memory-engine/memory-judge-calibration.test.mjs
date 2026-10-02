@@ -223,6 +223,53 @@ test('perfect calibration predictions pass safety gates and expose exact metrics
   });
 });
 
+test('calibration runner accepts synchronous resource close methods', async () => {
+  let closeCalls = 0;
+  const importanceCases = [IMPORTANCE_JUDGE_CALIBRATION_CASES[0]];
+  const relationCases = [RELATION_JUDGE_CALIBRATION_CASES[0]];
+
+  const result = await runMemoryJudgeCalibration({
+    importanceCases,
+    relationCases,
+    createImportanceJudge: async () => ({
+      async judge(candidate) {
+        return JSON.stringify({
+          decision: 'promote',
+          suggested_type: candidate.proposed_type,
+          durability: 'long',
+          future_utility: 'high',
+          specificity: 'high',
+          confidence: 'high',
+          meaning_preserved: true,
+          canonical_fact: candidate.proposed_value,
+          reason: 'Synchronous close contract fixture.',
+          risk_flags: [],
+        });
+      },
+      close() {
+        closeCalls += 1;
+      },
+    }),
+    createRelationJudge: async () => ({
+      async judge({ caseSpec }) {
+        return JSON.stringify({
+          relation: caseSpec.expected.relation,
+          target_ref: caseSpec.expected.target_ref,
+          confidence: 'high',
+          meaning_preserved: true,
+          reason: 'Synchronous close contract fixture.',
+        });
+      },
+      close() {
+        closeCalls += 1;
+      },
+    }),
+  });
+
+  assert.equal(result.score.quality_gate.pass, true);
+  assert.equal(closeCalls, 2);
+});
+
 test('calibration runner uses judge parsers and scores deterministic provider outputs', async () => {
   let importanceCalls = 0;
   let relationCalls = 0;
