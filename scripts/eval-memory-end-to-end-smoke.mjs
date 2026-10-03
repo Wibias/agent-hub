@@ -116,6 +116,10 @@ function scopedUserClaims(memory, runtime) {
   ));
 }
 
+function claimValue(claim) {
+  return claim?.value_text ?? claim?.value ?? null;
+}
+
 function candidateForPrompt(memory, runtime, prompt) {
   return memory.listScopedCandidates({
     projectId: runtime.projectId,
@@ -561,7 +565,7 @@ export async function runMemoryEndToEndSmoke({
     check(
       'keep.exact_text_claim',
       activeUserClaims(memory, runtime).some(
-        (claim) => claim.value === PROMPTS.keep,
+        (claim) => claimValue(claim) === PROMPTS.keep,
       ),
     );
 
@@ -629,13 +633,13 @@ export async function runMemoryEndToEndSmoke({
     );
 
     const databaseClaims = scopedUserClaims(memory, runtime).filter(
-      (claim) => /production database/i.test(claim.value),
+      (claim) => /production database/i.test(claimValue(claim)),
     );
     const oldDatabase = databaseClaims.find(
-      (claim) => claim.value === PROMPTS.durable,
+      (claim) => claimValue(claim) === PROMPTS.durable,
     );
     const newDatabase = databaseClaims.find(
-      (claim) => claim.value === PROMPTS.update,
+      (claim) => claimValue(claim) === PROMPTS.update,
     );
     check(
       'update.old_superseded',
@@ -693,7 +697,7 @@ export async function runMemoryEndToEndSmoke({
     );
 
     const deploymentClaims = activeUserClaims(memory, runtime).filter(
-      (claim) => /production deployments/i.test(claim.value),
+      (claim) => /production deployments/i.test(claimValue(claim)),
     );
     const deploymentIds = new Set(deploymentClaims.map((claim) => claim.id));
     const openConflicts = memory.exportCanonical().conflicts.filter(
