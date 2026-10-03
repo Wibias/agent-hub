@@ -246,12 +246,12 @@ test('memory list reports an empty current scope without persisting anything', a
   );
 });
 
-test('memory list output stays bounded', async () => {
+test('memory list output stays bounded across user and agent sections', async () => {
   const state = exportedMemory();
   state.evidence = [];
   state.claims = [];
 
-  for (let index = 0; index < 100; index += 1) {
+  for (let index = 0; index < 50; index += 1) {
     const evidenceId = `e-${index}`;
     state.evidence.push({
       id: evidenceId,
@@ -270,6 +270,28 @@ test('memory list output stays bounded', async () => {
       branch_scope: 'main',
       created_from_evidence_id: evidenceId,
       created_at: `2026-09-30T09:${String(index % 60).padStart(2, '0')}:00.000Z`,
+    });
+  }
+
+  for (let index = 0; index < 50; index += 1) {
+    const evidenceId = `e-agent-${index}`;
+    state.evidence.push({
+      id: evidenceId,
+      project_id: 'project-a',
+      branch: 'main',
+      authority_class: 'agent_inference',
+    });
+    state.claims.push({
+      id: `c-agent-${index}`,
+      project_id: 'project-a',
+      kind: 'agent_inference',
+      subject: 'agent decision',
+      predicate: 'states',
+      value_text: `Agent decision: ${'y'.repeat(150)}-${index}`,
+      state: 'active',
+      branch_scope: 'main',
+      created_from_evidence_id: evidenceId,
+      created_at: `2026-09-30T10:${String(index % 60).padStart(2, '0')}:00.000Z`,
     });
   }
 
