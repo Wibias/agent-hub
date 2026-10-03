@@ -43,13 +43,18 @@ $PromptHook = @(
   $Hooks.hooks.UserPromptSubmit |
     ForEach-Object { @($_.hooks) } |
     Where-Object {
+      # commandWindows is intentionally an EncodedCommand payload on Windows,
+      # so identify the managed hook from its readable cross-platform command
+      # and then execute that hook's exact installed commandWindows value.
+      $_.command -is [string] -and
+      $_.command -match "codex-hook-cli\.mjs" -and
       $_.commandWindows -is [string] -and
-      $_.commandWindows -match "codex-hook-cli\.mjs"
+      -not [string]::IsNullOrWhiteSpace($_.commandWindows)
     }
 ) | Select-Object -First 1
 
 if ($null -eq $PromptHook) {
-  throw "Managed UserPromptSubmit memory hook with commandWindows was not found."
+  throw "Managed UserPromptSubmit memory hook with executable commandWindows was not found."
 }
 
 $Event = @{
