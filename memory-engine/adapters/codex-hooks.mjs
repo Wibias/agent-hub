@@ -107,7 +107,9 @@ export function formatAgentDecisionRecallContext(items, {
 }
 
 function combineRecallContexts(authoritative, advisory, maxBytes) {
-  if (!authoritative) return advisory;
+  if (!authoritative) {
+    return advisory && byteLength(advisory) <= maxBytes ? advisory : '';
+  }
   if (!advisory) return authoritative;
 
   const combined = authoritative + '\n\n' + advisory;
@@ -1175,17 +1177,6 @@ export function createCodexMemoryHookAdapter({
           && !conflictedIds.has(item.claim.id)
         ));
 
-        const advisoryBudget = Math.min(
-          2_048,
-          Math.max(512, Math.floor(maxContextBytes / 3)),
-        );
-        const advisoryContext = formatAgentDecisionRecallContext(
-          advisoryItems,
-          { maxBytes: advisoryBudget },
-        );
-        const authoritativeBudget = advisoryContext
-          ? Math.max(1, maxContextBytes - byteLength(advisoryContext) - 2)
-          : maxContextBytes;
         const authoritativeContext = formatCodexMemoryContext(
           {
             items: reliance.selected,
@@ -1193,8 +1184,22 @@ export function createCodexMemoryHookAdapter({
               (conflict) => String(conflict.status).startsWith('unresolved'),
             ),
           },
-          { maxBytes: authoritativeBudget },
+          { maxBytes: maxContextBytes },
         );
+        const separatorBytes = authoritativeContext ? 2 : 0;
+        const remainingBytes = Math.max(
+          0,
+          maxContextBytes
+            - byteLength(authoritativeContext)
+            - separatorBytes,
+        );
+        const advisoryBudget = Math.min(2_048, remainingBytes);
+        const advisoryContext = advisoryBudget > 0
+          ? formatAgentDecisionRecallContext(
+              advisoryItems,
+              { maxBytes: advisoryBudget },
+            )
+          : '';
         const additionalContext = combineRecallContexts(
           authoritativeContext,
           advisoryContext,
