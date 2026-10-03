@@ -242,7 +242,7 @@ test('memory list reports an empty current scope without persisting anything', a
   assert.equal(output.decision, 'block');
   assert.match(
     output.reason,
-    /no active durable memories/i,
+    /no active durable user memories/i,
   );
 });
 
