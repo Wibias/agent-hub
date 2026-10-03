@@ -1085,6 +1085,47 @@ Normal PR CI does **not** call Codex. It runs the same five lifecycle expectatio
 
 This evaluation does not schedule the pipeline, inspect transcripts, add `SessionEnd` work, or put model calls in the normal prompt path.
 
+### Full memory end-to-end smoke
+
+The final lifecycle smoke runs the real hook adapter, candidate ledger, explicit pipeline CLI, confirmation command, durable-memory listing, lexical recall, update lifecycle, and conflict visibility against one temporary SQLite database:
+
+```powershell
+node .\scripts\eval-memory-end-to-end-smoke.mjs
+```
+
+The provider-backed CLI uses the frozen production policies:
+
+```text
+capture-v1
+importance-v2
+relation-v1
+promotion-v1
+confirmation-v2
+```
+
+By default it uses `codex-default` with `medium` reasoning. Optional comparison overrides are:
+
+```powershell
+$env:MEMORY_E2E_SMOKE_MODEL = "MODEL_ID"
+$env:MEMORY_E2E_SMOKE_REASONING_EFFORT = "medium"
+$env:MEMORY_E2E_SMOKE_SOURCE_CODEX_HOME = "C:\path\to\.codex"
+```
+
+The sequential smoke covers:
+
+- a new durable fact being captured, promoted, listed by `memory list`, and returned by current recall;
+- a one-off candidate being classified `ignore` without creating a Claim;
+- a bounded multi-session candidate becoming `keep_candidate`, appearing in `memory candidates`, and becoming durable only after explicit user confirmation;
+- a scope-unclear candidate becoming `needs_confirmation`, remaining visible for review, and creating no Claim;
+- a paraphrase resolving `same` without a duplicate Claim;
+- a correction resolving `update`, superseding the prior durable Claim, disappearing the old value from current `memory list` and recall, and exposing the replacement;
+- a durable baseline plus an incompatible later constraint resolving `contradict`, keeping both Claims active and exposing one open conflict through recall;
+- a final idempotency pass requiring all automatic queues to be empty, with only the intentionally unconfirmed candidate remaining in the review count.
+
+Normal PR CI never calls Codex for this smoke. It executes the exact same sequence with deterministic injected importance-v2 and relation-v1 judges while keeping all other adapter, engine, pipeline, confirmation, listing, recall, lifecycle, and conflict code real.
+
+After a clean provider-backed run, this smoke is regression evidence rather than a prompt-tuning target. Further judge-policy changes require fresh holdout evidence before changing the frozen policy versions.
+
 ### Explicit durable-memory prompts
 
 Production Codex can opt into durable direct-user memory with the hook CLI flag:
