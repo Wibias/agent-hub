@@ -4,6 +4,9 @@ import assert from 'node:assert/strict';
 import {
   runMemoryEndToEndSmoke,
 } from '../../scripts/eval-memory-end-to-end-smoke.mjs';
+import {
+  parseMemoryGoldenSmokeArgs,
+} from '../../scripts/run-memory-golden-smoke.mjs';
 
 test('deterministic memory E2E smoke covers the full candidate lifecycle', async () => {
   const result = await runMemoryEndToEndSmoke({
@@ -129,5 +132,30 @@ test('deterministic memory E2E smoke covers the full candidate lifecycle', async
       'Decision: keep semantic recall telemetry separate from canonical memory export.',
     )?.status,
     'promoted',
+  );
+});
+
+
+test('golden smoke runner defaults to deterministic mode and parses provider options', () => {
+  assert.deepEqual(parseMemoryGoldenSmokeArgs([]), {
+    providerBacked: false,
+    model: null,
+    reasoningEffort: 'medium',
+  });
+  assert.deepEqual(
+    parseMemoryGoldenSmokeArgs([
+      '--provider',
+      '--model', 'fixture-model',
+      '--reasoning-effort', 'high',
+    ]),
+    {
+      providerBacked: true,
+      model: 'fixture-model',
+      reasoningEffort: 'high',
+    },
+  );
+  assert.throws(
+    () => parseMemoryGoldenSmokeArgs(['--reasoning-effort', 'extreme']),
+    /reasoning-effort/i,
   );
 });
