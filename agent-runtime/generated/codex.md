@@ -2,20 +2,22 @@
 
 Generated from `agent-runtime/host-capabilities.json` and `agent-runtime/skill-runtime.json`. Do not hand edit.
 
-- reviewed: 2026-09-30
+- reviewed: 2026-10-03
 - agentsRoot: supported
 - skillModelRouting: unsupported
-- config renderer: unsupported
+- config renderer: supported
 - lifecycle hooks: supported
 - command hooks: supported
 - plugin-bundled hooks: supported
 - hook events: SessionStart, PreToolUse, PermissionRequest, PostToolUse, PreCompact, PostCompact, UserPromptSubmit, SubagentStart, SubagentStop, Stop, Interrupt, SessionEnd
 - shared skill root: `~/.agents/skills`
 - agent profiles: manual
-- note: General Codex host-config rendering remains unsupported. Documented lifecycle command hooks are supported; the memory integration uses UserPromptSubmit through the explicit Codex hook adapter.
+- note: Codex profile rendering is supported for the verified 1:1 mapping reasoning -> model_reasoning_effort. Skill-to-profile activation remains manual because skillModelRouting is unsupported. Isolation and mutation remain semantic Hub preferences and are emitted only as unmapped metadata/comments, not translated to sandbox or approval settings.
 
 ## Sources
 
+- https://developers.openai.com/docs/config-file/config-reference
+- https://developers.openai.com/docs/config-file/config-basic
 - https://developers.openai.com/docs/hooks
 - https://developers.openai.com/plugins/build/plugins
 

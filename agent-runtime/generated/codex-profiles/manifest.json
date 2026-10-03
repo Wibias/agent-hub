@@ -1,0 +1,109 @@
+{
+  "schemaVersion": 1,
+  "host": "codex",
+  "activation": {
+    "mode": "manual-profile",
+    "command": "codex --profile <profile>",
+    "configRoot": "$CODEX_HOME"
+  },
+  "mappedRuntimeFields": [
+    "reasoning"
+  ],
+  "unmappedRuntimeFields": [
+    "isolation",
+    "mutation"
+  ],
+  "profiles": [
+    {
+      "skill": "code-simplification",
+      "profile": "agent-hub-code-simplification",
+      "file": "agent-hub-code-simplification.config.toml",
+      "mapped": {
+        "reasoning": "medium"
+      },
+      "unmapped": {}
+    },
+    {
+      "skill": "codebase-design",
+      "profile": "agent-hub-codebase-design",
+      "file": "agent-hub-codebase-design.config.toml",
+      "mapped": {
+        "reasoning": "high"
+      },
+      "unmapped": {}
+    },
+    {
+      "skill": "codex-dynamic-workflows",
+      "profile": "agent-hub-codex-dynamic-workflows",
+      "file": "agent-hub-codex-dynamic-workflows.config.toml",
+      "mapped": {
+        "reasoning": "high"
+      },
+      "unmapped": {
+        "isolation": "prefer"
+      }
+    },
+    {
+      "skill": "design-with-ai",
+      "profile": "agent-hub-design-with-ai",
+      "file": "agent-hub-design-with-ai.config.toml",
+      "mapped": {
+        "reasoning": "high"
+      },
+      "unmapped": {}
+    },
+    {
+      "skill": "diagnose",
+      "profile": "agent-hub-diagnose",
+      "file": "agent-hub-diagnose.config.toml",
+      "mapped": {
+        "reasoning": "high"
+      },
+      "unmapped": {
+        "isolation": "prefer"
+      }
+    },
+    {
+      "skill": "improve-codebase-architecture",
+      "profile": "agent-hub-improve-codebase-architecture",
+      "file": "agent-hub-improve-codebase-architecture.config.toml",
+      "mapped": {
+        "reasoning": "high"
+      },
+      "unmapped": {
+        "isolation": "prefer"
+      }
+    },
+    {
+      "skill": "security-review",
+      "profile": "agent-hub-security-review",
+      "file": "agent-hub-security-review.config.toml",
+      "mapped": {
+        "reasoning": "high"
+      },
+      "unmapped": {
+        "isolation": "prefer",
+        "mutation": "read-only"
+      }
+    },
+    {
+      "skill": "source-driven-development",
+      "profile": "agent-hub-source-driven-development",
+      "file": "agent-hub-source-driven-development.config.toml",
+      "mapped": {
+        "reasoning": "medium"
+      },
+      "unmapped": {}
+    },
+    {
+      "skill": "writing-ticks",
+      "profile": "agent-hub-writing-ticks",
+      "file": "agent-hub-writing-ticks.config.toml",
+      "mapped": {
+        "reasoning": "low"
+      },
+      "unmapped": {}
+    }
+  ],
+  "unrendered": []
+}
