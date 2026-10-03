@@ -3224,8 +3224,10 @@ export class MemoryEngine {
       + "WHERE project_id = ? AND branch = ? AND status = 'pending' "
       + "AND source_authority = 'user_direct' "
       + 'AND evaluated_at IS NOT NULL AND relation IS NULL '
+      + 'AND json_valid(evaluation_json) '
+      + "AND json_extract(evaluation_json, '$.decision') = 'promote' "
       + 'ORDER BY created_at ASC, id ASC LIMIT ?',
-    ).all(projectId, branch, limit * 4).map(normalizeCandidate);
+    ).all(projectId, branch, limit).map(normalizeCandidate);
 
     const eligible = [];
     for (const candidate of rows) {
@@ -3267,8 +3269,10 @@ export class MemoryEngine {
       + "WHERE project_id = ? AND branch = ? AND status = 'pending' "
       + "AND source_authority = 'agent_inference' "
       + 'AND evaluated_at IS NOT NULL AND relation IS NULL '
+      + 'AND json_valid(evaluation_json) '
+      + "AND json_extract(evaluation_json, '$.decision') = 'promote' "
       + 'ORDER BY created_at ASC, id ASC LIMIT ?',
-    ).all(projectId, branch, limit * 4).map(normalizeCandidate);
+    ).all(projectId, branch, limit).map(normalizeCandidate);
 
     const eligible = [];
     for (const candidate of rows) {
