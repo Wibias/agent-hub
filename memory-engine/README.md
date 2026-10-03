@@ -1169,6 +1169,54 @@ node .\scripts\eval-memory-replay.mjs --provider --model MODEL_ID --reasoning-ef
 
 The replay quality gate fails on any expected-decision mismatch and specifically on false durable promotions. This complements the broader balanced calibration and adversarial holdout suites: calibration measures general judge quality, while replay protects concrete past failure modes from regression.
 
+### Golden end-to-end release smoke
+
+The deterministic golden smoke runs the complete memory lifecycle in a fresh temporary database with the production hook/pipeline components:
+
+```powershell
+node .\scripts\run-memory-golden-smoke.mjs
+```
+
+It gates all of these paths in one run:
+
+- direct-user durable memory promotion;
+- ignored one-off state;
+- keep-candidate review plus explicit confirmation;
+- scope-unclear `needs_confirmation`;
+- same-memory duplicate closure;
+- explicit replacement and supersession;
+- contradiction with an open conflict and no silent winner;
+- root-agent `Stop` decision capture/promotion/provenance;
+- subagent `SubagentStop` decision capture/promotion with agent id/type provenance;
+- advisory agent decisions visible in `memory list`;
+- semantic index rebuild;
+- a lexical miss followed by a semantic/hybrid hit for the current replacement Claim;
+- final automatic queues drained except the intentionally unconfirmed candidate.
+
+The default runner is provider-free and deterministic so it can run in CI. To exercise the real isolated Codex judges too:
+
+```powershell
+node .\scripts\run-memory-golden-smoke.mjs --provider
+```
+
+Optional `--model` and `--reasoning-effort low|medium|high` arguments are supported.
+
+On Windows, the release runner additionally checks the actual installed Codex host configuration and the PowerShell dispatch path that previously failed:
+
+```powershell
+.\scripts\run-memory-windows-release-smoke.ps1
+```
+
+It performs, in order:
+
+1. `setup-codex-host.mjs` dry-run;
+2. `doctor-memory.mjs`;
+3. reads the installed managed `UserPromptSubmit.commandWindows` from `~\.codex\hooks.json`;
+4. pipes a read-only `memory health` event through `powershell.exe -Command <commandWindows>` and requires exit code 0 plus the expected health response;
+5. runs the deterministic golden E2E smoke.
+
+Use `-Provider` to add the provider-backed judge pass. The script ends by printing the one remaining UI-only release check: restart Codex Desktop, send `Reply only with OK.`, and verify that no `Failed UserPromptSubmit` / hook exit-code-1 message appears.
+
 Automatic processing adds orchestration only. It does not change capture-v1, importance-v2, relation-v1, promotion-v1, or confirmation-v2 decisions.
 
 ### Memory judge calibration
