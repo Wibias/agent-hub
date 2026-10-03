@@ -4,6 +4,9 @@ import assert from 'node:assert/strict';
 import {
   runMemoryEndToEndSmoke,
 } from '../../scripts/eval-memory-end-to-end-smoke.mjs';
+import {
+  parseMemoryGoldenSmokeArgs,
+} from '../../scripts/run-memory-golden-smoke.mjs';
 
 test('deterministic memory E2E smoke covers the full candidate lifecycle', async () => {
   const result = await runMemoryEndToEndSmoke({
@@ -20,9 +23,13 @@ test('deterministic memory E2E smoke covers the full candidate lifecycle', async
     relation: 'relation-v1',
     promotion: 'promotion-v1',
     confirmation: 'confirmation-v2',
+    agent_capture: 'agent-capture-v1',
+    agent_importance: 'agent-importance-v1',
+    agent_relation: 'agent-relation-v1',
+    agent_promotion: 'agent-promotion-v1',
   });
 
-  assert.ok(result.checks.length >= 25);
+  assert.ok(result.checks.length >= 35);
   assert.deepEqual(
     result.checks.filter((item) => !item.pass),
     [],
@@ -52,6 +59,16 @@ test('deterministic memory E2E smoke covers the full candidate lifecycle', async
     'contradict.both_active',
     'contradict.open_conflict',
     'contradict.recall_conflict_visible',
+    'agent.root.captured',
+    'agent.root.promoted',
+    'agent.root.provenance',
+    'agent.subagent.captured',
+    'agent.subagent.promoted',
+    'agent.subagent.provenance',
+    'agent.list_visible_as_advisory',
+    'semantic.indexed',
+    'semantic.lexical_miss',
+    'semantic.hybrid_hit',
     'final.automatic_queues_empty',
     'final.list_excludes_non_durable',
   ]) {
@@ -61,9 +78,12 @@ test('deterministic memory E2E smoke covers the full candidate lifecycle', async
   assert.deepEqual(result.judge_calls, {
     importance: 8,
     relation: 4,
+    agent_importance: 2,
+    agent_relation: 2,
   });
 
   assert.equal(result.final.active_claims, 4);
+  assert.equal(result.final.active_agent_claims, 2);
   assert.equal(result.final.scoped_claims, 5);
   assert.equal(result.final.open_conflicts, 1);
 
@@ -100,5 +120,42 @@ test('deterministic memory E2E smoke covers the full candidate lifecycle', async
       'We must require one approval for production deployments.',
     )?.relation,
     'contradict',
+  );
+  assert.equal(
+    statusByValue.get(
+      'Decision: use structured JSONL records for durable memory pipeline logs.',
+    )?.status,
+    'promoted',
+  );
+  assert.equal(
+    statusByValue.get(
+      'Decision: keep semantic recall telemetry separate from canonical memory export.',
+    )?.status,
+    'promoted',
+  );
+});
+
+
+test('golden smoke runner defaults to deterministic mode and parses provider options', () => {
+  assert.deepEqual(parseMemoryGoldenSmokeArgs([]), {
+    providerBacked: false,
+    model: null,
+    reasoningEffort: 'medium',
+  });
+  assert.deepEqual(
+    parseMemoryGoldenSmokeArgs([
+      '--provider',
+      '--model', 'fixture-model',
+      '--reasoning-effort', 'high',
+    ]),
+    {
+      providerBacked: true,
+      model: 'fixture-model',
+      reasoningEffort: 'high',
+    },
+  );
+  assert.throws(
+    () => parseMemoryGoldenSmokeArgs(['--reasoning-effort', 'extreme']),
+    /reasoning-effort/i,
   );
 });

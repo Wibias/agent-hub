@@ -5,9 +5,13 @@ import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 import {
+  runCodexAgentDecisionHook,
+} from '../memory-engine/adapters/codex-agent-decision-hook-cli.mjs';
+import {
   createCodexMemoryHookAdapter,
   memoryCandidateRef,
 } from '../memory-engine/adapters/codex-hooks.mjs';
+import { HybridMemoryRetriever } from '../memory-engine/hybrid-retrieval.mjs';
 import { MemoryEngine } from '../memory-engine/index.mjs';
 import { createMemoryProtocol } from '../memory-engine/protocol.mjs';
 import {
@@ -18,6 +22,15 @@ import {
   createCodexMemoryCandidateRelationJudge,
   runMemoryCandidateRelationCli,
 } from './judge-memory-relations.mjs';
+import {
+  createIsolatedCodexJsonJudge,
+} from './codex-isolated-memory-judge.mjs';
+import {
+  runAgentDecisionJudgeCli,
+} from './judge-agent-memory-candidates.mjs';
+import {
+  runAgentDecisionRelationCli,
+} from './judge-agent-memory-relations.mjs';
 import {
   runMemoryCandidatePipelineCli,
 } from './process-memory-candidates.mjs';
@@ -39,6 +52,10 @@ const PROMPTS = Object.freeze({
     'We decided production deployments require two approvals.',
   contradict:
     'We must require one approval for production deployments.',
+  rootAgent:
+    'Decision: use structured JSONL records for durable memory pipeline logs.',
+  subagent:
+    'Decision: keep semantic recall telemetry separate from canonical memory export.',
 });
 
 function nonEmpty(value) {
@@ -92,6 +109,51 @@ async function submitHook(hook, prompt, turnId) {
     turn_id: turnId,
     cwd: '/repo',
     prompt,
+  });
+}
+
+async function submitAgentDecision({
+  runtime,
+  message,
+  turnId,
+  agentId = null,
+  agentType = null,
+}) {
+  const hookEventName = agentId === null ? 'Stop' : 'SubagentStop';
+  return runCodexAgentDecisionHook({
+    event: {
+      hook_event_name: hookEventName,
+      session_id: 'memory-e2e-smoke',
+      turn_id: turnId,
+      cwd: runtime.cwd,
+      last_assistant_message: message,
+      ...(agentId === null ? {} : {
+        agent_id: agentId,
+        agent_type: agentType,
+      }),
+    },
+    env: {
+      AGENT_HUB_MEMORY_DB: runtime.dbPath,
+      AGENT_HUB_MEMORY_PROJECT_ID: runtime.projectId,
+    },
+    configOptions: {
+      ignoreMemoryEnv: false,
+      autoPipeline: false,
+    },
+    clock: () => '2026-10-03T00:10:00.000Z',
+    createMemory: ({ dbPath }) => new MemoryEngine({ dbPath }),
+    resolveProjectScope: () => ({
+      projectId: runtime.projectId,
+      repoIdentity: runtime.projectId,
+      canonicalRemote: null,
+    }),
+    resolveGit: () => ({
+      repoPath: runtime.cwd,
+      branch: runtime.branch,
+      revisionSha: runtime.revisionSha,
+    }),
+    ensureDbDirectory() {},
+    restoreLocked: () => false,
   });
 }
 
@@ -295,12 +357,16 @@ function createStageRunners({
 }) {
   let importanceJudgeCalls = 0;
   let relationJudgeCalls = 0;
+  let agentImportanceJudgeCalls = 0;
+  let agentRelationJudgeCalls = 0;
 
   return {
     get calls() {
       return {
         importance: importanceJudgeCalls,
         relation: relationJudgeCalls,
+        agent_importance: agentImportanceJudgeCalls,
+        agent_relation: agentRelationJudgeCalls,
       };
     },
 
@@ -379,6 +445,108 @@ function createStageRunners({
         },
       });
     },
+
+    async runAgentImportance(args) {
+      return runAgentDecisionJudgeCli({
+        ...args,
+        dependencies: {
+          ...args.dependencies,
+          async createJudge(options) {
+            if (!providerBacked) {
+              return {
+                evaluatorId: 'e2e-smoke:agent-importance-v1',
+                isolation: { deterministicFixture: true },
+                async judge(prompt) {
+                  agentImportanceJudgeCalls += 1;
+                  const isRoot = prompt.includes(PROMPTS.rootAgent);
+                  const isSubagent = prompt.includes(PROMPTS.subagent);
+                  if (!isRoot && !isSubagent) {
+                    throw new Error('unexpected deterministic agent candidate');
+                  }
+                  return {
+                    decision: 'promote',
+                    suggested_type: 'decision',
+                    durability: 'long',
+                    future_utility: 'high',
+                    specificity: 'high',
+                    confidence: 'high',
+                    meaning_preserved: true,
+                    canonical_fact: 'Agent decision: ' + (
+                      isRoot
+                        ? 'use structured JSONL records for durable memory pipeline logs.'
+                        : 'keep semantic recall telemetry separate from canonical memory export.'
+                    ),
+                    reason: 'Deterministic durable agent decision E2E fixture.',
+                    risk_flags: [],
+                  };
+                },
+                async close() {},
+              };
+            }
+
+            const resource = await createIsolatedCodexJsonJudge({
+              ...options,
+              model,
+              reasoningEffort,
+              sourceCodexHome,
+              env,
+            });
+            const judge = resource.judge;
+            return {
+              ...resource,
+              async judge(prompt) {
+                agentImportanceJudgeCalls += 1;
+                return judge(prompt);
+              },
+            };
+          },
+        },
+      });
+    },
+
+    async runAgentRelation(args) {
+      return runAgentDecisionRelationCli({
+        ...args,
+        dependencies: {
+          ...args.dependencies,
+          async createJudge(options) {
+            if (!providerBacked) {
+              return {
+                evaluatorId: 'e2e-smoke:agent-relation-v1',
+                isolation: { deterministicFixture: true },
+                async judge() {
+                  agentRelationJudgeCalls += 1;
+                  return {
+                    relation: 'unrelated',
+                    target_ref: null,
+                    confidence: 'high',
+                    meaning_preserved: true,
+                    reason: 'Deterministic unrelated agent decision E2E fixture.',
+                  };
+                },
+                async close() {},
+              };
+            }
+
+            const resource = await createIsolatedCodexJsonJudge({
+              ...options,
+              model,
+              reasoningEffort,
+              sourceCodexHome,
+              env,
+            });
+            const judge = resource.judge;
+            return {
+              ...resource,
+              async judge(prompt) {
+                agentRelationJudgeCalls += 1;
+                return judge(prompt);
+              },
+            };
+          },
+        },
+      });
+    },
   };
 }
 
@@ -449,6 +617,8 @@ export async function runMemoryEndToEndSmoke({
       createMemory,
       runImportance: stageRunners.runImportance,
       runRelation: stageRunners.runRelation,
+      runAgentImportance: stageRunners.runAgentImportance,
+      runAgentRelation: stageRunners.runAgentRelation,
     };
 
     async function runPipeline() {
@@ -783,6 +953,189 @@ export async function runMemoryEndToEndSmoke({
       { recall_conflicts: recalled.conflicts.length },
     );
 
+    // 9. Root agent Stop -> lower-authority durable agent decision.
+    await submitAgentDecision({
+      runtime,
+      message: PROMPTS.rootAgent,
+      turnId: 'root-agent-decision',
+    });
+    let rootAgentCandidate = candidateForPrompt(
+      memory,
+      runtime,
+      PROMPTS.rootAgent,
+    );
+    check(
+      'agent.root.captured',
+      rootAgentCandidate !== null
+        && rootAgentCandidate.source_authority === 'agent_inference',
+      {
+        candidate_id: rootAgentCandidate?.id ?? null,
+        authority: rootAgentCandidate?.source_authority ?? null,
+      },
+    );
+    await runPipeline();
+    rootAgentCandidate = memory.getCandidate(rootAgentCandidate.id);
+    check(
+      'agent.root.promoted',
+      rootAgentCandidate.status === 'promoted'
+        && rootAgentCandidate.relation === 'unrelated',
+      {
+        status: rootAgentCandidate.status,
+        relation: rootAgentCandidate.relation,
+      },
+    );
+    const rootAgentClaim = promotedClaimForCandidate(
+      memory,
+      rootAgentCandidate.id,
+    );
+    const rootAgentInspect = memory.inspectClaimObservability({
+      projectId: runtime.projectId,
+      branch: runtime.branch,
+      claimId: rootAgentClaim.id,
+    });
+    check(
+      'agent.root.provenance',
+      rootAgentClaim?.kind === 'agent_inference'
+        && rootAgentInspect?.evidence?.authority_class === 'agent_inference'
+        && rootAgentInspect?.evidence?.metadata?.event_type === 'assistant_stop'
+        && rootAgentInspect?.evidence?.metadata?.agent_type === 'root',
+      {
+        claim_id: rootAgentClaim?.id ?? null,
+        metadata: rootAgentInspect?.evidence?.metadata ?? null,
+      },
+    );
+
+    // 10. SubagentStop -> durable decision with agent id/type provenance.
+    await submitAgentDecision({
+      runtime,
+      message: PROMPTS.subagent,
+      turnId: 'subagent-decision',
+      agentId: 'agent-golden-1',
+      agentType: 'explorer',
+    });
+    let subagentCandidate = candidateForPrompt(
+      memory,
+      runtime,
+      PROMPTS.subagent,
+    );
+    check(
+      'agent.subagent.captured',
+      subagentCandidate !== null
+        && subagentCandidate.source_authority === 'agent_inference',
+      {
+        candidate_id: subagentCandidate?.id ?? null,
+        authority: subagentCandidate?.source_authority ?? null,
+      },
+    );
+    await runPipeline();
+    subagentCandidate = memory.getCandidate(subagentCandidate.id);
+    check(
+      'agent.subagent.promoted',
+      subagentCandidate.status === 'promoted'
+        && subagentCandidate.relation === 'unrelated',
+      {
+        status: subagentCandidate.status,
+        relation: subagentCandidate.relation,
+      },
+    );
+    const subagentClaim = promotedClaimForCandidate(
+      memory,
+      subagentCandidate.id,
+    );
+    const subagentInspect = memory.inspectClaimObservability({
+      projectId: runtime.projectId,
+      branch: runtime.branch,
+      claimId: subagentClaim.id,
+    });
+    check(
+      'agent.subagent.provenance',
+      subagentClaim?.kind === 'agent_inference'
+        && subagentInspect?.evidence?.metadata?.event_type === 'subagent_stop'
+        && subagentInspect?.evidence?.metadata?.agent_id === 'agent-golden-1'
+        && subagentInspect?.evidence?.metadata?.agent_type === 'explorer',
+      {
+        claim_id: subagentClaim?.id ?? null,
+        metadata: subagentInspect?.evidence?.metadata ?? null,
+      },
+    );
+
+    const agentList = await submitHook(
+      hook,
+      'memory list',
+      'agent-list',
+    );
+    check(
+      'agent.list_visible_as_advisory',
+      agentList?.decision === 'block'
+        && /Advisory durable agent decisions/i.test(agentList.reason)
+        && /structured JSONL records/i.test(agentList.reason)
+        && /semantic recall telemetry/i.test(agentList.reason),
+    );
+
+    // 11. Semantic recall recovers the current replacement without keywords.
+    const semanticRetriever = new HybridMemoryRetriever({
+      memory,
+      embedder: {
+        modelId: 'golden-e5',
+        modelRevision: 'fixture-v1',
+        dimensions: 3,
+        async embedQuery() {
+          return new Float32Array([1, 0, 0]);
+        },
+        async embedPassages(texts) {
+          return texts.map((text) => (
+            /MySQL/i.test(text)
+              ? new Float32Array([1, 0, 0])
+              : new Float32Array([0, 1, 0])
+          ));
+        },
+      },
+    });
+    const semanticRebuild = await semanticRetriever.rebuildSemanticIndex({
+      projectId: runtime.projectId,
+      branch: runtime.branch,
+    });
+    check(
+      'semantic.indexed',
+      semanticRebuild.indexed > 0 && semanticRebuild.failed === 0,
+      semanticRebuild,
+    );
+
+    const semanticQuery = 'Which storage engine handles many parallel writers?';
+    const lexicalOnly = memory.recall({
+      projectId: runtime.projectId,
+      branch: runtime.branch,
+      query: semanticQuery,
+      mode: 'current',
+      limit: 10,
+    });
+    check(
+      'semantic.lexical_miss',
+      !lexicalOnly.items.some(
+        (item) => item.claim.id === newDatabase.id,
+      ),
+      {
+        lexical_ids: lexicalOnly.items.map((item) => item.claim.id),
+        target_id: newDatabase.id,
+      },
+    );
+    const semanticRecall = await semanticRetriever.recall({
+      projectId: runtime.projectId,
+      branch: runtime.branch,
+      query: semanticQuery,
+      mode: 'current',
+      maxItems: 10,
+      maxSerializedBytes: 16_384,
+    });
+    check(
+      'semantic.hybrid_hit',
+      semanticRecall.items[0]?.claim?.id === newDatabase.id,
+      {
+        semantic_ids: semanticRecall.items.map((item) => item.claim.id),
+        target_id: newDatabase.id,
+      },
+    );
+
     // Final queues are drained except the intentionally unconfirmed candidate.
     pipeline = await runPipeline();
     check(
@@ -790,6 +1143,9 @@ export async function runMemoryEndToEndSmoke({
       pipeline.final.importance_ready === 0
         && pipeline.final.relation_ready === 0
         && pipeline.final.promotion_ready === 0
+        && pipeline.final.agent_importance_ready === 0
+        && pipeline.final.agent_relation_ready === 0
+        && pipeline.final.agent_promotion_ready === 0
         && pipeline.final.kept_for_review === 0
         && pipeline.final.needs_confirmation === 1,
       { final: pipeline.final },
@@ -801,7 +1157,9 @@ export async function runMemoryEndToEndSmoke({
       !finalList.reason.includes(PROMPTS.ignore)
         && !finalList.reason.includes(PROMPTS.ambiguous)
         && finalList.reason.includes(PROMPTS.keep)
-        && finalList.reason.includes(newDatabase.value),
+        && finalList.reason.includes(newDatabase.value)
+        && /structured JSONL records/i.test(finalList.reason)
+        && /semantic recall telemetry/i.test(finalList.reason),
     );
 
     return {
@@ -815,11 +1173,24 @@ export async function runMemoryEndToEndSmoke({
         relation: 'relation-v1',
         promotion: 'promotion-v1',
         confirmation: 'confirmation-v2',
+        agent_capture: 'agent-capture-v1',
+        agent_importance: 'agent-importance-v1',
+        agent_relation: 'agent-relation-v1',
+        agent_promotion: 'agent-promotion-v1',
       },
       checks,
       judge_calls: stageRunners.calls,
       final: {
         active_claims: activeUserClaims(memory, runtime).length,
+        active_agent_claims: memory.exportCanonical().claims.filter(
+          (claim) => (
+            claim.project_id === runtime.projectId
+            && claim.branch_scope === runtime.branch
+            && claim.state === 'active'
+            && claim.kind === 'agent_inference'
+            && claim.subject === 'agent decision'
+          ),
+        ).length,
         scoped_claims: scopedUserClaims(memory, runtime).length,
         open_conflicts: memory.exportCanonical().conflicts.filter(
           (conflict) => (
