@@ -348,6 +348,75 @@ function definition(rows) {
   `;
 }
 
+function renderClaimActions(claim) {
+  if (
+    claim?.authority !== 'user_direct'
+    || claim?.state !== 'active'
+  ) {
+    return '';
+  }
+
+  const message = state.actionError
+    ? `<div class="action-message error">${escapeHtml(state.actionError)}</div>`
+    : state.actionMessage
+      ? `<div class="action-message">${escapeHtml(state.actionMessage)}</div>`
+      : '<div class="action-message"></div>';
+
+  const replacePanel = state.claimActionMode === 'replace'
+    ? `
+      <div class="action-panel">
+        <label class="action-label" for="replace-memory-value">Replacement value</label>
+        <textarea id="replace-memory-value" class="action-textarea">${escapeHtml(claim.value)}</textarea>
+        <div class="action-row">
+          <button id="confirm-replace-memory" class="text-action" type="button">
+            Apply replacement
+          </button>
+          <button id="cancel-memory-action" class="text-action" type="button">
+            Cancel
+          </button>
+        </div>
+        ${message}
+      </div>
+    `
+    : '';
+
+  const forgetPanel = state.claimActionMode === 'forget'
+    ? `
+      <div class="action-panel">
+        <div class="action-message">
+          This will expire ${escapeHtml(claim.ref)} for this project and branch.
+          History and audit evidence remain.
+        </div>
+        <div class="action-row">
+          <button id="confirm-forget-memory" class="text-action danger" type="button">
+            Confirm forget
+          </button>
+          <button id="cancel-memory-action" class="text-action" type="button">
+            Cancel
+          </button>
+        </div>
+        ${message}
+      </div>
+    `
+    : '';
+
+  return `
+    <section class="inspect-section">
+      <h3>Actions</h3>
+      <div class="action-row">
+        <button id="replace-memory" class="text-action" type="button">
+          Replace
+        </button>
+        <button id="forget-memory" class="text-action danger" type="button">
+          Forget
+        </button>
+      </div>
+      ${replacePanel}
+      ${forgetPanel}
+    </section>
+  `;
+}
+
 function renderInspector() {
   if (!state.selectedClaimId) return inspectorEmpty();
   if (!state.claim) {
@@ -447,6 +516,8 @@ function renderInspector() {
         <h3>Value</h3>
         <p class="inspect-value">${escapeHtml(claim.value)}</p>
       </section>
+
+      ${renderClaimActions(claim)}
     </div>
   `;
 }
