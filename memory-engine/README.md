@@ -1005,11 +1005,13 @@ Normal PR CI never calls Codex for this suite. It verifies fixture balance, bili
 
 ### Pipeline-reachable memory judge holdout v3
 
-After `importance-v2` clarified the bounded multi-session `keep_candidate` boundary, a fresh unseen provider-backed validation suite is available:
+After `importance-v2` clarified the bounded multi-session `keep_candidate` boundary, v3 was used once as a fresh provider-backed validation suite:
 
 ```powershell
 node .\scripts\eval-codex-memory-judge-pipeline-holdout-v3.mjs
 ```
+
+That first real run invalidated one fixture rather than exposing a new judge defect: `pipeline-v3-importance-promote-csv-de` expected `promote` even though its statement was explicitly bounded "bis zu seiner Ablösung". Under `importance-v2`, that is `keep_candidate` by policy. The judge returned `keep_candidate` with high confidence, while the other 31 cases matched their expectations. Because the expected label was inconsistent with the production policy, v3 is preserved as observed evidence and is not relabeled or rerun as a fresh generalisation claim.
 
 The v3 suite is independent from the already-observed calibration, adversarial holdout, and pipeline-holdout-v2 fixtures. It contains 16 new bilingual importance cases and 16 new bilingual relation cases. Importance remains balanced 4/4/4/4, relation remains balanced 4/4/4/4, and every candidate statement must be reachable through `capture-v1` with the expected type before model scoring.
 
@@ -1018,6 +1020,25 @@ The `keep_candidate` boundary cases use new multi-session horizons such as clien
 The first real v3 run should use the default authenticated `codex-default` model with `medium` reasoning and no override. Optional later comparisons use `MEMORY_JUDGE_PIPELINE_HOLDOUT_V3_MODEL` and `MEMORY_JUDGE_PIPELINE_HOLDOUT_V3_REASONING_EFFORT`.
 
 As with the other holdouts, normal PR CI never calls Codex. It validates balance, bilingual coverage, fresh boundary composition, 32/32 `capture-v1` reachability/type agreement, strict production parser/scorer use, and deterministic runner orchestration.
+
+### Pipeline-reachable memory judge holdout v4
+
+A fresh v4 suite replaces the invalidated v3 fixture set for a clean `importance-v2` generalisation check:
+
+```powershell
+node .\scripts\eval-codex-memory-judge-pipeline-holdout-v4.mjs
+```
+
+v4 contains 16 new bilingual importance cases and 16 new bilingual relation cases, again balanced 4/4/4/4. It adds an explicit fixture invariant matching `importance-v2`:
+
+- `promote` fixtures are durable and do not contain explicit expiry/milestone language;
+- `keep_candidate` fixtures are explicit multi-session statements with a bounded horizon or named milestone;
+- `ignore` fixtures are one-off/current-day/single-run state;
+- `needs_confirmation` fixtures remain genuinely scope-unclear or missing a referent.
+
+All 32 source statements must be accepted by `capture-v1` with the expected candidate type before model scoring. Relation cases use new targets and distractors. The first provider-backed v4 run must use default `codex-default` / `medium` with no override and should be run exactly once before interpretation.
+
+Normal PR CI never calls Codex for v4. It validates fixture balance, the promote-vs-bounded invariant, bilingual coverage, 32/32 `capture-v1` reachability/type agreement, production parser/scorer use, and deterministic orchestration.
 
 ### Candidate pipeline behavioral evaluation
 
