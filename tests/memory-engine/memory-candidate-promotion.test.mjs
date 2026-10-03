@@ -104,7 +104,7 @@ function seedPromotedRelation(memory, {
 
   memory.evaluateCandidate({
     candidateId: candidate.id,
-    evaluatorId: 'codex:test:importance-v1',
+    evaluatorId: 'codex:test:importance-v2',
     evaluatedAt: '2026-10-01T01:01:00.000Z',
     evaluation: {
       decision: 'promote',
