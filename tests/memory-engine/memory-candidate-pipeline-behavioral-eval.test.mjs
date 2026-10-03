@@ -189,7 +189,7 @@ function deterministicStageRunners(caseSpec) {
         dependencies: {
           ...args.dependencies,
           createJudge: async () => ({
-            evaluatorId: 'eval:importance-v1',
+            evaluatorId: 'eval:importance-v2',
             isolation: { deterministicFixture: true },
             async judge(candidate) {
               return {
