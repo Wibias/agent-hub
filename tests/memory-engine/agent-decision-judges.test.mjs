@@ -9,6 +9,7 @@ import {
   activeDecisionRelationMemories,
   buildAgentDecisionRelationPrompt,
   evaluateAgentDecisionRelations,
+  findDeterministicAgentNearDuplicate,
 } from '../../memory-engine/agent-decision-relation.mjs';
 
 function agentCandidate(overrides = {}) {
@@ -198,4 +199,108 @@ test('active relation memories include only durable direct-user and agent-decisi
       ['user', 'user_direct'],
     ],
   );
+});
+
+
+test('near-duplicate guard closes only high-confidence same decision variants', () => {
+  const memories = [{
+    claimId: 'agent-existing',
+    ref: '@abcdef0123',
+    value: 'Agent decision: use PowerShell EncodedCommand for Windows hook dispatch.',
+    authority: 'agent_inference',
+    state: 'active',
+  }];
+
+  const duplicate = findDeterministicAgentNearDuplicate({
+    canonicalFact:
+      'Agent decision: use PowerShell EncodedCommand for Windows hook dispatch!',
+    memories,
+  });
+  assert.equal(duplicate.memory.ref, '@abcdef0123');
+  assert.equal(duplicate.reason, 'exact_normalized_match');
+
+  const changedNumber = findDeterministicAgentNearDuplicate({
+    canonicalFact:
+      'Agent decision: use PowerShell EncodedCommand for Windows hook dispatch with 2 retries.',
+    memories: [{
+      ...memories[0],
+      value:
+        'Agent decision: use PowerShell EncodedCommand for Windows hook dispatch with 3 retries.',
+    }],
+  });
+  assert.equal(changedNumber, null);
+
+  const negated = findDeterministicAgentNearDuplicate({
+    canonicalFact:
+      'Agent decision: never use PowerShell EncodedCommand for Windows hook dispatch.',
+    memories,
+  });
+  assert.equal(negated, null);
+});
+
+test('agent relation evaluator skips model call for deterministic near duplicate', async () => {
+  let judgeCalls = 0;
+  let applied = null;
+  const candidate = agentCandidate({
+    proposed_value:
+      'Decision: use PowerShell EncodedCommand for Windows hook dispatch.',
+    evaluation_json: JSON.stringify({
+      decision: 'promote',
+      suggested_type: 'decision',
+      durability: 'long',
+      future_utility: 'high',
+      specificity: 'high',
+      confidence: 'high',
+      meaning_preserved: true,
+      canonical_fact:
+        'Agent decision: use PowerShell EncodedCommand for Windows hook dispatch.',
+      reason: 'Durable hook convention.',
+      risk_flags: [],
+    }),
+  });
+
+  const summary = await evaluateAgentDecisionRelations({
+    memory: {
+      listAgentRelationPendingCandidates() {
+        return [candidate];
+      },
+      exportCanonical() {
+        return {
+          claims: [{
+            id: 'existing-agent',
+            project_id: 'project',
+            branch_scope: 'main',
+            state: 'active',
+            kind: 'agent_inference',
+            subject: 'agent decision',
+            predicate: 'states',
+            value_text:
+              'Agent decision: use PowerShell EncodedCommand for Windows hook dispatch!',
+            created_from_evidence_id: 'e-agent',
+          }],
+          evidence: [{
+            id: 'e-agent',
+            authority_class: 'agent_inference',
+          }],
+        };
+      },
+      evaluateAgentCandidateRelation(args) {
+        applied = args;
+      },
+    },
+    projectId: 'project',
+    branch: 'main',
+    evaluatorId: 'codex:test:agent-relation-v1',
+    apply: true,
+    judge: async () => {
+      judgeCalls += 1;
+      throw new Error('near duplicate must not require model relation');
+    },
+  });
+
+  assert.equal(judgeCalls, 0);
+  assert.equal(summary.failed, 0);
+  assert.equal(summary.results[0].relation, 'same');
+  assert.equal(summary.results[0].target_ref.length, 11);
+  assert.equal(applied.relation.relation, 'same');
 });
