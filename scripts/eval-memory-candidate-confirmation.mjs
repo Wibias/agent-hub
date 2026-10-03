@@ -176,7 +176,7 @@ function deterministicStageRunners(caseSpec) {
         dependencies: {
           ...args.dependencies,
           createJudge: async () => ({
-            evaluatorId: 'confirmation-eval:importance-v1',
+            evaluatorId: 'confirmation-eval:importance-v2',
             isolation: { deterministicFixture: true },
             async judge(candidate) {
               importanceJudgeCalls += 1;
