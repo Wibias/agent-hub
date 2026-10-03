@@ -6,6 +6,15 @@ const state = {
   projectId: null,
   branch: null,
   selectedClaimId: null,
+  selectedCandidateId: null,
+  actionToken: null,
+  claimActionMode: null,
+  reviewRelation: 'unrelated',
+  reviewTargetRef: null,
+  reviewRejectArmed: false,
+  actionMessage: '',
+  actionError: '',
+  busy: false,
   search: '',
   authority: 'all',
   claimState: 'all',
@@ -19,6 +28,7 @@ const el = {
   projectKicker: document.querySelector('#project-kicker'),
   branchSelect: document.querySelector('#branch-select'),
   scopeMeta: document.querySelector('#scope-meta'),
+  refreshButton: document.querySelector('#refresh-button'),
   tabs: document.querySelector('#tabs'),
   view: document.querySelector('#view'),
   loadingTemplate: document.querySelector('#loading-template'),
@@ -101,6 +111,44 @@ async function fetchJson(path) {
     throw new Error(payload?.message || response.statusText);
   }
   return payload;
+}
+
+async function postAction(path, payload) {
+  if (!state.actionToken) {
+    throw new Error('Memory Console action session is unavailable. Refresh the page.');
+  }
+  const response = await fetch(path, {
+    method: 'POST',
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+      'X-Agent-Hub-Action-Token': state.actionToken,
+    },
+    body: JSON.stringify(payload),
+    cache: 'no-store',
+  });
+  const result = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new Error(result?.message || response.statusText);
+  }
+  return result;
+}
+
+function resetActionState() {
+  state.claimActionMode = null;
+  state.reviewRelation = 'unrelated';
+  state.reviewTargetRef = null;
+  state.reviewRejectArmed = false;
+  state.actionMessage = '';
+  state.actionError = '';
+}
+
+function actionsAreOpen() {
+  return (
+    state.claimActionMode !== null
+    || state.reviewRejectArmed
+    || state.busy
+  );
 }
 
 function api(path, params = {}) {
