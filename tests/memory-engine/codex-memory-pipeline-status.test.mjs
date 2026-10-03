@@ -145,6 +145,8 @@ test('memory pipeline reports current-scope stage readiness without protocol or 
     /node \.\\scripts\\process-memory-candidates\.mjs --apply/,
   );
   assert.match(result.reason, /read-only/i);
+  assert.match(result.reason, /Automatic processing runs outside this command/i);
+  assert.match(result.reason, /Manual fallback/i);
   assert.equal(protocolCalls, 0);
   assert.equal(freshnessCalls, 0);
 
