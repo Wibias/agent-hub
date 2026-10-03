@@ -967,6 +967,14 @@ Before mutation, the engine rechecks:
 
 Confirmation finalization is exactly-once. Claim creation, lifecycle/conflict mutation, candidate status, and confirmation audit are one immediate SQLite transaction. Lifecycle and conflict provenance point to the explicit confirmation Evidence, while the durable Claim itself remains attached to the original candidate Evidence.
 
+A reviewable candidate can also be explicitly rejected:
+
+```text
+memory candidate reject: ~0123456789
+```
+
+Policy `candidate-rejection-v1` accepts the same two reviewable states as confirmation (`needs_confirmation` or an evaluated `keep_candidate`). The command records separate direct-user Evidence, changes only the candidate status to `ignored`, and writes an operational `memory_candidate_rejections` audit row. It creates no canonical Claim and does not delete source Evidence. An already-confirmed candidate cannot be rejected, and rejection is exactly-once.
+
 ### Candidate confirmation behavioral evaluation
 
 The explicit confirmation path has a separate deterministic end-to-end behavioral evaluation:
