@@ -158,10 +158,13 @@ export function inspectAgentHubHookConfiguration(hooks) {
   ));
 
   const recallText = recallCommands.join('\n');
-  const agentDecisionText = [
-    ...agentStopCommands,
-    ...agentSubagentStopCommands,
-  ].join('\n');
+  const hasAgentDecisionFlags = (commands) => {
+    const text = commands.join('\n');
+    return (
+      /(?:^|\s)--ignore-memory-env(?:\s|$)/.test(text)
+      && /(?:^|\s)--auto-pipeline(?:\s|$)/.test(text)
+    );
+  };
 
   return {
     configured: recallCommands.length > 0,
@@ -180,8 +183,8 @@ export function inspectAgentHubHookConfiguration(hooks) {
       agentDecisionCapture: (
         agentStopCommands.length > 0
         && agentSubagentStopCommands.length > 0
-        && /(?:^|\s)--ignore-memory-env(?:\s|$)/.test(agentDecisionText)
-        && /(?:^|\s)--auto-pipeline(?:\s|$)/.test(agentDecisionText)
+        && hasAgentDecisionFlags(agentStopCommands)
+        && hasAgentDecisionFlags(agentSubagentStopCommands)
       ),
     },
   };
