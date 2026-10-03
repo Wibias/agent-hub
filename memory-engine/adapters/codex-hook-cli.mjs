@@ -11,6 +11,7 @@ import {
 } from '../embedding-ipc.mjs';
 import { launchEmbeddingWorker } from '../embedding-worker-launcher.mjs';
 import { launchMemoryCandidatePipeline } from '../candidate-pipeline-launcher.mjs';
+import { auditCodexState } from '../codex-state-audit.mjs';
 import { resolveGitContext } from '../git-freshness.mjs';
 import {
   E5_DIMENSIONS,
@@ -414,6 +415,7 @@ export async function runCodexMemoryHook({
   resolvePipelineGitContext = resolveGitContext,
   launchCandidatePipeline = launchMemoryCandidatePipeline,
   restoreLockExists = (dbPath) => memoryRestoreLocked({ dbPath }),
+  auditCodex = auditCodexState,
 } = {}) {
   const config = parseCodexMemoryConfig(env, configOptions);
   if (restoreLockExists(config.dbPath)) return null;
@@ -527,6 +529,55 @@ export async function runCodexMemoryHook({
       )
         ? (args) => diagnosticsRetriever.diagnoseRecall(args)
         : null,
+      healthCheck: async () => {
+        let e5Worker = 'unavailable';
+        try {
+          const socketPath = nonEmpty(configOptions.embeddingSocketPath)
+            ? configOptions.embeddingSocketPath.trim()
+            : defaultEmbeddingIpcPath();
+          const client = createEmbeddingClient({
+            socketPath,
+            modelId: E5_MODEL_ID,
+            modelRevision: E5_MODEL_REVISION,
+            dimensions: E5_DIMENSIONS,
+            timeoutMs: 500,
+          });
+          const health = await client.health();
+          if (health?.ready === true) e5Worker = 'ready';
+        } catch {
+          e5Worker = 'unavailable';
+        }
+
+        let hooks = 'degraded';
+        try {
+          const codexHome = resolve(
+            env.CODEX_HOME || join(homedir(), '.codex'),
+          );
+          const audit = await auditCodex({ codexHome });
+          const hook = audit?.agentHubHook;
+          hooks = (
+            audit?.hookReadError === null
+            && hook?.configured === true
+            && hook?.userPromptSubmit === true
+            && hook?.sessionStartLauncher === true
+            && hook?.stopAgentDecisionCapture === true
+            && hook?.subagentStopAgentDecisionCapture === true
+            && hook?.flags?.ignoreMemoryEnv === true
+            && hook?.flags?.explicitMemoryRequests === true
+            && hook?.flags?.hybridRecall === true
+            && hook?.flags?.candidateCapture === true
+            && hook?.flags?.autoPipeline === true
+            && hook?.flags?.agentDecisionCapture === true
+          ) ? 'healthy' : 'degraded';
+        } catch {
+          hooks = 'degraded';
+        }
+
+        return {
+          e5_worker: e5Worker,
+          hooks,
+        };
+      },
     });
 
     if (restoreLockExists(config.dbPath)) {
