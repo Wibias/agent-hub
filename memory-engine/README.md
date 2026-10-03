@@ -397,7 +397,43 @@ Project identity is never derived from prompt text or the checkout path.
 
 ### Codex hook registration
 
-For production hybrid recall, register two independent command hooks:
+Use the installer rather than editing `~/.codex/hooks.json` by hand.
+
+Dry-run:
+
+```powershell
+node .\scripts\install-codex-memory-hooks.mjs
+```
+
+Apply:
+
+```powershell
+node .\scripts\install-codex-memory-hooks.mjs --apply
+```
+
+The installer derives the Agent Hub checkout from its own location, preserves unrelated
+Codex hooks and root fields, removes duplicate or stale Agent Hub memory-hook entries,
+and installs exactly one current `SessionStart` launcher plus one current
+`UserPromptSubmit` memory hook. Apply mode creates a timestamped backup before
+changing an existing hooks file and refuses to modify a symlinked hooks file. A second
+apply is idempotent and creates no new backup when the managed definitions are already
+current.
+
+The installer does not bypass Codex hook trust. If it reports
+`hookTrustRequired: true`, open `/hooks` in Codex and review/trust the exact changed
+definitions before relying on them.
+
+Optional controlled-install overrides are:
+
+```powershell
+node .\scripts\install-codex-memory-hooks.mjs `
+  --hooks C:\path\.codex\hooks.json `
+  --hub-root C:\path\.agents `
+  --node C:\path\node.exe `
+  --apply
+```
+
+For production hybrid recall, the managed configuration contains two independent command hooks:
 
 1. an asynchronous `SessionStart` launcher that makes sure the warm E5 worker exists;
 2. the normal `UserPromptSubmit` memory hook with `--hybrid-recall`.
