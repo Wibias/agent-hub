@@ -72,6 +72,12 @@ function exportedMemory() {
         branch: 'main',
         authority_class: 'agent_inference',
       },
+      {
+        id: 'e-agent-decision',
+        project_id: 'project-a',
+        branch: 'main',
+        authority_class: 'agent_inference',
+      },
     ],
     claims: [
       {
@@ -146,6 +152,18 @@ function exportedMemory() {
         created_from_evidence_id: 'e-inference',
         created_at: '2026-09-30T09:04:00.000Z',
       },
+      {
+        id: 'c-agent-decision',
+        project_id: 'project-a',
+        kind: 'agent_inference',
+        subject: 'agent decision',
+        predicate: 'states',
+        value_text: 'Agent decision: keep Windows hook dispatch shell-neutral.',
+        state: 'active',
+        branch_scope: 'main',
+        created_from_evidence_id: 'e-agent-decision',
+        created_at: '2026-09-30T09:05:00.000Z',
+      },
     ],
   };
 }
@@ -162,7 +180,7 @@ test('memory list parser is strict and read-only', () => {
   assert.equal(parseExplicitMemoryPrompt('please memory list'), null);
 });
 
-test('memory list returns only active direct-user memories in current project and branch', async () => {
+test('memory list separates active user memories and lower-authority agent decisions in current scope', async () => {
   let protocolCalled = false;
   const adapter = createCodexMemoryHookAdapter({
     protocol: {
@@ -187,8 +205,12 @@ test('memory list returns only active direct-user memories in current project an
   assert.equal(output.decision, 'block');
   const context = output.reason;
   assert.match(context, /active durable user memories/i);
+  assert.match(context, /advisory durable agent decisions/i);
+  assert.match(context, /lower-authority agent_inference/i);
   assert.match(context, /memory: database is Postgres/);
   assert.match(context, /memory: camera quality is 720p HIGH/);
+  assert.match(context, /Agent decision: keep Windows hook dispatch shell-neutral/);
+  assert.match(context, /@[0-9a-f]{10}/);
   assert.doesNotMatch(context, /database is SQLite/);
   assert.doesNotMatch(context, /feature branch only/);
   assert.doesNotMatch(context, /other project only/);
@@ -220,7 +242,7 @@ test('memory list reports an empty current scope without persisting anything', a
   assert.equal(output.decision, 'block');
   assert.match(
     output.reason,
-    /no active durable user memories/i,
+    /no active durable memories/i,
   );
 });
 
