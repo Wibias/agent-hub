@@ -153,6 +153,27 @@ test('hook inspection reports complete root and subagent decision capture', () =
   assert.equal(result.flags.agentDecisionCapture, true);
 });
 
+test('hook inspection requires agent decision flags on both Stop and SubagentStop independently', () => {
+  const result = inspectAgentHubHookConfiguration({
+    Stop: [{
+      hooks: [{
+        type: 'command',
+        command: 'node /repo/memory-engine/adapters/codex-agent-decision-hook-cli.mjs --ignore-memory-env --auto-pipeline',
+      }],
+    }],
+    SubagentStop: [{
+      hooks: [{
+        type: 'command',
+        command: 'node /repo/memory-engine/adapters/codex-agent-decision-hook-cli.mjs',
+      }],
+    }],
+  });
+
+  assert.equal(result.stopAgentDecisionCapture, true);
+  assert.equal(result.subagentStopAgentDecisionCapture, true);
+  assert.equal(result.flags.agentDecisionCapture, false);
+});
+
 test('hook inspection accepts the real Codex hooks.json root wrapper', () => {
   const config = {
     hooks: {
