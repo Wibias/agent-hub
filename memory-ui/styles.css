@@ -542,6 +542,11 @@ button {
   white-space: pre-wrap;
 }
 
+.inline-empty {
+  color: var(--muted);
+  font-size: 11px;
+}
+
 .inspector-chain {
   display: flex;
   flex-wrap: wrap;
