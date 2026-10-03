@@ -39,8 +39,11 @@ function healthyDoctor() {
           hybridRecall: true,
           candidateCapture: true,
           autoPipeline: true,
+          agentDecisionCapture: true,
         },
         sessionStartLauncher: true,
+        stopAgentDecisionCapture: true,
+        subagentStopAgentDecisionCapture: true,
       },
     },
     nativeCodexMemory: {
@@ -68,11 +71,17 @@ function baseDependencies(overrides = {}) {
         managed: {
           SessionStart: true,
           UserPromptSubmit: true,
+          Stop: true,
+          SubagentStop: true,
+          candidateCapture: true,
+          agentDecisionCapture: true,
           autoPipeline: true,
         },
         plan: {
           SessionStart: { action: 'current' },
           UserPromptSubmit: { action: 'current' },
+          Stop: { action: 'current' },
+          SubagentStop: { action: 'current' },
         },
       };
     },
@@ -133,11 +142,17 @@ test('host setup dry-run is healthy and mutation-free when everything is current
         managed: {
           SessionStart: true,
           UserPromptSubmit: true,
+          Stop: true,
+          SubagentStop: true,
+          candidateCapture: true,
+          agentDecisionCapture: true,
           autoPipeline: true,
         },
         plan: {
           SessionStart: { action: 'current' },
           UserPromptSubmit: { action: 'current' },
+          Stop: { action: 'current' },
+          SubagentStop: { action: 'current' },
         },
       };
     },
@@ -176,6 +191,10 @@ test('host setup dry-run reports all planned changes without invoking mutation p
         managed: {
           SessionStart: true,
           UserPromptSubmit: true,
+          Stop: true,
+          SubagentStop: true,
+          candidateCapture: true,
+          agentDecisionCapture: true,
           autoPipeline: true,
         },
         plan: {
@@ -309,11 +328,17 @@ test('host setup apply composes existing safe mutation paths and reports trust/r
           managed: {
             SessionStart: true,
             UserPromptSubmit: true,
+            Stop: true,
+            SubagentStop: true,
+            candidateCapture: true,
+            agentDecisionCapture: true,
             autoPipeline: true,
           },
           plan: {
             SessionStart: { action: 'normalize' },
             UserPromptSubmit: { action: 'normalize' },
+            Stop: { action: 'install' },
+            SubagentStop: { action: 'install' },
           },
         };
     },
