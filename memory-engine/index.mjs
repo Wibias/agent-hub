@@ -1499,6 +1499,15 @@ export class MemoryEngine {
       CREATE INDEX IF NOT EXISTS memory_candidate_confirmations_claim
       ON memory_candidate_confirmations (claim_id);
 
+      CREATE TABLE IF NOT EXISTS memory_candidate_rejections (
+        candidate_id TEXT PRIMARY KEY REFERENCES memory_candidates(id),
+        rejection_evidence_id TEXT NOT NULL REFERENCES evidence(id),
+        status TEXT NOT NULL CHECK (status = 'ignored'),
+        policy_version TEXT NOT NULL,
+        rejected_at TEXT NOT NULL,
+        result_json TEXT NOT NULL
+      ) STRICT;
+
       CREATE TABLE IF NOT EXISTS memory_pipeline_runs (
         id TEXT PRIMARY KEY,
         project_id TEXT NOT NULL REFERENCES project_registry(project_id),
@@ -4816,6 +4825,150 @@ export class MemoryEngine {
         status,
         policyVersion,
         confirmedAt,
+        JSON.stringify(audit),
+      );
+
+      this.#db.exec('COMMIT');
+      return audit;
+    } catch (error) {
+      this.#db.exec('ROLLBACK');
+      throw error;
+    }
+  }
+
+  getCandidateRejection(candidateId) {
+    assertNonEmptyString(candidateId, 'candidateId');
+    const row = this.#db.prepare(
+      'SELECT * FROM memory_candidate_rejections WHERE candidate_id = ?',
+    ).get(candidateId);
+    if (!row) return null;
+    return {
+      candidate_id: row.candidate_id,
+      rejection_evidence_id: row.rejection_evidence_id,
+      status: row.status,
+      policy_version: row.policy_version,
+      rejected_at: row.rejected_at,
+      result_json: row.result_json,
+    };
+  }
+
+  rejectCandidate({
+    projectId,
+    branch,
+    candidateId,
+    rejectionEvidenceId,
+    policyVersion,
+    rejectedAt = this.#clock(),
+  }) {
+    assertNonEmptyString(projectId, 'projectId');
+    assertNonEmptyString(branch, 'branch');
+    assertNonEmptyString(candidateId, 'candidateId');
+    assertNonEmptyString(rejectionEvidenceId, 'rejectionEvidenceId');
+    assertNonEmptyString(policyVersion, 'policyVersion');
+    assertNonEmptyString(rejectedAt, 'rejectedAt');
+
+    this.#db.exec('BEGIN IMMEDIATE');
+    try {
+      if (this.getCandidateConfirmation(candidateId)) {
+        throw new Error('memory candidate is already confirmed');
+      }
+      if (this.getCandidateRejection(candidateId)) {
+        throw new Error('memory candidate rejection is already finalized');
+      }
+
+      const candidate = normalizeCandidate(
+        this.#db.prepare('SELECT * FROM memory_candidates WHERE id = ?')
+          .get(candidateId),
+      );
+      if (!candidate) {
+        throw new Error('unknown memory candidate: ' + candidateId);
+      }
+      if (
+        candidate.project_id !== projectId
+        || candidate.branch !== branch
+      ) {
+        throw new Error('memory candidate rejection scope mismatch');
+      }
+
+      let keepCandidate = false;
+      if (
+        candidate.status === 'pending'
+        && candidate.evaluated_at !== null
+        && typeof candidate.evaluation_json === 'string'
+        && candidate.relation === null
+      ) {
+        try {
+          keepCandidate = validateMemoryCandidateJudgment(
+            JSON.parse(candidate.evaluation_json),
+          ).decision === 'keep_candidate';
+        } catch {
+          keepCandidate = false;
+        }
+      }
+      if (
+        candidate.status !== 'needs_confirmation'
+        && !keepCandidate
+      ) {
+        throw new Error('memory candidate is not rejectable');
+      }
+
+      const sourceEvidence = normalizeEvidence(
+        this.#db.prepare('SELECT * FROM evidence WHERE id = ?')
+          .get(candidate.source_evidence_id),
+      );
+      if (
+        !sourceEvidence
+        || sourceEvidence.project_id !== projectId
+        || sourceEvidence.branch !== branch
+        || sourceEvidence.authority_class !== candidate.source_authority
+        || sourceEvidence.sensitivity === 'secret_redacted'
+        || sourceEvidence.content_redacted !== candidate.proposed_value
+      ) {
+        throw new Error('candidate source evidence invariant failed');
+      }
+
+      const rejectionEvidence = normalizeEvidence(
+        this.#db.prepare('SELECT * FROM evidence WHERE id = ?')
+          .get(rejectionEvidenceId),
+      );
+      if (
+        !rejectionEvidence
+        || rejectionEvidence.authority_class !== 'user_direct'
+        || rejectionEvidence.sensitivity === 'secret_redacted'
+        || rejectionEvidence.project_id !== projectId
+        || rejectionEvidence.branch !== branch
+        || rejectionEvidence.metadata?.explicit_memory_mode !== 'candidate_reject'
+      ) {
+        throw new Error(
+          'candidate rejection requires direct-user rejection evidence in scope',
+        );
+      }
+
+      const updated = this.#db.prepare(
+        'UPDATE memory_candidates SET status = ? '
+        + 'WHERE id = ? AND status = ?',
+      ).run('ignored', candidateId, candidate.status);
+      if (Number(updated.changes) !== 1) {
+        throw new Error(
+          'memory candidate rejection raced or was already finalized',
+        );
+      }
+
+      const audit = {
+        status: 'ignored',
+        candidate_id: candidateId,
+      };
+      this.#db.prepare(
+        'INSERT INTO memory_candidate_rejections ('
+        + 'candidate_id, rejection_evidence_id, status, policy_version, '
+        + 'rejected_at, result_json'
+        + ') VALUES (?, ?, ?, ?, ?, ?)',
+      ).run(
+        candidateId,
+        rejectionEvidence.id,
+        'ignored',
+        policyVersion,
+        rejectedAt,
         JSON.stringify(audit),
       );
 
