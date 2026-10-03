@@ -310,7 +310,7 @@ function formatActiveDurableMemories(memory, {
 }) {
   const memories = activeScopedDurableMemories(memory, { projectId, branch });
   if (memories.user.length === 0 && memories.agent.length === 0) {
-    return 'No active durable memories for the current project and branch.';
+    return 'No active durable user memories for the current project and branch.';
   }
 
   const lines = [];
