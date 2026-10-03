@@ -2650,6 +2650,7 @@ export class MemoryEngine {
     return this.#db.prepare(
       'SELECT * FROM memory_candidates '
       + "WHERE project_id = ? AND branch = ? AND status = 'pending' "
+      + "AND source_authority = 'user_direct' "
       + 'AND evaluated_at IS NULL '
       + 'ORDER BY created_at ASC, id ASC LIMIT ?',
     ).all(projectId, branch, limit).map(normalizeCandidate);
@@ -2860,6 +2861,7 @@ export class MemoryEngine {
     const rows = this.#db.prepare(
       'SELECT * FROM memory_candidates '
       + "WHERE project_id = ? AND branch = ? AND status = 'pending' "
+      + "AND source_authority = 'user_direct' "
       + 'AND evaluated_at IS NOT NULL AND relation IS NULL '
       + 'ORDER BY created_at ASC, id ASC LIMIT ?',
     ).all(projectId, branch, limit * 4).map(normalizeCandidate);
@@ -3023,6 +3025,7 @@ export class MemoryEngine {
       'SELECT c.* FROM memory_candidates c '
       + 'JOIN memory_candidate_relations r ON r.candidate_id = c.id '
       + "WHERE c.project_id = ? AND c.branch = ? AND c.status = 'pending' "
+      + "AND c.source_authority = 'user_direct' "
       + 'AND c.evaluated_at IS NOT NULL AND c.relation IS NOT NULL '
       + 'AND NOT EXISTS ('
       + 'SELECT 1 FROM memory_candidate_promotions p WHERE p.candidate_id = c.id'
