@@ -369,7 +369,7 @@ function renderInspector() {
                 <span class="muted">${escapeHtml(item.sourceRef || '—')} → ${escapeHtml(item.targetRef || '—')} · ${escapeHtml(dateTime(item.created_at))}</span>
               </div>
             `).join('')
-          : '<div class="muted" style="font-size:11px">No lifecycle transitions.</div>'}
+          : '<div class="inline-empty">No lifecycle transitions.</div>'}
       </section>
 
       <section class="inspect-section">
@@ -381,7 +381,7 @@ function renderInspector() {
                 <span class="mono muted">${escapeHtml(item.claimARef)} ↔ ${escapeHtml(item.claimBRef)}</span>
               </div>
             `).join('')
-          : '<div class="muted" style="font-size:11px">No conflicts.</div>'}
+          : '<div class="inline-empty">No conflicts.</div>'}
       </section>
 
       <section class="inspect-section">
@@ -711,7 +711,7 @@ async function selectClaim(claimId) {
     state.claim = {
       claim: {
         ref: 'error',
-        value_text: error.message,
+        value: error.message,
         provenance: {},
       },
       evidence: {},
