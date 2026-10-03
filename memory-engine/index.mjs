@@ -2404,6 +2404,23 @@ export class MemoryEngine {
     const needsConfirmation = candidates.filter(
       (candidate) => candidate.status === 'needs_confirmation',
     ).length;
+    const keptForReview = candidates.filter((candidate) => {
+      if (
+        candidate.status !== 'pending'
+        || candidate.evaluated_at === null
+        || typeof candidate.evaluation_json !== 'string'
+        || candidate.relation !== null
+      ) {
+        return false;
+      }
+      try {
+        return validateMemoryCandidateJudgment(
+          JSON.parse(candidate.evaluation_json),
+        ).decision === 'keep_candidate';
+      } catch {
+        return false;
+      }
+    }).length;
     const failedCandidates = candidates.filter(
       (candidate) => candidate.status === 'failed',
     ).length;
@@ -2439,6 +2456,7 @@ export class MemoryEngine {
       db_healthy: dbHealthy,
       pending,
       needs_confirmation: needsConfirmation,
+      kept_for_review: keptForReview,
       failed_candidates: failedCandidates,
       failed_runs: failedRuns,
       recent_runs: runs.length,
