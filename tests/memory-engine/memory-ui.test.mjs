@@ -168,10 +168,12 @@ test('memory console browser source parses and keeps the divider-first visual co
     syntax.stderr || syntax.stdout || 'browser source failed syntax check',
   );
 
-  const [css, html] = await Promise.all([
+  const [appSource, css, html] = await Promise.all([
+    readFile(appPath, 'utf8'),
     readFile(cssPath, 'utf8'),
     readFile(htmlPath, 'utf8'),
   ]);
+  assert.doesNotMatch(appSource, /style="/i);
   assert.doesNotMatch(css, /linear-gradient|radial-gradient/i);
   assert.doesNotMatch(css, /border-radius:\s*(?!0\b)/i);
   assert.match(css, /border-bottom:\s*1px solid var\(--line\)/i);
