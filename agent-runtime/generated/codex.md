@@ -12,12 +12,14 @@ Generated from `agent-runtime/host-capabilities.json` and `agent-runtime/skill-r
 - hook events: SessionStart, PreToolUse, PermissionRequest, PostToolUse, PreCompact, PostCompact, UserPromptSubmit, SubagentStart, SubagentStop, Stop, Interrupt, SessionEnd
 - shared skill root: `~/.agents/skills`
 - agent profiles: manual
-- note: Codex profile rendering is supported for the verified 1:1 mapping reasoning -> model_reasoning_effort. Skill-to-profile activation remains manual because skillModelRouting is unsupported. Isolation and mutation remain semantic Hub preferences and are emitted only as unmapped metadata/comments, not translated to sandbox or approval settings.
+- note: Codex runtime rendering is supported only as an ephemeral CLI override for the verified 1:1 mapping reasoning -> model_reasoning_effort. Agent Hub no longer installs named profile files because current Codex treats the selected profile as the active user config path for local TUI writes; interactive settings can therefore mutate it. Skill routing remains manual. Isolation and mutation remain unmapped Hub semantics.
 
 ## Sources
 
 - https://developers.openai.com/docs/config-file/config-reference
 - https://developers.openai.com/docs/config-file/config-basic
+- https://github.com/openai/codex/blob/main/codex-rs/cli/src/main.rs
+- https://github.com/openai/codex/blob/main/codex-rs/tui/src/local_settings_tests.rs
 - https://developers.openai.com/docs/hooks
 - https://developers.openai.com/plugins/build/plugins
 
