@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
+import { request as httpRequest } from 'node:http';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -375,6 +376,35 @@ test('MemoryEngine read-only mode permits inspection and rejects mutation', asyn
   }
 });
 
+function requestWithHost({
+  port,
+  path,
+  hostHeader,
+}) {
+  return new Promise((resolvePromise, rejectPromise) => {
+    const req = httpRequest({
+      hostname: '127.0.0.1',
+      port,
+      path,
+      method: 'GET',
+      headers: {
+        Host: hostHeader,
+      },
+    }, (res) => {
+      const chunks = [];
+      res.on('data', (chunk) => chunks.push(chunk));
+      res.on('end', () => {
+        resolvePromise({
+          status: res.statusCode,
+          body: Buffer.concat(chunks).toString('utf8'),
+        });
+      });
+    });
+    req.on('error', rejectPromise);
+    req.end();
+  });
+}
+
 test('memory console HTTP surface keeps reads loopback-only and protects explicit actions', async () => {
   const root = await mkdtemp(join(tmpdir(), 'agent-hub-memory-ui-http-'));
   const dbPath = join(root, 'memory.sqlite3');
@@ -417,13 +447,13 @@ test('memory console HTTP surface keeps reads loopback-only and protects explici
     assert.match(payload.actions.token, /^[0-9a-f]{48}$/);
     const actionToken = payload.actions.token;
 
-    response = await fetch(base + '/api/overview', {
-      headers: {
-        Host: 'evil.example',
-      },
+    const rebound = await requestWithHost({
+      port: address.port,
+      path: '/api/overview',
+      hostHeader: 'evil.example',
     });
-    assert.equal(response.status, 403);
-    payload = await response.json();
+    assert.equal(rebound.status, 403);
+    payload = JSON.parse(rebound.body);
     assert.equal(payload.error, 'invalid_host');
 
     response = await fetch(
