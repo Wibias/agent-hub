@@ -34,6 +34,9 @@ function fakeMemory({
   importance = 0,
   relation = 0,
   promotion = 0,
+  agentImportance = 0,
+  agentRelation = 0,
+  agentPromotion = 0,
   order = [],
 } = {}) {
   return {
@@ -48,6 +51,24 @@ function fakeMemory({
     },
     listPromotionReadyCandidates() {
       return Array.from({ length: promotion }, (_, index) => ({ id: 'p' + index }));
+    },
+    listUnevaluatedAgentCandidates() {
+      return Array.from(
+        { length: agentImportance },
+        (_, index) => ({ id: 'ai' + index }),
+      );
+    },
+    listAgentRelationPendingCandidates() {
+      return Array.from(
+        { length: agentRelation },
+        (_, index) => ({ id: 'ar' + index }),
+      );
+    },
+    listAgentPromotionReadyCandidates() {
+      return Array.from(
+        { length: agentPromotion },
+        (_, index) => ({ id: 'ap' + index }),
+      );
     },
     close() {
       order.push('close');
@@ -96,6 +117,27 @@ test('automatic pipeline readiness ignores review-only backlog states', () => {
 
   assert.equal(automaticMemoryCandidatePipelineReady(fakeMemory({
     promotion: 1,
+  }), {
+    projectId: 'project-a',
+    branch: 'main',
+  }), true);
+
+  assert.equal(automaticMemoryCandidatePipelineReady(fakeMemory({
+    agentImportance: 1,
+  }), {
+    projectId: 'project-a',
+    branch: 'main',
+  }), true);
+
+  assert.equal(automaticMemoryCandidatePipelineReady(fakeMemory({
+    agentRelation: 1,
+  }), {
+    projectId: 'project-a',
+    branch: 'main',
+  }), true);
+
+  assert.equal(automaticMemoryCandidatePipelineReady(fakeMemory({
+    agentPromotion: 1,
   }), {
     projectId: 'project-a',
     branch: 'main',
