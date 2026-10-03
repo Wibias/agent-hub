@@ -281,7 +281,7 @@ test('GitHub token shapes and generic token assignments are redacted before pers
   t.after(() => engine.close());
   engine.registerProject({ projectId: 'project-a', repoIdentity: 'project-a' });
 
-  const token = 'ghp_abcdefghijklmnopqrstuvwxyz1234567890';
+  const token = 'gh' + 'p_' + 'abcdefghijklmnopqrstuvwxyz1234567890';
   engine.recordEvidence(evidence({
     id: 'e-token-secret',
     content: `Decision: token=${token}`,
