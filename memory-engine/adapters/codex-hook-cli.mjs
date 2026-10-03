@@ -20,6 +20,10 @@ import {
 } from '../e5-embedder.mjs';
 import { HybridMemoryRetriever } from '../hybrid-retrieval.mjs';
 import { MemoryEngine } from '../index.mjs';
+import {
+  recallQueryHash,
+  recallTelemetryRunId,
+} from '../recall-observability.mjs';
 import { memoryRestoreLocked } from '../memory-maintenance-lock.mjs';
 import { createMemoryProtocol } from '../protocol.mjs';
 import {
@@ -515,6 +519,45 @@ export async function runCodexMemoryHook({
         memory,
         ...args,
       }),
+      onRecallTelemetry: async ({
+        requestId,
+        normalized,
+        telemetry,
+      }) => {
+        if (
+          typeof memory?.recordRecallTelemetry !== 'function'
+          || typeof requestId !== 'string'
+          || !telemetry
+        ) {
+          return;
+        }
+        memory.recordRecallTelemetry({
+          id: recallTelemetryRunId(requestId),
+          projectId: normalized.projectId,
+          branch: normalized.branch,
+          revisionSha: normalized.revisionSha,
+          queryHash: recallQueryHash(normalized.query),
+          observedAt: new Date().toISOString(),
+          retrievalMode: telemetry.retrieval_mode ?? 'unknown',
+          fallbackReason: telemetry.fallback_reason ?? null,
+          contextBytes: 0,
+          items: (telemetry.candidates ?? []).map((candidate) => ({
+            claimId: candidate.claim_id,
+            authorityClass: candidate.authority_class ?? 'unclassified',
+            finalRank: candidate.final_rank,
+            lexicalRank: candidate.lexical_rank,
+            semanticRank: candidate.semantic_rank,
+            semanticSimilarity: candidate.semantic_similarity,
+            rrfScore: candidate.rrf_score,
+            budgetRetained: candidate.budget_retained === true,
+            answerSelected: false,
+            advisoryIncluded: false,
+            blockedReason: candidate.budget_retained === true
+              ? 'awaiting_context_selection'
+              : 'budget_dropped',
+          })),
+        });
+      },
     });
     const adapter = createAdapter({
       protocol,
