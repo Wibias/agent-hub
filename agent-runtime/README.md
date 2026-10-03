@@ -10,6 +10,7 @@ This directory is the Hub's source of truth for that separation.
 - `host-capabilities.json` - evidence-backed statements about what each host currently supports.
 - `portable-skill-exceptions.json` - exact reviewed exceptions for legacy/external top-level skill frontmatter.
 - `generated/*.md` - deterministic capability reports generated from the registries.
+- `generated/codex-profiles/` - deterministic Codex reasoning profiles plus a manifest; generated only for the verified renderer surface.
 
 ## Commands
 
