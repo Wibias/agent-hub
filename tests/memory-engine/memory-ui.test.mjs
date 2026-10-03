@@ -3,10 +3,15 @@ import assert from 'node:assert/strict';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
+import { request as httpRequest } from 'node:http';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { MemoryEngine } from '../../memory-engine/index.mjs';
+import {
+  CAPTURE_POLICY_VERSION,
+  memoryCandidateFingerprint,
+} from '../../memory-engine/memory-capture-policy.mjs';
 import {
   memoryUiClaim,
   memoryUiOverview,
@@ -148,6 +153,59 @@ function seed(memory) {
     },
     candidateRefs: ['~1234567890'],
   });
+}
+
+function seedReviewCandidate(memory, {
+  id,
+  value,
+} = {}) {
+  const evidence = memory.recordEvidence({
+    id: 'e-' + id,
+    projectId: 'github.com/example/alpha',
+    harness: 'codex',
+    sessionId: 'review',
+    sourceKind: 'session',
+    sourceRef: 'session:review',
+    capturedAt: '2026-10-02T13:00:00.000Z',
+    branch: 'main',
+    content: value,
+    authorityClass: 'user_direct',
+    metadata: {
+      event_type: 'user_prompt',
+      candidate_capture: true,
+    },
+  });
+  const candidate = memory.recordCandidate({
+    id,
+    evidenceId: evidence.id,
+    type: 'decision',
+    proposedValue: evidence.content_redacted,
+    decisionReason: 'rule:decision:definitive',
+    policyVersion: CAPTURE_POLICY_VERSION,
+    fingerprint: memoryCandidateFingerprint({
+      type: 'decision',
+      value: evidence.content_redacted,
+    }),
+    createdAt: '2026-10-02T13:00:00.000Z',
+  });
+  memory.evaluateCandidate({
+    candidateId: candidate.id,
+    evaluatorId: 'codex:test:importance-v2',
+    evaluatedAt: '2026-10-02T13:01:00.000Z',
+    evaluation: {
+      decision: 'needs_confirmation',
+      suggested_type: 'decision',
+      durability: 'medium',
+      future_utility: 'medium',
+      specificity: 'high',
+      confidence: 'medium',
+      meaning_preserved: true,
+      canonical_fact: null,
+      reason: 'Explicit UI review fixture.',
+      risk_flags: ['scope_unclear'],
+    },
+  });
+  return memory.getCandidate(candidate.id);
 }
 
 test('memory console browser source parses and keeps the divider-first visual contract', async () => {
@@ -318,11 +376,48 @@ test('MemoryEngine read-only mode permits inspection and rejects mutation', asyn
   }
 });
 
-test('memory console HTTP surface is loopback read-only and serves project drilldown', async () => {
+function requestWithHost({
+  port,
+  path,
+  hostHeader,
+}) {
+  return new Promise((resolvePromise, rejectPromise) => {
+    const req = httpRequest({
+      hostname: '127.0.0.1',
+      port,
+      path,
+      method: 'GET',
+      headers: {
+        Host: hostHeader,
+      },
+    }, (res) => {
+      const chunks = [];
+      res.on('data', (chunk) => chunks.push(chunk));
+      res.on('end', () => {
+        resolvePromise({
+          status: res.statusCode,
+          body: Buffer.concat(chunks).toString('utf8'),
+        });
+      });
+    });
+    req.on('error', rejectPromise);
+    req.end();
+  });
+}
+
+test('memory console HTTP surface keeps reads loopback-only and protects explicit actions', async () => {
   const root = await mkdtemp(join(tmpdir(), 'agent-hub-memory-ui-http-'));
   const dbPath = join(root, 'memory.sqlite3');
   const memory = new MemoryEngine({ dbPath });
   seed(memory);
+  seedReviewCandidate(memory, {
+    id: 'candidate-ui-reject',
+    value: 'We should keep this only if the user confirms it.',
+  });
+  seedReviewCandidate(memory, {
+    id: 'candidate-ui-confirm',
+    value: 'We should store signed release evidence across sessions.',
+  });
 
   const runtime = createMemoryUiServer({
     dbPath,
@@ -348,6 +443,18 @@ test('memory console HTTP surface is loopback read-only and serves project drill
     assert.equal(response.status, 200);
     let payload = await response.json();
     assert.equal(payload.projects.length, 2);
+    assert.equal(payload.actions.enabled, true);
+    assert.match(payload.actions.token, /^[0-9a-f]{48}$/);
+    const actionToken = payload.actions.token;
+
+    const rebound = await requestWithHost({
+      port: address.port,
+      path: '/api/overview',
+      hostHeader: 'evil.example',
+    });
+    assert.equal(rebound.status, 403);
+    payload = JSON.parse(rebound.body);
+    assert.equal(payload.error, 'invalid_host');
 
     response = await fetch(
       base
@@ -371,12 +478,159 @@ test('memory console HTTP surface is loopback read-only and serves project drill
     payload = await response.json();
     assert.equal(payload.claim.provenance.agentId, 'agent-7');
 
+    response = await fetch(base + '/api/actions/replace', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        projectId: 'github.com/example/alpha',
+        branch: 'main',
+        claimRef: memoryUiScope(memory, {
+          projectId: 'github.com/example/alpha',
+          branch: 'main',
+        }).memories.find((item) => item.claimId === 'claim-user-alpha').ref,
+        newValue: 'memory: production database is CockroachDB',
+      }),
+    });
+    assert.equal(response.status, 403);
+
+    response = await fetch(base + '/api/actions/replace', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Agent-Hub-Action-Token': actionToken,
+        Origin: 'https://evil.example',
+      },
+      body: JSON.stringify({
+        projectId: 'github.com/example/alpha',
+        branch: 'main',
+        claimRef: '@0000000000',
+        newValue: 'memory: malicious replacement',
+      }),
+    });
+    assert.equal(response.status, 403);
+
+    const initialScope = memoryUiScope(memory, {
+      projectId: 'github.com/example/alpha',
+      branch: 'main',
+    });
+    const originalRef = initialScope.memories.find(
+      (item) => item.claimId === 'claim-user-alpha',
+    ).ref;
+
+    response = await fetch(base + '/api/actions/replace', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Agent-Hub-Action-Token': actionToken,
+      },
+      body: JSON.stringify({
+        projectId: 'github.com/example/alpha',
+        branch: 'main',
+        claimRef: originalRef,
+        newValue: 'memory: production database is CockroachDB',
+      }),
+    });
+    assert.equal(response.status, 200);
+    payload = await response.json();
+    assert.match(payload.reason, /replaced/i);
+    assert.equal(memory.getClaim('claim-user-alpha').state, 'superseded');
+
+    const replacedScope = memoryUiScope(memory, {
+      projectId: 'github.com/example/alpha',
+      branch: 'main',
+    });
+    const replacement = replacedScope.memories.find(
+      (item) => item.value === 'memory: production database is CockroachDB',
+    );
+    assert.ok(replacement);
+    assert.equal(replacement.state, 'active');
+
+    response = await fetch(base + '/api/actions/forget', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Agent-Hub-Action-Token': actionToken,
+      },
+      body: JSON.stringify({
+        projectId: 'github.com/example/alpha',
+        branch: 'main',
+        claimRef: replacement.ref,
+      }),
+    });
+    assert.equal(response.status, 200);
+    payload = await response.json();
+    assert.match(payload.reason, /forgotten/i);
+
+    let scope = memoryUiScope(memory, {
+      projectId: 'github.com/example/alpha',
+      branch: 'main',
+    });
+    assert.equal(
+      scope.memories.find((item) => item.claimId === replacement.claimId).state,
+      'rejected',
+    );
+
+    const rejectCandidate = scope.candidates.find(
+      (item) => item.id === 'candidate-ui-reject',
+    );
+    assert.equal(rejectCandidate.reviewable, true);
+    response = await fetch(base + '/api/actions/candidate-reject', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Agent-Hub-Action-Token': actionToken,
+      },
+      body: JSON.stringify({
+        projectId: 'github.com/example/alpha',
+        branch: 'main',
+        candidateRef: rejectCandidate.ref,
+      }),
+    });
+    assert.equal(response.status, 200);
+    assert.equal(memory.getCandidate(rejectCandidate.id).status, 'ignored');
+    assert.equal(
+      memory.getCandidateRejection(rejectCandidate.id).status,
+      'ignored',
+    );
+
+    scope = memoryUiScope(memory, {
+      projectId: 'github.com/example/alpha',
+      branch: 'main',
+    });
+    const confirmCandidate = scope.candidates.find(
+      (item) => item.id === 'candidate-ui-confirm',
+    );
+    response = await fetch(base + '/api/actions/candidate-confirm', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Agent-Hub-Action-Token': actionToken,
+      },
+      body: JSON.stringify({
+        projectId: 'github.com/example/alpha',
+        branch: 'main',
+        candidateRef: confirmCandidate.ref,
+        relation: 'unrelated',
+        targetRef: null,
+      }),
+    });
+    assert.equal(response.status, 200);
+    payload = await response.json();
+    assert.match(payload.reason, /confirmed/i);
+    assert.equal(memory.getCandidate(confirmCandidate.id).status, 'promoted');
+    assert.equal(
+      memory.getCandidateConfirmation(confirmCandidate.id).status,
+      'promoted',
+    );
+
     response = await fetch(base + '/api/overview', {
       method: 'POST',
     });
     assert.equal(response.status, 405);
     payload = await response.json();
-    assert.equal(payload.message, 'Memory Console is read-only.');
+    assert.equal(payload.message, 'Unsupported Memory Console method.');
 
     response = await fetch(base + '/styles.css');
     assert.equal(response.status, 200);

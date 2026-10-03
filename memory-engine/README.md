@@ -967,6 +967,14 @@ Before mutation, the engine rechecks:
 
 Confirmation finalization is exactly-once. Claim creation, lifecycle/conflict mutation, candidate status, and confirmation audit are one immediate SQLite transaction. Lifecycle and conflict provenance point to the explicit confirmation Evidence, while the durable Claim itself remains attached to the original candidate Evidence.
 
+A reviewable candidate can also be explicitly rejected:
+
+```text
+memory candidate reject: ~0123456789
+```
+
+Policy `candidate-rejection-v1` accepts the same two reviewable states as confirmation (`needs_confirmation` or an evaluated `keep_candidate`). The command records separate direct-user Evidence, changes only the candidate status to `ignored`, and writes an operational `memory_candidate_rejections` audit row. It creates no canonical Claim and does not delete source Evidence. An already-confirmed candidate cannot be rejected, and rejection is exactly-once.
+
 ### Candidate confirmation behavioral evaluation
 
 The explicit confirmation path has a separate deterministic end-to-end behavioral evaluation:
@@ -1246,7 +1254,7 @@ Repositories that already have a canonical remote continue to use the existing `
 
 ### Local Memory Console
 
-Agent Hub includes a local read-only browser for project-scoped memory:
+Agent Hub includes a local browser and review surface for project-scoped memory:
 
 ```powershell
 node .\scripts\memory-ui.mjs
@@ -1258,17 +1266,28 @@ The server binds only to `127.0.0.1` and defaults to:
 http://127.0.0.1:4317
 ```
 
-The first version intentionally exposes no mutation endpoints. It reads the same local SQLite database through `MemoryEngine` and the existing observability APIs.
+Normal browsing keeps a long-lived SQLite `readOnly: true` connection. Mutations are explicit and short-lived: the server opens a normal Memory hook path only after a guarded action POST, then closes it again.
 
 Views:
 
 - **Projects / branches** — registered memory projects and durable Claim counts per branch;
-- **Memories** — divider-first list of active and historical Claims with stable refs, authority, provenance, semantic-index state, and recall use;
+- **Memories** — divider-first list of active and historical Claims with stable refs, authority, provenance, semantic-index state, recall use, plus Replace/Forget for active `user_direct` memories;
 - **Inspect** — Evidence, root/subagent provenance, Candidate importance/relation state, lifecycle, conflicts, and recall telemetry for one Claim;
+- **Review** — only `needs_confirmation` and evaluated `keep_candidate` items, with explicit `same / update / contradict / unrelated` confirmation and Reject;
 - **Pipeline** — recent run refs, triggers, outcomes, duration, promoted counts, and recorded failures;
 - **Health** — scoped database/semantic status plus host-level E5 worker and Codex-hook status;
 - **Quality** — user/agent judge distributions, recall funnel, deterministic near-duplicate count, and stale count;
 - **Stale** — advisory-only lower-authority cleanup candidates.
+
+Action safety:
+
+- no `--host` option; loopback is fixed;
+- no CORS enablement;
+- POST actions require JSON, same-origin when an Origin header is present, and a random per-server action token obtained from same-origin `/api/overview`;
+- Replace/Forget are routed through the same explicit Codex Memory command semantics as the CLI;
+- candidate Confirm/Reject require direct-user audit Evidence and stay scoped to the selected project/branch;
+- Reject closes only reviewable candidates as `ignored`; it does not create or delete a canonical Claim;
+- live refresh pauses while an action confirmation is open.
 
 Optional arguments:
 
@@ -1278,8 +1297,6 @@ node .\scripts\memory-ui.mjs --db-path "C:\path\to\memory.sqlite3"
 ```
 
 There is deliberately no `--host` option: the console is a local operator surface, not a network service.
-
-Automatic processing adds orchestration only. It does not change capture-v1, importance-v2, relation-v1, promotion-v1, or confirmation-v2 decisions.
 
 ### Memory judge calibration
 

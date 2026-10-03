@@ -135,15 +135,16 @@ Initialize missing local state with:
 node skills/extract-approach/scripts/ensure-memory-state.mjs
 ```
 
-For the local durable-memory engine, a loopback-only read-only console is available:
+For the local durable-memory engine, a loopback-only console is available:
 
 ```powershell
 node .\scripts\memory-ui.mjs
 ```
 
-Open `http://127.0.0.1:4317` to browse projects, branches, Memories, Inspect,
-Pipeline, Health, Quality, and Stale views. The console opens the SQLite memory
-database read-only and exposes no mutation endpoints.
+Open `http://127.0.0.1:4317` to browse projects, branches, Memories, Review,
+Pipeline, Health, Quality, and Stale views. Browsing keeps a read-only SQLite
+connection. Explicit Replace/Forget and candidate Confirm/Reject actions use
+token-protected same-origin POSTs and the existing Memory hook contracts.
 
 ## Portability contract
 

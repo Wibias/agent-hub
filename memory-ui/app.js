@@ -6,6 +6,15 @@ const state = {
   projectId: null,
   branch: null,
   selectedClaimId: null,
+  selectedCandidateId: null,
+  actionToken: null,
+  claimActionMode: null,
+  reviewRelation: 'unrelated',
+  reviewTargetRef: null,
+  reviewRejectArmed: false,
+  actionMessage: '',
+  actionError: '',
+  busy: false,
   search: '',
   authority: 'all',
   claimState: 'all',
@@ -19,6 +28,7 @@ const el = {
   projectKicker: document.querySelector('#project-kicker'),
   branchSelect: document.querySelector('#branch-select'),
   scopeMeta: document.querySelector('#scope-meta'),
+  refreshButton: document.querySelector('#refresh-button'),
   tabs: document.querySelector('#tabs'),
   view: document.querySelector('#view'),
   loadingTemplate: document.querySelector('#loading-template'),
@@ -103,6 +113,44 @@ async function fetchJson(path) {
   return payload;
 }
 
+async function postAction(path, payload) {
+  if (!state.actionToken) {
+    throw new Error('Memory Console action session is unavailable. Refresh the page.');
+  }
+  const response = await fetch(path, {
+    method: 'POST',
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+      'X-Agent-Hub-Action-Token': state.actionToken,
+    },
+    body: JSON.stringify(payload),
+    cache: 'no-store',
+  });
+  const result = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new Error(result?.message || response.statusText);
+  }
+  return result;
+}
+
+function resetActionState() {
+  state.claimActionMode = null;
+  state.reviewRelation = 'unrelated';
+  state.reviewTargetRef = null;
+  state.reviewRejectArmed = false;
+  state.actionMessage = '';
+  state.actionError = '';
+}
+
+function actionsAreOpen() {
+  return (
+    state.claimActionMode !== null
+    || state.reviewRejectArmed
+    || state.busy
+  );
+}
+
 function api(path, params = {}) {
   const url = new URL(path, window.location.origin);
   for (const [key, value] of Object.entries(params)) {
@@ -136,6 +184,11 @@ function updateUrl() {
   } else {
     url.searchParams.delete('claim');
   }
+  if (state.selectedCandidateId && state.view === 'review') {
+    url.searchParams.set('candidate', state.selectedCandidateId);
+  } else {
+    url.searchParams.delete('candidate');
+  }
   history.replaceState(null, '', url);
 }
 
@@ -167,7 +220,9 @@ function renderProjects() {
       state.projectId = project.projectId;
       state.branch = project.defaultBranch;
       state.selectedClaimId = null;
+      state.selectedCandidateId = null;
       state.claim = null;
+      resetActionState();
       loadScope();
     });
   });
@@ -300,6 +355,75 @@ function definition(rows) {
   `;
 }
 
+function renderClaimActions(claim) {
+  if (
+    claim?.authority !== 'user_direct'
+    || claim?.state !== 'active'
+  ) {
+    return '';
+  }
+
+  const message = state.actionError
+    ? `<div class="action-message error">${escapeHtml(state.actionError)}</div>`
+    : state.actionMessage
+      ? `<div class="action-message">${escapeHtml(state.actionMessage)}</div>`
+      : '<div class="action-message"></div>';
+
+  const replacePanel = state.claimActionMode === 'replace'
+    ? `
+      <div class="action-panel">
+        <label class="action-label" for="replace-memory-value">Replacement value</label>
+        <textarea id="replace-memory-value" class="action-textarea">${escapeHtml(claim.value)}</textarea>
+        <div class="action-row">
+          <button id="confirm-replace-memory" class="text-action" type="button">
+            Apply replacement
+          </button>
+          <button id="cancel-memory-action" class="text-action" type="button">
+            Cancel
+          </button>
+        </div>
+        ${message}
+      </div>
+    `
+    : '';
+
+  const forgetPanel = state.claimActionMode === 'forget'
+    ? `
+      <div class="action-panel">
+        <div class="action-message">
+          This will expire ${escapeHtml(claim.ref)} for this project and branch.
+          History and audit evidence remain.
+        </div>
+        <div class="action-row">
+          <button id="confirm-forget-memory" class="text-action danger" type="button">
+            Confirm forget
+          </button>
+          <button id="cancel-memory-action" class="text-action" type="button">
+            Cancel
+          </button>
+        </div>
+        ${message}
+      </div>
+    `
+    : '';
+
+  return `
+    <section class="inspect-section">
+      <h3>Actions</h3>
+      <div class="action-row">
+        <button id="replace-memory" class="text-action" type="button">
+          Replace
+        </button>
+        <button id="forget-memory" class="text-action danger" type="button">
+          Forget
+        </button>
+      </div>
+      ${replacePanel}
+      ${forgetPanel}
+    </section>
+  `;
+}
+
 function renderInspector() {
   if (!state.selectedClaimId) return inspectorEmpty();
   if (!state.claim) {
@@ -399,8 +523,100 @@ function renderInspector() {
         <h3>Value</h3>
         <p class="inspect-value">${escapeHtml(claim.value)}</p>
       </section>
+
+      ${renderClaimActions(claim)}
     </div>
   `;
+}
+
+async function reloadCurrentData({
+  preserveClaim = true,
+  preserveCandidate = true,
+} = {}) {
+  const claimId = preserveClaim ? state.selectedClaimId : null;
+  const candidateId = preserveCandidate ? state.selectedCandidateId : null;
+
+  const overview = await fetchJson('/api/overview');
+  state.overview = overview;
+  state.actionToken = overview.actions?.token ?? null;
+
+  let project = overview.projects.find(
+    (item) => item.projectId === state.projectId,
+  ) ?? overview.projects[0] ?? null;
+
+  if (!project) {
+    state.projectId = null;
+    state.branch = null;
+    state.scope = null;
+    state.claim = null;
+    state.selectedClaimId = null;
+    state.selectedCandidateId = null;
+    renderProjects();
+    renderScopeHeader();
+    renderView();
+    return;
+  }
+
+  state.projectId = project.projectId;
+  if (!project.branches.some((item) => item.branch === state.branch)) {
+    state.branch = project.defaultBranch;
+  }
+
+  if (!state.branch) {
+    state.scope = null;
+    state.claim = null;
+    state.selectedClaimId = null;
+    state.selectedCandidateId = null;
+    renderView();
+    return;
+  }
+
+  state.scope = await fetchJson(api('/api/scope', {
+    projectId: state.projectId,
+    branch: state.branch,
+  }));
+
+  state.selectedClaimId = (
+    claimId
+    && state.scope.memories.some((item) => item.claimId === claimId)
+  ) ? claimId : null;
+  state.selectedCandidateId = (
+    candidateId
+    && state.scope.candidates.some((item) => item.id === candidateId)
+  ) ? candidateId : null;
+
+  state.claim = null;
+  if (state.selectedClaimId) {
+    state.claim = await fetchJson(api('/api/claim', {
+      projectId: state.projectId,
+      branch: state.branch,
+      claimId: state.selectedClaimId,
+    }));
+  }
+
+  updateUrl();
+  renderView();
+}
+
+async function performConsoleAction(path, payload) {
+  if (state.busy) return null;
+  state.busy = true;
+  state.actionError = '';
+  renderView();
+
+  try {
+    const result = await postAction(path, payload);
+    resetActionState();
+    state.actionMessage = result.reason ?? 'Memory action applied.';
+    await reloadCurrentData();
+    return result;
+  } catch (error) {
+    state.actionError = error.message;
+    renderView();
+    return null;
+  } finally {
+    state.busy = false;
+  }
 }
 
 function renderMemories() {
@@ -469,9 +685,50 @@ function renderMemories() {
 
   el.view.querySelectorAll('[data-claim]').forEach((button) => {
     button.addEventListener('click', () => {
+      resetActionState();
       selectClaim(button.dataset.claim);
     });
   });
+
+  document.querySelector('#replace-memory')?.addEventListener('click', () => {
+    state.claimActionMode = 'replace';
+    state.actionError = '';
+    state.actionMessage = '';
+    renderMemories();
+  });
+  document.querySelector('#forget-memory')?.addEventListener('click', () => {
+    state.claimActionMode = 'forget';
+    state.actionError = '';
+    state.actionMessage = '';
+    renderMemories();
+  });
+  document.querySelector('#cancel-memory-action')?.addEventListener('click', () => {
+    state.claimActionMode = null;
+    state.actionError = '';
+    renderMemories();
+  });
+  document.querySelector('#confirm-replace-memory')?.addEventListener(
+    'click',
+    async () => {
+      const value = document.querySelector('#replace-memory-value')?.value ?? '';
+      await performConsoleAction('/api/actions/replace', {
+        projectId: state.projectId,
+        branch: state.branch,
+        claimRef: state.claim?.claim?.ref,
+        newValue: value,
+      });
+    },
+  );
+  document.querySelector('#confirm-forget-memory')?.addEventListener(
+    'click',
+    async () => {
+      await performConsoleAction('/api/actions/forget', {
+        projectId: state.projectId,
+        branch: state.branch,
+        claimRef: state.claim?.claim?.ref,
+      });
+    },
+  );
 }
 
 function summaryStat(label, value) {
@@ -481,6 +738,252 @@ function summaryStat(label, value) {
       <div class="summary-stat-value">${escapeHtml(value)}</div>
     </div>
   `;
+}
+
+function reviewableCandidates() {
+  return (state.scope?.candidates ?? []).filter((candidate) => candidate.reviewable);
+}
+
+function reviewTargets(candidate) {
+  const memories = (state.scope?.memories ?? []).filter(
+    (memory) => memory.state === 'active',
+  );
+  if (candidate?.authority === 'user_direct') {
+    return memories.filter((memory) => memory.authority === 'user_direct');
+  }
+  return memories.filter(
+    (memory) => ['user_direct', 'agent_inference'].includes(memory.authority),
+  );
+}
+
+function reviewCandidateRow(candidate) {
+  const importance = candidate.importance ?? {};
+  return `
+    <button
+      class="review-row ${candidate.id === state.selectedCandidateId ? 'is-active' : ''}"
+      data-candidate="${escapeHtml(candidate.id)}"
+      type="button"
+    >
+      <span class="memory-row-top">
+        <span class="ref">${escapeHtml(candidate.ref)}</span>
+        <span class="authority">${escapeHtml(candidate.authority.replaceAll('_', ' '))}</span>
+      </span>
+      <span class="memory-value">${escapeHtml(candidate.value)}</span>
+      <span class="review-meta">
+        <span class="${statusClass(candidate.status)}">${escapeHtml(candidate.status)}</span>
+        <span>judge ${escapeHtml(importance.decision || 'unknown')}</span>
+        <span>durability ${escapeHtml(importance.durability || 'unknown')}</span>
+        <span>utility ${escapeHtml(importance.future_utility || 'unknown')}</span>
+      </span>
+    </button>
+  `;
+}
+
+function renderReviewInspector(candidate) {
+  if (!candidate) {
+    return `
+      <div class="inspector-empty">
+        No reviewable candidate selected.
+      </div>
+    `;
+  }
+
+  const importance = candidate.importance ?? {};
+  const targets = reviewTargets(candidate);
+  if (
+    state.reviewRelation !== 'unrelated'
+    && !targets.some((memory) => memory.ref === state.reviewTargetRef)
+  ) {
+    state.reviewTargetRef = targets[0]?.ref ?? null;
+  }
+
+  const targetControl = state.reviewRelation === 'unrelated'
+    ? ''
+    : `
+      <label class="action-label" for="review-target">Target memory</label>
+      <select id="review-target" class="action-select">
+        ${targets.length
+          ? targets.map((memory) => `
+              <option
+                value="${escapeHtml(memory.ref)}"
+                ${memory.ref === state.reviewTargetRef ? 'selected' : ''}
+              >
+                ${escapeHtml(memory.ref)} · ${escapeHtml(memory.authority)} · ${escapeHtml(memory.value)}
+              </option>
+            `).join('')
+          : '<option value="">No eligible target</option>'}
+      </select>
+    `;
+
+  const message = state.actionError
+    ? `<div class="action-message error">${escapeHtml(state.actionError)}</div>`
+    : state.actionMessage
+      ? `<div class="action-message">${escapeHtml(state.actionMessage)}</div>`
+      : '<div class="action-message"></div>';
+
+  const rejectPanel = state.reviewRejectArmed
+    ? `
+      <div class="action-panel">
+        <div class="action-message">
+          Rejecting closes ${escapeHtml(candidate.ref)} as ignored.
+          No durable Claim will be created.
+        </div>
+        <div class="action-row">
+          <button id="confirm-reject-candidate" class="text-action danger" type="button">
+            Confirm reject
+          </button>
+          <button id="cancel-reject-candidate" class="text-action" type="button">
+            Cancel
+          </button>
+        </div>
+      </div>
+    `
+    : '';
+
+  return `
+    <div class="inspector-scroll">
+      <div class="inspector-head">
+        <div class="inspector-ref">${escapeHtml(candidate.ref)}</div>
+        <h2>${escapeHtml(candidate.value)}</h2>
+      </div>
+
+      <section class="inspect-section">
+        <h3>Candidate</h3>
+        ${definition([
+          ['Authority', candidate.authority],
+          ['Status', candidate.status, statusClass(candidate.status)],
+          ['Created', dateTime(candidate.createdAt)],
+          ['Evaluated', dateTime(candidate.evaluatedAt)],
+          ['Importance', importance.decision || 'unknown'],
+          ['Durability', importance.durability || 'unknown'],
+          ['Utility', importance.future_utility || 'unknown'],
+          ['Confidence', importance.confidence || 'unknown'],
+        ])}
+      </section>
+
+      <section class="inspect-section">
+        <h3>Decision</h3>
+        <div class="action-panel">
+          <label class="action-label" for="review-relation">Relation</label>
+          <select id="review-relation" class="action-select">
+            ${['unrelated', 'same', 'update', 'contradict'].map((relation) => `
+              <option value="${relation}" ${relation === state.reviewRelation ? 'selected' : ''}>
+                ${relation}
+              </option>
+            `).join('')}
+          </select>
+          ${targetControl}
+          <div class="action-row">
+            <button id="confirm-candidate" class="text-action" type="button">
+              Confirm candidate
+            </button>
+            <button id="reject-candidate" class="text-action danger" type="button">
+              Reject
+            </button>
+          </div>
+          ${message}
+          ${rejectPanel}
+        </div>
+      </section>
+
+      <section class="inspect-section">
+        <h3>Judge reason</h3>
+        <p class="inspect-value">${escapeHtml(importance.reason || 'No judge reason recorded.')}</p>
+      </section>
+    </div>
+  `;
+}
+
+function renderReview() {
+  const candidates = reviewableCandidates();
+  if (
+    !candidates.some((candidate) => candidate.id === state.selectedCandidateId)
+  ) {
+    state.selectedCandidateId = candidates[0]?.id ?? null;
+    state.reviewRelation = 'unrelated';
+    state.reviewTargetRef = null;
+    state.reviewRejectArmed = false;
+  }
+
+  const selected = candidates.find(
+    (candidate) => candidate.id === state.selectedCandidateId,
+  ) ?? null;
+
+  el.view.innerHTML = `
+    <div class="review-layout">
+      <section class="review-list">
+        <div class="data-section-head">
+          <h2>Review queue</h2>
+          <span>${number(candidates.length)} actionable</span>
+        </div>
+        ${candidates.length
+          ? candidates.map(reviewCandidateRow).join('')
+          : '<div class="empty">No candidates need explicit review.</div>'}
+      </section>
+      <aside class="review-inspector">
+        ${renderReviewInspector(selected)}
+      </aside>
+    </div>
+  `;
+
+  el.view.querySelectorAll('[data-candidate]').forEach((button) => {
+    button.addEventListener('click', () => {
+      state.selectedCandidateId = button.dataset.candidate;
+      state.reviewRelation = 'unrelated';
+      state.reviewTargetRef = null;
+      state.reviewRejectArmed = false;
+      state.actionMessage = '';
+      state.actionError = '';
+      updateUrl();
+      renderReview();
+    });
+  });
+
+  document.querySelector('#review-relation')?.addEventListener('change', (event) => {
+    state.reviewRelation = event.target.value;
+    state.reviewTargetRef = null;
+    state.reviewRejectArmed = false;
+    state.actionError = '';
+    renderReview();
+  });
+  document.querySelector('#review-target')?.addEventListener('change', (event) => {
+    state.reviewTargetRef = event.target.value || null;
+  });
+  document.querySelector('#confirm-candidate')?.addEventListener('click', async () => {
+    if (!selected) return;
+    if (
+      state.reviewRelation !== 'unrelated'
+      && !state.reviewTargetRef
+    ) {
+      state.actionError = 'Select an eligible target memory.';
+      renderReview();
+      return;
+    }
+    await performConsoleAction('/api/actions/candidate-confirm', {
+      projectId: state.projectId,
+      branch: state.branch,
+      candidateRef: selected.ref,
+      relation: state.reviewRelation,
+      targetRef: state.reviewTargetRef,
+    });
+  });
+  document.querySelector('#reject-candidate')?.addEventListener('click', () => {
+    state.reviewRejectArmed = true;
+    state.actionError = '';
+    renderReview();
+  });
+  document.querySelector('#cancel-reject-candidate')?.addEventListener('click', () => {
+    state.reviewRejectArmed = false;
+    renderReview();
+  });
+  document.querySelector('#confirm-reject-candidate')?.addEventListener('click', async () => {
+    if (!selected) return;
+    await performConsoleAction('/api/actions/candidate-reject', {
+      projectId: state.projectId,
+      branch: state.branch,
+      candidateRef: selected.ref,
+    });
+  });
 }
 
 function renderPipeline() {
@@ -699,6 +1202,7 @@ function renderView() {
     return;
   }
 
+  if (state.view === 'review') return renderReview();
   if (state.view === 'pipeline') return renderPipeline();
   if (state.view === 'health') return renderHealth();
   if (state.view === 'quality') return renderQuality();
@@ -739,6 +1243,8 @@ async function loadScope() {
   state.scope = null;
   state.claim = null;
   state.selectedClaimId = null;
+  state.selectedCandidateId = null;
+  resetActionState();
   state.search = '';
   state.authority = 'all';
   state.claimState = 'all';
@@ -768,11 +1274,13 @@ async function bootstrap() {
   loading();
   try {
     state.overview = await fetchJson('/api/overview');
+    state.actionToken = state.overview.actions?.token ?? null;
     const params = new URL(window.location.href).searchParams;
     const requestedProject = params.get('project');
     const requestedBranch = params.get('branch');
     const requestedView = params.get('view');
     const requestedClaim = params.get('claim');
+    const requestedCandidate = params.get('candidate');
 
     const projects = state.overview.projects ?? [];
     const project = projects.find(
@@ -792,7 +1300,7 @@ async function bootstrap() {
     )
       ? requestedBranch
       : project.defaultBranch;
-    if (['memories', 'pipeline', 'health', 'quality', 'stale'].includes(requestedView)) {
+    if (['memories', 'review', 'pipeline', 'health', 'quality', 'stale'].includes(requestedView)) {
       state.view = requestedView;
     }
 
@@ -804,6 +1312,17 @@ async function bootstrap() {
       && state.scope.memories.some((item) => item.claimId === requestedClaim)
     ) {
       await selectClaim(requestedClaim);
+    }
+    if (
+      requestedCandidate
+      && state.view === 'review'
+      && state.scope.candidates.some(
+        (item) => item.id === requestedCandidate && item.reviewable,
+      )
+    ) {
+      state.selectedCandidateId = requestedCandidate;
+      updateUrl();
+      renderReview();
     }
   } catch (error) {
     el.projectTitle.textContent = 'Memory Console unavailable';
@@ -817,14 +1336,45 @@ el.branchSelect.addEventListener('change', () => {
   loadScope();
 });
 
+el.refreshButton?.addEventListener('click', async () => {
+  if (state.busy) return;
+  const prior = el.refreshButton.textContent;
+  el.refreshButton.textContent = 'Refreshing…';
+  try {
+    await reloadCurrentData();
+  } catch (error) {
+    state.actionError = error.message;
+    renderView();
+  } finally {
+    el.refreshButton.textContent = prior;
+  }
+});
+
 el.tabs.addEventListener('click', (event) => {
   const button = event.target.closest('[data-view]');
   if (!button) return;
   state.view = button.dataset.view;
   state.selectedClaimId = null;
+  state.selectedCandidateId = null;
   state.claim = null;
+  resetActionState();
   updateUrl();
   renderView();
 });
 
 bootstrap();
+
+setInterval(async () => {
+  if (
+    document.visibilityState !== 'visible'
+    || !state.scope
+    || actionsAreOpen()
+  ) {
+    return;
+  }
+  try {
+    await reloadCurrentData();
+  } catch {
+    // Live refresh is best-effort; explicit Refresh remains available.
+  }
+}, 10_000);

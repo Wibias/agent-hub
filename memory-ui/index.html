@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta
     name="description"
-    content="Local read-only Agent Hub memory console"
+    content="Local Agent Hub memory console with guarded actions"
   >
   <title>Agent Hub · Memory Console</title>
   <link rel="stylesheet" href="/styles.css">
@@ -17,10 +17,15 @@
         <span class="brand-mark">AH</span>
         <div>
           <strong>Memory Console</strong>
-          <span>local · read-only</span>
+          <span>local · guarded actions</span>
         </div>
       </div>
-      <div id="scope-meta" class="scope-meta"></div>
+      <div class="topbar-actions">
+        <div id="scope-meta" class="scope-meta"></div>
+        <button id="refresh-button" class="text-action" type="button">
+          Refresh
+        </button>
+      </div>
     </header>
 
     <aside class="sidebar">
@@ -49,6 +54,7 @@
 
       <nav id="tabs" class="tabs" aria-label="Memory Console views">
         <button data-view="memories" class="tab is-active">Memories</button>
+        <button data-view="review" class="tab">Review</button>
         <button data-view="pipeline" class="tab">Pipeline</button>
         <button data-view="health" class="tab">Health</button>
         <button data-view="quality" class="tab">Quality</button>

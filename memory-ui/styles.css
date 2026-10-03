@@ -110,6 +110,39 @@ button {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.text-action {
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-bottom: 1px solid var(--line-strong);
+  border-radius: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+}
+
+.text-action:hover,
+.text-action:focus-visible {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+  outline: 0;
+}
+
+.text-action.danger:hover,
+.text-action.danger:focus-visible {
+  color: #e5aaaa;
+  border-bottom-color: var(--danger);
+}
+
 .sidebar {
   grid-area: sidebar;
   min-height: 0;
@@ -540,6 +573,120 @@ button {
   font-size: 12px;
   line-height: 1.6;
   white-space: pre-wrap;
+}
+
+.action-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 34px;
+}
+
+.action-panel {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.action-panel[hidden] {
+  display: none;
+}
+
+.action-label {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.action-input,
+.action-textarea,
+.action-select {
+  width: 100%;
+  border: 0;
+  border-bottom: 1px solid var(--line-strong);
+  border-radius: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text);
+  padding: 8px 1px;
+  font-size: 11px;
+}
+
+.action-textarea {
+  min-height: 78px;
+  resize: vertical;
+  line-height: 1.5;
+}
+
+.action-input:focus,
+.action-textarea:focus,
+.action-select:focus {
+  border-bottom-color: var(--accent);
+}
+
+.action-message {
+  min-height: 18px;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.action-message.error {
+  padding: 0;
+  border: 0;
+  color: #e5aaaa;
+  font-family: inherit;
+}
+
+.review-layout {
+  height: 100%;
+  display: grid;
+  grid-template-columns: minmax(420px, 1fr) minmax(360px, .8fr);
+}
+
+.review-list,
+.review-inspector {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+}
+
+.review-inspector {
+  border-left: 1px solid var(--line);
+  background: #0b0c0d;
+}
+
+.review-row {
+  width: 100%;
+  display: grid;
+  gap: 8px;
+  padding: 13px 16px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+}
+
+.review-row:hover,
+.review-row.is-active {
+  background: #0e1011;
+}
+
+.review-row.is-active {
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.review-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  color: var(--muted);
+  font-size: 10px;
 }
 
 .inline-empty {

@@ -295,19 +295,38 @@ export function memoryUiScope(memory, {
     ));
 
   const candidates = typeof memory.listScopedCandidates === 'function'
-    ? memory.listScopedCandidates({ projectId, branch }).map((candidate) => ({
-        id: candidate.id,
-        ref: memoryCandidateRef(candidate.id),
-        value: candidate.proposed_value,
-        authority: candidate.source_authority,
-        status: candidate.status,
-        relation: candidate.relation,
-        relatedRef: candidate.related_claim_id
-          ? memoryClaimRef(candidate.related_claim_id)
-          : null,
-        createdAt: candidate.created_at,
-        evaluatedAt: candidate.evaluated_at,
-      }))
+    ? memory.listScopedCandidates({ projectId, branch }).map((candidate) => {
+        let importance = null;
+        try {
+          importance = candidate.evaluation_json
+            ? JSON.parse(candidate.evaluation_json)
+            : null;
+        } catch {}
+
+        const keptForReview = (
+          candidate.status === 'pending'
+          && candidate.relation === null
+          && importance?.decision === 'keep_candidate'
+        );
+        return {
+          id: candidate.id,
+          ref: memoryCandidateRef(candidate.id),
+          value: candidate.proposed_value,
+          authority: candidate.source_authority,
+          status: candidate.status,
+          relation: candidate.relation,
+          relatedRef: candidate.related_claim_id
+            ? memoryClaimRef(candidate.related_claim_id)
+            : null,
+          createdAt: candidate.created_at,
+          evaluatedAt: candidate.evaluated_at,
+          importance,
+          reviewable: (
+            candidate.status === 'needs_confirmation'
+            || keptForReview
+          ),
+        };
+      })
     : [];
 
   const pipelineRuns = typeof memory.listPipelineRuns === 'function'
