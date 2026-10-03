@@ -230,67 +230,116 @@ export function parseExplicitMemoryPrompt(prompt) {
   };
 }
 
-function activeDirectUserMemories(memory, {
+function activeScopedDurableMemories(memory, {
   projectId,
   branch,
 }) {
-  if (typeof memory?.exportCanonical !== 'function') return [];
+  if (typeof memory?.exportCanonical !== 'function') {
+    return { user: [], agent: [] };
+  }
   const exported = memory.exportCanonical();
   if (
     !exported
     || !Array.isArray(exported.claims)
     || !Array.isArray(exported.evidence)
   ) {
-    return [];
+    return { user: [], agent: [] };
   }
 
   const evidenceById = new Map(
     exported.evidence.map((evidence) => [evidence.id, evidence]),
   );
 
-  return exported.claims
-    .filter((claim) => {
-      const evidence = evidenceById.get(claim.created_from_evidence_id);
-      return (
-        claim?.project_id === projectId
-        && claim?.branch_scope === branch
-        && claim?.state === 'active'
-        && claim?.kind === 'user_direct'
-        && claim?.subject === 'user memory'
-        && claim?.predicate === 'states'
-        && evidence?.project_id === projectId
-        && evidence?.authority_class === 'user_direct'
-      );
-    })
-    .sort((a, b) => (
-      String(b.created_at ?? '').localeCompare(String(a.created_at ?? ''))
-      || String(a.id ?? '').localeCompare(String(b.id ?? ''))
-    ));
+  const user = [];
+  const agent = [];
+
+  for (const claim of exported.claims) {
+    if (
+      claim?.project_id !== projectId
+      || claim?.branch_scope !== branch
+      || claim?.state !== 'active'
+      || claim?.predicate !== 'states'
+    ) {
+      continue;
+    }
+
+    const evidence = evidenceById.get(claim.created_from_evidence_id);
+    if (
+      claim?.kind === 'user_direct'
+      && claim?.subject === 'user memory'
+      && evidence?.project_id === projectId
+      && evidence?.authority_class === 'user_direct'
+    ) {
+      user.push(claim);
+      continue;
+    }
+
+    if (
+      claim?.kind === 'agent_inference'
+      && claim?.subject === 'agent decision'
+      && evidence?.project_id === projectId
+      && evidence?.authority_class === 'agent_inference'
+    ) {
+      agent.push(claim);
+    }
+  }
+
+  const sortNewest = (a, b) => (
+    String(b.created_at ?? '').localeCompare(String(a.created_at ?? ''))
+    || String(a.id ?? '').localeCompare(String(b.id ?? ''))
+  );
+  user.sort(sortNewest);
+  agent.sort(sortNewest);
+  return { user, agent };
 }
 
-function formatActiveDirectUserMemories(memory, {
+function activeDirectUserMemories(memory, {
+  projectId,
+  branch,
+}) {
+  return activeScopedDurableMemories(memory, {
+    projectId,
+    branch,
+  }).user;
+}
+
+function formatActiveDurableMemories(memory, {
   projectId,
   branch,
   maxBytes,
 }) {
-  const memories = activeDirectUserMemories(memory, { projectId, branch });
-  if (memories.length === 0) {
+  const memories = activeScopedDurableMemories(memory, { projectId, branch });
+  if (memories.user.length === 0 && memories.agent.length === 0) {
     return 'No active durable user memories for the current project and branch.';
   }
 
-  const lines = [
-    'Active durable user memories for the current project and branch:',
-  ];
+  const lines = [];
+  const appendSection = (heading, claims) => {
+    if (claims.length === 0) return;
+    const prefix = lines.length > 0 ? ['', heading] : [heading];
+    const headingCandidate = [...lines, ...prefix].join('\n');
+    if (byteLength(headingCandidate) > maxBytes) return;
+    lines.push(...prefix);
 
-  for (const claim of memories) {
-    const line = `- ${memoryClaimRef(claim.id)} ${compactText(
-      claim.value_text ?? '',
-      500,
-    )}`;
-    const candidate = [...lines, line].join('\n');
-    if (byteLength(candidate) > maxBytes) break;
-    lines.push(line);
-  }
+    for (const claim of claims) {
+      const line = `- ${memoryClaimRef(claim.id)} ${compactText(
+        claim.value_text ?? '',
+        500,
+      )}`;
+      const candidate = [...lines, line].join('\n');
+      if (byteLength(candidate) > maxBytes) break;
+      lines.push(line);
+    }
+  };
+
+  appendSection(
+    'Active durable user memories for the current project and branch:',
+    memories.user,
+  );
+  appendSection(
+    'Advisory durable agent decisions for the current project and branch (lower-authority agent_inference):',
+    memories.agent,
+  );
 
   return lines.join('\n');
 }
@@ -771,7 +820,7 @@ export function createCodexMemoryHookAdapter({
         if (explicitMemory?.mode === 'list') {
           return {
             decision: 'block',
-            reason: formatActiveDirectUserMemories(memory, {
+            reason: formatActiveDurableMemories(memory, {
               projectId,
               branch: context.branch,
               maxBytes: maxContextBytes,
