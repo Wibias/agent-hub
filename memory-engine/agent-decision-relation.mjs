@@ -25,6 +25,7 @@ function normalizedDecisionText(value) {
     .normalize('NFKC')
     .toLowerCase()
     .replace(/[^\p{L}\p{N}._/-]+/gu, ' ')
+    .replace(/[._/-]+(?=\s|$)/gu, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 }
