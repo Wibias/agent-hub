@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { Buffer } from 'node:buffer';
 import {
   closeSync,
   copyFileSync,
@@ -23,6 +24,22 @@ function nonEmpty(value) {
 
 function quote(value) {
   return `"${String(value).replaceAll('"', '\\"')}"`;
+}
+
+function quotePowerShellLiteral(value) {
+  return `'${String(value).replaceAll("'", "''")}'`;
+}
+
+function windowsPowerShellCommand(executable, args = []) {
+  const script = [
+    '&',
+    quotePowerShellLiteral(executable),
+    ...args.map((arg) => quotePowerShellLiteral(arg)),
+    ';',
+    'exit $LASTEXITCODE',
+  ].join(' ');
+  const encoded = Buffer.from(script, 'utf16le').toString('base64');
+  return `powershell.exe -NoProfile -NonInteractive -EncodedCommand ${encoded}`;
 }
 
 function defaultHubRoot() {
@@ -215,12 +232,12 @@ function promptEntry({ hubRoot, nodePath }) {
     '--hybrid-recall',
     '--candidate-capture',
     '--auto-pipeline',
-  ].join(' ');
+  ];
   return {
     hooks: [{
       type: 'command',
-      command: `node ${quote(script)} ${args}`,
-      commandWindows: `${quote(nodePath)} ${quote(script)} ${args}`,
+      command: `node ${quote(script)} ${args.join(' ')}`,
+      commandWindows: windowsPowerShellCommand(nodePath, [script, ...args]),
       timeout: 10,
       statusMessage: 'Recalling project memory',
       additionalContextLimit: 2500,
@@ -240,13 +257,13 @@ function sessionStartEntry({ hubRoot, nodePath }) {
     'memory-engine',
     'e5',
   );
+  const args = ['--cache-dir', cacheDir];
   return {
     matcher: 'startup|resume|clear|compact',
     hooks: [{
       type: 'command',
       command: `node ${quote(script)} --cache-dir ${quote(cacheDir)}`,
-      commandWindows:
-        `${quote(nodePath)} ${quote(script)} --cache-dir ${quote(cacheDir)}`,
+      commandWindows: windowsPowerShellCommand(nodePath, [script, ...args]),
       timeout: 45,
       async: true,
       statusMessage: 'Starting project memory embeddings',
@@ -264,12 +281,12 @@ function agentDecisionEntry({ hubRoot, nodePath }) {
   const args = [
     '--ignore-memory-env',
     '--auto-pipeline',
-  ].join(' ');
+  ];
   return {
     hooks: [{
       type: 'command',
-      command: `node ${quote(script)} ${args}`,
-      commandWindows: `${quote(nodePath)} ${quote(script)} ${args}`,
+      command: `node ${quote(script)} ${args.join(' ')}`,
+      commandWindows: windowsPowerShellCommand(nodePath, [script, ...args]),
       timeout: 10,
       statusMessage: 'Capturing agent decisions',
     }],
