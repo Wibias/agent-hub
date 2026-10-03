@@ -132,6 +132,26 @@ export function parseExplicitMemoryPrompt(prompt) {
     return { mode: 'pipeline' };
   }
 
+  if (/^\s*memory\s+pipeline\s+failures\s*$/i.test(prompt)) {
+    return { mode: 'pipeline_failures' };
+  }
+
+  if (/^\s*memory\s+health\s*$/i.test(prompt)) {
+    return { mode: 'health' };
+  }
+
+  const inspectPrefix = prompt.match(/^\s*memory\s+inspect:\s*/i);
+  if (inspectPrefix) {
+    const ref = normalizeMemoryRef(
+      prompt.slice(inspectPrefix[0].length).trim(),
+    );
+    if (ref === null) return null;
+    return {
+      mode: 'inspect',
+      ref,
+    };
+  }
+
   const confirmPrefix = prompt.match(
     /^\s*memory\s+candidate\s+confirm:\s*/i,
   );
@@ -532,6 +552,240 @@ function formatMemoryCandidatePipelineStatus(memory, {
   }
 }
 
+function resolveScopedMemoryClaimTarget(memory, {
+  projectId,
+  branch,
+  ref,
+}) {
+  if (
+    typeof memory?.exportCanonical !== 'function'
+    || !nonEmptyString(ref)
+  ) {
+    return null;
+  }
+  const exported = memory.exportCanonical();
+  if (!Array.isArray(exported?.claims)) return null;
+  const matches = exported.claims.filter((claim) => (
+    claim?.project_id === projectId
+    && claim?.branch_scope === branch
+    && memoryClaimRef(claim.id) === ref
+  ));
+  return matches.length === 1 ? matches[0] : null;
+}
+
+function formatMemoryInspection(memory, {
+  projectId,
+  branch,
+  ref,
+  maxBytes,
+}) {
+  if (typeof memory?.inspectClaimObservability !== 'function') {
+    return 'Memory inspection is unavailable for the current configuration.';
+  }
+  const claim = resolveScopedMemoryClaimTarget(memory, {
+    projectId,
+    branch,
+    ref,
+  });
+  if (claim === null) {
+    return 'Memory inspection failed: ref was not found or was not unique in the current project and branch.';
+  }
+
+  const inspected = memory.inspectClaimObservability({
+    projectId,
+    branch,
+    claimId: claim.id,
+  });
+  if (inspected === null) {
+    return 'Memory inspection failed: claim details are unavailable.';
+  }
+
+  const evidence = inspected.evidence ?? {};
+  const candidate = inspected.candidate;
+  const relation = inspected.relation;
+  const promotion = inspected.promotion;
+  const confirmation = inspected.confirmation;
+  const metadata = evidence.metadata ?? {};
+  const origin = evidence.authority_class === 'user_direct'
+    ? 'user'
+    : metadata.event_type === 'subagent_stop'
+      ? [
+          'subagent',
+          metadata.agent_type ? 'type=' + compactText(metadata.agent_type, 80) : null,
+          metadata.agent_id ? 'id=' + compactText(metadata.agent_id, 80) : null,
+        ].filter(Boolean).join(' ')
+      : metadata.event_type === 'assistant_stop'
+        ? 'root-agent'
+        : compactText(evidence.source_kind ?? 'unknown', 80);
+
+  let importance = 'n/a';
+  if (typeof candidate?.evaluation_json === 'string') {
+    try {
+      const parsed = JSON.parse(candidate.evaluation_json);
+      importance = [
+        parsed.decision ?? 'unknown',
+        parsed.durability ? 'durability=' + parsed.durability : null,
+        parsed.future_utility ? 'utility=' + parsed.future_utility : null,
+        parsed.confidence ? 'confidence=' + parsed.confidence : null,
+      ].filter(Boolean).join(' ');
+    } catch {
+      importance = 'invalid';
+    }
+  }
+
+  const supersedes = (inspected.lifecycle ?? [])
+    .filter((item) => (
+      item.action === 'supersede'
+      && item.source_claim_id === claim.id
+    ))
+    .map((item) => memoryClaimRef(item.target_claim_id));
+  const supersededBy = claim.superseded_by_claim_id
+    ? memoryClaimRef(claim.superseded_by_claim_id)
+    : null;
+  const rejectedBy = (inspected.lifecycle ?? [])
+    .filter((item) => (
+      item.action === 'reject'
+      && item.target_claim_id === claim.id
+    ))
+    .map((item) => memoryClaimRef(item.source_claim_id));
+  const conflicts = (inspected.conflicts ?? []).map((item) => (
+    memoryClaimRef(
+      item.claim_a === claim.id ? item.claim_b : item.claim_a,
+    ) + ':' + item.state
+  ));
+  const promotedAt = (
+    promotion?.finalized_at
+    ?? confirmation?.confirmed_at
+    ?? null
+  );
+  const embeddingModels = (inspected.embeddings ?? []).map(
+    (item) => item.model_id + '@' + item.model_revision,
+  );
+
+  const lines = [
+    'Memory inspection ' + ref + ':',
+    'Claim-ID: ' + claim.id,
+    'Authority: ' + compactText(evidence.authority_class ?? 'unknown', 80),
+    'Kind: ' + compactText(claim.kind ?? 'unknown', 80),
+    'State: ' + compactText(claim.state ?? 'unknown', 80),
+    'Origin: ' + origin,
+    'Created: ' + compactText(claim.created_at ?? 'unknown', 80),
+    'Promoted: ' + compactText(promotedAt ?? 'n/a', 80),
+    'Evidence-ID: ' + compactText(evidence.id ?? 'unknown', 160),
+    'Evidence source: ' + compactText(
+      evidence.source_ref ?? evidence.path ?? 'n/a',
+      240,
+    ),
+    'Candidate-ID: ' + compactText(candidate?.id ?? 'n/a', 180),
+    'Candidate-ref: ' + (
+      candidate?.id ? memoryCandidateRef(candidate.id) : 'n/a'
+    ),
+    'Importance: ' + compactText(importance, 320),
+    'Relation: ' + (
+      relation
+        ? [
+            relation.relation,
+            relation.related_claim_id
+              ? 'target=' + memoryClaimRef(relation.related_claim_id)
+              : null,
+          ].filter(Boolean).join(' ')
+        : 'n/a'
+    ),
+    'Supersedes: ' + (supersedes.join(', ') || 'none'),
+    'Superseded-by: ' + (supersededBy ?? 'none'),
+    'Rejected-by: ' + (rejectedBy.join(', ') || 'none'),
+    'Conflicts: ' + (conflicts.join(', ') || 'none'),
+    'Semantic indexed: ' + (
+      inspected.semantic_indexed === true ? 'yes' : 'no'
+    ),
+    'Embedding models: ' + (embeddingModels.join(', ') || 'none'),
+    'Value: ' + compactText(claim.value_text ?? claim.value ?? '', 800),
+  ];
+
+  const bounded = [];
+  for (const line of lines) {
+    const next = [...bounded, line].join('\n');
+    if (byteLength(next) > maxBytes) break;
+    bounded.push(line);
+  }
+  return bounded.join('\n');
+}
+
+function formatPipelineFailures(memory, {
+  projectId,
+  branch,
+  maxBytes,
+}) {
+  if (typeof memory?.listPipelineFailures !== 'function') {
+    return 'Memory pipeline failure history is unavailable for the current configuration.';
+  }
+  const failures = memory.listPipelineFailures({
+    projectId,
+    branch,
+    limit: 50,
+  });
+  if (failures.length === 0) {
+    return 'No recorded memory pipeline failures for the current project and branch.';
+  }
+
+  const lines = [
+    'Memory pipeline failures for the current project and branch:',
+  ];
+  for (const failure of failures) {
+    const line = [
+      '-',
+      pipelineRunRef(failure.run_id),
+      failure.candidate_ref ?? '',
+      '[' + compactText(failure.stage, 60) + ']',
+      compactText(failure.error_class, 80) + ':',
+      compactText(failure.error, 500),
+      '(' + compactText(failure.occurred_at, 80) + ')',
+    ].filter(Boolean).join(' ');
+    const next = [...lines, line].join('\n');
+    if (byteLength(next) > maxBytes) break;
+    lines.push(line);
+  }
+  return lines.join('\n');
+}
+
+function formatMemoryHealth(snapshot, external = null) {
+  if (!snapshot || typeof snapshot !== 'object') {
+    return 'Memory health is unavailable for the current configuration.';
+  }
+  const last = snapshot.last_pipeline;
+  const review = Number(snapshot.needs_confirmation ?? 0)
+    + Number(snapshot.kept_for_review ?? 0);
+  const hooks = external?.hooks ?? 'unknown';
+  const worker = external?.e5_worker ?? 'unknown';
+
+  return [
+    'Memory health for the current project and branch:',
+    'DB: ' + (snapshot.db_healthy ? 'healthy' : 'degraded'),
+    'E5 worker: ' + worker,
+    'Hooks: ' + hooks,
+    'Pending: ' + Number(snapshot.pending ?? 0),
+    'Review: ' + review,
+    'Failed candidates: ' + Number(snapshot.failed_candidates ?? 0),
+    'Failed/partial runs: ' + Number(snapshot.failed_runs ?? 0)
+      + ' / ' + Number(snapshot.recent_runs ?? 0) + ' recent',
+    'Semantic coverage: '
+      + Number(snapshot.semantic_coverage_percent ?? 0).toFixed(2) + '%'
+      + ' (' + Number(snapshot.embedded_claims ?? 0)
+      + '/' + Number(snapshot.claims ?? 0) + ')',
+    'Last pipeline: ' + (
+      last
+        ? [
+            pipelineRunRef(last.id),
+            last.started_at,
+            last.status,
+            'trigger=' + last.trigger,
+            last.duration_ms === null ? null : last.duration_ms + 'ms',
+          ].filter(Boolean).join(' | ')
+        : 'none'
+    ),
+  ].join('\n');
+}
+
 function formatRecallDiagnostics(result, {
   maxBytes,
 }) {
@@ -741,6 +995,7 @@ export function createCodexMemoryHookAdapter({
   explicitMemoryRequests = false,
   candidateCapture = false,
   diagnoseRecall = null,
+  healthCheck = null,
   clock = () => new Date().toISOString(),
   git = null,
   maxContextBytes = 8_192,
@@ -765,6 +1020,9 @@ export function createCodexMemoryHookAdapter({
   }
   if (diagnoseRecall !== null && typeof diagnoseRecall !== 'function') {
     throw new TypeError('diagnoseRecall must be a function or null');
+  }
+  if (healthCheck !== null && typeof healthCheck !== 'function') {
+    throw new TypeError('healthCheck must be a function or null');
   }
   if (typeof clock !== 'function') {
     throw new TypeError('clock must be a function');
@@ -803,6 +1061,60 @@ export function createCodexMemoryHookAdapter({
               projectId,
               branch: context.branch,
             }),
+          };
+        }
+
+        if (explicitMemory?.mode === 'pipeline_failures') {
+          return {
+            decision: 'block',
+            reason: formatPipelineFailures(memory, {
+              projectId,
+              branch: context.branch,
+              maxBytes: maxContextBytes,
+            }),
+          };
+        }
+
+        if (explicitMemory?.mode === 'inspect') {
+          return {
+            decision: 'block',
+            reason: formatMemoryInspection(memory, {
+              projectId,
+              branch: context.branch,
+              ref: explicitMemory.ref,
+              maxBytes: maxContextBytes,
+            }),
+          };
+        }
+
+        if (explicitMemory?.mode === 'health') {
+          if (typeof memory?.healthSnapshot !== 'function') {
+            return {
+              decision: 'block',
+              reason: 'Memory health is unavailable for the current configuration.',
+            };
+          }
+          let external = null;
+          if (healthCheck !== null) {
+            try {
+              external = await healthCheck({
+                projectId,
+                branch: context.branch,
+                revisionSha: context.revisionSha,
+              });
+            } catch {
+              external = null;
+            }
+          }
+          return {
+            decision: 'block',
+            reason: formatMemoryHealth(
+              memory.healthSnapshot({
+                projectId,
+                branch: context.branch,
+              }),
+              external,
+            ),
           };
         }
 
