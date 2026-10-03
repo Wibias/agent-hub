@@ -802,3 +802,73 @@ test('worker persists structured run history and clears its lock after success',
     await rm(root, { recursive: true, force: true });
   }
 });
+
+
+test('stalled worker records partial run and a visible pipeline-control failure', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'agent-hub-auto-pipeline-stalled-'));
+  const dbPath = join(root, 'memory.sqlite3');
+  const projectId = 'github.com/example/stalled-history';
+  const seed = new MemoryEngine({ dbPath });
+  seed.registerProject({
+    projectId,
+    repoIdentity: projectId,
+  });
+  seed.close();
+
+  let tick = 0;
+  try {
+    const result = await runMemoryCandidatePipelineWorker({
+      cwd: root,
+      dbPath,
+      projectId,
+      branch: 'main',
+      trigger: 'UserPromptSubmit',
+      createRunId: () => 'pipeline-run:stalled',
+      now() {
+        tick += 1;
+        return 1_800_000_100_000 + tick * 100;
+      },
+      restoreLocked: () => false,
+      runPipeline: async () => ({
+        initial: {
+          importance_ready: 1,
+          relation_ready: 0,
+          promotion_ready: 0,
+          agent_importance_ready: 0,
+          agent_relation_ready: 0,
+          agent_promotion_ready: 0,
+        },
+        stages: [],
+        final: {
+          importance_ready: 1,
+          relation_ready: 0,
+          promotion_ready: 0,
+          agent_importance_ready: 0,
+          agent_relation_ready: 0,
+          agent_promotion_ready: 0,
+        },
+      }),
+      log() {},
+    });
+
+    assert.equal(result.status, 'stalled');
+    assert.equal(result.observabilityStatus, 'partial');
+
+    const verify = new MemoryEngine({ dbPath });
+    try {
+      const run = verify.getPipelineRun('pipeline-run:stalled');
+      assert.equal(run.status, 'partial');
+      const failures = verify.listPipelineFailures({
+        projectId,
+        branch: 'main',
+      });
+      assert.equal(failures.length, 1);
+      assert.equal(failures[0].stage, 'pipeline_control');
+      assert.equal(failures[0].error_class, 'PipelineStalled');
+    } finally {
+      verify.close();
+    }
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
