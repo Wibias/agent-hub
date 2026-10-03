@@ -282,7 +282,10 @@ test('memory inspect renders authority provenance candidate lifecycle and semant
   const output = await adapter.handle(event('memory inspect: ' + ref));
   assert.equal(output.decision, 'block');
   assert.match(output.reason, /Authority: agent_inference/);
-  assert.match(output.reason, /Origin: subagent type=explorer id=agent-7/);
+  assert.match(
+    output.reason,
+    /Origin: session=unknown -> subagent -> type=explorer -> id=agent-7 -> decision/,
+  );
   assert.match(output.reason, /Candidate-ID: candidate-agent/);
   assert.match(output.reason, /Importance: promote/);
   assert.match(output.reason, /Relation: unrelated/);
