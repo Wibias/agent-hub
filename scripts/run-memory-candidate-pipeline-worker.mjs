@@ -10,7 +10,15 @@ import {
 import { dirname, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
+import { MemoryEngine } from '../memory-engine/index.mjs';
 import { memoryRestoreLocked } from '../memory-engine/memory-maintenance-lock.mjs';
+import {
+  createPipelineRunId,
+  mergePipelineStageSummaries,
+  pipelineRunRef,
+  structuredPipelineLog,
+  summarizePipelineStages,
+} from '../memory-engine/pipeline-observability.mjs';
 import {
   runMemoryCandidatePipelineCli,
 } from './process-memory-candidates.mjs';
@@ -47,6 +55,7 @@ export function parseMemoryCandidatePipelineWorkerArgs(argv = []) {
     projectId: null,
     branch: null,
     revisionSha: null,
+    trigger: 'manual',
     limit: 20,
     maxRounds: 5,
   };
@@ -75,6 +84,11 @@ export function parseMemoryCandidatePipelineWorkerArgs(argv = []) {
     }
     if (arg === '--revision-sha') {
       parsed.revisionSha = requireValue(argv, index, arg).trim();
+      index += 1;
+      continue;
+    }
+    if (arg === '--trigger') {
+      parsed.trigger = requireValue(argv, index, arg).trim();
       index += 1;
       continue;
     }
@@ -262,12 +276,16 @@ export async function runMemoryCandidatePipelineWorker({
   projectId,
   branch,
   revisionSha = null,
+  trigger = 'manual',
   maxRounds = 5,
   runPipeline = runMemoryCandidatePipelineCli,
   syncSemantic = reindexMemorySemantic,
   restoreLocked = memoryRestoreLocked,
   acquireLock = acquireMemoryCandidatePipelineLock,
   releaseLock = releaseMemoryCandidatePipelineLock,
+  createMemory = (options) => new MemoryEngine(options),
+  createRunId = createPipelineRunId,
+  now = Date.now,
   log = console.log,
 } = {}) {
   if (!nonEmpty(cwd) || !nonEmpty(dbPath)) {
@@ -276,11 +294,23 @@ export async function runMemoryCandidatePipelineWorker({
   if (!nonEmpty(projectId) || !nonEmpty(branch)) {
     throw new TypeError('projectId and branch must be non-empty strings');
   }
+  if (!nonEmpty(trigger)) {
+    throw new TypeError('trigger must be a non-empty string');
+  }
   if (typeof runPipeline !== 'function') {
     throw new TypeError('runPipeline must be a function');
   }
   if (typeof syncSemantic !== 'function') {
     throw new TypeError('syncSemantic must be a function');
+  }
+  if (typeof createMemory !== 'function') {
+    throw new TypeError('createMemory must be a function');
+  }
+  if (typeof createRunId !== 'function') {
+    throw new TypeError('createRunId must be a function');
+  }
+  if (typeof now !== 'function') {
+    throw new TypeError('now must be a function');
   }
 
   const runtime = {
@@ -302,14 +332,87 @@ export async function runMemoryCandidatePipelineWorker({
     };
   }
 
+  const runId = createRunId();
+  const runRef = pipelineRunRef(runId);
+  const startedMs = now();
+  const startedAt = new Date(startedMs).toISOString();
+  let runStoreReady = false;
+
+  try {
+    const observability = createMemory({ dbPath: runtime.dbPath });
+    try {
+      observability.startPipelineRun({
+        id: runId,
+        projectId: runtime.projectId,
+        branch: runtime.branch,
+        revisionSha: runtime.revisionSha,
+        trigger,
+        startedAt,
+      });
+      runStoreReady = true;
+    } finally {
+      observability.close();
+    }
+  } catch {
+    runStoreReady = false;
+  }
+
+  const pipelineLog = (value) => log(structuredPipelineLog(value, {
+    runId,
+    trigger,
+  }));
+
   let rounds = 0;
   let final = null;
   let status = 'drained';
   let promotedClaims = 0;
+  let stageCounts = {};
+  const candidateRefs = new Set();
+  const observedFailures = [];
   let semanticSync = {
     status: 'not_needed',
     indexed: 0,
     failed: 0,
+  };
+
+  const persistRun = ({
+    runStatus,
+    error = null,
+  }) => {
+    if (!runStoreReady) return;
+    try {
+      const observability = createMemory({ dbPath: runtime.dbPath });
+      try {
+        for (const failure of observedFailures) {
+          observability.recordPipelineFailure({
+            runId,
+            projectId: runtime.projectId,
+            branch: runtime.branch,
+            candidateId: failure.candidate_id ?? null,
+            candidateRef: failure.candidate_ref ?? null,
+            stage: failure.stage,
+            errorClass: failure.error_class ?? 'Error',
+            error: failure.error,
+            occurredAt: failure.occurred_at ?? new Date(now()).toISOString(),
+          });
+        }
+        observability.finishPipelineRun({
+          id: runId,
+          status: runStatus,
+          finishedAt: new Date(now()).toISOString(),
+          durationMs: Math.max(0, now() - startedMs),
+          rounds,
+          promotedCount: promotedClaims,
+          stageCounts,
+          candidateRefs: [...candidateRefs],
+          error,
+        });
+      } finally {
+        observability.close();
+      }
+    } catch {
+      // Observability must never make a memory decision run fail.
+    }
   };
 
   try {
@@ -327,7 +430,7 @@ export async function runMemoryCandidatePipelineWorker({
           '--limit', String(limit),
         ],
         cwd: runtime.cwd,
-        log,
+        log: pipelineLog,
         dependencies: {
           resolveRuntime() {
             return runtime;
@@ -337,6 +440,20 @@ export async function runMemoryCandidatePipelineWorker({
       rounds += 1;
       final = result.final;
       promotedClaims += promotedClaimCount(result);
+      const observed = summarizePipelineStages(result.stages);
+      stageCounts = mergePipelineStageSummaries(
+        stageCounts,
+        observed.stageCounts,
+      );
+      for (const candidateRef of observed.candidateRefs) {
+        candidateRefs.add(candidateRef);
+      }
+      for (const failure of observed.failures) {
+        observedFailures.push({
+          ...failure,
+          occurred_at: new Date(now()).toISOString(),
+        });
+      }
 
       const remaining = automaticReady(result.final);
       if (remaining === 0) {
@@ -373,12 +490,31 @@ export async function runMemoryCandidatePipelineWorker({
           failed: promotedClaims,
           error: error instanceof Error ? error.message : String(error),
         };
+        observedFailures.push({
+          stage: 'semantic_sync',
+          candidate_id: null,
+          candidate_ref: null,
+          error_class: error instanceof Error ? error.name : 'Error',
+          error: semanticSync.error,
+          occurred_at: new Date(now()).toISOString(),
+        });
       }
     }
 
-    return {
+    const runStatus = observedFailures.length > 0
+      || semanticSync.status === 'partial'
+      || semanticSync.status === 'failed'
+      ? 'partial'
+      : status;
+    persistRun({ runStatus });
+
+    const output = {
       type: 'agent_hub_memory_candidate_pipeline_worker',
       status,
+      observabilityStatus: runStatus,
+      runId,
+      runRef,
+      trigger,
       rounds,
       projectId: runtime.projectId,
       branch: runtime.branch,
@@ -386,6 +522,50 @@ export async function runMemoryCandidatePipelineWorker({
       semanticSync,
       final,
     };
+    pipelineLog({
+      type: 'agent_hub_memory_candidate_pipeline_run',
+      status: runStatus,
+      worker_status: status,
+      projectId: runtime.projectId,
+      branch: runtime.branch,
+      revisionSha: runtime.revisionSha,
+      rounds,
+      promotedClaims,
+      semanticSync,
+      stageCounts,
+      candidateRefs: [...candidateRefs],
+      durationMs: Math.max(0, now() - startedMs),
+    });
+    return output;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    observedFailures.push({
+      stage: 'worker',
+      candidate_id: null,
+      candidate_ref: null,
+      error_class: error instanceof Error ? error.name : 'Error',
+      error: message,
+      occurred_at: new Date(now()).toISOString(),
+    });
+    persistRun({
+      runStatus: 'failed',
+      error: message,
+    });
+    pipelineLog({
+      type: 'agent_hub_memory_candidate_pipeline_run',
+      status: 'failed',
+      worker_status: status,
+      projectId: runtime.projectId,
+      branch: runtime.branch,
+      revisionSha: runtime.revisionSha,
+      rounds,
+      promotedClaims,
+      stageCounts,
+      candidateRefs: [...candidateRefs],
+      durationMs: Math.max(0, now() - startedMs),
+      error: message,
+    });
+    throw error;
   } finally {
     await releaseLock(lock);
   }
