@@ -152,17 +152,24 @@ export function inspectAgentHubHookConfiguration(hooks) {
   const agentStopCommands = stopCommands.filter((command) => (
     /memory-engine[\\/]adapters[\\/]codex-agent-decision-hook-cli\.mjs/i.test(command)
   ));
+  const agentStopPipelineCommands = stopCommands.filter((command) => (
+    /scripts[\\/]codex-agent-memory-pipeline-hook\.mjs/i.test(command)
+  ));
   const subagentStopCommands = eventCommands(eventMap, 'SubagentStop');
   const agentSubagentStopCommands = subagentStopCommands.filter((command) => (
     /memory-engine[\\/]adapters[\\/]codex-agent-decision-hook-cli\.mjs/i.test(command)
   ));
+  const agentSubagentPipelineCommands = subagentStopCommands.filter((command) => (
+    /scripts[\\/]codex-agent-memory-pipeline-hook\.mjs/i.test(command)
+  ));
 
   const recallText = recallCommands.join('\n');
-  const hasAgentDecisionFlags = (commands) => {
-    const text = commands.join('\n');
+  const hasAgentDecisionFlags = (captureCommands, pipelineCommands) => {
+    const captureText = captureCommands.join('\n');
+    const pipelineText = pipelineCommands.join('\n');
     return (
-      /(?:^|\s)--ignore-memory-env(?:\s|$)/.test(text)
-      && /(?:^|\s)--auto-pipeline(?:\s|$)/.test(text)
+      /(?:^|\s)--ignore-memory-env(?:\s|$)/.test(captureText)
+      && /(?:^|\s)--ignore-memory-env(?:\s|$)/.test(pipelineText)
     );
   };
 
@@ -183,8 +190,14 @@ export function inspectAgentHubHookConfiguration(hooks) {
       agentDecisionCapture: (
         agentStopCommands.length > 0
         && agentSubagentStopCommands.length > 0
-        && hasAgentDecisionFlags(agentStopCommands)
-        && hasAgentDecisionFlags(agentSubagentStopCommands)
+        && hasAgentDecisionFlags(
+          agentStopCommands,
+          agentStopPipelineCommands,
+        )
+        && hasAgentDecisionFlags(
+          agentSubagentStopCommands,
+          agentSubagentPipelineCommands,
+        )
       ),
     },
   };
