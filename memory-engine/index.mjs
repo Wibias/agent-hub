@@ -1525,6 +1525,45 @@ export class MemoryEngine {
       CREATE INDEX IF NOT EXISTS memory_pipeline_failures_run
       ON memory_pipeline_failures (run_id, id);
 
+      CREATE TABLE IF NOT EXISTS memory_recall_runs (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL REFERENCES project_registry(project_id),
+        branch TEXT NOT NULL,
+        revision_sha TEXT,
+        query_hash TEXT NOT NULL,
+        observed_at TEXT NOT NULL,
+        retrieval_mode TEXT NOT NULL,
+        fallback_reason TEXT,
+        retrieved_count INTEGER NOT NULL CHECK (retrieved_count >= 0),
+        retained_count INTEGER NOT NULL CHECK (retained_count >= 0),
+        selected_count INTEGER NOT NULL CHECK (selected_count >= 0),
+        advisory_count INTEGER NOT NULL CHECK (advisory_count >= 0),
+        blocked_count INTEGER NOT NULL CHECK (blocked_count >= 0),
+        context_bytes INTEGER NOT NULL CHECK (context_bytes >= 0)
+      ) STRICT;
+
+      CREATE INDEX IF NOT EXISTS memory_recall_runs_scope_time
+      ON memory_recall_runs (project_id, branch, observed_at DESC);
+
+      CREATE TABLE IF NOT EXISTS memory_recall_items (
+        run_id TEXT NOT NULL REFERENCES memory_recall_runs(id) ON DELETE CASCADE,
+        claim_id TEXT NOT NULL,
+        authority_class TEXT NOT NULL,
+        final_rank INTEGER,
+        lexical_rank INTEGER,
+        semantic_rank INTEGER,
+        semantic_similarity REAL,
+        rrf_score REAL,
+        budget_retained INTEGER NOT NULL CHECK (budget_retained IN (0,1)),
+        answer_selected INTEGER NOT NULL CHECK (answer_selected IN (0,1)),
+        advisory_included INTEGER NOT NULL CHECK (advisory_included IN (0,1)),
+        blocked_reason TEXT,
+        PRIMARY KEY (run_id, claim_id)
+      ) STRICT;
+
+      CREATE INDEX IF NOT EXISTS memory_recall_items_claim
+      ON memory_recall_items (claim_id, run_id);
+
       CREATE TABLE IF NOT EXISTS lifecycle_events (
         id INTEGER PRIMARY KEY,
         project_id TEXT NOT NULL REFERENCES project_registry(project_id),
@@ -2465,6 +2504,293 @@ export class MemoryEngine {
       embedded_claims: embedded,
       last_pipeline: runs[0] ?? null,
     };
+  }
+
+  recordRecallTelemetry({
+    id,
+    projectId,
+    branch,
+    revisionSha = null,
+    queryHash,
+    observedAt = this.#clock(),
+    retrievalMode,
+    fallbackReason = null,
+    contextBytes = 0,
+    items = [],
+  }) {
+    for (const [value, name] of [
+      [id, 'id'],
+      [projectId, 'projectId'],
+      [branch, 'branch'],
+      [queryHash, 'queryHash'],
+      [observedAt, 'observedAt'],
+      [retrievalMode, 'retrievalMode'],
+    ]) {
+      assertNonEmptyString(value, name);
+    }
+    if (!/^[0-9a-f]{64}$/.test(queryHash)) {
+      throw new Error('queryHash must be a lowercase SHA-256 hex digest');
+    }
+    if (revisionSha !== null) assertNonEmptyString(revisionSha, 'revisionSha');
+    if (fallbackReason !== null) assertNonEmptyString(fallbackReason, 'fallbackReason');
+    if (!Number.isInteger(contextBytes) || contextBytes < 0) {
+      throw new RangeError('contextBytes must be a non-negative integer');
+    }
+    if (!Array.isArray(items)) throw new TypeError('items must be an array');
+    if (!this.getProject(projectId)) throw new Error('unknown project: ' + projectId);
+
+    const normalized = items.map((item) => {
+      assertNonEmptyString(item?.claimId, 'item.claimId');
+      assertNonEmptyString(item?.authorityClass, 'item.authorityClass');
+      const optionalRank = (value, name) => {
+        if (value === null || value === undefined) return null;
+        if (!Number.isInteger(value) || value < 1) {
+          throw new RangeError(name + ' must be a positive integer or null');
+        }
+        return value;
+      };
+      const optionalNumber = (value, name) => {
+        if (value === null || value === undefined) return null;
+        if (!Number.isFinite(value)) throw new TypeError(name + ' must be finite or null');
+        return value;
+      };
+      return {
+        claimId: item.claimId,
+        authorityClass: item.authorityClass,
+        finalRank: optionalRank(item.finalRank, 'item.finalRank'),
+        lexicalRank: optionalRank(item.lexicalRank, 'item.lexicalRank'),
+        semanticRank: optionalRank(item.semanticRank, 'item.semanticRank'),
+        semanticSimilarity: optionalNumber(item.semanticSimilarity, 'item.semanticSimilarity'),
+        rrfScore: optionalNumber(item.rrfScore, 'item.rrfScore'),
+        budgetRetained: item.budgetRetained === true,
+        answerSelected: item.answerSelected === true,
+        advisoryIncluded: item.advisoryIncluded === true,
+        blockedReason: item.blockedReason === null || item.blockedReason === undefined
+          ? null
+          : redactString(String(item.blockedReason)).value,
+      };
+    });
+
+    const retrievedCount = normalized.length;
+    const retainedCount = normalized.filter((item) => item.budgetRetained).length;
+    const selectedCount = normalized.filter((item) => item.answerSelected).length;
+    const advisoryCount = normalized.filter((item) => item.advisoryIncluded).length;
+    const blockedCount = normalized.filter((item) => (
+      item.budgetRetained
+      && !item.answerSelected
+      && !item.advisoryIncluded
+    )).length;
+
+    this.#db.exec('BEGIN IMMEDIATE');
+    try {
+      this.#db.prepare('DELETE FROM memory_recall_items WHERE run_id = ?').run(id);
+      this.#db.prepare('DELETE FROM memory_recall_runs WHERE id = ?').run(id);
+      this.#db.prepare(`
+        INSERT INTO memory_recall_runs (
+          id, project_id, branch, revision_sha, query_hash, observed_at,
+          retrieval_mode, fallback_reason, retrieved_count, retained_count,
+          selected_count, advisory_count, blocked_count, context_bytes
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        id,
+        projectId,
+        branch,
+        revisionSha,
+        queryHash,
+        observedAt,
+        retrievalMode,
+        fallbackReason,
+        retrievedCount,
+        retainedCount,
+        selectedCount,
+        advisoryCount,
+        blockedCount,
+        contextBytes,
+      );
+      const insert = this.#db.prepare(`
+        INSERT INTO memory_recall_items (
+          run_id, claim_id, authority_class, final_rank, lexical_rank,
+          semantic_rank, semantic_similarity, rrf_score, budget_retained,
+          answer_selected, advisory_included, blocked_reason
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+      for (const item of normalized) {
+        insert.run(
+          id,
+          item.claimId,
+          item.authorityClass,
+          item.finalRank,
+          item.lexicalRank,
+          item.semanticRank,
+          item.semanticSimilarity,
+          item.rrfScore,
+          item.budgetRetained ? 1 : 0,
+          item.answerSelected ? 1 : 0,
+          item.advisoryIncluded ? 1 : 0,
+          item.blockedReason,
+        );
+      }
+      this.#db.exec('COMMIT');
+    } catch (error) {
+      this.#db.exec('ROLLBACK');
+      throw error;
+    }
+
+    return this.getRecallTelemetry(id);
+  }
+
+  getRecallTelemetry(id) {
+    assertNonEmptyString(id, 'id');
+    const run = this.#db.prepare(
+      'SELECT * FROM memory_recall_runs WHERE id = ?',
+    ).get(id);
+    if (!run) return null;
+    const items = this.#db.prepare(`
+      SELECT *
+      FROM memory_recall_items
+      WHERE run_id = ?
+      ORDER BY final_rank ASC, claim_id ASC
+    `).all(id).map((item) => ({
+      claim_id: item.claim_id,
+      authority_class: item.authority_class,
+      final_rank: item.final_rank,
+      lexical_rank: item.lexical_rank,
+      semantic_rank: item.semantic_rank,
+      semantic_similarity: item.semantic_similarity,
+      rrf_score: item.rrf_score,
+      budget_retained: item.budget_retained === 1,
+      answer_selected: item.answer_selected === 1,
+      advisory_included: item.advisory_included === 1,
+      blocked_reason: item.blocked_reason,
+    }));
+    return {
+      id: run.id,
+      project_id: run.project_id,
+      branch: run.branch,
+      revision_sha: run.revision_sha,
+      query_hash: run.query_hash,
+      observed_at: run.observed_at,
+      retrieval_mode: run.retrieval_mode,
+      fallback_reason: run.fallback_reason,
+      retrieved_count: run.retrieved_count,
+      retained_count: run.retained_count,
+      selected_count: run.selected_count,
+      advisory_count: run.advisory_count,
+      blocked_count: run.blocked_count,
+      context_bytes: run.context_bytes,
+      items,
+    };
+  }
+
+  recallUsageForClaim({
+    projectId,
+    branch,
+    claimId,
+  }) {
+    for (const [value, name] of [
+      [projectId, 'projectId'],
+      [branch, 'branch'],
+      [claimId, 'claimId'],
+    ]) {
+      assertNonEmptyString(value, name);
+    }
+    const row = this.#db.prepare(`
+      SELECT
+        COUNT(*) AS retrieval_count,
+        COALESCE(SUM(CASE WHEN i.budget_retained = 1 THEN 1 ELSE 0 END), 0)
+          AS retained_count,
+        COALESCE(SUM(CASE WHEN i.answer_selected = 1 OR i.advisory_included = 1 THEN 1 ELSE 0 END), 0)
+          AS context_count,
+        MAX(CASE WHEN i.budget_retained = 1 THEN r.observed_at ELSE NULL END)
+          AS last_retained_at,
+        MAX(CASE WHEN i.answer_selected = 1 OR i.advisory_included = 1 THEN r.observed_at ELSE NULL END)
+          AS last_context_at
+      FROM memory_recall_items i
+      JOIN memory_recall_runs r ON r.id = i.run_id
+      WHERE r.project_id = ?
+        AND r.branch = ?
+        AND i.claim_id = ?
+    `).get(projectId, branch, claimId);
+    return {
+      retrieval_count: Number(row?.retrieval_count ?? 0),
+      retained_count: Number(row?.retained_count ?? 0),
+      context_count: Number(row?.context_count ?? 0),
+      last_retained_at: row?.last_retained_at ?? null,
+      last_context_at: row?.last_context_at ?? null,
+    };
+  }
+
+  listStaleAgentMemories({
+    projectId,
+    branch,
+    now = this.#clock(),
+    unusedDays = 90,
+    limit = 50,
+  }) {
+    assertNonEmptyString(projectId, 'projectId');
+    assertNonEmptyString(branch, 'branch');
+    assertNonEmptyString(now, 'now');
+    if (!Number.isInteger(unusedDays) || unusedDays < 1 || unusedDays > 3650) {
+      throw new RangeError('unusedDays must be an integer between 1 and 3650');
+    }
+    if (!Number.isInteger(limit) || limit < 1 || limit > 200) {
+      throw new RangeError('limit must be an integer between 1 and 200');
+    }
+    const nowMs = Date.parse(now);
+    if (!Number.isFinite(nowMs)) throw new Error('now must be an ISO timestamp');
+    const cutoffMs = nowMs - (unusedDays * 24 * 60 * 60 * 1000);
+
+    const exported = this.exportCanonical();
+    const evidenceById = new Map(
+      exported.evidence.map((item) => [item.id, item]),
+    );
+    const result = [];
+
+    for (const claim of exported.claims) {
+      if (
+        claim.project_id !== projectId
+        || claim.branch_scope !== branch
+        || claim.state !== 'active'
+        || claim.kind !== 'agent_inference'
+        || claim.subject !== 'agent decision'
+        || claim.predicate !== 'states'
+        || evidenceById.get(claim.created_from_evidence_id)?.authority_class !== 'agent_inference'
+      ) {
+        continue;
+      }
+
+      const createdMs = Date.parse(claim.created_at);
+      if (!Number.isFinite(createdMs) || createdMs > cutoffMs) continue;
+      const usage = this.recallUsageForClaim({
+        projectId,
+        branch,
+        claimId: claim.id,
+      });
+      const lastContextMs = usage.last_context_at === null
+        ? null
+        : Date.parse(usage.last_context_at);
+      if (lastContextMs !== null && lastContextMs > cutoffMs) continue;
+
+      result.push({
+        claim_id: claim.id,
+        value: claim.value_text,
+        created_at: claim.created_at,
+        ...usage,
+        reason: usage.context_count === 0
+          ? 'never_in_context'
+          : 'unused_since_cutoff',
+      });
+    }
+
+    result.sort((left, right) => (
+      String(left.last_context_at ?? '').localeCompare(
+        String(right.last_context_at ?? ''),
+        'en',
+      )
+      || String(left.created_at).localeCompare(String(right.created_at), 'en')
+      || left.claim_id.localeCompare(right.claim_id, 'en')
+    ));
+    return result.slice(0, limit);
   }
 
   getApproval(id) {
