@@ -50,8 +50,9 @@
     },
     "claude": {
       "displayName": "Claude Code",
-      "reviewed": "2026-09-04",
+      "reviewed": "2026-10-03",
       "sources": [
+        "https://code.claude.com/docs/en/hooks",
         "https://github.com/addyosmani/agent-skills/blob/main/docs/advanced-per-agent-configuration.md"
       ],
       "skills": {
@@ -63,7 +64,25 @@
       },
       "adapter": {
         "configRenderer": "unsupported",
-        "note": "The Hub keeps Claude-specific orchestration out of shared skills. Renderer remains disabled until this repository locks a current official/local schema and tests it."
+        "note": "General Claude Code host-config rendering remains unsupported. Documented lifecycle command hooks are supported; the read-only memory integration uses UserPromptSubmit through the explicit Claude Code hook adapter."
+      },
+      "hooks": {
+        "supported": true,
+        "command": true,
+        "pluginBundled": true,
+        "events": [
+          "SessionStart",
+          "UserPromptSubmit",
+          "PreToolUse",
+          "PermissionRequest",
+          "PostToolUse",
+          "PreCompact",
+          "PostCompact",
+          "SubagentStart",
+          "SubagentStop",
+          "Stop",
+          "SessionEnd"
+        ]
       }
     },
     "codex": {

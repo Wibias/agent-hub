@@ -1407,6 +1407,108 @@ Official host references reviewed 2026-09-30:
 - https://developers.openai.com/docs/hooks
 - https://developers.openai.com/plugins/build/plugins
 
+## Claude Code command-hook adapter
+
+The second production host adapter uses Claude Code's documented
+`UserPromptSubmit` command hook.
+
+Entrypoint:
+
+```text
+memory-engine/adapters/claude-code-hook-cli.mjs
+```
+
+Claude Code supplies command-hook JSON on stdin, including `session_id`,
+`cwd`, `hook_event_name`, and the submitted `prompt`. Current Claude Code
+versions may also supply `prompt_id`; the adapter does not require it.
+
+The v1 Claude Code adapter is deliberately **read-only for canonical memory**.
+For each valid `UserPromptSubmit` event it:
+
+1. resolves the current Git root, branch, and revision;
+2. refreshes rebuildable repository-freshness state;
+3. calls `memory.protocol.v1` `recall` for the configured project only;
+4. applies the same `answer` reliance gate used by the Codex adapter;
+5. emits only selected bounded memory through
+   `hookSpecificOutput.additionalContext`.
+
+It does not parse `transcript_path`, capture prompt Evidence, create memory
+candidates, run the importance/relation pipeline, or accept explicit memory
+mutation commands. Missing memory, an unknown project, Git failure, a restore
+lock, recall failure, or an empty reliance-selected result returns no output
+and does not block the prompt.
+
+The adapter uses the same shared database environment as Codex:
+
+```text
+AGENT_HUB_MEMORY_DB=/absolute/shared/memory.sqlite3
+AGENT_HUB_MEMORY_PROJECT_ID=project-a
+AGENT_HUB_MEMORY_REPO_IDENTITY=github.com/example/project
+```
+
+All three variables are optional. Without `AGENT_HUB_MEMORY_DB`, the adapter
+uses the same platform default as Codex. Without an explicit project or
+repository identity, it derives the canonical project identity from the
+checkout's Git `origin`. The `--ignore-memory-env` flag ignores stale
+`AGENT_HUB_MEMORY_*` overrides and uses that default database plus Git-derived
+scope.
+
+The adapter never creates a missing database or project. This keeps its first
+host integration read-only and ensures Claude Code cannot silently establish a
+new canonical scope.
+
+### Claude Code hook registration
+
+Claude Code supports command hooks in user, project, managed, and plugin hook
+configuration. A minimal project-level `.claude/settings.json` registration is:
+
+```json
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node /absolute/path/to/agent-hub/memory-engine/adapters/claude-code-hook-cli.mjs --ignore-memory-env",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+On Windows, use the corresponding escaped absolute path, for example:
+
+```json
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node C:\\absolute\\path\\to\\agent-hub\\memory-engine\\adapters\\claude-code-hook-cli.mjs --ignore-memory-env",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+Claude Code documents `UserPromptSubmit` as a synchronous per-prompt hook:
+plain stdout or `hookSpecificOutput.additionalContext` is injected into the
+model context. This adapter uses the structured JSON form only.
+
+The first Claude Code adapter intentionally uses protocol-backed lexical recall
+only. Hybrid E5 recall, candidate capture, and explicit memory-management
+commands remain follow-up work after this read-only boundary is proven in a
+real Claude Code session.
+
 ## Pinned E5 provider
 
 ### Warm local embedding worker
