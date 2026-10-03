@@ -175,7 +175,7 @@ export function createMemoryUiServer({
   }
 
   const ownedMemory = memory === null;
-  const engine = memory ?? new MemoryEngine({ dbPath: resolvedDbPath });
+  const engine = memory ?? new MemoryEngine({ dbPath: resolvedDbPath, readOnly: true });
 
   const server = createServer(async (req, res) => {
     apiHeaders(res);
