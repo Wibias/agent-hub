@@ -733,6 +733,252 @@ function summaryStat(label, value) {
   `;
 }
 
+function reviewableCandidates() {
+  return (state.scope?.candidates ?? []).filter((candidate) => candidate.reviewable);
+}
+
+function reviewTargets(candidate) {
+  const memories = (state.scope?.memories ?? []).filter(
+    (memory) => memory.state === 'active',
+  );
+  if (candidate?.authority === 'user_direct') {
+    return memories.filter((memory) => memory.authority === 'user_direct');
+  }
+  return memories.filter(
+    (memory) => ['user_direct', 'agent_inference'].includes(memory.authority),
+  );
+}
+
+function reviewCandidateRow(candidate) {
+  const importance = candidate.importance ?? {};
+  return `
+    <button
+      class="review-row ${candidate.id === state.selectedCandidateId ? 'is-active' : ''}"
+      data-candidate="${escapeHtml(candidate.id)}"
+      type="button"
+    >
+      <span class="memory-row-top">
+        <span class="ref">${escapeHtml(candidate.ref)}</span>
+        <span class="authority">${escapeHtml(candidate.authority.replaceAll('_', ' '))}</span>
+      </span>
+      <span class="memory-value">${escapeHtml(candidate.value)}</span>
+      <span class="review-meta">
+        <span class="${statusClass(candidate.status)}">${escapeHtml(candidate.status)}</span>
+        <span>judge ${escapeHtml(importance.decision || 'unknown')}</span>
+        <span>durability ${escapeHtml(importance.durability || 'unknown')}</span>
+        <span>utility ${escapeHtml(importance.future_utility || 'unknown')}</span>
+      </span>
+    </button>
+  `;
+}
+
+function renderReviewInspector(candidate) {
+  if (!candidate) {
+    return `
+      <div class="inspector-empty">
+        No reviewable candidate selected.
+      </div>
+    `;
+  }
+
+  const importance = candidate.importance ?? {};
+  const targets = reviewTargets(candidate);
+  if (
+    state.reviewRelation !== 'unrelated'
+    && !targets.some((memory) => memory.ref === state.reviewTargetRef)
+  ) {
+    state.reviewTargetRef = targets[0]?.ref ?? null;
+  }
+
+  const targetControl = state.reviewRelation === 'unrelated'
+    ? ''
+    : `
+      <label class="action-label" for="review-target">Target memory</label>
+      <select id="review-target" class="action-select">
+        ${targets.length
+          ? targets.map((memory) => `
+              <option
+                value="${escapeHtml(memory.ref)}"
+                ${memory.ref === state.reviewTargetRef ? 'selected' : ''}
+              >
+                ${escapeHtml(memory.ref)} · ${escapeHtml(memory.authority)} · ${escapeHtml(memory.value)}
+              </option>
+            `).join('')
+          : '<option value="">No eligible target</option>'}
+      </select>
+    `;
+
+  const message = state.actionError
+    ? `<div class="action-message error">${escapeHtml(state.actionError)}</div>`
+    : state.actionMessage
+      ? `<div class="action-message">${escapeHtml(state.actionMessage)}</div>`
+      : '<div class="action-message"></div>';
+
+  const rejectPanel = state.reviewRejectArmed
+    ? `
+      <div class="action-panel">
+        <div class="action-message">
+          Rejecting closes ${escapeHtml(candidate.ref)} as ignored.
+          No durable Claim will be created.
+        </div>
+        <div class="action-row">
+          <button id="confirm-reject-candidate" class="text-action danger" type="button">
+            Confirm reject
+          </button>
+          <button id="cancel-reject-candidate" class="text-action" type="button">
+            Cancel
+          </button>
+        </div>
+      </div>
+    `
+    : '';
+
+  return `
+    <div class="inspector-scroll">
+      <div class="inspector-head">
+        <div class="inspector-ref">${escapeHtml(candidate.ref)}</div>
+        <h2>${escapeHtml(candidate.value)}</h2>
+      </div>
+
+      <section class="inspect-section">
+        <h3>Candidate</h3>
+        ${definition([
+          ['Authority', candidate.authority],
+          ['Status', candidate.status, statusClass(candidate.status)],
+          ['Created', dateTime(candidate.createdAt)],
+          ['Evaluated', dateTime(candidate.evaluatedAt)],
+          ['Importance', importance.decision || 'unknown'],
+          ['Durability', importance.durability || 'unknown'],
+          ['Utility', importance.future_utility || 'unknown'],
+          ['Confidence', importance.confidence || 'unknown'],
+        ])}
+      </section>
+
+      <section class="inspect-section">
+        <h3>Decision</h3>
+        <div class="action-panel">
+          <label class="action-label" for="review-relation">Relation</label>
+          <select id="review-relation" class="action-select">
+            ${['unrelated', 'same', 'update', 'contradict'].map((relation) => `
+              <option value="${relation}" ${relation === state.reviewRelation ? 'selected' : ''}>
+                ${relation}
+              </option>
+            `).join('')}
+          </select>
+          ${targetControl}
+          <div class="action-row">
+            <button id="confirm-candidate" class="text-action" type="button">
+              Confirm candidate
+            </button>
+            <button id="reject-candidate" class="text-action danger" type="button">
+              Reject
+            </button>
+          </div>
+          ${message}
+          ${rejectPanel}
+        </div>
+      </section>
+
+      <section class="inspect-section">
+        <h3>Judge reason</h3>
+        <p class="inspect-value">${escapeHtml(importance.reason || 'No judge reason recorded.')}</p>
+      </section>
+    </div>
+  `;
+}
+
+function renderReview() {
+  const candidates = reviewableCandidates();
+  if (
+    !candidates.some((candidate) => candidate.id === state.selectedCandidateId)
+  ) {
+    state.selectedCandidateId = candidates[0]?.id ?? null;
+    state.reviewRelation = 'unrelated';
+    state.reviewTargetRef = null;
+    state.reviewRejectArmed = false;
+  }
+
+  const selected = candidates.find(
+    (candidate) => candidate.id === state.selectedCandidateId,
+  ) ?? null;
+
+  el.view.innerHTML = `
+    <div class="review-layout">
+      <section class="review-list">
+        <div class="data-section-head">
+          <h2>Review queue</h2>
+          <span>${number(candidates.length)} actionable</span>
+        </div>
+        ${candidates.length
+          ? candidates.map(reviewCandidateRow).join('')
+          : '<div class="empty">No candidates need explicit review.</div>'}
+      </section>
+      <aside class="review-inspector">
+        ${renderReviewInspector(selected)}
+      </aside>
+    </div>
+  `;
+
+  el.view.querySelectorAll('[data-candidate]').forEach((button) => {
+    button.addEventListener('click', () => {
+      state.selectedCandidateId = button.dataset.candidate;
+      state.reviewRelation = 'unrelated';
+      state.reviewTargetRef = null;
+      state.reviewRejectArmed = false;
+      state.actionMessage = '';
+      state.actionError = '';
+      updateUrl();
+      renderReview();
+    });
+  });
+
+  document.querySelector('#review-relation')?.addEventListener('change', (event) => {
+    state.reviewRelation = event.target.value;
+    state.reviewTargetRef = null;
+    state.reviewRejectArmed = false;
+    state.actionError = '';
+    renderReview();
+  });
+  document.querySelector('#review-target')?.addEventListener('change', (event) => {
+    state.reviewTargetRef = event.target.value || null;
+  });
+  document.querySelector('#confirm-candidate')?.addEventListener('click', async () => {
+    if (!selected) return;
+    if (
+      state.reviewRelation !== 'unrelated'
+      && !state.reviewTargetRef
+    ) {
+      state.actionError = 'Select an eligible target memory.';
+      renderReview();
+      return;
+    }
+    await performConsoleAction('/api/actions/candidate-confirm', {
+      projectId: state.projectId,
+      branch: state.branch,
+      candidateRef: selected.ref,
+      relation: state.reviewRelation,
+      targetRef: state.reviewTargetRef,
+    });
+  });
+  document.querySelector('#reject-candidate')?.addEventListener('click', () => {
+    state.reviewRejectArmed = true;
+    state.actionError = '';
+    renderReview();
+  });
+  document.querySelector('#cancel-reject-candidate')?.addEventListener('click', () => {
+    state.reviewRejectArmed = false;
+    renderReview();
+  });
+  document.querySelector('#confirm-reject-candidate')?.addEventListener('click', async () => {
+    if (!selected) return;
+    await performConsoleAction('/api/actions/candidate-reject', {
+      projectId: state.projectId,
+      branch: state.branch,
+      candidateRef: selected.ref,
+    });
+  });
+}
+
 function renderPipeline() {
   const pipeline = state.scope?.pipeline ?? { runs: [], failures: [] };
   const candidates = state.scope?.candidates ?? [];
@@ -949,6 +1195,7 @@ function renderView() {
     return;
   }
 
+  if (state.view === 'review') return renderReview();
   if (state.view === 'pipeline') return renderPipeline();
   if (state.view === 'health') return renderHealth();
   if (state.view === 'quality') return renderQuality();
@@ -1042,7 +1289,7 @@ async function bootstrap() {
     )
       ? requestedBranch
       : project.defaultBranch;
-    if (['memories', 'pipeline', 'health', 'quality', 'stale'].includes(requestedView)) {
+    if (['memories', 'review', 'pipeline', 'health', 'quality', 'stale'].includes(requestedView)) {
       state.view = requestedView;
     }
 
@@ -1072,7 +1319,9 @@ el.tabs.addEventListener('click', (event) => {
   if (!button) return;
   state.view = button.dataset.view;
   state.selectedClaimId = null;
+  state.selectedCandidateId = null;
   state.claim = null;
+  resetActionState();
   updateUrl();
   renderView();
 });
