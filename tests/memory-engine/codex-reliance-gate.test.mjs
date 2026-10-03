@@ -73,7 +73,7 @@ function agentDecisionItem(id, value) {
   };
 }
 
-function adapterFor(result) {
+function adapterFor(result, options = {}) {
   return createCodexMemoryHookAdapter({
     protocol: {
       async handle(request) {
@@ -89,6 +89,7 @@ function adapterFor(result) {
     memory: {},
     projectId: 'project-a',
     git: fakeGit(),
+    ...options,
   });
 }
 
@@ -213,4 +214,44 @@ test('conflicted agent decisions are withheld from advisory recall', async () =>
   const context = output?.hookSpecificOutput?.additionalContext ?? '';
   assert.doesNotMatch(context, /Agent decision: use SQLite/);
   assert.match(context, /Postgres/);
+});
+
+
+test('authoritative recall keeps the full context budget before lower-authority advisory decisions', async () => {
+  const maxContextBytes = 900;
+  const output = await adapterFor({
+    items: [
+      item('c-user-budget', 'user_direct', 'Postgres'),
+      agentDecisionItem(
+        'c-agent-budget',
+        'Agent decision: keep an advisory choice that must never displace user evidence.',
+      ),
+    ],
+    conflicts: [],
+  }, {
+    maxContextBytes,
+  }).handle(event('Which database do we use?'));
+
+  const context = output?.hookSpecificOutput?.additionalContext ?? '';
+  assert.ok(Buffer.byteLength(context, 'utf8') <= maxContextBytes);
+  assert.match(context, /Postgres/);
+  assert.doesNotMatch(context, /must never displace user evidence/);
+});
+
+test('advisory-only recall never exceeds maxContextBytes', async () => {
+  const maxContextBytes = 240;
+  const output = await adapterFor({
+    items: [
+      agentDecisionItem(
+        'c-agent-small-budget',
+        'Agent decision: use Postgres.',
+      ),
+    ],
+    conflicts: [],
+  }, {
+    maxContextBytes,
+  }).handle(event('Which database?'));
+
+  const context = output?.hookSpecificOutput?.additionalContext ?? '';
+  assert.ok(Buffer.byteLength(context, 'utf8') <= maxContextBytes);
 });
