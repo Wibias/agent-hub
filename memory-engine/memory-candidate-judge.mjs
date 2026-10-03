@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 
-export const CANDIDATE_JUDGE_POLICY_VERSION = 'importance-v1';
+export const CANDIDATE_JUDGE_POLICY_VERSION = 'importance-v2';
 
 const DECISIONS = new Set([
   'promote',
@@ -238,8 +238,9 @@ export function buildMemoryCandidateJudgePrompt(candidate) {
     '',
     'Decision rules:',
     '- promote: explicit, durable, high-confidence information with high future utility. It must be expected to remain useful across future sessions.',
-    '- ignore: temporary status, one-off task state, obvious transient implementation detail, or information with low future utility.',
-    '- keep_candidate: plausibly useful but not strong enough for promotion yet.',
+    '- ignore: one-off or near-immediate task state, current-day/single-run implementation detail, or information with low future utility. Temporary alone is not enough to ignore.',
+    '- keep_candidate: explicit information with real future utility that is not durable enough for promotion. Use this for bounded multi-session decisions, preferences, or constraints that remain actionable until a named milestone such as a cutover, release cycle, migration completion, pilot review, or similar event.',
+    '- Boundary rule: if the statement is expected to guide multiple future work sessions before a clear expiry/milestone, prefer keep_candidate over ignore even when it is transient. Reserve ignore for low-utility or effectively one-off state.',
     '- needs_confirmation: important-looking but ambiguous, scope-unclear, tentative, or unsafe to normalize without confirmation.',
     '- A repository-reconstructible implementation detail should normally not be promoted when the candidate text itself clearly identifies it as such.',
     '- Never increase the semantic strength of the user statement.',

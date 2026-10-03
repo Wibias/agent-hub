@@ -276,7 +276,7 @@ test('calibration runner uses judge parsers and scores deterministic provider ou
 
   const result = await runMemoryJudgeCalibration({
     createImportanceJudge: async () => ({
-      evaluatorId: 'fixture:importance-v1',
+      evaluatorId: 'fixture:importance-v2',
       isolation: { deterministicFixture: true },
       async judge(candidate) {
         importanceCalls += 1;

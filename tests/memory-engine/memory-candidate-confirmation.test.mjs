@@ -119,7 +119,7 @@ function seedConfirmationEvidence(memory, {
 function importanceNeedsConfirmation(memory, candidate) {
   memory.evaluateCandidate({
     candidateId: candidate.id,
-    evaluatorId: 'codex:test:importance-v1',
+    evaluatorId: 'codex:test:importance-v2',
     evaluatedAt: '2026-10-01T01:01:00.000Z',
     evaluation: {
       decision: 'needs_confirmation',
@@ -139,7 +139,7 @@ function importanceNeedsConfirmation(memory, candidate) {
 function importanceKeepsCandidate(memory, candidate) {
   memory.evaluateCandidate({
     candidateId: candidate.id,
-    evaluatorId: 'codex:test:importance-v1',
+    evaluatorId: 'codex:test:importance-v2',
     evaluatedAt: '2026-10-01T01:01:00.000Z',
     evaluation: {
       decision: 'keep_candidate',
@@ -162,7 +162,7 @@ function importanceKeepsCandidate(memory, candidate) {
 function promotionNeedsConfirmation(memory, candidate, target) {
   memory.evaluateCandidate({
     candidateId: candidate.id,
-    evaluatorId: 'codex:test:importance-v1',
+    evaluatorId: 'codex:test:importance-v2',
     evaluatedAt: '2026-10-01T01:01:00.000Z',
     evaluation: {
       decision: 'promote',

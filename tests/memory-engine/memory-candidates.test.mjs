@@ -589,7 +589,7 @@ test('memory candidates surfaces needs_confirmation candidates instead of hiding
   });
   memory.evaluateCandidate({
     candidateId: candidate.id,
-    evaluatorId: 'codex:test:importance-v1',
+    evaluatorId: 'codex:test:importance-v2',
     evaluatedAt: '2026-10-01T00:01:00.000Z',
     evaluation: {
       decision: 'needs_confirmation',
@@ -668,7 +668,7 @@ test('memory candidates surfaces evaluated keep_candidate backlog items for expl
   });
   memory.evaluateCandidate({
     candidateId: candidate.id,
-    evaluatorId: 'codex:test:importance-v1',
+    evaluatorId: 'codex:test:importance-v2',
     evaluatedAt: '2026-10-01T00:01:00.000Z',
     evaluation: {
       decision: 'keep_candidate',
@@ -747,7 +747,7 @@ test('candidate confirmation command captures direct-user authority and promotes
   });
   memory.evaluateCandidate({
     candidateId: candidate.id,
-    evaluatorId: 'codex:test:importance-v1',
+    evaluatorId: 'codex:test:importance-v2',
     evaluatedAt: '2026-10-01T00:01:00.000Z',
     evaluation: {
       decision: 'needs_confirmation',
