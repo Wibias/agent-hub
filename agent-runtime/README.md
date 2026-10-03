@@ -10,7 +10,7 @@ This directory is the Hub's source of truth for that separation.
 - `host-capabilities.json` - evidence-backed statements about what each host currently supports.
 - `portable-skill-exceptions.json` - exact reviewed exceptions for legacy/external top-level skill frontmatter.
 - `generated/*.md` - deterministic capability reports generated from the registries.
-- `generated/codex-profiles/` - deterministic Codex reasoning profiles plus a manifest; generated only for the verified renderer surface.
+- `generated/codex-runtime/` - deterministic Codex runtime-launch manifest for the verified CLI-override surface.
 
 ## Commands
 
@@ -51,61 +51,89 @@ Do not generate host configuration until `host-capabilities.json` names a suppor
 When a renderer is eventually added, keep shared skills unchanged and generate the host-local agent/profile resource from this registry.
 
 
-## Codex reasoning profiles
+## Codex runtime launch overrides
 
-Codex is the first host with a supported runtime config renderer.
+Codex is the first host with a supported runtime renderer, but the renderer no longer
+installs named Codex profile files.
 
-The renderer uses only the verified one-to-one mapping:
+The verified mapping remains:
 
 ```text
 Agent Hub reasoning -> Codex model_reasoning_effort
 ```
 
-It deliberately does **not** map Agent Hub `isolation` to `sandbox_mode`, or
-`mutation` to approval/sandbox keys. Those concepts are not equivalent. Non-inherited
-values remain visible in the generated manifest and TOML comments as unmapped semantics.
-
-Generated artifacts live under:
+The activation mechanism is now an ephemeral Codex CLI config override:
 
 ```text
-agent-runtime/generated/codex-profiles/
+-c model_reasoning_effort="<effort>"
 ```
 
-Each file is named after its manual Codex profile, for example:
+Codex gives CLI config overrides higher precedence than project, named-profile, and user
+configuration. Agent Hub therefore applies the skill reasoning preference for the launched
+session without changing the user's selected model or persistent defaults.
+
+This change is deliberate. Current Codex resolves `--profile <name>` by using
+`$CODEX_HOME/<name>.config.toml` as the selected user config path. Local TUI settings
+write back to that selected user file. In practice, using `/model` inside an Agent Hub
+named profile can rewrite the generated reasoning value and add a model choice. Mutable
+named profiles are therefore unsuitable as Agent Hub's runtime-policy source of truth.
+
+Generated runtime metadata lives under:
 
 ```text
-agent-hub-diagnose.config.toml
+agent-runtime/generated/codex-runtime/manifest.json
 ```
 
-Install or update the generated profiles with the dedicated dry-run-first installer.
-
-Dry-run:
+Inspect a launch without starting Codex:
 
 ```powershell
-node .\scripts\install-codex-runtime-profiles.mjs
+node .\scripts\run-codex-runtime.mjs diagnose --dry-run
 ```
 
-Apply:
+Start an interactive Codex session with the `diagnose` runtime preference:
 
 ```powershell
-node .\scripts\install-codex-runtime-profiles.mjs --apply
+node .\scripts\run-codex-runtime.mjs diagnose
 ```
 
-The installer uses `$CODEX_HOME` when set and otherwise `~/.codex`. It installs only
-manifest-owned `agent-hub-*.config.toml` files, preserves `config.toml` and unrelated
-profiles, backs up an existing managed profile before changing it, refuses symlinked
-managed destinations, and is idempotent once current. Stale Agent Hub profile files that
-are no longer present in the generated manifest are reported but not deleted.
-
-After installation, start Codex with the matching profile name:
+Forward Codex arguments after `--`:
 
 ```powershell
-codex --profile agent-hub-diagnose
+node .\scripts\run-codex-runtime.mjs diagnose -- --search
+node .\scripts\run-codex-runtime.mjs source-driven-development -- exec "inspect the current change"
 ```
 
-Codex loads profile files from the same directory as `config.toml`, using
-`$CODEX_HOME/<profile-name>.config.toml` when selected with `--profile`.
+On Windows the launcher uses `codex.exe`; on other platforms it uses `codex`.
+`CODEX_BIN` or `--codex PATH` can override the executable.
 
-Profile activation remains manual because the capability registry still marks
-`skillModelRouting` unsupported. The renderer does not change the user's model choice;
-it emits only `model_reasoning_effort`.
+The launcher maps only `reasoning`. It deliberately does **not** translate Agent Hub
+`isolation` to `sandbox_mode`, or `mutation` to approval/sandbox settings. Those
+concepts are not equivalent. Non-inherited values remain visible as unmapped metadata.
+
+### Retiring legacy Agent Hub Codex profiles
+
+Agent Hub versions that used the earlier named-profile renderer may have installed
+`agent-hub-*.config.toml` files into `$CODEX_HOME` / `~/.codex`.
+
+Inspect them without mutation:
+
+```powershell
+node .\scripts\retire-codex-runtime-profiles.mjs
+```
+
+Back up every matching legacy Agent Hub profile and then remove only the original
+`agent-hub-*.config.toml` files:
+
+```powershell
+node .\scripts\retire-codex-runtime-profiles.mjs --apply
+```
+
+The retirement tool does not touch `config.toml` or unrelated profile names and refuses
+symlinked managed files.
+
+`install-codex-runtime-profiles.mjs` is retained only as a fail-closed migration notice;
+it no longer installs mutable profile files.
+
+Skill activation remains manual because the capability registry still marks
+`skillModelRouting` unsupported. The runtime launcher never pins the model; it injects
+only `model_reasoning_effort`.
