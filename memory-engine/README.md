@@ -397,6 +397,16 @@ Project identity is never derived from prompt text or the checkout path.
 
 ### Codex hook registration
 
+For normal Codex host setup and upgrades, prefer the repository-level orchestrator:
+
+```powershell
+node .\scripts\setup-codex-host.mjs
+node .\scripts\setup-codex-host.mjs --apply
+```
+
+Use the dedicated hook installer below when diagnosing or repairing only the hook
+surface rather than the complete managed Codex host state.
+
 Use the installer rather than editing `~/.codex/hooks.json` by hand.
 
 Dry-run:

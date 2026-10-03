@@ -19,6 +19,7 @@ node scripts/verify-portable-skills.mjs
 node scripts/render-agent-runtime.mjs
 node scripts/render-agent-runtime.mjs --check
 node scripts/render-agent-runtime.mjs --emit-config codex
+node scripts/setup-codex-host.mjs
 ```
 
 `verify-portable-skills.mjs` scans only top-level Hub skills (`skills/*/SKILL.md`). Nested vendored/internal skill trees are governed by their own owner unless promoted to the Hub discovery surface.
