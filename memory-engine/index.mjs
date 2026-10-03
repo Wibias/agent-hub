@@ -3652,9 +3652,10 @@ export class MemoryEngine {
       if (!sourceEvidence) {
         throw new Error('candidate source evidence is missing');
       }
+      const candidateAuthority = candidate.source_authority;
       if (
-        candidate.source_authority !== 'user_direct'
-        || sourceEvidence.authority_class !== 'user_direct'
+        !['user_direct', 'agent_inference'].includes(candidateAuthority)
+        || sourceEvidence.authority_class !== candidateAuthority
         || sourceEvidence.sensitivity === 'secret_redacted'
         || sourceEvidence.project_id !== projectId
         || sourceEvidence.branch !== branch
@@ -3681,6 +3682,7 @@ export class MemoryEngine {
       }
 
       let target = null;
+      let targetAuthority = null;
       if (relation !== 'unrelated') {
         target = normalizeClaim(
           this.#db.prepare('SELECT * FROM claims WHERE id = ?')
@@ -3691,34 +3693,89 @@ export class MemoryEngine {
           || target.project_id !== projectId
           || target.branch_scope !== branch
           || target.state !== 'active'
-          || target.kind !== 'user_direct'
-          || target.subject !== 'user memory'
           || target.predicate !== 'states'
         ) {
-          throw new Error('candidate confirmation target must be one active durable user memory in scope');
+          throw new Error('candidate confirmation target must be active in scope');
         }
 
         const targetEvidence = normalizeEvidence(
           this.#db.prepare('SELECT * FROM evidence WHERE id = ?')
             .get(target.created_from_evidence_id),
         );
+        const directTarget = (
+          target.kind === 'user_direct'
+          && target.subject === 'user memory'
+          && targetEvidence?.authority_class === 'user_direct'
+        );
+        const agentTarget = (
+          target.kind === 'agent_inference'
+          && target.subject === 'agent decision'
+          && targetEvidence?.authority_class === 'agent_inference'
+        );
+
         if (
           !targetEvidence
           || targetEvidence.project_id !== projectId
-          || targetEvidence.authority_class !== 'user_direct'
+          || (
+            candidateAuthority === 'user_direct'
+              ? !directTarget
+              : (!directTarget && !agentTarget)
+          )
         ) {
           throw new Error('candidate confirmation target authority invariant failed');
         }
+        targetAuthority = directTarget ? 'user_direct' : 'agent_inference';
       }
 
       let status = 'superseded';
       let createdClaimId = null;
-      if (relation !== 'same') {
+      const createConfirmedClaim = (
+        relation !== 'same'
+        || (
+          candidateAuthority === 'agent_inference'
+          && targetAuthority === 'agent_inference'
+        )
+      );
+
+      if (createConfirmedClaim) {
+        let claimEvidence = sourceEvidence;
+        let evidenceContent = sourceEvidence.content_redacted;
+
+        if (candidateAuthority === 'agent_inference') {
+          const endorsedEvidence = prepareEvidenceInput({
+            id: claimId + ':confirmed-agent-decision',
+            projectId,
+            harness: confirmationEvidence.harness,
+            sessionId: confirmationEvidence.session_id,
+            sourceKind: 'user_confirmation',
+            sourceRef: confirmationEvidence.source_ref,
+            capturedAt: confirmedAt,
+            branch,
+            commitSha: confirmationEvidence.commit_sha,
+            path: null,
+            blobOid: null,
+            content: candidate.proposed_value,
+            authorityClass: 'user_direct',
+            metadata: {
+              event_type: 'candidate_confirmation',
+              confirmed_candidate_id: candidate.id,
+              agent_source_evidence_id: sourceEvidence.id,
+              confirmation_evidence_id: confirmationEvidence.id,
+            },
+          });
+          if (endorsedEvidence.sensitivity === 'secret_redacted') {
+            throw new Error('confirmed agent decision became secret-redacted');
+          }
+          insertEvidenceRow(this.#db, endorsedEvidence);
+          claimEvidence = endorsedEvidence;
+          evidenceContent = endorsedEvidence.content;
+        }
+
         const preparedClaim = prepareClaimInput({
           evidence: {
-            id: sourceEvidence.id,
-            projectId: sourceEvidence.project_id,
-            branch: sourceEvidence.branch,
+            id: claimEvidence.id,
+            projectId: claimEvidence.projectId ?? claimEvidence.project_id,
+            branch: claimEvidence.branch,
           },
           claim: {
             id: claimId,
@@ -3731,14 +3788,22 @@ export class MemoryEngine {
             createdAt: confirmedAt,
           },
         });
+        const supersedesTarget = (
+          relation === 'update'
+          || (
+            relation === 'same'
+            && candidateAuthority === 'agent_inference'
+            && targetAuthority === 'agent_inference'
+          )
+        );
         const lifecycle = prepareLifecycle(preparedClaim.id, {
-          supersedes: relation === 'update' ? [target.id] : [],
+          supersedes: supersedesTarget ? [target.id] : [],
           conflictsWith: relation === 'contradict' ? [target.id] : [],
         });
 
         insertClaimAndLifecycle(this.#db, {
           claim: preparedClaim,
-          evidenceContent: sourceEvidence.content_redacted,
+          evidenceContent,
           lifecycle,
           lifecycleEvidenceId: confirmationEvidence.id,
           lifecycleCreatedAt: confirmedAt,
