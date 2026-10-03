@@ -93,6 +93,80 @@ function isEmbeddingLauncherHook(hook) {
   );
 }
 
+function analyzeManagedEvent(entries, predicate, desiredEntry, eventName) {
+  if (entries === undefined) {
+    return {
+      event: eventName,
+      action: 'install',
+      managedHooksFound: 0,
+      managedEntriesFound: 0,
+      mixedEntries: 0,
+      unrelatedHooksPreserved: 0,
+      exactDefinitionPresent: false,
+      reasons: ['missing_managed_hook'],
+    };
+  }
+  if (!Array.isArray(entries)) {
+    throw new Error('hooks.' + eventName + ' must be an array');
+  }
+
+  let managedHooksFound = 0;
+  let managedEntriesFound = 0;
+  let mixedEntries = 0;
+  let unrelatedHooksPreserved = 0;
+  let exactDefinitionPresent = false;
+
+  for (const entry of entries) {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue;
+    if (!Array.isArray(entry.hooks)) continue;
+
+    const managed = entry.hooks.filter((hook) => predicate(hook));
+    const unrelated = entry.hooks.length - managed.length;
+    managedHooksFound += managed.length;
+    unrelatedHooksPreserved += unrelated;
+    if (managed.length > 0) {
+      managedEntriesFound += 1;
+      if (unrelated > 0) mixedEntries += 1;
+      if (stableJson(entry) === stableJson(desiredEntry)) {
+        exactDefinitionPresent = true;
+      }
+    }
+  }
+
+  const reasons = [];
+  if (managedHooksFound === 0) {
+    reasons.push('missing_managed_hook');
+  } else {
+    if (managedHooksFound > 1 || managedEntriesFound > 1) {
+      reasons.push('duplicate_managed_hooks');
+    }
+    if (mixedEntries > 0) {
+      reasons.push('managed_hook_shares_entry_with_unrelated_hooks');
+    }
+    if (!exactDefinitionPresent) {
+      reasons.push('managed_definition_differs');
+    }
+  }
+
+  const current = (
+    managedHooksFound === 1
+    && managedEntriesFound === 1
+    && mixedEntries === 0
+    && exactDefinitionPresent
+  );
+
+  return {
+    event: eventName,
+    action: current ? 'current' : managedHooksFound === 0 ? 'install' : 'normalize',
+    managedHooksFound,
+    managedEntriesFound,
+    mixedEntries,
+    unrelatedHooksPreserved,
+    exactDefinitionPresent,
+    reasons,
+  };
+}
+
 function stripManagedHooks(entries, predicate, eventName) {
   if (entries === undefined) return [];
   if (!Array.isArray(entries)) {
@@ -194,6 +268,23 @@ export function planCodexMemoryHooks({
   }
 
   const hooks = { ...(existing.hooks ?? {}) };
+  const desiredPrompt = promptEntry({ hubRoot, nodePath });
+  const desiredSession = sessionStartEntry({ hubRoot, nodePath });
+  const diagnostics = {
+    UserPromptSubmit: analyzeManagedEvent(
+      hooks.UserPromptSubmit,
+      isPromptMemoryHook,
+      desiredPrompt,
+      'UserPromptSubmit',
+    ),
+    SessionStart: analyzeManagedEvent(
+      hooks.SessionStart,
+      isEmbeddingLauncherHook,
+      desiredSession,
+      'SessionStart',
+    ),
+  };
+
   const promptBase = stripManagedHooks(
     hooks.UserPromptSubmit,
     isPromptMemoryHook,
@@ -207,17 +298,18 @@ export function planCodexMemoryHooks({
 
   hooks.UserPromptSubmit = [
     ...promptBase,
-    promptEntry({ hubRoot, nodePath }),
+    desiredPrompt,
   ];
   hooks.SessionStart = [
     ...sessionBase,
-    sessionStartEntry({ hubRoot, nodePath }),
+    desiredSession,
   ];
 
   const config = { ...existing, hooks };
   return {
     config,
     changed: stableJson(config) !== stableJson(existing),
+    diagnostics,
   };
 }
 
@@ -315,6 +407,7 @@ export function installCodexMemoryHooks({
         UserPromptSubmit: true,
         autoPipeline: true,
       },
+      plan: plan.diagnostics,
     };
   };
 
