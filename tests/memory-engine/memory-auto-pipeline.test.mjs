@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -326,6 +326,37 @@ test('candidate pipeline lock serializes one project and branch scope', async ()
   } finally {
     if (first) await releaseMemoryCandidatePipelineLock(first);
     if (third) await releaseMemoryCandidatePipelineLock(third);
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('candidate pipeline lock immediately recovers a dead recorded owner', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'agent-hub-auto-pipeline-dead-lock-'));
+  const runtime = {
+    dbPath: join(root, 'memory.sqlite3'),
+    projectId: 'github.com/example/project',
+    branch: 'feature/dead-owner',
+  };
+  const lockPath = memoryCandidatePipelineLockPath(runtime);
+  let recovered = null;
+
+  try {
+    await writeFile(lockPath, JSON.stringify({
+      pid: 424242,
+      createdAt: new Date().toISOString(),
+    }));
+
+    recovered = await acquireMemoryCandidatePipelineLock(lockPath, {
+      staleAfterMs: 60 * 60 * 1000,
+      isProcessAlive(pid) {
+        assert.equal(pid, 424242);
+        return false;
+      },
+    });
+
+    assert.ok(recovered);
+  } finally {
+    if (recovered) await releaseMemoryCandidatePipelineLock(recovered);
     await rm(root, { recursive: true, force: true });
   }
 });
