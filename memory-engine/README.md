@@ -419,6 +419,11 @@ changing an existing hooks file and refuses to modify a symlinked hooks file. A 
 apply is idempotent and creates no new backup when the managed definitions are already
 current.
 
+The dry-run also includes a content-free `plan` for the two managed events. Each
+event is classified as `current`, `install`, or `normalize`, with bounded reasons
+such as a missing managed hook, duplicate managed hooks, a mixed entry, or a differing
+managed definition. It does not print existing hook commands.
+
 The installer does not bypass Codex hook trust. If it reports
 `hookTrustRequired: true`, open `/hooks` in Codex and review/trust the exact changed
 definitions before relying on them.
