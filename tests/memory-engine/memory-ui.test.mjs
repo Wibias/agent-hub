@@ -175,7 +175,10 @@ test('memory console browser source parses and keeps the divider-first visual co
   ]);
   assert.doesNotMatch(appSource, /style="/i);
   assert.doesNotMatch(css, /linear-gradient|radial-gradient/i);
-  assert.doesNotMatch(css, /border-radius:\s*(?!0\b)/i);
+  const radii = [...css.matchAll(/border-radius:\s*([^;]+);/gi)]
+    .map((match) => match[1].trim());
+  assert.equal(radii.length > 0, true);
+  assert.deepEqual([...new Set(radii)], ['0']);
   assert.match(css, /border-bottom:\s*1px solid var\(--line\)/i);
   assert.match(html, /class="sidebar"/);
   assert.match(html, /class="tabs"/);
