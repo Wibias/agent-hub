@@ -425,8 +425,8 @@ For production hybrid recall, register two independent command hooks:
         "hooks": [
           {
             "type": "command",
-            "command": "node /absolute/path/to/agent-hub/memory-engine/adapters/codex-hook-cli.mjs --ignore-memory-env --explicit-memory-requests --hybrid-recall --candidate-capture",
-            "commandWindows": "node C:\\absolute\\path\\to\\agent-hub\\memory-engine\\adapters\\codex-hook-cli.mjs --ignore-memory-env --explicit-memory-requests --hybrid-recall --candidate-capture",
+            "command": "node /absolute/path/to/agent-hub/memory-engine/adapters/codex-hook-cli.mjs --ignore-memory-env --explicit-memory-requests --hybrid-recall --candidate-capture --auto-pipeline",
+            "commandWindows": "node C:\\absolute\\path\\to\\agent-hub\\memory-engine\\adapters\\codex-hook-cli.mjs --ignore-memory-env --explicit-memory-requests --hybrid-recall --candidate-capture --auto-pipeline",
             "timeout": 10,
             "statusMessage": "Recalling project memory",
             "additionalContextLimit": 2500
@@ -903,7 +903,27 @@ The runner adds no new decision policy. It delegates to the existing importance,
 
 Candidates in `needs_confirmation` and evaluated `keep_candidate` backlog items are never auto-confirmed by this runner. They remain visible through `memory candidates` and require the explicit confirmation commands documented above.
 
-The pipeline is deliberately an explicit operator action. It is not executed inside `UserPromptSubmit` and it does not introduce hidden background consolidation.
+With the managed Codex hook's `--auto-pipeline` flag, the normal operator path is automatic without putting model work in `UserPromptSubmit`.
+
+After the synchronous hook finishes capture/recall work, Agent Hub checks only the three automatic queues. If importance, relation, or promotion work is ready, the hook freezes the current repository path, project ID, branch, revision, and database path, closes the prompt-time database connection, and launches a detached local worker. The hook does not wait for importance-v2 or relation-v1.
+
+The detached worker:
+
+- holds a cross-process project+branch lock so concurrent Codex sessions cannot run the same candidate scope in parallel;
+- writes stdout/stderr to `candidate-pipeline.log` beside the memory database instead of hook stdout;
+- runs bounded batches through the existing explicit pipeline implementation;
+- rechecks automatic queues between bounded rounds and stops when drained;
+- stops rather than repeatedly retrying a stalled queue in the same worker;
+- exits fail-closed while a memory restore lock is active;
+- never auto-confirms `needs_confirmation` or `keep_candidate`.
+
+The manual command remains available as a diagnostic and recovery fallback:
+
+```powershell
+node .\scripts\process-memory-candidates.mjs --apply
+```
+
+Automatic processing adds orchestration only. It does not change capture-v1, importance-v2, relation-v1, promotion-v1, or confirmation-v2 decisions.
 
 ### Memory judge calibration
 
@@ -1555,7 +1575,7 @@ The worker opens the pinned provider with remote loading disabled, performs a re
 Then add `--hybrid-recall` to the Codex hook command. A production command that also uses the explicit memory controls can therefore be:
 
 ```text
-node .../memory-engine/adapters/codex-hook-cli.mjs --ignore-memory-env --explicit-memory-requests --hybrid-recall --candidate-capture
+node .../memory-engine/adapters/codex-hook-cli.mjs --ignore-memory-env --explicit-memory-requests --hybrid-recall --candidate-capture --auto-pipeline
 ```
 
 If the worker is not running, Codex continues with lexical recall. There is no implicit model startup or download from the prompt hook.

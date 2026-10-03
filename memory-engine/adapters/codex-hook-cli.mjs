@@ -10,6 +10,8 @@ import {
   defaultEmbeddingIpcPath,
 } from '../embedding-ipc.mjs';
 import { launchEmbeddingWorker } from '../embedding-worker-launcher.mjs';
+import { launchMemoryCandidatePipeline } from '../candidate-pipeline-launcher.mjs';
+import { resolveGitContext } from '../git-freshness.mjs';
 import {
   E5_DIMENSIONS,
   E5_MODEL_ID,
@@ -138,7 +140,46 @@ export function parseCodexHookCliOptions(argv = []) {
   if (argv.includes('--candidate-capture')) {
     options.candidateCapture = true;
   }
+  if (argv.includes('--auto-pipeline')) {
+    options.autoPipeline = true;
+  }
   return options;
+}
+
+export function automaticMemoryCandidatePipelineReady(memory, {
+  projectId,
+  branch,
+} = {}) {
+  if (
+    !memory
+    || typeof memory.listUnevaluatedCandidates !== 'function'
+    || typeof memory.listRelationPendingCandidates !== 'function'
+    || typeof memory.listPromotionReadyCandidates !== 'function'
+  ) {
+    return false;
+  }
+
+  try {
+    return (
+      memory.listUnevaluatedCandidates({
+        projectId,
+        branch,
+        limit: 1,
+      }).length > 0
+      || memory.listRelationPendingCandidates({
+        projectId,
+        branch,
+        limit: 1,
+      }).length > 0
+      || memory.listPromotionReadyCandidates({
+        projectId,
+        branch,
+        limit: 1,
+      }).length > 0
+    );
+  } catch {
+    return false;
+  }
 }
 
 export function resolveCodexProjectScope({
@@ -343,12 +384,16 @@ export async function runCodexMemoryHook({
   ensureDbDirectory = defaultEnsureDbDirectory,
   embeddingCacheAvailable = existsSync,
   ensureEmbeddingWorker = launchEmbeddingWorker,
+  resolvePipelineGitContext = resolveGitContext,
+  launchCandidatePipeline = launchMemoryCandidatePipeline,
   restoreLockExists = (dbPath) => memoryRestoreLocked({ dbPath }),
 } = {}) {
   const config = parseCodexMemoryConfig(env, configOptions);
   if (restoreLockExists(config.dbPath)) return null;
 
   let memory = null;
+  let output = null;
+  let pipelineLaunch = null;
   try {
     const scope = resolveProjectScope({ event, config });
     if (
@@ -457,10 +502,34 @@ export async function runCodexMemoryHook({
         : null,
     });
 
-    if (restoreLockExists(config.dbPath)) return null;
-    return await adapter.handle(event);
+    if (restoreLockExists(config.dbPath)) {
+      output = null;
+    } else {
+      output = await adapter.handle(event);
+
+      if (configOptions.autoPipeline === true) {
+        try {
+          const git = resolvePipelineGitContext({ cwd: event?.cwd });
+          if (automaticMemoryCandidatePipelineReady(memory, {
+            projectId: scope.projectId,
+            branch: git.branch,
+          })) {
+            pipelineLaunch = {
+              cwd: git.repoPath,
+              dbPath: config.dbPath,
+              projectId: scope.projectId,
+              branch: git.branch,
+              revisionSha: git.revisionSha,
+            };
+          }
+        } catch {
+          pipelineLaunch = null;
+        }
+      }
+    }
   } catch {
-    return null;
+    output = null;
+    pipelineLaunch = null;
   } finally {
     if (memory && typeof memory.close === 'function') {
       try {
@@ -470,6 +539,16 @@ export async function runCodexMemoryHook({
       }
     }
   }
+
+  if (pipelineLaunch !== null) {
+    try {
+      launchCandidatePipeline(pipelineLaunch);
+    } catch {
+      // Automatic processing is opportunistic and must not block the prompt.
+    }
+  }
+
+  return output;
 }
 
 async function readStdin(stream = process.stdin) {

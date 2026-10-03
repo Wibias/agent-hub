@@ -162,6 +162,7 @@ export function inspectAgentHubHookConfiguration(hooks) {
       ),
       hybridRecall: /(?:^|\s)--hybrid-recall(?:\s|$)/.test(recallText),
       candidateCapture: /(?:^|\s)--candidate-capture(?:\s|$)/.test(recallText),
+      autoPipeline: /(?:^|\s)--auto-pipeline(?:\s|$)/.test(recallText),
     },
   };
 }

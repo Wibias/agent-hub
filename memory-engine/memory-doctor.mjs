@@ -363,6 +363,14 @@ export async function inspectCodexIntegration({ codexHome, auditState = auditCod
         reason: 'candidate_capture_disabled',
       };
     }
+    if (hook.flags?.autoPipeline !== true) {
+      return {
+        status: 'degraded',
+        hook,
+        hookReadError: null,
+        reason: 'auto_pipeline_disabled',
+      };
+    }
     if (hook.sessionStartLauncher !== true) {
       return {
         status: 'degraded',
