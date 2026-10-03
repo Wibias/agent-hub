@@ -116,7 +116,21 @@ function isAgentDecisionHook(hook) {
   );
 }
 
+function isAgentPipelineHook(hook) {
+  return /scripts[\\/]codex-agent-memory-pipeline-hook\.mjs/i.test(
+    hookCommandText(hook),
+  );
+}
+
+function isAgentMemoryHook(hook) {
+  return isAgentDecisionHook(hook) || isAgentPipelineHook(hook);
+}
+
 function analyzeManagedEvent(entries, predicate, desiredEntry, eventName) {
+  const expectedManagedHooks = Array.isArray(desiredEntry?.hooks)
+    ? desiredEntry.hooks.filter((hook) => predicate(hook)).length
+    : 1;
+
   if (entries === undefined) {
     return {
       event: eventName,
@@ -157,22 +171,24 @@ function analyzeManagedEvent(entries, predicate, desiredEntry, eventName) {
   }
 
   const reasons = [];
-  if (managedHooksFound === 0) {
+  if (managedHooksFound < expectedManagedHooks) {
     reasons.push('missing_managed_hook');
-  } else {
-    if (managedHooksFound > 1 || managedEntriesFound > 1) {
-      reasons.push('duplicate_managed_hooks');
-    }
-    if (mixedEntries > 0) {
-      reasons.push('managed_hook_shares_entry_with_unrelated_hooks');
-    }
-    if (!exactDefinitionPresent) {
-      reasons.push('managed_definition_differs');
-    }
+  }
+  if (
+    managedHooksFound > expectedManagedHooks
+    || managedEntriesFound > 1
+  ) {
+    reasons.push('duplicate_managed_hooks');
+  }
+  if (mixedEntries > 0) {
+    reasons.push('managed_hook_shares_entry_with_unrelated_hooks');
+  }
+  if (managedHooksFound > 0 && !exactDefinitionPresent) {
+    reasons.push('managed_definition_differs');
   }
 
   const current = (
-    managedHooksFound === 1
+    managedHooksFound === expectedManagedHooks
     && managedEntriesFound === 1
     && mixedEntries === 0
     && exactDefinitionPresent
@@ -272,24 +288,47 @@ function sessionStartEntry({ hubRoot, nodePath }) {
 }
 
 function agentDecisionEntry({ hubRoot, nodePath }) {
-  const script = resolve(
+  const captureScript = resolve(
     hubRoot,
     'memory-engine',
     'adapters',
     'codex-agent-decision-hook-cli.mjs',
   );
-  const args = [
+  const captureArgs = [
     '--ignore-memory-env',
-    '--auto-pipeline',
+  ];
+  const pipelineScript = resolve(
+    hubRoot,
+    'scripts',
+    'codex-agent-memory-pipeline-hook.mjs',
+  );
+  const pipelineArgs = [
+    '--ignore-memory-env',
   ];
   return {
-    hooks: [{
-      type: 'command',
-      command: `node ${quote(script)} ${args.join(' ')}`,
-      commandWindows: windowsPowerShellCommand(nodePath, [script, ...args]),
-      timeout: 10,
-      statusMessage: 'Capturing agent decisions',
-    }],
+    hooks: [
+      {
+        type: 'command',
+        command: `node ${quote(captureScript)} ${captureArgs.join(' ')}`,
+        commandWindows: windowsPowerShellCommand(
+          nodePath,
+          [captureScript, ...captureArgs],
+        ),
+        timeout: 10,
+        statusMessage: 'Capturing agent decisions',
+      },
+      {
+        type: 'command',
+        command: `node ${quote(pipelineScript)} ${pipelineArgs.join(' ')}`,
+        commandWindows: windowsPowerShellCommand(
+          nodePath,
+          [pipelineScript, ...pipelineArgs],
+        ),
+        timeout: 300,
+        async: true,
+        statusMessage: 'Processing agent memory decisions',
+      },
+    ],
   };
 }
 
@@ -332,13 +371,13 @@ export function planCodexMemoryHooks({
     ),
     Stop: analyzeManagedEvent(
       hooks.Stop,
-      isAgentDecisionHook,
+      isAgentMemoryHook,
       desiredStop,
       'Stop',
     ),
     SubagentStop: analyzeManagedEvent(
       hooks.SubagentStop,
-      isAgentDecisionHook,
+      isAgentMemoryHook,
       desiredSubagentStop,
       'SubagentStop',
     ),
@@ -356,12 +395,12 @@ export function planCodexMemoryHooks({
   );
   const stopBase = stripManagedHooks(
     hooks.Stop,
-    isAgentDecisionHook,
+    isAgentMemoryHook,
     'Stop',
   );
   const subagentStopBase = stripManagedHooks(
     hooks.SubagentStop,
-    isAgentDecisionHook,
+    isAgentMemoryHook,
     'SubagentStop',
   );
 
