@@ -308,7 +308,7 @@ function renderInspector() {
     <div class="inspector-scroll">
       <div class="inspector-head">
         <div class="inspector-ref">${escapeHtml(claim.ref)}</div>
-        <h2>${escapeHtml(claim.value_text)}</h2>
+        <h2>${escapeHtml(claim.value)}</h2>
       </div>
 
       <section class="inspect-section">
@@ -386,7 +386,7 @@ function renderInspector() {
 
       <section class="inspect-section">
         <h3>Value</h3>
-        <p class="inspect-value">${escapeHtml(claim.value_text)}</p>
+        <p class="inspect-value">${escapeHtml(claim.value)}</p>
       </section>
     </div>
   `;
