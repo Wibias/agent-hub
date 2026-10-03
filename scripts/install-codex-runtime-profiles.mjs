@@ -6,8 +6,6 @@ import {
   mkdirSync,
   readFileSync,
   readdirSync,
-  renameSync,
-  rmSync,
   writeFileSync,
 } from 'node:fs';
 import { homedir } from 'node:os';
@@ -171,15 +169,9 @@ export function planCodexRuntimeProfiles({
   };
 }
 
-function writeAtomically(targetPath, content) {
+function writeManagedProfile(targetPath, content) {
   mkdirSync(dirname(targetPath), { recursive: true });
-  const tempPath = targetPath + '.agent-hub-tmp-' + process.pid;
-  try {
-    writeFileSync(tempPath, content);
-    renameSync(tempPath, targetPath);
-  } finally {
-    rmSync(tempPath, { force: true });
-  }
+  writeFileSync(targetPath, content);
 }
 
 export function installCodexRuntimeProfiles({
@@ -210,7 +202,7 @@ export function installCodexRuntimeProfiles({
         entry.sourcePath,
         'generated Codex profile',
       );
-      writeAtomically(entry.targetPath, source);
+      writeManagedProfile(entry.targetPath, source);
     }
   }
 
