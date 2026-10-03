@@ -243,6 +243,7 @@ test('Codex integration doctor separates critical recall-hook failure from optio
       explicitMemoryRequests: true,
       hybridRecall: true,
       candidateCapture: true,
+      autoPipeline: true,
     },
   };
 
@@ -283,6 +284,22 @@ test('Codex integration doctor separates critical recall-hook failure from optio
   });
   assert.equal(noCandidateCapture.status, 'degraded');
   assert.equal(noCandidateCapture.reason, 'candidate_capture_disabled');
+
+  const noAutoPipeline = await inspectCodexIntegration({
+    codexHome: 'fixture',
+    auditState: async () => ({
+      agentHubHook: {
+        ...healthyHook,
+        flags: {
+          ...healthyHook.flags,
+          autoPipeline: false,
+        },
+      },
+      hookReadError: null,
+    }),
+  });
+  assert.equal(noAutoPipeline.status, 'degraded');
+  assert.equal(noAutoPipeline.reason, 'auto_pipeline_disabled');
 
   const missingHybrid = await inspectCodexIntegration({
     codexHome: 'fixture',
