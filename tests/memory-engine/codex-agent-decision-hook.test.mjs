@@ -140,6 +140,81 @@ test('SubagentStop preserves agent id/type provenance and namespaces candidate f
   memory.close();
 });
 
+test('capture treats competing deterministic evidence and candidate inserts as idempotent success', async () => {
+  const value = 'Decision: use encoded PowerShell hook commands.';
+  let evidenceReads = 0;
+  let fingerprintReads = 0;
+  let candidateInsertAttempts = 0;
+
+  const output = await runCodexAgentDecisionHook({
+    event: rootEvent({
+      last_assistant_message: value,
+    }),
+    env: {},
+    configOptions: {
+      ignoreMemoryEnv: true,
+      autoPipeline: false,
+    },
+    createMemory() {
+      return {
+        getProject() {
+          return { project_id: 'github.com/example/project' };
+        },
+        findCandidateByFingerprint() {
+          fingerprintReads += 1;
+          return fingerprintReads === 1
+            ? null
+            : { id: 'candidate:existing' };
+        },
+        getEvidence(id) {
+          evidenceReads += 1;
+          if (evidenceReads === 1) return null;
+          return {
+            id,
+            project_id: 'github.com/example/project',
+            branch: 'main',
+            authority_class: 'agent_inference',
+            sensitivity: 'normal',
+            content_redacted: value,
+            captured_at: '2026-10-03T03:00:00.000Z',
+          };
+        },
+        recordEvidence() {
+          throw new Error('UNIQUE constraint failed: evidence.id');
+        },
+        recordAgentCandidate() {
+          candidateInsertAttempts += 1;
+          throw new Error('UNIQUE constraint failed: memory_candidates.fingerprint');
+        },
+        close() {},
+      };
+    },
+    resolveProjectScope() {
+      return {
+        projectId: 'github.com/example/project',
+        repoIdentity: 'github.com/example/project',
+        canonicalRemote: 'github.com/example/project',
+      };
+    },
+    resolveGit() {
+      return {
+        repoPath: '/fixture/repo',
+        branch: 'main',
+        revisionSha: 'a'.repeat(40),
+      };
+    },
+    ensureDbDirectory() {},
+    restoreLocked() {
+      return false;
+    },
+  });
+
+  assert.deepEqual(output, { continue: true });
+  assert.equal(candidateInsertAttempts, 1);
+  assert.equal(evidenceReads, 2);
+  assert.equal(fingerprintReads, 2);
+});
+
 test('duplicate Stop event does not create duplicate evidence or candidates', async () => {
   const root = await mkdtemp(join(tmpdir(), 'agent-decision-duplicate-'));
   const dbPath = join(root, 'memory.sqlite3');
