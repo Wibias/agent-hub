@@ -623,6 +623,7 @@ function formatMemoryInspection(memory, {
   const promotion = inspected.promotion;
   const confirmation = inspected.confirmation;
   const metadata = evidence.metadata ?? {};
+  const recallUsage = inspected.recall_usage ?? {};
   const origin = evidence.authority_class === 'user_direct'
     ? 'user'
     : metadata.event_type === 'subagent_stop'
@@ -724,6 +725,13 @@ function formatMemoryInspection(memory, {
       inspected.semantic_indexed === true ? 'yes' : 'no'
     ),
     'Embedding models: ' + (embeddingModels.join(', ') || 'none'),
+    'Recall usage: retrieved=' + Number(recallUsage.retrieval_count ?? 0)
+      + ' retained=' + Number(recallUsage.retained_count ?? 0)
+      + ' context=' + Number(recallUsage.context_count ?? 0)
+      + ' last-context=' + compactText(
+        recallUsage.last_context_at ?? 'never',
+        80,
+      ),
     'Value: ' + compactText(claim.value_text ?? claim.value ?? '', 800),
   ];
 
@@ -838,6 +846,8 @@ function formatMemoryHealth(snapshot, external = null) {
     'Pending: ' + Number(snapshot.pending ?? 0),
     'Review: ' + review,
     'Failed candidates: ' + Number(snapshot.failed_candidates ?? 0),
+    'Stale advisory agent memories: '
+      + Number(snapshot.stale_agent_memories ?? 0),
     'Failed/partial runs: ' + Number(snapshot.failed_runs ?? 0)
       + ' / ' + Number(snapshot.recent_runs ?? 0) + ' recent',
     'Semantic coverage: '
