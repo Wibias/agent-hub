@@ -6,6 +6,7 @@ import { join } from 'node:path';
 
 import { MemoryEngine } from '../../memory-engine/index.mjs';
 import {
+  parseAgentDecisionHookOptions,
   runCodexAgentDecisionHook,
 } from '../../memory-engine/adapters/codex-agent-decision-hook-cli.mjs';
 
@@ -27,13 +28,17 @@ function runtimeDeps(dbPath, {
   createMemory = null,
 } = {}) {
   return {
-    env: {},
+    env: {
+      AGENT_HUB_MEMORY_DB: dbPath,
+    },
     configOptions: {
-      ignoreMemoryEnv: true,
+      ignoreMemoryEnv: false,
       autoPipeline: true,
     },
     createMemory: createMemory
-      ?? (() => new MemoryEngine({ dbPath })),
+      ?? (({ dbPath: resolvedDbPath }) => new MemoryEngine({
+        dbPath: resolvedDbPath,
+      })),
     resolveProjectScope() {
       return {
         projectId: 'github.com/example/project',
@@ -56,6 +61,23 @@ function runtimeDeps(dbPath, {
     launchPipeline: launch,
   };
 }
+
+test('agent decision hook parser keeps ignore-memory-env and auto-pipeline explicit opt-ins', () => {
+  assert.deepEqual(
+    parseAgentDecisionHookOptions([
+      '--ignore-memory-env',
+      '--auto-pipeline',
+    ]),
+    {
+      ignoreMemoryEnv: true,
+      autoPipeline: true,
+    },
+  );
+  assert.deepEqual(parseAgentDecisionHookOptions([]), {
+    ignoreMemoryEnv: false,
+    autoPipeline: false,
+  });
+});
 
 test('Stop captures explicit root-agent decision as agent_inference candidate', async () => {
   const root = await mkdtemp(join(tmpdir(), 'agent-decision-stop-'));
