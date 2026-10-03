@@ -1003,6 +1003,22 @@ This is a generalisation holdout, not a prompt-tuning target. After its first re
 
 Normal PR CI never calls Codex for this suite. It verifies fixture balance, bilingual coverage, full `capture-v1` reachability/type agreement, the distribution-drift gate, production parser use, scoring, and runner orchestration with deterministic injected judges.
 
+### Pipeline-reachable memory judge holdout v3
+
+After `importance-v2` clarified the bounded multi-session `keep_candidate` boundary, a fresh unseen provider-backed validation suite is available:
+
+```powershell
+node .\scripts\eval-codex-memory-judge-pipeline-holdout-v3.mjs
+```
+
+The v3 suite is independent from the already-observed calibration, adversarial holdout, and pipeline-holdout-v2 fixtures. It contains 16 new bilingual importance cases and 16 new bilingual relation cases. Importance remains balanced 4/4/4/4, relation remains balanced 4/4/4/4, and every candidate statement must be reachable through `capture-v1` with the expected type before model scoring.
+
+The `keep_candidate` boundary cases use new multi-session horizons such as client/data migration completion, rollout windows, and audit completion rather than reusing the v2 cutover/pilot wording. The old v2 suite remains regression evidence only.
+
+The first real v3 run should use the default authenticated `codex-default` model with `medium` reasoning and no override. Optional later comparisons use `MEMORY_JUDGE_PIPELINE_HOLDOUT_V3_MODEL` and `MEMORY_JUDGE_PIPELINE_HOLDOUT_V3_REASONING_EFFORT`.
+
+As with the other holdouts, normal PR CI never calls Codex. It validates balance, bilingual coverage, fresh boundary composition, 32/32 `capture-v1` reachability/type agreement, strict production parser/scorer use, and deterministic runner orchestration.
+
 ### Candidate pipeline behavioral evaluation
 
 The complete candidate path has a separate manual, provider-backed end-to-end evaluation:
