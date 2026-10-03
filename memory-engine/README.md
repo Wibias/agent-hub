@@ -457,16 +457,22 @@ For production memory operation, the managed configuration contains four indepen
 
 1. an asynchronous `SessionStart` launcher that makes sure the warm E5 worker exists;
 2. the normal `UserPromptSubmit` memory hook with hybrid recall, direct-user candidate capture, and automatic pipeline wake-up;
-3. a `Stop` hook that captures explicit finalized root-agent decisions from `last_assistant_message`;
-4. a `SubagentStop` hook that captures explicit finalized subagent decisions while preserving `agent_id` and `agent_type` provenance.
+3. a `Stop` entry with a synchronous capture hook plus an asynchronous agent-pipeline hook;
+4. a `SubagentStop` entry with the same split while preserving `agent_id` and `agent_type` provenance.
 
-The decision hooks use:
+The synchronous decision hook is capture-only:
 
 ```text
-codex-agent-decision-hook-cli.mjs --ignore-memory-env --auto-pipeline
+codex-agent-decision-hook-cli.mjs --ignore-memory-env
 ```
 
-They share the same project/branch candidate ledger, detached worker, and cross-process lock as direct-user candidates.
+The paired async hook runs:
+
+```text
+scripts/codex-agent-memory-pipeline-hook.mjs --ignore-memory-env
+```
+
+The async hook repeats deterministic capture idempotently before processing so it cannot lose a race with the synchronous capture handler. It then runs the existing candidate worker inline inside Codex's supported async-hook lifetime rather than spawning a detached child from `Stop` / `SubagentStop`. Both authority lanes still share the same project/branch candidate ledger, log, and cross-process lock.
 
 ```json
 {
@@ -1068,11 +1074,13 @@ The runner adds no new decision policy. It delegates to the existing importance,
 
 Candidates in `needs_confirmation` and evaluated `keep_candidate` backlog items are never auto-confirmed by this runner. They remain visible through `memory candidates` and require the explicit confirmation commands documented above.
 
-With the managed Codex hook's `--auto-pipeline` flag, the normal operator path is automatic without putting model work in `UserPromptSubmit`.
+Automatic processing uses two launch modes so model work stays off the synchronous hook hot path.
 
-After the synchronous hook finishes capture/recall work, Agent Hub checks only the three automatic queues. If importance, relation, or promotion work is ready, the hook freezes the current repository path, project ID, branch, revision, and database path, closes the prompt-time database connection, and launches a detached local worker. The hook does not wait for importance-v2 or relation-v1.
+For direct-user candidates, `UserPromptSubmit --auto-pipeline` keeps the existing behavior: after synchronous capture/recall finishes, Agent Hub freezes the repository scope, closes the prompt-time database connection, and launches the candidate worker detached.
 
-The detached worker:
+For root/subagent decisions, the synchronous `Stop` / `SubagentStop` hook is capture-only. A paired Codex `async: true` hook repeats capture idempotently, freezes the same repository scope, and runs the candidate worker inline inside the async hook process. This avoids depending on a detached descendant surviving the end of a synchronous Stop hook.
+
+The candidate worker in either launch mode:
 
 - holds a cross-process project+branch lock so concurrent Codex sessions cannot run the same candidate scope in parallel;
 - writes stdout/stderr to `candidate-pipeline.log` beside the memory database instead of hook stdout;
