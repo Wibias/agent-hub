@@ -9,6 +9,10 @@ import { MemoryEngine } from '../index.mjs';
 import { memoryRestoreLocked } from '../memory-maintenance-lock.mjs';
 import { createMemoryProtocol } from '../protocol.mjs';
 import {
+  canonicalizeGitRemote,
+  resolveGitRepositoryIdentity,
+} from '../repository-identity.mjs';
+import {
   createClaudeCodeMemoryHookAdapter,
 } from './claude-code-hooks.mjs';
 
@@ -24,44 +28,7 @@ function defaultExecFile(command, args) {
 }
 
 export function canonicalizeClaudeCodeGitRemote(value) {
-  if (!nonEmpty(value)) return null;
-  const remote = value.trim();
-
-  let host;
-  let repoPath;
-
-  const scpLike = remote.match(/^[^@\s]+@([^:\s]+):(.+)$/);
-  if (scpLike) {
-    host = scpLike[1];
-    repoPath = scpLike[2];
-  } else {
-    let parsed;
-    try {
-      parsed = new URL(remote);
-    } catch {
-      return null;
-    }
-    host = parsed.hostname;
-    repoPath = parsed.pathname;
-  }
-
-  host = String(host || '').trim().toLowerCase();
-  repoPath = String(repoPath || '')
-    .trim()
-    .replace(/^\/+/, '')
-    .replace(/\/+$/, '')
-    .replace(/\.git$/i, '');
-
-  if (!host || !repoPath || /\s/.test(repoPath)) return null;
-  const segments = repoPath.split('/').filter(Boolean);
-  if (
-    segments.length < 2
-    || segments.some((segment) => segment === '.' || segment === '..')
-  ) {
-    return null;
-  }
-
-  return `${host}/${segments.join('/')}`;
+  return canonicalizeGitRemote(value);
 }
 
 export function defaultClaudeCodeMemoryDbPath({
@@ -154,28 +121,15 @@ export function resolveClaudeCodeProjectScope({
     throw new Error('Git repository root could not be resolved');
   }
 
-  let remote;
-  try {
-    remote = String(
-      execFile('git', ['-C', repoPath, 'remote', 'get-url', 'origin']),
-    ).trim();
-  } catch {
-    throw new Error(
-      'Git origin remote is required for repository identity discovery',
-    );
-  }
-
-  const repoIdentity = canonicalizeClaudeCodeGitRemote(remote);
-  if (!repoIdentity) {
-    throw new Error(
-      'Git origin remote cannot be converted to a safe repository identity',
-    );
-  }
+  const identity = resolveGitRepositoryIdentity({
+    repoPath,
+    execFile,
+  });
 
   return {
-    projectId: repoIdentity,
-    repoIdentity,
-    canonicalRemote: repoIdentity,
+    projectId: identity.projectId,
+    repoIdentity: identity.repoIdentity,
+    canonicalRemote: identity.canonicalRemote,
   };
 }
 

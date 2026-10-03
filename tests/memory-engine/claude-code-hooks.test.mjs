@@ -324,6 +324,37 @@ test('Claude Code Git remote normalization and scope discovery are path-independ
     repoIdentity: 'github.com/example/project',
     canonicalRemote: 'github.com/example/project',
   });
+
+  const local = resolveClaudeCodeProjectScope({
+    event: userPromptEvent({ cwd: '/work/taste-compiler' }),
+    config: {
+      dbPath: '/shared/memory.sqlite3',
+      projectId: null,
+      repoIdentity: null,
+    },
+    execFile(command, args) {
+      const tail = args.slice(2).join(' ');
+      if (tail === 'rev-parse --show-toplevel') {
+        return '/work/taste-compiler\n';
+      }
+      if (tail === 'config --local --get agent-hub.project-id') {
+        throw new Error('unset');
+      }
+      if (tail === 'remote get-url origin') {
+        throw new Error('origin missing');
+      }
+      if (tail === 'rev-list --max-parents=0 HEAD') {
+        return '3'.repeat(40) + '\n';
+      }
+      throw new Error(`unexpected Git call: ${command} ${args.join(' ')}`);
+    },
+  });
+  assert.match(
+    local.projectId,
+    /^local\.git\/taste-compiler@[0-9a-f]{12}$/,
+  );
+  assert.equal(local.repoIdentity, local.projectId);
+  assert.equal(local.canonicalRemote, null);
 });
 
 test('runClaudeCodeMemoryHook is read-only at canonical memory boundaries and closes the engine', async () => {

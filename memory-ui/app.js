@@ -34,8 +34,14 @@ function escapeHtml(value) {
 }
 
 function projectName(projectId) {
-  const parts = String(projectId ?? '').split('/');
-  return parts.length >= 3 ? parts.slice(2).join('/') : projectId;
+  const raw = String(projectId ?? '');
+  if (raw.startsWith('local.git/')) {
+    return raw
+      .slice('local.git/'.length)
+      .replace(/@[0-9a-f]{12}$/i, '');
+  }
+  const parts = raw.split('/');
+  return parts.length >= 3 ? parts.slice(2).join('/') : raw;
 }
 
 function number(value) {
@@ -172,8 +178,13 @@ function renderScopeHeader() {
   const branch = activeBranchSummary();
   if (!project) return;
 
-  el.projectKicker.textContent = project.canonicalRemote || 'Project';
-  el.projectTitle.textContent = project.projectId;
+  const localProject = project.projectId.startsWith('local.git/');
+  el.projectKicker.textContent = localProject
+    ? 'Local Git repository · ' + project.projectId
+    : project.canonicalRemote || 'Project';
+  el.projectTitle.textContent = localProject
+    ? projectName(project.projectId)
+    : project.projectId;
   el.scopeMeta.innerHTML = [
     `<span>${escapeHtml(state.branch ?? '—')}</span>`,
     '<span>·</span>',
