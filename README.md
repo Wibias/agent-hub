@@ -135,7 +135,7 @@ Initialize missing local state with:
 node skills/extract-approach/scripts/ensure-memory-state.mjs
 ```
 
-For the local durable-memory engine, a loopback-only read-only console is available:
+For the local durable-memory engine, a loopback-only console is available:
 
 ```powershell
 node .\scripts\memory-ui.mjs
