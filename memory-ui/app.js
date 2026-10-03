@@ -723,7 +723,7 @@ async function selectClaim(claimId) {
 }
 
 async function loadScope() {
-  if (!state.projectId || !state.branch) return;
+  if (!state.projectId) return;
 
   state.scope = null;
   state.claim = null;
@@ -734,6 +734,12 @@ async function loadScope() {
   updateUrl();
   renderProjects();
   renderScopeHeader();
+
+  if (!state.branch) {
+    el.view.innerHTML = '<div class="empty">This project has no memory branches yet.</div>';
+    return;
+  }
+
   loading();
 
   try {
