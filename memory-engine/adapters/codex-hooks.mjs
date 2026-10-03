@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { evaluateReliance } from '../index.mjs';
 import { classifyMemoryCandidatePrompt } from '../memory-capture-policy.mjs';
 import { confirmMemoryCandidate } from '../memory-candidate-confirmation.mjs';
+import { rejectMemoryCandidate } from '../memory-candidate-rejection.mjs';
 import {
   validateMemoryCandidateJudgment,
 } from '../memory-candidate-judge.mjs';
@@ -170,6 +171,20 @@ export function parseExplicitMemoryPrompt(prompt) {
     return {
       mode: 'inspect',
       ref,
+    };
+  }
+
+  const rejectPrefix = prompt.match(
+    /^\s*memory\s+candidate\s+reject:\s*/i,
+  );
+  if (rejectPrefix) {
+    const candidateRef = normalizeCandidateRef(
+      prompt.slice(rejectPrefix[0].length).trim(),
+    );
+    if (candidateRef === null) return null;
+    return {
+      mode: 'candidate_reject',
+      candidateRef,
     };
   }
 
@@ -1396,6 +1411,7 @@ export function createCodexMemoryHookAdapter({
                   explicitMemory.mode === 'replace'
                   || explicitMemory.mode === 'forget'
                   || explicitMemory.mode === 'candidate_confirm'
+                  || explicitMemory.mode === 'candidate_reject'
                 ) {
                   metadata.explicit_memory_mode = explicitMemory.mode;
                 }
@@ -1475,6 +1491,50 @@ export function createCodexMemoryHookAdapter({
               }
 
               if (
+                parsedMemory?.mode === 'candidate_reject'
+                && typeof memory.rejectCandidate === 'function'
+              ) {
+                const candidate = resolveScopedCandidateTarget(memory, {
+                  projectId,
+                  branch: context.branch,
+                  ref: parsedMemory.candidateRef,
+                });
+
+                if (candidate === null) {
+                  explicitCommandResult.targetMissing = true;
+                } else {
+                  const priorRejection = (
+                    typeof memory.getCandidateRejection === 'function'
+                      ? memory.getCandidateRejection(candidate.id)
+                      : null
+                  );
+                  const priorConfirmation = (
+                    typeof memory.getCandidateConfirmation === 'function'
+                      ? memory.getCandidateConfirmation(candidate.id)
+                      : null
+                  );
+
+                  if (priorRejection !== null) {
+                    explicitCommandResult.applied = true;
+                  } else if (priorConfirmation !== null) {
+                    explicitCommandResult.alreadyFinalized = true;
+                  } else if (!isExplicitlyConfirmableCandidate(candidate)) {
+                    explicitCommandResult.targetMissing = true;
+                  } else {
+                    rejectMemoryCandidate({
+                      memory,
+                      projectId,
+                      branch: context.branch,
+                      candidateId: candidate.id,
+                      rejectionEvidenceId: capturedEvidence.id,
+                      now: () => capturedEvidence.captured_at ?? capturedAt,
+                    });
+                    explicitCommandResult.applied = true;
+                  }
+                }
+              }
+
+              if (
                 parsedMemory?.mode === 'candidate_confirm'
                 && typeof memory.confirmCandidate === 'function'
               ) {
@@ -1550,6 +1610,7 @@ export function createCodexMemoryHookAdapter({
                 existingClaim === null
                 && parsedMemory !== null
                 && parsedMemory.mode !== 'candidate_confirm'
+                && parsedMemory.mode !== 'candidate_reject'
               ) {
                 let value = capturedEvidence.content_redacted;
                 let kind = 'user_direct';
@@ -1641,12 +1702,17 @@ export function createCodexMemoryHookAdapter({
               reason = 'Memory forgotten for the current project and branch.';
             } else if (explicitMemory.mode === 'candidate_confirm') {
               reason = 'Memory candidate confirmed for the current project and branch.';
+            } else if (explicitMemory.mode === 'candidate_reject') {
+              reason = 'Memory candidate rejected for the current project and branch.';
             }
           } else if (explicitCommandResult?.alreadyFinalized === true) {
             reason = 'Memory candidate not changed: it was already confirmed with a different action.';
           } else if (explicitCommandResult?.targetMissing === true) {
-            reason = explicitMemory.mode === 'candidate_confirm'
-              ? 'Memory candidate not changed: candidate or target memory was not found or was not unique in the current project and branch.'
+            reason = (
+              explicitMemory.mode === 'candidate_confirm'
+              || explicitMemory.mode === 'candidate_reject'
+            )
+              ? 'Memory candidate not changed: candidate or target memory was not found, was not unique, or is not reviewable in the current project and branch.'
               : 'Memory not changed: target was not found or was not unique in the current project and branch.';
           }
 
