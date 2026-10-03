@@ -20,6 +20,9 @@ function createLedgerState({
   importance = 0,
   relation = 0,
   promotion = 0,
+  agentImportance = 0,
+  agentRelation = 0,
+  agentPromotion = 0,
   needsConfirmation = 0,
   keptForReview = 0,
 } = {}) {
@@ -27,6 +30,9 @@ function createLedgerState({
     importance,
     relation,
     promotion,
+    agentImportance,
+    agentRelation,
+    agentPromotion,
     needsConfirmation,
     keptForReview,
     closes: 0,
@@ -51,6 +57,24 @@ function createMemoryFactory(state) {
       return Array.from(
         { length: Math.min(state.promotion, limit) },
         (_, index) => ({ id: 'promotion-' + index }),
+      );
+    },
+    listUnevaluatedAgentCandidates({ limit }) {
+      return Array.from(
+        { length: Math.min(state.agentImportance, limit) },
+        (_, index) => ({ id: 'agent-importance-' + index }),
+      );
+    },
+    listAgentRelationPendingCandidates({ limit }) {
+      return Array.from(
+        { length: Math.min(state.agentRelation, limit) },
+        (_, index) => ({ id: 'agent-relation-' + index }),
+      );
+    },
+    listAgentPromotionReadyCandidates({ limit }) {
+      return Array.from(
+        { length: Math.min(state.agentPromotion, limit) },
+        (_, index) => ({ id: 'agent-promotion-' + index }),
       );
     },
     listScopedCandidates() {
@@ -157,6 +181,9 @@ test('status-only mode never invokes AI or promotion stages', async () => {
     importance_ready: 2,
     relation_ready: 2,
     promotion_ready: 1,
+    agent_importance_ready: 0,
+    agent_relation_ready: 0,
+    agent_promotion_ready: 0,
     needs_confirmation: 4,
     kept_for_review: 3,
   });
@@ -274,6 +301,9 @@ test('apply mode executes only newly eligible stages in strict order', async () 
       ['importance', false],
       ['relation', false],
       ['promotion', false],
+      ['agent_importance', true],
+      ['agent_relation', true],
+      ['agent_promotion', true],
     ],
   );
   assert.deepEqual(output.final, {
@@ -281,6 +311,9 @@ test('apply mode executes only newly eligible stages in strict order', async () 
     importance_ready: 0,
     relation_ready: 0,
     promotion_ready: 0,
+    agent_importance_ready: 0,
+    agent_relation_ready: 0,
+    agent_promotion_ready: 0,
     needs_confirmation: 1,
     kept_for_review: 0,
   });
@@ -325,6 +358,9 @@ test('apply skips empty stages and never starts an unnecessary judge', async () 
       ['importance', true],
       ['relation', false],
       ['promotion', false],
+      ['agent_importance', true],
+      ['agent_relation', true],
+      ['agent_promotion', true],
     ],
   );
 });
@@ -421,4 +457,72 @@ test('a successful stage may report candidate failures while later eligible work
   assert.deepEqual(calls, ['importance', 'relation', 'promotion']);
   assert.equal(output.stages[0].result.summary.failed, 1);
   assert.equal(output.final.importance_ready, 1);
+});
+
+
+test('apply mode drains agent decision stages after direct-user stages', async () => {
+  const state = createLedgerState({
+    agentImportance: 2,
+    agentRelation: 0,
+    agentPromotion: 0,
+  });
+  const calls = [];
+
+  const output = await runMemoryCandidatePipelineCli({
+    argv: ['--apply', '--limit', '2'],
+    cwd: '/repo',
+    log() {},
+    dependencies: {
+      resolveRuntime: runtime,
+      createMemory: createMemoryFactory(state),
+      async runAgentImportance(args) {
+        calls.push(['agent_importance', args.argv]);
+        state.agentImportance = 0;
+        state.agentRelation = 2;
+        return { summary: { total: 2, applied: 2, failed: 0 } };
+      },
+      async runAgentRelation(args) {
+        calls.push(['agent_relation', args.argv]);
+        state.agentRelation = 0;
+        state.agentPromotion = 2;
+        return { summary: { total: 2, applied: 2, failed: 0 } };
+      },
+      async runAgentPromotion(args) {
+        calls.push(['agent_promotion', args.argv]);
+        state.agentPromotion = 0;
+        return {
+          summary: {
+            total: 2,
+            promoted: 2,
+            superseded: 0,
+            needs_confirmation: 0,
+            failed: 0,
+          },
+        };
+      },
+    },
+  });
+
+  assert.deepEqual(calls.map(([name]) => name), [
+    'agent_importance',
+    'agent_relation',
+    'agent_promotion',
+  ]);
+  assert.ok(calls[0][1].includes('--reasoning-effort'));
+  assert.ok(calls[1][1].includes('--reasoning-effort'));
+  assert.equal(calls[2][1].includes('--reasoning-effort'), false);
+  assert.deepEqual(
+    output.stages.map((stage) => [stage.name, stage.skipped]),
+    [
+      ['importance', true],
+      ['relation', true],
+      ['promotion', true],
+      ['agent_importance', false],
+      ['agent_relation', false],
+      ['agent_promotion', false],
+    ],
+  );
+  assert.equal(output.final.agent_importance_ready, 0);
+  assert.equal(output.final.agent_relation_ready, 0);
+  assert.equal(output.final.agent_promotion_ready, 0);
 });
