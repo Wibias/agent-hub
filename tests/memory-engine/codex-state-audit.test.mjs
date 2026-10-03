@@ -135,16 +135,30 @@ test('hook inspection reports automatic pipeline processing when enabled', () =>
 test('hook inspection reports complete root and subagent decision capture', () => {
   const result = inspectAgentHubHookConfiguration({
     Stop: [{
-      hooks: [{
-        type: 'command',
-        command: 'node /repo/memory-engine/adapters/codex-agent-decision-hook-cli.mjs --ignore-memory-env --auto-pipeline',
-      }],
+      hooks: [
+        {
+          type: 'command',
+          command: 'node /repo/memory-engine/adapters/codex-agent-decision-hook-cli.mjs --ignore-memory-env',
+        },
+        {
+          type: 'command',
+          async: true,
+          command: 'node /repo/scripts/codex-agent-memory-pipeline-hook.mjs --ignore-memory-env',
+        },
+      ],
     }],
     SubagentStop: [{
-      hooks: [{
-        type: 'command',
-        command: 'node /repo/memory-engine/adapters/codex-agent-decision-hook-cli.mjs --ignore-memory-env --auto-pipeline',
-      }],
+      hooks: [
+        {
+          type: 'command',
+          command: 'node /repo/memory-engine/adapters/codex-agent-decision-hook-cli.mjs --ignore-memory-env',
+        },
+        {
+          type: 'command',
+          async: true,
+          command: 'node /repo/scripts/codex-agent-memory-pipeline-hook.mjs --ignore-memory-env',
+        },
+      ],
     }],
   });
 
@@ -153,18 +167,25 @@ test('hook inspection reports complete root and subagent decision capture', () =
   assert.equal(result.flags.agentDecisionCapture, true);
 });
 
-test('hook inspection requires agent decision flags on both Stop and SubagentStop independently', () => {
+test('hook inspection requires capture and async pipeline hooks on both Stop and SubagentStop', () => {
   const result = inspectAgentHubHookConfiguration({
     Stop: [{
-      hooks: [{
-        type: 'command',
-        command: 'node /repo/memory-engine/adapters/codex-agent-decision-hook-cli.mjs --ignore-memory-env --auto-pipeline',
-      }],
+      hooks: [
+        {
+          type: 'command',
+          command: 'node /repo/memory-engine/adapters/codex-agent-decision-hook-cli.mjs --ignore-memory-env',
+        },
+        {
+          type: 'command',
+          async: true,
+          command: 'node /repo/scripts/codex-agent-memory-pipeline-hook.mjs --ignore-memory-env',
+        },
+      ],
     }],
     SubagentStop: [{
       hooks: [{
         type: 'command',
-        command: 'node /repo/memory-engine/adapters/codex-agent-decision-hook-cli.mjs',
+        command: 'node /repo/memory-engine/adapters/codex-agent-decision-hook-cli.mjs --ignore-memory-env',
       }],
     }],
   });
