@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { randomBytes, randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
@@ -8,7 +9,11 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import {
   defaultCodexMemoryDbPath,
+  runCodexMemoryHook,
 } from '../memory-engine/adapters/codex-hook-cli.mjs';
+import {
+  createCodexMemoryHookAdapter,
+} from '../memory-engine/adapters/codex-hooks.mjs';
 import { MemoryEngine } from '../memory-engine/index.mjs';
 import {
   inspectCodexIntegration,
@@ -98,6 +103,139 @@ function queryValue(url, key) {
   return nonEmpty(value) ? value.trim() : null;
 }
 
+function validClaimRef(value) {
+  return typeof value === 'string' && /^@[0-9a-f]{10}$/i.test(value.trim());
+}
+
+function validCandidateRef(value) {
+  return typeof value === 'string' && /^~[0-9a-f]{10}$/i.test(value.trim());
+}
+
+async function readJsonBody(req, {
+  maxBytes = 16_384,
+} = {}) {
+  const contentType = String(req.headers['content-type'] ?? '').toLowerCase();
+  if (!contentType.startsWith('application/json')) {
+    const error = new Error('Action requests must use application/json.');
+    error.statusCode = 415;
+    throw error;
+  }
+
+  let size = 0;
+  const chunks = [];
+  for await (const chunk of req) {
+    size += chunk.length;
+    if (size > maxBytes) {
+      const error = new Error('Action request body is too large.');
+      error.statusCode = 413;
+      throw error;
+    }
+    chunks.push(chunk);
+  }
+
+  let parsed;
+  try {
+    parsed = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}');
+  } catch {
+    const error = new Error('Action request body must be valid JSON.');
+    error.statusCode = 400;
+    throw error;
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    const error = new Error('Action request body must be a JSON object.');
+    error.statusCode = 400;
+    throw error;
+  }
+  return parsed;
+}
+
+function actionCommand(pathname, payload) {
+  if (!nonEmpty(payload.projectId) || !nonEmpty(payload.branch)) {
+    const error = new Error('projectId and branch are required.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (pathname === '/api/actions/forget') {
+    if (!validClaimRef(payload.claimRef)) {
+      const error = new Error('claimRef must be a stable memory ref.');
+      error.statusCode = 400;
+      throw error;
+    }
+    return 'memory forget: ' + payload.claimRef.trim().toLowerCase();
+  }
+
+  if (pathname === '/api/actions/replace') {
+    if (!validClaimRef(payload.claimRef) || !nonEmpty(payload.newValue)) {
+      const error = new Error('claimRef and newValue are required.');
+      error.statusCode = 400;
+      throw error;
+    }
+    const newValue = payload.newValue.trim();
+    if (!/^memory:\s*\S/i.test(newValue)) {
+      const error = new Error('Replacement value must begin with "memory:".');
+      error.statusCode = 400;
+      throw error;
+    }
+    return (
+      'memory replace: '
+      + payload.claimRef.trim().toLowerCase()
+      + ' => '
+      + newValue
+    );
+  }
+
+  if (pathname === '/api/actions/candidate-confirm') {
+    if (!validCandidateRef(payload.candidateRef)) {
+      const error = new Error('candidateRef must be a stable candidate ref.');
+      error.statusCode = 400;
+      throw error;
+    }
+    const relation = String(payload.relation ?? '').trim().toLowerCase();
+    if (!['same', 'update', 'contradict', 'unrelated'].includes(relation)) {
+      const error = new Error('relation must be same, update, contradict, or unrelated.');
+      error.statusCode = 400;
+      throw error;
+    }
+    if (relation === 'unrelated') {
+      return (
+        'memory candidate confirm: '
+        + payload.candidateRef.trim().toLowerCase()
+        + ' => unrelated'
+      );
+    }
+    if (!validClaimRef(payload.targetRef)) {
+      const error = new Error(relation + ' confirmation requires targetRef.');
+      error.statusCode = 400;
+      throw error;
+    }
+    return (
+      'memory candidate confirm: '
+      + payload.candidateRef.trim().toLowerCase()
+      + ' => '
+      + relation
+      + ' '
+      + payload.targetRef.trim().toLowerCase()
+    );
+  }
+
+  if (pathname === '/api/actions/candidate-reject') {
+    if (!validCandidateRef(payload.candidateRef)) {
+      const error = new Error('candidateRef must be a stable candidate ref.');
+      error.statusCode = 400;
+      throw error;
+    }
+    return (
+      'memory candidate reject: '
+      + payload.candidateRef.trim().toLowerCase()
+    );
+  }
+
+  const error = new Error('unknown Memory Console action');
+  error.statusCode = 404;
+  throw error;
+}
+
 function apiHeaders(res) {
   res.setHeader(
     'Content-Security-Policy',
@@ -175,24 +313,129 @@ export function createMemoryUiServer({
   }
 
   const ownedMemory = memory === null;
-  const engine = memory ?? new MemoryEngine({ dbPath: resolvedDbPath, readOnly: true });
+  const engine = memory ?? new MemoryEngine({
+    dbPath: resolvedDbPath,
+    readOnly: true,
+  });
+  const actionToken = randomBytes(24).toString('hex');
+
+  async function runAction(pathname, payload) {
+    const command = actionCommand(pathname, payload);
+    const project = engine.getProject(payload.projectId);
+    if (!project) {
+      const error = new Error('project is not registered in the memory database.');
+      error.statusCode = 404;
+      throw error;
+    }
+
+    memoryUiScope(engine, {
+      projectId: payload.projectId,
+      branch: payload.branch,
+    });
+
+    const eventId = randomUUID();
+    const output = await runCodexMemoryHook({
+      event: {
+        hook_event_name: 'UserPromptSubmit',
+        session_id: 'memory-ui:' + eventId,
+        turn_id: 'memory-ui-action:' + eventId,
+        cwd: process.cwd(),
+        prompt: command,
+      },
+      env: {
+        ...process.env,
+        AGENT_HUB_MEMORY_DB: resolvedDbPath,
+        AGENT_HUB_MEMORY_CAPTURE_PROMPTS: 'false',
+      },
+      configOptions: {
+        explicitMemoryRequests: true,
+        candidateCapture: false,
+        hybridRecall: false,
+        autoPipeline: false,
+      },
+      resolveProjectScope: () => ({
+        projectId: project.project_id,
+        repoIdentity: project.repo_identity,
+        canonicalRemote: project.canonical_remote,
+      }),
+      createAdapter: (options) => createCodexMemoryHookAdapter({
+        ...options,
+        git: {
+          resolveContext() {
+            return {
+              repoPath: process.cwd(),
+              branch: payload.branch,
+              revisionSha: null,
+            };
+          },
+          refreshFreshness() {},
+        },
+      }),
+    });
+
+    const reason = String(output?.reason ?? '');
+    if (
+      output?.decision !== 'block'
+      || /not changed|operation failed/i.test(reason)
+    ) {
+      const error = new Error(reason || 'Memory action was not applied.');
+      error.statusCode = 409;
+      throw error;
+    }
+
+    return {
+      ok: true,
+      reason,
+    };
+  }
 
   const server = createServer(async (req, res) => {
     apiHeaders(res);
 
     try {
+      const url = new URL(req.url ?? '/', `http://${HOST}`);
+
+      if (req.method === 'POST' && url.pathname.startsWith('/api/actions/')) {
+        const origin = String(req.headers.origin ?? '');
+        const expectedOrigin = 'http://' + String(req.headers.host ?? '');
+        if (origin && origin !== expectedOrigin) {
+          json(res, 403, {
+            error: 'forbidden_origin',
+            message: 'Memory Console actions require same-origin requests.',
+          });
+          return;
+        }
+        if (
+          req.headers['x-agent-hub-action-token'] !== actionToken
+        ) {
+          json(res, 403, {
+            error: 'invalid_action_token',
+            message: 'Memory Console action token is missing or invalid.',
+          });
+          return;
+        }
+
+        const payload = await readJsonBody(req);
+        const result = await runAction(url.pathname, payload);
+        json(res, 200, result);
+        return;
+      }
+
       if (req.method !== 'GET') {
         json(res, 405, {
           error: 'method_not_allowed',
-          message: 'Memory Console is read-only.',
+          message: 'Unsupported Memory Console method.',
         });
         return;
       }
 
-      const url = new URL(req.url ?? '/', `http://${HOST}`);
-
       if (url.pathname === '/api/overview') {
-        json(res, 200, memoryUiOverview(engine));
+        const overview = memoryUiOverview(engine);
+        overview.actions = {
+          enabled: true,
+          token: actionToken,
+        };
+        json(res, 200, overview);
         return;
       }
 
@@ -264,7 +507,11 @@ export function createMemoryUiServer({
       });
       res.end(fallback);
     } catch (error) {
-      json(res, 500, errorPayload(error));
+      json(
+        res,
+        Number.isInteger(error?.statusCode) ? error.statusCode : 500,
+        errorPayload(error),
+      );
     }
   });
 
@@ -304,7 +551,7 @@ export async function runMemoryUi({
 
   log(`Memory Console: ${url}`);
   log(`Database: ${runtime.dbPath}`);
-  log('Mode: read-only · loopback only');
+  log('Mode: read-only browsing · explicit local actions · loopback only');
 
   return {
     ...runtime,
