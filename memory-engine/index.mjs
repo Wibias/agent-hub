@@ -3038,6 +3038,41 @@ export class MemoryEngine {
     return eligible;
   }
 
+  listAgentRelationPendingCandidates({
+    projectId,
+    branch,
+    limit = 10,
+  }) {
+    assertNonEmptyString(projectId, 'projectId');
+    assertNonEmptyString(branch, 'branch');
+    if (!Number.isInteger(limit) || limit < 1 || limit > 20) {
+      throw new RangeError('limit must be an integer between 1 and 20');
+    }
+
+    const rows = this.#db.prepare(
+      'SELECT * FROM memory_candidates '
+      + "WHERE project_id = ? AND branch = ? AND status = 'pending' "
+      + "AND source_authority = 'agent_inference' "
+      + 'AND evaluated_at IS NOT NULL AND relation IS NULL '
+      + 'ORDER BY created_at ASC, id ASC LIMIT ?',
+    ).all(projectId, branch, limit * 4).map(normalizeCandidate);
+
+    const eligible = [];
+    for (const candidate of rows) {
+      try {
+        const normalized = validateMemoryCandidateJudgment(
+          JSON.parse(candidate.evaluation_json),
+        );
+        if (normalized.decision !== 'promote') continue;
+      } catch {
+        continue;
+      }
+      eligible.push(candidate);
+      if (eligible.length >= limit) break;
+    }
+    return eligible;
+  }
+
   getCandidateRelation(candidateId) {
     assertNonEmptyString(candidateId, 'candidateId');
     return normalizeCandidateRelation(
@@ -3156,6 +3191,132 @@ export class MemoryEngine {
     }
 
     return this.getCandidate(candidateId);
+  }
+
+  evaluateAgentCandidateRelation({
+    candidateId,
+    evaluatorId,
+    policyVersion,
+    relation,
+    relatedClaimId = null,
+    evaluatedAt = this.#clock(),
+  }) {
+    for (const [value, name] of [
+      [candidateId, 'candidateId'],
+      [evaluatorId, 'evaluatorId'],
+      [policyVersion, 'policyVersion'],
+      [evaluatedAt, 'evaluatedAt'],
+    ]) {
+      assertNonEmptyString(value, name);
+    }
+
+    const candidate = this.getCandidate(candidateId);
+    if (
+      !candidate
+      || candidate.status !== 'pending'
+      || candidate.source_authority !== 'agent_inference'
+      || candidate.evaluated_at === null
+      || !candidate.evaluation_json
+      || candidate.relation !== null
+      || this.getCandidateRelation(candidateId)
+    ) {
+      throw new Error('agent memory candidate is not relation-ready');
+    }
+
+    const importance = validateMemoryCandidateJudgment(
+      JSON.parse(candidate.evaluation_json),
+    );
+    if (importance.decision !== 'promote') {
+      throw new Error('agent relation requires promote importance judgment');
+    }
+
+    const normalized = validateMemoryCandidateRelation(relation);
+    if (normalized.relation === 'unrelated') {
+      if (relatedClaimId !== null) {
+        throw new Error('unrelated agent relation cannot target a claim');
+      }
+    } else {
+      assertNonEmptyString(relatedClaimId, 'relatedClaimId');
+      const claim = this.getClaim(relatedClaimId);
+      if (
+        !claim
+        || claim.project_id !== candidate.project_id
+        || claim.branch_scope !== candidate.branch
+        || claim.state !== 'active'
+        || claim.predicate !== 'states'
+      ) {
+        throw new Error('agent relation target must be active in candidate scope');
+      }
+      const evidence = this.getEvidence(claim.created_from_evidence_id);
+      const validUser = (
+        claim.kind === 'user_direct'
+        && claim.subject === 'user memory'
+        && evidence?.authority_class === 'user_direct'
+      );
+      const validAgent = (
+        claim.kind === 'agent_inference'
+        && claim.subject === 'agent decision'
+        && evidence?.authority_class === 'agent_inference'
+      );
+      if (!validUser && !validAgent) {
+        throw new Error('agent relation target must be durable user or agent memory');
+      }
+    }
+
+    this.#db.exec('BEGIN IMMEDIATE');
+    try {
+      this.#db.prepare(
+        'INSERT INTO memory_candidate_relations ('
+        + 'candidate_id, relation, related_claim_id, evaluator_id, '
+        + 'policy_version, evaluated_at, result_json'
+        + ') VALUES (?, ?, ?, ?, ?, ?, ?)',
+      ).run(
+        candidateId,
+        normalized.relation,
+        relatedClaimId,
+        evaluatorId,
+        policyVersion,
+        evaluatedAt,
+        JSON.stringify(normalized),
+      );
+      const updated = this.#db.prepare(
+        'UPDATE memory_candidates SET relation = ?, related_claim_id = ? '
+        + "WHERE id = ? AND relation IS NULL AND source_authority = 'agent_inference'",
+      ).run(normalized.relation, relatedClaimId, candidateId);
+      if (Number(updated.changes) !== 1) {
+        throw new Error('agent memory candidate relation raced');
+      }
+      this.#db.exec('COMMIT');
+    } catch (error) {
+      this.#db.exec('ROLLBACK');
+      throw error;
+    }
+
+    return this.getCandidate(candidateId);
+  }
+
+  listAgentPromotionReadyCandidates({
+    projectId,
+    branch,
+    limit = 10,
+  }) {
+    assertNonEmptyString(projectId, 'projectId');
+    assertNonEmptyString(branch, 'branch');
+    if (!Number.isInteger(limit) || limit < 1 || limit > 20) {
+      throw new RangeError('limit must be an integer between 1 and 20');
+    }
+
+    return this.#db.prepare(
+      'SELECT c.* FROM memory_candidates c '
+      + 'JOIN memory_candidate_relations r ON r.candidate_id = c.id '
+      + "WHERE c.project_id = ? AND c.branch = ? AND c.status = 'pending' "
+      + "AND c.source_authority = 'agent_inference' "
+      + 'AND c.evaluated_at IS NOT NULL AND c.relation IS NOT NULL '
+      + 'AND NOT EXISTS ('
+      + 'SELECT 1 FROM memory_candidate_promotions p WHERE p.candidate_id = c.id'
+      + ') '
+      + 'ORDER BY c.created_at ASC, c.id ASC LIMIT ?',
+    ).all(projectId, branch, limit).map(normalizeCandidate);
   }
 
   listPromotionReadyCandidates({
