@@ -326,7 +326,7 @@ function renderInspector() {
       <section class="inspect-section">
         <h3>Provenance</h3>
         <div class="inspector-chain">${provenanceChain(detail)}</div>
-        <div style="height:12px"></div>
+        <div class="spacer-12"></div>
         ${definition([
           ['Evidence', evidence.id],
           ['Source', evidence.source_ref || evidence.source_kind],
@@ -364,7 +364,7 @@ function renderInspector() {
         <h3>Lifecycle</h3>
         ${lifecycle.length
           ? lifecycle.map((item) => `
-              <div class="data-row" style="padding-left:0;padding-right:0;grid-template-columns:100px minmax(0,1fr);">
+              <div class="data-row inspect-event-row">
                 <span class="mono">${escapeHtml(item.action)}</span>
                 <span class="muted">${escapeHtml(item.sourceRef || '—')} → ${escapeHtml(item.targetRef || '—')} · ${escapeHtml(dateTime(item.created_at))}</span>
               </div>
@@ -376,7 +376,7 @@ function renderInspector() {
         <h3>Conflicts</h3>
         ${conflicts.length
           ? conflicts.map((item) => `
-              <div class="data-row" style="padding-left:0;padding-right:0;grid-template-columns:92px minmax(0,1fr);">
+              <div class="data-row inspect-conflict-row">
                 <span class="${statusClass(item.state)}">${escapeHtml(item.state)}</span>
                 <span class="mono muted">${escapeHtml(item.claimARef)} ↔ ${escapeHtml(item.claimBRef)}</span>
               </div>
@@ -522,7 +522,7 @@ function renderPipeline() {
         </div>
         ${pipeline.failures.length
           ? pipeline.failures.map((failure) => `
-              <div class="data-row" style="grid-template-columns:118px 130px 120px minmax(0,1fr);gap:14px">
+              <div class="data-row failure-row">
                 <span class="ref">${escapeHtml(failure.runRef)}</span>
                 <span class="mono">${escapeHtml(failure.candidate_ref || '—')}</span>
                 <span>${escapeHtml(failure.stage)}</span>
