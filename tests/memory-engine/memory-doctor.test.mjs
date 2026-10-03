@@ -105,11 +105,69 @@ test('database doctor opens production memory read-only and reports canonical pl
   assert.equal(result.currentEmbeddings, 1);
   assert.equal(result.validCurrentEmbeddings, 1);
   assert.equal(result.semanticCoverageComplete, true);
+  assert.equal(result.pipelineHistoryAvailable, true);
+  assert.equal(result.recentPipelineRuns, 0);
+  assert.equal(result.failedPipelineRuns, 0);
+  assert.equal(result.pipelineFailures, 0);
+  assert.equal(result.lastPipelineRun, null);
   assert.equal(result.modelId, E5_MODEL_ID);
   assert.equal(result.modelRevision, E5_MODEL_REVISION);
   assert.equal(result.dimensions, E5_DIMENSIONS);
   assert.equal(after.size, before.size);
   assert.equal(after.mtimeMs, before.mtimeMs);
+});
+
+test('database doctor summarizes recent pipeline run history without mutating it', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'agent-hub-memory-doctor-runs-'));
+  const dbPath = await createHealthyFixtureDb(root);
+
+  const memory = new MemoryEngine({ dbPath });
+  try {
+    memory.startPipelineRun({
+      id: 'pipeline-run:doctor',
+      projectId: 'github.com/Wibias/agent-hub',
+      branch: 'main',
+      revisionSha: 'd'.repeat(40),
+      trigger: 'Stop',
+      startedAt: '2026-10-03T09:00:00.000Z',
+    });
+    memory.recordPipelineFailure({
+      runId: 'pipeline-run:doctor',
+      projectId: 'github.com/Wibias/agent-hub',
+      branch: 'main',
+      stage: 'semantic_sync',
+      errorClass: 'WorkerUnavailable',
+      error: 'embedding worker unavailable',
+      occurredAt: '2026-10-03T09:00:02.000Z',
+    });
+    memory.finishPipelineRun({
+      id: 'pipeline-run:doctor',
+      status: 'partial',
+      finishedAt: '2026-10-03T09:00:03.000Z',
+      durationMs: 3000,
+      rounds: 1,
+      promotedCount: 1,
+      stageCounts: { agent_promotion: { promoted: 1 } },
+      candidateRefs: ['~abcdef0123'],
+    });
+  } finally {
+    memory.close();
+  }
+
+  const result = inspectMemoryDatabase({
+    dbPath,
+    projectId: 'github.com/Wibias/agent-hub',
+    branch: 'main',
+  });
+
+  assert.equal(result.pipelineHistoryAvailable, true);
+  assert.equal(result.recentPipelineRuns, 1);
+  assert.equal(result.failedPipelineRuns, 1);
+  assert.equal(result.pipelineFailures, 1);
+  assert.equal(result.lastPipelineRun.id, 'pipeline-run:doctor');
+  assert.equal(result.lastPipelineRun.status, 'partial');
+
+  await rm(root, { recursive: true, force: true });
 });
 
 test('database doctor treats a pre-candidate-ledger database as degraded but structurally valid', async () => {
