@@ -387,6 +387,7 @@ function formatPendingMemoryCandidates(memory, {
     const line = [
       `- ${memoryCandidateRef(candidate.id)}`,
       `[status=${compactText(candidate.status, 40)}]`,
+      `[authority=${compactText(candidate.source_authority, 40)}]`,
       `[${compactText(candidate.proposed_type, 80)}]`,
       compactText(candidate.proposed_value, 500),
       judgeSummary ? '| ' + judgeSummary : null,
@@ -412,6 +413,9 @@ function formatMemoryCandidatePipelineStatus(memory, {
     typeof memory?.listUnevaluatedCandidates !== 'function'
     || typeof memory?.listRelationPendingCandidates !== 'function'
     || typeof memory?.listPromotionReadyCandidates !== 'function'
+    || typeof memory?.listUnevaluatedAgentCandidates !== 'function'
+    || typeof memory?.listAgentRelationPendingCandidates !== 'function'
+    || typeof memory?.listAgentPromotionReadyCandidates !== 'function'
     || typeof memory?.listScopedCandidates !== 'function'
   ) {
     return unavailable;
@@ -434,6 +438,21 @@ function formatMemoryCandidatePipelineStatus(memory, {
       branch,
       limit,
     }).length;
+    const agentImportanceReady = memory.listUnevaluatedAgentCandidates({
+      projectId,
+      branch,
+      limit,
+    }).length;
+    const agentRelationReady = memory.listAgentRelationPendingCandidates({
+      projectId,
+      branch,
+      limit,
+    }).length;
+    const agentPromotionReady = memory.listAgentPromotionReadyCandidates({
+      projectId,
+      branch,
+      limit,
+    }).length;
     const scoped = memory.listScopedCandidates({
       projectId,
       branch,
@@ -448,6 +467,9 @@ function formatMemoryCandidatePipelineStatus(memory, {
       `importance-ready: ${importanceReady} (next batch, max ${limit})`,
       `relation-ready: ${relationReady} (next batch, max ${limit})`,
       `promotion-ready: ${promotionReady} (next batch, max ${limit})`,
+      `agent-importance-ready: ${agentImportanceReady} (next batch, max ${limit})`,
+      `agent-relation-ready: ${agentRelationReady} (next batch, max ${limit})`,
+      `agent-promotion-ready: ${agentPromotionReady} (next batch, max ${limit})`,
       `needs-confirmation: ${needsConfirmation}`,
       `kept-for-review: ${keptForReview}`,
       'Read-only: this status command does not run judges or promotion.',
@@ -567,6 +589,56 @@ export function resolveActiveDirectUserMemoryTarget(memory, {
   const matches = memories.filter(
     (claim) => memoryClaimRef(claim.id) === ref,
   );
+  return matches.length === 1 ? matches[0] : null;
+}
+
+export function resolveActiveCandidateConfirmationTarget(memory, {
+  projectId,
+  branch,
+  ref,
+}) {
+  if (
+    !memory
+    || typeof memory.exportCanonical !== 'function'
+    || !nonEmptyString(ref)
+  ) {
+    return null;
+  }
+  const exported = memory.exportCanonical();
+  if (
+    !exported
+    || !Array.isArray(exported.claims)
+    || !Array.isArray(exported.evidence)
+  ) {
+    return null;
+  }
+  const evidenceById = new Map(
+    exported.evidence.map((evidence) => [evidence.id, evidence]),
+  );
+  const matches = exported.claims.filter((claim) => {
+    if (
+      claim?.project_id !== projectId
+      || claim?.branch_scope !== branch
+      || claim?.state !== 'active'
+      || memoryClaimRef(claim.id) !== ref
+    ) {
+      return false;
+    }
+    const evidence = evidenceById.get(claim.created_from_evidence_id);
+    const direct = (
+      claim.kind === 'user_direct'
+      && claim.subject === 'user memory'
+      && claim.predicate === 'states'
+      && evidence?.authority_class === 'user_direct'
+    );
+    const agent = (
+      claim.kind === 'agent_inference'
+      && claim.subject === 'agent decision'
+      && claim.predicate === 'states'
+      && evidence?.authority_class === 'agent_inference'
+    );
+    return direct || agent;
+  });
   return matches.length === 1 ? matches[0] : null;
 }
 
@@ -918,11 +990,19 @@ export function createCodexMemoryHookAdapter({
                   } else {
                     const target = parsedMemory.targetRef === null
                       ? null
-                      : resolveActiveDirectUserMemoryTarget(memory, {
-                          projectId,
-                          branch: context.branch,
-                          ref: parsedMemory.targetRef,
-                        });
+                      : (
+                        candidate.source_authority === 'agent_inference'
+                          ? resolveActiveCandidateConfirmationTarget(memory, {
+                              projectId,
+                              branch: context.branch,
+                              ref: parsedMemory.targetRef,
+                            })
+                          : resolveActiveDirectUserMemoryTarget(memory, {
+                              projectId,
+                              branch: context.branch,
+                              ref: parsedMemory.targetRef,
+                            })
+                      );
 
                     if (
                       parsedMemory.targetRef !== null
