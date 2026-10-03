@@ -499,7 +499,42 @@ test('repository discovery keeps different remotes in different project scopes',
   assert.notEqual(a.projectId, b.projectId);
 });
 
-test('repository discovery fails closed when no safe Git identity exists', () => {
+test('repository discovery supports a local Git repository without origin', () => {
+  const scope = resolveCodexProjectScope({
+    event: userPromptEvent({ cwd: '/work/taste-compiler' }),
+    config: {
+      dbPath: '/shared/memory.sqlite3',
+      projectId: null,
+      repoIdentity: null,
+      capturePrompts: false,
+    },
+    execFile(command, args) {
+      const tail = args.slice(2).join(' ');
+      if (tail === 'rev-parse --show-toplevel') {
+        return '/work/taste-compiler\n';
+      }
+      if (tail === 'config --local --get agent-hub.project-id') {
+        throw new Error('local project id unset');
+      }
+      if (tail === 'remote get-url origin') {
+        throw new Error('origin remote missing');
+      }
+      if (tail === 'rev-list --max-parents=0 HEAD') {
+        return '1'.repeat(40) + '\n';
+      }
+      throw new Error('unexpected git call: ' + args.join(' '));
+    },
+  });
+
+  assert.match(
+    scope.projectId,
+    /^local\.git\/taste-compiler@[0-9a-f]{12}$/,
+  );
+  assert.equal(scope.repoIdentity, scope.projectId);
+  assert.equal(scope.canonicalRemote, null);
+});
+
+test('repository discovery still fails closed for an empty local repo without explicit id', () => {
   assert.throws(
     () => resolveCodexProjectScope({
       event: userPromptEvent({ cwd: '/work/no-remote' }),
@@ -510,11 +545,21 @@ test('repository discovery fails closed when no safe Git identity exists', () =>
         capturePrompts: false,
       },
       execFile(command, args) {
-        if (args.includes('--show-toplevel')) return '/work/no-remote\n';
-        throw new Error('origin remote missing');
+        const tail = args.slice(2).join(' ');
+        if (tail === 'rev-parse --show-toplevel') return '/work/no-remote\n';
+        if (tail === 'config --local --get agent-hub.project-id') {
+          throw new Error('unset');
+        }
+        if (tail === 'remote get-url origin') {
+          throw new Error('origin remote missing');
+        }
+        if (tail === 'rev-list --max-parents=0 HEAD') {
+          throw new Error('unborn HEAD');
+        }
+        throw new Error('unexpected git call: ' + args.join(' '));
       },
     }),
-    /repository identity|origin/i,
+    /at least one commit|agent-hub\.project-id/i,
   );
 });
 
