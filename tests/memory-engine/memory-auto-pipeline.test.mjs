@@ -13,6 +13,10 @@ import {
   launchMemoryCandidatePipeline,
 } from '../../memory-engine/candidate-pipeline-launcher.mjs';
 import {
+  parseCodexAgentPipelineHookOptions,
+  runCodexAgentPipelineHook,
+} from '../../scripts/codex-agent-memory-pipeline-hook.mjs';
+import {
   acquireMemoryCandidatePipelineLock,
   memoryCandidatePipelineLockPath,
   parseMemoryCandidatePipelineWorkerArgs,
@@ -75,6 +79,96 @@ function fakeMemory({
     },
   };
 }
+
+test('async agent pipeline hook captures idempotently before inline processing', async () => {
+  assert.deepEqual(
+    parseCodexAgentPipelineHookOptions(['--ignore-memory-env']),
+    { ignoreMemoryEnv: true },
+  );
+  assert.throws(
+    () => parseCodexAgentPipelineHookOptions(['--wat']),
+    /unknown argument/i,
+  );
+
+  const order = [];
+  const logs = [];
+  const result = await runCodexAgentPipelineHook({
+    event: {
+      hook_event_name: 'Stop',
+      session_id: 'session-agent-async',
+      cwd: '/repo/project',
+      turn_id: 'turn-agent-async',
+      stop_hook_active: false,
+      last_assistant_message: 'Decision: keep capture synchronous.',
+    },
+    env: {
+      AGENT_HUB_MEMORY_DB: '/state/memory.sqlite3',
+      AGENT_HUB_MEMORY_PROJECT_ID: 'project-a',
+    },
+    configOptions: {
+      ignoreMemoryEnv: false,
+    },
+    async captureDecision(args) {
+      order.push('capture');
+      assert.equal(args.configOptions.autoPipeline, false);
+      assert.equal(args.configOptions.ignoreMemoryEnv, false);
+      return { continue: true };
+    },
+    resolveProjectScope() {
+      order.push('scope');
+      return {
+        projectId: 'project-a',
+        repoIdentity: 'project-a',
+        canonicalRemote: null,
+      };
+    },
+    resolveGit() {
+      order.push('git');
+      return {
+        repoPath: '/repo/project',
+        branch: 'feature/async-agent-pipeline',
+        revisionSha: '9'.repeat(40),
+      };
+    },
+    createLog() {
+      return (value) => logs.push(String(value));
+    },
+    async runWorker(args) {
+      order.push('worker');
+      assert.deepEqual(
+        {
+          cwd: args.cwd,
+          dbPath: args.dbPath,
+          projectId: args.projectId,
+          branch: args.branch,
+          revisionSha: args.revisionSha,
+        },
+        {
+          cwd: '/repo/project',
+          dbPath: '/state/memory.sqlite3',
+          projectId: 'project-a',
+          branch: 'feature/async-agent-pipeline',
+          revisionSha: '9'.repeat(40),
+        },
+      );
+      args.log('pipeline-stage-output');
+      return {
+        type: 'agent_hub_memory_candidate_pipeline_worker',
+        status: 'drained',
+      };
+    },
+  });
+
+  assert.deepEqual(order, ['capture', 'scope', 'git', 'worker']);
+  assert.equal(result.status, 'completed');
+  assert.deepEqual(logs, [
+    'pipeline-stage-output',
+    JSON.stringify({
+      type: 'agent_hub_memory_candidate_pipeline_worker',
+      status: 'drained',
+    }),
+  ]);
+});
 
 test('auto-pipeline remains an explicit Codex CLI opt-in', () => {
   assert.deepEqual(
