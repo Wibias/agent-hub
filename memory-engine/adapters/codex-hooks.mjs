@@ -732,14 +732,23 @@ function formatPipelineFailures(memory, {
     'Memory pipeline failures for the current project and branch:',
   ];
   for (const failure of failures) {
+    let runRef = 'run=unknown';
+    try {
+      if (nonEmptyString(failure?.run_id)) {
+        runRef = pipelineRunRef(failure.run_id);
+      }
+    } catch {
+      runRef = 'run=invalid';
+    }
+
     const line = [
       '-',
-      pipelineRunRef(failure.run_id),
-      failure.candidate_ref ?? '',
-      '[' + compactText(failure.stage, 60) + ']',
-      compactText(failure.error_class, 80) + ':',
-      compactText(failure.error, 500),
-      '(' + compactText(failure.occurred_at, 80) + ')',
+      runRef,
+      failure?.candidate_ref ?? '',
+      '[' + compactText(failure?.stage ?? 'unknown', 60) + ']',
+      compactText(failure?.error_class ?? 'Error', 80) + ':',
+      compactText(failure?.error ?? 'unknown failure', 500),
+      '(' + compactText(failure?.occurred_at ?? 'unknown time', 80) + ')',
     ].filter(Boolean).join(' ');
     const next = [...lines, line].join('\n');
     if (byteLength(next) > maxBytes) break;
