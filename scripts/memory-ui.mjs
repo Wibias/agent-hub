@@ -240,7 +240,8 @@ function apiHeaders(res) {
   res.setHeader(
     'Content-Security-Policy',
     "default-src 'self'; img-src 'self' data:; style-src 'self'; "
-      + "script-src 'self'; connect-src 'self'; frame-ancestors 'none';",
+      + "script-src 'self'; connect-src 'self'; frame-ancestors 'none'; "
+      + "form-action 'none'; base-uri 'none';",
   );
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'DENY');
@@ -393,6 +394,15 @@ export function createMemoryUiServer({
     apiHeaders(res);
 
     try {
+      const requestHost = String(req.headers.host ?? '');
+      if (!/^127\.0\.0\.1(?::\d+)?$/.test(requestHost)) {
+        json(res, 403, {
+          error: 'invalid_host',
+          message: 'Memory Console only accepts the 127.0.0.1 host.',
+        });
+        return;
+      }
+
       const url = new URL(req.url ?? '/', `http://${HOST}`);
 
       if (req.method === 'POST' && url.pathname.startsWith('/api/actions/')) {
@@ -493,7 +503,7 @@ export function createMemoryUiServer({
       if (url.pathname.startsWith('/api/')) {
         json(res, 404, {
           error: 'not_found',
-          message: 'unknown read-only Memory Console endpoint',
+          message: 'unknown Memory Console endpoint',
         });
         return;
       }
