@@ -432,3 +432,119 @@ test('worker stops instead of repeatedly retrying a stalled automatic queue', as
   assert.equal(result.rounds, 1);
   assert.equal(calls, 1);
 });
+
+
+test('worker synchronizes semantic derived state once after real promotion', async () => {
+  let syncCalls = 0;
+  const result = await runMemoryCandidatePipelineWorker({
+    cwd: '/repo',
+    dbPath: '/state/memory.sqlite3',
+    projectId: 'project-a',
+    branch: 'main',
+    maxRounds: 2,
+    acquireLock: async () => ({ file: {}, path: '/tmp/lock' }),
+    releaseLock: async () => {},
+    restoreLocked: () => false,
+    runPipeline: async () => ({
+      initial: {
+        importance_ready: 0,
+        relation_ready: 0,
+        promotion_ready: 1,
+        agent_importance_ready: 0,
+        agent_relation_ready: 0,
+        agent_promotion_ready: 0,
+      },
+      stages: [
+        {
+          name: 'promotion',
+          skipped: false,
+          result: {
+            summary: {
+              total: 1,
+              promoted: 1,
+              superseded: 0,
+              needs_confirmation: 0,
+              failed: 0,
+            },
+          },
+        },
+        {
+          name: 'agent_promotion',
+          skipped: true,
+          result: null,
+        },
+      ],
+      final: {
+        importance_ready: 0,
+        relation_ready: 0,
+        promotion_ready: 0,
+        agent_importance_ready: 0,
+        agent_relation_ready: 0,
+        agent_promotion_ready: 0,
+      },
+    }),
+    async syncSemantic(args) {
+      syncCalls += 1;
+      assert.equal(args.dbPath, '/state/memory.sqlite3');
+      assert.equal(args.projectId, 'project-a');
+      assert.equal(args.branch, 'main');
+      return { indexed: 4, failed: 0 };
+    },
+    log() {},
+  });
+
+  assert.equal(syncCalls, 1);
+  assert.equal(result.promotedClaims, 1);
+  assert.deepEqual(result.semanticSync, {
+    status: 'ok',
+    indexed: 4,
+    failed: 0,
+  });
+});
+
+test('worker skips semantic sync when no new claim is promoted', async () => {
+  let syncCalls = 0;
+  const result = await runMemoryCandidatePipelineWorker({
+    cwd: '/repo',
+    dbPath: '/state/memory.sqlite3',
+    projectId: 'project-a',
+    branch: 'main',
+    acquireLock: async () => ({ file: {}, path: '/tmp/lock' }),
+    releaseLock: async () => {},
+    restoreLocked: () => false,
+    runPipeline: async () => ({
+      initial: {
+        importance_ready: 0,
+        relation_ready: 0,
+        promotion_ready: 1,
+      },
+      stages: [{
+        name: 'promotion',
+        skipped: false,
+        result: {
+          summary: {
+            total: 1,
+            promoted: 0,
+            superseded: 1,
+            needs_confirmation: 0,
+            failed: 0,
+          },
+        },
+      }],
+      final: {
+        importance_ready: 0,
+        relation_ready: 0,
+        promotion_ready: 0,
+      },
+    }),
+    async syncSemantic() {
+      syncCalls += 1;
+      return { indexed: 1, failed: 0 };
+    },
+    log() {},
+  });
+
+  assert.equal(syncCalls, 0);
+  assert.equal(result.promotedClaims, 0);
+  assert.equal(result.semanticSync.status, 'not_needed');
+});
