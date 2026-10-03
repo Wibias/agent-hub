@@ -66,6 +66,26 @@ test('installer plan adds current memory hooks while preserving unrelated hooks 
   });
 
   assert.equal(plan.changed, true);
+  assert.deepEqual(plan.diagnostics.UserPromptSubmit, {
+    event: 'UserPromptSubmit',
+    action: 'install',
+    managedHooksFound: 0,
+    managedEntriesFound: 0,
+    mixedEntries: 0,
+    unrelatedHooksPreserved: 1,
+    exactDefinitionPresent: false,
+    reasons: ['missing_managed_hook'],
+  });
+  assert.deepEqual(plan.diagnostics.SessionStart, {
+    event: 'SessionStart',
+    action: 'install',
+    managedHooksFound: 0,
+    managedEntriesFound: 0,
+    mixedEntries: 0,
+    unrelatedHooksPreserved: 0,
+    exactDefinitionPresent: false,
+    reasons: ['missing_managed_hook'],
+  });
   assert.equal(plan.config.version, 1);
   assert.deepEqual(plan.config.custom, { keep: true });
   assert.deepEqual(plan.config.hooks.Stop, unrelatedStop);
@@ -149,6 +169,18 @@ test('installer replaces stale or duplicate managed hooks without deleting unrel
   assert.ok(
     promptHooks.some((hook) => /keep-me\.mjs/.test(String(hook.command))),
   );
+  assert.equal(plan.diagnostics.UserPromptSubmit.action, 'normalize');
+  assert.equal(plan.diagnostics.UserPromptSubmit.managedHooksFound, 2);
+  assert.equal(plan.diagnostics.UserPromptSubmit.managedEntriesFound, 2);
+  assert.equal(plan.diagnostics.UserPromptSubmit.mixedEntries, 1);
+  assert.deepEqual(
+    plan.diagnostics.UserPromptSubmit.reasons,
+    [
+      'duplicate_managed_hooks',
+      'managed_hook_shares_entry_with_unrelated_hooks',
+      'managed_definition_differs',
+    ],
+  );
 
   const sessionHooks = plan.config.hooks.SessionStart.flatMap(
     (entry) => entry.hooks ?? [],
@@ -180,6 +212,8 @@ test('installer plan is idempotent after normalization', () => {
     nodePath: NODE,
   });
   assert.equal(second.changed, false);
+  assert.equal(second.diagnostics.UserPromptSubmit.action, 'current');
+  assert.equal(second.diagnostics.SessionStart.action, 'current');
   assert.deepEqual(second.config, first.config);
 });
 
@@ -210,6 +244,8 @@ test('installer is dry-run by default and apply creates a backup before changing
     assert.equal(dry.wouldChange, true);
     assert.equal(dry.applied, false);
     assert.equal(dry.backupPath, null);
+    assert.equal(dry.plan.UserPromptSubmit.action, 'install');
+    assert.equal(dry.plan.SessionStart.action, 'install');
     assert.deepEqual(
       JSON.parse(readFileSync(hooksPath, 'utf8')),
       original,
