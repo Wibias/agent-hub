@@ -117,15 +117,30 @@ function allHookCommands(hooks) {
   return commands;
 }
 
-function eventCommands(hooks, eventName) {
+function eventHooks(hooks, eventName) {
   if (!hooks || typeof hooks !== 'object' || Array.isArray(hooks)) {
     return [];
   }
   const event = hooks[eventName];
   if (!Array.isArray(event)) return [];
 
-  const wrapped = { [eventName]: event };
-  return allHookCommands(wrapped).map((entry) => entry.command);
+  const result = [];
+  for (const entry of event) {
+    if (!entry || typeof entry !== 'object') continue;
+    const nested = Array.isArray(entry.hooks) ? entry.hooks : [];
+    for (const hook of nested) {
+      if (hook && typeof hook === 'object') result.push(hook);
+    }
+  }
+  return result;
+}
+
+function eventCommands(hooks, eventName) {
+  return eventHooks(hooks, eventName).flatMap((hook) => (
+    ['command', 'commandWindows']
+      .map((key) => hook[key])
+      .filter((value) => typeof value === 'string' && value.trim().length > 0)
+  ));
 }
 
 export function inspectAgentHubHookConfiguration(hooks) {
@@ -148,6 +163,7 @@ export function inspectAgentHubHookConfiguration(hooks) {
   const launcherCommands = startCommands.filter((command) => (
     /memory-engine[\\/]embedding-worker-launcher\.mjs/i.test(command)
   ));
+  const stopHooks = eventHooks(eventMap, 'Stop');
   const stopCommands = eventCommands(eventMap, 'Stop');
   const agentStopCommands = stopCommands.filter((command) => (
     /memory-engine[\\/]adapters[\\/]codex-agent-decision-hook-cli\.mjs/i.test(command)
@@ -155,6 +171,16 @@ export function inspectAgentHubHookConfiguration(hooks) {
   const agentStopPipelineCommands = stopCommands.filter((command) => (
     /scripts[\\/]codex-agent-memory-pipeline-hook\.mjs/i.test(command)
   ));
+  const agentStopPipelineAsync = stopHooks.some((hook) => (
+    hook?.async === true
+    && /scripts[\\/]codex-agent-memory-pipeline-hook\.mjs/i.test(
+      [
+        hook.command ?? '',
+        hook.commandWindows ?? '',
+      ].join('\n'),
+    )
+  ));
+  const subagentStopHooks = eventHooks(eventMap, 'SubagentStop');
   const subagentStopCommands = eventCommands(eventMap, 'SubagentStop');
   const agentSubagentStopCommands = subagentStopCommands.filter((command) => (
     /memory-engine[\\/]adapters[\\/]codex-agent-decision-hook-cli\.mjs/i.test(command)
@@ -162,14 +188,28 @@ export function inspectAgentHubHookConfiguration(hooks) {
   const agentSubagentPipelineCommands = subagentStopCommands.filter((command) => (
     /scripts[\\/]codex-agent-memory-pipeline-hook\.mjs/i.test(command)
   ));
+  const agentSubagentPipelineAsync = subagentStopHooks.some((hook) => (
+    hook?.async === true
+    && /scripts[\\/]codex-agent-memory-pipeline-hook\.mjs/i.test(
+      [
+        hook.command ?? '',
+        hook.commandWindows ?? '',
+      ].join('\n'),
+    )
+  ));
 
   const recallText = recallCommands.join('\n');
-  const hasAgentDecisionFlags = (captureCommands, pipelineCommands) => {
+  const hasAgentDecisionFlags = (
+    captureCommands,
+    pipelineCommands,
+    pipelineAsync,
+  ) => {
     const captureText = captureCommands.join('\n');
     const pipelineText = pipelineCommands.join('\n');
     return (
       /(?:^|\s)--ignore-memory-env(?:\s|$)/.test(captureText)
       && /(?:^|\s)--ignore-memory-env(?:\s|$)/.test(pipelineText)
+      && pipelineAsync === true
     );
   };
 
@@ -193,10 +233,12 @@ export function inspectAgentHubHookConfiguration(hooks) {
         && hasAgentDecisionFlags(
           agentStopCommands,
           agentStopPipelineCommands,
+          agentStopPipelineAsync,
         )
         && hasAgentDecisionFlags(
           agentSubagentStopCommands,
           agentSubagentPipelineCommands,
+          agentSubagentPipelineAsync,
         )
       ),
     },
