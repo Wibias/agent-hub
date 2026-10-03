@@ -4,6 +4,7 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { MemoryEngine } from '../../memory-engine/index.mjs';
 import {
@@ -156,7 +157,7 @@ test('memory console browser source parses and keeps the divider-first visual co
 
   const syntax = spawnSync(
     process.execPath,
-    ['--check', appPath],
+    ['--check', fileURLToPath(appPath)],
     {
       encoding: 'utf8',
     },
