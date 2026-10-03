@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
+import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
 
 import { MemoryEngine } from '../../memory-engine/index.mjs';
@@ -147,6 +148,36 @@ function seed(memory) {
     candidateRefs: ['~1234567890'],
   });
 }
+
+test('memory console browser source parses and keeps the divider-first visual contract', async () => {
+  const appPath = new URL('../../memory-ui/app.js', import.meta.url);
+  const cssPath = new URL('../../memory-ui/styles.css', import.meta.url);
+  const htmlPath = new URL('../../memory-ui/index.html', import.meta.url);
+
+  const syntax = spawnSync(
+    process.execPath,
+    ['--check', appPath],
+    {
+      encoding: 'utf8',
+    },
+  );
+  assert.equal(
+    syntax.status,
+    0,
+    syntax.stderr || syntax.stdout || 'browser source failed syntax check',
+  );
+
+  const [css, html] = await Promise.all([
+    readFile(cssPath, 'utf8'),
+    readFile(htmlPath, 'utf8'),
+  ]);
+  assert.doesNotMatch(css, /linear-gradient|radial-gradient/i);
+  assert.doesNotMatch(css, /border-radius:\s*(?!0\b)/i);
+  assert.match(css, /border-bottom:\s*1px solid var\(--line\)/i);
+  assert.match(html, /class="sidebar"/);
+  assert.match(html, /class="tabs"/);
+  assert.doesNotMatch(html, /class="[^"]*card/i);
+});
 
 test('memory console args expose port/db only and keep host fixed internally', () => {
   const parsed = parseMemoryUiArgs([
