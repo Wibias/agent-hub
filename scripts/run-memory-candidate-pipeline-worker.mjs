@@ -384,17 +384,21 @@ export async function runMemoryCandidatePipelineWorker({
       const observability = createMemory({ dbPath: runtime.dbPath });
       try {
         for (const failure of observedFailures) {
-          observability.recordPipelineFailure({
-            runId,
-            projectId: runtime.projectId,
-            branch: runtime.branch,
-            candidateId: failure.candidate_id ?? null,
-            candidateRef: failure.candidate_ref ?? null,
-            stage: failure.stage,
-            errorClass: failure.error_class ?? 'Error',
-            error: failure.error,
-            occurredAt: failure.occurred_at ?? new Date(now()).toISOString(),
-          });
+          try {
+            observability.recordPipelineFailure({
+              runId,
+              projectId: runtime.projectId,
+              branch: runtime.branch,
+              candidateId: failure.candidate_id ?? null,
+              candidateRef: failure.candidate_ref ?? null,
+              stage: failure.stage,
+              errorClass: failure.error_class ?? 'Error',
+              error: failure.error,
+              occurredAt: failure.occurred_at ?? new Date(now()).toISOString(),
+            });
+          } catch {
+            // One malformed failure detail must not leave the run unfinished.
+          }
         }
         observability.finishPipelineRun({
           id: runId,
@@ -499,6 +503,35 @@ export async function runMemoryCandidatePipelineWorker({
           occurred_at: new Date(now()).toISOString(),
         });
       }
+    }
+
+    if (status === 'stalled') {
+      observedFailures.push({
+        stage: 'pipeline_control',
+        candidate_id: null,
+        candidate_ref: null,
+        error_class: 'PipelineStalled',
+        error: 'automatic candidate queues made no progress',
+        occurred_at: new Date(now()).toISOString(),
+      });
+    } else if (status === 'max_rounds') {
+      observedFailures.push({
+        stage: 'pipeline_control',
+        candidate_id: null,
+        candidate_ref: null,
+        error_class: 'PipelineMaxRounds',
+        error: 'automatic candidate queues remained after max rounds',
+        occurred_at: new Date(now()).toISOString(),
+      });
+    } else if (status === 'restore_locked') {
+      observedFailures.push({
+        stage: 'pipeline_control',
+        candidate_id: null,
+        candidate_ref: null,
+        error_class: 'RestoreLocked',
+        error: 'memory restore lock prevented automatic candidate processing',
+        occurred_at: new Date(now()).toISOString(),
+      });
     }
 
     const runStatus = observedFailures.length > 0
