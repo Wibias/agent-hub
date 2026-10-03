@@ -28,7 +28,8 @@ const SECRET_PATTERNS = [
   /\bsk-[A-Za-z0-9_-]{12,}\b/g,
   /\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})\b/g,
   /\bBearer\s+[A-Za-z0-9._~+/=-]{12,}\b/gi,
-  /\b(?:api[_-]?key|access[_-]?token|token|secret|password)\s*[:=]\s*["']?[^\s"',;]{8,}["']?/gi,
+  /\b(?:api[_-]?key|access[_-]?token|secret|password)\s*[:=]\s*["']?[^\s"',;]{8,}["']?/gi,
+  /\btoken\s*[:=]\s*["']?[A-Za-z0-9._~+/=_-]{16,}["']?/gi,
 ];
 
 const QUERY_TOKEN = /[\p{L}\p{N}_-]+/gu;
@@ -2264,6 +2265,7 @@ export class MemoryEngine {
       }
     }
 
+    const importedEvidence = [];
     for (const row of payload.evidence) {
       assertAuthorityClass(row.authority_class);
       let metadata;
@@ -2277,10 +2279,16 @@ export class MemoryEngine {
         content_redacted: row.content_redacted,
         metadata,
       });
-      if (scanned.redacted) {
-        throw new Error(`canonical import contains unredacted secret material in evidence ${row.id}`);
-      }
+      importedEvidence.push({
+        ...row,
+        source_ref: scanned.value.source_ref,
+        content_redacted: scanned.value.content_redacted,
+        metadata_json: JSON.stringify(scanned.value.metadata),
+        sensitivity: scanned.redacted ? 'secret_redacted' : row.sensitivity,
+      });
     }
+
+    const importedClaims = [];
     for (const row of payload.claims) {
       if (!CLAIM_STATES.has(row.state)) {
         throw new Error(`canonical import has unsupported claim state: ${row.state}`);
@@ -2290,9 +2298,12 @@ export class MemoryEngine {
         predicate: row.predicate,
         value_text: row.value_text,
       });
-      if (scanned.redacted) {
-        throw new Error(`canonical import contains unredacted secret material in claim ${row.id}`);
-      }
+      importedClaims.push({
+        ...row,
+        subject: scanned.value.subject,
+        predicate: scanned.value.predicate,
+        value_text: scanned.value.value_text,
+      });
     }
     for (const row of payload.approvals) {
       let constraints;
@@ -2366,7 +2377,7 @@ export class MemoryEngine {
           sensitivity, authority_class, metadata_json
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
-      for (const row of payload.evidence) {
+      for (const row of importedEvidence) {
         insertEvidence.run(
           row.id,
           row.project_id,
@@ -2393,7 +2404,7 @@ export class MemoryEngine {
           valid_until, superseded_by_claim_id, rejected_by_evidence_id
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)
       `);
-      for (const row of payload.claims) {
+      for (const row of importedClaims) {
         insertClaim.run(
           row.id,
           row.project_id,
@@ -2416,7 +2427,7 @@ export class MemoryEngine {
         SET superseded_by_claim_id = ?
         WHERE id = ?
       `);
-      for (const row of payload.claims) {
+      for (const row of importedClaims) {
         if (row.superseded_by_claim_id !== null) {
           updateSupersession.run(row.superseded_by_claim_id, row.id);
         }
