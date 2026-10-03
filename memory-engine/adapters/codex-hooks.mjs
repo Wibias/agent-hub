@@ -1708,12 +1708,11 @@ export function createCodexMemoryHookAdapter({
           } else if (explicitCommandResult?.alreadyFinalized === true) {
             reason = 'Memory candidate not changed: it was already confirmed with a different action.';
           } else if (explicitCommandResult?.targetMissing === true) {
-            reason = (
-              explicitMemory.mode === 'candidate_confirm'
-              || explicitMemory.mode === 'candidate_reject'
-            )
-              ? 'Memory candidate not changed: candidate or target memory was not found, was not unique, or is not reviewable in the current project and branch.'
-              : 'Memory not changed: target was not found or was not unique in the current project and branch.';
+            reason = explicitMemory.mode === 'candidate_confirm'
+              ? 'Memory candidate not changed: candidate or target memory was not found or was not unique in the current project and branch.'
+              : explicitMemory.mode === 'candidate_reject'
+                ? 'Memory candidate not changed: candidate was not found, was not unique, or is not reviewable in the current project and branch.'
+                : 'Memory not changed: target was not found or was not unique in the current project and branch.';
           }
 
           return {
