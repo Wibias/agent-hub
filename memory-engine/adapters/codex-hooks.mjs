@@ -316,10 +316,10 @@ function formatActiveDurableMemories(memory, {
   const lines = [];
   const appendSection = (heading, claims) => {
     if (claims.length === 0) return;
-    const headingCandidate = [...lines, heading].join('\n');
+    const prefix = lines.length > 0 ? ['', heading] : [heading];
+    const headingCandidate = [...lines, ...prefix].join('\n');
     if (byteLength(headingCandidate) > maxBytes) return;
-    if (lines.length > 0) lines.push('');
-    lines.push(heading);
+    lines.push(...prefix);
 
     for (const claim of claims) {
       const line = `- ${memoryClaimRef(claim.id)} ${compactText(
