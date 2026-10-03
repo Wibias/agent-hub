@@ -26,8 +26,10 @@ const CLAIM_STATES = new Set([
 
 const SECRET_PATTERNS = [
   /\bsk-[A-Za-z0-9_-]{12,}\b/g,
+  /\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})\b/g,
   /\bBearer\s+[A-Za-z0-9._~+/=-]{12,}\b/gi,
   /\b(?:api[_-]?key|access[_-]?token|secret|password)\s*[:=]\s*["']?[^\s"',;]{8,}["']?/gi,
+  /\btoken\s*[:=]\s*["']?[A-Za-z0-9._~+/=_-]{16,}["']?/gi,
 ];
 
 const QUERY_TOKEN = /[\p{L}\p{N}_-]+/gu;
@@ -1060,6 +1062,218 @@ function resolveCandidatePromotion(db, {
   };
 }
 
+function resolveAgentCandidatePromotion(db, {
+  candidateId,
+  claimId,
+  policyVersion,
+  finalizedAt,
+}) {
+  assertNonEmptyString(candidateId, 'candidateId');
+  assertNonEmptyString(claimId, 'claimId');
+  assertNonEmptyString(policyVersion, 'policyVersion');
+  assertNonEmptyString(finalizedAt, 'finalizedAt');
+
+  const candidate = normalizeCandidate(
+    db.prepare('SELECT * FROM memory_candidates WHERE id = ?').get(candidateId),
+  );
+  if (!candidate) throw new Error('unknown memory candidate: ' + candidateId);
+  if (
+    candidate.status !== 'pending'
+    || candidate.source_authority !== 'agent_inference'
+    || candidate.evaluated_at === null
+    || !candidate.evaluation_json
+    || candidate.relation === null
+  ) {
+    throw new Error('agent memory candidate is not promotion-ready');
+  }
+
+  const importance = validateMemoryCandidateJudgment(
+    JSON.parse(candidate.evaluation_json),
+  );
+  if (importance.decision !== 'promote') {
+    throw new Error('agent promotion requires promote importance judgment');
+  }
+
+  const relationAudit = normalizeCandidateRelation(
+    db.prepare(
+      'SELECT * FROM memory_candidate_relations WHERE candidate_id = ?',
+    ).get(candidateId),
+  );
+  if (!relationAudit) {
+    throw new Error('agent memory candidate relation audit is missing');
+  }
+  const relation = validateMemoryCandidateRelation(
+    JSON.parse(relationAudit.result_json),
+  );
+  if (
+    relation.relation !== candidate.relation
+    || relationAudit.related_claim_id !== candidate.related_claim_id
+  ) {
+    throw new Error('agent memory candidate relation invariant failed');
+  }
+
+  const evidence = normalizeEvidence(
+    db.prepare('SELECT * FROM evidence WHERE id = ?')
+      .get(candidate.source_evidence_id),
+  );
+  if (
+    !evidence
+    || evidence.authority_class !== 'agent_inference'
+    || evidence.sensitivity === 'secret_redacted'
+    || evidence.project_id !== candidate.project_id
+    || evidence.branch !== candidate.branch
+    || evidence.content_redacted !== candidate.proposed_value
+  ) {
+    throw new Error('agent memory candidate source invariant failed');
+  }
+
+  let target = null;
+  let targetAuthority = null;
+  if (relation.relation === 'unrelated') {
+    if (
+      candidate.related_claim_id !== null
+      || relationAudit.related_claim_id !== null
+      || relation.target_ref !== null
+    ) {
+      throw new Error('unrelated agent promotion cannot target a claim');
+    }
+  } else {
+    if (!candidate.related_claim_id) {
+      throw new Error('related agent promotion requires target claim');
+    }
+    target = normalizeClaim(
+      db.prepare('SELECT * FROM claims WHERE id = ?')
+        .get(candidate.related_claim_id),
+    );
+    if (
+      !target
+      || target.project_id !== candidate.project_id
+      || target.branch_scope !== candidate.branch
+      || target.state !== 'active'
+      || target.predicate !== 'states'
+    ) {
+      throw new Error('agent promotion target is not active in scope');
+    }
+    const targetEvidence = normalizeEvidence(
+      db.prepare('SELECT * FROM evidence WHERE id = ?')
+        .get(target.created_from_evidence_id),
+    );
+    if (!targetEvidence || targetEvidence.project_id !== candidate.project_id) {
+      throw new Error('agent promotion target evidence invariant failed');
+    }
+
+    if (
+      target.kind === 'user_direct'
+      && target.subject === 'user memory'
+      && targetEvidence.authority_class === 'user_direct'
+    ) {
+      targetAuthority = 'user_direct';
+    } else if (
+      target.kind === 'agent_inference'
+      && target.subject === 'agent decision'
+      && targetEvidence.authority_class === 'agent_inference'
+    ) {
+      targetAuthority = 'agent_inference';
+    } else {
+      throw new Error('agent promotion target has unsupported authority');
+    }
+
+    if (relation.target_ref !== memoryRelationClaimRef(target.id)) {
+      throw new Error('agent promotion target ref invariant failed');
+    }
+  }
+
+  if (
+    relation.confidence !== 'high'
+    || relation.meaning_preserved !== true
+  ) {
+    return {
+      candidate,
+      evidence,
+      relation,
+      status: 'needs_confirmation',
+      claim: null,
+      lifecycle: null,
+      claim_id: null,
+      related_claim_id: target?.id ?? null,
+    };
+  }
+
+  if (relation.relation === 'same') {
+    return {
+      candidate,
+      evidence,
+      relation,
+      status: 'superseded',
+      claim: null,
+      lifecycle: null,
+      claim_id: null,
+      related_claim_id: target.id,
+    };
+  }
+
+  if (
+    targetAuthority === 'user_direct'
+    || relation.relation === 'contradict'
+  ) {
+    return {
+      candidate,
+      evidence,
+      relation,
+      status: 'needs_confirmation',
+      claim: null,
+      lifecycle: null,
+      claim_id: null,
+      related_claim_id: target?.id ?? null,
+    };
+  }
+
+  const sensitivity = inspectMemoryTextSensitivity(importance.canonical_fact);
+  if (sensitivity.containsSecret) {
+    return {
+      candidate,
+      evidence,
+      relation,
+      status: 'needs_confirmation',
+      claim: null,
+      lifecycle: null,
+      claim_id: null,
+      related_claim_id: target?.id ?? null,
+    };
+  }
+
+  const claim = prepareClaimInput({
+    evidence,
+    claim: {
+      id: claimId,
+      kind: 'agent_inference',
+      subject: 'agent decision',
+      predicate: 'states',
+      value: importance.canonical_fact,
+      state: 'active',
+      branchScope: candidate.branch,
+      createdAt: finalizedAt,
+    },
+  });
+  const lifecycle = prepareLifecycle(claim.id, {
+    supersedes: (
+      relation.relation === 'update'
+      && targetAuthority === 'agent_inference'
+    ) ? [target.id] : [],
+  });
+
+  return {
+    candidate,
+    evidence,
+    relation,
+    status: 'promoted',
+    claim,
+    lifecycle,
+    claim_id: claim.id,
+    related_claim_id: target?.id ?? null,
+  };
+}
+
 export class MemoryEngine {
   #db;
   #clock;
@@ -2051,6 +2265,7 @@ export class MemoryEngine {
       }
     }
 
+    const importedEvidence = [];
     for (const row of payload.evidence) {
       assertAuthorityClass(row.authority_class);
       let metadata;
@@ -2064,10 +2279,16 @@ export class MemoryEngine {
         content_redacted: row.content_redacted,
         metadata,
       });
-      if (scanned.redacted) {
-        throw new Error(`canonical import contains unredacted secret material in evidence ${row.id}`);
-      }
+      importedEvidence.push({
+        ...row,
+        source_ref: scanned.value.source_ref,
+        content_redacted: scanned.value.content_redacted,
+        metadata_json: JSON.stringify(scanned.value.metadata),
+        sensitivity: scanned.redacted ? 'secret_redacted' : row.sensitivity,
+      });
     }
+
+    const importedClaims = [];
     for (const row of payload.claims) {
       if (!CLAIM_STATES.has(row.state)) {
         throw new Error(`canonical import has unsupported claim state: ${row.state}`);
@@ -2077,9 +2298,12 @@ export class MemoryEngine {
         predicate: row.predicate,
         value_text: row.value_text,
       });
-      if (scanned.redacted) {
-        throw new Error(`canonical import contains unredacted secret material in claim ${row.id}`);
-      }
+      importedClaims.push({
+        ...row,
+        subject: scanned.value.subject,
+        predicate: scanned.value.predicate,
+        value_text: scanned.value.value_text,
+      });
     }
     for (const row of payload.approvals) {
       let constraints;
@@ -2153,7 +2377,7 @@ export class MemoryEngine {
           sensitivity, authority_class, metadata_json
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
-      for (const row of payload.evidence) {
+      for (const row of importedEvidence) {
         insertEvidence.run(
           row.id,
           row.project_id,
@@ -2180,7 +2404,7 @@ export class MemoryEngine {
           valid_until, superseded_by_claim_id, rejected_by_evidence_id
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)
       `);
-      for (const row of payload.claims) {
+      for (const row of importedClaims) {
         insertClaim.run(
           row.id,
           row.project_id,
@@ -2203,7 +2427,7 @@ export class MemoryEngine {
         SET superseded_by_claim_id = ?
         WHERE id = ?
       `);
-      for (const row of payload.claims) {
+      for (const row of importedClaims) {
         if (row.superseded_by_claim_id !== null) {
           updateSupersession.run(row.superseded_by_claim_id, row.id);
         }
@@ -2650,6 +2874,7 @@ export class MemoryEngine {
     return this.#db.prepare(
       'SELECT * FROM memory_candidates '
       + "WHERE project_id = ? AND branch = ? AND status = 'pending' "
+      + "AND source_authority = 'user_direct' "
       + 'AND evaluated_at IS NULL '
       + 'ORDER BY created_at ASC, id ASC LIMIT ?',
     ).all(projectId, branch, limit).map(normalizeCandidate);
@@ -2687,6 +2912,154 @@ export class MemoryEngine {
       + 'WHERE project_id = ? AND branch = ? AND status = ? '
       + 'ORDER BY created_at DESC, id ASC LIMIT ?',
     ).all(projectId, branch, status, limit).map(normalizeCandidate);
+  }
+
+  listUnevaluatedAgentCandidates({
+    projectId,
+    branch,
+    limit = 10,
+  }) {
+    assertNonEmptyString(projectId, 'projectId');
+    assertNonEmptyString(branch, 'branch');
+    if (!Number.isInteger(limit) || limit < 1 || limit > 20) {
+      throw new RangeError('limit must be an integer between 1 and 20');
+    }
+
+    return this.#db.prepare(
+      'SELECT * FROM memory_candidates '
+      + "WHERE project_id = ? AND branch = ? AND status = 'pending' "
+      + "AND source_authority = 'agent_inference' "
+      + 'AND evaluated_at IS NULL '
+      + 'ORDER BY created_at ASC, id ASC LIMIT ?',
+    ).all(projectId, branch, limit).map(normalizeCandidate);
+  }
+
+  recordAgentCandidate({
+    id,
+    evidenceId,
+    proposedValue,
+    decisionReason,
+    policyVersion,
+    fingerprint,
+    createdAt = this.#clock(),
+  }) {
+    for (const [value, name] of [
+      [id, 'id'],
+      [evidenceId, 'evidenceId'],
+      [proposedValue, 'proposedValue'],
+      [decisionReason, 'decisionReason'],
+      [policyVersion, 'policyVersion'],
+      [fingerprint, 'fingerprint'],
+      [createdAt, 'createdAt'],
+    ]) {
+      assertNonEmptyString(value, name);
+    }
+    if (!/^[0-9a-f]{64}$/.test(fingerprint)) {
+      throw new Error('fingerprint must be a lowercase SHA-256 hex digest');
+    }
+
+    const evidence = this.getEvidence(evidenceId);
+    if (!evidence) throw new Error('unknown evidence: ' + evidenceId);
+    if (evidence.authority_class !== 'agent_inference') {
+      throw new Error('agent memory candidates require agent_inference evidence');
+    }
+    if (evidence.sensitivity === 'secret_redacted') {
+      throw new Error('secret-redacted evidence cannot become an agent memory candidate');
+    }
+    if (!evidence.branch) {
+      throw new Error('agent memory candidates require branch-scoped evidence');
+    }
+    if (proposedValue !== evidence.content_redacted) {
+      throw new Error('agent candidate value must exactly match source evidence');
+    }
+
+    const existing = this.findCandidateByFingerprint({
+      projectId: evidence.project_id,
+      branch: evidence.branch,
+      fingerprint,
+    });
+    if (existing) return existing;
+
+    this.#db.prepare(
+      'INSERT INTO memory_candidates ('
+      + 'id, project_id, branch, source_evidence_id, proposed_type, '
+      + 'proposed_value, source_authority, status, decision_reason, '
+      + 'created_at, evaluated_at, related_claim_id, relation, policy_version, '
+      + 'evaluator_id, evaluation_json, fingerprint'
+      + ') VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, ?, NULL, NULL, ?)',
+    ).run(
+      id,
+      evidence.project_id,
+      evidence.branch,
+      evidence.id,
+      'decision',
+      proposedValue,
+      'agent_inference',
+      'pending',
+      decisionReason,
+      createdAt,
+      policyVersion,
+      fingerprint,
+    );
+
+    return this.getCandidate(id);
+  }
+
+  evaluateAgentCandidate({
+    candidateId,
+    evaluatorId,
+    evaluation,
+    evaluatedAt = this.#clock(),
+  }) {
+    assertNonEmptyString(candidateId, 'candidateId');
+    assertNonEmptyString(evaluatorId, 'evaluatorId');
+    assertNonEmptyString(evaluatedAt, 'evaluatedAt');
+
+    const candidate = this.getCandidate(candidateId);
+    if (!candidate) throw new Error('unknown memory candidate: ' + candidateId);
+    if (
+      candidate.status !== 'pending'
+      || candidate.evaluated_at !== null
+      || candidate.source_authority !== 'agent_inference'
+    ) {
+      throw new Error('agent memory candidate is not unevaluated');
+    }
+
+    const evidence = this.getEvidence(candidate.source_evidence_id);
+    if (
+      !evidence
+      || evidence.authority_class !== 'agent_inference'
+      || evidence.sensitivity === 'secret_redacted'
+      || evidence.project_id !== candidate.project_id
+      || evidence.branch !== candidate.branch
+      || evidence.content_redacted !== candidate.proposed_value
+    ) {
+      throw new Error('agent candidate source evidence invariant failed');
+    }
+
+    const normalized = validateMemoryCandidateJudgment(evaluation);
+    const nextStatus = normalized.decision === 'ignore'
+      ? 'ignored'
+      : normalized.decision === 'needs_confirmation'
+        ? 'needs_confirmation'
+        : 'pending';
+
+    const result = this.#db.prepare(
+      'UPDATE memory_candidates '
+      + 'SET status = ?, evaluated_at = ?, evaluator_id = ?, evaluation_json = ? '
+      + "WHERE id = ? AND status = 'pending' AND evaluated_at IS NULL "
+      + "AND source_authority = 'agent_inference'",
+    ).run(
+      nextStatus,
+      evaluatedAt,
+      evaluatorId,
+      JSON.stringify(normalized),
+      candidateId,
+    );
+    if (Number(result.changes) !== 1) {
+      throw new Error('agent memory candidate evaluation raced');
+    }
+    return this.getCandidate(candidateId);
   }
 
   recordCandidate({
@@ -2860,9 +3233,12 @@ export class MemoryEngine {
     const rows = this.#db.prepare(
       'SELECT * FROM memory_candidates '
       + "WHERE project_id = ? AND branch = ? AND status = 'pending' "
+      + "AND source_authority = 'user_direct' "
       + 'AND evaluated_at IS NOT NULL AND relation IS NULL '
+      + 'AND json_valid(evaluation_json) '
+      + "AND json_extract(evaluation_json, '$.decision') = 'promote' "
       + 'ORDER BY created_at ASC, id ASC LIMIT ?',
-    ).all(projectId, branch, limit * 4).map(normalizeCandidate);
+    ).all(projectId, branch, limit).map(normalizeCandidate);
 
     const eligible = [];
     for (const candidate of rows) {
@@ -2885,6 +3261,43 @@ export class MemoryEngine {
       if (eligible.length >= limit) break;
     }
 
+    return eligible;
+  }
+
+  listAgentRelationPendingCandidates({
+    projectId,
+    branch,
+    limit = 10,
+  }) {
+    assertNonEmptyString(projectId, 'projectId');
+    assertNonEmptyString(branch, 'branch');
+    if (!Number.isInteger(limit) || limit < 1 || limit > 20) {
+      throw new RangeError('limit must be an integer between 1 and 20');
+    }
+
+    const rows = this.#db.prepare(
+      'SELECT * FROM memory_candidates '
+      + "WHERE project_id = ? AND branch = ? AND status = 'pending' "
+      + "AND source_authority = 'agent_inference' "
+      + 'AND evaluated_at IS NOT NULL AND relation IS NULL '
+      + 'AND json_valid(evaluation_json) '
+      + "AND json_extract(evaluation_json, '$.decision') = 'promote' "
+      + 'ORDER BY created_at ASC, id ASC LIMIT ?',
+    ).all(projectId, branch, limit).map(normalizeCandidate);
+
+    const eligible = [];
+    for (const candidate of rows) {
+      try {
+        const normalized = validateMemoryCandidateJudgment(
+          JSON.parse(candidate.evaluation_json),
+        );
+        if (normalized.decision !== 'promote') continue;
+      } catch {
+        continue;
+      }
+      eligible.push(candidate);
+      if (eligible.length >= limit) break;
+    }
     return eligible;
   }
 
@@ -3008,6 +3421,132 @@ export class MemoryEngine {
     return this.getCandidate(candidateId);
   }
 
+  evaluateAgentCandidateRelation({
+    candidateId,
+    evaluatorId,
+    policyVersion,
+    relation,
+    relatedClaimId = null,
+    evaluatedAt = this.#clock(),
+  }) {
+    for (const [value, name] of [
+      [candidateId, 'candidateId'],
+      [evaluatorId, 'evaluatorId'],
+      [policyVersion, 'policyVersion'],
+      [evaluatedAt, 'evaluatedAt'],
+    ]) {
+      assertNonEmptyString(value, name);
+    }
+
+    const candidate = this.getCandidate(candidateId);
+    if (
+      !candidate
+      || candidate.status !== 'pending'
+      || candidate.source_authority !== 'agent_inference'
+      || candidate.evaluated_at === null
+      || !candidate.evaluation_json
+      || candidate.relation !== null
+      || this.getCandidateRelation(candidateId)
+    ) {
+      throw new Error('agent memory candidate is not relation-ready');
+    }
+
+    const importance = validateMemoryCandidateJudgment(
+      JSON.parse(candidate.evaluation_json),
+    );
+    if (importance.decision !== 'promote') {
+      throw new Error('agent relation requires promote importance judgment');
+    }
+
+    const normalized = validateMemoryCandidateRelation(relation);
+    if (normalized.relation === 'unrelated') {
+      if (relatedClaimId !== null) {
+        throw new Error('unrelated agent relation cannot target a claim');
+      }
+    } else {
+      assertNonEmptyString(relatedClaimId, 'relatedClaimId');
+      const claim = this.getClaim(relatedClaimId);
+      if (
+        !claim
+        || claim.project_id !== candidate.project_id
+        || claim.branch_scope !== candidate.branch
+        || claim.state !== 'active'
+        || claim.predicate !== 'states'
+      ) {
+        throw new Error('agent relation target must be active in candidate scope');
+      }
+      const evidence = this.getEvidence(claim.created_from_evidence_id);
+      const validUser = (
+        claim.kind === 'user_direct'
+        && claim.subject === 'user memory'
+        && evidence?.authority_class === 'user_direct'
+      );
+      const validAgent = (
+        claim.kind === 'agent_inference'
+        && claim.subject === 'agent decision'
+        && evidence?.authority_class === 'agent_inference'
+      );
+      if (!validUser && !validAgent) {
+        throw new Error('agent relation target must be durable user or agent memory');
+      }
+    }
+
+    this.#db.exec('BEGIN IMMEDIATE');
+    try {
+      this.#db.prepare(
+        'INSERT INTO memory_candidate_relations ('
+        + 'candidate_id, relation, related_claim_id, evaluator_id, '
+        + 'policy_version, evaluated_at, result_json'
+        + ') VALUES (?, ?, ?, ?, ?, ?, ?)',
+      ).run(
+        candidateId,
+        normalized.relation,
+        relatedClaimId,
+        evaluatorId,
+        policyVersion,
+        evaluatedAt,
+        JSON.stringify(normalized),
+      );
+      const updated = this.#db.prepare(
+        'UPDATE memory_candidates SET relation = ?, related_claim_id = ? '
+        + "WHERE id = ? AND relation IS NULL AND source_authority = 'agent_inference'",
+      ).run(normalized.relation, relatedClaimId, candidateId);
+      if (Number(updated.changes) !== 1) {
+        throw new Error('agent memory candidate relation raced');
+      }
+      this.#db.exec('COMMIT');
+    } catch (error) {
+      this.#db.exec('ROLLBACK');
+      throw error;
+    }
+
+    return this.getCandidate(candidateId);
+  }
+
+  listAgentPromotionReadyCandidates({
+    projectId,
+    branch,
+    limit = 10,
+  }) {
+    assertNonEmptyString(projectId, 'projectId');
+    assertNonEmptyString(branch, 'branch');
+    if (!Number.isInteger(limit) || limit < 1 || limit > 20) {
+      throw new RangeError('limit must be an integer between 1 and 20');
+    }
+
+    return this.#db.prepare(
+      'SELECT c.* FROM memory_candidates c '
+      + 'JOIN memory_candidate_relations r ON r.candidate_id = c.id '
+      + "WHERE c.project_id = ? AND c.branch = ? AND c.status = 'pending' "
+      + "AND c.source_authority = 'agent_inference' "
+      + 'AND c.evaluated_at IS NOT NULL AND c.relation IS NOT NULL '
+      + 'AND NOT EXISTS ('
+      + 'SELECT 1 FROM memory_candidate_promotions p WHERE p.candidate_id = c.id'
+      + ') '
+      + 'ORDER BY c.created_at ASC, c.id ASC LIMIT ?',
+    ).all(projectId, branch, limit).map(normalizeCandidate);
+  }
+
   listPromotionReadyCandidates({
     projectId,
     branch,
@@ -3023,6 +3562,7 @@ export class MemoryEngine {
       'SELECT c.* FROM memory_candidates c '
       + 'JOIN memory_candidate_relations r ON r.candidate_id = c.id '
       + "WHERE c.project_id = ? AND c.branch = ? AND c.status = 'pending' "
+      + "AND c.source_authority = 'user_direct' "
       + 'AND c.evaluated_at IS NOT NULL AND c.relation IS NOT NULL '
       + 'AND NOT EXISTS ('
       + 'SELECT 1 FROM memory_candidate_promotions p WHERE p.candidate_id = c.id'
@@ -3128,9 +3668,10 @@ export class MemoryEngine {
       if (!sourceEvidence) {
         throw new Error('candidate source evidence is missing');
       }
+      const candidateAuthority = candidate.source_authority;
       if (
-        candidate.source_authority !== 'user_direct'
-        || sourceEvidence.authority_class !== 'user_direct'
+        !['user_direct', 'agent_inference'].includes(candidateAuthority)
+        || sourceEvidence.authority_class !== candidateAuthority
         || sourceEvidence.sensitivity === 'secret_redacted'
         || sourceEvidence.project_id !== projectId
         || sourceEvidence.branch !== branch
@@ -3157,6 +3698,7 @@ export class MemoryEngine {
       }
 
       let target = null;
+      let targetAuthority = null;
       if (relation !== 'unrelated') {
         target = normalizeClaim(
           this.#db.prepare('SELECT * FROM claims WHERE id = ?')
@@ -3167,34 +3709,89 @@ export class MemoryEngine {
           || target.project_id !== projectId
           || target.branch_scope !== branch
           || target.state !== 'active'
-          || target.kind !== 'user_direct'
-          || target.subject !== 'user memory'
           || target.predicate !== 'states'
         ) {
-          throw new Error('candidate confirmation target must be one active durable user memory in scope');
+          throw new Error('candidate confirmation target must be active in scope');
         }
 
         const targetEvidence = normalizeEvidence(
           this.#db.prepare('SELECT * FROM evidence WHERE id = ?')
             .get(target.created_from_evidence_id),
         );
+        const directTarget = (
+          target.kind === 'user_direct'
+          && target.subject === 'user memory'
+          && targetEvidence?.authority_class === 'user_direct'
+        );
+        const agentTarget = (
+          target.kind === 'agent_inference'
+          && target.subject === 'agent decision'
+          && targetEvidence?.authority_class === 'agent_inference'
+        );
+
         if (
           !targetEvidence
           || targetEvidence.project_id !== projectId
-          || targetEvidence.authority_class !== 'user_direct'
+          || (
+            candidateAuthority === 'user_direct'
+              ? !directTarget
+              : (!directTarget && !agentTarget)
+          )
         ) {
           throw new Error('candidate confirmation target authority invariant failed');
         }
+        targetAuthority = directTarget ? 'user_direct' : 'agent_inference';
       }
 
       let status = 'superseded';
       let createdClaimId = null;
-      if (relation !== 'same') {
+      const createConfirmedClaim = (
+        relation !== 'same'
+        || (
+          candidateAuthority === 'agent_inference'
+          && targetAuthority === 'agent_inference'
+        )
+      );
+
+      if (createConfirmedClaim) {
+        let claimEvidence = sourceEvidence;
+        let evidenceContent = sourceEvidence.content_redacted;
+
+        if (candidateAuthority === 'agent_inference') {
+          const endorsedEvidence = prepareEvidenceInput({
+            id: claimId + ':confirmed-agent-decision',
+            projectId,
+            harness: confirmationEvidence.harness,
+            sessionId: confirmationEvidence.session_id,
+            sourceKind: 'user_confirmation',
+            sourceRef: confirmationEvidence.source_ref,
+            capturedAt: confirmedAt,
+            branch,
+            commitSha: confirmationEvidence.commit_sha,
+            path: null,
+            blobOid: null,
+            content: candidate.proposed_value,
+            authorityClass: 'user_direct',
+            metadata: {
+              event_type: 'candidate_confirmation',
+              confirmed_candidate_id: candidate.id,
+              agent_source_evidence_id: sourceEvidence.id,
+              confirmation_evidence_id: confirmationEvidence.id,
+            },
+          });
+          if (endorsedEvidence.sensitivity === 'secret_redacted') {
+            throw new Error('confirmed agent decision became secret-redacted');
+          }
+          insertEvidenceRow(this.#db, endorsedEvidence);
+          claimEvidence = endorsedEvidence;
+          evidenceContent = endorsedEvidence.content;
+        }
+
         const preparedClaim = prepareClaimInput({
           evidence: {
-            id: sourceEvidence.id,
-            projectId: sourceEvidence.project_id,
-            branch: sourceEvidence.branch,
+            id: claimEvidence.id,
+            projectId: claimEvidence.projectId ?? claimEvidence.project_id,
+            branch: claimEvidence.branch,
           },
           claim: {
             id: claimId,
@@ -3207,14 +3804,22 @@ export class MemoryEngine {
             createdAt: confirmedAt,
           },
         });
+        const supersedesTarget = (
+          relation === 'update'
+          || (
+            relation === 'same'
+            && candidateAuthority === 'agent_inference'
+            && targetAuthority === 'agent_inference'
+          )
+        );
         const lifecycle = prepareLifecycle(preparedClaim.id, {
-          supersedes: relation === 'update' ? [target.id] : [],
+          supersedes: supersedesTarget ? [target.id] : [],
           conflictsWith: relation === 'contradict' ? [target.id] : [],
         });
 
         insertClaimAndLifecycle(this.#db, {
           claim: preparedClaim,
-          evidenceContent: sourceEvidence.content_redacted,
+          evidenceContent,
           lifecycle,
           lifecycleEvidenceId: confirmationEvidence.id,
           lifecycleCreatedAt: confirmedAt,
@@ -3333,6 +3938,92 @@ export class MemoryEngine {
       ).run(resolved.status, candidateId);
       if (Number(updated.changes) !== 1) {
         throw new Error('memory candidate promotion raced or was already finalized');
+      }
+
+      const audit = {
+        status: resolved.status,
+        relation: resolved.relation.relation,
+        claim_id: resolved.claim_id,
+        related_claim_id: resolved.related_claim_id,
+      };
+      this.#db.prepare(
+        'INSERT INTO memory_candidate_promotions ('
+        + 'candidate_id, status, relation, claim_id, related_claim_id, '
+        + 'policy_version, finalized_at, result_json'
+        + ') VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      ).run(
+        candidateId,
+        resolved.status,
+        resolved.relation.relation,
+        resolved.claim_id,
+        resolved.related_claim_id,
+        policyVersion,
+        finalizedAt,
+        JSON.stringify(audit),
+      );
+
+      this.#db.exec('COMMIT');
+      return audit;
+    } catch (error) {
+      this.#db.exec('ROLLBACK');
+      throw error;
+    }
+  }
+
+  previewAgentCandidatePromotion({
+    candidateId,
+    claimId,
+    policyVersion,
+    finalizedAt = this.#clock(),
+  }) {
+    const resolved = resolveAgentCandidatePromotion(this.#db, {
+      candidateId,
+      claimId,
+      policyVersion,
+      finalizedAt,
+    });
+    return {
+      status: resolved.status,
+      relation: resolved.relation.relation,
+      claim_id: resolved.claim_id,
+      related_claim_id: resolved.related_claim_id,
+    };
+  }
+
+  finalizeAgentCandidatePromotion({
+    candidateId,
+    claimId,
+    policyVersion,
+    finalizedAt = this.#clock(),
+  }) {
+    this.#db.exec('BEGIN IMMEDIATE');
+    try {
+      if (this.getCandidatePromotion(candidateId)) {
+        throw new Error('agent memory candidate promotion is already finalized');
+      }
+
+      const resolved = resolveAgentCandidatePromotion(this.#db, {
+        candidateId,
+        claimId,
+        policyVersion,
+        finalizedAt,
+      });
+
+      if (resolved.status === 'promoted') {
+        insertClaimAndLifecycle(this.#db, {
+          claim: resolved.claim,
+          evidenceContent: resolved.evidence.content_redacted,
+          lifecycle: resolved.lifecycle,
+        });
+      }
+
+      const updated = this.#db.prepare(
+        'UPDATE memory_candidates SET status = ? '
+        + "WHERE id = ? AND status = 'pending' "
+        + "AND source_authority = 'agent_inference'",
+      ).run(resolved.status, candidateId);
+      if (Number(updated.changes) !== 1) {
+        throw new Error('agent memory candidate promotion raced');
       }
 
       const audit = {

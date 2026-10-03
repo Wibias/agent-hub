@@ -609,3 +609,76 @@ test('relation CLI composes scope and isolated judge without requiring a live mo
   assert.equal(output.summary.failed, 0);
   assert.equal(lines.length, 1);
 });
+
+
+test('kept direct-user candidates cannot starve a later promote-ready relation candidate', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'agent-hub-relation-starvation-'));
+  const memory = new MemoryEngine({ dbPath: join(root, 'memory.sqlite3') });
+  createProject(memory);
+
+  for (let index = 0; index < 5; index += 1) {
+    const value = `Keep review-only decision ${index}.`;
+    const evidence = memory.recordEvidence({
+      id: `e-a-keep-${index}`,
+      projectId: 'project',
+      harness: 'codex',
+      sessionId: `keep-${index}`,
+      sourceKind: 'session',
+      sourceRef: `session:keep-${index}`,
+      capturedAt: '2026-10-01T01:00:00.000Z',
+      branch: 'main',
+      content: value,
+      authorityClass: 'user_direct',
+      metadata: { event_type: 'user_prompt', candidate_capture: true },
+    });
+    const candidate = memory.recordCandidate({
+      id: `a-keep-${index}`,
+      evidenceId: evidence.id,
+      type: 'decision',
+      proposedValue: evidence.content_redacted,
+      decisionReason: 'rule:decision:definitive',
+      policyVersion: CAPTURE_POLICY_VERSION,
+      fingerprint: memoryCandidateFingerprint({
+        type: 'decision',
+        value,
+      }),
+      createdAt: '2026-10-01T01:00:00.000Z',
+    });
+    memory.evaluateCandidate({
+      candidateId: candidate.id,
+      evaluatorId: 'codex:test:importance-v2',
+      evaluatedAt: '2026-10-01T01:01:00.000Z',
+      evaluation: {
+        decision: 'keep_candidate',
+        suggested_type: 'decision',
+        durability: 'medium',
+        future_utility: 'medium',
+        specificity: 'high',
+        confidence: 'high',
+        meaning_preserved: true,
+        canonical_fact: value,
+        reason: 'Review only.',
+        risk_flags: ['transient'],
+      },
+    });
+  }
+
+  const promoted = seedPromoteCandidate(memory, {
+    id: 'z-promote',
+    evidenceId: 'e-z-promote',
+    value: 'We use Postgres for durable concurrent writes.',
+    canonicalFact: 'The project uses Postgres for durable concurrent writes.',
+    createdAt: '2026-10-01T01:00:00.000Z',
+  });
+
+  assert.deepEqual(
+    memory.listRelationPendingCandidates({
+      projectId: 'project',
+      branch: 'main',
+      limit: 1,
+    }).map((item) => item.id),
+    [promoted.id],
+  );
+
+  memory.close();
+});

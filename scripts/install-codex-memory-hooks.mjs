@@ -93,6 +93,12 @@ function isEmbeddingLauncherHook(hook) {
   );
 }
 
+function isAgentDecisionHook(hook) {
+  return /memory-engine[\\/]adapters[\\/]codex-agent-decision-hook-cli\.mjs/i.test(
+    hookCommandText(hook),
+  );
+}
+
 function analyzeManagedEvent(entries, predicate, desiredEntry, eventName) {
   if (entries === undefined) {
     return {
@@ -248,6 +254,28 @@ function sessionStartEntry({ hubRoot, nodePath }) {
   };
 }
 
+function agentDecisionEntry({ hubRoot, nodePath }) {
+  const script = resolve(
+    hubRoot,
+    'memory-engine',
+    'adapters',
+    'codex-agent-decision-hook-cli.mjs',
+  );
+  const args = [
+    '--ignore-memory-env',
+    '--auto-pipeline',
+  ].join(' ');
+  return {
+    hooks: [{
+      type: 'command',
+      command: `node ${quote(script)} ${args}`,
+      commandWindows: `${quote(nodePath)} ${quote(script)} ${args}`,
+      timeout: 10,
+      statusMessage: 'Capturing agent decisions',
+    }],
+  };
+}
+
 function stableJson(value) {
   return JSON.stringify(value);
 }
@@ -270,6 +298,8 @@ export function planCodexMemoryHooks({
   const hooks = { ...(existing.hooks ?? {}) };
   const desiredPrompt = promptEntry({ hubRoot, nodePath });
   const desiredSession = sessionStartEntry({ hubRoot, nodePath });
+  const desiredStop = agentDecisionEntry({ hubRoot, nodePath });
+  const desiredSubagentStop = agentDecisionEntry({ hubRoot, nodePath });
   const diagnostics = {
     UserPromptSubmit: analyzeManagedEvent(
       hooks.UserPromptSubmit,
@@ -283,6 +313,18 @@ export function planCodexMemoryHooks({
       desiredSession,
       'SessionStart',
     ),
+    Stop: analyzeManagedEvent(
+      hooks.Stop,
+      isAgentDecisionHook,
+      desiredStop,
+      'Stop',
+    ),
+    SubagentStop: analyzeManagedEvent(
+      hooks.SubagentStop,
+      isAgentDecisionHook,
+      desiredSubagentStop,
+      'SubagentStop',
+    ),
   };
 
   const promptBase = stripManagedHooks(
@@ -295,6 +337,16 @@ export function planCodexMemoryHooks({
     isEmbeddingLauncherHook,
     'SessionStart',
   );
+  const stopBase = stripManagedHooks(
+    hooks.Stop,
+    isAgentDecisionHook,
+    'Stop',
+  );
+  const subagentStopBase = stripManagedHooks(
+    hooks.SubagentStop,
+    isAgentDecisionHook,
+    'SubagentStop',
+  );
 
   hooks.UserPromptSubmit = [
     ...promptBase,
@@ -303,6 +355,14 @@ export function planCodexMemoryHooks({
   hooks.SessionStart = [
     ...sessionBase,
     desiredSession,
+  ];
+  hooks.Stop = [
+    ...stopBase,
+    desiredStop,
+  ];
+  hooks.SubagentStop = [
+    ...subagentStopBase,
+    desiredSubagentStop,
   ];
 
   const config = { ...existing, hooks };
@@ -405,6 +465,10 @@ export function installCodexMemoryHooks({
       managed: {
         SessionStart: true,
         UserPromptSubmit: true,
+        Stop: true,
+        SubagentStop: true,
+        candidateCapture: true,
+        agentDecisionCapture: true,
         autoPipeline: true,
       },
       plan: plan.diagnostics,

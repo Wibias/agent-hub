@@ -276,6 +276,23 @@ test('secret filtering happens before canonical SQLite persistence', async (t) =
 });
 
 
+test('GitHub token shapes and generic token assignments are redacted before persistence', async (t) => {
+  const { engine } = await createEngine();
+  t.after(() => engine.close());
+  engine.registerProject({ projectId: 'project-a', repoIdentity: 'project-a' });
+
+  const token = 'gh' + 'p_' + 'abcdefghijklmnopqrstuvwxyz1234567890';
+  engine.recordEvidence(evidence({
+    id: 'e-token-secret',
+    content: `Decision: token=${token}`,
+  }));
+
+  const stored = engine.getEvidence('e-token-secret');
+  assert.equal(stored.sensitivity, 'secret_redacted');
+  assert.equal(stored.content_redacted.includes(token), false);
+  assert.equal(stored.content_redacted.includes(REDACTED_SECRET), true);
+});
+
 test('structured sensitive metadata fields are redacted before persistence', async (t) => {
   const { engine } = await createEngine();
   t.after(() => engine.close());

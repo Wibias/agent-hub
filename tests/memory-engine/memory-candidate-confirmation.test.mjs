@@ -63,6 +63,85 @@ function seedCandidate(memory, {
   });
 }
 
+function seedAgentCandidate(memory, {
+  id = 'agent-candidate',
+  evidenceId = 'e-agent-candidate',
+  value = 'Decision: switch the database to Postgres.',
+} = {}) {
+  const evidence = memory.recordEvidence({
+    id: evidenceId,
+    projectId: 'project',
+    harness: 'codex',
+    sessionId: 'agent-session',
+    sourceKind: 'assistant',
+    sourceRef: 'codex:assistant:turn',
+    capturedAt: '2026-10-01T01:00:00.000Z',
+    branch: 'main',
+    content: value,
+    authorityClass: 'agent_inference',
+    metadata: { event_type: 'assistant_stop', decision_capture: true },
+  });
+  const candidate = memory.recordAgentCandidate({
+    id,
+    evidenceId: evidence.id,
+    proposedValue: evidence.content_redacted,
+    decisionReason: 'rule:agent_decision:explicit_commitment',
+    policyVersion: 'agent-capture-v1',
+    fingerprint: 'a'.repeat(64),
+    createdAt: '2026-10-01T01:00:00.000Z',
+  });
+  memory.evaluateAgentCandidate({
+    candidateId: candidate.id,
+    evaluatorId: 'codex:test:agent-importance-v1',
+    evaluatedAt: '2026-10-01T01:01:00.000Z',
+    evaluation: {
+      decision: 'needs_confirmation',
+      suggested_type: 'decision',
+      durability: 'long',
+      future_utility: 'high',
+      specificity: 'high',
+      confidence: 'medium',
+      meaning_preserved: true,
+      canonical_fact: null,
+      reason: 'User confirmation required.',
+      risk_flags: ['scope_unclear'],
+    },
+  });
+  return memory.getCandidate(candidate.id);
+}
+
+function seedAgentDurable(memory, {
+  claimId = 'agent-claim-existing',
+  evidenceId = 'e-agent-existing',
+  value = 'Agent decision: use Postgres.',
+} = {}) {
+  memory.ingest({
+    evidence: {
+      id: evidenceId,
+      projectId: 'project',
+      harness: 'codex',
+      sessionId: 'agent-existing',
+      sourceKind: 'assistant',
+      sourceRef: 'codex:assistant:existing',
+      capturedAt: '2026-10-01T00:00:00.000Z',
+      branch: 'main',
+      content: value,
+      authorityClass: 'agent_inference',
+      metadata: { event_type: 'assistant_stop' },
+    },
+    claim: {
+      id: claimId,
+      kind: 'agent_inference',
+      subject: 'agent decision',
+      predicate: 'states',
+      value,
+      branchScope: 'main',
+      createdAt: '2026-10-01T00:00:00.000Z',
+    },
+  });
+  return memory.getClaim(claimId);
+}
+
 function seedDurable(memory, {
   claimId = 'claim-existing',
   evidenceId = 'e-existing',
@@ -427,5 +506,85 @@ test('confirmation is exactly-once', async () => {
   );
 
   assert.equal(memory.exportCanonical().claims.length, 1);
+  memory.close();
+});
+
+
+test('confirming an agent decision promotes new user_direct evidence without rewriting agent provenance', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'agent-hub-confirm-agent-'));
+  const memory = new MemoryEngine({ dbPath: join(root, 'memory.sqlite3') });
+  createProject(memory);
+  const candidate = seedAgentCandidate(memory);
+  const originalEvidence = memory.getEvidence(candidate.source_evidence_id);
+  const confirmation = seedConfirmationEvidence(memory);
+
+  const result = confirmMemoryCandidate({
+    memory,
+    projectId: 'project',
+    branch: 'main',
+    candidateId: candidate.id,
+    relation: 'unrelated',
+    targetClaimId: null,
+    confirmationEvidenceId: confirmation.id,
+    now: () => '2026-10-01T02:00:00.000Z',
+  });
+
+  assert.equal(result.status, 'promoted');
+  const claim = memory.getClaim(memoryCandidateConfirmationClaimId(candidate.id));
+  assert.equal(claim.kind, 'user_direct');
+  assert.equal(claim.subject, 'user memory');
+  assert.equal(claim.value, candidate.proposed_value);
+  assert.notEqual(claim.created_from_evidence_id, originalEvidence.id);
+
+  const endorsed = memory.getEvidence(claim.created_from_evidence_id);
+  assert.equal(endorsed.authority_class, 'user_direct');
+  assert.equal(endorsed.source_kind, 'user_confirmation');
+  assert.equal(
+    endorsed.metadata.agent_source_evidence_id,
+    originalEvidence.id,
+  );
+  assert.equal(
+    memory.getEvidence(originalEvidence.id).authority_class,
+    'agent_inference',
+  );
+
+  memory.close();
+});
+
+test('same confirmation against an agent decision upgrades authority by superseding the agent claim', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'agent-hub-confirm-agent-same-'));
+  const memory = new MemoryEngine({ dbPath: join(root, 'memory.sqlite3') });
+  createProject(memory);
+  const target = seedAgentDurable(memory);
+  const candidate = seedAgentCandidate(memory, {
+    value: 'Agent decision: use Postgres.',
+  });
+  const confirmation = seedConfirmationEvidence(memory, {
+    content: 'memory candidate confirm: ~fixture => same @fixture',
+  });
+
+  const result = confirmMemoryCandidate({
+    memory,
+    projectId: 'project',
+    branch: 'main',
+    candidateId: candidate.id,
+    relation: 'same',
+    targetClaimId: target.id,
+    confirmationEvidenceId: confirmation.id,
+    now: () => '2026-10-01T02:00:00.000Z',
+  });
+
+  assert.equal(result.status, 'promoted');
+  const userClaim = memory.getClaim(
+    memoryCandidateConfirmationClaimId(candidate.id),
+  );
+  assert.equal(userClaim.kind, 'user_direct');
+  assert.equal(userClaim.state, 'active');
+  assert.equal(memory.getClaim(target.id).state, 'superseded');
+  assert.equal(
+    memory.getClaim(target.id).superseded_by_claim_id,
+    userClaim.id,
+  );
+
   memory.close();
 });

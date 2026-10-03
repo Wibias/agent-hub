@@ -13,6 +13,9 @@ import { memoryRestoreLocked } from '../memory-engine/memory-maintenance-lock.mj
 import {
   runMemoryCandidatePipelineCli,
 } from './process-memory-candidates.mjs';
+import {
+  reindexMemorySemantic,
+} from './reindex-memory-semantic.mjs';
 
 const DEFAULT_STALE_LOCK_MS = 60 * 60 * 1000;
 
@@ -184,11 +187,24 @@ export async function releaseMemoryCandidatePipelineLock(lock) {
   await rm(lock.path, { force: true });
 }
 
+function promotedClaimCount(result) {
+  if (!result || !Array.isArray(result.stages)) return 0;
+  let total = 0;
+  for (const stage of result.stages) {
+    if (!['promotion', 'agent_promotion'].includes(stage?.name)) continue;
+    total += Number(stage?.result?.summary?.promoted ?? 0);
+  }
+  return total;
+}
+
 function automaticReady(status) {
   return (
     Number(status?.importance_ready ?? 0)
     + Number(status?.relation_ready ?? 0)
     + Number(status?.promotion_ready ?? 0)
+    + Number(status?.agent_importance_ready ?? 0)
+    + Number(status?.agent_relation_ready ?? 0)
+    + Number(status?.agent_promotion_ready ?? 0)
   );
 }
 
@@ -201,6 +217,7 @@ export async function runMemoryCandidatePipelineWorker({
   revisionSha = null,
   maxRounds = 5,
   runPipeline = runMemoryCandidatePipelineCli,
+  syncSemantic = reindexMemorySemantic,
   restoreLocked = memoryRestoreLocked,
   acquireLock = acquireMemoryCandidatePipelineLock,
   releaseLock = releaseMemoryCandidatePipelineLock,
@@ -214,6 +231,9 @@ export async function runMemoryCandidatePipelineWorker({
   }
   if (typeof runPipeline !== 'function') {
     throw new TypeError('runPipeline must be a function');
+  }
+  if (typeof syncSemantic !== 'function') {
+    throw new TypeError('syncSemantic must be a function');
   }
 
   const runtime = {
@@ -238,6 +258,12 @@ export async function runMemoryCandidatePipelineWorker({
   let rounds = 0;
   let final = null;
   let status = 'drained';
+  let promotedClaims = 0;
+  let semanticSync = {
+    status: 'not_needed',
+    indexed: 0,
+    failed: 0,
+  };
 
   try {
     for (let round = 0; round < maxRounds; round += 1) {
@@ -263,6 +289,7 @@ export async function runMemoryCandidatePipelineWorker({
       });
       rounds += 1;
       final = result.final;
+      promotedClaims += promotedClaimCount(result);
 
       const remaining = automaticReady(result.final);
       if (remaining === 0) {
@@ -279,12 +306,37 @@ export async function runMemoryCandidatePipelineWorker({
       if (round === maxRounds - 1) status = 'max_rounds';
     }
 
+    if (promotedClaims > 0) {
+      try {
+        const synced = await syncSemantic({
+          dbPath: runtime.dbPath,
+          projectId: runtime.projectId,
+          branch: runtime.branch,
+          log() {},
+        });
+        semanticSync = {
+          status: Number(synced?.failed ?? 0) === 0 ? 'ok' : 'partial',
+          indexed: Number(synced?.indexed ?? 0),
+          failed: Number(synced?.failed ?? 0),
+        };
+      } catch (error) {
+        semanticSync = {
+          status: 'failed',
+          indexed: 0,
+          failed: promotedClaims,
+          error: error instanceof Error ? error.message : String(error),
+        };
+      }
+    }
+
     return {
       type: 'agent_hub_memory_candidate_pipeline_worker',
       status,
       rounds,
       projectId: runtime.projectId,
       branch: runtime.branch,
+      promotedClaims,
+      semanticSync,
       final,
     };
   } finally {

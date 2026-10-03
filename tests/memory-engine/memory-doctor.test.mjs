@@ -238,12 +238,15 @@ test('Codex integration doctor separates critical recall-hook failure from optio
     configured: true,
     userPromptSubmit: true,
     sessionStartLauncher: true,
+    stopAgentDecisionCapture: true,
+    subagentStopAgentDecisionCapture: true,
     flags: {
       ignoreMemoryEnv: true,
       explicitMemoryRequests: true,
       hybridRecall: true,
       candidateCapture: true,
       autoPipeline: true,
+      agentDecisionCapture: true,
     },
   };
 
@@ -300,6 +303,26 @@ test('Codex integration doctor separates critical recall-hook failure from optio
   });
   assert.equal(noAutoPipeline.status, 'degraded');
   assert.equal(noAutoPipeline.reason, 'auto_pipeline_disabled');
+
+  const noAgentDecisionCapture = await inspectCodexIntegration({
+    codexHome: 'fixture',
+    auditState: async () => ({
+      agentHubHook: {
+        ...healthyHook,
+        subagentStopAgentDecisionCapture: false,
+        flags: {
+          ...healthyHook.flags,
+          agentDecisionCapture: false,
+        },
+      },
+      hookReadError: null,
+    }),
+  });
+  assert.equal(noAgentDecisionCapture.status, 'degraded');
+  assert.equal(
+    noAgentDecisionCapture.reason,
+    'agent_decision_capture_incomplete',
+  );
 
   const missingHybrid = await inspectCodexIntegration({
     codexHome: 'fixture',

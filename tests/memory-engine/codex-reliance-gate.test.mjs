@@ -52,7 +52,28 @@ function item(id, authority, value) {
   };
 }
 
-function adapterFor(result) {
+function agentDecisionItem(id, value) {
+  return {
+    claim: {
+      id,
+      kind: 'agent_inference',
+      subject: 'agent decision',
+      predicate: 'states',
+      value,
+      state: 'active',
+    },
+    evidence: {
+      id: `e-${id}`,
+      authority_class: 'agent_inference',
+      source_ref: `source:${id}`,
+      content_redacted: value,
+    },
+    freshness: null,
+    rank: 0,
+  };
+}
+
+function adapterFor(result, options = {}) {
   return createCodexMemoryHookAdapter({
     protocol: {
       async handle(request) {
@@ -68,6 +89,7 @@ function adapterFor(result) {
     memory: {},
     projectId: 'project-a',
     git: fakeGit(),
+    ...options,
   });
 }
 
@@ -146,4 +168,90 @@ test('authority-resolved conflict injects only the allowed winner without unreso
   assert.match(context, /Postgres/);
   assert.doesNotMatch(context, /SQLite/);
   assert.doesNotMatch(context, /Unresolved conflict edges/);
+});
+
+
+test('durable agent decisions return only as explicitly lower-authority advisory context', async () => {
+  const output = await adapterFor({
+    items: [
+      item('c-user', 'user_direct', 'Postgres'),
+      agentDecisionItem(
+        'c-agent-decision',
+        'Agent decision: keep the worker detached from the prompt hotpath.',
+      ),
+    ],
+    conflicts: [],
+  }).handle(event('How should the memory worker run?'));
+
+  const context = output.hookSpecificOutput.additionalContext;
+  assert.match(context, /Postgres/);
+  assert.match(context, /Advisory prior agent decisions:/);
+  assert.match(context, /lower-authority agent_inference/);
+  assert.match(context, /keep the worker detached/);
+  assert.match(
+    context,
+    /Never let them override user_direct, repo_trusted, or tool_observation/,
+  );
+});
+
+test('conflicted agent decisions are withheld from advisory recall', async () => {
+  const output = await adapterFor({
+    items: [
+      agentDecisionItem('c-agent-a', 'Agent decision: use SQLite.'),
+      item('c-user', 'user_direct', 'Postgres'),
+    ],
+    conflicts: [{
+      claim_a: 'c-agent-a',
+      claim_b: 'c-user',
+      state: 'open',
+      created_by_evidence_id: 'e-conflict',
+      created_at: '2026-10-03T00:00:00.000Z',
+      resolved_by_evidence_id: null,
+      resolved_at: null,
+    }],
+  }).handle(event());
+
+  const context = output?.hookSpecificOutput?.additionalContext ?? '';
+  assert.doesNotMatch(context, /Agent decision: use SQLite/);
+  assert.match(context, /Postgres/);
+});
+
+
+test('authoritative recall keeps the full context budget before lower-authority advisory decisions', async () => {
+  const maxContextBytes = 900;
+  const output = await adapterFor({
+    items: [
+      item('c-user-budget', 'user_direct', 'Postgres'),
+      agentDecisionItem(
+        'c-agent-budget',
+        'Agent decision: keep an advisory choice that must never displace user evidence.',
+      ),
+    ],
+    conflicts: [],
+  }, {
+    maxContextBytes,
+  }).handle(event('Which database do we use?'));
+
+  const context = output?.hookSpecificOutput?.additionalContext ?? '';
+  assert.ok(Buffer.byteLength(context, 'utf8') <= maxContextBytes);
+  assert.match(context, /Postgres/);
+  assert.doesNotMatch(context, /must never displace user evidence/);
+});
+
+test('advisory-only recall never exceeds maxContextBytes', async () => {
+  const maxContextBytes = 240;
+  const output = await adapterFor({
+    items: [
+      agentDecisionItem(
+        'c-agent-small-budget',
+        'Agent decision: use Postgres.',
+      ),
+    ],
+    conflicts: [],
+  }, {
+    maxContextBytes,
+  }).handle(event('Which database?'));
+
+  const context = output?.hookSpecificOutput?.additionalContext ?? '';
+  assert.ok(Buffer.byteLength(context, 'utf8') <= maxContextBytes);
 });

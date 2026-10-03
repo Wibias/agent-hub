@@ -66,6 +66,57 @@ export function formatCodexMemoryContext(result, options = {}) {
   return formatMemoryRecallContext(result, options);
 }
 
+export function formatAgentDecisionRecallContext(items, {
+  maxBytes = 2_048,
+} = {}) {
+  if (!Array.isArray(items) || items.length === 0) return '';
+  if (!Number.isInteger(maxBytes) || maxBytes < 1) {
+    throw new RangeError('maxBytes must be a positive integer');
+  }
+
+  const lines = [
+    'Advisory prior agent decisions:',
+    'These are lower-authority agent_inference memories, not user instructions or project truth.',
+    'Never let them override user_direct, repo_trusted, or tool_observation evidence.',
+  ];
+
+  for (const item of items) {
+    const claim = item?.claim ?? {};
+    const evidence = item?.evidence ?? {};
+    if (
+      claim.kind !== 'agent_inference'
+      || claim.subject !== 'agent decision'
+      || claim.predicate !== 'states'
+      || claim.state !== 'active'
+      || evidence.authority_class !== 'agent_inference'
+    ) {
+      continue;
+    }
+
+    const line = '- ' + compactText(
+      claim.value ?? evidence.content_redacted ?? '',
+      500,
+    );
+    if (line === '- ') continue;
+    const next = [...lines, line].join('\n');
+    if (byteLength(next) > maxBytes) break;
+    lines.push(line);
+  }
+
+  return lines.length > 3 ? lines.join('\n') : '';
+}
+
+function combineRecallContexts(authoritative, advisory, maxBytes) {
+  if (!authoritative) {
+    return advisory && byteLength(advisory) <= maxBytes ? advisory : '';
+  }
+  if (!advisory) return authoritative;
+
+  const combined = authoritative + '\n\n' + advisory;
+  if (byteLength(combined) <= maxBytes) return combined;
+  return authoritative;
+}
+
 export function parseExplicitMemoryPrompt(prompt) {
   if (typeof prompt !== 'string') return null;
 
@@ -338,6 +389,7 @@ function formatPendingMemoryCandidates(memory, {
     const line = [
       `- ${memoryCandidateRef(candidate.id)}`,
       `[status=${compactText(candidate.status, 40)}]`,
+      `[authority=${compactText(candidate.source_authority, 40)}]`,
       `[${compactText(candidate.proposed_type, 80)}]`,
       compactText(candidate.proposed_value, 500),
       judgeSummary ? '| ' + judgeSummary : null,
@@ -363,6 +415,9 @@ function formatMemoryCandidatePipelineStatus(memory, {
     typeof memory?.listUnevaluatedCandidates !== 'function'
     || typeof memory?.listRelationPendingCandidates !== 'function'
     || typeof memory?.listPromotionReadyCandidates !== 'function'
+    || typeof memory?.listUnevaluatedAgentCandidates !== 'function'
+    || typeof memory?.listAgentRelationPendingCandidates !== 'function'
+    || typeof memory?.listAgentPromotionReadyCandidates !== 'function'
     || typeof memory?.listScopedCandidates !== 'function'
   ) {
     return unavailable;
@@ -385,6 +440,21 @@ function formatMemoryCandidatePipelineStatus(memory, {
       branch,
       limit,
     }).length;
+    const agentImportanceReady = memory.listUnevaluatedAgentCandidates({
+      projectId,
+      branch,
+      limit,
+    }).length;
+    const agentRelationReady = memory.listAgentRelationPendingCandidates({
+      projectId,
+      branch,
+      limit,
+    }).length;
+    const agentPromotionReady = memory.listAgentPromotionReadyCandidates({
+      projectId,
+      branch,
+      limit,
+    }).length;
     const scoped = memory.listScopedCandidates({
       projectId,
       branch,
@@ -399,6 +469,9 @@ function formatMemoryCandidatePipelineStatus(memory, {
       `importance-ready: ${importanceReady} (next batch, max ${limit})`,
       `relation-ready: ${relationReady} (next batch, max ${limit})`,
       `promotion-ready: ${promotionReady} (next batch, max ${limit})`,
+      `agent-importance-ready: ${agentImportanceReady} (next batch, max ${limit})`,
+      `agent-relation-ready: ${agentRelationReady} (next batch, max ${limit})`,
+      `agent-promotion-ready: ${agentPromotionReady} (next batch, max ${limit})`,
       `needs-confirmation: ${needsConfirmation}`,
       `kept-for-review: ${keptForReview}`,
       'Read-only: this status command does not run judges or promotion.',
@@ -518,6 +591,56 @@ export function resolveActiveDirectUserMemoryTarget(memory, {
   const matches = memories.filter(
     (claim) => memoryClaimRef(claim.id) === ref,
   );
+  return matches.length === 1 ? matches[0] : null;
+}
+
+export function resolveActiveCandidateConfirmationTarget(memory, {
+  projectId,
+  branch,
+  ref,
+}) {
+  if (
+    !memory
+    || typeof memory.exportCanonical !== 'function'
+    || !nonEmptyString(ref)
+  ) {
+    return null;
+  }
+  const exported = memory.exportCanonical();
+  if (
+    !exported
+    || !Array.isArray(exported.claims)
+    || !Array.isArray(exported.evidence)
+  ) {
+    return null;
+  }
+  const evidenceById = new Map(
+    exported.evidence.map((evidence) => [evidence.id, evidence]),
+  );
+  const matches = exported.claims.filter((claim) => {
+    if (
+      claim?.project_id !== projectId
+      || claim?.branch_scope !== branch
+      || claim?.state !== 'active'
+      || memoryClaimRef(claim.id) !== ref
+    ) {
+      return false;
+    }
+    const evidence = evidenceById.get(claim.created_from_evidence_id);
+    const direct = (
+      claim.kind === 'user_direct'
+      && claim.subject === 'user memory'
+      && claim.predicate === 'states'
+      && evidence?.authority_class === 'user_direct'
+    );
+    const agent = (
+      claim.kind === 'agent_inference'
+      && claim.subject === 'agent decision'
+      && claim.predicate === 'states'
+      && evidence?.authority_class === 'agent_inference'
+    );
+    return direct || agent;
+  });
   return matches.length === 1 ? matches[0] : null;
 }
 
@@ -869,11 +992,19 @@ export function createCodexMemoryHookAdapter({
                   } else {
                     const target = parsedMemory.targetRef === null
                       ? null
-                      : resolveActiveDirectUserMemoryTarget(memory, {
-                          projectId,
-                          branch: context.branch,
-                          ref: parsedMemory.targetRef,
-                        });
+                      : (
+                        candidate.source_authority === 'agent_inference'
+                          ? resolveActiveCandidateConfirmationTarget(memory, {
+                              projectId,
+                              branch: context.branch,
+                              ref: parsedMemory.targetRef,
+                            })
+                          : resolveActiveDirectUserMemoryTarget(memory, {
+                              projectId,
+                              branch: context.branch,
+                              ref: parsedMemory.targetRef,
+                            })
+                      );
 
                     if (
                       parsedMemory.targetRef !== null
@@ -1022,12 +1153,31 @@ export function createCodexMemoryHookAdapter({
         });
         if (!recalled?.ok) return null;
 
+        const recalledItems = recalled.result?.items ?? [];
+        const recalledConflicts = recalled.result?.conflicts ?? [];
         const reliance = evaluateReliance({
-          items: recalled.result?.items ?? [],
-          conflicts: recalled.result?.conflicts ?? [],
+          items: recalledItems,
+          conflicts: recalledConflicts,
           use: 'answer',
         });
-        const additionalContext = formatCodexMemoryContext(
+
+        const conflictedIds = new Set();
+        for (const conflict of recalledConflicts) {
+          if (conflict?.state === 'resolved') continue;
+          if (nonEmptyString(conflict?.claim_a)) conflictedIds.add(conflict.claim_a);
+          if (nonEmptyString(conflict?.claim_b)) conflictedIds.add(conflict.claim_b);
+        }
+
+        const advisoryItems = recalledItems.filter((item) => (
+          item?.claim?.kind === 'agent_inference'
+          && item?.claim?.subject === 'agent decision'
+          && item?.claim?.predicate === 'states'
+          && item?.claim?.state === 'active'
+          && item?.evidence?.authority_class === 'agent_inference'
+          && !conflictedIds.has(item.claim.id)
+        ));
+
+        const authoritativeContext = formatCodexMemoryContext(
           {
             items: reliance.selected,
             conflicts: reliance.conflict_resolutions.filter(
@@ -1035,6 +1185,25 @@ export function createCodexMemoryHookAdapter({
             ),
           },
           { maxBytes: maxContextBytes },
+        );
+        const separatorBytes = authoritativeContext ? 2 : 0;
+        const remainingBytes = Math.max(
+          0,
+          maxContextBytes
+            - byteLength(authoritativeContext)
+            - separatorBytes,
+        );
+        const advisoryBudget = Math.min(2_048, remainingBytes);
+        const advisoryContext = advisoryBudget > 0
+          ? formatAgentDecisionRecallContext(
+              advisoryItems,
+              { maxBytes: advisoryBudget },
+            )
+          : '';
+        const additionalContext = combineRecallContexts(
+          authoritativeContext,
+          advisoryContext,
+          maxContextBytes,
         );
         if (!additionalContext) return null;
 

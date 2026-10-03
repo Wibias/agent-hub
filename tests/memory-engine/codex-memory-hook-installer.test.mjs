@@ -37,6 +37,15 @@ function managedSessionHook(config) {
     ));
 }
 
+function managedAgentDecisionHook(config, eventName) {
+  const entries = config.hooks[eventName] ?? [];
+  return entries
+    .flatMap((entry) => Array.isArray(entry?.hooks) ? entry.hooks : [])
+    .find((hook) => /codex-agent-decision-hook-cli\.mjs/.test(
+      String(hook?.command ?? '') + String(hook?.commandWindows ?? ''),
+    ));
+}
+
 test('installer plan adds current memory hooks while preserving unrelated hooks and root fields', () => {
   const unrelatedPrompt = {
     hooks: [{
@@ -88,7 +97,21 @@ test('installer plan adds current memory hooks while preserving unrelated hooks 
   });
   assert.equal(plan.config.version, 1);
   assert.deepEqual(plan.config.custom, { keep: true });
-  assert.deepEqual(plan.config.hooks.Stop, unrelatedStop);
+  assert.deepEqual(plan.config.hooks.Stop[0], unrelatedStop[0]);
+  assert.equal(plan.diagnostics.Stop.action, 'install');
+  assert.equal(plan.diagnostics.Stop.unrelatedHooksPreserved, 1);
+  assert.equal(plan.diagnostics.SubagentStop.action, 'install');
+
+  const stop = managedAgentDecisionHook(plan.config, 'Stop');
+  assert.ok(stop);
+  assert.match(stop.command, /codex-agent-decision-hook-cli\.mjs/);
+  assert.match(stop.command, /--ignore-memory-env/);
+  assert.match(stop.command, /--auto-pipeline/);
+  assert.equal(stop.timeout, 10);
+
+  const subagentStop = managedAgentDecisionHook(plan.config, 'SubagentStop');
+  assert.ok(subagentStop);
+  assert.match(subagentStop.command, /codex-agent-decision-hook-cli\.mjs/);
   assert.deepEqual(plan.config.hooks.UserPromptSubmit[0], unrelatedPrompt);
 
   const prompt = managedPromptHook(plan.config);
@@ -198,6 +221,52 @@ test('installer replaces stale or duplicate managed hooks without deleting unrel
   );
 });
 
+test('installer replaces stale agent decision hooks without deleting unrelated stop hooks', () => {
+  const existing = {
+    hooks: {
+      Stop: [{
+        hooks: [
+          {
+            type: 'command',
+            command: 'node /old/memory-engine/adapters/codex-agent-decision-hook-cli.mjs',
+          },
+          {
+            type: 'command',
+            command: 'node /repo/keep-stop.mjs',
+          },
+        ],
+      }],
+      SubagentStop: [{
+        hooks: [{
+          type: 'command',
+          commandWindows: 'node C:\\old\\memory-engine\\adapters\\codex-agent-decision-hook-cli.mjs',
+        }],
+      }],
+    },
+  };
+
+  const plan = planCodexMemoryHooks({
+    existing,
+    hubRoot: HUB,
+    nodePath: NODE,
+  });
+
+  assert.equal(plan.diagnostics.Stop.action, 'normalize');
+  assert.equal(plan.diagnostics.Stop.mixedEntries, 1);
+  assert.equal(plan.diagnostics.SubagentStop.action, 'normalize');
+
+  const stopHooks = plan.config.hooks.Stop.flatMap((entry) => entry.hooks ?? []);
+  assert.equal(
+    stopHooks.filter((hook) => /codex-agent-decision-hook-cli\.mjs/.test(
+      String(hook.command ?? '') + String(hook.commandWindows ?? ''),
+    )).length,
+    1,
+  );
+  assert.ok(
+    stopHooks.some((hook) => /keep-stop\.mjs/.test(String(hook.command))),
+  );
+});
+
 test('installer plan is idempotent after normalization', () => {
   const first = planCodexMemoryHooks({
     existing: { hooks: {} },
@@ -214,6 +283,8 @@ test('installer plan is idempotent after normalization', () => {
   assert.equal(second.changed, false);
   assert.equal(second.diagnostics.UserPromptSubmit.action, 'current');
   assert.equal(second.diagnostics.SessionStart.action, 'current');
+  assert.equal(second.diagnostics.Stop.action, 'current');
+  assert.equal(second.diagnostics.SubagentStop.action, 'current');
   assert.deepEqual(second.config, first.config);
 });
 
@@ -246,6 +317,8 @@ test('installer is dry-run by default and apply creates a backup before changing
     assert.equal(dry.backupPath, null);
     assert.equal(dry.plan.UserPromptSubmit.action, 'install');
     assert.equal(dry.plan.SessionStart.action, 'install');
+    assert.equal(dry.plan.Stop.action, 'install');
+    assert.equal(dry.plan.SubagentStop.action, 'install');
     assert.deepEqual(
       JSON.parse(readFileSync(hooksPath, 'utf8')),
       original,
