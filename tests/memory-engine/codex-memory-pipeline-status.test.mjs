@@ -23,6 +23,9 @@ function pipelineMemory({
   importance = 0,
   relation = 0,
   promotion = 0,
+  agentImportance = 0,
+  agentRelation = 0,
+  agentPromotion = 0,
   needsConfirmation = 0,
   keptForReview = 0,
 } = {}) {
@@ -45,6 +48,24 @@ function pipelineMemory({
       calls.push(['promotion', args]);
       return Array.from({ length: promotion }, (_, index) => ({
         id: 'promotion-' + index,
+      }));
+    },
+    listUnevaluatedAgentCandidates(args) {
+      calls.push(['agent-importance', args]);
+      return Array.from({ length: agentImportance }, (_, index) => ({
+        id: 'agent-importance-' + index,
+      }));
+    },
+    listAgentRelationPendingCandidates(args) {
+      calls.push(['agent-relation', args]);
+      return Array.from({ length: agentRelation }, (_, index) => ({
+        id: 'agent-relation-' + index,
+      }));
+    },
+    listAgentPromotionReadyCandidates(args) {
+      calls.push(['agent-promotion', args]);
+      return Array.from({ length: agentPromotion }, (_, index) => ({
+        id: 'agent-promotion-' + index,
       }));
     },
     listScopedCandidates(args) {
@@ -95,6 +116,9 @@ test('memory pipeline reports current-scope stage readiness without protocol or 
     importance: 2,
     relation: 1,
     promotion: 1,
+    agentImportance: 2,
+    agentRelation: 1,
+    agentPromotion: 1,
     needsConfirmation: 3,
     keptForReview: 2,
   });
@@ -138,6 +162,9 @@ test('memory pipeline reports current-scope stage readiness without protocol or 
   assert.match(result.reason, /importance-ready:\s+2/);
   assert.match(result.reason, /relation-ready:\s+1/);
   assert.match(result.reason, /promotion-ready:\s+1/);
+  assert.match(result.reason, /agent-importance-ready:\s+2/);
+  assert.match(result.reason, /agent-relation-ready:\s+1/);
+  assert.match(result.reason, /agent-promotion-ready:\s+1/);
   assert.match(result.reason, /needs-confirmation:\s+3/);
   assert.match(result.reason, /kept-for-review:\s+2/);
   assert.match(
@@ -164,6 +191,21 @@ test('memory pipeline reports current-scope stage readiness without protocol or 
         limit: 20,
       }],
       ['promotion', {
+        projectId: 'github.com/Wibias/agent-hub',
+        branch: 'feat/example',
+        limit: 20,
+      }],
+      ['agent-importance', {
+        projectId: 'github.com/Wibias/agent-hub',
+        branch: 'feat/example',
+        limit: 20,
+      }],
+      ['agent-relation', {
+        projectId: 'github.com/Wibias/agent-hub',
+        branch: 'feat/example',
+        limit: 20,
+      }],
+      ['agent-promotion', {
         projectId: 'github.com/Wibias/agent-hub',
         branch: 'feat/example',
         limit: 20,
@@ -203,6 +245,9 @@ test('memory pipeline reports an empty pipeline without invoking any judge', asy
   assert.match(result.reason, /importance-ready:\s+0/);
   assert.match(result.reason, /relation-ready:\s+0/);
   assert.match(result.reason, /promotion-ready:\s+0/);
+  assert.match(result.reason, /agent-importance-ready:\s+0/);
+  assert.match(result.reason, /agent-relation-ready:\s+0/);
+  assert.match(result.reason, /agent-promotion-ready:\s+0/);
   assert.match(result.reason, /needs-confirmation:\s+0/);
   assert.match(result.reason, /kept-for-review:\s+0/);
 });
