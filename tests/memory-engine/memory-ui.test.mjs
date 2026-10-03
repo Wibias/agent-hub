@@ -261,6 +261,13 @@ test('MemoryEngine read-only mode permits inspection and rejects mutation', asyn
   try {
     const overview = memoryUiOverview(readOnly);
     assert.equal(overview.projects.length, 2);
+    const scope = memoryUiScope(readOnly, {
+      projectId: 'github.com/example/alpha',
+      branch: 'main',
+    });
+    assert.equal(scope.memories.length, 1);
+    assert.equal(scope.health.db_healthy, true);
+    assert.equal(scope.pipeline.runs.length, 1);
     assert.throws(
       () => readOnly.registerProject({
         projectId: 'github.com/example/write-attempt',
