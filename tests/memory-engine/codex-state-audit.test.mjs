@@ -266,12 +266,15 @@ test('Codex state audit reports legacy memory separately from conversation histo
     configured: true,
     userPromptSubmit: true,
     sessionStartLauncher: false,
+    stopAgentDecisionCapture: false,
+    subagentStopAgentDecisionCapture: false,
     flags: {
       ignoreMemoryEnv: true,
       explicitMemoryRequests: true,
       hybridRecall: true,
       candidateCapture: false,
       autoPipeline: false,
+      agentDecisionCapture: false,
     },
   });
 
