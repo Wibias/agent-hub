@@ -2,15 +2,20 @@
 
 Generated from `agent-runtime/host-capabilities.json` and `agent-runtime/skill-runtime.json`. Do not hand edit.
 
-- reviewed: 2026-09-04
+- reviewed: 2026-10-03
 - agentsRoot: unsupported
 - skillModelRouting: unsupported
 - config renderer: unsupported
+- lifecycle hooks: supported
+- command hooks: supported
+- plugin-bundled hooks: supported
+- hook events: SessionStart, UserPromptSubmit, PreToolUse, PermissionRequest, PostToolUse, PreCompact, PostCompact, SubagentStart, SubagentStop, Stop, SessionEnd
 - agent profiles: manual
-- note: The Hub keeps Claude-specific orchestration out of shared skills. Renderer remains disabled until this repository locks a current official/local schema and tests it.
+- note: General Claude Code host-config rendering remains unsupported. Documented lifecycle command hooks are supported; the read-only memory integration uses UserPromptSubmit through the explicit Claude Code hook adapter.
 
 ## Sources
 
+- https://code.claude.com/docs/en/hooks
 - https://github.com/addyosmani/agent-skills/blob/main/docs/advanced-per-agent-configuration.md
 
 ## Semantic runtime preferences
