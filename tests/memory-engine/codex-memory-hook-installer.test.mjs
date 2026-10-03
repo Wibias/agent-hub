@@ -47,6 +47,15 @@ function managedAgentDecisionHook(config, eventName) {
     ));
 }
 
+function managedAgentPipelineHook(config, eventName) {
+  const entries = config.hooks[eventName] ?? [];
+  return entries
+    .flatMap((entry) => Array.isArray(entry?.hooks) ? entry.hooks : [])
+    .find((hook) => /codex-agent-memory-pipeline-hook\.mjs/.test(
+      String(hook?.command ?? '') + String(hook?.commandWindows ?? ''),
+    ));
+}
+
 function decodeWindowsPowerShellCommand(hook) {
   const command = String(hook?.commandWindows ?? '');
   const match = /^powershell\.exe -NoProfile -NonInteractive -EncodedCommand ([A-Za-z0-9+/=]+)$/.exec(
@@ -116,12 +125,25 @@ test('installer plan adds current memory hooks while preserving unrelated hooks 
   assert.ok(stop);
   assert.match(stop.command, /codex-agent-decision-hook-cli\.mjs/);
   assert.match(stop.command, /--ignore-memory-env/);
-  assert.match(stop.command, /--auto-pipeline/);
+  assert.doesNotMatch(stop.command, /--auto-pipeline/);
   assert.equal(stop.timeout, 10);
+
+  const stopPipeline = managedAgentPipelineHook(plan.config, 'Stop');
+  assert.ok(stopPipeline);
+  assert.match(stopPipeline.command, /codex-agent-memory-pipeline-hook\.mjs/);
+  assert.match(stopPipeline.command, /--ignore-memory-env/);
+  assert.equal(stopPipeline.timeout, 300);
+  assert.equal(stopPipeline.async, true);
 
   const subagentStop = managedAgentDecisionHook(plan.config, 'SubagentStop');
   assert.ok(subagentStop);
   assert.match(subagentStop.command, /codex-agent-decision-hook-cli\.mjs/);
+  const subagentPipeline = managedAgentPipelineHook(
+    plan.config,
+    'SubagentStop',
+  );
+  assert.ok(subagentPipeline);
+  assert.equal(subagentPipeline.async, true);
   assert.deepEqual(plan.config.hooks.UserPromptSubmit[0], unrelatedPrompt);
 
   const prompt = managedPromptHook(plan.config);
@@ -160,10 +182,22 @@ test('installer emits shell-neutral Windows hooks with safely quoted paths', () 
 
   const prompt = managedPromptHook(plan.config);
   const stop = managedAgentDecisionHook(plan.config, 'Stop');
+  const stopPipeline = managedAgentPipelineHook(plan.config, 'Stop');
   const subagentStop = managedAgentDecisionHook(plan.config, 'SubagentStop');
+  const subagentPipeline = managedAgentPipelineHook(
+    plan.config,
+    'SubagentStop',
+  );
   const session = managedSessionHook(plan.config);
 
-  for (const hook of [prompt, stop, subagentStop, session]) {
+  for (const hook of [
+    prompt,
+    stop,
+    stopPipeline,
+    subagentStop,
+    subagentPipeline,
+    session,
+  ]) {
     assert.ok(hook);
     assert.match(
       hook.commandWindows,
@@ -182,11 +216,23 @@ test('installer emits shell-neutral Windows hooks with safely quoted paths', () 
 
   const stopScript = decodeWindowsPowerShellCommand(stop);
   assert.match(stopScript, /codex-agent-decision-hook-cli\.mjs/);
-  assert.match(stopScript, /'--auto-pipeline'/);
+  assert.doesNotMatch(stopScript, /'--auto-pipeline'/);
   assert.match(stopScript, /; exit \$LASTEXITCODE$/);
+
+  const stopPipelineScript = decodeWindowsPowerShellCommand(stopPipeline);
+  assert.match(
+    stopPipelineScript,
+    /codex-agent-memory-pipeline-hook\.mjs/,
+  );
+  assert.match(stopPipelineScript, /'--ignore-memory-env'/);
+  assert.match(stopPipelineScript, /; exit \$LASTEXITCODE$/);
 
   const subagentStopScript = decodeWindowsPowerShellCommand(subagentStop);
   assert.equal(subagentStopScript, stopScript);
+  const subagentPipelineScript = decodeWindowsPowerShellCommand(
+    subagentPipeline,
+  );
+  assert.equal(subagentPipelineScript, stopPipelineScript);
 
   const sessionScript = decodeWindowsPowerShellCommand(session);
   assert.match(sessionScript, /embedding-worker-launcher\.mjs/);
@@ -315,11 +361,25 @@ test('installer replaces stale agent decision hooks without deleting unrelated s
 
   assert.equal(plan.diagnostics.Stop.action, 'normalize');
   assert.equal(plan.diagnostics.Stop.mixedEntries, 1);
+  assert.deepEqual(
+    plan.diagnostics.Stop.reasons,
+    [
+      'missing_managed_hook',
+      'managed_hook_shares_entry_with_unrelated_hooks',
+      'managed_definition_differs',
+    ],
+  );
   assert.equal(plan.diagnostics.SubagentStop.action, 'normalize');
 
   const stopHooks = plan.config.hooks.Stop.flatMap((entry) => entry.hooks ?? []);
   assert.equal(
     stopHooks.filter((hook) => /codex-agent-decision-hook-cli\.mjs/.test(
+      String(hook.command ?? '') + String(hook.commandWindows ?? ''),
+    )).length,
+    1,
+  );
+  assert.equal(
+    stopHooks.filter((hook) => /codex-agent-memory-pipeline-hook\.mjs/.test(
       String(hook.command ?? '') + String(hook.commandWindows ?? ''),
     )).length,
     1,
