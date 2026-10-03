@@ -60,6 +60,11 @@ function baseDatabaseResult({ dbPath, exists, status, error = null }) {
     currentEmbeddings: null,
     validCurrentEmbeddings: null,
     semanticCoverageComplete: null,
+    pipelineHistoryAvailable: null,
+    recentPipelineRuns: null,
+    failedPipelineRuns: null,
+    pipelineFailures: null,
+    lastPipelineRun: null,
     modelId: E5_MODEL_ID,
     modelRevision: E5_MODEL_REVISION,
     dimensions: E5_DIMENSIONS,
@@ -110,6 +115,10 @@ export function inspectMemoryDatabase({ dbPath, projectId = null, branch = null 
     );
     const missingTables = REQUIRED_TABLES.filter((name) => !presentTables.has(name));
     const candidateLedgerAvailable = presentTables.has('memory_candidates');
+    const pipelineHistoryAvailable = (
+      presentTables.has('memory_pipeline_runs')
+      && presentTables.has('memory_pipeline_failures')
+    );
 
     if (quickCheck !== 'ok' || foreignKeyViolations > 0 || missingTables.length > 0) {
       return {
@@ -119,6 +128,7 @@ export function inspectMemoryDatabase({ dbPath, projectId = null, branch = null 
         journalMode,
         missingTables,
         candidateLedgerAvailable,
+        pipelineHistoryAvailable,
         error: quickCheck !== 'ok'
           ? 'sqlite_quick_check_failed'
           : foreignKeyViolations > 0
@@ -136,6 +146,10 @@ export function inspectMemoryDatabase({ dbPath, projectId = null, branch = null 
     let currentEmbeddings = null;
     let validCurrentEmbeddings = null;
     let semanticCoverageComplete = null;
+    let recentPipelineRuns = null;
+    let failedPipelineRuns = null;
+    let pipelineFailures = null;
+    let lastPipelineRun = null;
 
     if (typeof projectId === 'string' && projectId.length > 0
         && typeof branch === 'string' && branch.length > 0) {
@@ -185,6 +199,28 @@ export function inspectMemoryDatabase({ dbPath, projectId = null, branch = null 
       currentEmbeddings = scalar(embeddingRow, 'current_count');
       validCurrentEmbeddings = scalar(embeddingRow, 'valid_count');
       semanticCoverageComplete = currentEmbeddings === claims && validCurrentEmbeddings === claims;
+
+      if (pipelineHistoryAvailable) {
+        const runRows = db.prepare(
+          'SELECT id, trigger, started_at, finished_at, duration_ms, status, '
+          + 'rounds, promoted_count '
+          + 'FROM memory_pipeline_runs '
+          + 'WHERE project_id = ? AND branch = ? '
+          + 'ORDER BY started_at DESC, id ASC LIMIT 50',
+        ).all(projectId, branch);
+        recentPipelineRuns = runRows.length;
+        failedPipelineRuns = runRows.filter(
+          (row) => ['failed', 'partial'].includes(row.status),
+        ).length;
+        lastPipelineRun = runRows[0] ?? null;
+        pipelineFailures = scalar(
+          db.prepare(
+            'SELECT COUNT(*) AS count FROM memory_pipeline_failures '
+            + 'WHERE project_id = ? AND branch = ?',
+          ).get(projectId, branch),
+          'count',
+        );
+      }
     }
 
     const degraded = journalMode !== 'wal'
@@ -212,6 +248,11 @@ export function inspectMemoryDatabase({ dbPath, projectId = null, branch = null 
       currentEmbeddings,
       validCurrentEmbeddings,
       semanticCoverageComplete,
+      pipelineHistoryAvailable,
+      recentPipelineRuns,
+      failedPipelineRuns,
+      pipelineFailures,
+      lastPipelineRun,
       modelId: E5_MODEL_ID,
       modelRevision: E5_MODEL_REVISION,
       dimensions: E5_DIMENSIONS,
