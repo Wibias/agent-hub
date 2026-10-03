@@ -13,7 +13,10 @@ import {
   launchMemoryCandidatePipeline,
 } from '../../memory-engine/candidate-pipeline-launcher.mjs';
 import {
+  acquireMemoryCandidatePipelineLock,
+  memoryCandidatePipelineLockPath,
   parseMemoryCandidatePipelineWorkerArgs,
+  releaseMemoryCandidatePipelineLock,
   runMemoryCandidatePipelineWorker,
 } from '../../scripts/run-memory-candidate-pipeline-worker.mjs';
 
@@ -253,6 +256,36 @@ test('worker parser requires the frozen runtime scope', () => {
   assert.equal(parsed.revisionSha, 'e'.repeat(40));
   assert.equal(parsed.limit, 7);
   assert.equal(parsed.maxRounds, 3);
+});
+
+test('candidate pipeline lock serializes one project and branch scope', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'agent-hub-auto-pipeline-lock-'));
+  const runtime = {
+    dbPath: join(root, 'memory.sqlite3'),
+    projectId: 'github.com/example/project',
+    branch: 'main',
+  };
+  const lockPath = memoryCandidatePipelineLockPath(runtime);
+
+  let first = null;
+  let third = null;
+  try {
+    first = await acquireMemoryCandidatePipelineLock(lockPath);
+    assert.ok(first);
+
+    const second = await acquireMemoryCandidatePipelineLock(lockPath);
+    assert.equal(second, null);
+
+    await releaseMemoryCandidatePipelineLock(first);
+    first = null;
+
+    third = await acquireMemoryCandidatePipelineLock(lockPath);
+    assert.ok(third);
+  } finally {
+    if (first) await releaseMemoryCandidatePipelineLock(first);
+    if (third) await releaseMemoryCandidatePipelineLock(third);
+    await rm(root, { recursive: true, force: true });
+  }
 });
 
 test('worker exits when another process already owns the scope lock', async () => {
