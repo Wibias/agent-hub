@@ -568,7 +568,9 @@ Useful bounded options:
 --db-path <memory.sqlite3>
 ```
 
-The judge uses policy `importance-v1` and returns exactly one structured recommendation per candidate:
+The judge uses policy `importance-v2` and returns exactly one structured recommendation per candidate.
+
+The v2 boundary between `ignore` and `keep_candidate` is explicit: temporary information is not automatically ignored. A bounded decision, preference, or constraint that should guide multiple future work sessions until a named milestone such as a migration cutover, release cycle, or pilot review belongs in `keep_candidate`. `ignore` is reserved for effectively one-off/current-run state or low-future-utility information. The durable `promote` requirements are unchanged from v1.
 
 ```json
 {
@@ -647,7 +649,7 @@ Even then, `memory list` remains unchanged because no canonical Claim exists.
 
 ### AI candidate relation and dedupe judge
 
-Candidates that already have a valid `importance-v1` `promote` recommendation can be compared against existing active durable user memory with:
+Candidates that already have a valid `importance-v2` `promote` recommendation can be compared against existing active durable user memory with:
 
 ```powershell
 node .\scripts\judge-memory-relations.mjs
@@ -712,7 +714,7 @@ Relation evaluation is exactly-once. The write rechecks that the candidate still
 
 ### Deterministic candidate promotion policy
 
-Candidates with both a valid `importance-v1` `promote` recommendation and a stored relation can enter the final deterministic stage with:
+Candidates with both a valid `importance-v2` `promote` recommendation and a stored relation can enter the final deterministic stage with:
 
 ```powershell
 node .\scripts\promote-memory-candidates.mjs
@@ -876,7 +878,7 @@ node .\scripts\process-memory-candidates.mjs --apply
 The order is fixed:
 
 ```text
-importance-v1
+importance-v2
     ↓
 relation-v1
     ↓
@@ -927,7 +929,7 @@ $env:MEMORY_JUDGE_CALIBRATION_SOURCE_CODEX_HOME = "C:\path\to\.codex"
 
 The fixture contains 32 labeled cases:
 
-- 16 `importance-v1` cases, balanced across `promote`, `ignore`, `keep_candidate`, and `needs_confirmation`;
+- 16 `importance-v2` cases, balanced across `promote`, `ignore`, `keep_candidate`, and `needs_confirmation`;
 - 16 `relation-v1` cases, balanced across `same`, `update`, `contradict`, and `unrelated`;
 - English and German examples in both stages;
 - transient, tentative, scope-unclear, repository-reconstructible, sensitive, and durable importance examples;
@@ -961,7 +963,7 @@ node .\scripts\eval-codex-memory-judge-holdout.mjs
 
 It uses separate bilingual adversarial fixtures for both importance and relation judgment. The importance output also reports whether each case is reachable through the current deterministic `capture-v1` policy. This distinction is intentional:
 
-- `pipeline_reachable=true` means the current production candidate-capture policy could send that statement to `importance-v1`;
+- `pipeline_reachable=true` means the current production candidate-capture policy could send that statement to `importance-v2`;
 - `pipeline_reachable=false` means the case is judge-only distribution-shift evidence and must not be treated as a direct production-pipeline failure.
 
 The holdout quality gate remains deliberately strict for model errors: invalid outputs, false durable promotions, high-confidence wrong importance decisions, and high-confidence wrong relation/target decisions fail the run. The capture-reachability metadata is diagnostic only and does not change those scores.
@@ -987,7 +989,7 @@ This suite contains 32 separate bilingual cases:
 
 The runner executes those deterministic reachability checks before model scoring and reports them separately. Its `pipeline_gate` passes only when both capture reachability and the existing judge safety gate pass.
 
-The real run uses the same production `importance-v1` and `relation-v1` prompts, strict parsers, isolated Codex homes, and default `codex-default` / `medium` settings as the other judge evaluations. Optional comparison overrides use:
+The real run uses the same production `importance-v2` and `relation-v1` prompts, strict parsers, isolated Codex homes, and default `codex-default` / `medium` settings as the other judge evaluations. Optional comparison overrides use:
 
 ```powershell
 $env:MEMORY_JUDGE_PIPELINE_HOLDOUT_MODEL = "MODEL_ID"
@@ -1023,7 +1025,7 @@ Each behavioral case gets its own temporary Git repository and temporary SQLite 
 ```text
 capture-v1
     ↓
-importance-v1
+importance-v2
     ↓
 relation-v1
     ↓
