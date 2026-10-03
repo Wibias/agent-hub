@@ -163,6 +163,56 @@ function normalizeCandidate(row) {
   };
 }
 
+function parseJsonArray(value) {
+  if (typeof value !== 'string' || value.length === 0) return [];
+  const parsed = JSON.parse(value);
+  return Array.isArray(parsed) ? parsed : [];
+}
+
+function parseJsonObject(value) {
+  if (typeof value !== 'string' || value.length === 0) return {};
+  const parsed = JSON.parse(value);
+  return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+    ? parsed
+    : {};
+}
+
+function normalizePipelineRun(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    project_id: row.project_id,
+    branch: row.branch,
+    revision_sha: row.revision_sha,
+    trigger: row.trigger,
+    started_at: row.started_at,
+    finished_at: row.finished_at,
+    duration_ms: row.duration_ms,
+    status: row.status,
+    rounds: row.rounds,
+    promoted_count: row.promoted_count,
+    stage_counts: parseJsonObject(row.stage_counts_json),
+    candidate_refs: parseJsonArray(row.candidate_refs_json),
+    error: row.error_text,
+  };
+}
+
+function normalizePipelineFailure(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    run_id: row.run_id,
+    project_id: row.project_id,
+    branch: row.branch,
+    candidate_id: row.candidate_id,
+    candidate_ref: row.candidate_ref,
+    stage: row.stage,
+    error_class: row.error_class,
+    error: row.error_text,
+    occurred_at: row.occurred_at,
+  };
+}
+
 function normalizeClaim(row) {
   if (!row) return null;
   return {
@@ -1436,6 +1486,45 @@ export class MemoryEngine {
       CREATE INDEX IF NOT EXISTS memory_candidate_confirmations_claim
       ON memory_candidate_confirmations (claim_id);
 
+      CREATE TABLE IF NOT EXISTS memory_pipeline_runs (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL REFERENCES project_registry(project_id),
+        branch TEXT NOT NULL,
+        revision_sha TEXT,
+        trigger TEXT NOT NULL,
+        started_at TEXT NOT NULL,
+        finished_at TEXT,
+        duration_ms INTEGER CHECK (duration_ms IS NULL OR duration_ms >= 0),
+        status TEXT NOT NULL,
+        rounds INTEGER NOT NULL DEFAULT 0 CHECK (rounds >= 0),
+        promoted_count INTEGER NOT NULL DEFAULT 0 CHECK (promoted_count >= 0),
+        stage_counts_json TEXT NOT NULL DEFAULT '{}',
+        candidate_refs_json TEXT NOT NULL DEFAULT '[]',
+        error_text TEXT
+      ) STRICT;
+
+      CREATE INDEX IF NOT EXISTS memory_pipeline_runs_scope_started
+      ON memory_pipeline_runs (project_id, branch, started_at DESC);
+
+      CREATE TABLE IF NOT EXISTS memory_pipeline_failures (
+        id INTEGER PRIMARY KEY,
+        run_id TEXT NOT NULL REFERENCES memory_pipeline_runs(id),
+        project_id TEXT NOT NULL REFERENCES project_registry(project_id),
+        branch TEXT NOT NULL,
+        candidate_id TEXT REFERENCES memory_candidates(id),
+        candidate_ref TEXT,
+        stage TEXT NOT NULL,
+        error_class TEXT NOT NULL,
+        error_text TEXT NOT NULL,
+        occurred_at TEXT NOT NULL
+      ) STRICT;
+
+      CREATE INDEX IF NOT EXISTS memory_pipeline_failures_scope_time
+      ON memory_pipeline_failures (project_id, branch, occurred_at DESC);
+
+      CREATE INDEX IF NOT EXISTS memory_pipeline_failures_run
+      ON memory_pipeline_failures (run_id, id);
+
       CREATE TABLE IF NOT EXISTS lifecycle_events (
         id INTEGER PRIMARY KEY,
         project_id TEXT NOT NULL REFERENCES project_registry(project_id),
@@ -1996,6 +2085,369 @@ export class MemoryEngine {
     }
   }
 
+
+  startPipelineRun({
+    id,
+    projectId,
+    branch,
+    revisionSha = null,
+    trigger,
+    startedAt = this.#clock(),
+  }) {
+    for (const [value, name] of [
+      [id, 'id'],
+      [projectId, 'projectId'],
+      [branch, 'branch'],
+      [trigger, 'trigger'],
+      [startedAt, 'startedAt'],
+    ]) {
+      assertNonEmptyString(value, name);
+    }
+    if (revisionSha !== null) assertNonEmptyString(revisionSha, 'revisionSha');
+    if (!this.getProject(projectId)) throw new Error(`unknown project: ${projectId}`);
+
+    this.#db.prepare(`
+      INSERT INTO memory_pipeline_runs (
+        id, project_id, branch, revision_sha, trigger, started_at,
+        finished_at, duration_ms, status, rounds, promoted_count,
+        stage_counts_json, candidate_refs_json, error_text
+      ) VALUES (?, ?, ?, ?, ?, ?, NULL, NULL, 'running', 0, 0, '{}', '[]', NULL)
+    `).run(id, projectId, branch, revisionSha, trigger, startedAt);
+
+    return this.getPipelineRun(id);
+  }
+
+  finishPipelineRun({
+    id,
+    status,
+    finishedAt = this.#clock(),
+    durationMs,
+    rounds = 0,
+    promotedCount = 0,
+    stageCounts = {},
+    candidateRefs = [],
+    error = null,
+  }) {
+    assertNonEmptyString(id, 'id');
+    assertNonEmptyString(status, 'status');
+    assertNonEmptyString(finishedAt, 'finishedAt');
+    if (!Number.isInteger(durationMs) || durationMs < 0) {
+      throw new RangeError('durationMs must be a non-negative integer');
+    }
+    if (!Number.isInteger(rounds) || rounds < 0) {
+      throw new RangeError('rounds must be a non-negative integer');
+    }
+    if (!Number.isInteger(promotedCount) || promotedCount < 0) {
+      throw new RangeError('promotedCount must be a non-negative integer');
+    }
+    if (!stageCounts || typeof stageCounts !== 'object' || Array.isArray(stageCounts)) {
+      throw new TypeError('stageCounts must be an object');
+    }
+    if (!Array.isArray(candidateRefs)) {
+      throw new TypeError('candidateRefs must be an array');
+    }
+
+    const existing = this.getPipelineRun(id);
+    if (!existing) throw new Error('unknown pipeline run: ' + id);
+    const scannedError = error === null
+      ? null
+      : redactString(String(error)).value;
+
+    this.#db.prepare(`
+      UPDATE memory_pipeline_runs
+      SET finished_at = ?,
+          duration_ms = ?,
+          status = ?,
+          rounds = ?,
+          promoted_count = ?,
+          stage_counts_json = ?,
+          candidate_refs_json = ?,
+          error_text = ?
+      WHERE id = ?
+    `).run(
+      finishedAt,
+      durationMs,
+      status,
+      rounds,
+      promotedCount,
+      JSON.stringify(stageCounts),
+      JSON.stringify([...new Set(candidateRefs.filter(
+        (value) => typeof value === 'string' && value.length > 0,
+      ))]),
+      scannedError,
+      id,
+    );
+
+    return this.getPipelineRun(id);
+  }
+
+  getPipelineRun(id) {
+    assertNonEmptyString(id, 'id');
+    return normalizePipelineRun(
+      this.#db.prepare(
+        'SELECT * FROM memory_pipeline_runs WHERE id = ?',
+      ).get(id),
+    );
+  }
+
+  listPipelineRuns({
+    projectId,
+    branch,
+    limit = 50,
+  }) {
+    assertNonEmptyString(projectId, 'projectId');
+    assertNonEmptyString(branch, 'branch');
+    if (!Number.isInteger(limit) || limit < 1 || limit > 200) {
+      throw new RangeError('limit must be an integer between 1 and 200');
+    }
+    return this.#db.prepare(`
+      SELECT *
+      FROM memory_pipeline_runs
+      WHERE project_id = ? AND branch = ?
+      ORDER BY started_at DESC, id ASC
+      LIMIT ?
+    `).all(projectId, branch, limit).map(normalizePipelineRun);
+  }
+
+  recordPipelineFailure({
+    runId,
+    projectId,
+    branch,
+    candidateId = null,
+    candidateRef = null,
+    stage,
+    errorClass = 'Error',
+    error,
+    occurredAt = this.#clock(),
+  }) {
+    for (const [value, name] of [
+      [runId, 'runId'],
+      [projectId, 'projectId'],
+      [branch, 'branch'],
+      [stage, 'stage'],
+      [errorClass, 'errorClass'],
+      [error, 'error'],
+      [occurredAt, 'occurredAt'],
+    ]) {
+      assertNonEmptyString(value, name);
+    }
+    if (candidateId !== null) assertNonEmptyString(candidateId, 'candidateId');
+    if (candidateRef !== null) assertNonEmptyString(candidateRef, 'candidateRef');
+
+    const run = this.getPipelineRun(runId);
+    if (!run) throw new Error('unknown pipeline run: ' + runId);
+    if (run.project_id !== projectId || run.branch !== branch) {
+      throw new Error('pipeline failure cannot cross run scope');
+    }
+    if (candidateId !== null) {
+      const candidate = this.getCandidate(candidateId);
+      if (!candidate) throw new Error('unknown pipeline failure candidate: ' + candidateId);
+      if (candidate.project_id !== projectId || candidate.branch !== branch) {
+        throw new Error('pipeline failure candidate cannot cross run scope');
+      }
+    }
+
+    const scannedClass = redactString(String(errorClass)).value;
+    const scannedError = redactString(String(error)).value;
+    const result = this.#db.prepare(`
+      INSERT INTO memory_pipeline_failures (
+        run_id, project_id, branch, candidate_id, candidate_ref,
+        stage, error_class, error_text, occurred_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      runId,
+      projectId,
+      branch,
+      candidateId,
+      candidateRef,
+      stage,
+      scannedClass,
+      scannedError,
+      occurredAt,
+    );
+    return normalizePipelineFailure(
+      this.#db.prepare(
+        'SELECT * FROM memory_pipeline_failures WHERE id = ?',
+      ).get(Number(result.lastInsertRowid)),
+    );
+  }
+
+  listPipelineFailures({
+    projectId,
+    branch,
+    limit = 50,
+  }) {
+    assertNonEmptyString(projectId, 'projectId');
+    assertNonEmptyString(branch, 'branch');
+    if (!Number.isInteger(limit) || limit < 1 || limit > 200) {
+      throw new RangeError('limit must be an integer between 1 and 200');
+    }
+    return this.#db.prepare(`
+      SELECT *
+      FROM memory_pipeline_failures
+      WHERE project_id = ? AND branch = ?
+      ORDER BY occurred_at DESC, id DESC
+      LIMIT ?
+    `).all(projectId, branch, limit).map(normalizePipelineFailure);
+  }
+
+  inspectClaimObservability({
+    projectId,
+    branch,
+    claimId,
+  }) {
+    for (const [value, name] of [
+      [projectId, 'projectId'],
+      [branch, 'branch'],
+      [claimId, 'claimId'],
+    ]) {
+      assertNonEmptyString(value, name);
+    }
+
+    const claim = this.getClaim(claimId);
+    if (
+      !claim
+      || claim.project_id !== projectId
+      || claim.branch_scope !== branch
+    ) {
+      return null;
+    }
+    const evidence = this.getEvidence(claim.created_from_evidence_id);
+    const candidateRow = this.#db.prepare(`
+      SELECT mc.*
+      FROM memory_candidates mc
+      LEFT JOIN memory_candidate_promotions mp
+        ON mp.candidate_id = mc.id
+      LEFT JOIN memory_candidate_confirmations mcc
+        ON mcc.candidate_id = mc.id
+      WHERE mc.project_id = ?
+        AND mc.branch = ?
+        AND (mp.claim_id = ? OR mcc.claim_id = ?)
+      ORDER BY mc.created_at DESC, mc.id ASC
+      LIMIT 1
+    `).get(projectId, branch, claimId, claimId);
+    const candidate = normalizeCandidate(candidateRow);
+    const relation = candidate
+      ? normalizeCandidateRelation(
+          this.#db.prepare(
+            'SELECT * FROM memory_candidate_relations WHERE candidate_id = ?',
+          ).get(candidate.id),
+        )
+      : null;
+    const promotion = candidate
+      ? this.#db.prepare(
+          'SELECT * FROM memory_candidate_promotions WHERE candidate_id = ?',
+        ).get(candidate.id) ?? null
+      : null;
+    const confirmation = candidate
+      ? this.#db.prepare(
+          'SELECT * FROM memory_candidate_confirmations WHERE candidate_id = ?',
+        ).get(candidate.id) ?? null
+      : null;
+    const lifecycle = this.#db.prepare(`
+      SELECT *
+      FROM lifecycle_events
+      WHERE project_id = ?
+        AND (source_claim_id = ? OR target_claim_id = ?)
+      ORDER BY created_at ASC, id ASC
+    `).all(projectId, claimId, claimId);
+    const conflicts = this.#db.prepare(`
+      SELECT *
+      FROM conflicts
+      WHERE project_id = ?
+        AND (claim_a = ? OR claim_b = ?)
+      ORDER BY created_at ASC, claim_a ASC, claim_b ASC
+    `).all(projectId, claimId, claimId);
+    const embeddings = this.#db.prepare(`
+      SELECT model_id, model_revision, dimensions, indexed_at
+      FROM claim_embeddings
+      WHERE claim_id = ?
+      ORDER BY indexed_at DESC, model_id ASC, model_revision ASC
+    `).all(claimId);
+
+    return {
+      claim,
+      evidence,
+      candidate,
+      relation,
+      promotion,
+      confirmation,
+      lifecycle,
+      conflicts,
+      embeddings,
+      semantic_indexed: embeddings.length > 0,
+    };
+  }
+
+  healthSnapshot({
+    projectId,
+    branch,
+    runLimit = 50,
+  }) {
+    assertNonEmptyString(projectId, 'projectId');
+    assertNonEmptyString(branch, 'branch');
+    if (!Number.isInteger(runLimit) || runLimit < 1 || runLimit > 200) {
+      throw new RangeError('runLimit must be an integer between 1 and 200');
+    }
+
+    const quickValues = this.#db.prepare('PRAGMA quick_check').all()
+      .map((row) => String(Object.values(row)[0] ?? ''));
+    const dbHealthy = (
+      quickValues.length === 1
+      && quickValues[0].toLowerCase() === 'ok'
+      && String(this.journalMode()).toLowerCase() === 'wal'
+    );
+    const candidates = this.listScopedCandidates({ projectId, branch });
+    const pending = candidates.filter(
+      (candidate) => candidate.status === 'pending',
+    ).length;
+    const needsConfirmation = candidates.filter(
+      (candidate) => candidate.status === 'needs_confirmation',
+    ).length;
+    const failedCandidates = candidates.filter(
+      (candidate) => candidate.status === 'failed',
+    ).length;
+
+    const claimStats = this.#db.prepare(`
+      SELECT
+        COUNT(*) AS claims,
+        COALESCE(SUM(CASE WHEN ce.claim_id IS NOT NULL THEN 1 ELSE 0 END), 0)
+          AS embedded
+      FROM claims c
+      LEFT JOIN (
+        SELECT DISTINCT claim_id
+        FROM claim_embeddings
+      ) ce ON ce.claim_id = c.id
+      WHERE c.project_id = ? AND c.branch_scope = ?
+    `).get(projectId, branch);
+    const claims = Number(claimStats?.claims ?? 0);
+    const embedded = Number(claimStats?.embedded ?? 0);
+    const semanticCoveragePercent = claims === 0
+      ? 100
+      : Math.round((embedded / claims) * 10_000) / 100;
+
+    const runs = this.listPipelineRuns({
+      projectId,
+      branch,
+      limit: runLimit,
+    });
+    const failedRuns = runs.filter(
+      (run) => ['failed', 'partial'].includes(run.status),
+    ).length;
+
+    return {
+      db_healthy: dbHealthy,
+      pending,
+      needs_confirmation: needsConfirmation,
+      failed_candidates: failedCandidates,
+      failed_runs: failedRuns,
+      recent_runs: runs.length,
+      semantic_coverage_percent: semanticCoveragePercent,
+      claims,
+      embedded_claims: embedded,
+      last_pipeline: runs[0] ?? null,
+    };
+  }
 
   getApproval(id) {
     return normalizeApproval(
