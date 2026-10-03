@@ -1096,6 +1096,35 @@ The manual command remains available as a diagnostic and recovery fallback:
 node .\scripts\process-memory-candidates.mjs --apply
 ```
 
+### Memory observability
+
+Automatic candidate processing records local operational telemetry separately from canonical memory truth. Every worker run receives an opaque run reference such as `@p4f82a1c3d` and records its trigger, current project/branch/revision, start/end time, duration, bounded stage counters, candidate refs, promotion count, completion state, and redacted technical failures.
+
+The operational tables are:
+
+```text
+memory_pipeline_runs
+memory_pipeline_failures
+```
+
+They are intentionally excluded from `exportCanonical()`. Portable memory export remains limited to durable memory truth; pipeline history is host-local observability just like semantic derived state.
+
+Pipeline JSONL output is tagged with the same `run_id`, `run_ref`, and trigger so a single automatic run can be followed across stage output.
+
+Three read-only Codex commands expose the operator surface:
+
+```text
+memory inspect: @7fa31c9e42
+memory health
+memory pipeline failures
+```
+
+`memory inspect: @ref` resolves exactly one Claim in the current project and branch and shows authority, state, root/user/subagent provenance, Evidence and Candidate identifiers, importance and relation judgments, lifecycle links, conflicts, promotion time, and semantic-index state. Historical superseded/rejected Claims remain inspectable by their stable ref.
+
+`memory health` is the compact everyday status surface. It reports SQLite/WAL health, E5 worker readiness, managed-hook health, pending and review backlog, candidate/run failures, semantic coverage, and the most recent pipeline run. It is intentionally much smaller than the full `doctor-memory.mjs` report.
+
+`memory pipeline failures` is a bounded dead-letter-style view of recorded technical failures. It shows run ref, candidate ref when available, stage, error class/message, and timestamp. The command never retries work and never mutates candidate or Claim state.
+
 Automatic processing adds orchestration only. It does not change capture-v1, importance-v2, relation-v1, promotion-v1, or confirmation-v2 decisions.
 
 ### Memory judge calibration

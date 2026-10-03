@@ -4,6 +4,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import { MemoryEngine } from '../../memory-engine/index.mjs';
 import {
   automaticMemoryCandidatePipelineReady,
   parseCodexHookCliOptions,
@@ -142,6 +143,7 @@ test('async agent pipeline hook captures idempotently before inline processing',
           projectId: args.projectId,
           branch: args.branch,
           revisionSha: args.revisionSha,
+          trigger: args.trigger,
         },
         {
           cwd: '/repo/project',
@@ -149,6 +151,7 @@ test('async agent pipeline hook captures idempotently before inline processing',
           projectId: 'project-a',
           branch: 'feature/async-agent-pipeline',
           revisionSha: '9'.repeat(40),
+          trigger: 'Stop',
         },
       );
       args.log('pipeline-stage-output');
@@ -370,6 +373,8 @@ test('detached launcher passes frozen scope and hides worker IO from the hook', 
     assert.ok(calls[0].args.includes('feature/frozen'));
     assert.ok(calls[0].args.includes('--revision-sha'));
     assert.ok(calls[0].args.includes('d'.repeat(40)));
+    assert.ok(calls[0].args.includes('--trigger'));
+    assert.ok(calls[0].args.includes('UserPromptSubmit'));
     assert.deepEqual(calls[1], { unref: true });
   } finally {
     await rm(root, { recursive: true, force: true });
@@ -390,6 +395,7 @@ test('worker parser requires the frozen runtime scope', () => {
   assert.equal(parsed.projectId, 'project-a');
   assert.equal(parsed.branch, 'main');
   assert.equal(parsed.revisionSha, 'e'.repeat(40));
+  assert.equal(parsed.trigger, 'manual');
   assert.equal(parsed.limit, 7);
   assert.equal(parsed.maxRounds, 3);
 });
@@ -672,4 +678,197 @@ test('worker skips semantic sync when no new claim is promoted', async () => {
   assert.equal(syncCalls, 0);
   assert.equal(result.promotedClaims, 0);
   assert.equal(result.semanticSync.status, 'not_needed');
+});
+
+
+test('worker persists structured run history and clears its lock after success', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'agent-hub-auto-pipeline-history-'));
+  const dbPath = join(root, 'memory.sqlite3');
+  const projectId = 'github.com/example/history';
+  const seed = new MemoryEngine({ dbPath });
+  seed.registerProject({
+    projectId,
+    repoIdentity: projectId,
+  });
+  seed.close();
+
+  const logs = [];
+  let tick = 0;
+  try {
+    const result = await runMemoryCandidatePipelineWorker({
+      cwd: root,
+      dbPath,
+      projectId,
+      branch: 'main',
+      revisionSha: '7'.repeat(40),
+      trigger: 'SubagentStop',
+      createRunId: () => 'pipeline-run:deterministic',
+      now() {
+        tick += 1;
+        return 1_800_000_000_000 + tick * 100;
+      },
+      runPipeline: async (args) => {
+        args.log(JSON.stringify({
+          type: 'fixture_pipeline_stage',
+        }));
+        return {
+          initial: {
+            importance_ready: 0,
+            relation_ready: 0,
+            promotion_ready: 0,
+            agent_importance_ready: 1,
+            agent_relation_ready: 0,
+            agent_promotion_ready: 0,
+          },
+          stages: [{
+            name: 'agent_importance',
+            skipped: false,
+            result: {
+              summary: {
+                total: 1,
+                evaluated: 1,
+                applied: 1,
+                failed: 0,
+                results: [{
+                  candidate_ref: '~1234567890',
+                  ok: true,
+                }],
+              },
+            },
+          }],
+          final: {
+            importance_ready: 0,
+            relation_ready: 0,
+            promotion_ready: 0,
+            agent_importance_ready: 0,
+            agent_relation_ready: 0,
+            agent_promotion_ready: 0,
+          },
+        };
+      },
+      log(value) {
+        logs.push(String(value));
+      },
+    });
+
+    assert.equal(result.status, 'drained');
+    assert.equal(result.observabilityStatus, 'drained');
+    assert.equal(result.runId, 'pipeline-run:deterministic');
+    assert.equal(result.trigger, 'SubagentStop');
+
+    const parsedLogs = logs.map((line) => JSON.parse(line));
+    assert.equal(
+      parsedLogs.every(
+        (entry) => entry.run_id === 'pipeline-run:deterministic',
+      ),
+      true,
+    );
+    assert.equal(
+      parsedLogs.some(
+        (entry) => entry.type === 'agent_hub_memory_candidate_pipeline_run',
+      ),
+      true,
+    );
+
+    const verify = new MemoryEngine({ dbPath });
+    try {
+      const runs = verify.listPipelineRuns({
+        projectId,
+        branch: 'main',
+      });
+      assert.equal(runs.length, 1);
+      assert.equal(runs[0].trigger, 'SubagentStop');
+      assert.equal(runs[0].status, 'drained');
+      assert.deepEqual(runs[0].candidate_refs, ['~1234567890']);
+      assert.equal(runs[0].stage_counts.agent_importance.total, 1);
+    } finally {
+      verify.close();
+    }
+
+    const lockPath = memoryCandidatePipelineLockPath({
+      dbPath,
+      projectId,
+      branch: 'main',
+    });
+    await assert.rejects(
+      async () => {
+        const content = await import('node:fs/promises')
+          .then(({ readFile }) => readFile(lockPath, 'utf8'));
+        return content;
+      },
+      /ENOENT/,
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+
+test('stalled worker records partial run and a visible pipeline-control failure', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'agent-hub-auto-pipeline-stalled-'));
+  const dbPath = join(root, 'memory.sqlite3');
+  const projectId = 'github.com/example/stalled-history';
+  const seed = new MemoryEngine({ dbPath });
+  seed.registerProject({
+    projectId,
+    repoIdentity: projectId,
+  });
+  seed.close();
+
+  let tick = 0;
+  try {
+    const result = await runMemoryCandidatePipelineWorker({
+      cwd: root,
+      dbPath,
+      projectId,
+      branch: 'main',
+      trigger: 'UserPromptSubmit',
+      createRunId: () => 'pipeline-run:stalled',
+      now() {
+        tick += 1;
+        return 1_800_000_100_000 + tick * 100;
+      },
+      restoreLocked: () => false,
+      runPipeline: async () => ({
+        initial: {
+          importance_ready: 1,
+          relation_ready: 0,
+          promotion_ready: 0,
+          agent_importance_ready: 0,
+          agent_relation_ready: 0,
+          agent_promotion_ready: 0,
+        },
+        stages: [],
+        final: {
+          importance_ready: 1,
+          relation_ready: 0,
+          promotion_ready: 0,
+          agent_importance_ready: 0,
+          agent_relation_ready: 0,
+          agent_promotion_ready: 0,
+        },
+      }),
+      log() {},
+    });
+
+    assert.equal(result.status, 'stalled');
+    assert.equal(result.observabilityStatus, 'partial');
+
+    const verify = new MemoryEngine({ dbPath });
+    try {
+      const run = verify.getPipelineRun('pipeline-run:stalled');
+      assert.equal(run.status, 'partial');
+      const failures = verify.listPipelineFailures({
+        projectId,
+        branch: 'main',
+      });
+      assert.equal(failures.length, 1);
+      assert.equal(failures[0].stage, 'pipeline_control');
+      assert.equal(failures[0].error_class, 'PipelineStalled');
+    } finally {
+      verify.close();
+    }
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });

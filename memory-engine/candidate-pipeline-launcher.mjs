@@ -28,6 +28,7 @@ export function launchMemoryCandidatePipeline({
   projectId,
   branch,
   revisionSha = null,
+  trigger = 'UserPromptSubmit',
   limit = 20,
   maxRounds = 5,
   logFile = null,
@@ -39,6 +40,7 @@ export function launchMemoryCandidatePipeline({
     [dbPath, 'dbPath'],
     [projectId, 'projectId'],
     [branch, 'branch'],
+    [trigger, 'trigger'],
     [executable, 'executable'],
   ]) {
     if (!nonEmpty(value)) {
@@ -71,6 +73,7 @@ export function launchMemoryCandidatePipeline({
         '--project-id', projectId,
         '--branch', branch,
         ...(nonEmpty(revisionSha) ? ['--revision-sha', revisionSha] : []),
+        '--trigger', trigger,
         '--limit', String(limit),
         '--max-rounds', String(maxRounds),
       ],

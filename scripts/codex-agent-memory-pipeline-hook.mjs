@@ -110,6 +110,7 @@ export async function runCodexAgentPipelineHook({
     projectId: scope.projectId,
     branch: git.branch,
     revisionSha: git.revisionSha,
+    trigger: event.hook_event_name,
     log,
   });
   log(JSON.stringify(result));
