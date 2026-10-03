@@ -3889,6 +3889,92 @@ export class MemoryEngine {
     }
   }
 
+  previewAgentCandidatePromotion({
+    candidateId,
+    claimId,
+    policyVersion,
+    finalizedAt = this.#clock(),
+  }) {
+    const resolved = resolveAgentCandidatePromotion(this.#db, {
+      candidateId,
+      claimId,
+      policyVersion,
+      finalizedAt,
+    });
+    return {
+      status: resolved.status,
+      relation: resolved.relation.relation,
+      claim_id: resolved.claim_id,
+      related_claim_id: resolved.related_claim_id,
+    };
+  }
+
+  finalizeAgentCandidatePromotion({
+    candidateId,
+    claimId,
+    policyVersion,
+    finalizedAt = this.#clock(),
+  }) {
+    this.#db.exec('BEGIN IMMEDIATE');
+    try {
+      if (this.getCandidatePromotion(candidateId)) {
+        throw new Error('agent memory candidate promotion is already finalized');
+      }
+
+      const resolved = resolveAgentCandidatePromotion(this.#db, {
+        candidateId,
+        claimId,
+        policyVersion,
+        finalizedAt,
+      });
+
+      if (resolved.status === 'promoted') {
+        insertClaimAndLifecycle(this.#db, {
+          claim: resolved.claim,
+          evidenceContent: resolved.evidence.content_redacted,
+          lifecycle: resolved.lifecycle,
+        });
+      }
+
+      const updated = this.#db.prepare(
+        'UPDATE memory_candidates SET status = ? '
+        + "WHERE id = ? AND status = 'pending' "
+        + "AND source_authority = 'agent_inference'",
+      ).run(resolved.status, candidateId);
+      if (Number(updated.changes) !== 1) {
+        throw new Error('agent memory candidate promotion raced');
+      }
+
+      const audit = {
+        status: resolved.status,
+        relation: resolved.relation.relation,
+        claim_id: resolved.claim_id,
+        related_claim_id: resolved.related_claim_id,
+      };
+      this.#db.prepare(
+        'INSERT INTO memory_candidate_promotions ('
+        + 'candidate_id, status, relation, claim_id, related_claim_id, '
+        + 'policy_version, finalized_at, result_json'
+        + ') VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      ).run(
+        candidateId,
+        resolved.status,
+        resolved.relation.relation,
+        resolved.claim_id,
+        resolved.related_claim_id,
+        policyVersion,
+        finalizedAt,
+        JSON.stringify(audit),
+      );
+
+      this.#db.exec('COMMIT');
+      return audit;
+    } catch (error) {
+      this.#db.exec('ROLLBACK');
+      throw error;
+    }
+  }
+
   recordEvidence(evidence) {
     const preparedEvidence = prepareEvidenceInput(evidence);
     if (!this.getProject(preparedEvidence.projectId)) {
