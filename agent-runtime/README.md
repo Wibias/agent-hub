@@ -77,15 +77,34 @@ Each file is named after its manual Codex profile, for example:
 agent-hub-diagnose.config.toml
 ```
 
-Install a selected profile by copying it beside `$CODEX_HOME/config.toml`, then start
-Codex with the matching profile name:
+Install or update the generated profiles with the dedicated dry-run-first installer.
+
+Dry-run:
 
 ```powershell
-Copy-Item .\agent-runtime\generated\codex-profiles\agent-hub-diagnose.config.toml `
-  (Join-Path $env:USERPROFILE ".codex\agent-hub-diagnose.config.toml")
+node .\scripts\install-codex-runtime-profiles.mjs
+```
 
+Apply:
+
+```powershell
+node .\scripts\install-codex-runtime-profiles.mjs --apply
+```
+
+The installer uses `$CODEX_HOME` when set and otherwise `~/.codex`. It installs only
+manifest-owned `agent-hub-*.config.toml` files, preserves `config.toml` and unrelated
+profiles, backs up an existing managed profile before changing it, refuses symlinked
+managed destinations, and is idempotent once current. Stale Agent Hub profile files that
+are no longer present in the generated manifest are reported but not deleted.
+
+After installation, start Codex with the matching profile name:
+
+```powershell
 codex --profile agent-hub-diagnose
 ```
+
+Codex loads profile files from the same directory as `config.toml`, using
+`$CODEX_HOME/<profile-name>.config.toml` when selected with `--profile`.
 
 Profile activation remains manual because the capability registry still marks
 `skillModelRouting` unsupported. The renderer does not change the user's model choice;
