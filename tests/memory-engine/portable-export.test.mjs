@@ -4,7 +4,11 @@ import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { MemoryEngine } from '../../memory-engine/index.mjs';
+import {
+  MemoryEngine,
+  REDACTED_SECRET,
+  inspectMemoryTextSensitivity,
+} from '../../memory-engine/index.mjs';
 
 async function createEngine(name) {
   const root = await mkdtemp(join(tmpdir(), `memory-engine-export-${name}-`));
@@ -314,4 +318,54 @@ test('canonical import preserves approval authority provenance invariants', asyn
 
   assert.equal(target.exportCanonical().evidence.length, 0);
   assert.equal(target.exportCanonical().approvals.length, 0);
+});
+
+
+test('canonical import redacts legacy secret material instead of rejecting older exports', async (t) => {
+  const source = await createEngine('legacy-secret-source');
+  const target = await createEngine('legacy-secret-target');
+  t.after(() => source.close());
+  t.after(() => target.close());
+
+  source.registerProject({
+    projectId: 'project-a',
+    repoIdentity: 'project-a',
+    createdAt: '2026-01-01T00:00:00Z',
+  });
+  target.registerProject({
+    projectId: 'project-a',
+    repoIdentity: 'project-a',
+    createdAt: '2099-01-01T00:00:00Z',
+  });
+  ingestDecision(source, {
+    evidenceId: 'e-legacy',
+    claimId: 'c-legacy',
+    content: 'Legacy source without a secret.',
+    createdAt: '2026-01-02T09:00:00Z',
+  });
+
+  const token = ['gh', 'p_', 'abcdefghijklmnopqrstuvwxyz1234567890'].join('');
+  const legacy = structuredClone(source.exportCanonical());
+  legacy.evidence[0].content_redacted = `Legacy credential ${token}`;
+  legacy.evidence[0].sensitivity = 'normal';
+  legacy.claims[0].value_text = `Legacy credential ${token}`;
+
+  target.importCanonical(legacy);
+
+  const evidence = target.getEvidence('e-legacy');
+  const claim = target.getClaim('c-legacy');
+  assert.equal(evidence.sensitivity, 'secret_redacted');
+  assert.equal(evidence.content_redacted.includes(token), false);
+  assert.equal(evidence.content_redacted.includes(REDACTED_SECRET), true);
+  assert.equal(claim.value.includes(token), false);
+  assert.equal(claim.value.includes(REDACTED_SECRET), true);
+  assert.equal(JSON.stringify(target.exportCanonical()).includes(token), false);
+});
+
+test('generic token prose is not classified as a secret assignment', () => {
+  const result = inspectMemoryTextSensitivity(
+    'Parser status: token: generated successfully.',
+  );
+  assert.equal(result.containsSecret, false);
+  assert.match(result.redacted, /token: generated/);
 });
