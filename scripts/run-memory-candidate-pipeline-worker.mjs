@@ -189,6 +189,9 @@ function automaticReady(status) {
     Number(status?.importance_ready ?? 0)
     + Number(status?.relation_ready ?? 0)
     + Number(status?.promotion_ready ?? 0)
+    + Number(status?.agent_importance_ready ?? 0)
+    + Number(status?.agent_relation_ready ?? 0)
+    + Number(status?.agent_promotion_ready ?? 0)
   );
 }
 
