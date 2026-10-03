@@ -235,14 +235,12 @@ function renderScopeHeader() {
 
   const localProject = project.projectId.startsWith('local.git/');
   el.projectKicker.textContent = localProject
-    ? 'Local Git repository · ' + project.projectId
+    ? 'Local Git repository'
     : project.canonicalRemote || 'Project';
   el.projectTitle.textContent = localProject
     ? projectName(project.projectId)
     : project.projectId;
   el.scopeMeta.innerHTML = [
-    `<span>${escapeHtml(state.branch ?? '—')}</span>`,
-    '<span>·</span>',
     `<span>${number(branch?.active ?? 0)} active</span>`,
     '<span>·</span>',
     `<span>${number(branch?.total ?? 0)} total</span>`,
@@ -252,7 +250,7 @@ function renderScopeHeader() {
     <option
       value="${escapeHtml(item.branch)}"
       ${item.branch === state.branch ? 'selected' : ''}
-    >${escapeHtml(item.branch)} · ${number(item.active)} active</option>
+    >${escapeHtml(item.branch)}</option>
   `).join('');
 }
 
@@ -1237,7 +1235,9 @@ async function selectClaim(claimId) {
   renderMemories();
 }
 
-async function loadScope() {
+async function loadScope({
+  preferredClaimId = null,
+} = {}) {
   if (!state.projectId) return;
 
   state.scope = null;
@@ -1264,6 +1264,22 @@ async function loadScope() {
       projectId: state.projectId,
       branch: state.branch,
     }));
+
+    if (state.view === 'memories' && state.scope.memories.length > 0) {
+      const preferred = state.scope.memories.find(
+        (item) => item.claimId === preferredClaimId,
+      );
+      const active = state.scope.memories.find(
+        (item) => item.state === 'active',
+      );
+      await selectClaim(
+        preferred?.claimId
+        ?? active?.claimId
+        ?? state.scope.memories[0].claimId,
+      );
+      return;
+    }
+
     renderView();
   } catch (error) {
     el.view.innerHTML = `<div class="error">${escapeHtml(error.message)}</div>`;
@@ -1304,15 +1320,9 @@ async function bootstrap() {
       state.view = requestedView;
     }
 
-    await loadScope();
-
-    if (
-      requestedClaim
-      && state.view === 'memories'
-      && state.scope.memories.some((item) => item.claimId === requestedClaim)
-    ) {
-      await selectClaim(requestedClaim);
-    }
+    await loadScope({
+      preferredClaimId: requestedClaim,
+    });
     if (
       requestedCandidate
       && state.view === 'review'
