@@ -160,7 +160,7 @@ export function automaticMemoryCandidatePipelineReady(memory, {
   }
 
   try {
-    return (
+    const userReady = (
       memory.listUnevaluatedCandidates({
         projectId,
         branch,
@@ -172,6 +172,33 @@ export function automaticMemoryCandidatePipelineReady(memory, {
         limit: 1,
       }).length > 0
       || memory.listPromotionReadyCandidates({
+        projectId,
+        branch,
+        limit: 1,
+      }).length > 0
+    );
+    if (userReady) return true;
+
+    if (
+      typeof memory.listUnevaluatedAgentCandidates !== 'function'
+      || typeof memory.listAgentRelationPendingCandidates !== 'function'
+      || typeof memory.listAgentPromotionReadyCandidates !== 'function'
+    ) {
+      return false;
+    }
+
+    return (
+      memory.listUnevaluatedAgentCandidates({
+        projectId,
+        branch,
+        limit: 1,
+      }).length > 0
+      || memory.listAgentRelationPendingCandidates({
+        projectId,
+        branch,
+        limit: 1,
+      }).length > 0
+      || memory.listAgentPromotionReadyCandidates({
         projectId,
         branch,
         limit: 1,
