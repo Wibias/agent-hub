@@ -1348,3 +1348,52 @@ test('reciprocal rank fusion tie breakers use locale-independent code-point orde
     'binary code-point order must win an exact RRF/time tie regardless of ICU locale',
   );
 });
+
+
+test('detailed recall exposes retrieved versus budget-retained candidates in one pass', async (t) => {
+  const { HybridMemoryRetriever } = await import(
+    '../../memory-engine/hybrid-retrieval.mjs'
+  );
+  const engine = await createEngine('detailed-telemetry');
+  t.after(() => engine.close());
+  engine.registerProject({ projectId: 'project-a', repoIdentity: 'project-a' });
+
+  ingestRawHybridClaim(engine, {
+    evidenceId: 'e-detail-a',
+    claimId: 'c-detail-a',
+    value: 'ZXQ-991 alpha memory',
+    createdAt: '2026-01-02T09:00:00Z',
+  });
+  ingestRawHybridClaim(engine, {
+    evidenceId: 'e-detail-b',
+    claimId: 'c-detail-b',
+    value: 'ZXQ-991 beta memory',
+    createdAt: '2026-01-02T09:10:00Z',
+  });
+
+  const hybrid = new HybridMemoryRetriever({ memory: engine });
+  const detailed = await hybrid.recallDetailed({
+    projectId: 'project-a',
+    branch: 'main',
+    query: 'ZXQ-991',
+    maxItems: 1,
+    maxSerializedBytes: 16_384,
+  });
+
+  assert.equal(detailed.result.items.length, 1);
+  assert.equal(detailed.telemetry.retrieval_mode, 'lexical');
+  assert.equal(detailed.telemetry.fallback_reason, 'embedder_unavailable');
+  assert.equal(detailed.telemetry.candidates.length, 2);
+  assert.equal(
+    detailed.telemetry.candidates.filter(
+      (candidate) => candidate.budget_retained,
+    ).length,
+    1,
+  );
+  assert.equal(
+    detailed.telemetry.candidates.filter(
+      (candidate) => !candidate.budget_retained,
+    ).length,
+    1,
+  );
+});

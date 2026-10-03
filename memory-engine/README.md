@@ -1111,12 +1111,13 @@ They are intentionally excluded from `exportCanonical()`. Portable memory export
 
 Pipeline JSONL output is tagged with the same `run_id`, `run_ref`, and trigger so a single automatic run can be followed across stage output.
 
-Three read-only Codex commands expose the operator surface:
+Four read-only Codex commands expose the operator surface:
 
 ```text
 memory inspect: @7fa31c9e42
 memory health
 memory pipeline failures
+memory stale
 ```
 
 `memory inspect: @ref` resolves exactly one Claim in the current project and branch and shows authority, state, root/user/subagent provenance, Evidence and Candidate identifiers, importance and relation judgments, lifecycle links, conflicts, promotion time, and semantic-index state. Historical superseded/rejected Claims remain inspectable by their stable ref.
@@ -1124,6 +1125,14 @@ memory pipeline failures
 `memory health` is the compact everyday status surface. It reports SQLite/WAL health, E5 worker readiness, managed-hook health, pending and review backlog, candidate/run failures, semantic coverage, and the most recent pipeline run. It is intentionally much smaller than the full `doctor-memory.mjs` report.
 
 `memory pipeline failures` is a bounded dead-letter-style view of recorded technical failures. It shows run ref, candidate ref when available, stage, error class/message, and timestamp. The command never retries work and never mutates candidate or Claim state.
+
+Recall observability is also local derived state. `memory_recall_runs` records a SHA-256 query hash rather than raw prompt text, retrieval mode/fallback, counts, and final context size. `memory_recall_items` records per-Claim rank information and distinguishes `retrieved`, `budget_retained`, `answer_selected`, `advisory_included`, and blocked/budget-dropped outcomes. The protocol emits this through an internal side channel, so normal recall responses keep their existing byte budget and shape and no second embedding query is required.
+
+`memory inspect: @ref` includes the Claim's recall/context usage and a provenance chain such as `session -> subagent type/id -> turn -> decision`.
+
+`memory stale` is advisory only. It lists active lower-authority agent decisions older than 90 days that have not entered answer/advisory context during that window. Retrieval alone does not count as actual use. It never expires, rejects, supersedes, or deletes a Claim automatically.
+
+For high-confidence duplicate control, `agent-relation-v1` now short-circuits only exact-normalized or extremely close text variants when critical negation and numeric tokens also match. Wider semantic paraphrases still go through the existing model relation judge; the deterministic guard never upgrades authority.
 
 Automatic processing adds orchestration only. It does not change capture-v1, importance-v2, relation-v1, promotion-v1, or confirmation-v2 decisions.
 

@@ -288,6 +288,7 @@ export function createMemoryProtocol({
   hybridRetriever = null,
   classifyAuthority = null,
   authorizeClaim = null,
+  onRecallTelemetry = null,
 }) {
   if (!memory || typeof memory !== 'object') {
     throw new TypeError('memory must be a MemoryEngine-like object');
@@ -316,6 +317,9 @@ export function createMemoryProtocol({
   }
   if (authorizeClaim !== null && typeof authorizeClaim !== 'function') {
     throw new TypeError('authorizeClaim must be a function');
+  }
+  if (onRecallTelemetry !== null && typeof onRecallTelemetry !== 'function') {
+    throw new TypeError('onRecallTelemetry must be a function or null');
   }
 
   async function captureEvidence(payload) {
@@ -393,29 +397,86 @@ export function createMemoryProtocol({
     return asserted;
   }
 
-  async function recall(payload, mode) {
+  async function recall(payload, mode, requestId) {
     const normalized = normalizeRecallPayload(payload);
 
-    if (hybridRetriever !== null) {
-      return hybridRetriever.recall({
+    let result;
+    let telemetry;
+    if (
+      hybridRetriever !== null
+      && typeof hybridRetriever.recallDetailed === 'function'
+    ) {
+      const detailed = await hybridRetriever.recallDetailed({
         ...normalized,
         mode,
       });
+      result = detailed.result;
+      telemetry = detailed.telemetry;
+    } else if (hybridRetriever !== null) {
+      result = await hybridRetriever.recall({
+        ...normalized,
+        mode,
+      });
+      telemetry = {
+        retrieval_mode: 'hybrid',
+        fallback_reason: 'detailed_telemetry_unavailable',
+        candidates: result.items.map((item, index) => ({
+          claim_id: item.claim.id,
+          authority_class: item.evidence?.authority_class ?? 'unclassified',
+          final_rank: index + 1,
+          lexical_rank: null,
+          semantic_rank: null,
+          semantic_similarity: null,
+          rrf_score: null,
+          budget_retained: true,
+        })),
+      };
+    } else {
+      const raw = memory.recall({
+        projectId: normalized.projectId,
+        branch: normalized.branch,
+        revisionSha: normalized.revisionSha,
+        query: normalized.query,
+        mode,
+        limit: Math.max(normalized.maxItems, 32),
+      });
+      result = enforceRecallBudget(raw, {
+        maxItems: normalized.maxItems,
+        maxSerializedBytes: normalized.maxSerializedBytes,
+      });
+      const retainedIds = new Set(
+        result.items.map((item) => item?.claim?.id).filter(Boolean),
+      );
+      telemetry = {
+        retrieval_mode: 'lexical',
+        fallback_reason: 'embedder_unavailable',
+        candidates: raw.items.map((item, index) => ({
+          claim_id: item.claim.id,
+          authority_class: item.evidence?.authority_class ?? 'unclassified',
+          final_rank: index + 1,
+          lexical_rank: index + 1,
+          semantic_rank: null,
+          semantic_similarity: null,
+          rrf_score: null,
+          budget_retained: retainedIds.has(item.claim.id),
+        })),
+      };
     }
 
-    const raw = memory.recall({
-      projectId: normalized.projectId,
-      branch: normalized.branch,
-      revisionSha: normalized.revisionSha,
-      query: normalized.query,
-      mode,
-      limit: normalized.maxItems,
-    });
+    if (onRecallTelemetry !== null) {
+      try {
+        await onRecallTelemetry({
+          requestId,
+          mode,
+          normalized,
+          telemetry,
+        });
+      } catch {
+        // Recall observability is derived operational state and fail-soft.
+      }
+    }
 
-    return enforceRecallBudget(raw, {
-      maxItems: normalized.maxItems,
-      maxSerializedBytes: normalized.maxSerializedBytes,
-    });
+    return result;
   }
 
   async function authorize(payload) {
@@ -449,16 +510,16 @@ export function createMemoryProtocol({
     };
   }
 
-  async function dispatch(operation, payload) {
+  async function dispatch(operation, payload, requestId) {
     switch (operation) {
       case 'capture_evidence':
         return captureEvidence(payload);
       case 'assert_claim':
         return assertClaim(payload);
       case 'recall':
-        return recall(payload, 'current');
+        return recall(payload, 'current', requestId);
       case 'history':
-        return recall(payload, 'historical');
+        return recall(payload, 'historical', requestId);
       case 'authorize':
         return authorize(payload);
       case 'export':
@@ -480,7 +541,11 @@ export function createMemoryProtocol({
       const requestId = safeRequestId(request);
       try {
         const payload = validateEnvelope(request);
-        const result = await dispatch(request.operation, payload);
+        const result = await dispatch(
+          request.operation,
+          payload,
+          request.request_id,
+        );
         return {
           protocol: MEMORY_PROTOCOL_V1,
           request_id: request.request_id,

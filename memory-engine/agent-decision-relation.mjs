@@ -15,6 +15,145 @@ function nonEmpty(value) {
   return typeof value === 'string' && value.trim().length > 0;
 }
 
+const NEGATION_TOKENS = new Set([
+  'no', 'not', 'never', 'without',
+  'kein', 'keine', 'keinen', 'keiner', 'keines', 'nicht', 'nie', 'ohne',
+]);
+
+function normalizedDecisionText(value) {
+  return String(value ?? '')
+    .normalize('NFKC')
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}._/-]+/gu, ' ')
+    .replace(/[._/-]+(?=\s|$)/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function tokenSet(value) {
+  return new Set(
+    normalizedDecisionText(value)
+      .split(' ')
+      .filter((token) => token.length > 0),
+  );
+}
+
+function criticalTokenSet(tokens) {
+  return new Set([...tokens].filter((token) => (
+    NEGATION_TOKENS.has(token)
+    || /^\d+(?:\.\d+)*$/u.test(token)
+  )));
+}
+
+function setEquals(left, right) {
+  if (left.size !== right.size) return false;
+  for (const value of left) {
+    if (!right.has(value)) return false;
+  }
+  return true;
+}
+
+function jaccard(left, right) {
+  const union = new Set([...left, ...right]);
+  if (union.size === 0) return 1;
+  let intersection = 0;
+  for (const value of left) {
+    if (right.has(value)) intersection += 1;
+  }
+  return intersection / union.size;
+}
+
+function trigrams(value) {
+  const normalized = normalizedDecisionText(value);
+  if (normalized.length < 3) return new Set([normalized]);
+  const result = new Set();
+  for (let index = 0; index <= normalized.length - 3; index += 1) {
+    result.add(normalized.slice(index, index + 3));
+  }
+  return result;
+}
+
+function dice(left, right) {
+  if (left.size === 0 && right.size === 0) return 1;
+  let intersection = 0;
+  for (const value of left) {
+    if (right.has(value)) intersection += 1;
+  }
+  return (2 * intersection) / (left.size + right.size);
+}
+
+export function findDeterministicAgentNearDuplicate({
+  canonicalFact,
+  memories,
+} = {}) {
+  if (!nonEmpty(canonicalFact) || !Array.isArray(memories)) return null;
+  const canonicalNormalized = normalizedDecisionText(canonicalFact);
+  const canonicalTokens = tokenSet(canonicalFact);
+  const canonicalCritical = criticalTokenSet(canonicalTokens);
+  let best = null;
+
+  for (const memory of memories) {
+    if (!nonEmpty(memory?.value) || !nonEmpty(memory?.ref)) continue;
+    const memoryNormalized = normalizedDecisionText(memory.value);
+    const memoryTokens = tokenSet(memory.value);
+    const memoryCritical = criticalTokenSet(memoryTokens);
+    if (!setEquals(canonicalCritical, memoryCritical)) continue;
+
+    let score;
+    let reason;
+    if (canonicalNormalized === memoryNormalized) {
+      score = 1;
+      reason = 'exact_normalized_match';
+    } else {
+      if (Math.min(canonicalTokens.size, memoryTokens.size) < 6) continue;
+      const tokenScore = jaccard(canonicalTokens, memoryTokens);
+      const trigramScore = dice(
+        trigrams(canonicalFact),
+        trigrams(memory.value),
+      );
+      const lengthRatio = Math.min(
+        canonicalNormalized.length,
+        memoryNormalized.length,
+      ) / Math.max(
+        canonicalNormalized.length,
+        memoryNormalized.length,
+      );
+      if (
+        tokenScore < 0.92
+        || trigramScore < 0.94
+        || lengthRatio < 0.90
+      ) {
+        continue;
+      }
+      score = (tokenScore + trigramScore + lengthRatio) / 3;
+      reason = 'high_precision_near_duplicate';
+    }
+
+    if (
+      best === null
+      || score > best.score
+      || (
+        score === best.score
+        && memory.authority === 'user_direct'
+        && best.memory.authority !== 'user_direct'
+      )
+      || (
+        score === best.score
+        && memory.authority === best.memory.authority
+        && memory.ref < best.memory.ref
+      )
+    ) {
+      best = {
+        memory,
+        score,
+        reason,
+      };
+    }
+  }
+
+  return best;
+}
+
 function importanceJudgment(candidate) {
   if (!nonEmpty(candidate?.evaluation_json)) {
     throw new TypeError('agent candidate has no importance judgment');
@@ -212,17 +351,36 @@ export async function evaluateAgentDecisionRelations({
       if (memories.length === 0) {
         relation = deterministicUnrelated();
       } else {
-        const raw = await judge({
-          candidate,
+        const importance = importanceJudgment(candidate);
+        const nearDuplicate = findDeterministicAgentNearDuplicate({
+          canonicalFact: importance.canonical_fact,
           memories,
-          prompt: buildAgentDecisionRelationPrompt({
+        });
+        if (nearDuplicate !== null) {
+          relation = {
+            relation: 'same',
+            target_ref: nearDuplicate.memory.ref,
+            confidence: 'high',
+            meaning_preserved: true,
+            reason: (
+              'Deterministic near-duplicate guard: '
+              + nearDuplicate.reason
+              + ' score=' + nearDuplicate.score.toFixed(4)
+            ),
+          };
+        } else {
+          const raw = await judge({
             candidate,
             memories,
-          }),
-        });
-        relation = typeof raw === 'string'
-          ? parseMemoryCandidateRelation(raw)
-          : validateMemoryCandidateRelation(raw);
+            prompt: buildAgentDecisionRelationPrompt({
+              candidate,
+              memories,
+            }),
+          });
+          relation = typeof raw === 'string'
+            ? parseMemoryCandidateRelation(raw)
+            : validateMemoryCandidateRelation(raw);
+        }
       }
 
       let target = null;
