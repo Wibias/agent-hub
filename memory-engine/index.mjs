@@ -2806,6 +2806,144 @@ export class MemoryEngine {
     return result.slice(0, limit);
   }
 
+  memoryQualitySnapshot({
+    projectId,
+    branch,
+  }) {
+    assertNonEmptyString(projectId, 'projectId');
+    assertNonEmptyString(branch, 'branch');
+
+    const emptyAuthority = () => ({
+      candidates: 0,
+      importance: {
+        promote: 0,
+        ignore: 0,
+        keep_candidate: 0,
+        needs_confirmation: 0,
+        unevaluated: 0,
+        invalid: 0,
+      },
+      relations: {
+        same: 0,
+        update: 0,
+        contradict: 0,
+        unrelated: 0,
+      },
+      candidate_status: {
+        pending: 0,
+        ignored: 0,
+        promoted: 0,
+        needs_confirmation: 0,
+        superseded: 0,
+        failed: 0,
+      },
+      promotions: {
+        promoted: 0,
+        superseded: 0,
+        needs_confirmation: 0,
+      },
+    });
+    const byAuthority = {
+      user_direct: emptyAuthority(),
+      agent_inference: emptyAuthority(),
+    };
+
+    const candidates = this.#db.prepare(`
+      SELECT *
+      FROM memory_candidates
+      WHERE project_id = ? AND branch = ?
+      ORDER BY created_at ASC, id ASC
+    `).all(projectId, branch);
+
+    for (const row of candidates) {
+      const bucket = byAuthority[row.source_authority];
+      if (!bucket) continue;
+      bucket.candidates += 1;
+      if (Object.hasOwn(bucket.candidate_status, row.status)) {
+        bucket.candidate_status[row.status] += 1;
+      }
+      if (row.evaluation_json === null) {
+        bucket.importance.unevaluated += 1;
+      } else {
+        try {
+          const decision = JSON.parse(row.evaluation_json)?.decision;
+          if (Object.hasOwn(bucket.importance, decision)) {
+            bucket.importance[decision] += 1;
+          } else {
+            bucket.importance.invalid += 1;
+          }
+        } catch {
+          bucket.importance.invalid += 1;
+        }
+      }
+    }
+
+    const relations = this.#db.prepare(`
+      SELECT c.source_authority, r.relation, r.result_json
+      FROM memory_candidate_relations r
+      JOIN memory_candidates c ON c.id = r.candidate_id
+      WHERE c.project_id = ? AND c.branch = ?
+    `).all(projectId, branch);
+    let deterministicNearDuplicates = 0;
+    for (const row of relations) {
+      const bucket = byAuthority[row.source_authority];
+      if (bucket && Object.hasOwn(bucket.relations, row.relation)) {
+        bucket.relations[row.relation] += 1;
+      }
+      try {
+        const reason = String(JSON.parse(row.result_json)?.reason ?? '');
+        if (/^Deterministic near-duplicate guard:/u.test(reason)) {
+          deterministicNearDuplicates += 1;
+        }
+      } catch {}
+    }
+
+    const promotions = this.#db.prepare(`
+      SELECT c.source_authority, p.status
+      FROM memory_candidate_promotions p
+      JOIN memory_candidates c ON c.id = p.candidate_id
+      WHERE c.project_id = ? AND c.branch = ?
+    `).all(projectId, branch);
+    for (const row of promotions) {
+      const bucket = byAuthority[row.source_authority];
+      if (bucket && Object.hasOwn(bucket.promotions, row.status)) {
+        bucket.promotions[row.status] += 1;
+      }
+    }
+
+    const recall = this.#db.prepare(`
+      SELECT
+        COUNT(*) AS runs,
+        COALESCE(SUM(retrieved_count), 0) AS retrieved,
+        COALESCE(SUM(retained_count), 0) AS retained,
+        COALESCE(SUM(selected_count), 0) AS selected,
+        COALESCE(SUM(advisory_count), 0) AS advisory,
+        COALESCE(SUM(blocked_count), 0) AS blocked
+      FROM memory_recall_runs
+      WHERE project_id = ? AND branch = ?
+    `).get(projectId, branch);
+
+    return {
+      by_authority: byAuthority,
+      deterministic_near_duplicates: deterministicNearDuplicates,
+      recall: {
+        runs: Number(recall?.runs ?? 0),
+        retrieved: Number(recall?.retrieved ?? 0),
+        retained: Number(recall?.retained ?? 0),
+        selected: Number(recall?.selected ?? 0),
+        advisory: Number(recall?.advisory ?? 0),
+        blocked: Number(recall?.blocked ?? 0),
+      },
+      stale_agent_memories: this.listStaleAgentMemories({
+        projectId,
+        branch,
+        now: this.#clock(),
+        unusedDays: 90,
+        limit: 200,
+      }).length,
+    };
+  }
+
   getApproval(id) {
     return normalizeApproval(
       this.#db.prepare('SELECT * FROM approvals WHERE id = ?').get(id),
