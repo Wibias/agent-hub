@@ -127,6 +127,12 @@ function candidateForPrompt(memory, runtime, prompt) {
   }).find((candidate) => candidate.proposed_value === prompt) ?? null;
 }
 
+function promotedClaimForCandidate(memory, candidateId) {
+  const promotion = memory.getCandidatePromotion(candidateId);
+  if (!promotion?.claim_id) return null;
+  return memory.getClaim(promotion.claim_id);
+}
+
 function importanceDecision(candidate) {
   if (!candidate?.evaluation_json) return null;
   try {
@@ -487,11 +493,24 @@ export async function runMemoryEndToEndSmoke({
       { active: activeUserClaims(memory, runtime).length },
     );
 
+    const durableClaim = promotedClaimForCandidate(memory, candidate.id);
+    check(
+      'durable.promotion_claim',
+      durableClaim?.state === 'active'
+        && typeof durableClaim?.value === 'string'
+        && durableClaim.value.length > 0,
+      {
+        claim_id: durableClaim?.id ?? null,
+        claim_value: durableClaim?.value ?? null,
+      },
+    );
+
     const durableList = await submitHook(hook, 'memory list', 'durable-list');
     check(
       'durable.memory_list',
       durableList?.decision === 'block'
-        && durableList.reason.includes(PROMPTS.durable),
+        && durableList.reason.includes(durableClaim.value),
+      { claim_value: durableClaim.value },
     );
     let recalled = recallValues(
       memory,
@@ -500,8 +519,11 @@ export async function runMemoryEndToEndSmoke({
     );
     check(
       'durable.recall',
-      recalled.values.includes(PROMPTS.durable),
-      { values: recalled.values },
+      recalled.values.includes(durableClaim.value),
+      {
+        claim_value: durableClaim.value,
+        values: recalled.values,
+      },
     );
 
     // 2. One-off state -> ignored and never becomes a Claim.
@@ -632,43 +654,52 @@ export async function runMemoryEndToEndSmoke({
       { status: candidate.status, relation: candidate.relation },
     );
 
-    const databaseClaims = scopedUserClaims(memory, runtime).filter(
-      (claim) => /production database/i.test(claimValue(claim)),
-    );
-    const oldDatabase = databaseClaims.find(
-      (claim) => claimValue(claim) === PROMPTS.durable,
-    );
-    const newDatabase = databaseClaims.find(
-      (claim) => claimValue(claim) === PROMPTS.update,
-    );
+    const updateClaim = promotedClaimForCandidate(memory, candidate.id);
+    const oldDatabase = memory.getClaim(durableClaim.id);
+    const newDatabase = updateClaim;
     check(
       'update.old_superseded',
       oldDatabase?.state === 'superseded'
         && oldDatabase.superseded_by_claim_id === newDatabase?.id,
       {
         old_state: oldDatabase?.state ?? null,
+        old_value: oldDatabase?.value ?? null,
         superseded_by: oldDatabase?.superseded_by_claim_id ?? null,
         new_id: newDatabase?.id ?? null,
+        new_value: newDatabase?.value ?? null,
       },
     );
     check(
       'update.new_active',
-      newDatabase?.state === 'active',
-      { new_state: newDatabase?.state ?? null },
+      newDatabase?.state === 'active'
+        && typeof newDatabase?.value === 'string'
+        && newDatabase.value.length > 0,
+      {
+        new_state: newDatabase?.state ?? null,
+        new_value: newDatabase?.value ?? null,
+      },
     );
 
     const updateList = await submitHook(hook, 'memory list', 'update-list');
     check(
       'update.memory_list_current_only',
-      updateList?.reason.includes(PROMPTS.update)
-        && !updateList.reason.includes(PROMPTS.durable),
+      updateList?.reason.includes(newDatabase.value)
+        && !updateList.reason.includes(oldDatabase.value),
+      {
+        old_value: oldDatabase.value,
+        new_value: newDatabase.value,
+      },
     );
     recalled = recallValues(memory, runtime, 'production database MySQL');
     check(
       'update.recall_current_only',
-      recalled.values.includes(PROMPTS.update)
-        && !recalled.values.includes(PROMPTS.durable),
-      { values: recalled.values },
+      recalled.values.includes(newDatabase.value)
+        && !recalled.values.includes(oldDatabase.value),
+      {
+        old_value: oldDatabase.value,
+        new_value: newDatabase.value,
+        values: recalled.values,
+      },
     );
 
     // 7. Build a durable comparison Claim through the same pipeline.
@@ -684,6 +715,18 @@ export async function runMemoryEndToEndSmoke({
         && candidate.relation === 'unrelated',
       { status: candidate.status, relation: candidate.relation },
     );
+    const approvalBaselineClaim = promotedClaimForCandidate(
+      memory,
+      candidate.id,
+    );
+    check(
+      'contradict.baseline_claim',
+      approvalBaselineClaim?.state === 'active',
+      {
+        claim_id: approvalBaselineClaim?.id ?? null,
+        claim_value: approvalBaselineClaim?.value ?? null,
+      },
+    );
 
     // 8. Incompatible durable constraint -> conflict, no silent winner.
     candidate = await capture(PROMPTS.contradict, 'contradict');
@@ -696,10 +739,13 @@ export async function runMemoryEndToEndSmoke({
       { status: candidate.status, relation: candidate.relation },
     );
 
-    const deploymentClaims = activeUserClaims(memory, runtime).filter(
-      (claim) => /production deployments/i.test(claimValue(claim)),
-    );
-    const deploymentIds = new Set(deploymentClaims.map((claim) => claim.id));
+    const contradictClaim = promotedClaimForCandidate(memory, candidate.id);
+    const baselineAfterConflict = memory.getClaim(approvalBaselineClaim.id);
+    const contradictAfterConflict = contradictClaim;
+    const deploymentIds = new Set([
+      baselineAfterConflict?.id,
+      contradictAfterConflict?.id,
+    ].filter(Boolean));
     const openConflicts = memory.exportCanonical().conflicts.filter(
       (conflict) => (
         conflict.project_id === runtime.projectId
@@ -710,8 +756,15 @@ export async function runMemoryEndToEndSmoke({
     );
     check(
       'contradict.both_active',
-      deploymentClaims.length === 2,
-      { active_deployment_claims: deploymentClaims.length },
+      baselineAfterConflict?.state === 'active'
+        && contradictAfterConflict?.state === 'active'
+        && deploymentIds.size === 2,
+      {
+        baseline_state: baselineAfterConflict?.state ?? null,
+        baseline_value: baselineAfterConflict?.value ?? null,
+        contradict_state: contradictAfterConflict?.state ?? null,
+        contradict_value: contradictAfterConflict?.value ?? null,
+      },
     );
     check(
       'contradict.open_conflict',
@@ -748,7 +801,7 @@ export async function runMemoryEndToEndSmoke({
       !finalList.reason.includes(PROMPTS.ignore)
         && !finalList.reason.includes(PROMPTS.ambiguous)
         && finalList.reason.includes(PROMPTS.keep)
-        && finalList.reason.includes(PROMPTS.update),
+        && finalList.reason.includes(newDatabase.value),
     );
 
     return {
