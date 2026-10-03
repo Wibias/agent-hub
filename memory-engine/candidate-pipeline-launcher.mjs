@@ -25,6 +25,9 @@ export function defaultMemoryCandidatePipelineLogFile(dbPath) {
 export function launchMemoryCandidatePipeline({
   cwd,
   dbPath,
+  projectId,
+  branch,
+  revisionSha = null,
   limit = 20,
   maxRounds = 5,
   logFile = null,
@@ -34,6 +37,8 @@ export function launchMemoryCandidatePipeline({
   for (const [value, name] of [
     [cwd, 'cwd'],
     [dbPath, 'dbPath'],
+    [projectId, 'projectId'],
+    [branch, 'branch'],
     [executable, 'executable'],
   ]) {
     if (!nonEmpty(value)) {
@@ -63,6 +68,9 @@ export function launchMemoryCandidatePipeline({
         workerScriptPath,
         '--cwd', resolve(cwd),
         '--db-path', resolve(dbPath),
+        '--project-id', projectId,
+        '--branch', branch,
+        ...(nonEmpty(revisionSha) ? ['--revision-sha', revisionSha] : []),
         '--limit', String(limit),
         '--max-rounds', String(maxRounds),
       ],
