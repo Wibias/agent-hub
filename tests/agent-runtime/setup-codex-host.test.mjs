@@ -78,7 +78,7 @@ function baseDependencies(overrides = {}) {
     },
     async readConfig() {
       return {
-        configPath: 'C:/Users/ws/.codex/config.toml',
+        configPath: 'C:/fixture/codex/config.toml',
         exists: true,
         text: '[features]\nmemories = false\n[memories]\nuse_memories = false\ngenerate_memories = false\n',
       };
@@ -105,7 +105,7 @@ function baseDependencies(overrides = {}) {
       return {
         schemaVersion: 1,
         host: 'codex',
-        codexHome: 'C:/Users/ws/.codex',
+        codexHome: 'C:/fixture/codex',
         profiles: [],
         wouldChange: false,
       };
@@ -145,9 +145,9 @@ test('host setup dry-run is healthy and mutation-free when everything is current
 
   const result = await runCodexHostSetup({
     apply: false,
-    cwd: 'C:/Users/ws/.agents',
-    hubRoot: 'C:/Users/ws/.agents',
-    codexHome: 'C:/Users/ws/.codex',
+    cwd: 'C:/fixture/agent-hub',
+    hubRoot: 'C:/fixture/agent-hub',
+    codexHome: 'C:/fixture/codex',
     nodePath: 'C:/nvm4w/nodejs/node.exe',
     dependencies,
   });
@@ -228,9 +228,9 @@ test('host setup dry-run reports all planned changes without invoking mutation p
 
   const result = await runCodexHostSetup({
     apply: false,
-    cwd: 'C:/Users/ws/.agents',
-    hubRoot: 'C:/Users/ws/.agents',
-    codexHome: 'C:/Users/ws/.codex',
+    cwd: 'C:/fixture/agent-hub',
+    hubRoot: 'C:/fixture/agent-hub',
+    codexHome: 'C:/fixture/codex',
     nodePath: 'C:/nvm4w/nodejs/node.exe',
     dependencies,
   });
@@ -257,7 +257,7 @@ test('host setup blocks before host inspection or mutation when generated runtim
   const dependencies = baseDependencies({
     async renderAll() {
       return [
-        'C:/Users/ws/.agents/agent-runtime/generated/codex-runtime/manifest.json',
+        'C:/fixture/agent-hub/agent-runtime/generated/codex-runtime/manifest.json',
       ];
     },
     installHooks() {
@@ -276,9 +276,9 @@ test('host setup blocks before host inspection or mutation when generated runtim
 
   const result = await runCodexHostSetup({
     apply: true,
-    cwd: 'C:/Users/ws/.agents',
-    hubRoot: 'C:/Users/ws/.agents',
-    codexHome: 'C:/Users/ws/.codex',
+    cwd: 'C:/fixture/agent-hub',
+    hubRoot: 'C:/fixture/agent-hub',
+    codexHome: 'C:/fixture/codex',
     dependencies,
   });
 
@@ -298,7 +298,7 @@ test('host setup apply composes existing safe mutation paths and reports trust/r
         ? {
           wouldChange: true,
           applied: true,
-          backupPath: 'C:/Users/ws/.codex/hooks.json.backup',
+          backupPath: 'C:/fixture/codex/hooks.json.backup',
           hookTrustRequired: true,
         }
         : {
@@ -336,8 +336,8 @@ test('host setup apply composes existing safe mutation paths and reports trust/r
       sequence.push('native-memory-apply');
       return {
         changed: true,
-        configPath: 'C:/Users/ws/.codex/config.toml',
-        backupPath: 'C:/Users/ws/.codex/config.toml.backup',
+        configPath: 'C:/fixture/codex/config.toml',
+        backupPath: 'C:/fixture/codex/config.toml.backup',
         settings: {
           featureEnabled: false,
           useMemories: false,
@@ -363,7 +363,7 @@ test('host setup apply composes existing safe mutation paths and reports trust/r
         backups: [
           {
             file: 'agent-hub-diagnose.config.toml',
-            path: 'C:/Users/ws/.codex/agent-hub-diagnose.config.toml.retired-backup',
+            path: 'C:/fixture/codex/agent-hub-diagnose.config.toml.retired-backup',
           },
         ],
       };
@@ -377,9 +377,9 @@ test('host setup apply composes existing safe mutation paths and reports trust/r
 
   const result = await runCodexHostSetup({
     apply: true,
-    cwd: 'C:/Users/ws/.agents',
-    hubRoot: 'C:/Users/ws/.agents',
-    codexHome: 'C:/Users/ws/.codex',
+    cwd: 'C:/fixture/agent-hub',
+    hubRoot: 'C:/fixture/agent-hub',
+    codexHome: 'C:/fixture/codex',
     nodePath: 'C:/nvm4w/nodejs/node.exe',
     dependencies,
   });
@@ -428,9 +428,9 @@ test('host setup keeps a broken doctor state visible even when changes are also 
 
   const result = await runCodexHostSetup({
     apply: false,
-    cwd: 'C:/Users/ws/.agents',
-    hubRoot: 'C:/Users/ws/.agents',
-    codexHome: 'C:/Users/ws/.codex',
+    cwd: 'C:/fixture/agent-hub',
+    hubRoot: 'C:/fixture/agent-hub',
+    codexHome: 'C:/fixture/codex',
     dependencies,
   });
 
