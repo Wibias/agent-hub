@@ -184,6 +184,11 @@ function updateUrl() {
   } else {
     url.searchParams.delete('claim');
   }
+  if (state.selectedCandidateId && state.view === 'review') {
+    url.searchParams.set('candidate', state.selectedCandidateId);
+  } else {
+    url.searchParams.delete('candidate');
+  }
   history.replaceState(null, '', url);
 }
 
@@ -215,7 +220,9 @@ function renderProjects() {
       state.projectId = project.projectId;
       state.branch = project.defaultBranch;
       state.selectedClaimId = null;
+      state.selectedCandidateId = null;
       state.claim = null;
+      resetActionState();
       loadScope();
     });
   });
@@ -1236,6 +1243,8 @@ async function loadScope() {
   state.scope = null;
   state.claim = null;
   state.selectedClaimId = null;
+  state.selectedCandidateId = null;
+  resetActionState();
   state.search = '';
   state.authority = 'all';
   state.claimState = 'all';
@@ -1265,11 +1274,13 @@ async function bootstrap() {
   loading();
   try {
     state.overview = await fetchJson('/api/overview');
+    state.actionToken = state.overview.actions?.token ?? null;
     const params = new URL(window.location.href).searchParams;
     const requestedProject = params.get('project');
     const requestedBranch = params.get('branch');
     const requestedView = params.get('view');
     const requestedClaim = params.get('claim');
+    const requestedCandidate = params.get('candidate');
 
     const projects = state.overview.projects ?? [];
     const project = projects.find(
@@ -1302,6 +1313,17 @@ async function bootstrap() {
     ) {
       await selectClaim(requestedClaim);
     }
+    if (
+      requestedCandidate
+      && state.view === 'review'
+      && state.scope.candidates.some(
+        (item) => item.id === requestedCandidate && item.reviewable,
+      )
+    ) {
+      state.selectedCandidateId = requestedCandidate;
+      updateUrl();
+      renderReview();
+    }
   } catch (error) {
     el.projectTitle.textContent = 'Memory Console unavailable';
     el.view.innerHTML = `<div class="error">${escapeHtml(error.message)}</div>`;
@@ -1312,6 +1334,20 @@ el.branchSelect.addEventListener('change', () => {
   if (el.branchSelect.value === state.branch) return;
   state.branch = el.branchSelect.value;
   loadScope();
+});
+
+el.refreshButton?.addEventListener('click', async () => {
+  if (state.busy) return;
+  const prior = el.refreshButton.textContent;
+  el.refreshButton.textContent = 'Refreshing…';
+  try {
+    await reloadCurrentData();
+  } catch (error) {
+    state.actionError = error.message;
+    renderView();
+  } finally {
+    el.refreshButton.textContent = prior;
+  }
 });
 
 el.tabs.addEventListener('click', (event) => {
@@ -1327,3 +1363,18 @@ el.tabs.addEventListener('click', (event) => {
 });
 
 bootstrap();
+
+setInterval(async () => {
+  if (
+    document.visibilityState !== 'visible'
+    || !state.scope
+    || actionsAreOpen()
+  ) {
+    return;
+  }
+  try {
+    await reloadCurrentData();
+  } catch {
+    // Live refresh is best-effort; explicit Refresh remains available.
+  }
+}, 10_000);
