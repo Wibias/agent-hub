@@ -247,6 +247,33 @@ test('memory console scope and inspector expose authority provenance and observa
   }
 });
 
+test('MemoryEngine read-only mode permits inspection and rejects mutation', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'agent-hub-memory-ui-readonly-'));
+  const dbPath = join(root, 'memory.sqlite3');
+  const writable = new MemoryEngine({ dbPath });
+  seed(writable);
+  writable.close();
+
+  const readOnly = new MemoryEngine({
+    dbPath,
+    readOnly: true,
+  });
+  try {
+    const overview = memoryUiOverview(readOnly);
+    assert.equal(overview.projects.length, 2);
+    assert.throws(
+      () => readOnly.registerProject({
+        projectId: 'github.com/example/write-attempt',
+        repoIdentity: 'github.com/example/write-attempt',
+      }),
+      /readonly|read-only|attempt to write/i,
+    );
+  } finally {
+    readOnly.close();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test('memory console HTTP surface is loopback read-only and serves project drilldown', async () => {
   const root = await mkdtemp(join(tmpdir(), 'agent-hub-memory-ui-http-'));
   const dbPath = join(root, 'memory.sqlite3');
