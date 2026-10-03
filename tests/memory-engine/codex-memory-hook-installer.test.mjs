@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { Buffer } from 'node:buffer';
 import {
   mkdirSync,
   readFileSync,
@@ -44,6 +45,15 @@ function managedAgentDecisionHook(config, eventName) {
     .find((hook) => /codex-agent-decision-hook-cli\.mjs/.test(
       String(hook?.command ?? '') + String(hook?.commandWindows ?? ''),
     ));
+}
+
+function decodeWindowsPowerShellCommand(hook) {
+  const command = String(hook?.commandWindows ?? '');
+  const match = /^powershell\.exe -NoProfile -NonInteractive -EncodedCommand ([A-Za-z0-9+/=]+)$/.exec(
+    command,
+  );
+  assert.ok(match, 'expected an encoded PowerShell command');
+  return Buffer.from(match[1], 'base64').toString('utf16le');
 }
 
 test('installer plan adds current memory hooks while preserving unrelated hooks and root fields', () => {
@@ -121,7 +131,11 @@ test('installer plan adds current memory hooks while preserving unrelated hooks 
   assert.match(prompt.command, /--hybrid-recall/);
   assert.match(prompt.command, /--candidate-capture/);
   assert.match(prompt.command, /--auto-pipeline/);
-  assert.match(prompt.commandWindows, /^"\/usr\/bin\/node"/);
+  const promptWindows = decodeWindowsPowerShellCommand(prompt);
+  assert.match(promptWindows, /^& '\/usr\/bin\/node' '/);
+  assert.match(promptWindows, /codex-hook-cli\.mjs/);
+  assert.match(promptWindows, /'--candidate-capture'/);
+  assert.match(promptWindows, /; exit \$LASTEXITCODE$/);
   assert.equal(prompt.timeout, 10);
   assert.equal(prompt.additionalContextLimit, 2500);
 
@@ -131,6 +145,54 @@ test('installer plan adds current memory hooks while preserving unrelated hooks 
   assert.match(session.command, /--cache-dir/);
   assert.equal(session.timeout, 45);
   assert.equal(session.async, true);
+  const sessionWindows = decodeWindowsPowerShellCommand(session);
+  assert.match(sessionWindows, /embedding-worker-launcher\.mjs/);
+  assert.match(sessionWindows, /'--cache-dir'/);
+  assert.match(sessionWindows, /; exit \$LASTEXITCODE$/);
+});
+
+test('installer emits shell-neutral Windows hooks with safely quoted paths', () => {
+  const plan = planCodexMemoryHooks({
+    existing: { hooks: {} },
+    hubRoot: "/opt/Agent Hub's runtime",
+    nodePath: '/opt/Node Runtime/node',
+  });
+
+  const prompt = managedPromptHook(plan.config);
+  const stop = managedAgentDecisionHook(plan.config, 'Stop');
+  const subagentStop = managedAgentDecisionHook(plan.config, 'SubagentStop');
+  const session = managedSessionHook(plan.config);
+
+  for (const hook of [prompt, stop, subagentStop, session]) {
+    assert.ok(hook);
+    assert.match(
+      hook.commandWindows,
+      /^powershell\.exe -NoProfile -NonInteractive -EncodedCommand /,
+    );
+    assert.doesNotMatch(hook.commandWindows, /Node Runtime/);
+  }
+
+  const promptScript = decodeWindowsPowerShellCommand(prompt);
+  assert.match(promptScript, /^& '\/opt\/Node Runtime\/node' '/);
+  assert.match(
+    promptScript,
+    /'\/opt\/Agent Hub''s runtime\/memory-engine\/adapters\/codex-hook-cli\.mjs'/,
+  );
+  assert.match(promptScript, /; exit \$LASTEXITCODE$/);
+
+  const stopScript = decodeWindowsPowerShellCommand(stop);
+  assert.match(stopScript, /codex-agent-decision-hook-cli\.mjs/);
+  assert.match(stopScript, /'--auto-pipeline'/);
+  assert.match(stopScript, /; exit \$LASTEXITCODE$/);
+
+  const subagentStopScript = decodeWindowsPowerShellCommand(subagentStop);
+  assert.equal(subagentStopScript, stopScript);
+
+  const sessionScript = decodeWindowsPowerShellCommand(session);
+  assert.match(sessionScript, /embedding-worker-launcher\.mjs/);
+  assert.match(sessionScript, /'--cache-dir'/);
+  assert.match(sessionScript, /Agent Hub''s runtime/);
+  assert.match(sessionScript, /; exit \$LASTEXITCODE$/);
 });
 
 test('installer replaces stale or duplicate managed hooks without deleting unrelated hooks in shared entries', () => {
