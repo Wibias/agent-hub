@@ -150,51 +150,69 @@ export async function runCodexAgentDecisionHook({
 
       let evidence = memory.getEvidence(evidenceId);
       if (evidence === null) {
-        evidence = memory.recordEvidence({
-          id: evidenceId,
-          projectId: scope.projectId,
-          harness: 'codex',
-          sessionId: event.session_id,
-          sourceKind: event.hook_event_name === 'SubagentStop'
-            ? 'subagent'
-            : 'assistant',
-          sourceRef: event.hook_event_name === 'SubagentStop'
-            ? 'codex:subagent:' + event.agent_id
-            : 'codex:assistant:' + event.turn_id,
-          capturedAt,
-          branch: git.branch,
-          commitSha: git.revisionSha,
-          path: null,
-          blobOid: null,
-          content: proposal.value,
-          authorityClass: 'agent_inference',
-          metadata: {
-            event_type: event.hook_event_name === 'SubagentStop'
-              ? 'subagent_stop'
-              : 'assistant_stop',
-            hook_event_name: event.hook_event_name,
-            turn_id: event.turn_id,
-            agent_id: event.agent_id ?? null,
-            agent_type: agentType,
-            decision_capture: true,
-            candidate_policy: proposal.policyVersion,
-            candidate_rule: proposal.decisionReason,
-            assistant_message_hash: createHash('sha256')
-              .update(event.last_assistant_message, 'utf8')
-              .digest('hex'),
-          },
-        });
+        try {
+          evidence = memory.recordEvidence({
+            id: evidenceId,
+            projectId: scope.projectId,
+            harness: 'codex',
+            sessionId: event.session_id,
+            sourceKind: event.hook_event_name === 'SubagentStop'
+              ? 'subagent'
+              : 'assistant',
+            sourceRef: event.hook_event_name === 'SubagentStop'
+              ? 'codex:subagent:' + event.agent_id
+              : 'codex:assistant:' + event.turn_id,
+            capturedAt,
+            branch: git.branch,
+            commitSha: git.revisionSha,
+            path: null,
+            blobOid: null,
+            content: proposal.value,
+            authorityClass: 'agent_inference',
+            metadata: {
+              event_type: event.hook_event_name === 'SubagentStop'
+                ? 'subagent_stop'
+                : 'assistant_stop',
+              hook_event_name: event.hook_event_name,
+              turn_id: event.turn_id,
+              agent_id: event.agent_id ?? null,
+              agent_type: agentType,
+              decision_capture: true,
+              candidate_policy: proposal.policyVersion,
+              candidate_rule: proposal.decisionReason,
+              assistant_message_hash: createHash('sha256')
+                .update(event.last_assistant_message, 'utf8')
+                .digest('hex'),
+            },
+          });
+        } catch (error) {
+          // Sync and async Stop handlers may race on the same deterministic
+          // Evidence id. If the competing process committed first, reuse it.
+          evidence = memory.getEvidence(evidenceId);
+          if (evidence === null) throw error;
+        }
       }
 
-      memory.recordAgentCandidate({
-        id: candidateId,
-        evidenceId: evidence.id,
-        proposedValue: evidence.content_redacted,
-        decisionReason: proposal.decisionReason,
-        policyVersion: proposal.policyVersion,
-        fingerprint: proposal.fingerprint,
-        createdAt: evidence.captured_at ?? capturedAt,
-      });
+      try {
+        memory.recordAgentCandidate({
+          id: candidateId,
+          evidenceId: evidence.id,
+          proposedValue: evidence.content_redacted,
+          decisionReason: proposal.decisionReason,
+          policyVersion: proposal.policyVersion,
+          fingerprint: proposal.fingerprint,
+          createdAt: evidence.captured_at ?? capturedAt,
+        });
+      } catch (error) {
+        // The fingerprint is the cross-process idempotency key. A competing
+        // capture that won the insert race is success, not a hook failure.
+        const raced = memory.findCandidateByFingerprint({
+          projectId: scope.projectId,
+          branch: git.branch,
+          fingerprint: proposal.fingerprint,
+        });
+        if (raced === null) throw error;
+      }
     }
 
     if (
