@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import {
   mkdir,
   open,
+  readFile,
   rm,
   stat,
 } from 'node:fs/promises';
@@ -142,15 +143,43 @@ async function openNewLock(lockFile, now) {
   return { path: lockFile, file };
 }
 
+function lockOwnerPid(raw) {
+  try {
+    const parsed = JSON.parse(raw);
+    return Number.isInteger(parsed?.pid) && parsed.pid > 0
+      ? parsed.pid
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+export function memoryCandidatePipelineProcessAlive(pid) {
+  if (!Number.isInteger(pid) || pid < 1) {
+    throw new TypeError('pid must be a positive integer');
+  }
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    if (error?.code === 'ESRCH') return false;
+    return true;
+  }
+}
+
 export async function acquireMemoryCandidatePipelineLock(lockFile, {
   staleAfterMs = DEFAULT_STALE_LOCK_MS,
   now = Date.now,
+  isProcessAlive = memoryCandidatePipelineProcessAlive,
 } = {}) {
   if (!nonEmpty(lockFile)) {
     throw new TypeError('lockFile must be a non-empty string');
   }
   if (!Number.isInteger(staleAfterMs) || staleAfterMs < 1) {
     throw new RangeError('staleAfterMs must be a positive integer');
+  }
+  if (typeof isProcessAlive !== 'function') {
+    throw new TypeError('isProcessAlive must be a function');
   }
 
   const resolved = resolve(lockFile);
@@ -166,6 +195,24 @@ export async function acquireMemoryCandidatePipelineLock(lockFile, {
   } catch (error) {
     if (error?.code === 'ENOENT') return openNewLock(resolved, now);
     throw error;
+  }
+
+  let ownerPid = null;
+  try {
+    ownerPid = lockOwnerPid(await readFile(resolved, 'utf8'));
+  } catch (error) {
+    if (error?.code === 'ENOENT') return openNewLock(resolved, now);
+    throw error;
+  }
+
+  if (ownerPid !== null && !isProcessAlive(ownerPid)) {
+    await rm(resolved, { force: true });
+    try {
+      return await openNewLock(resolved, now);
+    } catch (error) {
+      if (error?.code === 'EEXIST') return null;
+      throw error;
+    }
   }
 
   if ((now() - metadata.mtimeMs) <= staleAfterMs) return null;
