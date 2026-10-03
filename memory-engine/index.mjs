@@ -26,8 +26,9 @@ const CLAIM_STATES = new Set([
 
 const SECRET_PATTERNS = [
   /\bsk-[A-Za-z0-9_-]{12,}\b/g,
+  /\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})\b/g,
   /\bBearer\s+[A-Za-z0-9._~+/=-]{12,}\b/gi,
-  /\b(?:api[_-]?key|access[_-]?token|secret|password)\s*[:=]\s*["']?[^\s"',;]{8,}["']?/gi,
+  /\b(?:api[_-]?key|access[_-]?token|token|secret|password)\s*[:=]\s*["']?[^\s"',;]{8,}["']?/gi,
 ];
 
 const QUERY_TOKEN = /[\p{L}\p{N}_-]+/gu;
