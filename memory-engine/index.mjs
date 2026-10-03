@@ -2690,6 +2690,154 @@ export class MemoryEngine {
     ).all(projectId, branch, status, limit).map(normalizeCandidate);
   }
 
+  listUnevaluatedAgentCandidates({
+    projectId,
+    branch,
+    limit = 10,
+  }) {
+    assertNonEmptyString(projectId, 'projectId');
+    assertNonEmptyString(branch, 'branch');
+    if (!Number.isInteger(limit) || limit < 1 || limit > 20) {
+      throw new RangeError('limit must be an integer between 1 and 20');
+    }
+
+    return this.#db.prepare(
+      'SELECT * FROM memory_candidates '
+      + "WHERE project_id = ? AND branch = ? AND status = 'pending' "
+      + "AND source_authority = 'agent_inference' "
+      + 'AND evaluated_at IS NULL '
+      + 'ORDER BY created_at ASC, id ASC LIMIT ?',
+    ).all(projectId, branch, limit).map(normalizeCandidate);
+  }
+
+  recordAgentCandidate({
+    id,
+    evidenceId,
+    proposedValue,
+    decisionReason,
+    policyVersion,
+    fingerprint,
+    createdAt = this.#clock(),
+  }) {
+    for (const [value, name] of [
+      [id, 'id'],
+      [evidenceId, 'evidenceId'],
+      [proposedValue, 'proposedValue'],
+      [decisionReason, 'decisionReason'],
+      [policyVersion, 'policyVersion'],
+      [fingerprint, 'fingerprint'],
+      [createdAt, 'createdAt'],
+    ]) {
+      assertNonEmptyString(value, name);
+    }
+    if (!/^[0-9a-f]{64}$/.test(fingerprint)) {
+      throw new Error('fingerprint must be a lowercase SHA-256 hex digest');
+    }
+
+    const evidence = this.getEvidence(evidenceId);
+    if (!evidence) throw new Error('unknown evidence: ' + evidenceId);
+    if (evidence.authority_class !== 'agent_inference') {
+      throw new Error('agent memory candidates require agent_inference evidence');
+    }
+    if (evidence.sensitivity === 'secret_redacted') {
+      throw new Error('secret-redacted evidence cannot become an agent memory candidate');
+    }
+    if (!evidence.branch) {
+      throw new Error('agent memory candidates require branch-scoped evidence');
+    }
+    if (proposedValue !== evidence.content_redacted) {
+      throw new Error('agent candidate value must exactly match source evidence');
+    }
+
+    const existing = this.findCandidateByFingerprint({
+      projectId: evidence.project_id,
+      branch: evidence.branch,
+      fingerprint,
+    });
+    if (existing) return existing;
+
+    this.#db.prepare(
+      'INSERT INTO memory_candidates ('
+      + 'id, project_id, branch, source_evidence_id, proposed_type, '
+      + 'proposed_value, source_authority, status, decision_reason, '
+      + 'created_at, evaluated_at, related_claim_id, relation, policy_version, '
+      + 'evaluator_id, evaluation_json, fingerprint'
+      + ') VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, ?, NULL, NULL, ?)',
+    ).run(
+      id,
+      evidence.project_id,
+      evidence.branch,
+      evidence.id,
+      'decision',
+      proposedValue,
+      'agent_inference',
+      'pending',
+      decisionReason,
+      createdAt,
+      policyVersion,
+      fingerprint,
+    );
+
+    return this.getCandidate(id);
+  }
+
+  evaluateAgentCandidate({
+    candidateId,
+    evaluatorId,
+    evaluation,
+    evaluatedAt = this.#clock(),
+  }) {
+    assertNonEmptyString(candidateId, 'candidateId');
+    assertNonEmptyString(evaluatorId, 'evaluatorId');
+    assertNonEmptyString(evaluatedAt, 'evaluatedAt');
+
+    const candidate = this.getCandidate(candidateId);
+    if (!candidate) throw new Error('unknown memory candidate: ' + candidateId);
+    if (
+      candidate.status !== 'pending'
+      || candidate.evaluated_at !== null
+      || candidate.source_authority !== 'agent_inference'
+    ) {
+      throw new Error('agent memory candidate is not unevaluated');
+    }
+
+    const evidence = this.getEvidence(candidate.source_evidence_id);
+    if (
+      !evidence
+      || evidence.authority_class !== 'agent_inference'
+      || evidence.sensitivity === 'secret_redacted'
+      || evidence.project_id !== candidate.project_id
+      || evidence.branch !== candidate.branch
+      || evidence.content_redacted !== candidate.proposed_value
+    ) {
+      throw new Error('agent candidate source evidence invariant failed');
+    }
+
+    const normalized = validateMemoryCandidateJudgment(evaluation);
+    const nextStatus = normalized.decision === 'ignore'
+      ? 'ignored'
+      : normalized.decision === 'needs_confirmation'
+        ? 'needs_confirmation'
+        : 'pending';
+
+    const result = this.#db.prepare(
+      'UPDATE memory_candidates '
+      + 'SET status = ?, evaluated_at = ?, evaluator_id = ?, evaluation_json = ? '
+      + "WHERE id = ? AND status = 'pending' AND evaluated_at IS NULL "
+      + "AND source_authority = 'agent_inference'",
+    ).run(
+      nextStatus,
+      evaluatedAt,
+      evaluatorId,
+      JSON.stringify(normalized),
+      candidateId,
+    );
+    if (Number(result.changes) !== 1) {
+      throw new Error('agent memory candidate evaluation raced');
+    }
+    return this.getCandidate(candidateId);
+  }
+
   recordCandidate({
     id,
     evidenceId,
