@@ -16,6 +16,15 @@ import {
 import {
   runMemoryCandidatePromotionCli,
 } from './promote-memory-candidates.mjs';
+import {
+  runAgentDecisionJudgeCli,
+} from './judge-agent-memory-candidates.mjs';
+import {
+  runAgentDecisionRelationCli,
+} from './judge-agent-memory-relations.mjs';
+import {
+  runAgentDecisionPromotionCli,
+} from './promote-agent-memory-candidates.mjs';
 
 function nonEmpty(value) {
   return typeof value === 'string' && value.trim().length > 0;
@@ -123,6 +132,15 @@ function readPipelineStatus({
     if (typeof memory.listScopedCandidates !== 'function') {
       throw new TypeError('memory does not support scoped candidate listing');
     }
+    if (typeof memory.listUnevaluatedAgentCandidates !== 'function') {
+      throw new TypeError('memory does not support unevaluated agent candidate listing');
+    }
+    if (typeof memory.listAgentRelationPendingCandidates !== 'function') {
+      throw new TypeError('memory does not support agent relation-pending candidate listing');
+    }
+    if (typeof memory.listAgentPromotionReadyCandidates !== 'function') {
+      throw new TypeError('memory does not support agent promotion-ready candidate listing');
+    }
 
     const importanceReady = memory.listUnevaluatedCandidates({
       projectId: runtime.projectId,
@@ -135,6 +153,21 @@ function readPipelineStatus({
       limit,
     }).length;
     const promotionReady = memory.listPromotionReadyCandidates({
+      projectId: runtime.projectId,
+      branch: runtime.branch,
+      limit,
+    }).length;
+    const agentImportanceReady = memory.listUnevaluatedAgentCandidates({
+      projectId: runtime.projectId,
+      branch: runtime.branch,
+      limit,
+    }).length;
+    const agentRelationReady = memory.listAgentRelationPendingCandidates({
+      projectId: runtime.projectId,
+      branch: runtime.branch,
+      limit,
+    }).length;
+    const agentPromotionReady = memory.listAgentPromotionReadyCandidates({
       projectId: runtime.projectId,
       branch: runtime.branch,
       limit,
@@ -153,6 +186,9 @@ function readPipelineStatus({
       importance_ready: importanceReady,
       relation_ready: relationReady,
       promotion_ready: promotionReady,
+      agent_importance_ready: agentImportanceReady,
+      agent_relation_ready: agentRelationReady,
+      agent_promotion_ready: agentPromotionReady,
       needs_confirmation: needsConfirmation,
       kept_for_review: keptForReview,
     };
@@ -232,6 +268,12 @@ export async function runMemoryCandidatePipelineCli({
     || runMemoryCandidateRelationCli;
   const runPromotion = dependencies.runPromotion
     || runMemoryCandidatePromotionCli;
+  const runAgentImportance = dependencies.runAgentImportance
+    || runAgentDecisionJudgeCli;
+  const runAgentRelation = dependencies.runAgentRelation
+    || runAgentDecisionRelationCli;
+  const runAgentPromotion = dependencies.runAgentPromotion
+    || runAgentDecisionPromotionCli;
 
   const runtime = resolveRuntime({
     cwd: options.cwd,
@@ -272,6 +314,36 @@ export async function runMemoryCandidatePipelineCli({
       name: 'promotion',
       ready: afterRelation.promotion_ready,
       runner: runPromotion,
+      argv: stageArgv(runtime, options),
+      cwd: runtime.cwd,
+      runtime,
+    }));
+
+    const afterUserPromotion = status();
+    stages.push(await executeStage({
+      name: 'agent_importance',
+      ready: afterUserPromotion.agent_importance_ready,
+      runner: runAgentImportance,
+      argv: stageArgv(runtime, options, { ai: true }),
+      cwd: runtime.cwd,
+      runtime,
+    }));
+
+    const afterAgentImportance = status();
+    stages.push(await executeStage({
+      name: 'agent_relation',
+      ready: afterAgentImportance.agent_relation_ready,
+      runner: runAgentRelation,
+      argv: stageArgv(runtime, options, { ai: true }),
+      cwd: runtime.cwd,
+      runtime,
+    }));
+
+    const afterAgentRelation = status();
+    stages.push(await executeStage({
+      name: 'agent_promotion',
+      ready: afterAgentRelation.agent_promotion_ready,
+      runner: runAgentPromotion,
       argv: stageArgv(runtime, options),
       cwd: runtime.cwd,
       runtime,
