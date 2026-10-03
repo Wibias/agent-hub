@@ -965,6 +965,79 @@ test('Codex CLI auto-registers different repositories in one shared database', (
 });
 
 
+test('Codex CLI auto-registers a local Git repository without origin', () => {
+  const root = mkdtempSync(join(tmpdir(), 'agent-hub-codex-local-project-'));
+  const repoDir = join(root, 'taste-compiler');
+  const dbPath = join(root, 'memory.sqlite3');
+  const cliPath = fileURLToPath(
+    new URL('../../memory-engine/adapters/codex-hook-cli.mjs', import.meta.url),
+  );
+
+  try {
+    mkdirSync(repoDir, { recursive: true });
+    execFileSync('git', ['init', '-b', 'main', repoDir], { stdio: 'ignore' });
+    execFileSync('git', ['-C', repoDir, 'config', 'user.email', 'test@example.com']);
+    execFileSync('git', ['-C', repoDir, 'config', 'user.name', 'Memory Test']);
+    writeFileSync(join(repoDir, 'README.md'), '# taste compiler\n');
+    execFileSync('git', ['-C', repoDir, 'add', 'README.md']);
+    execFileSync('git', ['-C', repoDir, 'commit', '-m', 'initial'], {
+      stdio: 'ignore',
+    });
+
+    const scope = resolveCodexProjectScope({
+      event: userPromptEvent({ cwd: repoDir }),
+      config: {
+        dbPath,
+        projectId: null,
+        repoIdentity: null,
+        capturePrompts: false,
+      },
+    });
+    assert.match(
+      scope.projectId,
+      /^local\.git\/taste-compiler@[0-9a-f]{12}$/,
+    );
+    assert.equal(scope.canonicalRemote, null);
+
+    const event = JSON.stringify({
+      session_id: 'thr-local-project',
+      transcript_path: null,
+      cwd: repoDir,
+      hook_event_name: 'UserPromptSubmit',
+      model: 'gpt-5.6-sol',
+      permission_mode: 'default',
+      turn_id: 'turn-local-project',
+      prompt: 'Recall project memory.',
+    });
+    const result = spawnSync(process.execPath, [cliPath], {
+      input: event,
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        AGENT_HUB_MEMORY_DB: dbPath,
+        AGENT_HUB_MEMORY_PROJECT_ID: '',
+        AGENT_HUB_MEMORY_REPO_IDENTITY: '',
+        AGENT_HUB_MEMORY_CAPTURE_PROMPTS: 'false',
+      },
+    });
+    assert.equal(result.status, 0, result.stderr);
+
+    const memory = new MemoryEngine({ dbPath });
+    try {
+      assert.deepEqual(memory.getProject(scope.projectId), {
+        project_id: scope.projectId,
+        canonical_remote: null,
+        repo_identity: scope.projectId,
+      });
+    } finally {
+      memory.close();
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+
 test('explicit memory: prompt captures, commits, and consumes the command', async () => {
   const calls = [];
   const protocol = {
