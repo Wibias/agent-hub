@@ -10,6 +10,7 @@ import {
   refreshRepositoryFreshness,
   resolveGitContext,
 } from '../git-freshness.mjs';
+import { pipelineRunRef } from '../pipeline-observability.mjs';
 import {
   formatMemoryRecallContext,
 } from './recall-context.mjs';
