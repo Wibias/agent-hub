@@ -148,13 +148,27 @@ export function inspectAgentHubHookConfiguration(hooks) {
   const launcherCommands = startCommands.filter((command) => (
     /memory-engine[\\/]embedding-worker-launcher\.mjs/i.test(command)
   ));
+  const stopCommands = eventCommands(eventMap, 'Stop');
+  const agentStopCommands = stopCommands.filter((command) => (
+    /memory-engine[\\/]adapters[\\/]codex-agent-decision-hook-cli\.mjs/i.test(command)
+  ));
+  const subagentStopCommands = eventCommands(eventMap, 'SubagentStop');
+  const agentSubagentStopCommands = subagentStopCommands.filter((command) => (
+    /memory-engine[\\/]adapters[\\/]codex-agent-decision-hook-cli\.mjs/i.test(command)
+  ));
 
   const recallText = recallCommands.join('\n');
+  const agentDecisionText = [
+    ...agentStopCommands,
+    ...agentSubagentStopCommands,
+  ].join('\n');
 
   return {
     configured: recallCommands.length > 0,
     userPromptSubmit: recallCommands.length > 0,
     sessionStartLauncher: launcherCommands.length > 0,
+    stopAgentDecisionCapture: agentStopCommands.length > 0,
+    subagentStopAgentDecisionCapture: agentSubagentStopCommands.length > 0,
     flags: {
       ignoreMemoryEnv: /(?:^|\s)--ignore-memory-env(?:\s|$)/.test(recallText),
       explicitMemoryRequests: /(?:^|\s)--explicit-memory-requests(?:\s|$)/.test(
@@ -163,6 +177,12 @@ export function inspectAgentHubHookConfiguration(hooks) {
       hybridRecall: /(?:^|\s)--hybrid-recall(?:\s|$)/.test(recallText),
       candidateCapture: /(?:^|\s)--candidate-capture(?:\s|$)/.test(recallText),
       autoPipeline: /(?:^|\s)--auto-pipeline(?:\s|$)/.test(recallText),
+      agentDecisionCapture: (
+        agentStopCommands.length > 0
+        && agentSubagentStopCommands.length > 0
+        && /(?:^|\s)--ignore-memory-env(?:\s|$)/.test(agentDecisionText)
+        && /(?:^|\s)--auto-pipeline(?:\s|$)/.test(agentDecisionText)
+      ),
     },
   };
 }
