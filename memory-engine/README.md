@@ -1217,6 +1217,41 @@ It performs, in order:
 
 Use `-Provider` to add the provider-backed judge pass. The script ends by printing the one remaining UI-only release check: restart Codex Desktop, send `Reply only with OK.`, and verify that no `Failed UserPromptSubmit` / hook exit-code-1 message appears.
 
+### Local Memory Console
+
+Agent Hub includes a local read-only browser for project-scoped memory:
+
+```powershell
+node .\scripts\memory-ui.mjs
+```
+
+The server binds only to `127.0.0.1` and defaults to:
+
+```text
+http://127.0.0.1:4317
+```
+
+The first version intentionally exposes no mutation endpoints. It reads the same local SQLite database through `MemoryEngine` and the existing observability APIs.
+
+Views:
+
+- **Projects / branches** — registered memory projects and durable Claim counts per branch;
+- **Memories** — divider-first list of active and historical Claims with stable refs, authority, provenance, semantic-index state, and recall use;
+- **Inspect** — Evidence, root/subagent provenance, Candidate importance/relation state, lifecycle, conflicts, and recall telemetry for one Claim;
+- **Pipeline** — recent run refs, triggers, outcomes, duration, promoted counts, and recorded failures;
+- **Health** — scoped database/semantic status plus host-level E5 worker and Codex-hook status;
+- **Quality** — user/agent judge distributions, recall funnel, deterministic near-duplicate count, and stale count;
+- **Stale** — advisory-only lower-authority cleanup candidates.
+
+Optional arguments:
+
+```powershell
+node .\scripts\memory-ui.mjs --port 5001
+node .\scripts\memory-ui.mjs --db-path "C:\path\to\memory.sqlite3"
+```
+
+There is deliberately no `--host` option: the console is a local operator surface, not a network service.
+
 Automatic processing adds orchestration only. It does not change capture-v1, importance-v2, relation-v1, promotion-v1, or confirmation-v2 decisions.
 
 ### Memory judge calibration

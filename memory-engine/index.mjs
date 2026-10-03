@@ -1331,15 +1331,28 @@ export class MemoryEngine {
   constructor({
     dbPath,
     clock = () => new Date().toISOString(),
+    readOnly = false,
   }) {
     assertNonEmptyString(dbPath, 'dbPath');
     if (typeof clock !== 'function') throw new TypeError('clock must be a function');
+    if (typeof readOnly !== 'boolean') {
+      throw new TypeError('readOnly must be a boolean');
+    }
 
     this.#clock = clock;
     this.#db = new DatabaseSync(dbPath, {
+      readOnly,
       timeout: 5_000,
       enableForeignKeyConstraints: true,
     });
+
+    if (readOnly) {
+      this.#db.exec(`
+        PRAGMA foreign_keys = ON;
+        PRAGMA busy_timeout = 5000;
+      `);
+      return;
+    }
 
     this.#db.exec(`
       PRAGMA journal_mode = WAL;

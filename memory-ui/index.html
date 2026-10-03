@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta
+    name="description"
+    content="Local read-only Agent Hub memory console"
+  >
+  <title>Agent Hub · Memory Console</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div id="app" class="app-shell">
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark">AH</span>
+        <div>
+          <strong>Memory Console</strong>
+          <span>local · read-only</span>
+        </div>
+      </div>
+      <div id="scope-meta" class="scope-meta"></div>
+    </header>
+
+    <aside class="sidebar">
+      <div class="sidebar-heading">
+        <span>Projects</span>
+        <span id="project-total" class="muted"></span>
+      </div>
+      <div id="project-list" class="project-list"></div>
+      <div class="sidebar-footer">
+        <span class="status-dot"></span>
+        <span>127.0.0.1 only</span>
+      </div>
+    </aside>
+
+    <main class="main">
+      <section class="scope-header">
+        <div>
+          <div id="project-kicker" class="kicker">Project</div>
+          <h1 id="project-title">Loading…</h1>
+        </div>
+        <div class="branch-control">
+          <label for="branch-select">Branch</label>
+          <select id="branch-select" aria-label="Select branch"></select>
+        </div>
+      </section>
+
+      <nav id="tabs" class="tabs" aria-label="Memory Console views">
+        <button data-view="memories" class="tab is-active">Memories</button>
+        <button data-view="pipeline" class="tab">Pipeline</button>
+        <button data-view="health" class="tab">Health</button>
+        <button data-view="quality" class="tab">Quality</button>
+        <button data-view="stale" class="tab">Stale</button>
+      </nav>
+
+      <section id="view" class="view" aria-live="polite"></section>
+    </main>
+  </div>
+
+  <template id="loading-template">
+    <div class="loading-row">
+      <span></span><span></span><span></span>
+    </div>
+  </template>
+
+  <script type="module" src="/app.js"></script>
+</body>
+</html>
