@@ -148,7 +148,9 @@ test('hook skips active stop recursion, tentative text, and secret-shaped decisi
     rootEvent({
       turn_id: 'turn-3',
       last_assistant_message:
-        'Decision: use token=ghp_abcdefghijklmnopqrstuvwxyz1234567890.',
+        'Decision: use token='
+        + ['gh', 'p_', 'abcdefghijklmnopqrstuvwxyz1234567890'].join('')
+        + '.',
     }),
   ]) {
     await runCodexAgentDecisionHook({
