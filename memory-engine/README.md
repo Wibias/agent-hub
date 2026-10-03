@@ -1118,6 +1118,7 @@ memory inspect: @7fa31c9e42
 memory health
 memory pipeline failures
 memory stale
+memory quality
 ```
 
 `memory inspect: @ref` resolves exactly one Claim in the current project and branch and shows authority, state, root/user/subagent provenance, Evidence and Candidate identifiers, importance and relation judgments, lifecycle links, conflicts, promotion time, and semantic-index state. Historical superseded/rejected Claims remain inspectable by their stable ref.
@@ -1133,6 +1134,40 @@ Recall observability is also local derived state. `memory_recall_runs` records a
 `memory stale` is advisory only. It lists active lower-authority agent decisions older than 90 days that have not entered answer/advisory context during that window. Retrieval alone does not count as actual use. It never expires, rejects, supersedes, or deletes a Claim automatically.
 
 For high-confidence duplicate control, `agent-relation-v1` now short-circuits only exact-normalized or extremely close text variants when critical negation and numeric tokens also match. Wider semantic paraphrases still go through the existing model relation judge; the deterministic guard never upgrades authority.
+
+### Memory quality dashboard and replay
+
+The read-only operator command:
+
+```text
+memory quality
+```
+
+summarizes actual candidate and recall behavior for the current project and branch. User and agent authority lanes are reported separately, including importance decisions (`promote / ignore / keep_candidate / needs_confirmation`), relation classes, promotion outcomes, deterministic near-duplicate closures, recall retrieved/retained/selected/advisory/blocked counts, and stale advisory-agent-memory count.
+
+The versioned replay fixture in `memory-engine/memory-replay-fixtures.mjs` captures anonymized failure patterns that previously mattered operationally: status chatter, `Continue`, current CI state, temporary smoke-test choices, declarative non-commitments, explicit durable choices, tentative language, and repository-reconstructible facts. It stores no session IDs, repository secrets, or raw private conversation exports.
+
+Capture replay is deterministic and provider-free:
+
+```powershell
+node .\scripts\eval-memory-replay.mjs
+```
+
+This checks whether each historical pattern is still captured or rejected at the correct authority lane. It is suitable for CI and fails when capture behavior drifts.
+
+The optional provider-backed replay also runs the current user and agent importance judges:
+
+```powershell
+node .\scripts\eval-memory-replay.mjs --provider
+```
+
+Optional model and reasoning overrides:
+
+```powershell
+node .\scripts\eval-memory-replay.mjs --provider --model MODEL_ID --reasoning-effort medium
+```
+
+The replay quality gate fails on any expected-decision mismatch and specifically on false durable promotions. This complements the broader balanced calibration and adversarial holdout suites: calibration measures general judge quality, while replay protects concrete past failure modes from regression.
 
 Automatic processing adds orchestration only. It does not change capture-v1, importance-v2, relation-v1, promotion-v1, or confirmation-v2 decisions.
 
