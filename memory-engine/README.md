@@ -1217,6 +1217,33 @@ It performs, in order:
 
 Use `-Provider` to add the provider-backed judge pass. The script ends by printing the one remaining UI-only release check: restart Codex Desktop, send `Reply only with OK.`, and verify that no `Failed UserPromptSubmit` / hook exit-code-1 message appears.
 
+### Local Git repositories without remotes
+
+Repository identity discovery does not require a network remote.
+
+Identity precedence is:
+
+1. explicit Agent Hub project/repository overrides;
+2. optional repository-local Git config `agent-hub.project-id`;
+3. canonicalized `origin` remote when present;
+4. a deterministic local identity derived from repository name plus the root commit set.
+
+A local repository such as `taste-compiler` therefore receives an identity similar to:
+
+```text
+local.git/taste-compiler@1a2b3c4d5e6f
+```
+
+The root-commit fallback survives moving the checkout to another directory. It does not write to `.git/config`. For an unborn/empty repository, or when a fixed local identity should survive future history rewrites or the later addition of a remote, set an explicit local id once:
+
+```powershell
+git config --local agent-hub.project-id taste-compiler
+```
+
+That resolves to `local.git/taste-compiler` and takes precedence over a later `origin`.
+
+Repositories that already have a canonical remote continue to use the existing `host/owner/repo` identity unchanged.
+
 ### Local Memory Console
 
 Agent Hub includes a local read-only browser for project-scoped memory:
