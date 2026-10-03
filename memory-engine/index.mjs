@@ -2415,6 +2415,11 @@ export class MemoryEngine {
       conflicts,
       embeddings,
       semantic_indexed: embeddings.length > 0,
+      recall_usage: this.recallUsageForClaim({
+        projectId,
+        branch,
+        claimId,
+      }),
     };
   }
 
@@ -2490,6 +2495,13 @@ export class MemoryEngine {
     const failedRuns = runs.filter(
       (run) => ['failed', 'partial'].includes(run.status),
     ).length;
+    const staleAgentMemories = this.listStaleAgentMemories({
+      projectId,
+      branch,
+      now: this.#clock(),
+      unusedDays: 90,
+      limit: 200,
+    }).length;
 
     return {
       db_healthy: dbHealthy,
@@ -2499,6 +2511,7 @@ export class MemoryEngine {
       failed_candidates: failedCandidates,
       failed_runs: failedRuns,
       recent_runs: runs.length,
+      stale_agent_memories: staleAgentMemories,
       semantic_coverage_percent: semanticCoveragePercent,
       claims,
       embedded_claims: embedded,
