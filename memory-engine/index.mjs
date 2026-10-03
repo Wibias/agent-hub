@@ -1060,6 +1060,218 @@ function resolveCandidatePromotion(db, {
   };
 }
 
+function resolveAgentCandidatePromotion(db, {
+  candidateId,
+  claimId,
+  policyVersion,
+  finalizedAt,
+}) {
+  assertNonEmptyString(candidateId, 'candidateId');
+  assertNonEmptyString(claimId, 'claimId');
+  assertNonEmptyString(policyVersion, 'policyVersion');
+  assertNonEmptyString(finalizedAt, 'finalizedAt');
+
+  const candidate = normalizeCandidate(
+    db.prepare('SELECT * FROM memory_candidates WHERE id = ?').get(candidateId),
+  );
+  if (!candidate) throw new Error('unknown memory candidate: ' + candidateId);
+  if (
+    candidate.status !== 'pending'
+    || candidate.source_authority !== 'agent_inference'
+    || candidate.evaluated_at === null
+    || !candidate.evaluation_json
+    || candidate.relation === null
+  ) {
+    throw new Error('agent memory candidate is not promotion-ready');
+  }
+
+  const importance = validateMemoryCandidateJudgment(
+    JSON.parse(candidate.evaluation_json),
+  );
+  if (importance.decision !== 'promote') {
+    throw new Error('agent promotion requires promote importance judgment');
+  }
+
+  const relationAudit = normalizeCandidateRelation(
+    db.prepare(
+      'SELECT * FROM memory_candidate_relations WHERE candidate_id = ?',
+    ).get(candidateId),
+  );
+  if (!relationAudit) {
+    throw new Error('agent memory candidate relation audit is missing');
+  }
+  const relation = validateMemoryCandidateRelation(
+    JSON.parse(relationAudit.result_json),
+  );
+  if (
+    relation.relation !== candidate.relation
+    || relationAudit.related_claim_id !== candidate.related_claim_id
+  ) {
+    throw new Error('agent memory candidate relation invariant failed');
+  }
+
+  const evidence = normalizeEvidence(
+    db.prepare('SELECT * FROM evidence WHERE id = ?')
+      .get(candidate.source_evidence_id),
+  );
+  if (
+    !evidence
+    || evidence.authority_class !== 'agent_inference'
+    || evidence.sensitivity === 'secret_redacted'
+    || evidence.project_id !== candidate.project_id
+    || evidence.branch !== candidate.branch
+    || evidence.content_redacted !== candidate.proposed_value
+  ) {
+    throw new Error('agent memory candidate source invariant failed');
+  }
+
+  let target = null;
+  let targetAuthority = null;
+  if (relation.relation === 'unrelated') {
+    if (
+      candidate.related_claim_id !== null
+      || relationAudit.related_claim_id !== null
+      || relation.target_ref !== null
+    ) {
+      throw new Error('unrelated agent promotion cannot target a claim');
+    }
+  } else {
+    if (!candidate.related_claim_id) {
+      throw new Error('related agent promotion requires target claim');
+    }
+    target = normalizeClaim(
+      db.prepare('SELECT * FROM claims WHERE id = ?')
+        .get(candidate.related_claim_id),
+    );
+    if (
+      !target
+      || target.project_id !== candidate.project_id
+      || target.branch_scope !== candidate.branch
+      || target.state !== 'active'
+      || target.predicate !== 'states'
+    ) {
+      throw new Error('agent promotion target is not active in scope');
+    }
+    const targetEvidence = normalizeEvidence(
+      db.prepare('SELECT * FROM evidence WHERE id = ?')
+        .get(target.created_from_evidence_id),
+    );
+    if (!targetEvidence || targetEvidence.project_id !== candidate.project_id) {
+      throw new Error('agent promotion target evidence invariant failed');
+    }
+
+    if (
+      target.kind === 'user_direct'
+      && target.subject === 'user memory'
+      && targetEvidence.authority_class === 'user_direct'
+    ) {
+      targetAuthority = 'user_direct';
+    } else if (
+      target.kind === 'agent_inference'
+      && target.subject === 'agent decision'
+      && targetEvidence.authority_class === 'agent_inference'
+    ) {
+      targetAuthority = 'agent_inference';
+    } else {
+      throw new Error('agent promotion target has unsupported authority');
+    }
+
+    if (relation.target_ref !== memoryRelationClaimRef(target.id)) {
+      throw new Error('agent promotion target ref invariant failed');
+    }
+  }
+
+  if (
+    relation.confidence !== 'high'
+    || relation.meaning_preserved !== true
+  ) {
+    return {
+      candidate,
+      evidence,
+      relation,
+      status: 'needs_confirmation',
+      claim: null,
+      lifecycle: null,
+      claim_id: null,
+      related_claim_id: target?.id ?? null,
+    };
+  }
+
+  if (relation.relation === 'same') {
+    return {
+      candidate,
+      evidence,
+      relation,
+      status: 'superseded',
+      claim: null,
+      lifecycle: null,
+      claim_id: null,
+      related_claim_id: target.id,
+    };
+  }
+
+  if (
+    targetAuthority === 'user_direct'
+    || relation.relation === 'contradict'
+  ) {
+    return {
+      candidate,
+      evidence,
+      relation,
+      status: 'needs_confirmation',
+      claim: null,
+      lifecycle: null,
+      claim_id: null,
+      related_claim_id: target?.id ?? null,
+    };
+  }
+
+  const sensitivity = inspectMemoryTextSensitivity(importance.canonical_fact);
+  if (sensitivity.containsSecret) {
+    return {
+      candidate,
+      evidence,
+      relation,
+      status: 'needs_confirmation',
+      claim: null,
+      lifecycle: null,
+      claim_id: null,
+      related_claim_id: target?.id ?? null,
+    };
+  }
+
+  const claim = prepareClaimInput({
+    evidence,
+    claim: {
+      id: claimId,
+      kind: 'agent_inference',
+      subject: 'agent decision',
+      predicate: 'states',
+      value: importance.canonical_fact,
+      state: 'active',
+      branchScope: candidate.branch,
+      createdAt: finalizedAt,
+    },
+  });
+  const lifecycle = prepareLifecycle(claim.id, {
+    supersedes: (
+      relation.relation === 'update'
+      && targetAuthority === 'agent_inference'
+    ) ? [target.id] : [],
+  });
+
+  return {
+    candidate,
+    evidence,
+    relation,
+    status: 'promoted',
+    claim,
+    lifecycle,
+    claim_id: claim.id,
+    related_claim_id: target?.id ?? null,
+  };
+}
+
 export class MemoryEngine {
   #db;
   #clock;
