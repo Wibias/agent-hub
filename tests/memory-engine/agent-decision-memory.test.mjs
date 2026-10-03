@@ -290,3 +290,54 @@ test('plain contradiction between agent decisions requires confirmation rather t
 
   memory.close();
 });
+
+
+test('kept agent candidates cannot starve a later promote-ready relation candidate', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'agent-decision-starvation-'));
+  const memory = createMemory(join(root, 'memory.sqlite3'));
+
+  for (let index = 0; index < 5; index += 1) {
+    const candidate = seedAgentCandidate(memory, {
+      id: `a-agent-keep-${index}`,
+      evidenceId: `e-agent-keep-${index}`,
+      value: `Decision: keep bounded review choice ${index}.`,
+      fingerprint: index.toString(16).repeat(64),
+    });
+    memory.evaluateAgentCandidate({
+      candidateId: candidate.id,
+      evaluatorId: 'codex:test:agent-importance-v1',
+      evaluatedAt: '2026-10-03T01:01:00.000Z',
+      evaluation: {
+        decision: 'keep_candidate',
+        suggested_type: 'decision',
+        durability: 'medium',
+        future_utility: 'medium',
+        specificity: 'high',
+        confidence: 'high',
+        meaning_preserved: true,
+        canonical_fact: candidate.proposed_value,
+        reason: 'Bounded review-only decision.',
+        risk_flags: ['transient'],
+      },
+    });
+  }
+
+  const promoted = seedAgentCandidate(memory, {
+    id: 'z-agent-promote',
+    evidenceId: 'e-agent-promote',
+    value: 'Decision: keep the worker detached across future sessions.',
+    fingerprint: 'f'.repeat(64),
+  });
+  promoteImportance(memory, promoted);
+
+  assert.deepEqual(
+    memory.listAgentRelationPendingCandidates({
+      projectId: 'project',
+      branch: 'main',
+      limit: 1,
+    }).map((item) => item.id),
+    [promoted.id],
+  );
+
+  memory.close();
+});
