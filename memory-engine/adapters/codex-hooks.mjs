@@ -401,8 +401,9 @@ function formatMemoryCandidatePipelineStatus(memory, {
       `promotion-ready: ${promotionReady} (next batch, max ${limit})`,
       `needs-confirmation: ${needsConfirmation}`,
       `kept-for-review: ${keptForReview}`,
-      'Read-only: no judges or promotion were run.',
-      'Run: node .\\scripts\\process-memory-candidates.mjs --apply',
+      'Read-only: this status command does not run judges or promotion.',
+      'Automatic processing runs outside this command when --auto-pipeline is configured.',
+      'Manual fallback: node .\\scripts\\process-memory-candidates.mjs --apply',
     ].join('\n');
   } catch {
     return unavailable;
