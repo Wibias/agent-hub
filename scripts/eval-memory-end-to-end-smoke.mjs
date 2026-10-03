@@ -5,9 +5,13 @@ import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 import {
+  runCodexAgentDecisionHook,
+} from '../memory-engine/adapters/codex-agent-decision-hook-cli.mjs';
+import {
   createCodexMemoryHookAdapter,
   memoryCandidateRef,
 } from '../memory-engine/adapters/codex-hooks.mjs';
+import { HybridMemoryRetriever } from '../memory-engine/hybrid-retrieval.mjs';
 import { MemoryEngine } from '../memory-engine/index.mjs';
 import { createMemoryProtocol } from '../memory-engine/protocol.mjs';
 import {
@@ -18,6 +22,15 @@ import {
   createCodexMemoryCandidateRelationJudge,
   runMemoryCandidateRelationCli,
 } from './judge-memory-relations.mjs';
+import {
+  createIsolatedCodexJsonJudge,
+} from './codex-isolated-memory-judge.mjs';
+import {
+  runAgentDecisionJudgeCli,
+} from './judge-agent-memory-candidates.mjs';
+import {
+  runAgentDecisionRelationCli,
+} from './judge-agent-memory-relations.mjs';
 import {
   runMemoryCandidatePipelineCli,
 } from './process-memory-candidates.mjs';
@@ -39,6 +52,10 @@ const PROMPTS = Object.freeze({
     'We decided production deployments require two approvals.',
   contradict:
     'We must require one approval for production deployments.',
+  rootAgent:
+    'Decision: use structured JSONL records for durable memory pipeline logs.',
+  subagent:
+    'Decision: keep semantic recall telemetry separate from canonical memory export.',
 });
 
 function nonEmpty(value) {
@@ -92,6 +109,51 @@ async function submitHook(hook, prompt, turnId) {
     turn_id: turnId,
     cwd: '/repo',
     prompt,
+  });
+}
+
+async function submitAgentDecision({
+  runtime,
+  message,
+  turnId,
+  agentId = null,
+  agentType = null,
+}) {
+  const hookEventName = agentId === null ? 'Stop' : 'SubagentStop';
+  return runCodexAgentDecisionHook({
+    event: {
+      hook_event_name: hookEventName,
+      session_id: 'memory-e2e-smoke',
+      turn_id: turnId,
+      cwd: runtime.cwd,
+      last_assistant_message: message,
+      ...(agentId === null ? {} : {
+        agent_id: agentId,
+        agent_type: agentType,
+      }),
+    },
+    env: {
+      AGENT_HUB_MEMORY_DB: runtime.dbPath,
+      AGENT_HUB_MEMORY_PROJECT_ID: runtime.projectId,
+    },
+    configOptions: {
+      ignoreMemoryEnv: false,
+      autoPipeline: false,
+    },
+    clock: () => '2026-10-03T00:10:00.000Z',
+    createMemory: ({ dbPath }) => new MemoryEngine({ dbPath }),
+    resolveProjectScope: () => ({
+      projectId: runtime.projectId,
+      repoIdentity: runtime.projectId,
+      canonicalRemote: null,
+    }),
+    resolveGit: () => ({
+      repoPath: runtime.cwd,
+      branch: runtime.branch,
+      revisionSha: runtime.revisionSha,
+    }),
+    ensureDbDirectory() {},
+    restoreLocked: () => false,
   });
 }
 
@@ -295,12 +357,16 @@ function createStageRunners({
 }) {
   let importanceJudgeCalls = 0;
   let relationJudgeCalls = 0;
+  let agentImportanceJudgeCalls = 0;
+  let agentRelationJudgeCalls = 0;
 
   return {
     get calls() {
       return {
         importance: importanceJudgeCalls,
         relation: relationJudgeCalls,
+        agent_importance: agentImportanceJudgeCalls,
+        agent_relation: agentRelationJudgeCalls,
       };
     },
 
@@ -379,6 +445,108 @@ function createStageRunners({
         },
       });
     },
+
+    async runAgentImportance(args) {
+      return runAgentDecisionJudgeCli({
+        ...args,
+        dependencies: {
+          ...args.dependencies,
+          async createJudge(options) {
+            if (!providerBacked) {
+              return {
+                evaluatorId: 'e2e-smoke:agent-importance-v1',
+                isolation: { deterministicFixture: true },
+                async judge(prompt) {
+                  agentImportanceJudgeCalls += 1;
+                  const isRoot = prompt.includes(PROMPTS.rootAgent);
+                  const isSubagent = prompt.includes(PROMPTS.subagent);
+                  if (!isRoot && !isSubagent) {
+                    throw new Error('unexpected deterministic agent candidate');
+                  }
+                  return {
+                    decision: 'promote',
+                    suggested_type: 'decision',
+                    durability: 'long',
+                    future_utility: 'high',
+                    specificity: 'high',
+                    confidence: 'high',
+                    meaning_preserved: true,
+                    canonical_fact: 'Agent decision: ' + (
+                      isRoot
+                        ? 'use structured JSONL records for durable memory pipeline logs.'
+                        : 'keep semantic recall telemetry separate from canonical memory export.'
+                    ),
+                    reason: 'Deterministic durable agent decision E2E fixture.',
+                    risk_flags: [],
+                  };
+                },
+                async close() {},
+              };
+            }
+
+            const resource = await createIsolatedCodexJsonJudge({
+              ...options,
+              model,
+              reasoningEffort,
+              sourceCodexHome,
+              env,
+            });
+            const judge = resource.judge;
+            return {
+              ...resource,
+              async judge(prompt) {
+                agentImportanceJudgeCalls += 1;
+                return judge(prompt);
+              },
+            };
+          },
+        },
+      });
+    },
+
+    async runAgentRelation(args) {
+      return runAgentDecisionRelationCli({
+        ...args,
+        dependencies: {
+          ...args.dependencies,
+          async createJudge(options) {
+            if (!providerBacked) {
+              return {
+                evaluatorId: 'e2e-smoke:agent-relation-v1',
+                isolation: { deterministicFixture: true },
+                async judge() {
+                  agentRelationJudgeCalls += 1;
+                  return {
+                    relation: 'unrelated',
+                    target_ref: null,
+                    confidence: 'high',
+                    meaning_preserved: true,
+                    reason: 'Deterministic unrelated agent decision E2E fixture.',
+                  };
+                },
+                async close() {},
+              };
+            }
+
+            const resource = await createIsolatedCodexJsonJudge({
+              ...options,
+              model,
+              reasoningEffort,
+              sourceCodexHome,
+              env,
+            });
+            const judge = resource.judge;
+            return {
+              ...resource,
+              async judge(prompt) {
+                agentRelationJudgeCalls += 1;
+                return judge(prompt);
+              },
+            };
+          },
+        },
+      });
+    },
   };
 }
 
@@ -449,6 +617,8 @@ export async function runMemoryEndToEndSmoke({
       createMemory,
       runImportance: stageRunners.runImportance,
       runRelation: stageRunners.runRelation,
+      runAgentImportance: stageRunners.runAgentImportance,
+      runAgentRelation: stageRunners.runAgentRelation,
     };
 
     async function runPipeline() {
