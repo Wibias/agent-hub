@@ -315,8 +315,22 @@ function inspectorEmpty() {
   `;
 }
 
-function chainPart(value) {
-  return `<span>${escapeHtml(value)}</span>`;
+function compactTechnicalId(value) {
+  const raw = String(value ?? '');
+  if (raw.length <= 28) return raw;
+  if (/^[0-9a-f-]{30,}$/i.test(raw)) {
+    return raw.slice(0, 8) + '…' + raw.slice(-6);
+  }
+  return raw.slice(0, 22) + '…' + raw.slice(-8);
+}
+
+function chainPart(value, {
+  fullValue = null,
+} = {}) {
+  const title = fullValue
+    ? ` title="${escapeHtml(fullValue)}"`
+    : '';
+  return `<span${title}>${escapeHtml(value)}</span>`;
 }
 
 function provenanceChain(claim) {
@@ -324,31 +338,52 @@ function provenanceChain(claim) {
   if (!p) return '—';
 
   const parts = [];
-  if (p.sessionId) parts.push('session ' + p.sessionId);
-  if (p.type === 'subagent') {
-    parts.push('subagent');
-    if (p.agentType) parts.push('type ' + p.agentType);
-    if (p.agentId) parts.push('id ' + p.agentId);
-  } else if (p.type === 'root_agent') {
-    parts.push('root agent');
-  } else {
-    parts.push(p.label || p.type);
+  if (p.sessionId) {
+    parts.push({
+      value: 'session ' + compactTechnicalId(p.sessionId),
+      fullValue: 'session ' + p.sessionId,
+    });
   }
-  if (p.turnId) parts.push('turn ' + p.turnId);
-  parts.push('decision');
+  if (p.type === 'subagent') {
+    parts.push({ value: 'subagent' });
+    if (p.agentType) parts.push({ value: 'type ' + p.agentType });
+    if (p.agentId) {
+      parts.push({
+        value: 'id ' + compactTechnicalId(p.agentId),
+        fullValue: 'id ' + p.agentId,
+      });
+    }
+  } else if (p.type === 'root_agent') {
+    parts.push({ value: 'root agent' });
+  } else {
+    parts.push({ value: p.label || p.type });
+  }
+  if (p.turnId) {
+    parts.push({
+      value: 'turn ' + compactTechnicalId(p.turnId),
+      fullValue: 'turn ' + p.turnId,
+    });
+  }
+  parts.push({ value: 'decision' });
 
   return parts.map((part, index) => (
-    (index ? '<span class="chain-arrow">→</span>' : '') + chainPart(part)
+    (index ? '<span class="chain-arrow">→</span>' : '')
+    + chainPart(part.value, { fullValue: part.fullValue })
   )).join('');
 }
 
 function definition(rows) {
   return `
     <dl class="definition-list">
-      ${rows.map(([label, value, className = '']) => `
-        <dt>${escapeHtml(label)}</dt>
-        <dd class="${escapeHtml(className)}">${escapeHtml(value ?? '—')}</dd>
-      `).join('')}
+      ${rows.map(([label, value, className = '', fullValue = null]) => {
+        const title = fullValue
+          ? ` title="${escapeHtml(fullValue)}"`
+          : '';
+        return `
+          <dt>${escapeHtml(label)}</dt>
+          <dd class="${escapeHtml(className)}"${title}>${escapeHtml(value ?? '—')}</dd>
+        `;
+      }).join('')}
     </dl>
   `;
 }
@@ -461,11 +496,26 @@ function renderInspector() {
         <div class="inspector-chain">${provenanceChain(detail)}</div>
         <div class="spacer-12"></div>
         ${definition([
-          ['Evidence', evidence.id],
-          ['Source', evidence.source_ref || evidence.source_kind],
+          [
+            'Evidence',
+            compactTechnicalId(evidence.id),
+            'mono technical-id',
+            evidence.id,
+          ],
+          [
+            'Source',
+            compactTechnicalId(evidence.source_ref || evidence.source_kind),
+            'mono technical-id',
+            evidence.source_ref || evidence.source_kind,
+          ],
           ['Captured', dateTime(evidence.captured_at)],
           ['Agent type', claim.provenance?.agentType],
-          ['Agent id', claim.provenance?.agentId],
+          [
+            'Agent id',
+            compactTechnicalId(claim.provenance?.agentId),
+            'mono technical-id',
+            claim.provenance?.agentId,
+          ],
         ])}
       </section>
 
