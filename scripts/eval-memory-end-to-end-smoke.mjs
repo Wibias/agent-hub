@@ -308,7 +308,7 @@ function createStageRunners({
                   importanceJudgeCalls += 1;
                   return deterministicImportanceJudgment(candidate);
                 },
-                close() {},
+                async close() {},
               };
             }
 
@@ -346,7 +346,7 @@ function createStageRunners({
                   relationJudgeCalls += 1;
                   return deterministicRelationJudgment(input);
                 },
-                close() {},
+                async close() {},
               };
             }
 
