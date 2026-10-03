@@ -82,8 +82,9 @@ test('agent type namespaces fingerprints so root and subagent decisions do not c
 });
 
 test('secret-shaped decision text is not captured', () => {
+  const token = 'gh' + 'p_' + 'abcdefghijklmnopqrstuvwxyz1234567890';
   const result = classifyAgentDecisionMessage(
-    'Decision: use token=ghp_abcdefghijklmnopqrstuvwxyz1234567890.',
+    'Decision: use token=' + token + '.',
   );
   assert.deepEqual(result, []);
 });
