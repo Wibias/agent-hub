@@ -1,0 +1,91 @@
+{
+  "schemaVersion": 2,
+  "host": "codex",
+  "activation": {
+    "mode": "cli-override",
+    "command": "node scripts/run-codex-runtime.mjs <skill> [-- <codex args>]",
+    "precedence": "cli-override"
+  },
+  "mappedRuntimeFields": [
+    "reasoning"
+  ],
+  "unmappedRuntimeFields": [
+    "isolation",
+    "mutation"
+  ],
+  "runtimes": [
+    {
+      "skill": "code-simplification",
+      "mapped": {
+        "reasoning": "medium"
+      },
+      "unmapped": {}
+    },
+    {
+      "skill": "codebase-design",
+      "mapped": {
+        "reasoning": "high"
+      },
+      "unmapped": {}
+    },
+    {
+      "skill": "codex-dynamic-workflows",
+      "mapped": {
+        "reasoning": "high"
+      },
+      "unmapped": {
+        "isolation": "prefer"
+      }
+    },
+    {
+      "skill": "design-with-ai",
+      "mapped": {
+        "reasoning": "high"
+      },
+      "unmapped": {}
+    },
+    {
+      "skill": "diagnose",
+      "mapped": {
+        "reasoning": "high"
+      },
+      "unmapped": {
+        "isolation": "prefer"
+      }
+    },
+    {
+      "skill": "improve-codebase-architecture",
+      "mapped": {
+        "reasoning": "high"
+      },
+      "unmapped": {
+        "isolation": "prefer"
+      }
+    },
+    {
+      "skill": "security-review",
+      "mapped": {
+        "reasoning": "high"
+      },
+      "unmapped": {
+        "isolation": "prefer",
+        "mutation": "read-only"
+      }
+    },
+    {
+      "skill": "source-driven-development",
+      "mapped": {
+        "reasoning": "medium"
+      },
+      "unmapped": {}
+    },
+    {
+      "skill": "writing-ticks",
+      "mapped": {
+        "reasoning": "low"
+      },
+      "unmapped": {}
+    }
+  ],
+  "unrendered": []
+}
