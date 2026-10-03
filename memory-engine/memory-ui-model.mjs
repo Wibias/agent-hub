@@ -17,8 +17,27 @@ function evidenceAuthority(evidence) {
   return text(evidence?.authority_class) || 'unknown';
 }
 
+function evidenceMetadata(evidence) {
+  if (
+    evidence?.metadata
+    && typeof evidence.metadata === 'object'
+    && !Array.isArray(evidence.metadata)
+  ) {
+    return evidence.metadata;
+  }
+  if (typeof evidence?.metadata_json === 'string') {
+    try {
+      const parsed = JSON.parse(evidence.metadata_json);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        return parsed;
+      }
+    } catch {}
+  }
+  return {};
+}
+
 function provenance(evidence) {
-  const metadata = evidence?.metadata ?? {};
+  const metadata = evidenceMetadata(evidence);
   if (evidenceAuthority(evidence) === 'user_direct') {
     return {
       type: 'user',
