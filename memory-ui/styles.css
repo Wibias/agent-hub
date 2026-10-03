@@ -551,6 +551,29 @@ button {
   font: 10px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
+.spacer-12 {
+  height: 12px;
+}
+
+.inspect-event-row,
+.inspect-conflict-row {
+  padding-right: 0;
+  padding-left: 0;
+}
+
+.inspect-event-row {
+  grid-template-columns: 100px minmax(0, 1fr);
+}
+
+.inspect-conflict-row {
+  grid-template-columns: 92px minmax(0, 1fr);
+}
+
+.failure-row {
+  grid-template-columns: 118px 130px 120px minmax(0, 1fr);
+  gap: 14px;
+}
+
 .chain-arrow {
   color: var(--dim);
 }
