@@ -122,6 +122,7 @@ function overallStatus({
   doctorStatus,
 }) {
   if (drift.length > 0) return 'blocked_generated_drift';
+  if (doctorStatus === 'broken') return 'broken';
   if (!apply && changesRequired) return 'changes_required';
   if (doctorStatus === 'healthy') return 'healthy';
   if (doctorStatus === 'degraded') return 'degraded';
