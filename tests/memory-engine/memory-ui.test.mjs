@@ -417,6 +417,15 @@ test('memory console HTTP surface keeps reads loopback-only and protects explici
     assert.match(payload.actions.token, /^[0-9a-f]{48}$/);
     const actionToken = payload.actions.token;
 
+    response = await fetch(base + '/api/overview', {
+      headers: {
+        Host: 'evil.example',
+      },
+    });
+    assert.equal(response.status, 403);
+    payload = await response.json();
+    assert.equal(payload.error, 'invalid_host');
+
     response = await fetch(
       base
       + '/api/scope?projectId='
