@@ -458,7 +458,7 @@ export class HybridMemoryRetriever {
     };
   }
 
-  async recall({
+  async recallDetailed({
     projectId,
     branch,
     revisionSha = null,
@@ -475,24 +475,57 @@ export class HybridMemoryRetriever {
       mode,
     });
 
-    if (ranked.retrievalMode === 'lexical') {
-      return enforceRecallBudget(ranked.lexical, {
-        maxItems,
-        maxSerializedBytes,
-      });
-    }
-
-    const materialized = this.#memory.materializeRecall({
-      projectId,
-      branch,
-      revisionSha,
-      mode,
-      claimIds: ranked.ranking.map((detail) => detail.id),
-    });
-
-    return enforceRecallBudget(materialized, {
+    const unbounded = ranked.retrievalMode === 'lexical'
+      ? ranked.lexical
+      : this.#memory.materializeRecall({
+          projectId,
+          branch,
+          revisionSha,
+          mode,
+          claimIds: ranked.ranking.map((detail) => detail.id),
+        });
+    const result = enforceRecallBudget(unbounded, {
       maxItems,
       maxSerializedBytes,
     });
+    const retainedIds = new Set(
+      result.items.map((item) => item?.claim?.id).filter(Boolean),
+    );
+    const allItems = new Map(
+      unbounded.items
+        .filter((item) => item?.claim?.id)
+        .map((item) => [item.claim.id, item]),
+    );
+    const semanticById = new Map(
+      ranked.semantic.map((item) => [item.claim_id, item]),
+    );
+
+    return {
+      result,
+      telemetry: {
+        retrieval_mode: ranked.retrievalMode,
+        fallback_reason: ranked.fallbackReason,
+        candidates: ranked.ranking.map((detail) => {
+          const item = allItems.get(detail.id) ?? null;
+          return {
+            claim_id: detail.id,
+            authority_class: item?.evidence?.authority_class ?? 'unclassified',
+            final_rank: detail.finalRank,
+            lexical_rank: detail.lexicalRank,
+            semantic_rank: detail.semanticRank,
+            semantic_similarity: (
+              semanticById.get(detail.id)?.similarity ?? null
+            ),
+            rrf_score: detail.score,
+            budget_retained: retainedIds.has(detail.id),
+          };
+        }),
+      },
+    };
+  }
+
+  async recall(args) {
+    const detailed = await this.recallDetailed(args);
+    return detailed.result;
   }
 }
