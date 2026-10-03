@@ -11,9 +11,6 @@ import { pathToFileURL } from 'node:url';
 
 import { memoryRestoreLocked } from '../memory-engine/memory-maintenance-lock.mjs';
 import {
-  resolveMemoryCandidateJudgeRuntime,
-} from './judge-memory-candidates.mjs';
-import {
   runMemoryCandidatePipelineCli,
 } from './process-memory-candidates.mjs';
 
@@ -43,6 +40,9 @@ export function parseMemoryCandidatePipelineWorkerArgs(argv = []) {
   const parsed = {
     cwd: null,
     dbPath: null,
+    projectId: null,
+    branch: null,
+    revisionSha: null,
     limit: 20,
     maxRounds: 5,
   };
@@ -56,6 +56,21 @@ export function parseMemoryCandidatePipelineWorkerArgs(argv = []) {
     }
     if (arg === '--db-path') {
       parsed.dbPath = resolve(requireValue(argv, index, arg));
+      index += 1;
+      continue;
+    }
+    if (arg === '--project-id') {
+      parsed.projectId = requireValue(argv, index, arg).trim();
+      index += 1;
+      continue;
+    }
+    if (arg === '--branch') {
+      parsed.branch = requireValue(argv, index, arg).trim();
+      index += 1;
+      continue;
+    }
+    if (arg === '--revision-sha') {
+      parsed.revisionSha = requireValue(argv, index, arg).trim();
       index += 1;
       continue;
     }
@@ -82,6 +97,8 @@ export function parseMemoryCandidatePipelineWorkerArgs(argv = []) {
 
   if (parsed.cwd === null) throw new Error('--cwd is required');
   if (parsed.dbPath === null) throw new Error('--db-path is required');
+  if (parsed.projectId === null) throw new Error('--project-id is required');
+  if (parsed.branch === null) throw new Error('--branch is required');
   return parsed;
 }
 
@@ -179,22 +196,33 @@ export async function runMemoryCandidatePipelineWorker({
   cwd,
   dbPath,
   limit = 20,
+  projectId,
+  branch,
+  revisionSha = null,
   maxRounds = 5,
-  resolveRuntime = resolveMemoryCandidateJudgeRuntime,
   runPipeline = runMemoryCandidatePipelineCli,
   restoreLocked = memoryRestoreLocked,
   acquireLock = acquireMemoryCandidatePipelineLock,
   releaseLock = releaseMemoryCandidatePipelineLock,
   log = console.log,
 } = {}) {
-  if (typeof resolveRuntime !== 'function') {
-    throw new TypeError('resolveRuntime must be a function');
+  if (!nonEmpty(cwd) || !nonEmpty(dbPath)) {
+    throw new TypeError('cwd and dbPath must be non-empty strings');
+  }
+  if (!nonEmpty(projectId) || !nonEmpty(branch)) {
+    throw new TypeError('projectId and branch must be non-empty strings');
   }
   if (typeof runPipeline !== 'function') {
     throw new TypeError('runPipeline must be a function');
   }
 
-  const runtime = resolveRuntime({ cwd, dbPath });
+  const runtime = {
+    cwd: resolve(cwd),
+    dbPath: resolve(dbPath),
+    projectId,
+    branch,
+    revisionSha: nonEmpty(revisionSha) ? revisionSha : null,
+  };
   const lockPath = memoryCandidatePipelineLockPath(runtime);
   const lock = await acquireLock(lockPath);
   if (lock === null) {
