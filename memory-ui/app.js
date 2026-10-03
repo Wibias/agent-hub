@@ -522,6 +522,96 @@ function renderInspector() {
   `;
 }
 
+async function reloadCurrentData({
+  preserveClaim = true,
+  preserveCandidate = true,
+} = {}) {
+  const claimId = preserveClaim ? state.selectedClaimId : null;
+  const candidateId = preserveCandidate ? state.selectedCandidateId : null;
+
+  const overview = await fetchJson('/api/overview');
+  state.overview = overview;
+  state.actionToken = overview.actions?.token ?? null;
+
+  let project = overview.projects.find(
+    (item) => item.projectId === state.projectId,
+  ) ?? overview.projects[0] ?? null;
+
+  if (!project) {
+    state.projectId = null;
+    state.branch = null;
+    state.scope = null;
+    state.claim = null;
+    state.selectedClaimId = null;
+    state.selectedCandidateId = null;
+    renderProjects();
+    renderScopeHeader();
+    renderView();
+    return;
+  }
+
+  state.projectId = project.projectId;
+  if (!project.branches.some((item) => item.branch === state.branch)) {
+    state.branch = project.defaultBranch;
+  }
+
+  if (!state.branch) {
+    state.scope = null;
+    state.claim = null;
+    state.selectedClaimId = null;
+    state.selectedCandidateId = null;
+    renderView();
+    return;
+  }
+
+  state.scope = await fetchJson(api('/api/scope', {
+    projectId: state.projectId,
+    branch: state.branch,
+  }));
+
+  state.selectedClaimId = (
+    claimId
+    && state.scope.memories.some((item) => item.claimId === claimId)
+  ) ? claimId : null;
+  state.selectedCandidateId = (
+    candidateId
+    && state.scope.candidates.some((item) => item.id === candidateId)
+  ) ? candidateId : null;
+
+  state.claim = null;
+  if (state.selectedClaimId) {
+    state.claim = await fetchJson(api('/api/claim', {
+      projectId: state.projectId,
+      branch: state.branch,
+      claimId: state.selectedClaimId,
+    }));
+  }
+
+  updateUrl();
+  renderView();
+}
+
+async function performConsoleAction(path, payload) {
+  if (state.busy) return null;
+  state.busy = true;
+  state.actionError = '';
+  renderView();
+
+  try {
+    const result = await postAction(path, payload);
+    resetActionState();
+    state.actionMessage = result.reason ?? 'Memory action applied.';
+    await reloadCurrentData();
+    return result;
+  } catch (error) {
+    state.actionError = error.message;
+    renderView();
+    return null;
+  } finally {
+    state.busy = false;
+  }
+}
+
 function renderMemories() {
   const memories = state.scope?.memories ?? [];
   const filtered = memoryFilters(memories);
@@ -588,9 +678,50 @@ function renderMemories() {
 
   el.view.querySelectorAll('[data-claim]').forEach((button) => {
     button.addEventListener('click', () => {
+      resetActionState();
       selectClaim(button.dataset.claim);
     });
   });
+
+  document.querySelector('#replace-memory')?.addEventListener('click', () => {
+    state.claimActionMode = 'replace';
+    state.actionError = '';
+    state.actionMessage = '';
+    renderMemories();
+  });
+  document.querySelector('#forget-memory')?.addEventListener('click', () => {
+    state.claimActionMode = 'forget';
+    state.actionError = '';
+    state.actionMessage = '';
+    renderMemories();
+  });
+  document.querySelector('#cancel-memory-action')?.addEventListener('click', () => {
+    state.claimActionMode = null;
+    state.actionError = '';
+    renderMemories();
+  });
+  document.querySelector('#confirm-replace-memory')?.addEventListener(
+    'click',
+    async () => {
+      const value = document.querySelector('#replace-memory-value')?.value ?? '';
+      await performConsoleAction('/api/actions/replace', {
+        projectId: state.projectId,
+        branch: state.branch,
+        claimRef: state.claim?.claim?.ref,
+        newValue: value,
+      });
+    },
+  );
+  document.querySelector('#confirm-forget-memory')?.addEventListener(
+    'click',
+    async () => {
+      await performConsoleAction('/api/actions/forget', {
+        projectId: state.projectId,
+        branch: state.branch,
+        claimRef: state.claim?.claim?.ref,
+      });
+    },
+  );
 }
 
 function summaryStat(label, value) {
