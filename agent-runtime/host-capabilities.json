@@ -87,8 +87,10 @@
     },
     "codex": {
       "displayName": "OpenAI Codex",
-      "reviewed": "2026-09-30",
+      "reviewed": "2026-10-03",
       "sources": [
+        "https://developers.openai.com/docs/config-file/config-reference",
+        "https://developers.openai.com/docs/config-file/config-basic",
         "https://developers.openai.com/docs/hooks",
         "https://developers.openai.com/plugins/build/plugins"
       ],
@@ -101,8 +103,11 @@
         "supported": "manual"
       },
       "adapter": {
-        "configRenderer": "unsupported",
-        "note": "General Codex host-config rendering remains unsupported. Documented lifecycle command hooks are supported; the memory integration uses UserPromptSubmit through the explicit Codex hook adapter."
+        "configRenderer": "supported",
+        "mappedRuntimeFields": [
+          "reasoning"
+        ],
+        "note": "Codex profile rendering is supported for the verified 1:1 mapping reasoning -> model_reasoning_effort. Skill-to-profile activation remains manual because skillModelRouting is unsupported. Isolation and mutation remain semantic Hub preferences and are emitted only as unmapped metadata/comments, not translated to sandbox or approval settings."
       },
       "hooks": {
         "supported": true,
