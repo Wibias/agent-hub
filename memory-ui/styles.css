@@ -100,7 +100,7 @@ button {
 .brand span:last-child,
 .scope-meta {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 10px;
 }
 
 .scope-meta {
@@ -205,7 +205,7 @@ button {
 }
 
 .project-row.is-active {
-  background: #121516;
+  background: #0f1112;
   box-shadow: inset 2px 0 0 var(--accent);
 }
 
@@ -658,7 +658,7 @@ button {
 
 .review-inspector {
   border-left: 1px solid var(--line);
-  background: #0b0c0d;
+  background: #0a0b0c;
 }
 
 .review-row {
