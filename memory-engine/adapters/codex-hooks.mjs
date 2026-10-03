@@ -157,6 +157,10 @@ export function parseExplicitMemoryPrompt(prompt) {
     return { mode: 'stale' };
   }
 
+  if (/^\s*memory\s+quality\s*$/i.test(prompt)) {
+    return { mode: 'quality' };
+  }
+
   const inspectPrefix = prompt.match(/^\s*memory\s+inspect:\s*/i);
   if (inspectPrefix) {
     const ref = normalizeMemoryRef(
@@ -828,6 +832,54 @@ function formatStaleAgentMemories(memory, {
   return lines.join('\n');
 }
 
+function formatMemoryQuality(snapshot) {
+  if (!snapshot || typeof snapshot !== 'object') {
+    return 'Memory quality metrics are unavailable for the current configuration.';
+  }
+  const authorityLines = [];
+  for (const authority of ['user_direct', 'agent_inference']) {
+    const bucket = snapshot.by_authority?.[authority] ?? {};
+    const importance = bucket.importance ?? {};
+    const relations = bucket.relations ?? {};
+    const promotions = bucket.promotions ?? {};
+    authorityLines.push(
+      authority + ': candidates=' + Number(bucket.candidates ?? 0)
+      + ' | importance promote=' + Number(importance.promote ?? 0)
+      + ' ignore=' + Number(importance.ignore ?? 0)
+      + ' keep=' + Number(importance.keep_candidate ?? 0)
+      + ' confirm=' + Number(importance.needs_confirmation ?? 0)
+      + ' unevaluated=' + Number(importance.unevaluated ?? 0)
+      + ' invalid=' + Number(importance.invalid ?? 0),
+    );
+    authorityLines.push(
+      authority + ' relations: same=' + Number(relations.same ?? 0)
+      + ' update=' + Number(relations.update ?? 0)
+      + ' contradict=' + Number(relations.contradict ?? 0)
+      + ' unrelated=' + Number(relations.unrelated ?? 0),
+    );
+    authorityLines.push(
+      authority + ' promotions: promoted=' + Number(promotions.promoted ?? 0)
+      + ' superseded=' + Number(promotions.superseded ?? 0)
+      + ' confirm=' + Number(promotions.needs_confirmation ?? 0),
+    );
+  }
+  const recall = snapshot.recall ?? {};
+  return [
+    'Memory quality dashboard for the current project and branch:',
+    ...authorityLines,
+    'Deterministic near-duplicates closed: '
+      + Number(snapshot.deterministic_near_duplicates ?? 0),
+    'Recall: runs=' + Number(recall.runs ?? 0)
+      + ' retrieved=' + Number(recall.retrieved ?? 0)
+      + ' retained=' + Number(recall.retained ?? 0)
+      + ' selected=' + Number(recall.selected ?? 0)
+      + ' advisory=' + Number(recall.advisory ?? 0)
+      + ' blocked=' + Number(recall.blocked ?? 0),
+    'Stale advisory agent memories: '
+      + Number(snapshot.stale_agent_memories ?? 0),
+  ].join('\n');
+}
+
 function formatMemoryHealth(snapshot, external = null) {
   if (!snapshot || typeof snapshot !== 'object') {
     return 'Memory health is unavailable for the current configuration.';
@@ -1177,6 +1229,18 @@ export function createCodexMemoryHookAdapter({
               branch: context.branch,
               maxBytes: maxContextBytes,
             }),
+          };
+        }
+
+        if (explicitMemory?.mode === 'quality') {
+          return {
+            decision: 'block',
+            reason: typeof memory?.memoryQualitySnapshot === 'function'
+              ? formatMemoryQuality(memory.memoryQualitySnapshot({
+                  projectId,
+                  branch: context.branch,
+                }))
+              : 'Memory quality metrics are unavailable for the current configuration.',
           };
         }
 
