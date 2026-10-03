@@ -379,6 +379,18 @@ export async function inspectCodexIntegration({ codexHome, auditState = auditCod
         reason: 'session_start_launcher_missing',
       };
     }
+    if (
+      hook.stopAgentDecisionCapture !== true
+      || hook.subagentStopAgentDecisionCapture !== true
+      || hook.flags?.agentDecisionCapture !== true
+    ) {
+      return {
+        status: 'degraded',
+        hook,
+        hookReadError: null,
+        reason: 'agent_decision_capture_incomplete',
+      };
+    }
     return { status: 'ok', hook, hookReadError: null, reason: null };
   } catch (error) {
     return {
