@@ -363,15 +363,20 @@ The protocol is a local integration boundary, not an untrusted network authoriza
 
 ## Codex command-hook adapter
 
-The first production host adapter uses the documented OpenAI Codex `UserPromptSubmit` command hook.
-
-Entrypoint:
+The production Codex integration uses separate documented lifecycle surfaces for separate authority classes:
 
 ```text
-memory-engine/adapters/codex-hook-cli.mjs
+UserPromptSubmit -> memory-engine/adapters/codex-hook-cli.mjs
+Stop/SubagentStop -> memory-engine/adapters/codex-agent-decision-hook-cli.mjs
 ```
 
-The command reads one Codex hook event as JSON from stdin. When current memory is available, it performs broad bounded recall, applies the engine's existing `answer` reliance policy, and writes only reliance-selected evidence as Codex-compatible `hookSpecificOutput.additionalContext` JSON to stdout. `user_direct`, `repo_trusted`, and `tool_observation` may enter normal answer context; `agent_inference`, `external_untrusted`, and `unclassified` remain retrievable but are not injected. Unresolved conflicts also fail closed at this boundary. Missing configuration, Git-context failure, unavailable memory, recall failure, or an empty reliance-selected result produces no output and does not block the user prompt.
+`UserPromptSubmit` owns recall, explicit memory management, and conservative direct-user candidate capture. When current memory is available, it performs broad bounded recall, applies the existing `answer` reliance policy, and writes reliance-selected authoritative evidence as Codex-compatible `hookSpecificOutput.additionalContext` JSON.
+
+Promoted agent decisions are the one deliberate exception to the normal exclusion of `agent_inference`: active Claims with `kind=agent_inference`, `subject=agent decision`, and `predicate=states` may be injected only in a separately labelled **advisory prior agent decisions** block. That block explicitly says it is lower authority and may never override `user_direct`, `repo_trusted`, or `tool_observation`. Other `agent_inference`, `external_untrusted`, and `unclassified` evidence remains excluded from answer context. Agent decisions attached to unresolved conflicts are also withheld.
+
+`Stop` and `SubagentStop` own only conservative capture of explicit finalized agent commitments from `last_assistant_message`. They never relabel agent output as user authority, never parse transcript history, and fail open if capture cannot run.
+
+Missing configuration, Git-context failure, unavailable memory, recall failure, or an empty recall/capture result does not block the user turn.
 
 ### Configuration
 
@@ -423,13 +428,13 @@ node .\scripts\install-codex-memory-hooks.mjs --apply
 
 The installer derives the Agent Hub checkout from its own location, preserves unrelated
 Codex hooks and root fields, removes duplicate or stale Agent Hub memory-hook entries,
-and installs exactly one current `SessionStart` launcher plus one current
-`UserPromptSubmit` memory hook. Apply mode creates a timestamped backup before
+and installs exactly one current definition for each managed surface:
+`SessionStart`, `UserPromptSubmit`, `Stop`, and `SubagentStop`. Apply mode creates a timestamped backup before
 changing an existing hooks file and refuses to modify a symlinked hooks file. A second
 apply is idempotent and creates no new backup when the managed definitions are already
 current.
 
-The dry-run also includes a content-free `plan` for the two managed events. Each
+The dry-run also includes a content-free `plan` for all four managed events. Each
 event is classified as `current`, `install`, or `normalize`, with bounded reasons
 such as a missing managed hook, duplicate managed hooks, a mixed entry, or a differing
 managed definition. It does not print existing hook commands.
@@ -448,10 +453,20 @@ node .\scripts\install-codex-memory-hooks.mjs `
   --apply
 ```
 
-For production hybrid recall, the managed configuration contains two independent command hooks:
+For production memory operation, the managed configuration contains four independent lifecycle surfaces:
 
 1. an asynchronous `SessionStart` launcher that makes sure the warm E5 worker exists;
-2. the normal `UserPromptSubmit` memory hook with `--hybrid-recall`.
+2. the normal `UserPromptSubmit` memory hook with hybrid recall, direct-user candidate capture, and automatic pipeline wake-up;
+3. a `Stop` hook that captures explicit finalized root-agent decisions from `last_assistant_message`;
+4. a `SubagentStop` hook that captures explicit finalized subagent decisions while preserving `agent_id` and `agent_type` provenance.
+
+The decision hooks use:
+
+```text
+codex-agent-decision-hook-cli.mjs --ignore-memory-env --auto-pipeline
+```
+
+They share the same project/branch candidate ledger, detached worker, and cross-process lock as direct-user candidates.
 
 ```json
 {
@@ -510,7 +525,7 @@ The launcher writes no normal stdout because `SessionStart` stdout becomes devel
 
 Codex requires changed non-managed hooks to be reviewed again because hook trust is bound to the exact hook definition. After adding or changing these handlers, open `/hooks` in Codex and trust the current definitions.
 
-The main memory adapter handles only `UserPromptSubmit`. It deliberately does not capture `PostToolUse`, summarize on `SessionEnd`, or parse `transcript_path`. Codex documents the transcript path as a convenience rather than a stable hook interface.
+The prompt adapter handles only `UserPromptSubmit`. The separate decision adapter handles only `Stop` and `SubagentStop`, and reads only the documented `last_assistant_message` plus event identity/provenance fields. Neither adapter captures `PostToolUse`, summarizes on `SessionEnd`, or parses `transcript_path` / `agent_transcript_path`.
 
 ### Deterministic memory-candidate capture
 
@@ -594,6 +609,77 @@ Candidate refs use `~` to remain distinct from durable Claim refs, which use `@`
 Candidate capture is deliberately independent from `AGENT_HUB_MEMORY_CAPTURE_PROMPTS=true`. The legacy environment flag still means full direct-prompt Evidence capture. `--candidate-capture` instead stores only prompts accepted by the deterministic policy.
 
 The memory doctor treats a missing candidate ledger or a managed Codex hook without `--candidate-capture` as **degraded**, not broken. Canonical memory and recall remain usable, but automatic candidate capture is not ready.
+
+### Agent decision capture
+
+Codex can also remember its own durable decisions, but those memories run through a separate lower-authority lane rather than weakening the direct-user pipeline.
+
+The managed `Stop` and `SubagentStop` hooks apply deterministic policy `agent-capture-v1` to `last_assistant_message`. Capture is intentionally narrow: only explicit finalized commitments such as `Decision: ...`, `I decided ...`, or equivalent German forms are eligible. Tentative language, questions, ordinary progress/status narration, and secret-shaped text are rejected. At most three decisions are captured from one assistant message.
+
+A captured decision is stored as:
+
+```text
+Evidence authority = agent_inference
+Candidate authority = agent_inference
+Candidate type      = decision
+```
+
+Root and subagent decisions preserve separate provenance. Subagent Evidence records the documented `agent_id` and `agent_type`; candidate fingerprints are namespaced by agent type so unrelated root/reviewer statements do not collide.
+
+Capture still creates **no Claim**:
+
+```text
+Stop / SubagentStop
+        ↓
+agent-capture-v1
+        ↓
+redacted agent_inference Evidence
+        ↓
+pending agent_inference Candidate
+```
+
+The agent lane then uses its own policies:
+
+```text
+agent-importance-v1
+        ↓
+agent-relation-v1
+        ↓
+agent-promotion-v1
+```
+
+`agent-importance-v1` runs in the same isolated auth-only Codex judge environment as the direct-user judges, but uses a stricter authority prompt. Automatic promotion is allowed only for explicit long-lived technical/project decisions with high future utility, high confidence, exact meaning preservation, and no risk flags. A promoted canonical fact must begin with:
+
+```text
+Agent decision:
+```
+
+The judge is forbidden to rewrite an agent statement as user intent, user preference, project policy, or any stronger source authority.
+
+`agent-relation-v1` may compare the candidate against both active durable `user_direct` memories and active durable `agent_inference / agent decision` memories from the same project and branch. Existing authority is supplied explicitly to the judge. Classification remains model-only metadata; lifecycle mutation is deterministic later.
+
+`agent-promotion-v1` applies the following fixed authority rules:
+
+```text
+unrelated
+  -> create active agent_inference / agent decision Claim
+
+same
+  -> close candidate as redundant; create no duplicate Claim
+
+clear update -> existing agent decision
+  -> create new agent decision and supersede the exact older agent decision
+
+update -> user_direct memory
+  -> needs_confirmation; never silently supersede user authority
+
+contradict -> user_direct or agent decision
+  -> needs_confirmation; never self-authorize a winner/conflict
+```
+
+A lower-confidence or meaning-unsafe relation also becomes `needs_confirmation`.
+
+Promoted agent decisions participate in lexical and semantic retrieval, but the prompt adapter injects them only in the explicitly labelled advisory block described above. They never enter ordinary answer reliance as if they were user, repository, or tool authority.
 
 ### AI candidate importance judge
 
@@ -850,15 +936,22 @@ contradict  -> create one active durable Claim and open a conflict with the sele
 
 The command accepts only a stable candidate `~...` ref. Every relation except `unrelated` also requires one stable active-memory `@...` ref. Unknown, ambiguous, inactive, cross-project, or cross-branch targets fail closed.
 
-The confirmation command itself is captured as separate direct-user Evidence and recorded in the operational `memory_candidate_confirmations` audit table. For a created durable Claim, the Claim value and provenance remain the candidate's exact original direct-user source text. An AI-generated `canonical_fact` is not promoted through the explicit confirmation path.
+The confirmation command itself is captured as separate direct-user Evidence and recorded in the operational `memory_candidate_confirmations` audit table.
+
+For a direct-user candidate, the existing v2 behavior is unchanged: a created durable Claim remains attached to the candidate's exact original direct-user source Evidence.
+
+For an `agent_inference` candidate, explicit confirmation is an intentional authority upgrade. The engine **does not relabel the original agent Evidence**. Instead it creates new `user_confirmation` Evidence with `authority_class=user_direct`, stores the candidate's exact decision text there, and links metadata back to both the original agent Evidence and the explicit confirmation Evidence. The resulting durable Claim is then `user_direct / user memory / states`.
+
+This also makes `same` against an existing agent decision useful: explicit user confirmation creates one direct-user Claim and supersedes the lower-authority agent decision rather than leaving the authority unchanged.
 
 Before mutation, the engine rechecks:
 
 - the candidate is either `needs_confirmation` or an evaluated `pending` candidate whose stored valid importance decision is exactly `keep_candidate`;
 - an unevaluated `pending` candidate is never confirmable;
-- candidate source Evidence is direct-user, same-project, same-branch, non-secret, and still exactly matches the candidate value;
+- candidate source Evidence authority exactly matches the candidate authority (`user_direct` or `agent_inference`), is same-project, same-branch, non-secret, and still exactly matches the candidate value;
 - confirmation Evidence is direct-user, same-project, same-branch, non-secret, and marked as a candidate-confirm command;
-- any selected target is still an active durable direct-user memory in the same project and branch.
+- direct-user candidates may target only active durable direct-user memories;
+- agent candidates may target active durable direct-user memories or active durable agent-decision memories in the same project and branch.
 
 Confirmation finalization is exactly-once. Claim creation, lifecycle/conflict mutation, candidate status, and confirmation audit are one immediate SQLite transaction. Lifecycle and conflict provenance point to the explicit confirmation Evidence, while the durable Claim itself remains attached to the original candidate Evidence.
 
@@ -900,11 +993,14 @@ The command reports:
 importance-ready
 relation-ready
 promotion-ready
+agent-importance-ready
+agent-relation-ready
+agent-promotion-ready
 needs-confirmation
 kept-for-review
 ```
 
-The first three values are the bounded next-batch counts using the pipeline maximum of 20. `needs-confirmation` and `kept-for-review` are exact current-scope counts. Kept candidates are review backlog only and do not enter the automatic relation or promotion queues. The response also prints the explicit operator command:
+The first six values are the bounded next-batch counts using the pipeline maximum of 20. `needs-confirmation` and `kept-for-review` are exact current-scope counts across both authority lanes. Kept candidates are review backlog only and do not enter automatic relation or promotion queues. The response also prints the explicit operator command:
 
 ```powershell
 node .\scripts\process-memory-candidates.mjs --apply
@@ -912,13 +1008,13 @@ node .\scripts\process-memory-candidates.mjs --apply
 
 `memory pipeline` is strictly read-only with respect to the memory database. It resolves the current Git branch/repository context, but returns before repository-freshness recording, Evidence capture, protocol recall, AI judge execution, promotion, or lifecycle mutation.
 
-The three automatic candidate stages can be composed with one explicit operator command:
+Both automatic candidate lanes can be composed with one explicit operator command:
 
 ```powershell
 node .\scripts\process-memory-candidates.mjs
 ```
 
-Without `--apply`, the command is status-only. It reports the bounded next batch for importance, relation, and promotion plus exact current-scope counts for `needs_confirmation` and evaluated `keep_candidate` review backlog items. It does not invoke either Codex judge and does not run promotion.
+Without `--apply`, the command is status-only. It reports the bounded next batch for all six user/agent stages plus exact current-scope counts for `needs_confirmation` and evaluated `keep_candidate` review backlog items. It invokes no judge and performs no promotion.
 
 To process one bounded batch through the available stages:
 
@@ -926,19 +1022,31 @@ To process one bounded batch through the available stages:
 node .\scripts\process-memory-candidates.mjs --apply
 ```
 
-The order is fixed:
+The order is fixed and authority-separated:
 
 ```text
-importance-v2
-    ↓
-relation-v1
-    ↓
-promotion-v1
+user_direct:
+  importance-v2
+      ↓
+  relation-v1
+      ↓
+  promotion-v1
+
+agent_inference:
+  agent-importance-v1
+      ↓
+  agent-relation-v1
+      ↓
+  agent-promotion-v1
 ```
 
-The runner rechecks eligibility after each completed stage. It starts a stage only when at least one candidate is currently eligible, so an empty relation queue does not start the relation judge and an empty importance queue does not start the importance judge.
+The direct-user queue methods explicitly filter `source_authority=user_direct`; the agent queue methods explicitly filter `source_authority=agent_inference`. A candidate therefore cannot drift from one authority policy into the other.
 
-Project, branch, repository path, database path, and revision are resolved once when the pipeline starts. The same frozen runtime scope is injected into all three stage runners. A branch change during execution therefore cannot silently redirect a later stage to another candidate scope.
+The runner rechecks eligibility after every completed stage. It starts a stage only when at least one candidate is currently eligible, so empty queues never start unnecessary isolated judges.
+
+Project, branch, repository path, database path, and revision are resolved once when the pipeline starts. The same frozen runtime scope is injected into all six stage runners. A branch change during execution therefore cannot silently redirect a later stage to another candidate scope.
+
+After any stage actually creates one or more new Claims, the detached worker synchronizes semantic derived state once through the already-running local E5 IPC worker. Ignore, `same`, review-only, and confirmation-only outcomes do not trigger an unnecessary reindex. This keeps FTS and E5 coverage aligned after automatic promotion without making embeddings canonical truth.
 
 `--limit N` sets the maximum next batch for each stage and accepts `1..20`. One invocation processes at most one bounded batch per stage. Run the command again to drain additional queued batches.
 
