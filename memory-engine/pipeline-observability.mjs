@@ -58,7 +58,11 @@ export function summarizePipelineStages(stages = []) {
       );
       if (candidateRef !== null) candidateRefs.push(candidateRef);
 
-      if (result?.ok === false || nonEmpty(result?.error)) {
+      if (
+        result?.ok === false
+        || result?.status === 'failed'
+        || nonEmpty(result?.error)
+      ) {
         failures.push({
           stage: stage.name,
           candidate_id: nonEmpty(result?.candidate_id)
