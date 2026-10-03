@@ -88,6 +88,7 @@ test('hook inspection reports the exact Agent Hub recall controls without exposi
         explicitMemoryRequests: true,
         hybridRecall: true,
         candidateCapture: false,
+        autoPipeline: false,
       },
     },
   );
@@ -108,6 +109,24 @@ test('hook inspection reports candidate capture when the managed hook enables it
   });
 
   assert.equal(result.flags.candidateCapture, true);
+});
+
+test('hook inspection reports automatic pipeline processing when enabled', () => {
+  const result = inspectAgentHubHookConfiguration({
+    UserPromptSubmit: [
+      {
+        hooks: [
+          {
+            type: 'command',
+            command: 'node /repo/memory-engine/adapters/codex-hook-cli.mjs --candidate-capture --auto-pipeline',
+          },
+        ],
+      },
+    ],
+  });
+
+  assert.equal(result.flags.candidateCapture, true);
+  assert.equal(result.flags.autoPipeline, true);
 });
 
 test('hook inspection accepts the real Codex hooks.json root wrapper', () => {
@@ -147,6 +166,7 @@ test('hook inspection accepts the real Codex hooks.json root wrapper', () => {
         explicitMemoryRequests: true,
         hybridRecall: true,
         candidateCapture: false,
+        autoPipeline: false,
       },
     },
   );
@@ -175,6 +195,7 @@ test('hook inspection fails closed for unrelated Codex hooks', () => {
         explicitMemoryRequests: false,
         hybridRecall: false,
         candidateCapture: false,
+        autoPipeline: false,
       },
     },
   );
@@ -220,6 +241,7 @@ test('Codex state audit reports legacy memory separately from conversation histo
       explicitMemoryRequests: true,
       hybridRecall: true,
       candidateCapture: false,
+      autoPipeline: false,
     },
   });
 
