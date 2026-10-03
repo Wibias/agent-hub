@@ -354,7 +354,7 @@ button {
 .memory-layout {
   height: 100%;
   display: grid;
-  grid-template-columns: minmax(420px, 46%) minmax(380px, 1fr);
+  grid-template-columns: minmax(400px, 44%) minmax(400px, 1fr);
 }
 
 .memory-column,
@@ -464,6 +464,10 @@ button {
   color: #dadddc;
   font-size: 12px;
   line-height: 1.46;
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .memory-row-bottom {
@@ -525,9 +529,9 @@ button {
 
 .inspector-head h2 {
   margin: 8px 0 0;
-  font-size: 16px;
-  font-weight: 650;
-  line-height: 1.5;
+  font-size: 15px;
+  font-weight: 620;
+  line-height: 1.45;
 }
 
 .inspector-ref {
@@ -566,6 +570,14 @@ button {
   min-width: 0;
   margin: 0;
   overflow-wrap: anywhere;
+}
+
+.technical-id {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #c7cbca;
 }
 
 .inspect-value {
@@ -646,7 +658,7 @@ button {
 .review-layout {
   height: 100%;
   display: grid;
-  grid-template-columns: minmax(420px, 46%) minmax(380px, 1fr);
+  grid-template-columns: minmax(400px, 44%) minmax(400px, 1fr);
 }
 
 .review-list,
@@ -927,8 +939,8 @@ button {
 }
 
 ::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+  width: 8px;
+  height: 8px;
 }
 
 ::-webkit-scrollbar-track {
@@ -948,7 +960,7 @@ button {
 
   .memory-layout,
   .review-layout {
-    grid-template-columns: minmax(380px, 48%) minmax(320px, 1fr);
+    grid-template-columns: minmax(360px, 46%) minmax(320px, 1fr);
   }
 
   .summary-strip {
