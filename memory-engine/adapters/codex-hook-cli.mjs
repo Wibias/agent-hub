@@ -136,10 +136,12 @@ export function parseCodexHookCliOptions(argv = []) {
     ignoreMemoryEnv: argv.includes('--ignore-memory-env'),
     explicitMemoryRequests: argv.includes('--explicit-memory-requests'),
     hybridRecall: argv.includes('--hybrid-recall'),
-    autoPipeline: argv.includes('--auto-pipeline'),
   };
   if (argv.includes('--candidate-capture')) {
     options.candidateCapture = true;
+  }
+  if (argv.includes('--auto-pipeline')) {
+    options.autoPipeline = true;
   }
   return options;
 }
