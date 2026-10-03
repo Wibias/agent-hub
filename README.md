@@ -56,6 +56,31 @@ Use the active host's normal instruction-discovery mechanism. Host-specific
 configuration belongs outside shared `SKILL.md` files unless the surface is
 explicitly portable.
 
+### Codex host setup / upgrade
+
+After cloning or pulling a newer Agent Hub revision, inspect the complete managed Codex
+host state with one dry-run-first command:
+
+```powershell
+node .\scripts\setup-codex-host.mjs
+```
+
+The command checks generated runtime drift before host mutation, plans the Agent Hub
+memory hooks, native Codex-memory isolation, and retirement of legacy mutable Agent Hub
+runtime profiles, then runs the existing read-only memory doctor.
+
+If the plan is expected, apply only the managed changes:
+
+```powershell
+node .\scripts\setup-codex-host.mjs --apply
+```
+
+The orchestrator reuses the existing safe installers and backup behavior. It does not
+trust changed hooks on the user's behalf. When hook definitions change, restart Codex
+and review/trust them through `/hooks`.
+
+Individual scripts remain available for diagnostics, recovery, and narrow maintenance.
+
 ## Verify an installation
 
 Requires Node.js for the repository maintenance scripts.
