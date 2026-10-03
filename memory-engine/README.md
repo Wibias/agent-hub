@@ -478,7 +478,7 @@ They share the same project/branch candidate ledger, detached worker, and cross-
           {
             "type": "command",
             "command": "node /absolute/path/to/agent-hub/memory-engine/embedding-worker-launcher.mjs --cache-dir /absolute/path/to/agent-hub/.cache/memory-engine/e5",
-            "commandWindows": "node C:\\absolute\\path\\to\\agent-hub\\memory-engine\\embedding-worker-launcher.mjs --cache-dir C:\\absolute\\path\\to\\agent-hub\\.cache\\memory-engine\\e5",
+            "commandWindows": "powershell.exe -NoProfile -NonInteractive -EncodedCommand <generated-payload>",
             "timeout": 45,
             "async": true,
             "statusMessage": "Starting project memory embeddings"
@@ -492,7 +492,7 @@ They share the same project/branch candidate ledger, detached worker, and cross-
           {
             "type": "command",
             "command": "node /absolute/path/to/agent-hub/memory-engine/adapters/codex-hook-cli.mjs --ignore-memory-env --explicit-memory-requests --hybrid-recall --candidate-capture --auto-pipeline",
-            "commandWindows": "node C:\\absolute\\path\\to\\agent-hub\\memory-engine\\adapters\\codex-hook-cli.mjs --ignore-memory-env --explicit-memory-requests --hybrid-recall --candidate-capture --auto-pipeline",
+            "commandWindows": "powershell.exe -NoProfile -NonInteractive -EncodedCommand <generated-payload>",
             "timeout": 10,
             "statusMessage": "Recalling project memory",
             "additionalContextLimit": 2500
@@ -504,7 +504,13 @@ They share the same project/branch candidate ledger, detached worker, and cross-
 }
 ```
 
-Replace the example paths with the real checkout path. The prompt hook inherits the memory environment variables from the Codex process.
+Replace the example paths with the real checkout path. On Windows, do not hand-build
+the encoded payload. Run `node .\\scripts\\setup-codex-host.mjs --apply`; the installer
+generates a shell-neutral PowerShell payload containing the exact Node and script paths,
+including safe handling for spaces and apostrophes, and propagates the Node exit code.
+This avoids quoted-executable parsing failures when Codex Desktop dispatches hooks through
+PowerShell instead of `cmd.exe`. The prompt hook inherits the memory environment variables
+from the Codex process.
 
 The launcher is idempotent. It first uses the IPC `health` operation, which verifies the pinned model identity without running inference. If no worker is ready, a cross-process lock ensures that only one concurrent Codex session spawns the detached worker. Other sessions wait for the same worker instead of loading another E5 runtime. A stale launcher lock is recoverable.
 
