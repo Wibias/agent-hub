@@ -40,10 +40,11 @@ Prefer existing specialists when they own the primary ask:
 1. **Define the user/system symptom and success measure.** Name the operation, environment, workload and metric that matters. Do not optimise "the app" generically.
 2. **Measure a baseline.** Load `references/investigation.md`. Prefer representative runtime data; distinguish synthetic lab measurements from real-user/production evidence.
 3. **Identify the bottleneck.** Follow evidence across browser/network, client main thread, server/runtime, external calls, queues and database. Do not patch the first suspicious code path without proving it dominates the symptom.
-4. **Apply the smallest causal fix.** Preserve correctness and operational safety. Use source-driven-development for version-specific framework/database features.
-5. **Verify on the same workload and environment.** Compare before/after distributions or resource profiles, not only one lucky sample. If the intended metric does not materially improve, revert or reclassify the hypothesis.
-6. **Check trade-offs.** A latency win that increases memory, database load, correctness risk, cache staleness or cost may be a regression elsewhere.
-7. **Guard against recurrence.** Add the cheapest reliable benchmark, budget, query-plan check, metric, regression test or project constraint that would catch the same class without making the inner loop unusable.
+4. **Generate fix hypotheses from the measured mechanism.** Prefer cheaper structural wins before expensive tuning: do not do unnecessary work; do not repeat identical work; do less work; move work later; move it outside the user-visible wait; run independent work concurrently; only then make the remaining work cheaper. This is an ordering heuristic, not a checklist. Skip any step the evidence does not support, and stop when the target is met.
+5. **Apply the smallest causal fix.** Preserve correctness and operational safety. Use source-driven-development for version-specific framework/database features.
+6. **Verify on the same workload and environment.** Apply the measurement-validity gate in `references/investigation.md`. Compare before/after distributions or resource profiles, not only one lucky sample. If the intended metric does not materially improve, revert or reclassify the hypothesis.
+7. **Check trade-offs.** A latency win that increases memory, database load, correctness risk, cache staleness or cost may be a regression elsewhere.
+8. **Guard against recurrence.** Add the cheapest reliable benchmark, budget, query-plan check, metric, regression test or project constraint that would catch the same class without making the inner loop unusable.
 
 ## Evidence rules
 
@@ -51,7 +52,9 @@ Prefer existing specialists when they own the primary ask:
 - Do not claim RUM improvement from local Lighthouse/DevTools evidence; label lab and field evidence separately.
 - Do not recommend memoization, caching, indexing, concurrency or code splitting merely because they are common fixes. Prove the specific bottleneck first.
 - A benchmark that does not exercise the user-relevant path is not proof.
-- Report blocked measurements as blocked rather than substituting intuition.
+- Do not report or act on a benchmark delta until you can explain the dominant limiter, confirm the intended work actually ran, count failures, and show the result exceeds run-to-run noise. If any of those are materially unknown, call the result inconclusive.
+- A microbenchmark win is not an end-to-end win. Bound the possible user-facing impact by the share of total time or resources the changed piece consumed.
+- Report blocked or inconclusive measurements honestly rather than substituting intuition.
 
 ## References
 

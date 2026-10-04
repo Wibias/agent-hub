@@ -29,11 +29,61 @@ For current Web Platform/Core Web Vitals definitions or framework recommendation
 
 ## Measurement discipline
 
-- Record environment, build/revision, dataset/workload, warm/cold state and relevant throttling.
-- Compare like with like.
-- Use multiple samples or distributions when noise is material.
-- Preserve a representative slow trace/profile before editing so the post-change comparison tests the same symptom.
-- When a proposed fix targets a sub-measure, confirm the user-facing/system-level metric improves too.
+Before running a comparison, write down the claim the number is meant to support.
+Read the measurement harness and note what it times, counts, excludes, caches, and
+treats as success. Record environment, build/revision, dataset/workload,
+warm/cold state, relevant throttling, and production-relevant flags.
+
+Compare like with like. When noise, warmup, cache drift, or machine load can
+matter, alternate the compared sides (A, B, A, B...) instead of running one side
+to completion first.
+
+### Measurement-validity gate
+
+Before reporting or acting on a measured speedup, regression, throughput, latency,
+memory, or benchmark result, answer these with run evidence:
+
+1. **What limits the number?** Name the dominant resource or code path from a
+   representative profile/counter/trace, not from source-code intuition alone.
+   Ask what prevents the result from being roughly twice as good. A saturated
+   load generator is a benchmark limiter too.
+2. **Were both sides production-representative?** Use comparable release builds,
+   flags, versions, data, batching, pools, indexes, cache state, and other relevant
+   settings. An untuned side makes a winner claim inconclusive.
+3. **Does the result respect system limits?** Check simple upper bounds from CPU,
+   bandwidth, I/O, concurrency, or the measured share of the changed component.
+   A result beyond a plausible ceiling usually means the harness measured a
+   cache, no-op, error path, or different work.
+4. **Did requests or operations fail?** Count failures, timeouts, retries,
+   non-success responses, and incorrect outputs. Fast failures are not fast
+   successful work.
+5. **Does it reproduce beyond noise?** Use enough alternating samples to estimate
+   the distribution. Prefer median plus range or another appropriate spread.
+   Treat a delta smaller than normal variation as no measurable difference.
+6. **Does it matter end to end?** Measure the user-facing or system-level path
+   next to a micro result. A component that was 1% of the total path cannot
+   explain a large end-to-end win by itself.
+7. **Did the intended work actually happen inside the measured region?** Confirm
+   the request reached the target, rows/bytes/operations were processed, awaited
+   work completed, and outputs were consumed. Lazy or skipped work can produce
+   excellent-looking numbers.
+
+If the intended comparison cannot establish the limiter, comparable tuning,
+error/work counts, or work execution, report **inconclusive** rather than
+choosing a winner.
+
+Preserve a representative slow trace/profile before editing so the post-change
+comparison tests the same symptom. When a proposed fix targets a sub-measure,
+confirm the user-facing/system-level metric improves too.
+
+## Reporting a benchmark
+
+Lead with one of: `faster`, `slower`, `no measurable difference`, or
+`inconclusive`.
+
+For a material comparison, include the primary metric and unit, sample count,
+spread, workload/environment, and named limiter. Keep raw runs and deeper profile
+evidence in a linked artifact when the reporting surface should stay compact.
 
 ## Guard
 
