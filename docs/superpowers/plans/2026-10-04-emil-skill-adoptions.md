@@ -125,5 +125,6 @@
 
 - [x] Run the deterministic adoption contract and confirm it passes.
 - [x] Regenerate the skill index and require no diff after regeneration.
-- [x] Run full Release Governance.
-- [ ] Complete digest-bound qualification: `design-with-ai`, `prototype`, and `write-swift` already PASS; `fortify` must be re-reviewed after the A2 repair.
+- [x] Run full Release Governance for the initial implementation.
+- [x] Regenerate the skill index after the Fortify A2 repair.
+- [ ] Complete post-repair Release Governance and digest-bound qualification: `design-with-ai`, `prototype`, and `write-swift` already PASS; only `fortify` must be re-reviewed.
