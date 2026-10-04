@@ -8,7 +8,8 @@ description: >-
   deterministic prevention over prose, and route implementation to the existing
   domain owner. Not for active debugging (diagnose), generic architecture scans
   (improve-codebase-architecture), standing quality-bar design
-  (quality-constraints), or personal lesson capture (extract-approach).---
+  (quality-constraints), or personal lesson capture (extract-approach).
+---
 
 # Retrospective
 
