@@ -110,6 +110,35 @@ reviewers; they receive spec, diff, and evidence pointers only.
 Prefer disjoint ownership: discovery / dependency research / implementation slice /
 tests / docs / UX review / security review / final verification.
 
+## Worker continuity policy
+
+Prefer a **fresh worker for a new independent round**. This includes a correction
+round after a worker has returned, a retry after a completed attempt, a follow-up
+with materially changed instructions, or the next packet that merely inherits the
+same role name.
+
+A role may continue while the worker changes. Give the fresh worker one consolidated
+packet containing the current goal, relevant file/artifact pointers, accepted prior
+results, new directives, and the verification contract. Do not make it reconstruct
+scope from a chain of resume messages.
+
+Reuse or resume the same worker only when the next step materially depends on state
+that is expensive or impossible to transfer, such as:
+
+- uncommitted changes that exist only in that worker's checkout;
+- a process the worker still owns, such as a dev server, simulator, profiler, or
+  long-running watcher;
+- an interactive/debugger state whose setup cost is material;
+- a narrow continuation where preserving that live state is more important than
+  fresh-context independence.
+
+Do not reuse a worker merely because it handled the previous round. Do not spawn a
+fresh worker merely for ritual separation when the next step needs the live state
+above. Record which path was chosen when continuity materially affects the result.
+
+Fresh reviewers remain stricter: when independence is the purpose of the review,
+do not resume the implementation worker or forward its confidence narrative.
+
 ## Fresh-context doubt gate
 
 When a high-risk decision depends on reasoning the main worker could be biased about, load `references/doubt-gate.md` and create a separate **read-only** reviewer packet. The reviewer receives the smallest reviewable artifact plus the contract/acceptance criteria, not the implementation worker's conclusion, confidence statement, or transcript.
