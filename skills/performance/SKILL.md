@@ -60,4 +60,9 @@ Prefer existing specialists when they own the primary ask:
 
 - `references/investigation.md` - symptom-to-measurement routing and before/after evidence.
 - `references/databases-and-runtime.md` - query plans, pools, memory/CPU, caches and throughput.
-- `tests/evals/cases.jsonl` - discovery and adversarial qualification cases.
+
+<!-- eval:references -->
+- tests/evals/cases.jsonl -- when to read: as canonical acceptance criteria during Skill Ratchet qualification
+- tests/evals/regression-cases.jsonl -- when to read: retained failures after a real regression is fixed
+- tests/evals/regression-lock.json -- when to read: validating immutable retained regression cases
+<!-- /eval:references -->
