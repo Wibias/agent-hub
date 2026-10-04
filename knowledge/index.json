@@ -701,7 +701,7 @@
       ],
       "status": "active",
       "canonicalId": null,
-      "contentHash": "19da29d4ea8d43fbcfe8b6be033f94dad8fbaf2690d61bda5f9b919ef24d47ae"
+      "contentHash": "313828e3a63a261124202233ef9456edb4aaae3a3d9a263dac47f631c47baeef"
     },
     {
       "id": "agents/playwright",
