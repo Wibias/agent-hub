@@ -72,6 +72,32 @@ When designing an interface, ask:
 - **The interface is the test surface.** Callers and tests cross the same seam. If you want to test *past* the interface, the module is probably the wrong shape.
 - **One adapter means a hypothetical seam. Two adapters means a real one.** Don't introduce a seam unless something actually varies across it.
 
+## Agent-resistant design red flags
+
+Evaluate a candidate as the next contributor will encounter it: with partial
+context, the nearest example open, and pressure to take the shortest path that
+compiles. Prefer a design where a locally plausible change is also globally
+correct.
+
+Treat these as red flags during design comparison and implementation feedback:
+
+- **Split ownership.** More than one module can write the same state or owns a
+  separate copy of the same truth. Prefer one owner; other modules read it or
+  ask that owner to change it.
+- **Two supported ways to do one task.** Equivalent paths accumulate callers
+  because contributors copy whichever one they find first. Prefer one canonical
+  path; migrate callers and delete the obsolete path instead of documenting both.
+- **Importable internals.** Callers can reach implementation details that the
+  interface is meant to hide. Make those internals unreachable across the seam
+  so the wrong import fails rather than merely violating a convention.
+- **Hand-synced lists or registries.** Adding one concept requires editing two or
+  more independent lists. Prefer one source of truth and derive the rest. When
+  derivation is impossible, add a deterministic consistency check.
+
+These are not automatic proof that a design is wrong. They are strong evidence
+because each one makes correctness depend on context a future contributor may
+not have.
+
 ## Implementation feedback
 
 A selected design is a hypothesis about the shape that will make implementation straightforward. Implementation friction is evidence about that hypothesis, not a reason to quietly widen the interface.
