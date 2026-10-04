@@ -26,5 +26,21 @@
   {
     "id": "R7",
     "sha256": "7147d18ff5a0b23caba78eb33f57806c6c1f2226061cf9dfaa136d3a6e03c590"
+  },
+  {
+    "id": "R8",
+    "sha256": "6cace2807fd6e3195e001b4c33f3134703b64dadc6f22117b5c8af0aaa04206f"
+  },
+  {
+    "id": "R9",
+    "sha256": "f7d1f98552480974f94c81eccc97b75cffee24d1a6789a419ee72d48a2bb7158"
+  },
+  {
+    "id": "R10",
+    "sha256": "4aee7af9cb932cbb1d8191abd86ab061250e4cf03d21e9f7de02dc0863f04aa2"
+  },
+  {
+    "id": "R11",
+    "sha256": "27fcff3c785fb3c7eb72564cb4f51ffa3d659d3b57498b00426822a33f17a75e"
   }
 ]
