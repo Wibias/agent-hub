@@ -174,7 +174,7 @@
       ],
       "status": "active",
       "canonicalId": null,
-      "contentHash": "6a9e16dc2baa174f62010261215e57048561d07c7794f3d9d3a1791100b04402"
+      "contentHash": "ff875caef52b5668bbebdd053d040f7546799a86818b2ba52f19ac38e8a45a1c"
     },
     {
       "id": "agents/codex-dynamic-workflows",
@@ -701,7 +701,7 @@
       ],
       "status": "active",
       "canonicalId": null,
-      "contentHash": "313828e3a63a261124202233ef9456edb4aaae3a3d9a263dac47f631c47baeef"
+      "contentHash": "01810ccbf9d849396a1e5eec5dc69a34cce8d40b23aa9dc465831d029e54fb20"
     },
     {
       "id": "agents/playwright",
