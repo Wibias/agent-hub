@@ -105,14 +105,17 @@ The release gate is:
 3. Give the printed bounded review prompt to one strong model and one distinct
    weaker model.
 4. Each model independently reviews every declared non-config case once against
-   the same committed revision using repository code, existing tests, existing
-   deterministic command output, and other inspectable state.
+   the same committed revision and the structural validator's exact target-skill
+   digest, using repository code, existing tests, existing deterministic command
+   output, and other inspectable state.
 5. A reviewer may run a small number of existing deterministic checks when
    useful, but must not turn qualification into a case-by-case execution suite.
 6. Any unsupported case is `blocked`; contradicted behavior is `fail`. Both
    reviews must pass every case.
 7. Repair failures outside the qualification run, then rerun structural
-   validation and both reviews against the same new commit.
+   validation and both reviews against the repaired target's new skill digest.
+   Unrelated repository commits do not invalidate passing receipts when the
+   target skill digest is unchanged.
 
 Never use hidden chain-of-thought or candidate self-report as evidence. For a
 `verify-*` target, structural skill validation and live product verification are
@@ -132,7 +135,8 @@ the final validation command.
 
 The strong and weaker agents write separate receipts under one OS-temp
 directory. They do not edit each other's evidence. Both receipts must name
-distinct concrete models and the same full Git revision.
+distinct concrete models, the same full Git revision, and the exact
+`skill_digest` printed by structural validation.
 
 Skill Ratchet scripts remain deterministic. They never launch Codex, another
 agent, a judge model, or any model API.
@@ -155,8 +159,13 @@ node scripts/skill-ratchet.mjs validate \
 ```
 
 Complete validation requires `strong.json` and `weaker.json`, the same committed
-revision, distinct concrete models, every canonical case exactly once in each
-receipt, and no `fail` or `blocked` result.
+revision, distinct concrete models, the same `skill_digest` in both receipts,
+that digest to match the current target skill, every canonical case exactly once
+in each receipt, and no `fail` or `blocked` result.
+
+The digest is the durable qualification identity. A later commit elsewhere in
+the repository does not stale the receipts. Any change inside the target skill
+tree changes the digest and requires fresh reviews.
 
 Retained regressions are authored when a failure is fixed, before qualification.
 Qualification verifies their append-only SHA locks; it does not invent or append
@@ -169,8 +178,8 @@ Return:
 ```text
 Classification: REUSE | EXTEND | MERGE | CREATE
 Evidence: <candidate paths and why>
-Strong review: <model>; <revision>; pass|fail|blocked
-Weaker review: <model>; <same revision>; pass|fail|blocked
+Strong review: <model>; <revision>; <skill_digest>; pass|fail|blocked
+Weaker review: <model>; <same revision>; <same skill_digest>; pass|fail|blocked
 Cases: <all declared case IDs reviewed once by both models>
 Findings: <none | concise list>
 Regression locks: pass|fail

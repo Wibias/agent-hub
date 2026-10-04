@@ -1,5 +1,6 @@
+import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
-import { readFile, stat } from 'node:fs/promises';
+import { readdir, readFile, readlink, stat } from 'node:fs/promises';
 import path from 'node:path';
 import {
   isInside, normalizeSlash, parseFrontmatter, parseJsonLines, sha256,
@@ -26,6 +27,45 @@ async function fileExists(target) {
   } catch {
     return false;
   }
+}
+
+async function computeSkillDigest(skillRoot) {
+  const hash = createHash('sha256');
+  const entries = [];
+
+  async function visit(current) {
+    const children = await readdir(current, { withFileTypes: true });
+    children.sort((a, b) => a.name.localeCompare(b.name));
+    for (const child of children) {
+      if (child.name === '.git' || child.name === 'node_modules') continue;
+      if (child.name === '.DS_Store' || child.name === 'Thumbs.db') continue;
+      const target = path.join(current, child.name);
+      const relative = normalizeSlash(path.relative(skillRoot, target));
+      if (child.isDirectory()) await visit(target);
+      else if (child.isFile()) entries.push({ kind: 'file', relative, target });
+      else if (child.isSymbolicLink()) entries.push({ kind: 'symlink', relative, target });
+    }
+  }
+
+  await visit(skillRoot);
+  entries.sort((a, b) => a.relative.localeCompare(b.relative));
+
+  for (const entry of entries) {
+    hash.update(entry.kind, 'utf8');
+    hash.update('\0');
+    hash.update(entry.relative, 'utf8');
+    hash.update('\0');
+    if (entry.kind === 'symlink') {
+      hash.update(await readlink(entry.target), 'utf8');
+    } else {
+      const contents = await readFile(entry.target);
+      hash.update(String(contents.length), 'utf8');
+      hash.update('\0');
+      hash.update(contents);
+    }
+    hash.update('\0');
+  }
+  return hash.digest('hex');
 }
 
 function validateCase(row, label, errors, includeAdded = false) {
@@ -70,7 +110,7 @@ async function readReceipt(runDir, filename, errors) {
   }
 }
 
-function validateReceipt(receipt, slotName, metadata, dataCases, errors) {
+function validateReceipt(receipt, slotName, metadata, dataCases, expectedSkillDigest, errors) {
   if (!receipt) return;
   if (receipt.skill !== metadata.name) errors.push(`${slotName} review skill '${receipt.skill}' does not match '${metadata.name}'`);
   if (receipt.slot !== slotName) errors.push(`${slotName} review has slot '${receipt.slot}', expected '${slotName}'`);
@@ -79,6 +119,11 @@ function validateReceipt(receipt, slotName, metadata, dataCases, errors) {
   }
   if (typeof receipt.revision !== 'string' || !/^[0-9a-f]{40}$/i.test(receipt.revision)) {
     errors.push(`${slotName} review requires the full 40-character Git revision`);
+  }
+  if (typeof receipt.skill_digest !== 'string' || !/^[0-9a-f]{64}$/i.test(receipt.skill_digest)) {
+    errors.push(`${slotName} review requires a 64-character skill_digest`);
+  } else if (receipt.skill_digest.toLowerCase() !== expectedSkillDigest) {
+    errors.push(`${slotName} review skill_digest does not match the current target skill`);
   }
   if (receipt.result !== 'pass') errors.push(`${slotName} review is '${receipt.result}', expected pass`);
   if (!Array.isArray(receipt.findings)) errors.push(`${slotName} review findings must be an array`);
@@ -114,6 +159,12 @@ export async function validateSkill(options) {
   }
 
   const skillText = await readFile(skillMdPath, 'utf8');
+  let skillDigest = null;
+  try {
+    skillDigest = await computeSkillDigest(skillRoot);
+  } catch (error) {
+    errors.push(`Could not compute skill_digest: ${error.message}`);
+  }
   const metadata = parseFrontmatter(skillText);
   if (!metadata.name) errors.push('SKILL.md frontmatter missing name');
   if (!metadata.description) errors.push('SKILL.md frontmatter missing description');
@@ -202,14 +253,18 @@ export async function validateSkill(options) {
 
     const strong = await readReceipt(runDir, 'strong.json', errors);
     const weaker = await readReceipt(runDir, 'weaker.json', errors);
-    validateReceipt(strong, 'strong', metadata, dataCases, errors);
-    validateReceipt(weaker, 'weaker', metadata, dataCases, errors);
+    validateReceipt(strong, 'strong', metadata, dataCases, skillDigest, errors);
+    validateReceipt(weaker, 'weaker', metadata, dataCases, skillDigest, errors);
 
     if (strong?.model && weaker?.model && strong.model.toLowerCase() === weaker.model.toLowerCase()) {
       errors.push('strong and weaker reviews must use distinct concrete models');
     }
     if (strong?.revision && weaker?.revision && strong.revision !== weaker.revision) {
       errors.push('strong and weaker reviews must cover the same committed revision');
+    }
+    if (strong?.skill_digest && weaker?.skill_digest
+      && strong.skill_digest.toLowerCase() !== weaker.skill_digest.toLowerCase()) {
+      errors.push('strong and weaker reviews must cover the same skill_digest');
     }
   }
 
@@ -220,6 +275,7 @@ export async function validateSkill(options) {
     declared_references: declaredRefs.length,
     case_count: dataCases.length,
     regression_count: regressions.length,
+    skill_digest: skillDigest,
     errors,
     warnings,
   };
