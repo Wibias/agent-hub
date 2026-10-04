@@ -171,9 +171,7 @@ const requiredRouteMarkers = [
 test("README documents every top-level skill exactly once and links its SKILL.md", () => {
   const readme = readFileSync(readmePath, "utf8").replace(/\r\n/g, "\n");
   for (const skill of topLevelSkills()) {
-    const isAlias =
-      skill.dir.endsWith("-redirect") ||
-      /compatibility redirect/i.test(skill.description);
+    const isAlias = /compatibility redirect/i.test(skill.description);
     const marker = `<!-- ${isAlias ? "skill-alias" : "skill-doc"}:${skill.name} -->`;
     assert.equal(
       count(readme, marker),
