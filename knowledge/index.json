@@ -174,7 +174,7 @@
       ],
       "status": "active",
       "canonicalId": null,
-      "contentHash": "3af1cc0da38857b243a7c08c79db9c26d84c940bc01ed1b22e2ba69b4f8d468d"
+      "contentHash": "ff875caef52b5668bbebdd053d040f7546799a86818b2ba52f19ac38e8a45a1c"
     },
     {
       "id": "agents/codex-dynamic-workflows",
@@ -202,7 +202,7 @@
       ],
       "status": "active",
       "canonicalId": null,
-      "contentHash": "9da038144f72bbb2a9c91ec1ee82d99d6ebd25b7811ab58b0a28929b1ef0c82a"
+      "contentHash": "aa3d119fcb764cf3fcb238744511f3958b5a6e26562a875a246bedfe88c66257"
     },
     {
       "id": "agents/context-engineering",
@@ -380,7 +380,7 @@
       ],
       "status": "active",
       "canonicalId": null,
-      "contentHash": "0aa4f7af6d0ab61a7e9271c28bd9fc25042afac7b2bd88e1e3c2c02685b88c60"
+      "contentHash": "09383a68ac96329cdf4b1a06b0a1d51c8c05bea3f3d602abff37576364473051"
     },
     {
       "id": "agents/domain-modeling",
@@ -701,7 +701,7 @@
       ],
       "status": "active",
       "canonicalId": null,
-      "contentHash": "95912d4f0779862fed06eac04ab9b9beac9223ff5b0a3b63bd382241a1e8d65d"
+      "contentHash": "ccb53f933c9a98de07c945af8ae6d425eee28775bdcc5d36d301122cc213216e"
     },
     {
       "id": "agents/playwright",
@@ -878,6 +878,31 @@
       "status": "active",
       "canonicalId": null,
       "contentHash": "f5326aca353bc60de16b967890a1c2c2e57957ef4a4d7df0b30748eaf958a630"
+    },
+    {
+      "id": "agents/retrospective",
+      "path": "~/.agents/skills/retrospective/SKILL.md",
+      "type": "skill",
+      "harness": "agents",
+      "scope": "global",
+      "name": "retrospective",
+      "description": "Improve future agent runs from completed work. Use when the user asks for a retrospective, asks what would have prevented a bug or failed run, says agents keep making the same mistake, or asks to make a repeated mistake harder or impossible. Mine session evidence, classify the failure, prefer structural or deterministic prevention over prose, and route implementation to the existing domain owner. Not for active debugging (diagnose), generic architecture scans (improve-codebase-architecture), standing quality-bar design (quality-constraints), or personal lesson capture (extract-approach).",
+      "tags": [
+        "retrospective"
+      ],
+      "triggers": [
+        "Improve future agent runs from completed work.",
+        "the user asks for a retrospective",
+        "asks what would have prevented a bug or failed run",
+        "says agents keep making the same mistake",
+        "or asks to make a repeated mistake harder or impossible. Mine session evidence",
+        "classify the failure",
+        "prefer structural or deterministic prevention over prose",
+        "and route implementation to the existing domain owner. Not for active debugging (diagnose)"
+      ],
+      "status": "active",
+      "canonicalId": null,
+      "contentHash": "b76e7f094d0a010d0d8af1a4f05ef1e3760c4fb832db6ef9c8b0879569342528"
     },
     {
       "id": "agents/review-security",

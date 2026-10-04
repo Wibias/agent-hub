@@ -70,6 +70,12 @@ in prose. Contrast by:
 - **Seam placement**
 - **Ease of correct use** vs ease of misuse
 - **Implementation efficiency** — does the shape allow efficient internals?
+- **Agent resistance** — does the shape avoid split ownership, duplicate ways to
+  perform one task, importable internals, and hand-synced lists/registries?
+
+For agent resistance, judge the candidate from one file at a time. Ask whether a
+contributor following the nearest local example can accidentally create a
+globally inconsistent state while still compiling and passing obvious checks.
 
 Do not score on implementation effort. After comparing, give a recommendation.
 If elements from different designs combine well, propose a hybrid. Be
@@ -84,3 +90,9 @@ another design should be kept.
 - Do not skip comparison — the value is in contrast
 - Do not implement
 - Do not evaluate based on implementation effort
+- Do not accept duplicate ownership or duplicate task paths merely because both
+  are documented
+- Do not rely on "contributors should know not to import this" when the module can
+  make the internal path unreachable
+- Do not keep hand-synced registries when one source of truth or a deterministic
+  consistency check can own the invariant
