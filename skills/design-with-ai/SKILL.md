@@ -4,14 +4,15 @@ description: >-
   Canonical default visible-UI design owner for intentional, anti-slop product
   surfaces. Use for generic look-better/polish and visual-hierarchy requests,
   surface audits, restyles, redesigns, new product UI, product-UI charts/data
-  visualization, native/mobile UI, design specs/prompts, motion
-  opportunities/audits/reviews, animation performance, or naming a motion
-  effect. Commands: audit-surface, improve-existing, restyle-existing,
-  redesign-existing, build-product-surface, design-spec, motion-opportunities,
-  motion-audit, motion-review, motion-optimize, motion-name. Not for backend-only
-  work, standalone analytical/report chart generation, API/module interface design
-  (use codebase-design), copy-only edits, general code review, or explicit
-  impeccable invocations.
+  visualization, native/mobile UI, mobile-web/PWA UI, design specs/prompts,
+  building motion, motion opportunities/audits/reviews, animation performance,
+  or naming a motion effect. Commands: audit-surface, improve-existing,
+  restyle-existing, redesign-existing, build-product-surface, design-spec,
+  motion-build, motion-opportunities, motion-audit, motion-review,
+  motion-optimize, motion-name. Not for backend-only work, standalone
+  analytical/report chart generation, API/module interface design (use
+  codebase-design), copy-only edits, general code review, or explicit impeccable
+  invocations.
 ---
 
 # Design with AI
@@ -21,9 +22,9 @@ direction, feeling, and taste.
 
 ## Resolve target first
 
-A command that needs a route, component, diff, or surface must have a resolvable
-target before workflow references are loaded. If the target is missing, stop and
-request it. Do not infer an arbitrary surface.
+A command that needs a route, component, diff, surface, or motion target must have
+a resolvable target before workflow references are loaded. If the target is
+missing, stop and request it. Do not infer an arbitrary surface.
 
 After target resolution, load `references/hard-invariants.md` before acting.
 Then load only the selected workflow bundle.
@@ -38,6 +39,7 @@ Then load only the selected workflow bundle.
 | `redesign-existing [standard|deep] <target>` | deep | `references/existing-ui-workflows.md`, `references/taste-workflow.md` |
 | `build-product-surface [standard|deep] <surface>` | deep | `references/new-product-surface.md`, `references/taste-workflow.md` |
 | `design-spec <target>` | standard | `references/design-first-prompting.md` |
+| `motion-build <target-or-description>` | standard | `references/motion-build.md`, `references/standards.md` |
 | `motion-opportunities [quick|standard|deep] <target>` | standard | `references/motion-workflows.md`, `references/opportunities.md` |
 | `motion-audit [quick|standard|deep] <scope>` | standard | `references/motion-workflows.md`, `references/standards.md`, `references/audit-playbook.md` |
 | `motion-review <diff-or-target>` | standard | `references/motion-workflows.md`, `references/standards.md` |
@@ -46,6 +48,8 @@ Then load only the selected workflow bundle.
 
 Without a command, a vague look-better/polish request loads
 `references/design-methods.md` and routes to `improve-existing standard`.
+A direct request to implement/add an animation routes to `motion-build`, not to
+motion audit/review/opportunity discovery.
 
 ## Non-motion load order
 
@@ -64,16 +68,42 @@ For `audit-surface`, `improve-existing`, `restyle-existing`,
 `design-spec` is a bounded spec/prompt route after direction is known; it does
 not automatically reopen the full design workflow.
 
+## Motion-build load order
+
+For `motion-build`:
+
+1. load `references/motion-build.md`, then `references/standards.md`;
+2. load `references/spring-decision.md` only when easing vs physics is open;
+3. load `references/motion-systems.md` only when defining/extending a shared motion language;
+4. load `references/direct-manipulation.md` for drag/swipe/gesture ownership;
+5. load `references/react-native-motion.md` only for a resolved React Native/Expo target;
+6. for browser/mobile-web platform behavior, load `references/mobile-web.md` only when those browser constraints are material;
+7. load `references/verification-contract.md` before claiming modifying work complete.
+
+Runtime performance diagnosis still belongs to `motion-optimize`; `motion-build`
+may choose compositor-friendly ingredients but must not claim measured jank/GPU/
+CPU causes without profiling.
+
 ## Conditional intelligence
 
-Do not load these merely because the surface category sounds related. Load from concrete target evidence or explicit user intent:
+Do not load these merely because the surface category sounds related. Load from
+concrete target evidence or explicit user intent:
 
 - charts, forecasts, funnels, KPI encodings, analytical visualizations -> `references/data-visualization.md`; use `references/design-guidance.md` only when a chart/interaction choice remains open;
-- native/mobile target or platform-specific safe-area, text-scaling, gesture, or touch behavior -> `references/native-mobile.md`; query `references/design-guidance.md` only for a specific unresolved outcome;
+- browser/PWA UI on phones/tablets where viewport chrome, touch capability, safe areas, soft keyboard, overscroll, or mobile-browser behavior is material -> `references/mobile-web.md`;
+- actual native/mobile target (SwiftUI, Compose, React Native, Flutter, etc.) or platform-specific safe-area, text-scaling, native gesture, or system-control behavior -> `references/native-mobile.md`; query `references/design-guidance.md` only for a specific unresolved outcome;
+- React Native/Expo motion implementation/review -> `references/react-native-motion.md`; exact package/API claims remain current-source questions rather than frozen skill truth;
+- direct drag/swipe/throw/reorder/sheet manipulation -> `references/direct-manipulation.md`;
 - long-token/chip/focus/drag/interruption edge case not already resolved by project primitives -> `references/design-guidance.md`;
 - explicit reusable multi-surface design-system/design-contract request -> `references/durable-design-contract.md`.
 
-Guidance is not evidence. It never counts toward `source-evidence.md` sampling and cannot choose visual style, palette, typography, landing structure, or motion intensity by product stereotype.
+Do not load `mobile-web.md` and `native-mobile.md` merely because a target is
+"mobile"; determine whether the runtime is a browser/PWA or native framework.
+React Native may legitimately compose `native-mobile.md` with
+`react-native-motion.md` when both general platform design and motion are in
+scope.
+
+Guidance is not evidence. It never counts toward `source-evidence.md` sampling and cannot choose visual style, palette, typography, landing structure, or motion intensity by product stereotype. Direct-manipulation mechanics do not authorize an Apple visual/material style.
 
 ## Quality profiles
 
@@ -99,11 +129,17 @@ not edit or vendor it. Explicit Impeccable requests stay with Impeccable.
 `intent`, `conversion-pages`, `prototype`, `fortify`, `shadcn`, and
 `codebase-design` remain separate when their domain is primary.
 
+`source-driven-development` composes when an implementation decision depends on
+current official framework/library/platform documentation. It does not replace
+this skill's product/motion ownership.
+
 ## Verification
 
 Browser/rendered evidence is required for modifying visual work when suitable
-tooling exists. Mechanical green never overrides a failed product, visual, or
-motion verdict. Missing tooling is recorded as blocked, never silently passed.
+tooling exists. Native/React Native/mobile-web feel claims require representative
+platform/runtime evidence when the behavior cannot be established from source.
+Mechanical green never overrides a failed product, visual, or motion verdict.
+Missing tooling is recorded as blocked, never silently passed.
 
 ## Reference map
 
@@ -116,7 +152,10 @@ motion verdict. Missing tooling is recorded as blocked, never silently passed.
 - `references/reference-library.md`: curated reference reuse
 - `references/design-guidance.md`: bounded deterministic heuristic retrieval
 - `references/data-visualization.md`: chart and analytical visualization decisions inside product UI
+- `references/mobile-web.md`: browser/PWA-on-phone platform behavior
 - `references/native-mobile.md`: platform-aware native/mobile UI contract
+- `references/react-native-motion.md`: conditional React Native/Expo motion engineering
+- `references/direct-manipulation.md`: drag/swipe/gesture continuity and velocity mechanics
 - `references/durable-design-contract.md`: optional persistent multi-surface design truth
 - `references/quality-stack.md`: Direction -> Baseline -> Craft -> Gate
 - `references/taste-workflow.md`: art direction, genre, macrostructure, anti-slop
@@ -126,7 +165,8 @@ motion verdict. Missing tooling is recorded as blocked, never silently passed.
 - `references/baseline-ui.md`: baseline interaction/layout/typography floor
 - `references/micro-craft.md`: optical and component-level finish
 - `references/design-first-prompting.md`: locked UI generation/spec prompt
-- `references/motion-workflows.md`: motion craft routing
+- `references/motion-build.md`: motion construction gate and implementation sequence
+- `references/motion-workflows.md`: motion opportunities/audit/review routing
 - `references/motion-performance.md`: live animation profiling/repair
 - `references/motion-vocabulary.md`: effect-name reverse lookup
 - `references/verification-contract.md`: completion evidence
@@ -141,7 +181,10 @@ motion verdict. Missing tooling is recorded as blocked, never silently passed.
 - references/reference-library.md -- when to read: after source-evidence for standard/deep non-motion surface workflows
 - references/design-guidance.md -- when to read: unresolved chart/native/interaction/text-layout/accessibility guidance question
 - references/data-visualization.md -- when to read: target contains charts or analytical visualizations
-- references/native-mobile.md -- when to read: native/mobile target or platform-specific mobile behavior
+- references/mobile-web.md -- when to read: browser/PWA target has material phone/tablet platform behavior
+- references/native-mobile.md -- when to read: actual native/mobile target or platform-specific native behavior
+- references/react-native-motion.md -- when to read: React Native/Expo motion build/review/optimization reasoning
+- references/direct-manipulation.md -- when to read: direct drag/swipe/throw/reorder/sheet gesture mechanics
 - references/durable-design-contract.md -- when to read: explicit multi-surface design-system/design-contract persistence
 - references/quality-stack.md -- when to read: improve-existing and final polish phases
 - references/taste-workflow.md -- when to read: direction, restyle, redesign, new surface
@@ -151,6 +194,7 @@ motion verdict. Missing tooling is recorded as blocked, never silently passed.
 - references/baseline-ui.md -- when to read: baseline quality pass
 - references/micro-craft.md -- when to read: craft quality pass
 - references/design-first-prompting.md -- when to read: design-spec
+- references/motion-build.md -- when to read: motion-build
 - references/motion-workflows.md -- when to read: motion-opportunities; motion-audit; motion-review
 - references/motion-performance.md -- when to read: motion-optimize
 - references/motion-vocabulary.md -- when to read: motion-name
