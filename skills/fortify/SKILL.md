@@ -5,7 +5,7 @@ description: >
   inventories, error recovery, empty/loading/offline states, first-run, i18n,
   latency, and realistic worst-case data. Use for edge cases, "what happens
   when", "try to break this UI", or `worst-case <surface>` stress testing.
-version: 1.4.0
+version: 1.4.1
 user-invocable: true
 ---
 
@@ -21,6 +21,11 @@ Any workflow that needs a screen, route, component, fixture, or rendered surface
 must have a concrete resolvable target before references are loaded. If the target
 does not exist, surface the missing target and stop. Do not invent a surface,
 fixture location, rendered result, or success claim.
+
+Required workflow references are authoritative dependencies. If a declared
+required reference cannot be resolved or read, surface the exact missing reference
+and stop before reconstructing its guidance from memory, generic knowledge, or an
+adjacent reference. Do not continue that workflow or claim successful results.
 
 ## Routes
 
