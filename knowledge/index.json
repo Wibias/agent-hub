@@ -476,7 +476,7 @@
       ],
       "status": "active",
       "canonicalId": null,
-      "contentHash": "078b96ef2340d8732ded345aa70f25368d35a6a2686cf306ac0acade1b23ceb1"
+      "contentHash": "e8d1d61dda555eb3cfe95d0e97c0d425015d8dca44edc3e9b6bea980405b22c9"
     },
     {
       "id": "agents/github-delivery",
