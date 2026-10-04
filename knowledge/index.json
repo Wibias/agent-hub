@@ -337,7 +337,7 @@
       "harness": "agents",
       "scope": "global",
       "name": "design-with-ai",
-      "description": "Canonical default visible-UI design owner for intentional, anti-slop product surfaces. Use for generic look-better/polish and visual-hierarchy requests, surface audits, restyles, redesigns, new product UI, product-UI charts/data visualization, native/mobile UI, design specs/prompts, motion opportunities/audits/reviews, animation performance, or naming a motion effect. Commands: audit-surface, improve-existing, restyle-existing, redesign-existing, build-product-surface, design-spec, motion-opportunities, motion-audit, motion-review, motion-optimize, motion-name. Not for backend-only work, standalone analytical/report chart generation, API/module interface design (use codebase-design), copy-only edits, general code review, or explicit impeccable invocations.",
+      "description": "Canonical default visible-UI design owner for intentional, anti-slop product surfaces. Use for generic look-better/polish and visual-hierarchy requests, surface audits, restyles, redesigns, new product UI, product-UI charts/data visualization, native/mobile UI, mobile-web/PWA UI, design specs/prompts, building motion, motion opportunities/audits/reviews, animation performance, or naming a motion effect. Commands: audit-surface, improve-existing, restyle-existing, redesign-existing, build-product-surface, design-spec, motion-build, motion-opportunities, motion-audit, motion-review, motion-optimize, motion-name. Not for backend-only work, standalone analytical/report chart generation, API/module interface design (use codebase-design), copy-only edits, general code review, or explicit impeccable invocations.",
       "tags": [
         "design",
         "with",
@@ -355,7 +355,7 @@
       ],
       "status": "active",
       "canonicalId": null,
-      "contentHash": "7a9a4edaab7eb6102925039ec75c177d077bd12e0634ea8a831833541b1444ab"
+      "contentHash": "b3b2c193a4a497bc1fca3020a65ce3c4e3d72cc95fb5e75219a06a8192497982"
     },
     {
       "id": "agents/diagnose",
@@ -460,23 +460,23 @@
       "harness": "agents",
       "scope": "global",
       "name": "fortify",
-      "description": "Harden designs for real-world use outside the happy path: state inventories, error recovery, empty/loading/offline states, first-run, stress tests, i18n readiness, and latency. Use for edge cases, \"what happens when\", \"what if the user\", harden this design, or failure-mode review.",
+      "description": "Harden visible product UI for real-world use outside the happy path: state inventories, error recovery, empty/loading/offline states, first-run, i18n, latency, and realistic worst-case data. Use for edge cases, \"what happens when\", \"try to break this UI\", or `worst-case <surface>` stress testing.",
       "tags": [
         "fortify"
       ],
       "triggers": [
-        "Harden designs for real-world use outside the happy path: state inventories",
+        "Harden visible product UI for real-world use outside the happy path: state inventories",
         "error recovery",
         "empty/loading/offline states",
         "first-run",
-        "stress tests",
-        "i18n readiness",
-        "and latency.",
+        "i18n",
+        "latency",
+        "and realistic worst-case data.",
         "edge cases"
       ],
       "status": "active",
       "canonicalId": null,
-      "contentHash": "cb5e6ced27979254c66186b5d641348a1aa18c3e8ab850551be28bdcadf31382"
+      "contentHash": "e8d1d61dda555eb3cfe95d0e97c0d425015d8dca44edc3e9b6bea980405b22c9"
     },
     {
       "id": "agents/github-delivery",
@@ -1317,6 +1317,32 @@
       "status": "active",
       "canonicalId": null,
       "contentHash": "a828e3baff3245ca07854d2301867e4c5067c1b0576649c9d88abdf1ccca838d"
+    },
+    {
+      "id": "agents/write-swift",
+      "path": "~/.agents/skills/write-swift/SKILL.md",
+      "type": "skill",
+      "harness": "agents",
+      "scope": "global",
+      "name": "write-swift",
+      "description": "Canonical Swift engineering owner. Use for writing, reviewing, refactoring, or migrating Swift; data modeling/value semantics; protocols/generics; errors; Swift concurrency, actors, Sendable, cancellation, and data races; Swift testing; ARC/memory; and Swift performance. Durable language principles live here. Version-sensitive compiler, SwiftPM, Xcode, SDK, framework, or newly introduced API facts compose with source-driven-development and current official Swift sources instead of being frozen as timeless guidance.",
+      "tags": [
+        "write",
+        "swift"
+      ],
+      "triggers": [
+        "Canonical Swift engineering owner.",
+        "writing",
+        "reviewing",
+        "refactoring",
+        "or migrating Swift",
+        "data modeling/value semantics",
+        "protocols/generics",
+        "errors"
+      ],
+      "status": "active",
+      "canonicalId": null,
+      "contentHash": "ee7f620ac8829beb879bb47bc5b5d8e5a498fa3f66ffd79bfba33eb593a09832"
     },
     {
       "id": "agents/writing-ticks",
