@@ -72,12 +72,13 @@ async function fixture() {
   return { root, skillRoot, caseIds: rows.filter((row) => row.id !== 'model_config').map((row) => row.id) };
 }
 
-function receipt(slot, model, revision, caseIds) {
+function receipt(slot, model, revision, skillDigest, caseIds) {
   return {
     skill: 'demo',
     slot,
     model,
     revision,
+    skill_digest: skillDigest,
     result: 'pass',
     cases: caseIds.map((id) => ({
       id,
@@ -92,9 +93,14 @@ async function evidenceDir(root, caseIds, options = {}) {
   const dir = path.join(root, options.name || 'reviews');
   await mkdir(dir, { recursive: true });
   const revision = '0123456789abcdef0123456789abcdef01234567';
+  const structural = await validateSkill({ skillRoot: path.join(root, 'demo') });
+  if (!structural.ok || !structural.skill_digest) {
+    throw new Error(`fixture structural validation failed: ${structural.errors.join('\n')}`);
+  }
+  const skillDigest = structural.skill_digest;
   await writeFile(
     path.join(dir, 'strong.json'),
-    `${JSON.stringify(receipt('strong', 'gpt-5.6-sol', revision, caseIds), null, 2)}\n`,
+    `${JSON.stringify(receipt('strong', 'gpt-5.6-sol', revision, skillDigest, caseIds), null, 2)}\n`,
     'utf8',
   );
 
@@ -106,6 +112,7 @@ async function evidenceDir(root, caseIds, options = {}) {
         'weaker',
         'gpt-5.6-luna',
         options.weakerRevision || revision,
+        skillDigest,
         weakerIds,
       ), null, 2)}\n`,
       'utf8',
@@ -154,6 +161,27 @@ test('complete validation rejects review receipts from different revisions', asy
 
   assert.equal(result.ok, false);
   assert.ok(result.errors.some((message) => message.includes('same committed revision')));
+});
+
+test('complete validation keeps receipts valid after unrelated repository content changes', async () => {
+  const { root, skillRoot, caseIds } = await fixture();
+  const runEvidence = await evidenceDir(root, caseIds, { name: 'unrelated-change' });
+  await writeFile(path.join(root, 'unrelated-generated-index.json'), '{"changed":true}\n', 'utf8');
+
+  const result = await validateSkill({ skillRoot, runEvidence });
+
+  assert.equal(result.ok, true, result.errors.join('\n'));
+});
+
+test('complete validation rejects receipts after target skill content changes', async () => {
+  const { root, skillRoot, caseIds } = await fixture();
+  const runEvidence = await evidenceDir(root, caseIds, { name: 'skill-change' });
+  await writeFile(path.join(skillRoot, 'new-contract-note.md'), 'material skill change\n', 'utf8');
+
+  const result = await validateSkill({ skillRoot, runEvidence });
+
+  assert.equal(result.ok, false);
+  assert.ok(result.errors.some((message) => message.includes('skill_digest does not match the current target skill')));
 });
 
 test('complete validation accepts two compact passing review receipts', async () => {

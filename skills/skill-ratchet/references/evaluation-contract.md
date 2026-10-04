@@ -104,20 +104,33 @@ Skill Ratchet scripts never launch either model.
 Both reviewers must:
 
 1. review the same committed Git revision;
-2. use distinct concrete model identifiers;
-3. read the same canonical case set;
-4. review every declared non-config case exactly once;
-5. write an independent receipt;
-6. mark the overall receipt `pass` only when every case passes;
-7. avoid modifying the target, cases, regressions, or each other's receipt.
+2. record the exact `skill_digest` printed by structural validation;
+3. use distinct concrete model identifiers;
+4. read the same canonical case set;
+5. review every declared non-config case exactly once;
+6. write an independent receipt;
+7. mark the overall receipt `pass` only when every case passes;
+8. avoid modifying the target, cases, regressions, or each other's receipt.
 
 The strong review is not an orchestrator for the weaker review. The weaker review
 must not inherit the strong review's conclusions. Both may read the same
 repository state, but their judgments are independent.
 
 If either review fails or blocks, repair the target outside qualification and
-rerun structural validation plus both reviews against the same new commit. Never
-combine receipts from different revisions.
+rerun structural validation plus both reviews against the repaired target's new
+skill digest. Never combine receipts from different revisions or digests.
+
+The repository revision is provenance for the shared review context. The
+`skill_digest` is the durable identity of the qualified target. Unrelated
+repository commits after a passing review do not invalidate receipts when the
+target skill digest is unchanged. Any change inside the target skill tree
+changes the digest and requires fresh reviews.
+
+Structural validation computes the digest deterministically from the target
+skill tree: normalized relative paths plus file contents and symlink targets,
+sorted by path. It excludes only `.git`, `node_modules`, `.DS_Store`, and
+`Thumbs.db`. This keeps the identity local to the skill while avoiding VCS,
+dependency-install, and OS metadata churn.
 
 ## 4. Regressions
 
@@ -163,6 +176,7 @@ Each receipt has this shape:
   "slot": "strong",
   "model": "concrete-model-id",
   "revision": "0123456789abcdef0123456789abcdef01234567",
+  "skill_digest": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
   "result": "pass",
   "cases": [
     {
@@ -182,6 +196,8 @@ The complete validator requires:
 - slots matching their filenames;
 - distinct concrete models;
 - the same full 40-character Git revision;
+- the same 64-character `skill_digest` in both receipts;
+- a receipt digest that matches the current target skill digest;
 - every canonical non-config case exactly once in each receipt;
 - non-empty evidence notes;
 - overall `pass` and per-case `pass` in both receipts.
@@ -225,6 +241,8 @@ A non-trivial qualification is complete only when:
 - the weaker review covers every declared non-config case exactly once;
 - both reviews name distinct concrete models;
 - both reviews name the same full Git revision;
+- both reviews name the same structural `skill_digest`;
+- that digest still matches the current target skill;
 - every reviewed case passes in both receipts;
 - neither review relies on hidden reasoning or self-report as evidence;
 - qualification did not expand into manual benchmark replay or synthetic fixture construction;
