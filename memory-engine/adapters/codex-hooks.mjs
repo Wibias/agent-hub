@@ -16,6 +16,9 @@ import {
   formatMemoryRecallContext,
   formatMemoryRecallContextDetailed,
 } from './recall-context.mjs';
+import {
+  selectCodexAuthoritativeRecall,
+} from './codex-recall-context-selection.mjs';
 import { recallTelemetryRunId } from '../recall-observability.mjs';
 
 function nonEmptyString(value) {
@@ -1145,6 +1148,7 @@ export function createCodexMemoryHookAdapter({
   candidateCapture = false,
   diagnoseRecall = null,
   healthCheck = null,
+  recallRelevanceJudge = null,
   clock = () => new Date().toISOString(),
   git = null,
   maxContextBytes = 8_192,
@@ -1172,6 +1176,12 @@ export function createCodexMemoryHookAdapter({
   }
   if (healthCheck !== null && typeof healthCheck !== 'function') {
     throw new TypeError('healthCheck must be a function or null');
+  }
+  if (
+    recallRelevanceJudge !== null
+    && typeof recallRelevanceJudge !== 'function'
+  ) {
+    throw new TypeError('recallRelevanceJudge must be a function or null');
   }
   if (typeof clock !== 'function') {
     throw new TypeError('clock must be a function');
@@ -1738,10 +1748,12 @@ export function createCodexMemoryHookAdapter({
 
         const recalledItems = recalled.result?.items ?? [];
         const recalledConflicts = recalled.result?.conflicts ?? [];
-        const reliance = evaluateReliance({
+        const reliance = await selectCodexAuthoritativeRecall({
+          query: event.prompt,
           items: recalledItems,
           conflicts: recalledConflicts,
-          use: 'answer',
+          evaluateReliance,
+          relevanceJudge: recallRelevanceJudge,
         });
 
         const conflictedIds = new Set();

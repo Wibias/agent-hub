@@ -13,6 +13,12 @@ import {
   createIsolatedCodexEnv,
   prepareIsolatedCodexHome,
 } from '../memory-engine/codex-memory-behavioral-eval.mjs';
+import {
+  parseCodexExecJsonUsage,
+} from '../memory-engine/codex-exec-usage.mjs';
+import {
+  buildCodexIsolatedJudgeExecArgs,
+} from '../memory-engine/codex-isolated-judge-exec.mjs';
 
 function nonEmpty(value) {
   return typeof value === 'string' && value.trim().length > 0;
@@ -156,24 +162,22 @@ export async function createIsolatedCodexJsonJudge({
     ].join(':');
 
     let sequence = 0;
+    let lastUsage = null;
     const judge = async (prompt) => {
       if (!nonEmpty(prompt)) {
         throw new TypeError('judge prompt must be a non-empty string');
       }
+      // Never leak the previous call's usage into telemetry for a failed
+      // retry that produced no turn.completed event.
+      lastUsage = null;
       sequence += 1;
       const resultPath = join(root, 'result-' + sequence + '.json');
-      const args = [
-        'exec',
-        '--cd',
+      const args = buildCodexIsolatedJudgeExecArgs({
         workspace,
-        '--ephemeral',
-        '--output-last-message',
         resultPath,
-        '-c',
-        'model_reasoning_effort="' + reasoningEffort + '"',
-      ];
-      if (model) args.push('--model', model);
-      args.push('-');
+        reasoningEffort,
+        model,
+      });
 
       const executed = await runProcess(executable, args, {
         cwd: workspace,
@@ -190,12 +194,16 @@ export async function createIsolatedCodexJsonJudge({
           ].filter(Boolean).join(': '),
         );
       }
+      lastUsage = parseCodexExecJsonUsage(executed.stdout);
       return readFile(resultPath, 'utf8');
     };
 
     return {
       judge,
       evaluatorId,
+      lastUsage() {
+        return lastUsage;
+      },
       isolation: {
         freshCodexHome: true,
         copiedAuthOnly: true,

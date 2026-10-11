@@ -3,6 +3,9 @@ import {
   readFile,
 } from 'node:fs/promises';
 import { resolve } from 'node:path';
+import {
+  inspectCodexPassiveMemoryHookConfiguration,
+} from './codex-passive-hook-audit.mjs';
 
 function normalizeEntryType(type) {
   if (type === 'file' || type === 'directory') return type;
@@ -318,10 +321,14 @@ export async function auditCodexState({ codexHome }) {
 
   const hookRead = await readHooks(resolvedHome);
   const agentHubHook = inspectAgentHubHookConfiguration(hookRead.hooks);
+  const passiveMemoryHook = inspectCodexPassiveMemoryHookConfiguration(
+    hookRead.hooks,
+  );
 
   return {
     codexHome: resolvedHome,
     agentHubHook,
+    passiveMemoryHook,
     hookReadError: hookRead.error,
     directMemory,
     conversationState,

@@ -182,7 +182,7 @@ function normalizeCapturePayload(payload) {
 function normalizeClaimPayload(payload) {
   requireAllowedKeys(
     payload,
-    new Set(['evidence_id', 'claim', 'lifecycle']),
+    new Set(['evidence_id', 'evidence_ids', 'claim', 'lifecycle']),
   );
 
   const claim = requireObject(payload.claim);
@@ -224,8 +224,23 @@ function normalizeClaimPayload(payload) {
     normalizedClaim.state = requireString(claim.state);
   }
 
+  const evidenceId = requireString(payload.evidence_id);
+  const evidenceIds = payload.evidence_ids === undefined
+    ? [evidenceId]
+    : stringArray(payload.evidence_ids);
+  if (evidenceIds.length < 1 || evidenceIds.length > 10) {
+    fault('invalid_request', 'Invalid memory protocol request.');
+  }
+  if (new Set(evidenceIds).size !== evidenceIds.length) {
+    fault('invalid_request', 'Invalid memory protocol request.');
+  }
+  if (!evidenceIds.includes(evidenceId)) {
+    fault('invalid_request', 'Invalid memory protocol request.');
+  }
+
   return {
-    evidenceId: requireString(payload.evidence_id),
+    evidenceId,
+    evidenceIds,
     claim: normalizedClaim,
     lifecycle: {
       supersedes: stringArray(lifecycle.supersedes),
@@ -349,10 +364,11 @@ export function createMemoryProtocol({
 
   async function assertClaim(payload) {
     const normalized = normalizeClaimPayload(payload);
-    const evidence = memory.getEvidence(normalized.evidenceId);
-    if (!evidence) {
+    const evidenceSet = normalized.evidenceIds.map((id) => memory.getEvidence(id));
+    if (evidenceSet.some((row) => !row)) {
       throw new Error('claim evidence does not exist');
     }
+    const evidence = evidenceSet.find((row) => row.id === normalized.evidenceId);
 
     if (authorizeClaim === null) {
       fault(
@@ -365,6 +381,7 @@ export function createMemoryProtocol({
     try {
       authorized = await authorizeClaim({
         evidence,
+        evidenceSet,
         claim: normalized.claim,
         lifecycle: normalized.lifecycle,
       }) === true;

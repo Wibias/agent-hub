@@ -100,8 +100,7 @@ function validateProposal(value) {
   };
 }
 
-export function parseEvidenceBoundExtraction(text) {
-  const value = parseJson(text);
+function normalizeExtractionObject(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new TypeError('evidence extraction response must be an object');
   }
@@ -120,33 +119,31 @@ export function parseEvidenceBoundExtraction(text) {
   };
 }
 
+export function parseEvidenceBoundExtraction(text) {
+  return normalizeExtractionObject(parseJson(text));
+}
+
 export function evidenceExtractionFingerprint({
   kind,
   canonicalFact,
-  evidenceIds,
 }) {
   if (!MEMORY_KINDS.has(kind)) {
     throw new TypeError('kind must be preference, procedure, or knowledge');
   }
   const fact = normalizeFact(canonicalFact);
   if (!fact) throw new TypeError('canonicalFact must be a non-empty string');
-  if (!Array.isArray(evidenceIds) || evidenceIds.length < 1) {
-    throw new TypeError('evidenceIds must contain at least one evidence id');
-  }
-  const ids = [...new Set(evidenceIds.map((id) => {
-    if (!nonEmptyString(id)) {
-      throw new TypeError('evidenceIds entries must be non-empty strings');
-    }
-    return id.trim();
-  }))].sort();
-
   return createHash('sha256')
     .update(kind)
     .update('\0')
     .update(fact.normalize('NFKC').toLowerCase())
-    .update('\0')
-    .update(ids.join('\0'))
     .digest('hex');
+}
+
+function isFailedToolObservation(item) {
+  return (
+    item?.authority_class === 'tool_observation'
+    && item?.metadata?.tool_outcome === 'failure'
+  );
 }
 
 function evidenceMapForScope({ evidence, projectId, branch }) {
@@ -184,14 +181,7 @@ export function validateEvidenceBoundExtraction({
 }) {
   const normalized = typeof extraction === 'string'
     ? parseEvidenceBoundExtraction(extraction)
-    : {
-        memories: Array.isArray(extraction?.memories)
-          ? extraction.memories.map(validateProposal)
-          : (() => { throw new TypeError('extraction.memories must be an array'); })(),
-      };
-  if (normalized.memories.length > 5) {
-    throw new TypeError('memories must contain at most 5 proposals');
-  }
+    : normalizeExtractionObject(extraction);
 
   const byId = evidenceMapForScope({ evidence, projectId, branch });
   const memories = normalized.memories.map((memory) => {
@@ -206,6 +196,9 @@ export function validateEvidenceBoundExtraction({
       }
       if (!ELIGIBLE_AUTHORITIES.has(item.authority_class)) {
         throw new Error('cited evidence authority is not eligible for extraction: ' + id);
+      }
+      if (isFailedToolObservation(item)) {
+        throw new Error('failed tool observation is not eligible for extraction: ' + id);
       }
       return item;
     });
@@ -222,7 +215,6 @@ export function validateEvidenceBoundExtraction({
       fingerprint: evidenceExtractionFingerprint({
         kind: memory.kind,
         canonicalFact: memory.canonical_fact,
-        evidenceIds: memory.evidence_ids,
       }),
     };
   });
@@ -242,11 +234,15 @@ function promptEvidence({ evidence, projectId, branch }) {
     if (item.project_id !== projectId || item.branch !== branch) continue;
     if (item.sensitivity === 'secret_redacted') continue;
     if (!ELIGIBLE_AUTHORITIES.has(item.authority_class)) continue;
+    if (isFailedToolObservation(item)) continue;
     if (!nonEmptyString(item.content_redacted)) continue;
     selected.push({
       id: item.id,
       authority: item.authority_class,
       source_kind: item.source_kind ?? null,
+      ...(item.authority_class === 'tool_observation'
+        ? { tool_outcome: item.metadata?.tool_outcome ?? 'unknown' }
+        : {}),
       content: item.content_redacted,
     });
   }
@@ -292,6 +288,15 @@ export async function extractEvidenceBoundMemories({
   if (typeof judge !== 'function') {
     throw new TypeError('judge must be a function');
   }
+  const eligible = promptEvidence({ evidence, projectId, branch });
+  if (eligible.length === 0) {
+    return {
+      policy_version: EVIDENCE_EXTRACTION_POLICY_VERSION,
+      project_id: projectId,
+      branch,
+      memories: [],
+    };
+  }
   const prompt = buildEvidenceBoundExtractionPrompt({
     projectId,
     branch,
@@ -313,4 +318,80 @@ export async function extractEvidenceBoundMemories({
     branch,
     evidence,
   });
+}
+
+export function persistEvidenceBoundExtraction({
+  memory,
+  extraction,
+  evaluatorId,
+  createdAt = new Date().toISOString(),
+}) {
+  if (
+    !memory
+    || typeof memory !== 'object'
+    || typeof memory.recordEvidenceBoundProposal !== 'function'
+  ) {
+    throw new TypeError(
+      'memory must support recordEvidenceBoundProposal',
+    );
+  }
+  if (!extraction || typeof extraction !== 'object' || Array.isArray(extraction)) {
+    throw new TypeError('extraction must be a validated extraction result');
+  }
+  if (extraction.policy_version !== EVIDENCE_EXTRACTION_POLICY_VERSION) {
+    throw new Error('unsupported evidence extraction policy version');
+  }
+  if (!nonEmptyString(extraction.project_id)) {
+    throw new TypeError('extraction.project_id must be a non-empty string');
+  }
+  if (!nonEmptyString(extraction.branch)) {
+    throw new TypeError('extraction.branch must be a non-empty string');
+  }
+  if (!Array.isArray(extraction.memories) || extraction.memories.length > 5) {
+    throw new TypeError('extraction.memories must contain at most 5 proposals');
+  }
+  if (!nonEmptyString(evaluatorId)) {
+    throw new TypeError('evaluatorId must be a non-empty string');
+  }
+  if (!nonEmptyString(createdAt)) {
+    throw new TypeError('createdAt must be a non-empty string');
+  }
+
+  const proposals = extraction.memories.map((proposal) => {
+    if (!proposal || typeof proposal !== 'object' || Array.isArray(proposal)) {
+      throw new TypeError('extraction memory must be an object');
+    }
+    if (!MEMORY_KINDS.has(proposal.kind)) {
+      throw new TypeError('extraction memory has unsupported kind');
+    }
+    if (!nonEmptyString(proposal.canonical_fact)) {
+      throw new TypeError('extraction memory canonical_fact must be non-empty');
+    }
+    if (!Array.isArray(proposal.evidence_ids) || proposal.evidence_ids.length < 1) {
+      throw new TypeError('extraction memory evidence_ids must be non-empty');
+    }
+    if (!/^[0-9a-f]{64}$/u.test(proposal.fingerprint ?? '')) {
+      throw new TypeError('extraction memory fingerprint must be lowercase SHA-256');
+    }
+
+    return memory.recordEvidenceBoundProposal({
+      id: 'evidence-proposal:' + proposal.fingerprint,
+      projectId: extraction.project_id,
+      branch: extraction.branch,
+      kind: proposal.kind,
+      canonicalFact: proposal.canonical_fact,
+      evidenceIds: proposal.evidence_ids,
+      fingerprint: proposal.fingerprint,
+      policyVersion: extraction.policy_version,
+      evaluatorId,
+      createdAt,
+    });
+  });
+
+  return {
+    policy_version: extraction.policy_version,
+    project_id: extraction.project_id,
+    branch: extraction.branch,
+    proposals,
+  };
 }

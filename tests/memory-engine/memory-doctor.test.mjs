@@ -171,6 +171,66 @@ test('database doctor summarizes recent pipeline run history without mutating it
   await rm(root, { recursive: true, force: true });
 });
 
+test('database doctor reports the most recently active overlapping pipeline run', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'agent-hub-memory-doctor-overlap-'));
+  const dbPath = await createHealthyFixtureDb(root);
+
+  const memory = new MemoryEngine({ dbPath });
+  try {
+    memory.startPipelineRun({
+      id: 'pipeline-run:evidence-bound',
+      projectId: 'github.com/Wibias/agent-hub',
+      branch: 'main',
+      revisionSha: 'e'.repeat(40),
+      trigger: 'Stop:evidence_bound',
+      startedAt: '2026-10-03T09:00:00.000Z',
+    });
+    memory.startPipelineRun({
+      id: 'pipeline-run:candidate',
+      projectId: 'github.com/Wibias/agent-hub',
+      branch: 'main',
+      revisionSha: 'e'.repeat(40),
+      trigger: 'Stop',
+      startedAt: '2026-10-03T09:00:01.000Z',
+    });
+    memory.finishPipelineRun({
+      id: 'pipeline-run:candidate',
+      status: 'drained',
+      finishedAt: '2026-10-03T09:00:02.000Z',
+      durationMs: 1000,
+      rounds: 1,
+      promotedCount: 0,
+      stageCounts: {},
+      candidateRefs: [],
+    });
+    memory.finishPipelineRun({
+      id: 'pipeline-run:evidence-bound',
+      status: 'drained',
+      finishedAt: '2026-10-03T09:00:30.000Z',
+      durationMs: 30000,
+      rounds: 1,
+      promotedCount: 1,
+      stageCounts: { evidence_promotion: { promoted: 1 } },
+      candidateRefs: [],
+    });
+  } finally {
+    memory.close();
+  }
+
+  const result = inspectMemoryDatabase({
+    dbPath,
+    projectId: 'github.com/Wibias/agent-hub',
+    branch: 'main',
+  });
+
+  assert.equal(result.recentPipelineRuns, 2);
+  assert.equal(result.lastPipelineRun.id, 'pipeline-run:evidence-bound');
+  assert.equal(result.lastPipelineRun.trigger, 'Stop:evidence_bound');
+  assert.equal(result.lastPipelineRun.promoted_count, 1);
+
+  await rm(root, { recursive: true, force: true });
+});
+
 test('database doctor treats a pre-candidate-ledger database as degraded but structurally valid', async () => {
   const root = await mkdtemp(join(tmpdir(), 'agent-hub-memory-doctor-legacy-db-'));
   const dbPath = await createHealthyFixtureDb(root);

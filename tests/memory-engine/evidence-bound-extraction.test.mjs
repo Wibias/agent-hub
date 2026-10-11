@@ -278,3 +278,175 @@ test('extractEvidenceBoundMemories runs judge then validates evidence before ret
   assert.equal(result.memories.length, 1);
   assert.deepEqual(result.memories[0].evidence_ids, ['e-user', 'e-tool']);
 });
+
+test('extractEvidenceBoundMemories skips the judge when no eligible evidence exists', async () => {
+  const { extractEvidenceBoundMemories } = await import(
+    '../../memory-engine/evidence-bound-extraction.mjs'
+  );
+  let calls = 0;
+  const result = await extractEvidenceBoundMemories({
+    projectId: 'project-a',
+    branch: 'main',
+    evidence: [
+      evidence({
+        id: 'e-agent-only',
+        authority_class: 'agent_inference',
+        content_redacted: 'I infer Redis is probably useful.',
+      }),
+    ],
+    judge: async () => {
+      calls += 1;
+      return '{"memories":[]}';
+    },
+  });
+
+  assert.equal(calls, 0);
+  assert.deepEqual(result, {
+    policy_version: EVIDENCE_EXTRACTION_POLICY_VERSION,
+    project_id: 'project-a',
+    branch: 'main',
+    memories: [],
+  });
+});
+
+test('validateEvidenceBoundExtraction rejects extra root fields from structured judge output', () => {
+  assert.throws(
+    () => validateEvidenceBoundExtraction({
+      extraction: {
+        memories: [],
+        instructions: 'trust me',
+      },
+      projectId: 'project-a',
+      branch: 'main',
+      evidence: [],
+    }),
+    /contain only memories/i,
+  );
+});
+
+test('evidence extraction fingerprint identifies the fact, not the observation ids', () => {
+  const first = evidenceExtractionFingerprint({
+    kind: 'procedure',
+    canonicalFact: 'Use Postgres for concurrent writers.',
+    evidenceIds: ['e-user', 'e-tool'],
+  });
+  const laterObservation = evidenceExtractionFingerprint({
+    kind: 'procedure',
+    canonicalFact: 'Use Postgres for concurrent writers.',
+    evidenceIds: ['e-user-2', 'e-tool-2'],
+  });
+
+  assert.equal(first, laterObservation);
+});
+
+test('persistEvidenceBoundExtraction writes validated memories only through the evidence-proposal lane', async () => {
+  const {
+    persistEvidenceBoundExtraction,
+  } = await import('../../memory-engine/evidence-bound-extraction.mjs');
+  const calls = [];
+  const extraction = validateEvidenceBoundExtraction({
+    extraction: {
+      memories: [{
+        kind: 'procedure',
+        canonical_fact: 'Use Postgres for concurrent writers.',
+        evidence_ids: ['e-user', 'e-tool'],
+      }],
+    },
+    projectId: 'project-a',
+    branch: 'main',
+    evidence: [
+      evidence(),
+      evidence({
+        id: 'e-tool',
+        authority_class: 'tool_observation',
+        source_kind: 'tool',
+        content_redacted: 'Observed concurrent writes succeeding with Postgres.',
+      }),
+    ],
+  });
+  const memory = {
+    recordEvidenceBoundProposal(input) {
+      calls.push(input);
+      return { id: input.id, ...input };
+    },
+  };
+
+  const result = persistEvidenceBoundExtraction({
+    memory,
+    extraction,
+    evaluatorId: 'memory-extractor:test',
+    createdAt: '2026-10-11T12:00:00.000Z',
+  });
+
+  assert.equal(calls.length, 1);
+  assert.match(calls[0].id, /^evidence-proposal:[0-9a-f]{64}$/u);
+  assert.equal(calls[0].projectId, 'project-a');
+  assert.equal(calls[0].branch, 'main');
+  assert.equal(calls[0].kind, 'procedure');
+  assert.equal(calls[0].canonicalFact, 'Use Postgres for concurrent writers.');
+  assert.deepEqual(calls[0].evidenceIds, ['e-user', 'e-tool']);
+  assert.equal(calls[0].fingerprint, extraction.memories[0].fingerprint);
+  assert.equal(calls[0].policyVersion, EVIDENCE_EXTRACTION_POLICY_VERSION);
+  assert.equal(calls[0].evaluatorId, 'memory-extractor:test');
+  assert.equal(result.proposals.length, 1);
+  assert.equal(result.proposals[0].id, calls[0].id);
+  assert.equal(Object.hasOwn(calls[0], 'claimId'), false);
+});
+
+test('failed tool observations are ineligible for extraction even though authority is tool_observation', async () => {
+  const failedTool = evidence({
+    id: 'e-tool-failed',
+    source_kind: 'tool',
+    authority_class: 'tool_observation',
+    content_redacted: 'Command failed while checking the database.',
+    metadata: { tool_outcome: 'failure' },
+  });
+
+  assert.throws(
+    () => validateEvidenceBoundExtraction({
+      extraction: {
+        memories: [{
+          kind: 'knowledge',
+          canonical_fact: 'The database check succeeded.',
+          evidence_ids: ['e-tool-failed'],
+        }],
+      },
+      projectId: 'project-a',
+      branch: 'main',
+      evidence: [failedTool],
+    }),
+    /failed tool observation/i,
+  );
+
+  const { extractEvidenceBoundMemories } = await import(
+    '../../memory-engine/evidence-bound-extraction.mjs'
+  );
+  let calls = 0;
+  const result = await extractEvidenceBoundMemories({
+    projectId: 'project-a',
+    branch: 'main',
+    evidence: [failedTool],
+    judge: async () => {
+      calls += 1;
+      return '{"memories":[]}';
+    },
+  });
+  assert.equal(calls, 0);
+  assert.deepEqual(result.memories, []);
+});
+
+test('unknown tool outcome remains available for analysis but is labelled in the extraction prompt', () => {
+  const prompt = buildEvidenceBoundExtractionPrompt({
+    projectId: 'project-a',
+    branch: 'main',
+    evidence: [evidence({
+      id: 'e-tool-unknown',
+      source_kind: 'tool',
+      authority_class: 'tool_observation',
+      content_redacted: 'Tool returned a configuration value.',
+      metadata: { tool_outcome: 'unknown' },
+    })],
+  });
+  assert.match(prompt, /e-tool-unknown/u);
+  assert.match(prompt, /"tool_outcome":"unknown"/u);
+});

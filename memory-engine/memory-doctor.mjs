@@ -18,6 +18,7 @@ import {
 
 const REQUIRED_TABLES = Object.freeze([
   'approvals',
+  'claim_evidence',
   'claim_embeddings',
   'claim_fts',
   'claims',
@@ -55,6 +56,9 @@ function baseDatabaseResult({ dbPath, exists, status, error = null }) {
     projectRegistered: null,
     claims: null,
     activeClaims: null,
+    claimEvidenceRows: null,
+    provenanceCoverageComplete: null,
+    provenanceIntegrityViolations: null,
     ftsRows: null,
     lexicalCoverageComplete: null,
     currentEmbeddings: null,
@@ -141,6 +145,9 @@ export function inspectMemoryDatabase({ dbPath, projectId = null, branch = null 
     let pendingCandidates = null;
     let claims = null;
     let activeClaims = null;
+    let claimEvidenceRows = null;
+    let provenanceCoverageComplete = null;
+    let provenanceIntegrityViolations = null;
     let ftsRows = null;
     let lexicalCoverageComplete = null;
     let currentEmbeddings = null;
@@ -175,6 +182,62 @@ export function inspectMemoryDatabase({ dbPath, projectId = null, branch = null 
           .get(projectId, branch),
         'count',
       );
+
+      claimEvidenceRows = scalar(
+        db.prepare(
+          'SELECT COUNT(*) AS count '
+          + 'FROM claim_evidence ce '
+          + 'JOIN claims c ON c.id = ce.claim_id '
+          + 'WHERE c.project_id = ? AND c.branch_scope = ?',
+        ).get(projectId, branch),
+        'count',
+      );
+
+      provenanceIntegrityViolations = scalar(
+        db.prepare(`
+          SELECT COUNT(*) AS count
+          FROM (
+            SELECT c.id
+            FROM claims c
+            LEFT JOIN claim_evidence ce ON ce.claim_id = c.id
+            LEFT JOIN evidence e ON e.id = ce.evidence_id
+            WHERE c.project_id = ? AND c.branch_scope = ?
+            GROUP BY
+              c.id,
+              c.project_id,
+              c.branch_scope,
+              c.created_from_evidence_id
+            HAVING
+              COUNT(ce.evidence_id) = 0
+              OR SUM(CASE WHEN ce.role = 'primary' THEN 1 ELSE 0 END) <> 1
+              OR MAX(CASE WHEN ce.role = 'primary' THEN ce.evidence_id END)
+                 <> c.created_from_evidence_id
+              OR SUM(
+                CASE
+                  WHEN ce.evidence_id IS NOT NULL AND e.id IS NULL THEN 1
+                  ELSE 0
+                END
+              ) > 0
+              OR SUM(
+                CASE
+                  WHEN e.id IS NOT NULL AND e.project_id <> c.project_id THEN 1
+                  ELSE 0
+                END
+              ) > 0
+              OR SUM(
+                CASE
+                  WHEN ce.role = 'supporting'
+                    AND (e.branch IS NULL OR e.branch <> c.branch_scope)
+                    THEN 1
+                  ELSE 0
+                END
+              ) > 0
+          )
+        `).get(projectId, branch),
+        'count',
+      );
+      provenanceCoverageComplete = provenanceIntegrityViolations === 0;
+
       ftsRows = scalar(
         db.prepare('SELECT COUNT(*) AS count FROM claim_fts WHERE project_id = ? AND branch_scope = ?')
           .get(projectId, branch),
@@ -206,7 +269,7 @@ export function inspectMemoryDatabase({ dbPath, projectId = null, branch = null 
           + 'rounds, promoted_count '
           + 'FROM memory_pipeline_runs '
           + 'WHERE project_id = ? AND branch = ? '
-          + 'ORDER BY started_at DESC, id ASC LIMIT 50',
+          + 'ORDER BY COALESCE(finished_at, started_at) DESC, started_at DESC, id ASC LIMIT 50',
         ).all(projectId, branch);
         recentPipelineRuns = runRows.length;
         failedPipelineRuns = runRows.filter(
@@ -223,6 +286,10 @@ export function inspectMemoryDatabase({ dbPath, projectId = null, branch = null 
       }
     }
 
+    const provenanceBroken = (
+      provenanceIntegrityViolations !== null
+      && provenanceIntegrityViolations > 0
+    );
     const degraded = journalMode !== 'wal'
       || candidateLedgerAvailable === false
       || projectRegistered === false
@@ -230,7 +297,7 @@ export function inspectMemoryDatabase({ dbPath, projectId = null, branch = null 
       || semanticCoverageComplete === false;
 
     return {
-      status: degraded ? 'degraded' : 'ok',
+      status: provenanceBroken ? 'broken' : (degraded ? 'degraded' : 'ok'),
       dbPath: resolvedPath,
       exists: true,
       readOnly: true,
@@ -243,6 +310,9 @@ export function inspectMemoryDatabase({ dbPath, projectId = null, branch = null 
       projectRegistered,
       claims,
       activeClaims,
+      claimEvidenceRows,
+      provenanceCoverageComplete,
+      provenanceIntegrityViolations,
       ftsRows,
       lexicalCoverageComplete,
       currentEmbeddings,
@@ -256,7 +326,7 @@ export function inspectMemoryDatabase({ dbPath, projectId = null, branch = null 
       modelId: E5_MODEL_ID,
       modelRevision: E5_MODEL_REVISION,
       dimensions: E5_DIMENSIONS,
-      error: null,
+      error: provenanceBroken ? 'claim_provenance_integrity_failed' : null,
     };
   } catch (error) {
     return baseDatabaseResult({
@@ -383,6 +453,7 @@ export async function inspectCodexIntegration({ codexHome, auditState = auditCod
   try {
     const audit = await auditState({ codexHome });
     const hook = audit.agentHubHook;
+    const passiveHook = audit.passiveMemoryHook ?? null;
     const critical = hook?.configured === true
       && hook?.userPromptSubmit === true
       && hook?.flags?.ignoreMemoryEnv === true
@@ -430,6 +501,14 @@ export async function inspectCodexIntegration({ codexHome, auditState = auditCod
         hook,
         hookReadError: null,
         reason: 'agent_decision_capture_incomplete',
+      };
+    }
+    if (passiveHook !== null && passiveHook.configured !== true) {
+      return {
+        status: 'degraded',
+        hook,
+        hookReadError: null,
+        reason: 'passive_run_extraction_incomplete',
       };
     }
     return { status: 'ok', hook, hookReadError: null, reason: null };
