@@ -14,7 +14,7 @@ test('passive hook entries keep prompt/tool synchronous and root Stop asynchrono
     '../../memory-engine/codex-passive-memory-hook-config.mjs'
   );
   const entries = buildCodexPassiveMemoryHookEntries({
-    hubRoot: 'C:/Users/ws/.agents',
+    hubRoot: 'C:/agent-hub-test',
     nodePath: 'C:/Program Files/nodejs/node.exe',
     model: 'gpt-test',
     reasoningEffort: 'high',
