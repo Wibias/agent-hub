@@ -316,6 +316,70 @@ function normalizeRecallRow(row, revisionSha) {
   };
 }
 
+function attachRecallProvenance(db, items) {
+  if (!Array.isArray(items) || items.length === 0) return items;
+
+  const table = db.prepare(`
+    SELECT 1 AS present
+    FROM sqlite_master
+    WHERE type = 'table' AND name = 'claim_evidence'
+  `).get();
+  const withProvenance = (item, provenance) => {
+    const next = { ...item };
+    Object.defineProperty(next, 'provenance', {
+      value: provenance,
+      enumerable: false,
+      configurable: true,
+      writable: false,
+    });
+    return next;
+  };
+
+  if (!table) {
+    return items.map((item) => withProvenance(item, [{
+      evidence: item.evidence,
+      role: 'primary',
+      linked_at: item.claim.created_at,
+    }]));
+  }
+
+  const claimIds = [...new Set(items.map((item) => item?.claim?.id).filter(Boolean))];
+  if (claimIds.length === 0) return items;
+  const placeholders = claimIds.map(() => '?').join(',');
+  const rows = db.prepare(`
+    SELECT ce.claim_id, ce.role, ce.linked_at, e.*
+    FROM claim_evidence ce
+    JOIN evidence e ON e.id = ce.evidence_id
+    WHERE ce.claim_id IN (${placeholders})
+    ORDER BY
+      ce.claim_id ASC,
+      CASE ce.role WHEN 'primary' THEN 0 ELSE 1 END ASC,
+      ce.evidence_id ASC
+  `).all(...claimIds);
+
+  const byClaim = new Map();
+  for (const row of rows) {
+    const provenance = byClaim.get(row.claim_id) ?? [];
+    provenance.push({
+      evidence: normalizeEvidence(row),
+      role: row.role,
+      linked_at: row.linked_at,
+    });
+    byClaim.set(row.claim_id, provenance);
+  }
+
+  return items.map((item) => {
+    const provenance = byClaim.get(item.claim.id) ?? [];
+    const primaries = provenance.filter((row) => row.role === 'primary');
+    const valid = (
+      primaries.length === 1
+      && primaries[0].evidence.id === item.evidence.id
+      && provenance.every((row) => row.evidence.project_id === item.claim.project_id)
+    );
+    return withProvenance(item, valid ? provenance : null);
+  });
+}
+
 function recallConflicts(db, {
   projectId,
   branch,
@@ -624,6 +688,16 @@ function insertClaimAndLifecycle(db, {
     claim.validUntil,
   );
 
+  db.prepare(`
+    INSERT INTO claim_evidence (
+      claim_id, evidence_id, role, linked_at
+    ) VALUES (?, ?, 'primary', ?)
+  `).run(
+    claim.id,
+    claim.createdFromEvidenceId,
+    claim.createdAt,
+  );
+
   for (const targetId of lifecycle.supersedes) {
     const target = db
       .prepare('SELECT project_id, state FROM claims WHERE id = ?')
@@ -822,8 +896,18 @@ export function evaluateReliance({
     if (!claimId) continue;
     byId.set(claimId, item);
 
-    const authority = item.evidence?.authority_class ?? 'unclassified';
-    if (allowedClasses.has(authority)) {
+    const provenance = Object.hasOwn(item, 'provenance')
+      ? item.provenance
+      : [{ evidence: item.evidence, role: 'primary' }];
+    const authorityAllowed = (
+      Array.isArray(provenance)
+      && provenance.length > 0
+      && provenance.every((row) => (
+        row?.evidence
+        && allowedClasses.has(row.evidence.authority_class ?? 'unclassified')
+      ))
+    );
+    if (authorityAllowed) {
       selected.push(item);
       selectedIds.add(claimId);
       authorityAllowedIds.add(claimId);
@@ -1404,6 +1488,21 @@ export class MemoryEngine {
         rejected_by_evidence_id TEXT REFERENCES evidence(id)
       ) STRICT;
 
+      CREATE TABLE IF NOT EXISTS claim_evidence (
+        claim_id TEXT NOT NULL REFERENCES claims(id) ON DELETE CASCADE,
+        evidence_id TEXT NOT NULL REFERENCES evidence(id),
+        role TEXT NOT NULL CHECK (role IN ('primary','supporting')),
+        linked_at TEXT NOT NULL,
+        PRIMARY KEY (claim_id, evidence_id)
+      ) STRICT;
+
+      CREATE UNIQUE INDEX IF NOT EXISTS claim_evidence_one_primary
+      ON claim_evidence (claim_id)
+      WHERE role = 'primary';
+
+      CREATE INDEX IF NOT EXISTS claim_evidence_by_evidence
+      ON claim_evidence (evidence_id, claim_id);
+
       CREATE TABLE IF NOT EXISTS memory_candidates (
         id TEXT PRIMARY KEY,
         project_id TEXT NOT NULL REFERENCES project_registry(project_id),
@@ -1661,6 +1760,65 @@ export class MemoryEngine {
         tokenize = 'unicode61'
       );
     `);
+
+    this.#migrateClaimEvidence();
+  }
+
+  #migrateClaimEvidence() {
+    this.#db.exec('BEGIN IMMEDIATE');
+    try {
+      this.#db.prepare(`
+        INSERT OR IGNORE INTO claim_evidence (
+          claim_id, evidence_id, role, linked_at
+        )
+        SELECT
+          c.id, c.created_from_evidence_id, 'primary', c.created_at
+        FROM claims c
+        WHERE NOT EXISTS (
+          SELECT 1 FROM claim_evidence ce WHERE ce.claim_id = c.id
+        )
+      `).run();
+
+      const invalidPrimary = this.#db.prepare(`
+        SELECT c.id
+        FROM claims c
+        LEFT JOIN claim_evidence ce ON ce.claim_id = c.id
+        GROUP BY c.id, c.created_from_evidence_id
+        HAVING
+          SUM(CASE WHEN ce.role = 'primary' THEN 1 ELSE 0 END) <> 1
+          OR MAX(CASE WHEN ce.role = 'primary' THEN ce.evidence_id END)
+             <> c.created_from_evidence_id
+        LIMIT 1
+      `).get();
+      if (invalidPrimary) {
+        throw new Error(
+          'claim provenance integrity check failed for claim: ' + invalidPrimary.id,
+        );
+      }
+
+      const invalidScope = this.#db.prepare(`
+        SELECT ce.claim_id
+        FROM claim_evidence ce
+        JOIN claims c ON c.id = ce.claim_id
+        JOIN evidence e ON e.id = ce.evidence_id
+        WHERE e.project_id <> c.project_id
+          OR (
+            ce.role = 'supporting'
+            AND (e.branch IS NULL OR e.branch <> c.branch_scope)
+          )
+        LIMIT 1
+      `).get();
+      if (invalidScope) {
+        throw new Error(
+          'claim provenance scope invariant failed for claim: ' + invalidScope.claim_id,
+        );
+      }
+
+      this.#db.exec('COMMIT');
+    } catch (error) {
+      this.#db.exec('ROLLBACK');
+      throw error;
+    }
   }
 
   close() {
@@ -1743,6 +1901,23 @@ export class MemoryEngine {
     return normalizeClaim(
       this.#db.prepare('SELECT * FROM claims WHERE id = ?').get(id),
     );
+  }
+
+  getClaimEvidence(claimId) {
+    assertNonEmptyString(claimId, 'claimId');
+    return this.#db.prepare(`
+      SELECT ce.role, ce.linked_at, e.*
+      FROM claim_evidence ce
+      JOIN evidence e ON e.id = ce.evidence_id
+      WHERE ce.claim_id = ?
+      ORDER BY
+        CASE ce.role WHEN 'primary' THEN 0 ELSE 1 END ASC,
+        ce.evidence_id ASC
+    `).all(claimId).map((row) => ({
+      evidence: normalizeEvidence(row),
+      role: row.role,
+      linked_at: row.linked_at,
+    }));
   }
 
   embeddingDocument({ claimId }) {
@@ -1939,12 +2114,13 @@ export class MemoryEngine {
       if (row) items.push(normalizeRecallRow(row, revisionSha));
     }
 
-    const ids = new Set(items.map((item) => item.claim.id));
+    const materializedItems = attachRecallProvenance(this.#db, items);
+    const ids = new Set(materializedItems.map((item) => item.claim.id));
     return {
       project_id: projectId,
       branch,
       mode,
-      items,
+      items: materializedItems,
       conflicts: recallConflicts(this.#db, {
         projectId,
         branch,
@@ -2374,6 +2550,7 @@ export class MemoryEngine {
       return null;
     }
     const evidence = this.getEvidence(claim.created_from_evidence_id);
+    const provenance = this.getClaimEvidence(claimId);
     const candidateRow = this.#db.prepare(`
       SELECT mc.*
       FROM memory_candidates mc
@@ -2429,6 +2606,7 @@ export class MemoryEngine {
     return {
       claim,
       evidence,
+      provenance,
       candidate,
       relation,
       promotion,
@@ -3011,6 +3189,14 @@ export class MemoryEngine {
           FROM claims
           ORDER BY id
         `).all(),
+        claim_evidence: this.#db.prepare(`
+          SELECT claim_id, evidence_id, role, linked_at
+          FROM claim_evidence
+          ORDER BY
+            claim_id ASC,
+            CASE role WHEN 'primary' THEN 0 ELSE 1 END ASC,
+            evidence_id ASC
+        `).all(),
         lifecycle_events: this.#db.prepare(`
           SELECT
             id, project_id, action, source_claim_id, target_claim_id,
@@ -3126,12 +3312,25 @@ export class MemoryEngine {
       }
     }
 
+    const rawClaimEvidence = payload.claim_evidence === undefined
+      ? payload.claims.map((row) => ({
+          claim_id: row.id,
+          evidence_id: row.created_from_evidence_id,
+          role: 'primary',
+          linked_at: row.created_at,
+        }))
+      : payload.claim_evidence;
+    if (!Array.isArray(rawClaimEvidence)) {
+      throw new TypeError('canonical import claim_evidence must be an array');
+    }
+
     this.#db.exec('BEGIN IMMEDIATE');
     try {
       const occupied = this.#db.prepare(`
         SELECT
           (SELECT COUNT(*) FROM evidence)
           + (SELECT COUNT(*) FROM claims)
+          + (SELECT COUNT(*) FROM claim_evidence)
           + (SELECT COUNT(*) FROM lifecycle_events)
           + (SELECT COUNT(*) FROM conflicts)
           + (SELECT COUNT(*) FROM approvals) AS count
@@ -3143,6 +3342,66 @@ export class MemoryEngine {
     const projectIds = new Set(payload.projects.map((row) => row.project_id));
     const evidenceById = new Map(payload.evidence.map((row) => [row.id, row]));
     const claimById = new Map(payload.claims.map((row) => [row.id, row]));
+
+    const claimEvidenceRows = [];
+    const provenanceKeys = new Set();
+    const provenanceByClaim = new Map();
+    for (const row of rawClaimEvidence) {
+      if (!row || typeof row !== 'object' || Array.isArray(row)) {
+        throw new TypeError('canonical import claim_evidence row must be an object');
+      }
+      assertNonEmptyString(row.claim_id, 'canonical claim_evidence claim_id');
+      assertNonEmptyString(row.evidence_id, 'canonical claim_evidence evidence_id');
+      assertNonEmptyString(row.linked_at, 'canonical claim_evidence linked_at');
+      if (!['primary', 'supporting'].includes(row.role)) {
+        throw new Error('canonical import claim_evidence has invalid role');
+      }
+      const key = row.claim_id + '\0' + row.evidence_id;
+      if (provenanceKeys.has(key)) {
+        throw new Error('canonical import claim_evidence contains duplicate provenance');
+      }
+      provenanceKeys.add(key);
+
+      const linkedClaim = claimById.get(row.claim_id);
+      const linkedEvidence = evidenceById.get(row.evidence_id);
+      if (!linkedClaim || !linkedEvidence) {
+        throw new Error('canonical import claim_evidence has missing provenance');
+      }
+      if (linkedClaim.project_id !== linkedEvidence.project_id) {
+        throw new Error('canonical import claim_evidence crosses project boundary');
+      }
+      if (
+        row.role === 'supporting'
+        && linkedEvidence.branch !== linkedClaim.branch_scope
+      ) {
+        throw new Error('canonical import supporting claim evidence crosses branch boundary');
+      }
+
+      const normalized = {
+        claim_id: row.claim_id,
+        evidence_id: row.evidence_id,
+        role: row.role,
+        linked_at: row.linked_at,
+      };
+      claimEvidenceRows.push(normalized);
+      const rows = provenanceByClaim.get(row.claim_id) ?? [];
+      rows.push(normalized);
+      provenanceByClaim.set(row.claim_id, rows);
+    }
+
+    for (const claimRow of payload.claims) {
+      const provenance = provenanceByClaim.get(claimRow.id) ?? [];
+      const primary = provenance.filter((row) => row.role === 'primary');
+      if (
+        primary.length !== 1
+        || primary[0].evidence_id !== claimRow.created_from_evidence_id
+      ) {
+        throw new Error(
+          'canonical import claim primary provenance does not match created_from_evidence_id: '
+          + claimRow.id,
+        );
+      }
+    }
 
     for (const row of payload.evidence) {
       if (!projectIds.has(row.project_id)) {
@@ -3388,6 +3647,20 @@ export class MemoryEngine {
           row.valid_from,
           row.valid_until,
           row.rejected_by_evidence_id,
+        );
+      }
+
+      const insertClaimEvidence = this.#db.prepare(`
+        INSERT INTO claim_evidence (
+          claim_id, evidence_id, role, linked_at
+        ) VALUES (?, ?, ?, ?)
+      `);
+      for (const row of claimEvidenceRows) {
+        insertClaimEvidence.run(
+          row.claim_id,
+          row.evidence_id,
+          row.role,
+          row.linked_at,
         );
       }
 
@@ -5187,11 +5460,34 @@ export class MemoryEngine {
     return this.getEvidence(preparedEvidence.id);
   }
 
-  assertClaim({ evidenceId, claim, lifecycle = {} }) {
+  assertClaim({ evidenceId, evidenceIds = undefined, claim, lifecycle = {} }) {
     assertNonEmptyString(evidenceId, 'evidenceId');
 
-    const evidence = this.getEvidence(evidenceId);
-    if (!evidence) throw new Error(`unknown evidence: ${evidenceId}`);
+    const normalizedEvidenceIds = evidenceIds === undefined
+      ? [evidenceId]
+      : evidenceIds;
+    if (!Array.isArray(normalizedEvidenceIds)) {
+      throw new TypeError('evidenceIds must be an array');
+    }
+    if (normalizedEvidenceIds.length < 1 || normalizedEvidenceIds.length > 10) {
+      throw new RangeError('evidenceIds must contain between 1 and 10 items');
+    }
+    for (const id of normalizedEvidenceIds) {
+      assertNonEmptyString(id, 'evidenceIds item');
+    }
+    if (new Set(normalizedEvidenceIds).size !== normalizedEvidenceIds.length) {
+      throw new Error('evidenceIds must contain unique evidence ids');
+    }
+    if (!normalizedEvidenceIds.includes(evidenceId)) {
+      throw new Error('evidenceIds must contain evidenceId');
+    }
+
+    const evidenceSet = normalizedEvidenceIds.map((id) => {
+      const evidence = this.getEvidence(id);
+      if (!evidence) throw new Error('unknown evidence: ' + id);
+      return evidence;
+    });
+    const evidence = evidenceSet.find((row) => row.id === evidenceId);
 
     const preparedClaim = prepareClaimInput({
       evidence: {
@@ -5203,6 +5499,114 @@ export class MemoryEngine {
     });
     const preparedLifecycle = prepareLifecycle(preparedClaim.id, lifecycle);
 
+    for (const linkedEvidence of evidenceSet) {
+      if (linkedEvidence.project_id !== preparedClaim.projectId) {
+        throw new Error('claim evidence cannot cross project boundaries');
+      }
+      if (
+        linkedEvidence.id !== evidenceId
+        && linkedEvidence.branch !== preparedClaim.branchScope
+      ) {
+        throw new Error('supporting claim evidence cannot cross branch boundaries');
+      }
+    }
+
+    const existing = this.getClaim(preparedClaim.id);
+    if (existing) {
+      const existingComparable = {
+        id: existing.id,
+        projectId: existing.project_id,
+        kind: existing.kind,
+        subject: existing.subject,
+        predicate: existing.predicate,
+        value: existing.value,
+        state: existing.state,
+        branchScope: existing.branch_scope,
+        createdFromEvidenceId: existing.created_from_evidence_id,
+        createdAt: existing.created_at,
+        validFrom: existing.valid_from,
+        validUntil: existing.valid_until,
+      };
+      const expectedComparable = {
+        id: preparedClaim.id,
+        projectId: preparedClaim.projectId,
+        kind: preparedClaim.kind,
+        subject: preparedClaim.subject,
+        predicate: preparedClaim.predicate,
+        value: preparedClaim.value,
+        state: preparedClaim.state,
+        branchScope: preparedClaim.branchScope,
+        createdFromEvidenceId: preparedClaim.createdFromEvidenceId,
+        createdAt: preparedClaim.createdAt,
+        validFrom: preparedClaim.validFrom,
+        validUntil: preparedClaim.validUntil,
+      };
+      if (!jsonEquivalent(existingComparable, expectedComparable)) {
+        throw new Error('claim id already exists with different canonical content');
+      }
+
+      const existingProvenance = this.getClaimEvidence(preparedClaim.id).map(
+        ({ evidence: row, role }) => ({ evidenceId: row.id, role }),
+      );
+      const expectedProvenance = normalizedEvidenceIds
+        .map((id) => ({
+          evidenceId: id,
+          role: id === evidenceId ? 'primary' : 'supporting',
+        }))
+        .sort((left, right) => (
+          (left.role === right.role)
+            ? left.evidenceId.localeCompare(right.evidenceId)
+            : (left.role === 'primary' ? -1 : 1)
+        ));
+      if (!jsonEquivalent(existingProvenance, expectedProvenance)) {
+        throw new Error('claim provenance does not match existing canonical claim');
+      }
+
+      const lifecycleEvents = this.#db.prepare(`
+        SELECT action, target_claim_id
+        FROM lifecycle_events
+        WHERE source_claim_id = ?
+          AND evidence_id = ?
+          AND created_at = ?
+        ORDER BY action ASC, target_claim_id ASC
+      `).all(preparedClaim.id, evidenceId, preparedClaim.createdAt)
+        .map((row) => ({ action: row.action, target: row.target_claim_id }));
+      const expectedEvents = [
+        ...preparedLifecycle.supersedes.map((target) => ({ action: 'supersede', target })),
+        ...preparedLifecycle.rejects.map((target) => ({ action: 'reject', target })),
+      ].sort((left, right) => (
+        left.action.localeCompare(right.action) || left.target.localeCompare(right.target)
+      ));
+      if (!jsonEquivalent(lifecycleEvents, expectedEvents)) {
+        throw new Error('claim lifecycle does not match existing canonical claim');
+      }
+
+      const conflicts = this.#db.prepare(`
+        SELECT CASE WHEN claim_a = ? THEN claim_b ELSE claim_a END AS target
+        FROM conflicts
+        WHERE project_id = ?
+          AND (claim_a = ? OR claim_b = ?)
+          AND created_by_evidence_id = ?
+          AND created_at = ?
+        ORDER BY target ASC
+      `).all(
+        preparedClaim.id,
+        preparedClaim.projectId,
+        preparedClaim.id,
+        preparedClaim.id,
+        evidenceId,
+        preparedClaim.createdAt,
+      ).map((row) => row.target);
+      if (!jsonEquivalent(conflicts, [...preparedLifecycle.conflictsWith].sort())) {
+        throw new Error('claim conflict lifecycle does not match existing canonical claim');
+      }
+
+      return {
+        evidence: this.getEvidence(evidenceId),
+        claim: existing,
+      };
+    }
+
     this.#db.exec('BEGIN IMMEDIATE');
     try {
       insertClaimAndLifecycle(this.#db, {
@@ -5210,6 +5614,19 @@ export class MemoryEngine {
         evidenceContent: evidence.content_redacted,
         lifecycle: preparedLifecycle,
       });
+      const insertSupporting = this.#db.prepare(`
+        INSERT INTO claim_evidence (
+          claim_id, evidence_id, role, linked_at
+        ) VALUES (?, ?, 'supporting', ?)
+      `);
+      for (const linkedEvidence of evidenceSet) {
+        if (linkedEvidence.id === evidenceId) continue;
+        insertSupporting.run(
+          preparedClaim.id,
+          linkedEvidence.id,
+          preparedClaim.createdAt,
+        );
+      }
       this.#db.exec('COMMIT');
     } catch (error) {
       this.#db.exec('ROLLBACK');
@@ -5361,7 +5778,10 @@ export class MemoryEngine {
       `).all(projectId, branch, mode, revisionSha, revisionSha, limit);
     }
 
-    const items = rows.map((row) => normalizeRecallRow(row, revisionSha));
+    const items = attachRecallProvenance(
+      this.#db,
+      rows.map((row) => normalizeRecallRow(row, revisionSha)),
+    );
     const ids = new Set(items.map((item) => item.claim.id));
     const conflicts = recallConflicts(this.#db, {
       projectId,

@@ -10,13 +10,20 @@ import {
 } from '../memory-engine/codex-native-memory-isolation.mjs';
 import { runMemoryDoctor } from '../memory-engine/memory-doctor.mjs';
 import {
-  installCodexMemoryHooks,
+  planCodexMemoryHooks,
 } from './install-codex-memory-hooks.mjs';
+import {
+  createCodexHostMemoryHookInstaller,
+} from './codex-host-memory-hook-installer.mjs';
 import {
   planLegacyCodexProfileRetirement,
   retireLegacyCodexProfiles,
 } from './retire-codex-runtime-profiles.mjs';
 import { renderAll } from './render-agent-runtime.mjs';
+
+const installCodexHostMemoryHooks = createCodexHostMemoryHookInstaller({
+  planCoreHooks: planCodexMemoryHooks,
+});
 
 function nonEmpty(value) {
   return typeof value === 'string' && value.trim().length > 0;
@@ -189,7 +196,7 @@ export async function runCodexHostSetup({
   const deps = {
     renderAll: dependencies.renderAll ?? renderAll,
     installHooks:
-      dependencies.installHooks ?? installCodexMemoryHooks,
+      dependencies.installHooks ?? installCodexHostMemoryHooks,
     readConfig: dependencies.readConfig ?? readCodexConfig,
     planIsolation:
       dependencies.planIsolation ?? planCodexNativeMemoryIsolation,

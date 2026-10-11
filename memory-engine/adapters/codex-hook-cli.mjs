@@ -35,6 +35,10 @@ import {
   parseExplicitMemoryPrompt,
   resolveActiveDirectUserMemoryTarget,
 } from './codex-hooks.mjs';
+import {
+  prepareCodexMemoryRecallRuntime,
+  shouldPrepareCodexMemoryRecallRuntime,
+} from './codex-memory-recall-runtime.mjs';
 
 function nonEmpty(value) {
   return typeof value === 'string' && value.trim().length > 0;
@@ -378,11 +382,13 @@ export async function runCodexMemoryHook({
   launchCandidatePipeline = launchMemoryCandidatePipeline,
   restoreLockExists = (dbPath) => memoryRestoreLocked({ dbPath }),
   auditCodex = auditCodexState,
+  prepareRecallRuntime = prepareCodexMemoryRecallRuntime,
 } = {}) {
   const config = parseCodexMemoryConfig(env, configOptions);
   if (restoreLockExists(config.dbPath)) return null;
 
   let memory = null;
+  let recallRuntime = null;
   let output = null;
   let pipelineLaunch = null;
   try {
@@ -404,6 +410,25 @@ export async function runCodexMemoryHook({
         registration.canonicalRemote = scope.canonicalRemote;
       }
       memory.registerProject(registration);
+    }
+
+    if (shouldPrepareCodexMemoryRecallRuntime(memory, {
+      explicitMemoryMode: parseExplicitMemoryPrompt(event?.prompt)?.mode ?? null,
+    })) {
+      recallRuntime = prepareRecallRuntime({
+        memory,
+        dbPath: config.dbPath,
+        projectId: scope.projectId,
+        cwd: event.cwd,
+        resolveGit: resolvePipelineGitContext,
+        // Relevance selection is intentionally opt-in. The deterministic
+        // temporal layer is enabled for full MemoryEngine-compatible stores;
+        // lightweight injected test doubles and explicit mutation commands
+        // keep the legacy execution path.
+        relevanceSelectorEnabled: false,
+        env,
+      });
+      memory = recallRuntime.memory;
     }
 
     let hybridRetriever = null;
@@ -524,6 +549,7 @@ export async function runCodexMemoryHook({
       capturePrompts: config.capturePrompts,
       explicitMemoryRequests: configOptions.explicitMemoryRequests === true,
       candidateCapture: configOptions.candidateCapture === true,
+      recallRelevanceJudge: recallRuntime?.relevanceJudge ?? null,
       diagnoseRecall: (
         diagnosticsRetriever !== null
         && typeof diagnosticsRetriever.diagnoseRecall === 'function'
@@ -556,6 +582,11 @@ export async function runCodexMemoryHook({
           );
           const audit = await auditCodex({ codexHome });
           const hook = audit?.agentHubHook;
+          const passiveHook = audit?.passiveMemoryHook;
+          const passiveHealthy = (
+            passiveHook === undefined
+            || passiveHook?.configured === true
+          );
           hooks = (
             audit?.hookReadError === null
             && hook?.configured === true
@@ -569,6 +600,7 @@ export async function runCodexMemoryHook({
             && hook?.flags?.candidateCapture === true
             && hook?.flags?.autoPipeline === true
             && hook?.flags?.agentDecisionCapture === true
+            && passiveHealthy
           ) ? 'healthy' : 'degraded';
         } catch {
           hooks = 'degraded';
@@ -588,7 +620,8 @@ export async function runCodexMemoryHook({
 
       if (configOptions.autoPipeline === true) {
         try {
-          const git = resolvePipelineGitContext({ cwd: event?.cwd });
+          const git = recallRuntime?.git
+            ?? resolvePipelineGitContext({ cwd: event?.cwd });
           if (automaticMemoryCandidatePipelineReady(memory, {
             projectId: scope.projectId,
             branch: git.branch,
@@ -610,6 +643,13 @@ export async function runCodexMemoryHook({
     output = null;
     pipelineLaunch = null;
   } finally {
+    if (recallRuntime && typeof recallRuntime.close === 'function') {
+      try {
+        await recallRuntime.close();
+      } catch {
+        // Operational selector teardown must never block the prompt.
+      }
+    }
     if (memory && typeof memory.close === 'function') {
       try {
         memory.close();

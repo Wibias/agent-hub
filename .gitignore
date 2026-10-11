@@ -9,3 +9,6 @@ memory/MEMORY.md
 memory/pending-rules.md
 memory/notes/*
 !memory/notes/.gitkeep
+memory-engine/node_modules/
+sync.ffs_lock
+sync.ffs_db.*.ffs_tmp
