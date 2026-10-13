@@ -17,4 +17,6 @@ Files shared with upstream under `.agents/skills/impeccable/` should remain byte
 
 Do not replace that overlay wholesale during an upstream refresh. Merge new upstream `SKILL.md` semantics into it, then verify that the local routing and security boundaries remain intact.
 
+After changing the overlay, regenerate the repository knowledge catalog with `node knowledge/build-index.mjs` and commit the generated `knowledge/index.json` and `knowledge/INDEX.md` outputs.
+
 Target-only evaluation or integration files are local Agent Hub assets and are not evidence of vendor drift.
