@@ -7,7 +7,7 @@ are maintained here.
 | Source | Snapshot / access | Role | Licence / provenance |
 |---|---|---|---|
 | LexnLin design-with-AI thread | accessed 2026-07-12; URL recorded historically | Methods 1-3 and component-by-component framing | public thread, historical local note |
-| emilkowalski/skills | commit `2d228630ba1446365f614a108cb8252f1feda202` reviewed 2026-10-13 | motion craft, animation review standards, vocabulary, runtime animation performance; `break-ui` reviewed as a separate content-stress workflow | MIT |
+| emilkowalski/skills | commit `2d228630ba1446365f614a108cb8252f1feda202` reviewed 2026-10-13 | motion craft, animation review standards, vocabulary, runtime animation performance; `break-ui` remains owned by `fortify worst-case` | MIT |
 | MengTo/Skills | commit `321c769739b823de5eb94eb3a52aa1974fe783a2` reviewed 2026-09-04 | design-first prompting and runtime animation profiling | MIT |
 | ibelick/ui-skills `baseline-ui` | local adapted snapshot | baseline UI floor | MIT |
 | jakubkrehel/make-interfaces-feel-better | local adapted snapshot | micro craft | MIT |
@@ -44,10 +44,10 @@ model through category-driven defaults.
 
 The 2026-10-13 Emil refresh again classifies as `EXTEND`, not a new discovery
 surface. `animation-performance` strengthens the existing runtime-motion owner.
-`break-ui` is useful but materially different: it stress-tests rendered UI with
-plausible/schema-backed worst-case content. It should be integrated as a focused
-content-stress workflow with its own route/evidence contract rather than folded
-silently into motion, polish, or generic anti-slop checks.
+`break-ui` has no post-adoption delta: Agent Hub already adopted it on 2026-10-04
+as the dedicated `fortify worst-case` workflow, including schema-backed realistic
+stress data, real-boundary injection, environment pressure, report-before-fix,
+and regression-fixture guidance. No duplicate design-with-ai route is added.
 
 `impeccable` is intentionally not vendored or modified by `design-with-ai`. It
 remains an independently managed explicit/delegated specialist and may update on
