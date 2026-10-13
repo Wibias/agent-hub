@@ -41,6 +41,13 @@ Valid reasons can include:
 - existing tests would need brittle timing or heavy mock behavior to express the failure;
 - the smallest useful evidence is a real CLI, service, browser, or integration probe.
 
+When the real reproduction fixture is expensive but a stable seam can still expose the defect, a temporary seam check is allowed as diagnostic evidence. Make it prove two things before the production fix:
+
+1. the real broken case is red at the strongest available boundary; and
+2. the seam check also fails under a controlled forced miss or mutation at that seam.
+
+The second check proves the seam can detect the class of failure instead of merely being correlated with it. Keep the assertion strong and specific. Remove a throwaway seam check after the fix unless it protects a useful durable contract; durable regression coverage should live at the highest stable boundary that can express the behavior without brittle setup.
+
 "No time" and "the fix looks obvious" are not evidence.
 
 ## High and critical fixes
@@ -72,4 +79,4 @@ For each fixed bug, record:
 
 ## Provenance
 
-This reference adapts the practical test-selection ideas from Cursor's `pstack` `tdd` skill. `pstack` is MIT licensed, copyright 2026 Lauren Tan. Stable-boundary selection is specified separately in `references/verification-boundaries.md`, which also adapts relevant use-case testing ideas from Hona's publicly shared engineering-design gist. The workflow here is rewritten to fit `github-delivery`'s root-cause, evidence, and publication contracts.
+This reference adapts practical test-selection ideas from Cursor's `pstack` `tdd` skill and Matt Pocock's MIT-licensed TDD guidance. `pstack` is MIT licensed, copyright 2026 Lauren Tan. The temporary seam-check rule follows Matt's 2026-10-10 update: when the full fixture is expensive, prove both that the real case is red and that a controlled miss at the seam is caught before applying the fix. Stable-boundary selection is specified separately in `references/verification-boundaries.md`, which also adapts relevant use-case testing ideas from Hona's publicly shared engineering-design gist. The workflow here is rewritten to fit `github-delivery`'s root-cause, evidence, and publication contracts.
