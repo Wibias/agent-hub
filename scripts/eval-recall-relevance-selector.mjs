@@ -4,6 +4,9 @@ import { isAbsolute, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { evaluateRecallRelevanceCases } from '../memory-engine/recall-relevance-eval.mjs';
+import {
+  evaluateRecallRelevanceEnablementGate,
+} from '../memory-engine/recall-relevance-benchmark-gate.mjs';
 import { createRecallRelevanceJudgeRuntime } from '../memory-engine/recall-relevance-judge-runtime.mjs';
 
 function nonEmpty(value) {
@@ -108,10 +111,12 @@ function humanReport(result) {
   const q = result.evaluation.quality;
   const p = result.evaluation.performance;
   const u = result.model_usage;
+  const g = result.enablement_gate;
   return [
     `Recall relevance benchmark: ${result.evaluation.counts.cases} cases`,
     `quality: precision=${q.precision.toFixed(4)} recall=${q.recall.toFixed(4)} exact=${q.exact_selection_rate.toFixed(4)} negative-fp=${q.negative_false_positive_rate.toFixed(4)}`,
     `selector: failures=${result.evaluation.counts.failures} judge-calls=${p.judge_calls} mean=${p.mean_duration_ms.toFixed(2)} ms`,
+    `enablement gate: ${g.passed ? 'PASS' : 'FAIL'}${g.failed_checks.length ? ' (' + g.failed_checks.join(', ') + ')' : ''}`,
     `model usage: calls=${u.calls} failures=${u.failures} input=${u.input_tokens} cached=${u.cached_input_tokens} output=${u.output_tokens} reasoning=${u.reasoning_output_tokens} duration=${u.duration_ms} ms`,
   ].join('\n');
 }
@@ -160,6 +165,7 @@ export async function runRecallRelevanceBenchmarkCli({
         max_selected: options.maxSelected,
       },
       evaluation,
+      enablement_gate: evaluateRecallRelevanceEnablementGate(evaluation),
       model_usage: modelUsage,
     };
     log(options.json ? JSON.stringify(result) : humanReport(result));

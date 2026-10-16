@@ -246,6 +246,8 @@ function promptEntry({ hubRoot, nodePath }) {
     '--ignore-memory-env',
     '--explicit-memory-requests',
     '--hybrid-recall',
+    '--recall-relevance',
+    '--recall-fast-path-shadow-replay',
     '--candidate-capture',
     '--auto-pipeline',
   ];

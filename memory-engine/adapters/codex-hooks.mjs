@@ -20,6 +20,7 @@ import {
   selectCodexAuthoritativeRecall,
 } from './codex-recall-context-selection.mjs';
 import { recallTelemetryRunId } from '../recall-observability.mjs';
+import { captureRecallShadowReplayPacket } from '../recall-shadow-replay-capture.mjs';
 
 function nonEmptyString(value) {
   return typeof value === 'string' && value.trim().length > 0;
@@ -1139,6 +1140,48 @@ function defaultGit(memory) {
   };
 }
 
+export function resolveCodexRecallSelectionRuntime({
+  recallRelevanceJudge = null,
+  recallFastPath = null,
+  recallFastPathShadowMode = false,
+  recallFastPathShadowReplayMode = false,
+} = {}) {
+  if (typeof recallFastPathShadowMode !== 'boolean') {
+    throw new TypeError('recallFastPathShadowMode must be a boolean');
+  }
+  if (typeof recallFastPathShadowReplayMode !== 'boolean') {
+    throw new TypeError('recallFastPathShadowReplayMode must be a boolean');
+  }
+  if (recallFastPathShadowMode && recallFastPathShadowReplayMode) {
+    throw new TypeError(
+      'recallFastPathShadowMode and recallFastPathShadowReplayMode are mutually exclusive',
+    );
+  }
+
+  const observer = recallFastPathShadowReplayMode
+    ? async (args) => {
+        if (recallFastPath === null) {
+          throw new Error('local Fast Path is unavailable');
+        }
+        return recallFastPath(args);
+      }
+    : null;
+
+  return {
+    relevanceJudge: recallRelevanceJudge,
+    recallFastPath: (
+      recallFastPathShadowMode
+      || recallFastPathShadowReplayMode
+    )
+      ? null
+      : recallFastPath,
+    recallFastPathShadow: recallFastPathShadowMode
+      ? recallFastPath
+      : null,
+    recallFastPathObserver: observer,
+  };
+}
+
 export function createCodexMemoryHookAdapter({
   protocol,
   memory,
@@ -1149,6 +1192,11 @@ export function createCodexMemoryHookAdapter({
   diagnoseRecall = null,
   healthCheck = null,
   recallRelevanceJudge = null,
+  recallFastPath = null,
+  recallFastPathShadowMode = false,
+  recallFastPathShadowReplayMode = false,
+  recallShadowReplayStore = null,
+  onRecallSelectorTelemetry = null,
   clock = () => new Date().toISOString(),
   git = null,
   maxContextBytes = 8_192,
@@ -1182,6 +1230,43 @@ export function createCodexMemoryHookAdapter({
     && typeof recallRelevanceJudge !== 'function'
   ) {
     throw new TypeError('recallRelevanceJudge must be a function or null');
+  }
+  if (recallFastPath !== null && typeof recallFastPath !== 'function') {
+    throw new TypeError('recallFastPath must be a function or null');
+  }
+  if (typeof recallFastPathShadowMode !== 'boolean') {
+    throw new TypeError('recallFastPathShadowMode must be a boolean');
+  }
+  if (typeof recallFastPathShadowReplayMode !== 'boolean') {
+    throw new TypeError('recallFastPathShadowReplayMode must be a boolean');
+  }
+  if (recallFastPathShadowMode && recallFastPathShadowReplayMode) {
+    throw new TypeError(
+      'recallFastPathShadowMode and recallFastPathShadowReplayMode are mutually exclusive',
+    );
+  }
+  if (
+    recallShadowReplayStore !== null
+    && (
+      typeof recallShadowReplayStore !== 'object'
+      || typeof recallShadowReplayStore.capture !== 'function'
+    )
+  ) {
+    throw new TypeError('recallShadowReplayStore must expose capture() or be null');
+  }
+  if (
+    recallFastPathShadowReplayMode
+    && recallShadowReplayStore === null
+  ) {
+    throw new TypeError(
+      'recallFastPathShadowReplayMode requires recallShadowReplayStore',
+    );
+  }
+  if (
+    onRecallSelectorTelemetry !== null
+    && typeof onRecallSelectorTelemetry !== 'function'
+  ) {
+    throw new TypeError('onRecallSelectorTelemetry must be a function or null');
   }
   if (typeof clock !== 'function') {
     throw new TypeError('clock must be a function');
@@ -1748,13 +1833,67 @@ export function createCodexMemoryHookAdapter({
 
         const recalledItems = recalled.result?.items ?? [];
         const recalledConflicts = recalled.result?.conflicts ?? [];
+        const recallRequestId = `${requestPrefix}:recall`;
+        let retrievalTelemetry = null;
+        if (typeof memory?.getRecallTelemetry === 'function') {
+          try {
+            retrievalTelemetry = memory.getRecallTelemetry(
+              recallTelemetryRunId(recallRequestId),
+            );
+          } catch {
+            retrievalTelemetry = null;
+          }
+        }
+        const recallMaxSelected = 8;
+        const selectionRuntime = resolveCodexRecallSelectionRuntime({
+          recallRelevanceJudge,
+          recallFastPath,
+          recallFastPathShadowMode,
+          recallFastPathShadowReplayMode,
+        });
+
         const reliance = await selectCodexAuthoritativeRecall({
           query: event.prompt,
           items: recalledItems,
           conflicts: recalledConflicts,
           evaluateReliance,
-          relevanceJudge: recallRelevanceJudge,
+          relevanceJudge: selectionRuntime.relevanceJudge,
+          recallFastPath: selectionRuntime.recallFastPath,
+          recallFastPathShadow: selectionRuntime.recallFastPathShadow,
+          recallFastPathObserver: selectionRuntime.recallFastPathObserver,
+          onRecallFastPathObservation: recallFastPathShadowReplayMode
+            ? async ({ candidates, fastResult }) => {
+                captureRecallShadowReplayPacket({
+                  store: recallShadowReplayStore,
+                  projectId,
+                  branch: context.branch,
+                  sessionId: event.session_id,
+                  turnId: event.turn_id,
+                  query: event.prompt,
+                  candidates,
+                  fastResult,
+                  retrievalTelemetry,
+                  maxSelected: recallMaxSelected,
+                  createdAt: clock(),
+                });
+              }
+            : null,
+          fastPathContext: { retrievalTelemetry },
+          maxSelected: recallMaxSelected,
         });
+        if (onRecallSelectorTelemetry !== null) {
+          for (const telemetry of [
+            reliance.selector?.telemetry ?? null,
+            reliance.selector?.shadow_telemetry ?? null,
+          ]) {
+            if (telemetry === null) continue;
+            try {
+              await onRecallSelectorTelemetry(telemetry);
+            } catch {
+              // Selector telemetry is operational and must never affect recall.
+            }
+          }
+        }
 
         const conflictedIds = new Set();
         for (const conflict of recalledConflicts) {
@@ -1808,7 +1947,6 @@ export function createCodexMemoryHookAdapter({
           && typeof memory?.recordRecallTelemetry === 'function'
         ) {
           try {
-            const recallRequestId = `${requestPrefix}:recall`;
             const telemetryId = recallTelemetryRunId(recallRequestId);
             const existing = memory.getRecallTelemetry(telemetryId);
             if (existing !== null) {
