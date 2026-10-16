@@ -1,14 +1,22 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { execFile as execFileCallback } from 'node:child_process';
+import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
 
+const execFile = promisify(execFileCallback);
 const testsDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(testsDir, '../..');
 
 async function text(relativePath) {
   return readFile(path.join(repoRoot, relativePath), 'utf8');
+}
+
+async function git(cwd, ...args) {
+  return execFile('git', args, { cwd });
 }
 
 test('PStack principle refresh stays semantic instead of mechanism-specific', async () => {
@@ -62,6 +70,63 @@ test('dynamic workflows bind durable state to repository provenance and expose t
   assert.match(controlLoop, /actuator/i);
   assert.match(controlLoop, /dampener/i);
   assert.match(controlLoop, /one open PR per loop/i);
+});
+
+test('workflow provenance passes on its captured head and rejects an unrecorded head change', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'agent-hub-workflow-provenance-'));
+  await git(tempRoot, 'init', '-b', 'main');
+  await git(tempRoot, 'config', 'user.email', 'test@example.com');
+  await git(tempRoot, 'config', 'user.name', 'Agent Hub Test');
+  await writeFile(path.join(tempRoot, 'README.md'), 'baseline\n');
+  await git(tempRoot, 'add', 'README.md');
+  await git(tempRoot, 'commit', '-m', 'baseline');
+  const { stdout: baseStdout } = await git(tempRoot, 'rev-parse', 'HEAD');
+  const baseHead = baseStdout.trim();
+  await git(tempRoot, 'switch', '-c', 'feature/provenance');
+
+  const scaffoldPath = path.join(
+    repoRoot,
+    'skills/codex-dynamic-workflows/scripts/new_workflow.py',
+  );
+  const verifierPath = path.join(
+    repoRoot,
+    'skills/codex-dynamic-workflows/scripts/verify_workflow.py',
+  );
+
+  await execFile(
+    'python3',
+    [scaffoldPath, 'Provenance test', '--root', '.workflow', '--base-branch', 'main'],
+    { cwd: tempRoot },
+  );
+
+  const workflowDir = path.join(tempRoot, '.workflow', 'provenance-test');
+  const state = JSON.parse(await readFile(path.join(workflowDir, 'state.json'), 'utf8'));
+  assert.equal(state.repository.base_branch, 'main');
+  assert.equal(state.repository.base_head, baseHead);
+  assert.equal(state.repository.working_branch, 'feature/provenance');
+  assert.equal(state.repository.working_head, baseHead);
+  assert.equal(state.repository.last_validated_head, baseHead);
+
+  await mkdir(path.join(workflowDir, 'packets'), { recursive: true });
+  await mkdir(path.join(workflowDir, 'results'), { recursive: true });
+  await writeFile(path.join(workflowDir, 'packets', 'probe.md'), '# Probe\n');
+  await writeFile(path.join(workflowDir, 'results', 'probe.md'), '# Result\n');
+
+  const fresh = await execFile('python3', [verifierPath, workflowDir], { cwd: tempRoot });
+  assert.match(fresh.stdout, /Workflow verification passed/);
+
+  await writeFile(path.join(tempRoot, 'README.md'), 'changed head\n');
+  await git(tempRoot, 'add', 'README.md');
+  await git(tempRoot, 'commit', '-m', 'advance head');
+
+  await assert.rejects(
+    execFile('python3', [verifierPath, workflowDir], { cwd: tempRoot }),
+    (error) => {
+      assert.equal(error.code, 1);
+      assert.match(error.stdout, /stale workflow provenance/i);
+      return true;
+    },
+  );
 });
 
 test('PR descriptions can use one compact structural view without visual duplication', async () => {
