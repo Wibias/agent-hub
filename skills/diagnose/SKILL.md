@@ -95,13 +95,12 @@ Rank the list before testing. Surface it to the user only when their domain know
 
 If two or more failed fixes or probes relied on the same material assumption, stop treating the next patch as an independent attempt. The repeated failure is evidence about the shared premise.
 
-Before a third fix that depends on that premise:
+Before another fix that depends on that premise:
 
 1. Write the shared premise as one falsifiable sentence.
-2. Build the smallest rerunnable measurement that observes the premise directly. For distributed or concurrent behavior, measure the relevant condition per actor instead of only the aggregate.
-3. Run the measurement before changing code again.
-4. If the premise is false, replace the premise in the model and regenerate the hypotheses. Do not compensate for the false assumption with another guard, retry, lock, rebalance, or special case.
-5. If the premise holds, keep the measurement as evidence and continue elsewhere in the ranked hypotheses.
+2. Find the smallest rerunnable observation that would come out differently if the premise were false, and run it before changing code again. Measure the relevant partition or actor only when that distinction is what the premise predicts.
+3. If the observation contradicts the premise, replace the premise in the model and regenerate the ranked hypotheses. Do not add another mechanism that merely compensates for an assumption the evidence rejected.
+4. If the observation supports the premise, keep it as evidence and continue to the next causal question. A guard, retry, lock, or fallback is a legitimate fix only when it handles a legitimate state rather than hiding the first place the system went wrong.
 
 The gate is about repeated failure under one assumption, not about an arbitrary number of attempts. Two unrelated failed hypotheses do not trigger it.
 
