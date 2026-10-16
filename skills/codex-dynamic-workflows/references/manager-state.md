@@ -16,6 +16,16 @@ and must never be treated as runtime dependencies.
 {
   "workflow_id": "string",
   "status": "pending|in_progress|review|accepted|blocked",
+  "repository": {
+    "root_name": "repo-directory-name",
+    "remote": "origin-url-or-null",
+    "base_branch": "main",
+    "base_head": "40-char-sha",
+    "working_branch": "feature/example",
+    "working_head": "40-char-sha",
+    "created_at": "ISO-8601",
+    "last_validated_head": "40-char-sha"
+  },
   "ACCEPT": null,
   "merge_authorization": null,
   "packets": [
@@ -38,6 +48,22 @@ and must never be treated as runtime dependencies.
 }
 ```
 
+## Repository provenance
+
+Durable workflow state is valid only for the repository state it was designed against. `scripts/new_workflow.py` captures the repository identity, base branch/head, current working branch/head, creation time, and the last validated head when the workflow is scaffolded.
+
+Before resuming a persisted workflow, run `scripts/verify_workflow.py`. It fails with `stale workflow provenance` when the repository, origin, base branch head, working branch, or working head no longer matches the captured state. Do not silently reuse a plan after that failure. Inspect what changed and decide whether the existing plan still applies, needs repair, or should be replaced.
+
+When the manager intentionally advances the same working branch after reviewing the new head, run:
+
+```text
+python scripts/verify_workflow.py .workflow/<slug> --refresh-provenance
+```
+
+Use `python3` when that is the host launcher. The refresh path may update only `working_head` and `last_validated_head`, and only when repository identity, branch, and base provenance still match. A moved base branch or changed repository identity requires explicit reconciliation rather than an automatic refresh.
+
+`base_head` is the design baseline. `working_head` is the last manager-accepted working-tree head. `last_validated_head` is the head most recently recorded through the provenance refresh path. Keep these as full Git SHAs. Do not replace them with branch names, timestamps, or human descriptions.
+
 ## Packet lifecycle
 
 ```
@@ -54,6 +80,7 @@ the first `needs_correction` cycle — the thinker takes ownership or marks bloc
 | Field | Notes |
 |---|---|
 | `status` (workflow) | Lifecycle of the whole workflow. |
+| `repository` | Head-bound provenance for safe resume; stale state blocks until reconciled. |
 | `ACCEPT` | `null` until CEO Phase 7 final review passes; then `{ summary, recorded_at (ISO-8601) }`. |
 | `merge_authorization` | Set when user explicitly grants it: `{ verbatim_instruction, source, recorded_at, consumed_at: null }`. Consumed only in CEO Phase 8 after `ACCEPT` exists; recording early never bypasses final review. |
 | `kind` | `AFK` = agent can implement without human judgment. `HITL` = human decision needed. |
