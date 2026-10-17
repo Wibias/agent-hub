@@ -1,0 +1,61 @@
+name: Temporary upstream adoption verification
+
+on:
+  push:
+    branches:
+      - feat/adopt-humanlayer-pstack-2026-10-17
+
+permissions:
+  contents: write
+
+concurrency:
+  group: tmp-upstream-adoption-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: feat/adopt-humanlayer-pstack-2026-10-17
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Verify branch public-release safety
+        run: node scripts/verify-public-release.mjs
+
+      - name: Run adoption contract tests
+        run: node --test tests/skill-catalog/upstream-guidance-adoption.test.mjs
+
+      - name: Validate affected skill contracts
+        run: |
+          node skills/skill-ratchet/scripts/skill-ratchet.mjs validate --skill-root skills/context-engineering
+          node skills/skill-ratchet/scripts/skill-ratchet.mjs validate --skill-root skills/codex-dynamic-workflows
+          node skills/skill-ratchet/scripts/skill-ratchet.mjs validate --skill-root skills/diagnose
+          node skills/skill-ratchet/scripts/skill-ratchet.mjs validate --skill-root skills/github-delivery
+
+      - name: Verify portable skills
+        run: node scripts/verify-portable-skills.mjs
+
+      - name: Regenerate knowledge index
+        run: node knowledge/build-index.mjs
+
+      - name: Validate routing after regeneration
+        run: node scripts/verify-skill-routing.mjs --check-index
+
+      - name: Commit generated knowledge index when needed
+        shell: bash
+        run: |
+          if git diff --quiet -- knowledge/INDEX.md knowledge/index.json; then
+            echo "Knowledge index already current."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add knowledge/INDEX.md knowledge/index.json
+          git commit -m "chore: regenerate knowledge index"
+          git push origin HEAD:feat/adopt-humanlayer-pstack-2026-10-17
