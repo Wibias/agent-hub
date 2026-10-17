@@ -19,7 +19,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-          cache: npm
 
       - name: Replace concrete test home paths with placeholders
         shell: python
@@ -39,9 +38,6 @@ jobs:
 
           text = text.replace(win_old, win_new).replace(linux_old, linux_new)
           path.write_text(text, encoding='utf-8')
-
-      - name: Install dependencies
-        run: npm ci
 
       - name: Verify public release contract
         run: |
