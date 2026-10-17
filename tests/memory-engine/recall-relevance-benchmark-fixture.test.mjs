@@ -12,10 +12,10 @@ async function readCases() {
   return JSON.parse(await readFile(fixtureUrl, 'utf8'));
 }
 
-test('recall relevance benchmark v1 is a balanced 24-case gold set', async () => {
+test('recall relevance benchmark v1 is a 25-case gold set', async () => {
   const cases = await readCases();
-  assert.equal(cases.length, 24);
-  assert.equal(new Set(cases.map((entry) => entry.id)).size, 24);
+  assert.equal(cases.length, 25);
+  assert.equal(new Set(cases.map((entry) => entry.id)).size, 25);
 
   const negativeCases = cases.filter((entry) => entry.relevantClaimIds.length === 0);
   const multiRelevantCases = cases.filter((entry) => entry.relevantClaimIds.length > 1);
@@ -44,7 +44,7 @@ test('recall relevance benchmark v1 is accepted by the production evaluator', as
     },
   });
 
-  assert.equal(result.counts.cases, 24);
+  assert.equal(result.counts.cases, 25);
   assert.equal(result.counts.failures, 0);
   assert.equal(result.quality.precision, 1);
   assert.equal(result.quality.recall, 1);
