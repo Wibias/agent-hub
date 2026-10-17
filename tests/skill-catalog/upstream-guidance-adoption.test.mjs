@@ -178,3 +178,11 @@ test('Impeccable vendor pin tracks upstream 4.6.0 while preserving the Agent Hub
   assert.equal(engineVersion, '0.1.15');
   assert.match(skill, /Explicit-only Impeccable frontend design specialist/i);
 });
+
+test('Impeccable sync preserves Agent Hub runtime integration files that were never upstream vendor files', async () => {
+  const upstream = await text('skills/impeccable/UPSTREAM.md');
+  const localContextRuntime = await text('skills/impeccable/scripts/context.mjs');
+
+  assert.match(upstream, /Files shared with upstream/i);
+  assert.match(localContextRuntime, /readLocalSkillVersion|resolveProject/);
+});
