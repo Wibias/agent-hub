@@ -19,4 +19,4 @@ Do not replace that overlay wholesale during an upstream refresh. Merge new upst
 
 After changing the overlay, regenerate the repository knowledge catalog with `node knowledge/build-index.mjs` and commit the generated `knowledge/index.json` and `knowledge/INDEX.md` outputs.
 
-Target-only evaluation or integration files are local Agent Hub assets and are not evidence of vendor drift.
+Target-only evaluation or integration files are local Agent Hub assets and are not evidence of vendor drift. Agent Hub runtime-integration files that were never present in the pinned upstream distribution are local overlays too; an upstream refresh must preserve them unless a separate migration deliberately retires them.
