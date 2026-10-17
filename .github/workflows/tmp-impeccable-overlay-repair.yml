@@ -58,7 +58,7 @@ jobs:
           node scripts/verify-skill-routing.mjs --check-index
           node knowledge/build-index.mjs
           git diff --exit-code -- knowledge/index.json knowledge/INDEX.md
-          git diff --check HEAD^ HEAD
+          git diff f38e8bf18fa5fc82336f2083509f86cd08561be9 --check
           test -z "$(git status --porcelain)"
           echo "verified_head=$(git rev-parse HEAD)"
       - name: Push verified repair
