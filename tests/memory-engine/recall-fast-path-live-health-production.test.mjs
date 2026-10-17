@@ -11,6 +11,11 @@ const v1EvalPath = path.join(repoRoot, 'scripts', 'eval-recall-fast-path.mjs');
 const v2EvalPath = path.join(repoRoot, 'scripts', 'eval-recall-fast-path-v2.mjs');
 const targetId = 'live-health-production';
 const doctorId = 'claim:codex:runtime-e2e-seed-doctor:runtime-e2e-turn-seed-doctor:prompt';
+const cacheDir = process.env.MEMORY_E5_MODEL_CACHE?.trim() || null;
+const offlinePreload = process.env.AGENT_HUB_E5_OFFLINE_PRELOAD?.trim() || null;
+const semanticEvalOptions = cacheDir
+  ? {}
+  : { skip: 'requires MEMORY_E5_MODEL_CACHE from the explicit semantic-eval workflow' };
 
 function fixtureCases() {
   const root = JSON.parse(readFileSync(fixturePath, 'utf8'));
@@ -26,22 +31,26 @@ function targetFixture() {
 }
 
 function runJson(scriptPath) {
+  const args = [];
+  if (offlinePreload) {
+    args.push('--import', offlinePreload);
+  }
+  args.push(
+    scriptPath,
+    '--cases',
+    fixturePath,
+    '--cache-dir',
+    cacheDir,
+    '--json',
+  );
+
   const result = spawnSync(
     process.execPath,
-    [
-      '--import',
-      process.env.AGENT_HUB_E5_OFFLINE_PRELOAD,
-      scriptPath,
-      '--cases',
-      fixturePath,
-      '--cache-dir',
-      process.env.MEMORY_E5_MODEL_CACHE,
-      '--json',
-    ],
+    args,
     {
-    cwd: repoRoot,
-    encoding: 'utf8',
-    env: process.env,
+      cwd: repoRoot,
+      encoding: 'utf8',
+      env: process.env,
       maxBuffer: 16 * 1024 * 1024,
     },
   );
@@ -73,7 +82,7 @@ test('benchmark includes the exact production-shaped live health recall case', (
   assert.equal(doctor.evidence.authority_class, 'user_direct');
 });
 
-test('v1 calibration turns live health into fallback and runtime uses the safe pair', () => {
+test('v1 calibration turns live health into fallback and runtime uses the safe pair', semanticEvalOptions, () => {
   targetFixture();
   const result = runJson(v1EvalPath);
   const recommended = result.calibration?.recommended;
@@ -89,7 +98,7 @@ test('v1 calibration turns live health into fallback and runtime uses the safe p
   assert.equal(runtimeNumber('positiveThreshold'), Number(recommended.positive_threshold));
 });
 
-test('v2 remains zero-error and never makes an incorrect live health fast decision', () => {
+test('v2 remains zero-error and never makes an incorrect live health fast decision', semanticEvalOptions, () => {
   targetFixture();
   const result = runJson(v2EvalPath);
   const recommended = result.calibration?.recommended;

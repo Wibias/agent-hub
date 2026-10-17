@@ -4,10 +4,10 @@ Agent Hub vendors the Impeccable skill from `pbakaus/impeccable`.
 
 ## Current pin
 
-- Upstream commit: `245ad82def45831dc56a21b683c7a1ff530b06cc`
-- Skill version: `4.5.2`
-- Engine version: `0.1.14`
-- Refreshed: `2026-10-13`
+- Upstream commit: `6af45ac9a5eb8792f033d3242f52e99812fd91fa`
+- Skill version: `4.6.0`
+- Engine version: `0.1.15`
+- Refreshed: `2026-10-17`
 
 ## Sync contract
 
@@ -19,4 +19,4 @@ Do not replace that overlay wholesale during an upstream refresh. Merge new upst
 
 After changing the overlay, regenerate the repository knowledge catalog with `node knowledge/build-index.mjs` and commit the generated `knowledge/index.json` and `knowledge/INDEX.md` outputs.
 
-Target-only evaluation or integration files are local Agent Hub assets and are not evidence of vendor drift.
+Target-only evaluation or integration files are local Agent Hub assets and are not evidence of vendor drift. Agent Hub runtime-integration files that were never present in the pinned upstream distribution are local overlays too; an upstream refresh must preserve them unless a separate migration deliberately retires them.

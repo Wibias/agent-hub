@@ -75,7 +75,7 @@ Tests should protect meaningful behavior, contracts, invariants, or reproduced d
 
 Prefer tests that call the subject as a real consumer does and assert an observable result against an expected value that is independent of the implementation under test.
 
-Use this as a test-quality smell, not a universal mutation-testing requirement: if a test would still pass when every imported collaborator returned `undefined` or became a no-op, it probably observes no meaningful behavior. Rewrite or delete it unless the test intentionally protects a compile-time contract, a relation across data, an invariant, or another real contract that this mutation does not model.
+A useful test fails when the protected behavior or contract breaks and stays green when only the implementation changes. If a test can stay green while the behavior it claims to protect is broken, or fails merely because internals were rearranged, rewrite or delete it unless it intentionally protects a compile-time contract, invariant, relation across data, or another real non-runtime contract.
 
 ---
 

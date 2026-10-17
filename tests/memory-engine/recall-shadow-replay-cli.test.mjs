@@ -181,25 +181,25 @@ test('replay DB path follows Agent Hub env/platform conventions without importin
     defaultRecallShadowReplayDbPath({
       env: { AGENT_HUB_MEMORY_DB: 'D:\\custom\\memory.sqlite3' },
       platform: 'win32',
-      homeDir: 'C:\\Users\\ws',
+      homeDir: 'C:\\Users\\<user>',
     }),
     'D:\\custom\\memory.sqlite3',
   );
 
   assert.equal(
     defaultRecallShadowReplayDbPath({
-      env: { LOCALAPPDATA: 'C:\\Users\\ws\\AppData\\Local' },
+      env: { LOCALAPPDATA: 'C:\\Users\\<user>\\AppData\\Local' },
       platform: 'win32',
-      homeDir: 'C:\\Users\\ws',
+      homeDir: 'C:\\Users\\<user>',
     }),
-    'C:\\Users\\ws\\AppData\\Local\\agent-hub\\memory.sqlite3',
+    'C:\\Users\\<user>\\AppData\\Local\\agent-hub\\memory.sqlite3',
   );
 
   assert.equal(
     defaultRecallShadowReplayDbPath({
       env: { XDG_STATE_HOME: '/state' },
       platform: 'linux',
-      homeDir: '/home/ws',
+      homeDir: '/home/<user>',
     }),
     '/state/agent-hub/memory.sqlite3',
   );

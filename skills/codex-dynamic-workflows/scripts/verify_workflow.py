@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
+import subprocess
 
 
 REQUIRED_FILES = ("plan.md", "state.json", "orchestration.md", "final-report.md")
@@ -24,9 +25,20 @@ PACKET_KINDS = {"AFK", "HITL"}
 REQUIRED_STATE_KEYS = (
     "workflow_id",
     "status",
+    "repository",
     "ACCEPT",
     "merge_authorization",
     "packets",
+)
+REQUIRED_REPOSITORY_KEYS = (
+    "root_name",
+    "remote",
+    "base_branch",
+    "base_head",
+    "working_branch",
+    "working_head",
+    "created_at",
+    "last_validated_head",
 )
 REQUIRED_PACKET_KEYS = (
     "id",
@@ -43,6 +55,48 @@ REQUIRED_PACKET_KEYS = (
     "requested_input",
     "input_evidence",
 )
+
+
+def git_output(repo: Path, *args: str) -> str | None:
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(repo), *args],
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+        )
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        return None
+    value = result.stdout.strip()
+    return value or None
+
+
+def validate_repository(repository: object, failures: list[str]) -> None:
+    if not isinstance(repository, dict):
+        failures.append("state.repository must be an object")
+        return
+
+    for key in REQUIRED_REPOSITORY_KEYS:
+        if key not in repository:
+            failures.append(f"state.repository missing key: {key}")
+
+    for key in (
+        "root_name",
+        "base_branch",
+        "base_head",
+        "working_branch",
+        "working_head",
+        "created_at",
+        "last_validated_head",
+    ):
+        value = repository.get(key)
+        if not isinstance(value, str) or not value.strip():
+            failures.append(f"state.repository.{key} must be a non-empty string")
+
+    remote = repository.get("remote")
+    if remote is not None and (not isinstance(remote, str) or not remote.strip()):
+        failures.append("state.repository.remote must be null or a non-empty string")
 
 
 def validate_state(state: object, failures: list[str]) -> None:
@@ -63,6 +117,8 @@ def validate_state(state: object, failures: list[str]) -> None:
         failures.append(
             "state.status must be one of: " + ", ".join(sorted(WORKFLOW_STATUSES))
         )
+
+    validate_repository(state.get("repository"), failures)
 
     accept = state.get("ACCEPT")
     if accept is not None:
@@ -198,13 +254,78 @@ def validate_state(state: object, failures: list[str]) -> None:
                 )
 
 
+def validate_live_provenance(
+    workflow_dir: Path,
+    state: dict,
+    failures: list[str],
+    refresh_provenance: bool,
+) -> bool:
+    repository = state.get("repository")
+    if not isinstance(repository, dict):
+        return False
+
+    repo_root_text = git_output(workflow_dir, "rev-parse", "--show-toplevel")
+    if repo_root_text is None:
+        failures.append("stale workflow provenance: workflow is no longer inside a Git repository")
+        return False
+
+    repo_root = Path(repo_root_text).resolve()
+    current_head = git_output(repo_root, "rev-parse", "HEAD")
+    current_branch = git_output(repo_root, "branch", "--show-current") or "DETACHED"
+    current_remote = git_output(repo_root, "remote", "get-url", "origin")
+    base_branch = repository.get("base_branch")
+    current_base_head = (
+        git_output(repo_root, "rev-parse", "--verify", f"{base_branch}^{{commit}}")
+        if isinstance(base_branch, str) and base_branch
+        else None
+    )
+
+    if repository.get("root_name") != repo_root.name:
+        failures.append(
+            "stale workflow provenance: repository root changed "
+            f"from {repository.get('root_name')} to {repo_root.name}"
+        )
+    stored_remote = repository.get("remote")
+    if stored_remote is not None and current_remote is not None and stored_remote != current_remote:
+        failures.append("stale workflow provenance: origin remote changed")
+    if repository.get("working_branch") != current_branch:
+        failures.append(
+            "stale workflow provenance: working branch changed "
+            f"from {repository.get('working_branch')} to {current_branch}"
+        )
+    if current_base_head is not None and repository.get("base_head") != current_base_head:
+        failures.append(
+            "stale workflow provenance: base branch moved "
+            f"from {repository.get('base_head')} to {current_base_head}"
+        )
+
+    stored_working_head = repository.get("working_head")
+    if current_head != stored_working_head:
+        if refresh_provenance and not failures and current_head is not None:
+            repository["working_head"] = current_head
+            repository["last_validated_head"] = current_head
+            return True
+        failures.append(
+            "stale workflow provenance: working HEAD changed "
+            f"from {stored_working_head} to {current_head}; inspect the new head before refreshing provenance"
+        )
+    return False
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("workflow_dir", help="Path to .workflow/<slug>")
+    parser.add_argument(
+        "--refresh-provenance",
+        action="store_true",
+        help="After inspecting an intentional same-branch HEAD advance, record the current HEAD as working_head and last_validated_head",
+    )
     args = parser.parse_args()
 
     workflow_dir = Path(args.workflow_dir)
     failures: list[str] = []
+    state: dict | None = None
+    provenance_refreshed = False
 
     if not workflow_dir.is_dir():
         failures.append(f"Missing workflow directory: {workflow_dir}")
@@ -222,11 +343,19 @@ def main() -> int:
     state_path = workflow_dir / "state.json"
     if state_path.is_file():
         try:
-            state = json.loads(state_path.read_text(encoding="utf-8"))
+            loaded_state = json.loads(state_path.read_text(encoding="utf-8"))
         except json.JSONDecodeError as exc:
             failures.append(f"Invalid JSON in {state_path}: {exc}")
         else:
-            validate_state(state, failures)
+            validate_state(loaded_state, failures)
+            if isinstance(loaded_state, dict) and not failures:
+                state = loaded_state
+                provenance_refreshed = validate_live_provenance(
+                    workflow_dir,
+                    state,
+                    failures,
+                    args.refresh_provenance,
+                )
 
     packet_files = (
         sorted((workflow_dir / "packets").glob("*.md"))
@@ -248,6 +377,10 @@ def main() -> int:
         for failure in failures:
             print(f"- {failure}")
         return 1
+
+    if provenance_refreshed and state is not None:
+        state_path.write_text(json.dumps(state, indent=2) + "\n", encoding="utf-8")
+        print(f"Workflow provenance refreshed: {state['repository']['working_head']}")
 
     print(f"Workflow verification passed: {workflow_dir}")
     return 0
