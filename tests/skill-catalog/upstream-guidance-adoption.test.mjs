@@ -50,6 +50,16 @@ test('context engineering sharpens intent and removes redundant rule text', asyn
   assert.match(contextEngineering, /do not copy Claude-specific conditional XML/i);
 });
 
+test('context engineering preserves critical directives when generated context approaches host output limits', async () => {
+  const contextEngineering = await text('skills/context-engineering/SKILL.md');
+
+  assert.match(contextEngineering, /output (?:limit|budget)/i);
+  assert.match(contextEngineering, /headroom/i);
+  assert.match(contextEngineering, /dereferenceable|read.*in full|pointer/i);
+  assert.match(contextEngineering, /critical directives/i);
+  assert.match(contextEngineering, /target identity/i);
+});
+
 test('dynamic workflows bind durable state to repository provenance and expose the iterated control-loop recipe', async () => {
   const skill = await text('skills/codex-dynamic-workflows/SKILL.md');
   const managerState = await text('skills/codex-dynamic-workflows/references/manager-state.md');
@@ -136,4 +146,35 @@ test('PR descriptions can use one compact structural view without visual duplica
   assert.match(prDescription, /component tree|call flow|data flow|ownership boundary/i);
   assert.match(prDescription, /do not repeat the same fact in prose and a visual/i);
   assert.match(prDescription, /omit the visual/i);
+});
+
+test('github delivery treats always-on cost and generated-output review as contract evidence', async () => {
+  const reviews = await text('skills/github-delivery/references/policy/reviews.md');
+  const propagation = await text('skills/github-delivery/references/semantic-propagation-review.md');
+  const prDescription = await text('skills/github-delivery/references/pr-description.md');
+
+  assert.match(reviews, /always-on|per-edit|per-request|per-message/i);
+  assert.match(reviews, /baseline/i);
+  assert.match(reviews, /candidate|branch/i);
+  assert.match(reviews, /same measurement method/i);
+  assert.match(reviews, /p50|p95/i);
+  assert.match(propagation, /generated|machine-written/i);
+  assert.match(propagation, /semantic source|authoritative source/i);
+  assert.match(propagation, /parity|regenerat/i);
+  assert.match(prDescription, /generated|mechanical/i);
+});
+
+test('Impeccable vendor pin tracks upstream 4.6.0 while preserving the Agent Hub overlay boundary', async () => {
+  const upstream = await text('skills/impeccable/UPSTREAM.md');
+  const skill = await text('skills/impeccable/SKILL.md');
+  const engineVersion = (await text('skills/impeccable/scripts/VERSION')).trim();
+
+  assert.match(upstream, /6af45ac9a5eb8792f033d3242f52e99812fd91fa/);
+  assert.match(upstream, /Skill version: `4\.6\.0`/);
+  assert.match(upstream, /Engine version: `0\.1\.15`/);
+  assert.match(skill, /version: 4\.6\.0/);
+  assert.match(skill, /Scale ambition to the surface's mode/i);
+  assert.doesNotMatch(skill, /the ceiling covers the whole cycle/i);
+  assert.equal(engineVersion, '0.1.15');
+  assert.match(skill, /Explicit-only Impeccable frontend design specialist/i);
 });
