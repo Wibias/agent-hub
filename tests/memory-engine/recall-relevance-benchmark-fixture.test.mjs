@@ -7,6 +7,7 @@ import {
 } from '../../memory-engine/recall-relevance-eval.mjs';
 
 const fixtureUrl = new URL('./fixtures/recall-relevance-benchmark-v1.json', import.meta.url);
+const productionCaseId = 'live-health-production';
 
 async function readCases() {
   return JSON.parse(await readFile(fixtureUrl, 'utf8'));
@@ -21,7 +22,21 @@ test('recall relevance benchmark v1 is a 25-case gold set', async () => {
   const multiRelevantCases = cases.filter((entry) => entry.relevantClaimIds.length > 1);
   assert.ok(negativeCases.length >= 5, 'expected at least five no-match cases');
   assert.ok(multiRelevantCases.length >= 4, 'expected at least four multi-memory cases');
-  assert.ok(cases.every((entry) => entry.items.length >= 5 && entry.items.length <= 10));
+
+  const productionCase = cases.find((entry) => entry.id === productionCaseId);
+  assert.ok(productionCase, `${productionCaseId} must exist`);
+  assert.equal(
+    productionCase.items.length,
+    3,
+    'the production-shaped live health case must preserve its three recalled candidates',
+  );
+
+  const benchmarkCases = cases.filter((entry) => entry.id !== productionCaseId);
+  assert.equal(benchmarkCases.length, 24);
+  assert.ok(
+    benchmarkCases.every((entry) => entry.items.length >= 5 && entry.items.length <= 10),
+    'the original benchmark cases must contain between five and ten candidates',
+  );
 
   const authorities = new Set(cases.flatMap((entry) => (
     entry.items.map((item) => item.evidence.authority_class)
