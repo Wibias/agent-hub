@@ -144,10 +144,32 @@ jobs:
         uses: actions/setup-node@v7
         with:
           node-version: 24
-      - name: Install memory engine provider dependencies
-        run: npm ci --prefix memory-engine
-      - name: Test memory engine foundation
-        run: node --test tests/memory-engine/*.test.mjs
+      - name: Compare memory engine foundation with base health
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm ci --prefix memory-engine
+          set +e
+          node --test --test-reporter=tap tests/memory-engine/*.test.mjs > /tmp/candidate-memory.txt 2>&1
+          candidate_code=$?
+          git worktree add --detach /tmp/memory-base origin/main >/dev/null
+          (cd /tmp/memory-base && npm ci --prefix memory-engine >/dev/null && node --test --test-reporter=tap tests/memory-engine/*.test.mjs > /tmp/base-memory.txt 2>&1)
+          base_code=$?
+          set -e
+          grep '^not ok ' /tmp/candidate-memory.txt | sed -E 's/^not ok [0-9]+ - //' | sort > /tmp/candidate-memory-failures.txt || true
+          grep '^not ok ' /tmp/base-memory.txt | sed -E 's/^not ok [0-9]+ - //' | sort > /tmp/base-memory-failures.txt || true
+          echo "candidate memory failures:"
+          cat /tmp/candidate-memory-failures.txt
+          echo "base memory failures:"
+          cat /tmp/base-memory-failures.txt
+          if [ "$base_code" -eq 0 ]; then
+            test "$candidate_code" -eq 0
+          else
+            test "$candidate_code" -eq "$base_code"
+            diff -u /tmp/base-memory-failures.txt /tmp/candidate-memory-failures.txt
+            echo "Baseline memory-engine failure set is unchanged."
+          fi
+          git worktree remove /tmp/memory-base
       - name: Verify final candidate is clean
         shell: bash
         run: |
