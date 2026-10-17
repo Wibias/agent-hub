@@ -1,0 +1,2082 @@
+[
+  {
+    "id": "direct-npm-ci",
+    "query": "What command should I use to reinstall the memory-engine dependencies?",
+    "items": [
+      {
+        "claim": {
+          "id": "m-npm-ci",
+          "state": "active",
+          "kind": "procedure",
+          "subject": "memory-engine dependencies",
+          "predicate": "install",
+          "value": "Use npm ci --prefix .\\memory-engine from the committed lockfile to repair the memory-engine provider dependencies."
+        },
+        "evidence": {
+          "authority_class": "user_direct",
+          "source_ref": "benchmark-v1:m-npm-ci",
+          "content_redacted": "Use npm ci --prefix .\\memory-engine from the committed lockfile to repair the memory-engine provider dependencies."
+        }
+      },
+      {
+        "claim": {
+          "id": "m-worker-pipe",
+          "state": "active",
+          "kind": "knowledge",
+          "subject": "embedding worker on Windows",
+          "predicate": "transport",
+          "value": "The embedding worker uses the Windows named pipe \\\\.\\pipe\\agent-hub-memory-embedding-v1."
+        },
+        "evidence": {
+          "authority_class": "tool_observation",
+          "source_ref": "benchmark-v1:m-worker-pipe",
+          "content_redacted": "The embedding worker uses the Windows named pipe \\\\.\\pipe\\agent-hub-memory-embedding-v1."
+        }
+      },
+      {
+        "claim": {
+          "id": "m-e5-dims",
+          "state": "active",
+          "kind": "knowledge",
+          "subject": "embedding worker",
+          "predicate": "dimensions",
+          "value": "The E5 embedding worker reports 384 dimensions and a healthy query canary."
+        },
+        "evidence": {
+          "authority_class": "tool_observation",
+          "source_ref": "benchmark-v1:m-e5-dims",
+          "content_redacted": "The E5 embedding worker reports 384 dimensions and a healthy query canary."
+        }
+      },
+      {
+        "claim": {
+          "id": "m-sync-ignore",
+          "state": "active",
+          "kind": "procedure",
+          "subject": "repository hygiene",
+          "predicate": "ignore",
+          "value": "Ignore memory-engine/node_modules and FreeFileSync sync.ffs_lock plus sync.ffs_db.*.ffs_tmp artifacts."
+        },
+        "evidence": {
+          "authority_class": "repo_trusted",
+          "source_ref": "benchmark-v1:m-sync-ignore",
+          "content_redacted": "Ignore memory-engine/node_modules and FreeFileSync sync.ffs_lock plus sync.ffs_db.*.ffs_tmp artifacts."
+        }
+      },
+      {
+        "claim": {
+          "id": "m-doctor-healthy",
+          "state": "active",
+          "kind": "procedure",
+          "subject": "memory runtime changes",
+          "predicate": "verify",
+          "value": "After runtime or hook changes, run Memory Doctor and require status healthy before considering the host ready."
+        },
+        "evidence": {
+          "authority_class": "user_direct",
+          "source_ref": "benchmark-v1:m-doctor-healthy",
+          "content_redacted": "After runtime or hook changes, run Memory Doctor and require status healthy before considering the host ready."
+        }
+      }
+    ],
+    "relevantClaimIds": [
+      "m-npm-ci"
+    ]
+  },
+  {
+    "id": "paraphrase-lockfile-install",
+    "query": "How do we restore the memory provider packages from the committed lockfile?",
+    "items": [
+      {
+        "claim": {
+          "id": "m-npm-ci",
+          "state": "active",
+          "kind": "procedure",
+          "subject": "memory-engine dependencies",
+          "predicate": "install",
+          "value": "Use npm ci --prefix .\\memory-engine from the committed lockfile to repair the memory-engine provider dependencies."
+        },
+        "evidence": {
+          "authority_class": "user_direct",
+          "source_ref": "benchmark-v1:m-npm-ci",
+          "content_redacted": "Use npm ci --prefix .\\memory-engine from the committed lockfile to repair the memory-engine provider dependencies."
+        }
+      },
+      {
+        "claim": {
+          "id": "m-e5-dims",
+          "state": "active",
+          "kind": "knowledge",
+          "subject": "embedding worker",
+          "predicate": "dimensions",
+          "value": "The E5 embedding worker reports 384 dimensions and a healthy query canary."
+        },
+        "evidence": {
+          "authority_class": "tool_observation",
+          "source_ref": "benchmark-v1:m-e5-dims",
+          "content_redacted": "The E5 embedding worker reports 384 dimensions and a healthy query canary."
+        }
+      },
+      {
+        "claim": {
+          "id": "m-worker-pipe",
+          "state": "active",
+          "kind": "knowledge",
+          "subject": "embedding worker on Windows",
+          "predicate": "transport",
+          "value": "The embedding worker uses the Windows named pipe \\\\.\\pipe\\agent-hub-memory-embedding-v1."
+        },
+        "evidence": {
+          "authority_class": "tool_observation",
+          "source_ref": "benchmark-v1:m-worker-pipe",
+          "content_redacted": "The embedding worker uses the Windows named pipe \\\\.\\pipe\\agent-hub-memory-embedding-v1."
+        }
+      },
+      {
+        "claim": {
+          "id": "m-doctor-healthy",
+          "state": "active",
+          "kind": "procedure",
+          "subject": "memory runtime changes",
+          "predicate": "verify",
+          "value": "After runtime or hook changes, run Memory Doctor and require status healthy before considering the host ready."
+        },
+        "evidence": {
+          "authority_class": "user_direct",
+          "source_ref": "benchmark-v1:m-doctor-healthy",
+          "content_redacted": "After runtime or hook changes, run Memory Doctor and require status healthy before considering the host ready."
+        }
+      },
+      {
+        "claim": {
+          "id": "m-project-branch-scope",
+          "state": "active",
+          "kind": "policy",
+          "subject": "durable memory recall",
+          "predicate": "scope",
+          "value": "Durable recall is strictly scoped to the current project and branch."
+        },
+        "evidence": {
+          "authority_class": "repo_trusted",
+          "source_ref": "benchmark-v1:m-project-branch-scope",
+          "content_redacted": "Durable recall is strictly scoped to the current project and branch."
+        }
+      }
+    ],
+    "relevantClaimIds": [
+      "m-npm-ci"
+    ]
+  },
+  {
+    "id": "negative-root-install",
+    "query": "Which command installs dependencies for the entire Agent Hub repository root?",
+    "items": [
+      {
+        "claim": {
+          "id": "m-npm-ci",
+          "state": "active",
+          "kind": "procedure",
+          "subject": "memory-engine dependencies",
+          "predicate": "install",
+          "value": "Use npm ci --prefix .\\memory-engine from the committed lockfile to repair the memory-engine provider dependencies."
+        },
+        "evidence": {
+          "authority_class": "user_direct",
+          "source_ref": "benchmark-v1:m-npm-ci",
+          "content_redacted": "Use npm ci --prefix .\\memory-engine from the committed lockfile to repair the memory-engine provider dependencies."
+        }
+      },
+      {
+        "claim": {
+          "id": "m-e5-dims",
+          "state": "active",
+          "kind": "knowledge",
+          "subject": "embedding worker",
+          "predicate": "dimensions",
+          "value": "The E5 embedding worker reports 384 dimensions and a healthy query canary."
+        },
+        "evidence": {
+          "authority_class": "tool_observation",
+          "source_ref": "benchmark-v1:m-e5-dims",
+          "content_redacted": "The E5 embedding worker reports 384 dimensions and a healthy query canary."
+        }
+      },
+      {
+        "claim": {
+          "id": "m-worker-pipe",
+          "state": "active",
+          "kind": "knowledge",
+          "subject": "embedding worker on Windows",
+          "predicate": "transport",
+          "value": "The embedding worker uses the Windows named pipe \\\\.\\pipe\\agent-hub-memory-embedding-v1."
+        },
+        "evidence": {
+          "authority_class": "tool_observation",
+          "source_ref": "benchmark-v1:m-worker-pipe",
+          "content_redacted": "The embedding worker uses the Windows named pipe \\\\.\\pipe\\agent-hub-memory-embedding-v1."
+        }
+      },
+      {
+        "claim": {
+          "id": "m-doctor-healthy",
+          "state": "active",
+          "kind": "procedure",
+          "subject": "memory runtime changes",
+          "predicate": "verify",
+          "value": "After runtime or hook changes, run Memory Doctor and require status healthy before considering the host ready."
+        },
+        "evidence": {
+          "authority_class": "user_direct",
+          "source_ref": "benchmark-v1:m-doctor-healthy",
+          "content_redacted": "After runtime or hook changes, run Memory Doctor and require status healthy before considering the host ready."
+        }
+      },
+      {
+        "claim": {
+          "id": "m-project-branch-scope",
+          "state": "active",
+          "kind": "policy",
+          "subject": "durable memory recall",
+          "predicate": "scope",
+          "value": "Durable recall is strictly scoped to the current project and branch."
+        },
+        "evidence": {
+          "authority_class": "repo_trusted",
+          "source_ref": "benchmark-v1:m-project-branch-scope",
+          "content_redacted": "Durable recall is strictly scoped to the current project and branch."
+        }
+      }
+    ],
+    "relevantClaimIds": []
+  },
+  {
+    "id": "direct-setup-dry-run",
+    "query": "What should I run before applying Codex host setup changes?",
+    "items": [
+      {
+        "claim": {
+          "id": "m-setup-dry-run",
+          "state": "active",
+          "kind": "procedure",
+          "subject": "Codex host setup",
+          "predicate": "validate",
+          "value": "Run scripts/setup-codex-host.mjs without --apply before applying host or hook changes."
+        },
+        "evidence": {
+          "authority_class": "user_direct",
+          "source_ref": "benchmark-v1:m-setup-dry-run",
+          "content_redacted": "Run scripts/setup-codex-host.mjs without --apply before applying host or hook changes."
+        }
+      },
+      {
+        "claim": {
+          "id": "m-doctor-healthy",
+          "state": "active",
+          "kind": "procedure",
+          "subject": "memory runtime changes",
+          "predicate": "verify",
+          "value": "After runtime or hook changes, run Memory Doctor and require status healthy before considering the host ready."
+        },
+        "evidence": {
+          "authority_class": "user_direct",
+          "source_ref": "benchmark-v1:m-doctor-healthy",
+          "content_redacted": "After runtime or hook changes, run Memory Doctor and require status healthy before considering the host ready."
+        }
+      },
+      {
+        "claim": {
+          "id": "m-native-isolated",
+          "state": "active",
+          "kind": "policy",
+          "subject": "native Codex memory",
+          "predicate": "isolation",
+          "value": "Native Codex memory remains isolated and disabled; Agent Hub must not use it as a fallback memory source."
+        },
+        "evidence": {
+          "authority_class": "repo_trusted",
+          "source_ref": "benchmark-v1:m-native-isolated",
+          "content_redacted": "Native Codex memory remains isolated and disabled; Agent Hub must not use it as a fallback memory source."
+        }
+      },
+      {
+        "claim": {
+          "id": "m-worker-pipe",
+          "state": "active",
+          "kind": "knowledge",
+          "subject": "embedding worker on Windows",
+          "predicate": "transport",
+          "value": "The embedding worker uses the Windows named pipe \\\\.\\pipe\\agent-hub-memory-embedding-v1."
+        },
+        "evidence": {
+          "authority_class": "tool_observation",
+          "source_ref": "benchmark-v1:m-worker-pipe",
+          "content_redacted": "The embedding worker uses the Windows named pipe \\\\.\\pipe\\agent-hub-memory-embedding-v1."
+        }
+      },
+      {
+        "claim": {
+          "id": "m-sync-ignore",
+          "state": "active",
+          "kind": "procedure",
+          "subject": "repository hygiene",
+          "predicate": "ignore",
+          "value": "Ignore memory-engine/node_modules and FreeFileSync sync.ffs_lock plus sync.ffs_db.*.ffs_tmp artifacts."
+        },
+        "evidence": {
+          "authority_class": "repo_trusted",
+          "source_ref": "benchmark-v1:m-sync-ignore",
+          "content_redacted": "Ignore memory-engine/node_modules and FreeFileSync sync.ffs_lock plus sync.ffs_db.*.ffs_tmp artifacts."
+        }
+      }
+    ],
+    "relevantClaimIds": [
+      "m-setup-dry-run"
+    ]
+  },
+  {
+    "id": "host-change-checklist",
+    "query": "Before and after changing Codex hooks, what safety checks do we require?",
+    "items": [
+      {
+        "claim": {
+          "id": "m-setup-dry-run",
+          "state": "active",
+          "kind": "procedure",
+          "subject": "Codex host setup",
+          "predicate": "validate",
+          "value": "Run scripts/setup-codex-host.mjs without --apply before applying host or hook changes."
+        },
+        "evidence": {
+          "authority_class": "user_direct",
+          "source_ref": "benchmark-v1:m-setup-dry-run",
+          "content_redacted": "Run scripts/setup-codex-host.mjs without --apply before applying host or hook changes."
+        }
+      },
+      {
+        "claim": {
+          "id": "m-doctor-healthy",
+          "state": "active",
+          "kind": "procedure",
+          "subject": "memory runtime changes",
+          "predicate": "verify",
+          "value": "After runtime or hook changes, run Memory Doctor and require status healthy before considering the host ready."
+        },
+        "evidence": {
+          "authority_class": "user_direct",
+          "source_ref": "benchmark-v1:m-doctor-healthy",
+          "content_redacted": "After runtime or hook changes, run Memory Doctor and require status healthy before considering the host ready."
+        }
+      },
+      {
+        "claim": {
+          "id": "m-native-isolated",
+          "state": "active",
+          "kind": "policy",
+          "subject": "native Codex memory",
+          "predicate": "isolation",
+          "value": "Native Codex memory remains isolated and disabled; Agent Hub must not use it as a fallback memory source."
+        },
+        "evidence": {
+          "authority_class": "repo_trusted",
+          "source_ref": "benchmark-v1:m-native-isolated",
+          "content_redacted": "Native Codex memory remains isolated and disabled; Agent Hub must not use it as a fallback memory source."
+        }
+      },
+      {
+        "claim": {
+          "id": "m-git-freshness",
+          "state": "active",
+          "kind": "policy",
+          "subject": "Git freshness",
+          "predicate": "failure mode",
+          "value": "Git freshness checks fail closed; uncertain repository state must not authorize current recall."
+        },
+        "evidence": {
+          "authority_class": "repo_trusted",
+          "source_ref": "benchmark-v1:m-git-freshness",
+          "content_redacted": "Git freshness checks fail closed; uncertain repository state must not authorize current recall."
+        }
+      },
+      {
+        "claim": {
+          "id": "m-project-branch-scope",
+          "state": "active",
+          "kind": "policy",
+          "subject": "durable memory recall",
+          "predicate": "scope",
+          "value": "Durable recall is strictly scoped to the current project and branch."
+        },
+        "evidence": {
+          "authority_class": "repo_trusted",
+          "source_ref": "benchmark-v1:m-project-branch-scope",
+          "content_redacted": "Durable recall is strictly scoped to the current project and branch."
+        }
+      }
+    ],
+    "relevantClaimIds": [
+      "m-setup-dry-run",
+      "m-doctor-healthy"
+    ]
+  },
+  {
+    "id": "direct-doctor",
+    "query": "What must be true after runtime or hook changes before we call the host healthy?",
+    "items": [
+      {
+        "claim": {
+          "id": "m-doctor-healthy",
+          "state": "active",
+          "kind": "procedure",
+          "subject": "memory runtime changes",
+          "predicate": "verify",
+          "value": "After runtime or hook changes, run Memory Doctor and require status healthy before considering the host ready."
+        },
+        "evidence": {
+          "authority_class": "user_direct",
+          "source_ref": "benchmark-v1:m-doctor-healthy",
+          "content_redacted": "After runtime or hook changes, run Memory Doctor and require status healthy before considering the host ready."
+        }
+      },
+      {
+        "claim": {
+          "id": "m-setup-dry-run",
+          "state": "active",
+          "kind": "procedure",
+          "subject": "Codex host setup",
+          "predicate": "validate",
+          "value": "Run scripts/setup-codex-host.mjs without --apply before applying host or hook changes."
+        },
+        "evidence": {
+          "authority_class": "user_direct",
+          "source_ref": "benchmark-v1:m-setup-dry-run",
+          "content_redacted": "Run scripts/setup-codex-host.mjs without --apply before applying host or hook changes."
+        }
+      },
+      {
+        "claim": {
+          "id": "m-git-freshness",
+          "state": "active",
+          "kind": "policy",
+          "subject": "Git freshness",
+          "predicate": "failure mode",
+          "value": "Git freshness checks fail closed; uncertain repository state must not authorize current recall."
+        },
+        "evidence": {
+          "authority_class": "repo_trusted",
+          "source_ref": "benchmark-v1:m-git-freshness",
+          "content_redacted": "Git freshness checks fail closed; uncertain repository state must not authorize current recall."
+        }
+      },
+      {
+        "claim": {
+          "id": "m-temporal-current",
+          "state": "active",
+          "kind": "policy",
+          "subject": "current memory view",
+          "predicate": "validity",
+          "value": "A claim is current only while active and valid_from <= now < valid_until; malformed temporal data fails closed."
+        },
+        "evidence": {
+          "authority_class": "repo_trusted",
+          "source_ref": "benchmark-v1:m-temporal-current",
+          "content_redacted": "A claim is current only while active and valid_from <= now < valid_until; malformed temporal data fails closed."
+        }
+      },
+      {
+        "claim": {
+          "id": "m-native-isolated",
+          "state": "active",
+          "kind": "policy",
+          "subject": "native Codex memory",
+          "predicate": "isolation",
+          "value": "Native Codex memory remains isolated and disabled; Agent Hub must not use it as a fallback memory source."
+        },
+        "evidence": {
+          "authority_class": "repo_trusted",
+          "source_ref": "benchmark-v1:m-native-isolated",
+          "content_redacted": "Native Codex memory remains isolated and disabled; Agent Hub must not use it as a fallback memory source."
+        }
+      }
+    ],
+    "relevantClaimIds": [
+      "m-doctor-healthy"
+    ]
+  },
+  {
+    "id": "negative-ci-diagnosis",
+    "query": "How do I diagnose a failed GitHub Actions workflow?",
+    "items": [
+      {
+        "claim": {
+          "id": "m-doctor-healthy",
+          "state": "active",
+          "kind": "procedure",
+          "subject": "memory runtime changes",
+          "predicate": "verify",
+          "value": "After runtime or hook changes, run Memory Doctor and require status healthy before considering the host ready."
+        },
+        "evidence": {
+          "authority_class": "user_direct",
+          "source_ref": "benchmark-v1:m-doctor-healthy",
+          "content_redacted": "After runtime or hook changes, run Memory Doctor and require status healthy before considering the host ready."
+        }
+      },
+      {
+        "claim": {
+          "id": "m-setup-dry-run",
+          "state": "active",
+          "kind": "procedure",
+          "subject": "Codex host setup",
+          "predicate": "validate",
+          "value": "Run scripts/setup-codex-host.mjs without --apply before applying host or hook changes."
+        },
+        "evidence": {
+          "authority_class": "user_direct",
+          "source_ref": "benchmark-v1:m-setup-dry-run",
+          "content_redacted": "Run scripts/setup-codex-host.mjs without --apply before applying host or hook changes."
+        }
+      },
+      {
+        "claim": {
+          "id": "m-git-freshness",
+          "state": "active",
+          "kind": "policy",
+          "subject": "Git freshness",
+          "predicate": "failure mode",
+          "value": "Git freshness checks fail closed; uncertain repository state must not authorize current recall."
+        },
+        "evidence": {
+          "authority_class": "repo_trusted",
+          "source_ref": "benchmark-v1:m-git-freshness",
+          "content_redacted": "Git freshness checks fail closed; uncertain repository state must not authorize current recall."
+        }
+      },
+      {
+        "claim": {
+          "id": "m-worker-pipe",
+          "state": "active",
+          "kind": "knowledge",
+          "subject": "embedding worker on Windows",
+          "predicate": "transport",
+          "value": "The embedding worker uses the Windows named pipe \\\\.\\pipe\\agent-hub-memory-embedding-v1."
+        },
+        "evidence": {
+          "authority_class": "tool_observation",
+          "source_ref": "benchmark-v1:m-worker-pipe",
+          "content_redacted": "The embedding worker uses the Windows named pipe \\\\.\\pipe\\agent-hub-memory-embedding-v1."
+        }
+      },
+      {
+        "claim": {
+          "id": "m-e5-dims",
+          "state": "active",
+          "kind": "knowledge",
+          "subject": "embedding worker",
+          "predicate": "dimensions",
+          "value": "The E5 embedding worker reports 384 dimensions and a healthy query canary."
+        },
+        "evidence": {
+          "authority_class": "tool_observation",
+          "source_ref": "benchmark-v1:m-e5-dims",
+          "content_redacted": "The E5 embedding worker reports 384 dimensions and a healthy query canary."
+        }
+      }
+    ],
+    "relevantClaimIds": []
+  },
+  {
+    "id": "direct-handoff",
+    "query": "Which field names are in the open_in_codex handoff receipt?",
+    "items": [
+      {
+        "claim": {
+          "id": "m-handoff-fields",
+          "state": "active",
+          "kind": "knowledge",
+          "subject": "open_in_codex handoff receipt",
+          "predicate": "field names",
+          "value": "The handoff receipt uses the field names status and threadId."
+        },
+        "evidence": {
+          "authority_class": "tool_observation",
+          "source_ref": "benchmark-v1:m-handoff-fields",
+          "content_redacted": "The handoff receipt uses the field names status and threadId."
+        }
+      },
+      {
+        "claim": {
+          "id": "m-relevance-disabled",
+          "state": "active",
+          "kind": "policy",
+          "subject": "recall relevance judge",
+          "predicate": "default state",
+          "value": "Keep recall relevance judging disabled by default until the benchmark gate passes."
+        },
+        "evidence": {
+          "authority_class": "repo_trusted",
+          "source_ref": "benchmark-v1:m-relevance-disabled",
+          "content_redacted": "Keep recall relevance judging disabled by default until the benchmark gate passes."
+        }
+      },
+      {
+        "claim": {
+          "id": "m-worker-pipe",
+          "state": "active",
+          "kind": "knowledge",
+          "subject": "embedding worker on Windows",
+          "predicate": "transport",
+          "value": "The embedding worker uses the Windows named pipe \\\\.\\pipe\\agent-hub-memory-embedding-v1."
+        },
+        "evidence": {
+          "authority_class": "tool_observation",
+          "source_ref": "benchmark-v1:m-worker-pipe",
+          "content_redacted": "The embedding worker uses the Windows named pipe \\\\.\\pipe\\agent-hub-memory-embedding-v1."
+        }
+      },
+      {
+        "claim": {
+          "id": "m-e5-dims",
+          "state": "active",
+          "kind": "knowledge",
+          "subject": "embedding worker",
+          "predicate": "dimensions",
+          "value": "The E5 embedding worker reports 384 dimensions and a healthy query canary."
+        },
+        "evidence": {
+          "authority_class": "tool_observation",
+          "source_ref": "benchmark-v1:m-e5-dims",
+          "content_redacted": "The E5 embedding worker reports 384 dimensions and a healthy query canary."
+        }
+      },
+      {
+        "claim": {
+          "id": "m-sync-ignore",
+          "state": "active",
+          "kind": "procedure",
+          "subject": "repository hygiene",
+          "predicate": "ignore",
+          "value": "Ignore memory-engine/node_modules and FreeFileSync sync.ffs_lock plus sync.ffs_db.*.ffs_tmp artifacts."
+        },
+        "evidence": {
+          "authority_class": "repo_trusted",
+          "source_ref": "benchmark-v1:m-sync-ignore",
+          "content_redacted": "Ignore memory-engine/node_modules and FreeFileSync sync.ffs_lock plus sync.ffs_db.*.ffs_tmp artifacts."
+        }
+      }
+    ],
+    "relevantClaimIds": [
+      "m-handoff-fields"
+    ]
+  },
+  {
+    "id": "paraphrase-handoff",
+    "query": "What are the status and thread identifiers called in the Codex handoff result?",
+    "items": [
+      {
+        "claim": {
+          "id": "m-handoff-fields",
+          "state": "active",
+          "kind": "knowledge",
+          "subject": "open_in_codex handoff receipt",
+          "predicate": "field names",
+          "value": "The handoff receipt uses the field names status and threadId."
+        },
+        "evidence": {
+          "authority_class": "tool_observation",
+          "source_ref": "benchmark-v1:m-handoff-fields",
+          "content_redacted": "The handoff receipt uses the field names status and threadId."
+        }
+      },
+      {
+        "claim": {
+          "id": "m-native-isolated",
+          "state": "active",
+          "kind": "policy",
+          "subject": "native Codex memory",
+          "predicate": "isolation",
+          "value": "Native Codex memory remains isolated and disabled; Agent Hub must not use it as a fallback memory source."
+        },
+        "evidence": {
+          "authority_class": "repo_trusted",
+          "source_ref": "benchmark-v1:m-native-isolated",
+          "content_redacted": "Native Codex memory remains isolated and disabled; Agent Hub must not use it as a fallback memory source."
+        }
+      },
+      {
+        "claim": {
+          "id": "m-worker-pipe",
+          "state": "active",
+          "kind": "knowledge",
+          "subject": "embedding worker on Windows",
+          "predicate": "transport",
+          "value": "The embedding worker uses the Windows named pipe \\\\.\\pipe\\agent-hub-memory-embedding-v1."
+        },
+        "evidence": {
+          "authority_class": "tool_observation",
+          "source_ref": "benchmark-v1:m-worker-pipe",
+          "content_redacted": "The embedding worker uses the Windows named pipe \\\\.\\pipe\\agent-hub-memory-embedding-v1."
+        }
+      },
+      {
+        "claim": {
+          "id": "m-project-branch-scope",
+          "state": "active",
+          "kind": "policy",
+          "subject": "durable memory recall",
+          "predicate": "scope",
+          "value": "Durable recall is strictly scoped to the current project and branch."
+        },
+        "evidence": {
+          "authority_class": "repo_trusted",
+          "source_ref": "benchmark-v1:m-project-branch-scope",
+          "content_redacted": "Durable recall is strictly scoped to the current project and branch."
+        }
+      },
+      {
+        "claim": {
+          "id": "m-sync-ignore",
+          "state": "active",
+          "kind": "procedure",
+          "subject": "repository hygiene",
+          "predicate": "ignore",
+          "value": "Ignore memory-engine/node_modules and FreeFileSync sync.ffs_lock plus sync.ffs_db.*.ffs_tmp artifacts."
+        },
+        "evidence": {
+          "authority_class": "repo_trusted",
+          "source_ref": "benchmark-v1:m-sync-ignore",
+          "content_redacted": "Ignore memory-engine/node_modules and FreeFileSync sync.ffs_lock plus sync.ffs_db.*.ffs_tmp artifacts."
+        }
+      }
+    ],
+    "relevantClaimIds": [
+      "m-handoff-fields"
+    ]
+  },
+  {
+    "id": "negative-pr-fields",
+    "query": "Which fields are returned by GitHub when a pull request is created?",
+    "items": [
+      {
+        "claim": {
+          "id": "m-handoff-fields",
+          "state": "active",
+          "kind": "knowledge",
+          "subject": "open_in_codex handoff receipt",
+          "predicate": "field names",
+          "value": "The handoff receipt uses the field names status and threadId."
+        },
+        "evidence": {
+          "authority_class": "tool_observation",
+          "source_ref": "benchmark-v1:m-handoff-fields",
+          "content_redacted": "The handoff receipt uses the field names status and threadId."
+        }
+      },
+      {
+        "claim": {
+          "id": "m-sync-ignore",
+          "state": "active",
+          "kind": "procedure",
+          "subject": "repository hygiene",
+          "predicate": "ignore",
+          "value": "Ignore memory-engine/node_modules and FreeFileSync sync.ffs_lock plus sync.ffs_db.*.ffs_tmp artifacts."
+        },
+        "evidence": {
+          "authority_class": "repo_trusted",
+          "source_ref": "benchmark-v1:m-sync-ignore",
+          "content_redacted": "Ignore memory-engine/node_modules and FreeFileSync sync.ffs_lock plus sync.ffs_db.*.ffs_tmp artifacts."
+        }
+      },
+      {
+        "claim": {
+          "id": "m-project-branch-scope",
+          "state": "active",
+          "kind": "policy",
+          "subject": "durable memory recall",
+          "predicate": "scope",
+          "value": "Durable recall is strictly scoped to the current project and branch."
+        },
+        "evidence": {
+          "authority_class": "repo_trusted",
+          "source_ref": "benchmark-v1:m-project-branch-scope",
+          "content_redacted": "Durable recall is strictly scoped to the current project and branch."
+        }
+      },
+      {
+        "claim": {
+          "id": "m-relevance-disabled",
+          "state": "active",
+          "kind": "policy",
+          "subject": "recall relevance judge",
+          "predicate": "default state",
+          "value": "Keep recall relevance judging disabled by default until the benchmark gate passes."
+        },
+        "evidence": {
+          "authority_class": "repo_trusted",
+          "source_ref": "benchmark-v1:m-relevance-disabled",
+          "content_redacted": "Keep recall relevance judging disabled by default until the benchmark gate passes."
+        }
+      },
+      {
+        "claim": {
+          "id": "m-doctor-healthy",
+          "state": "active",
+          "kind": "procedure",
+          "subject": "memory runtime changes",
+          "predicate": "verify",
+          "value": "After runtime or hook changes, run Memory Doctor and require status healthy before considering the host ready."
+        },
+        "evidence": {
+          "authority_class": "user_direct",
+          "source_ref": "benchmark-v1:m-doctor-healthy",
+          "content_redacted": "After runtime or hook changes, run Memory Doctor and require status healthy before considering the host ready."
+        }
+      }
+    ],
+    "relevantClaimIds": []
+  },
+  {
+    "id": "direct-relevance-disabled",
+    "query": "Is the recall relevance judge enabled by default?",
+    "items": [
+      {
+        "claim": {
+          "id": "m-relevance-disabled",
+          "state": "active",
+          "kind": "policy",
+          "subject": "recall relevance judge",
+          "predicate": "default state",
+          "value": "Keep recall relevance judging disabled by default until the benchmark gate passes."
+        },
+        "evidence": {
+          "authority_class": "repo_trusted",
+          "source_ref": "benchmark-v1:m-relevance-disabled",
+          "content_redacted": "Keep recall relevance judging disabled by default until the benchmark gate passes."
+        }
+      },
+      {
+        "claim": {
+          "id": "m-native-isolated",
+          "state": "active",
+          "kind": "policy",
+          "subject": "native Codex memory",
+          "predicate": "isolation",
+          "value": "Native Codex memory remains isolated and disabled; Agent Hub must not use it as a fallback memory source."
+        },
+        "evidence": {
+          "authority_class": "repo_trusted",
+          "source_ref": "benchmark-v1:m-native-isolated",
+          "content_redacted": "Native Codex memory remains isolated and disabled; Agent Hub must not use it as a fallback memory source."
+        }
+      },
+      {
+        "claim": {
+          "id": "m-temporal-current",
+          "state": "active",
+          "kind": "policy",
+          "subject": "current memory view",
+          "predicate": "validity",
+          "value": "A claim is current only while active and valid_from <= now < valid_until; malformed temporal data fails closed."
+        },
+        "evidence": {
+          "authority_class": "repo_trusted",
+          "source_ref": "benchmark-v1:m-temporal-current",
+          "content_redacted": "A claim is current only while active and valid_from <= now < valid_until; malformed temporal data fails closed."
+        }
+      },
+      {
+        "claim": {
+          "id": "m-git-freshness",
+          "state": "active",
+          "kind": "policy",
+          "subject": "Git freshness",
+          "predicate": "failure mode",
+          "value": "Git freshness checks fail closed; uncertain repository state must not authorize current recall."
+        },
+        "evidence": {
+          "authority_class": "repo_trusted",
+          "source_ref": "benchmark-v1:m-git-freshness",
+          "content_redacted": "Git freshness checks fail closed; uncertain repository state must not authorize current recall."
+        }
+      },
+      {
+        "claim": {
+          "id": "m-project-branch-scope",
+          "state": "active",
+          "kind": "policy",
+          "subject": "durable memory recall",
+          "predicate": "scope",
+          "value": "Durable recall is strictly scoped to the current project and branch."
+        },
+        "evidence": {
+          "authority_class": "repo_trusted",
+          "source_ref": "benchmark-v1:m-project-branch-scope",
+          "content_redacted": "Durable recall is strictly scoped to the current project and branch."
+        }
+      }
+    ],
+    "relevantClaimIds": [
+      "m-relevance-disabled"
+    ]
+  },
+  {
+    "id": "enablement-gate",
+    "query": "What has to happen before we enable recall relevance selection by default?",
+    "items": [
+      {
+        "claim": {
+          "id": "m-relevance-disabled",
+          "state": "active",
+          "kind": "policy",
+          "subject": "recall relevance judge",
+          "predicate": "default state",
+          "value": "Keep recall relevance judging disabled by default until the benchmark gate passes."
+        },
+        "evidence": {
+          "authority_class": "repo_trusted",
+          "source_ref": "benchmark-v1:m-relevance-disabled",
+          "content_redacted": "Keep recall relevance judging disabled by default until the benchmark gate passes."
+        }
+      },
+      {
+        "claim": {
+          "id": "m-native-isolated",
+          "state": "active",
+          "kind": "policy",
+          "subject": "native Codex memory",
+          "predicate": "isolation",
+          "value": "Native Codex memory remains isolated and disabled; Agent Hub must not use it as a fallback memory source."
+        },
+        "evidence": {
+          "authority_class": "repo_trusted",
+          "source_ref": "benchmark-v1:m-native-isolated",
+          "content_redacted": "Native Codex memory remains isolated and disabled; Agent Hub must not use it as a fallback memory source."
+        }
+      },
+      {
+        "claim": {
+          "id": "m-doctor-healthy",
+          "state": "active",
+          "kind": "procedure",
+          "subject": "memory runtime changes",
+          "predicate": "verify",
+          "value": "After runtime or hook changes, run Memory Doctor and require status healthy before considering the host ready."
+        },
+        "evidence": {
+          "authority_class": "user_direct",
+          "source_ref": "benchmark-v1:m-doctor-healthy",
+          "content_redacted": "After runtime or hook changes, run Memory Doctor and require status healthy before considering the host ready."
+        }
+      },
+      {
+        "claim": {
+          "id": "m-temporal-current",
+          "state": "active",
+          "kind": "policy",
+          "subject": "current memory view",
+          "predicate": "validity",
+          "value": "A claim is current only while active and valid_from <= now < valid_until; malformed temporal data fails closed."
+        },
+        "evidence": {
+          "authority_class": "repo_trusted",
+          "source_ref": "benchmark-v1:m-temporal-current",
+          "content_redacted": "A claim is current only while active and valid_from <= now < valid_until; malformed temporal data fails closed."
+        }
+      },
+      {
+        "claim": {
+          "id": "m-git-freshness",
+          "state": "active",
+          "kind": "policy",
+          "subject": "Git freshness",
+          "predicate": "failure mode",
+          "value": "Git freshness checks fail closed; uncertain repository state must not authorize current recall."
+        },
+        "evidence": {
+          "authority_class": "repo_trusted",
+          "source_ref": "benchmark-v1:m-git-freshness",
+          "content_redacted": "Git freshness checks fail closed; uncertain repository state must not authorize current recall."
+        }
+      }
+    ],
+    "relevantClaimIds": [
+      "m-relevance-disabled"
+    ]
+  },
+  {
+    "id": "disabled-behaviors",
+    "query": "Which memory features must stay isolated or disabled right now?",
+    "items": [
+      {
+        "claim": {
+          "id": "m-relevance-disabled",
+          "state": "active",
+          "kind": "policy",
+          "subject": "recall relevance judge",
+          "predicate": "default state",
+          "value": "Keep recall relevance judging disabled by default until the benchmark gate passes."
+        },
+        "evidence": {
+          "authority_class": "repo_trusted",
+          "source_ref": "benchmark-v1:m-relevance-disabled",
+          "content_redacted": "Keep recall relevance judging disabled by default until the benchmark gate passes."
+        }
+      },
+      {
+        "claim": {
+          "id": "m-native-isolated",
+          "state": "active",
+          "kind": "policy",
+          "subject": "native Codex memory",
+          "predicate": "isolation",
+          "value": "Native Codex memory remains isolated and disabled; Agent Hub must not use it as a fallback memory source."
+        },
+        "evidence": {
+          "authority_class": "repo_trusted",
+          "source_ref": "benchmark-v1:m-native-isolated",
+          "content_redacted": "Native Codex memory remains isolated and disabled; Agent Hub must not use it as a fallback memory source."
+        }
+      },
+      {
+        "claim": {
+          "id": "m-temporal-current",
+          "state": "active",
+          "kind": "policy",
+          "subject": "current memory view",
+          "predicate": "validity",
+          "value": "A claim is current only while active and valid_from <= now < valid_until; malformed temporal data fails closed."
+        },
+        "evidence": {
+          "authority_class": "repo_trusted",
+          "source_ref": "benchmark-v1:m-temporal-current",
+          "content_redacted": "A claim is current only while active and valid_from <= now < valid_until; malformed temporal data fails closed."
+        }
+      },
+      {
+        "claim": {
+          "id": "m-project-branch-scope",
+          "state": "active",
+          "kind": "policy",
+          "subject": "durable memory recall",
+          "predicate": "scope",
+          "value": "Durable recall is strictly scoped to the current project and branch."
+        },
+        "evidence": {
+          "authority_class": "repo_trusted",
+          "source_ref": "benchmark-v1:m-project-branch-scope",
+          "content_redacted": "Durable recall is strictly scoped to the current project and branch."
+        }
+      },
+      {
+        "claim": {
+          "id": "m-git-freshness",
+          "state": "active",
+          "kind": "policy",
+          "subject": "Git freshness",
+          "predicate": "failure mode",
+          "value": "Git freshness checks fail closed; uncertain repository state must not authorize current recall."
+        },
+        "evidence": {
+          "authority_class": "repo_trusted",
+          "source_ref": "benchmark-v1:m-git-freshness",
+          "content_redacted": "Git freshness checks fail closed; uncertain repository state must not authorize current recall."
+        }
+      }
+    ],
+    "relevantClaimIds": [
+      "m-relevance-disabled",
+      "m-native-isolated"
+    ]
+  },
+  {
+    "id": "direct-native-memory",
+    "query": "What is the policy for native Codex memory in Agent Hub?",
+    "items": [
+      {
+        "claim": {
+          "id": "m-native-isolated",
+          "state": "active",
+          "kind": "policy",
+          "subject": "native Codex memory",
+          "predicate": "isolation",
+          "value": "Native Codex memory remains isolated and disabled; Agent Hub must not use it as a fallback memory source."
+        },
+        "evidence": {
+          "authority_class": "repo_trusted",
+          "source_ref": "benchmark-v1:m-native-isolated",
+          "content_redacted": "Native Codex memory remains isolated and disabled; Agent Hub must not use it as a fallback memory source."
+        }
+      },
+      {
+        "claim": {
+          "id": "m-relevance-disabled",
+          "state": "active",
+          "kind": "policy",
+          "subject": "recall relevance judge",
+          "predicate": "default state",
+          "value": "Keep recall relevance judging disabled by default until the benchmark gate passes."
+        },
+        "evidence": {
+          "authority_class": "repo_trusted",
+          "source_ref": "benchmark-v1:m-relevance-disabled",
+          "content_redacted": "Keep recall relevance judging disabled by default until the benchmark gate passes."
+        }
+      },
+      {
+        "claim": {
+          "id": "m-project-branch-scope",
+          "state": "active",
+          "kind": "policy",
+          "subject": "durable memory recall",
+          "predicate": "scope",
+          "value": "Durable recall is strictly scoped to the current project and branch."
+        },
+        "evidence": {
+          "authority_class": "repo_trusted",
+          "source_ref": "benchmark-v1:m-project-branch-scope",
+          "content_redacted": "Durable recall is strictly scoped to the current project and branch."
+        }
+      },
+      {
+        "claim": {
+          "id": "m-temporal-current",
+          "state": "active",
+          "kind": "policy",
+          "subject": "current memory view",
+          "predicate": "validity",
+          "value": "A claim is current only while active and valid_from <= now < valid_until; malformed temporal data fails closed."
+        },
+        "evidence": {
+          "authority_class": "repo_trusted",
+          "source_ref": "benchmark-v1:m-temporal-current",
+          "content_redacted": "A claim is current only while active and valid_from <= now < valid_until; malformed temporal data fails closed."
+        }
+      },
+      {
+        "claim": {
+          "id": "m-provenance-primary",
+          "state": "active",
+          "kind": "policy",
+          "subject": "multi-evidence claims",
+          "predicate": "primary evidence",
+          "value": "Choose the deterministic primary evidence from the least-privileged authority first, then evidence_id ascending for ties."
+        },
+        "evidence": {
+          "authority_class": "repo_trusted",
+          "source_ref": "benchmark-v1:m-provenance-primary",
+          "content_redacted": "Choose the deterministic primary evidence from the least-privileged authority first, then evidence_id ascending for ties."
+        }
+      }
+    ],
+    "relevantClaimIds": [
+      "m-native-isolated"
+    ]
+  },
+  {
+    "id": "native-fallback",
+    "query": "Should native Codex memory be used as a fallback if Agent Hub recall has no match?",
+    "items": [
+      {
+        "claim": {
+          "id": "m-native-isolated",
+          "state": "active",
+          "kind": "policy",
+          "subject": "native Codex memory",
+          "predicate": "isolation",
+          "value": "Native Codex memory remains isolated and disabled; Agent Hub must not use it as a fallback memory source."
+        },
+        "evidence": {
+          "authority_class": "repo_trusted",
+          "source_ref": "benchmark-v1:m-native-isolated",
+          "content_redacted": "Native Codex memory remains isolated and disabled; Agent Hub must not use it as a fallback memory source."
+        }
+      },
+      {
+        "claim": {
+          "id": "m-relevance-disabled",
+          "state": "active",
+          "kind": "policy",
+          "subject": "recall relevance judge",
+          "predicate": "default state",
+          "value": "Keep recall relevance judging disabled by default until the benchmark gate passes."
+        },
+        "evidence": {
+          "authority_class": "repo_trusted",
+          "source_ref": "benchmark-v1:m-relevance-disabled",
+          "content_redacted": "Keep recall relevance judging disabled by default until the benchmark gate passes."
+        }
+      },
+      {
+        "claim": {
+          "id": "m-project-branch-scope",
+          "state": "active",
+          "kind": "policy",
+          "subject": "durable memory recall",
+          "predicate": "scope",
+          "value": "Durable recall is strictly scoped to the current project and branch."
+        },
+        "evidence": {
+          "authority_class": "repo_trusted",
+          "source_ref": "benchmark-v1:m-project-branch-scope",
+          "content_redacted": "Durable recall is strictly scoped to the current project and branch."
+        }
+      },
+      {
+        "claim": {
+          "id": "m-git-freshness",
+          "state": "active",
+          "kind": "policy",
+          "subject": "Git freshness",
+          "predicate": "failure mode",
+          "value": "Git freshness checks fail closed; uncertain repository state must not authorize current recall."
+        },
+        "evidence": {
+          "authority_class": "repo_trusted",
+          "source_ref": "benchmark-v1:m-git-freshness",
+          "content_redacted": "Git freshness checks fail closed; uncertain repository state must not authorize current recall."
+        }
+      },
+      {
+        "claim": {
+          "id": "m-doctor-healthy",
+          "state": "active",
+          "kind": "procedure",
+          "subject": "memory runtime changes",
+          "predicate": "verify",
+          "value": "After runtime or hook changes, run Memory Doctor and require status healthy before considering the host ready."
+        },
+        "evidence": {
+          "authority_class": "user_direct",
+          "source_ref": "benchmark-v1:m-doctor-healthy",
+          "content_redacted": "After runtime or hook changes, run Memory Doctor and require status healthy before considering the host ready."
+        }
+      }
+    ],
+    "relevantClaimIds": [
+      "m-native-isolated"
+    ]
+  },
+  {
+    "id": "direct-worker-pipe",
+    "query": "What IPC transport does the embedding worker use on Windows?",
+    "items": [
+      {
+        "claim": {
+          "id": "m-worker-pipe",
+          "state": "active",
+          "kind": "knowledge",
+          "subject": "embedding worker on Windows",
+          "predicate": "transport",
+          "value": "The embedding worker uses the Windows named pipe \\\\.\\pipe\\agent-hub-memory-embedding-v1."
+        },
+        "evidence": {
+          "authority_class": "tool_observation",
+          "source_ref": "benchmark-v1:m-worker-pipe",
+          "content_redacted": "The embedding worker uses the Windows named pipe \\\\.\\pipe\\agent-hub-memory-embedding-v1."
+        }
+      },
+      {
+        "claim": {
+          "id": "m-e5-dims",
+          "state": "active",
+          "kind": "knowledge",
+          "subject": "embedding worker",
+          "predicate": "dimensions",
+          "value": "The E5 embedding worker reports 384 dimensions and a healthy query canary."
+        },
+        "evidence": {
+          "authority_class": "tool_observation",
+          "source_ref": "benchmark-v1:m-e5-dims",
+          "content_redacted": "The E5 embedding worker reports 384 dimensions and a healthy query canary."
+        }
+      },
+      {
+        "claim": {
+          "id": "m-npm-ci",
+          "state": "active",
+          "kind": "procedure",
+          "subject": "memory-engine dependencies",
+          "predicate": "install",
+          "value": "Use npm ci --prefix .\\memory-engine from the committed lockfile to repair the memory-engine provider dependencies."
+        },
+        "evidence": {
+          "authority_class": "user_direct",
+          "source_ref": "benchmark-v1:m-npm-ci",
+          "content_redacted": "Use npm ci --prefix .\\memory-engine from the committed lockfile to repair the memory-engine provider dependencies."
+        }
+      },
+      {
+        "claim": {
+          "id": "m-doctor-healthy",
+          "state": "active",
+          "kind": "procedure",
+          "subject": "memory runtime changes",
+          "predicate": "verify",
+          "value": "After runtime or hook changes, run Memory Doctor and require status healthy before considering the host ready."
+        },
+        "evidence": {
+          "authority_class": "user_direct",
+          "source_ref": "benchmark-v1:m-doctor-healthy",
+          "content_redacted": "After runtime or hook changes, run Memory Doctor and require status healthy before considering the host ready."
+        }
+      },
+      {
+        "claim": {
+          "id": "m-sync-ignore",
+          "state": "active",
+          "kind": "procedure",
+          "subject": "repository hygiene",
+          "predicate": "ignore",
+          "value": "Ignore memory-engine/node_modules and FreeFileSync sync.ffs_lock plus sync.ffs_db.*.ffs_tmp artifacts."
+        },
+        "evidence": {
+          "authority_class": "repo_trusted",
+          "source_ref": "benchmark-v1:m-sync-ignore",
+          "content_redacted": "Ignore memory-engine/node_modules and FreeFileSync sync.ffs_lock plus sync.ffs_db.*.ffs_tmp artifacts."
+        }
+      }
+    ],
+    "relevantClaimIds": [
+      "m-worker-pipe"
+    ]
+  },
+  {
+    "id": "direct-e5-dims",
+    "query": "What embedding dimensions is the worker expected to expose?",
+    "items": [
+      {
+        "claim": {
+          "id": "m-e5-dims",
+          "state": "active",
+          "kind": "knowledge",
+          "subject": "embedding worker",
+          "predicate": "dimensions",
+          "value": "The E5 embedding worker reports 384 dimensions and a healthy query canary."
+        },
+        "evidence": {
+          "authority_class": "tool_observation",
+          "source_ref": "benchmark-v1:m-e5-dims",
+          "content_redacted": "The E5 embedding worker reports 384 dimensions and a healthy query canary."
+        }
+      },
+      {
+        "claim": {
+          "id": "m-worker-pipe",
+          "state": "active",
+          "kind": "knowledge",
+          "subject": "embedding worker on Windows",
+          "predicate": "transport",
+          "value": "The embedding worker uses the Windows named pipe \\\\.\\pipe\\agent-hub-memory-embedding-v1."
+        },
+        "evidence": {
+          "authority_class": "tool_observation",
+          "source_ref": "benchmark-v1:m-worker-pipe",
+          "content_redacted": "The embedding worker uses the Windows named pipe \\\\.\\pipe\\agent-hub-memory-embedding-v1."
+        }
+      },
+      {
+        "claim": {
+          "id": "m-npm-ci",
+          "state": "active",
+          "kind": "procedure",
+          "subject": "memory-engine dependencies",
+          "predicate": "install",
+          "value": "Use npm ci --prefix .\\memory-engine from the committed lockfile to repair the memory-engine provider dependencies."
+        },
+        "evidence": {
+          "authority_class": "user_direct",
+          "source_ref": "benchmark-v1:m-npm-ci",
+          "content_redacted": "Use npm ci --prefix .\\memory-engine from the committed lockfile to repair the memory-engine provider dependencies."
+        }
+      },
+      {
+        "claim": {
+          "id": "m-project-branch-scope",
+          "state": "active",
+          "kind": "policy",
+          "subject": "durable memory recall",
+          "predicate": "scope",
+          "value": "Durable recall is strictly scoped to the current project and branch."
+        },
+        "evidence": {
+          "authority_class": "repo_trusted",
+          "source_ref": "benchmark-v1:m-project-branch-scope",
+          "content_redacted": "Durable recall is strictly scoped to the current project and branch."
+        }
+      },
+      {
+        "claim": {
+          "id": "m-temporal-current",
+          "state": "active",
+          "kind": "policy",
+          "subject": "current memory view",
+          "predicate": "validity",
+          "value": "A claim is current only while active and valid_from <= now < valid_until; malformed temporal data fails closed."
+        },
+        "evidence": {
+          "authority_class": "repo_trusted",
+          "source_ref": "benchmark-v1:m-temporal-current",
+          "content_redacted": "A claim is current only while active and valid_from <= now < valid_until; malformed temporal data fails closed."
+        }
+      }
+    ],
+    "relevantClaimIds": [
+      "m-e5-dims"
+    ]
+  },
+  {
+    "id": "semantic-worker-config",
+    "query": "What are the expected Windows transport and embedding dimensions for the worker?",
+    "items": [
+      {
+        "claim": {
+          "id": "m-worker-pipe",
+          "state": "active",
+          "kind": "knowledge",
+          "subject": "embedding worker on Windows",
+          "predicate": "transport",
+          "value": "The embedding worker uses the Windows named pipe \\\\.\\pipe\\agent-hub-memory-embedding-v1."
+        },
+        "evidence": {
+          "authority_class": "tool_observation",
+          "source_ref": "benchmark-v1:m-worker-pipe",
+          "content_redacted": "The embedding worker uses the Windows named pipe \\\\.\\pipe\\agent-hub-memory-embedding-v1."
+        }
+      },
+      {
+        "claim": {
+          "id": "m-e5-dims",
+          "state": "active",
+          "kind": "knowledge",
+          "subject": "embedding worker",
+          "predicate": "dimensions",
+          "value": "The E5 embedding worker reports 384 dimensions and a healthy query canary."
+        },
+        "evidence": {
+          "authority_class": "tool_observation",
+          "source_ref": "benchmark-v1:m-e5-dims",
+          "content_redacted": "The E5 embedding worker reports 384 dimensions and a healthy query canary."
+        }
+      },
+      {
+        "claim": {
+          "id": "m-npm-ci",
+          "state": "active",
+          "kind": "procedure",
+          "subject": "memory-engine dependencies",
+          "predicate": "install",
+          "value": "Use npm ci --prefix .\\memory-engine from the committed lockfile to repair the memory-engine provider dependencies."
+        },
+        "evidence": {
+          "authority_class": "user_direct",
+          "source_ref": "benchmark-v1:m-npm-ci",
+          "content_redacted": "Use npm ci --prefix .\\memory-engine from the committed lockfile to repair the memory-engine provider dependencies."
+        }
+      },
+      {
+        "claim": {
+          "id": "m-doctor-healthy",
+          "state": "active",
+          "kind": "procedure",
+          "subject": "memory runtime changes",
+          "predicate": "verify",
+          "value": "After runtime or hook changes, run Memory Doctor and require status healthy before considering the host ready."
+        },
+        "evidence": {
+          "authority_class": "user_direct",
+          "source_ref": "benchmark-v1:m-doctor-healthy",
+          "content_redacted": "After runtime or hook changes, run Memory Doctor and require status healthy before considering the host ready."
+        }
+      },
+      {
+        "claim": {
+          "id": "m-git-freshness",
+          "state": "active",
+          "kind": "policy",
+          "subject": "Git freshness",
+          "predicate": "failure mode",
+          "value": "Git freshness checks fail closed; uncertain repository state must not authorize current recall."
+        },
+        "evidence": {
+          "authority_class": "repo_trusted",
+          "source_ref": "benchmark-v1:m-git-freshness",
+          "content_redacted": "Git freshness checks fail closed; uncertain repository state must not authorize current recall."
+        }
+      }
+    ],
+    "relevantClaimIds": [
+      "m-worker-pipe",
+      "m-e5-dims"
+    ]
+  },
+  {
+    "id": "direct-provenance-primary",
+    "query": "How do we choose the primary evidence when a claim has multiple evidence sources?",
+    "items": [
+      {
+        "claim": {
+          "id": "m-provenance-primary",
+          "state": "active",
+          "kind": "policy",
+          "subject": "multi-evidence claims",
+          "predicate": "primary evidence",
+          "value": "Choose the deterministic primary evidence from the least-privileged authority first, then evidence_id ascending for ties."
+        },
+        "evidence": {
+          "authority_class": "repo_trusted",
+          "source_ref": "benchmark-v1:m-provenance-primary",
+          "content_redacted": "Choose the deterministic primary evidence from the least-privileged authority first, then evidence_id ascending for ties."
+        }
+      },
+      {
+        "claim": {
+          "id": "m-project-branch-scope",
+          "state": "active",
+          "kind": "policy",
+          "subject": "durable memory recall",
+          "predicate": "scope",
+          "value": "Durable recall is strictly scoped to the current project and branch."
+        },
+        "evidence": {
+          "authority_class": "repo_trusted",
+          "source_ref": "benchmark-v1:m-project-branch-scope",
+          "content_redacted": "Durable recall is strictly scoped to the current project and branch."
+        }
+      },
+      {
+        "claim": {
+          "id": "m-temporal-current",
+          "state": "active",
+          "kind": "policy",
+          "subject": "current memory view",
+          "predicate": "validity",
+          "value": "A claim is current only while active and valid_from <= now < valid_until; malformed temporal data fails closed."
+        },
+        "evidence": {
+          "authority_class": "repo_trusted",
+          "source_ref": "benchmark-v1:m-temporal-current",
+          "content_redacted": "A claim is current only while active and valid_from <= now < valid_until; malformed temporal data fails closed."
+        }
+      },
+      {
+        "claim": {
+          "id": "m-git-freshness",
+          "state": "active",
+          "kind": "policy",
+          "subject": "Git freshness",
+          "predicate": "failure mode",
+          "value": "Git freshness checks fail closed; uncertain repository state must not authorize current recall."
+        },
+        "evidence": {
+          "authority_class": "repo_trusted",
+          "source_ref": "benchmark-v1:m-git-freshness",
+          "content_redacted": "Git freshness checks fail closed; uncertain repository state must not authorize current recall."
+        }
+      },
+      {
+        "claim": {
+          "id": "m-handoff-fields",
+          "state": "active",
+          "kind": "knowledge",
+          "subject": "open_in_codex handoff receipt",
+          "predicate": "field names",
+          "value": "The handoff receipt uses the field names status and threadId."
+        },
+        "evidence": {
+          "authority_class": "tool_observation",
+          "source_ref": "benchmark-v1:m-handoff-fields",
+          "content_redacted": "The handoff receipt uses the field names status and threadId."
+        }
+      }
+    ],
+    "relevantClaimIds": [
+      "m-provenance-primary"
+    ]
+  },
+  {
+    "id": "direct-scope",
+    "query": "What scope must durable recall obey?",
+    "items": [
+      {
+        "claim": {
+          "id": "m-project-branch-scope",
+          "state": "active",
+          "kind": "policy",
+          "subject": "durable memory recall",
+          "predicate": "scope",
+          "value": "Durable recall is strictly scoped to the current project and branch."
+        },
+        "evidence": {
+          "authority_class": "repo_trusted",
+          "source_ref": "benchmark-v1:m-project-branch-scope",
+          "content_redacted": "Durable recall is strictly scoped to the current project and branch."
+        }
+      },
+      {
+        "claim": {
+          "id": "m-git-freshness",
+          "state": "active",
+          "kind": "policy",
+          "subject": "Git freshness",
+          "predicate": "failure mode",
+          "value": "Git freshness checks fail closed; uncertain repository state must not authorize current recall."
+        },
+        "evidence": {
+          "authority_class": "repo_trusted",
+          "source_ref": "benchmark-v1:m-git-freshness",
+          "content_redacted": "Git freshness checks fail closed; uncertain repository state must not authorize current recall."
+        }
+      },
+      {
+        "claim": {
+          "id": "m-temporal-current",
+          "state": "active",
+          "kind": "policy",
+          "subject": "current memory view",
+          "predicate": "validity",
+          "value": "A claim is current only while active and valid_from <= now < valid_until; malformed temporal data fails closed."
+        },
+        "evidence": {
+          "authority_class": "repo_trusted",
+          "source_ref": "benchmark-v1:m-temporal-current",
+          "content_redacted": "A claim is current only while active and valid_from <= now < valid_until; malformed temporal data fails closed."
+        }
+      },
+      {
+        "claim": {
+          "id": "m-native-isolated",
+          "state": "active",
+          "kind": "policy",
+          "subject": "native Codex memory",
+          "predicate": "isolation",
+          "value": "Native Codex memory remains isolated and disabled; Agent Hub must not use it as a fallback memory source."
+        },
+        "evidence": {
+          "authority_class": "repo_trusted",
+          "source_ref": "benchmark-v1:m-native-isolated",
+          "content_redacted": "Native Codex memory remains isolated and disabled; Agent Hub must not use it as a fallback memory source."
+        }
+      },
+      {
+        "claim": {
+          "id": "m-relevance-disabled",
+          "state": "active",
+          "kind": "policy",
+          "subject": "recall relevance judge",
+          "predicate": "default state",
+          "value": "Keep recall relevance judging disabled by default until the benchmark gate passes."
+        },
+        "evidence": {
+          "authority_class": "repo_trusted",
+          "source_ref": "benchmark-v1:m-relevance-disabled",
+          "content_redacted": "Keep recall relevance judging disabled by default until the benchmark gate passes."
+        }
+      }
+    ],
+    "relevantClaimIds": [
+      "m-project-branch-scope"
+    ]
+  },
+  {
+    "id": "direct-git-freshness",
+    "query": "How should recall behave when Git freshness cannot be established?",
+    "items": [
+      {
+        "claim": {
+          "id": "m-git-freshness",
+          "state": "active",
+          "kind": "policy",
+          "subject": "Git freshness",
+          "predicate": "failure mode",
+          "value": "Git freshness checks fail closed; uncertain repository state must not authorize current recall."
+        },
+        "evidence": {
+          "authority_class": "repo_trusted",
+          "source_ref": "benchmark-v1:m-git-freshness",
+          "content_redacted": "Git freshness checks fail closed; uncertain repository state must not authorize current recall."
+        }
+      },
+      {
+        "claim": {
+          "id": "m-project-branch-scope",
+          "state": "active",
+          "kind": "policy",
+          "subject": "durable memory recall",
+          "predicate": "scope",
+          "value": "Durable recall is strictly scoped to the current project and branch."
+        },
+        "evidence": {
+          "authority_class": "repo_trusted",
+          "source_ref": "benchmark-v1:m-project-branch-scope",
+          "content_redacted": "Durable recall is strictly scoped to the current project and branch."
+        }
+      },
+      {
+        "claim": {
+          "id": "m-temporal-current",
+          "state": "active",
+          "kind": "policy",
+          "subject": "current memory view",
+          "predicate": "validity",
+          "value": "A claim is current only while active and valid_from <= now < valid_until; malformed temporal data fails closed."
+        },
+        "evidence": {
+          "authority_class": "repo_trusted",
+          "source_ref": "benchmark-v1:m-temporal-current",
+          "content_redacted": "A claim is current only while active and valid_from <= now < valid_until; malformed temporal data fails closed."
+        }
+      },
+      {
+        "claim": {
+          "id": "m-doctor-healthy",
+          "state": "active",
+          "kind": "procedure",
+          "subject": "memory runtime changes",
+          "predicate": "verify",
+          "value": "After runtime or hook changes, run Memory Doctor and require status healthy before considering the host ready."
+        },
+        "evidence": {
+          "authority_class": "user_direct",
+          "source_ref": "benchmark-v1:m-doctor-healthy",
+          "content_redacted": "After runtime or hook changes, run Memory Doctor and require status healthy before considering the host ready."
+        }
+      },
+      {
+        "claim": {
+          "id": "m-setup-dry-run",
+          "state": "active",
+          "kind": "procedure",
+          "subject": "Codex host setup",
+          "predicate": "validate",
+          "value": "Run scripts/setup-codex-host.mjs without --apply before applying host or hook changes."
+        },
+        "evidence": {
+          "authority_class": "user_direct",
+          "source_ref": "benchmark-v1:m-setup-dry-run",
+          "content_redacted": "Run scripts/setup-codex-host.mjs without --apply before applying host or hook changes."
+        }
+      }
+    ],
+    "relevantClaimIds": [
+      "m-git-freshness"
+    ]
+  },
+  {
+    "id": "current-memory-safety",
+    "query": "Which rules keep current recall from using stale or cross-scope memory?",
+    "items": [
+      {
+        "claim": {
+          "id": "m-project-branch-scope",
+          "state": "active",
+          "kind": "policy",
+          "subject": "durable memory recall",
+          "predicate": "scope",
+          "value": "Durable recall is strictly scoped to the current project and branch."
+        },
+        "evidence": {
+          "authority_class": "repo_trusted",
+          "source_ref": "benchmark-v1:m-project-branch-scope",
+          "content_redacted": "Durable recall is strictly scoped to the current project and branch."
+        }
+      },
+      {
+        "claim": {
+          "id": "m-git-freshness",
+          "state": "active",
+          "kind": "policy",
+          "subject": "Git freshness",
+          "predicate": "failure mode",
+          "value": "Git freshness checks fail closed; uncertain repository state must not authorize current recall."
+        },
+        "evidence": {
+          "authority_class": "repo_trusted",
+          "source_ref": "benchmark-v1:m-git-freshness",
+          "content_redacted": "Git freshness checks fail closed; uncertain repository state must not authorize current recall."
+        }
+      },
+      {
+        "claim": {
+          "id": "m-temporal-current",
+          "state": "active",
+          "kind": "policy",
+          "subject": "current memory view",
+          "predicate": "validity",
+          "value": "A claim is current only while active and valid_from <= now < valid_until; malformed temporal data fails closed."
+        },
+        "evidence": {
+          "authority_class": "repo_trusted",
+          "source_ref": "benchmark-v1:m-temporal-current",
+          "content_redacted": "A claim is current only while active and valid_from <= now < valid_until; malformed temporal data fails closed."
+        }
+      },
+      {
+        "claim": {
+          "id": "m-provenance-primary",
+          "state": "active",
+          "kind": "policy",
+          "subject": "multi-evidence claims",
+          "predicate": "primary evidence",
+          "value": "Choose the deterministic primary evidence from the least-privileged authority first, then evidence_id ascending for ties."
+        },
+        "evidence": {
+          "authority_class": "repo_trusted",
+          "source_ref": "benchmark-v1:m-provenance-primary",
+          "content_redacted": "Choose the deterministic primary evidence from the least-privileged authority first, then evidence_id ascending for ties."
+        }
+      },
+      {
+        "claim": {
+          "id": "m-relevance-disabled",
+          "state": "active",
+          "kind": "policy",
+          "subject": "recall relevance judge",
+          "predicate": "default state",
+          "value": "Keep recall relevance judging disabled by default until the benchmark gate passes."
+        },
+        "evidence": {
+          "authority_class": "repo_trusted",
+          "source_ref": "benchmark-v1:m-relevance-disabled",
+          "content_redacted": "Keep recall relevance judging disabled by default until the benchmark gate passes."
+        }
+      },
+      {
+        "claim": {
+          "id": "m-native-isolated",
+          "state": "active",
+          "kind": "policy",
+          "subject": "native Codex memory",
+          "predicate": "isolation",
+          "value": "Native Codex memory remains isolated and disabled; Agent Hub must not use it as a fallback memory source."
+        },
+        "evidence": {
+          "authority_class": "repo_trusted",
+          "source_ref": "benchmark-v1:m-native-isolated",
+          "content_redacted": "Native Codex memory remains isolated and disabled; Agent Hub must not use it as a fallback memory source."
+        }
+      }
+    ],
+    "relevantClaimIds": [
+      "m-project-branch-scope",
+      "m-git-freshness",
+      "m-temporal-current"
+    ]
+  },
+  {
+    "id": "negative-database",
+    "query": "Which database do we use for concurrent writes?",
+    "items": [
+      {
+        "claim": {
+          "id": "m-npm-ci",
+          "state": "active",
+          "kind": "procedure",
+          "subject": "memory-engine dependencies",
+          "predicate": "install",
+          "value": "Use npm ci --prefix .\\memory-engine from the committed lockfile to repair the memory-engine provider dependencies."
+        },
+        "evidence": {
+          "authority_class": "user_direct",
+          "source_ref": "benchmark-v1:m-npm-ci",
+          "content_redacted": "Use npm ci --prefix .\\memory-engine from the committed lockfile to repair the memory-engine provider dependencies."
+        }
+      },
+      {
+        "claim": {
+          "id": "m-project-branch-scope",
+          "state": "active",
+          "kind": "policy",
+          "subject": "durable memory recall",
+          "predicate": "scope",
+          "value": "Durable recall is strictly scoped to the current project and branch."
+        },
+        "evidence": {
+          "authority_class": "repo_trusted",
+          "source_ref": "benchmark-v1:m-project-branch-scope",
+          "content_redacted": "Durable recall is strictly scoped to the current project and branch."
+        }
+      },
+      {
+        "claim": {
+          "id": "m-git-freshness",
+          "state": "active",
+          "kind": "policy",
+          "subject": "Git freshness",
+          "predicate": "failure mode",
+          "value": "Git freshness checks fail closed; uncertain repository state must not authorize current recall."
+        },
+        "evidence": {
+          "authority_class": "repo_trusted",
+          "source_ref": "benchmark-v1:m-git-freshness",
+          "content_redacted": "Git freshness checks fail closed; uncertain repository state must not authorize current recall."
+        }
+      },
+      {
+        "claim": {
+          "id": "m-temporal-current",
+          "state": "active",
+          "kind": "policy",
+          "subject": "current memory view",
+          "predicate": "validity",
+          "value": "A claim is current only while active and valid_from <= now < valid_until; malformed temporal data fails closed."
+        },
+        "evidence": {
+          "authority_class": "repo_trusted",
+          "source_ref": "benchmark-v1:m-temporal-current",
+          "content_redacted": "A claim is current only while active and valid_from <= now < valid_until; malformed temporal data fails closed."
+        }
+      },
+      {
+        "claim": {
+          "id": "m-e5-dims",
+          "state": "active",
+          "kind": "knowledge",
+          "subject": "embedding worker",
+          "predicate": "dimensions",
+          "value": "The E5 embedding worker reports 384 dimensions and a healthy query canary."
+        },
+        "evidence": {
+          "authority_class": "tool_observation",
+          "source_ref": "benchmark-v1:m-e5-dims",
+          "content_redacted": "The E5 embedding worker reports 384 dimensions and a healthy query canary."
+        }
+      }
+    ],
+    "relevantClaimIds": []
+  },
+  {
+    "id": "negative-jeopardy",
+    "query": "How should the Jeopardy game board prioritize the host camera?",
+    "items": [
+      {
+        "claim": {
+          "id": "m-relevance-disabled",
+          "state": "active",
+          "kind": "policy",
+          "subject": "recall relevance judge",
+          "predicate": "default state",
+          "value": "Keep recall relevance judging disabled by default until the benchmark gate passes."
+        },
+        "evidence": {
+          "authority_class": "repo_trusted",
+          "source_ref": "benchmark-v1:m-relevance-disabled",
+          "content_redacted": "Keep recall relevance judging disabled by default until the benchmark gate passes."
+        }
+      },
+      {
+        "claim": {
+          "id": "m-native-isolated",
+          "state": "active",
+          "kind": "policy",
+          "subject": "native Codex memory",
+          "predicate": "isolation",
+          "value": "Native Codex memory remains isolated and disabled; Agent Hub must not use it as a fallback memory source."
+        },
+        "evidence": {
+          "authority_class": "repo_trusted",
+          "source_ref": "benchmark-v1:m-native-isolated",
+          "content_redacted": "Native Codex memory remains isolated and disabled; Agent Hub must not use it as a fallback memory source."
+        }
+      },
+      {
+        "claim": {
+          "id": "m-project-branch-scope",
+          "state": "active",
+          "kind": "policy",
+          "subject": "durable memory recall",
+          "predicate": "scope",
+          "value": "Durable recall is strictly scoped to the current project and branch."
+        },
+        "evidence": {
+          "authority_class": "repo_trusted",
+          "source_ref": "benchmark-v1:m-project-branch-scope",
+          "content_redacted": "Durable recall is strictly scoped to the current project and branch."
+        }
+      },
+      {
+        "claim": {
+          "id": "m-doctor-healthy",
+          "state": "active",
+          "kind": "procedure",
+          "subject": "memory runtime changes",
+          "predicate": "verify",
+          "value": "After runtime or hook changes, run Memory Doctor and require status healthy before considering the host ready."
+        },
+        "evidence": {
+          "authority_class": "user_direct",
+          "source_ref": "benchmark-v1:m-doctor-healthy",
+          "content_redacted": "After runtime or hook changes, run Memory Doctor and require status healthy before considering the host ready."
+        }
+      },
+      {
+        "claim": {
+          "id": "m-provenance-primary",
+          "state": "active",
+          "kind": "policy",
+          "subject": "multi-evidence claims",
+          "predicate": "primary evidence",
+          "value": "Choose the deterministic primary evidence from the least-privileged authority first, then evidence_id ascending for ties."
+        },
+        "evidence": {
+          "authority_class": "repo_trusted",
+          "source_ref": "benchmark-v1:m-provenance-primary",
+          "content_redacted": "Choose the deterministic primary evidence from the least-privileged authority first, then evidence_id ascending for ties."
+        }
+      }
+    ],
+    "relevantClaimIds": []
+  },
+  {
+    "id": "live-health-production",
+    "query": "What command should we run to verify that the memory system is healthy?",
+    "items": [
+      {
+        "claim": {
+          "id": "claim:codex:runtime-e2e-seed-doctor:runtime-e2e-turn-seed-doctor:prompt",
+          "state": "active",
+          "kind": "user_direct",
+          "subject": "user memory",
+          "predicate": "states",
+          "value": "memory: After changing Agent Hub memory runtime or Codex memory hooks, run `node .\\scripts\\doctor-memory.mjs` and require a healthy result before considering host integration complete."
+        },
+        "evidence": {
+          "authority_class": "user_direct",
+          "source_ref": "session:runtime-e2e-seed-doctor",
+          "content_redacted": "memory: After changing Agent Hub memory runtime or Codex memory hooks, run `node .\\scripts\\doctor-memory.mjs` and require a healthy result before considering host integration complete."
+        }
+      },
+      {
+        "claim": {
+          "id": "claim:codex:runtime-e2e-seed-setup:runtime-e2e-turn-seed-setup:prompt",
+          "state": "active",
+          "kind": "user_direct",
+          "subject": "user memory",
+          "predicate": "states",
+          "value": "memory: Before applying Codex host configuration changes in this repository, run `node .\\scripts\\setup-codex-host.mjs` without `--apply` and review the dry-run plan."
+        },
+        "evidence": {
+          "authority_class": "user_direct",
+          "source_ref": "session:runtime-e2e-seed-setup",
+          "content_redacted": "memory: Before applying Codex host configuration changes in this repository, run `node .\\scripts\\setup-codex-host.mjs` without `--apply` and review the dry-run plan."
+        }
+      },
+      {
+        "claim": {
+          "id": "claim:codex:runtime-e2e-seed-npm:runtime-e2e-turn-seed-npm:prompt",
+          "state": "active",
+          "kind": "user_direct",
+          "subject": "user memory",
+          "predicate": "states",
+          "value": "memory: Whenever memory-engine dependencies need to be installed or repaired, run `npm ci --prefix .\\memory-engine` from the committed lockfile rather than installing individual packages."
+        },
+        "evidence": {
+          "authority_class": "user_direct",
+          "source_ref": "session:runtime-e2e-seed-npm",
+          "content_redacted": "memory: Whenever memory-engine dependencies need to be installed or repaired, run `npm ci --prefix .\\memory-engine` from the committed lockfile rather than installing individual packages."
+        }
+      }
+    ],
+    "relevantClaimIds": [
+      "claim:codex:runtime-e2e-seed-doctor:runtime-e2e-turn-seed-doctor:prompt"
+    ]
+  }
+]

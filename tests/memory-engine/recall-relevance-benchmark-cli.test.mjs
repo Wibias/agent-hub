@@ -18,7 +18,7 @@ test('benchmark CLI parser requires cases and defaults to low-cost judge setting
   assert.throws(() => parseRecallRelevanceBenchmarkArgs([], '/repo'), /--cases is required/u);
 });
 
-test('benchmark CLI reports quality plus aggregate model usage', async () => {
+test('benchmark CLI reports quality, enablement gate, and aggregate model usage', async () => {
   const logs = [];
   let usageSink = null;
   const result = await runRecallRelevanceBenchmarkCli({
@@ -53,7 +53,11 @@ test('benchmark CLI reports quality plus aggregate model usage', async () => {
   });
 
   assert.equal(result.evaluation.quality.precision, 1);
+  assert.equal(result.enablement_gate.passed, true);
+  assert.deepEqual(result.enablement_gate.failed_checks, []);
   assert.equal(result.model_usage.calls, 1);
   assert.equal(result.model_usage.input_tokens, 100);
-  assert.equal(JSON.parse(logs[0]).model_usage.reasoning_output_tokens, 4);
+  const logged = JSON.parse(logs[0]);
+  assert.equal(logged.enablement_gate.policy_version, 'recall-relevance-enablement-v1');
+  assert.equal(logged.model_usage.reasoning_output_tokens, 4);
 });

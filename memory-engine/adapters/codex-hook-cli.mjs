@@ -24,6 +24,11 @@ import {
   recallQueryHash,
   recallTelemetryRunId,
 } from '../recall-observability.mjs';
+import { createRecallFastPathRuntime } from '../recall-fast-path-runtime.mjs';
+import { RecallShadowReplayStore } from '../recall-shadow-replay-store.mjs';
+import {
+  createRecallSelectorTelemetryRecorder,
+} from '../recall-selector-telemetry-recorder.mjs';
 import { memoryRestoreLocked } from '../memory-maintenance-lock.mjs';
 import { createMemoryProtocol } from '../protocol.mjs';
 import {
@@ -49,6 +54,11 @@ function defaultExecFile(command, args) {
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'pipe'],
   });
+}
+
+async function defaultCreateRecallJsonJudge(options) {
+  const module = await import('../../scripts/codex-isolated-memory-judge.mjs');
+  return module.createIsolatedCodexJsonJudge(options);
 }
 
 export function canonicalizeGitRemote(value) {
@@ -113,6 +123,18 @@ export function parseCodexHookCliOptions(argv = []) {
     explicitMemoryRequests: argv.includes('--explicit-memory-requests'),
     hybridRecall: argv.includes('--hybrid-recall'),
   };
+  if (argv.includes('--recall-relevance')) {
+    options.recallRelevance = true;
+  }
+  if (argv.includes('--recall-fast-path')) {
+    options.recallFastPath = true;
+  }
+  if (argv.includes('--recall-fast-path-shadow')) {
+    options.recallFastPathShadow = true;
+  }
+  if (argv.includes('--recall-fast-path-shadow-replay')) {
+    options.recallFastPathShadowReplay = true;
+  }
   if (argv.includes('--candidate-capture')) {
     options.candidateCapture = true;
   }
@@ -374,6 +396,10 @@ export async function runCodexMemoryHook({
   createEmbeddingClient = createEmbeddingIpcClient,
   createHybridRetriever = (options) => new HybridMemoryRetriever(options),
   createDiagnosticsRetriever = (options) => new HybridMemoryRetriever(options),
+  createRecallFastPath = createRecallFastPathRuntime,
+  createRecallShadowReplayStore = (options) => new RecallShadowReplayStore(options),
+  createSelectorTelemetryRecorder = createRecallSelectorTelemetryRecorder,
+  createRecallJsonJudge = defaultCreateRecallJsonJudge,
   resolveProjectScope = resolveCodexProjectScope,
   ensureDbDirectory = defaultEnsureDbDirectory,
   embeddingCacheAvailable = existsSync,
@@ -385,10 +411,30 @@ export async function runCodexMemoryHook({
   prepareRecallRuntime = prepareCodexMemoryRecallRuntime,
 } = {}) {
   const config = parseCodexMemoryConfig(env, configOptions);
+  const recallFastPathModeCount = [
+    configOptions.recallFastPath === true,
+    configOptions.recallFastPathShadow === true,
+    configOptions.recallFastPathShadowReplay === true,
+  ].filter(Boolean).length;
+
+  if (recallFastPathModeCount > 1) {
+    throw new TypeError(
+      'recallFastPath, recallFastPathShadow, and recallFastPathShadowReplay are mutually exclusive',
+    );
+  }
+  if (
+    configOptions.recallFastPathShadowReplay === true
+    && configOptions.recallRelevance !== true
+  ) {
+    throw new TypeError(
+      'recallFastPathShadowReplay requires recallRelevance',
+    );
+  }
   if (restoreLockExists(config.dbPath)) return null;
 
   let memory = null;
   let recallRuntime = null;
+  let selectorTelemetryRecorder = null;
   let output = null;
   let pipelineLaunch = null;
   try {
@@ -421,18 +467,35 @@ export async function runCodexMemoryHook({
         projectId: scope.projectId,
         cwd: event.cwd,
         resolveGit: resolvePipelineGitContext,
-        // Relevance selection is intentionally opt-in. The deterministic
-        // temporal layer is enabled for full MemoryEngine-compatible stores;
-        // lightweight injected test doubles and explicit mutation commands
-        // keep the legacy execution path.
-        relevanceSelectorEnabled: false,
+        // Relevance selection remains opt-in. Fast-path selection is a
+        // second opt-in and only runs when relevance selection is enabled.
+        relevanceSelectorEnabled: configOptions.recallRelevance === true,
+        createJsonJudge: configOptions.recallRelevance === true
+          ? createRecallJsonJudge
+          : null,
+        relevanceTimeoutMs: Number.isInteger(
+          configOptions.recallRelevanceTimeoutMs,
+        )
+          ? configOptions.recallRelevanceTimeoutMs
+          : 12_000,
         env,
       });
       memory = recallRuntime.memory;
     }
 
+    const recallRelevanceEnabled = configOptions.recallRelevance === true;
+    const recallFastPathEnabled = (
+      recallRelevanceEnabled
+      && (
+        configOptions.recallFastPath === true
+        || configOptions.recallFastPathShadow === true
+        || configOptions.recallFastPathShadowReplay === true
+      )
+    );
     let hybridRetriever = null;
-    if (configOptions.hybridRecall === true) {
+    let embeddingRetriever = null;
+    let recallEmbedder = null;
+    if (configOptions.hybridRecall === true || recallFastPathEnabled) {
       const socketPath = nonEmpty(configOptions.embeddingSocketPath)
         ? configOptions.embeddingSocketPath.trim()
         : defaultEmbeddingIpcPath();
@@ -457,12 +520,12 @@ export async function runCodexMemoryHook({
           });
         } catch {
           // SessionStart is only an optimization. If a host skips it and
-          // prompt-time recovery also fails, hybrid recall remains fail-soft.
+          // prompt-time recovery also fails, semantic selection remains fail-soft.
         }
       }
 
       try {
-        const embedder = createEmbeddingClient({
+        recallEmbedder = createEmbeddingClient({
           socketPath,
           modelId: E5_MODEL_ID,
           modelRevision: E5_MODEL_REVISION,
@@ -471,26 +534,55 @@ export async function runCodexMemoryHook({
             ? configOptions.embeddingTimeoutMs
             : 750,
         });
-        hybridRetriever = createHybridRetriever({
+        embeddingRetriever = createHybridRetriever({
           memory,
-          embedder,
+          embedder: recallEmbedder,
         });
+        if (configOptions.hybridRecall === true) {
+          hybridRetriever = embeddingRetriever;
+        }
       } catch {
+        recallEmbedder = null;
+        embeddingRetriever = null;
         hybridRetriever = null;
       }
     }
 
     let diagnosticsRetriever = null;
     if (
-      hybridRetriever !== null
-      && typeof hybridRetriever.diagnoseRecall === 'function'
+      embeddingRetriever !== null
+      && typeof embeddingRetriever.diagnoseRecall === 'function'
     ) {
-      diagnosticsRetriever = hybridRetriever;
+      diagnosticsRetriever = embeddingRetriever;
     } else {
       try {
         diagnosticsRetriever = createDiagnosticsRetriever({ memory });
       } catch {
         diagnosticsRetriever = null;
+      }
+    }
+
+    let recallFastPath = null;
+    if (recallFastPathEnabled && recallEmbedder !== null) {
+      try {
+        const fastPathRuntime = createRecallFastPath({
+          embedder: recallEmbedder,
+        });
+        recallFastPath = (args) => fastPathRuntime.select(args);
+      } catch {
+        recallFastPath = null;
+      }
+    }
+
+    if (recallRelevanceEnabled && recallRuntime?.git?.branch) {
+      try {
+        selectorTelemetryRecorder = createSelectorTelemetryRecorder({
+          dbPath: config.dbPath,
+          projectId: scope.projectId,
+          branch: recallRuntime.git.branch,
+        });
+      } catch {
+        selectorTelemetryRecorder = null;
       }
     }
 
@@ -542,6 +634,14 @@ export async function runCodexMemoryHook({
         });
       },
     });
+    const recallShadowReplayStore = (
+      configOptions.recallFastPathShadowReplay === true
+        ? createRecallShadowReplayStore({
+            rootDir: join(dirname(config.dbPath), 'shadow-replay'),
+          })
+        : null
+    );
+
     const adapter = createAdapter({
       protocol,
       memory,
@@ -550,6 +650,13 @@ export async function runCodexMemoryHook({
       explicitMemoryRequests: configOptions.explicitMemoryRequests === true,
       candidateCapture: configOptions.candidateCapture === true,
       recallRelevanceJudge: recallRuntime?.relevanceJudge ?? null,
+      recallFastPathShadowMode: configOptions.recallFastPathShadow === true,
+      recallFastPathShadowReplayMode: configOptions.recallFastPathShadowReplay === true,
+      recallShadowReplayStore,
+      recallFastPath,
+      onRecallSelectorTelemetry: selectorTelemetryRecorder
+        ? (event) => selectorTelemetryRecorder.record(event)
+        : null,
       diagnoseRecall: (
         diagnosticsRetriever !== null
         && typeof diagnosticsRetriever.diagnoseRecall === 'function'
@@ -643,6 +750,14 @@ export async function runCodexMemoryHook({
     output = null;
     pipelineLaunch = null;
   } finally {
+    if (selectorTelemetryRecorder) {
+      try {
+        selectorTelemetryRecorder.close();
+      } catch {
+        // Selector telemetry teardown must never block the prompt.
+      }
+      selectorTelemetryRecorder = null;
+    }
     if (recallRuntime && typeof recallRuntime.close === 'function') {
       try {
         await recallRuntime.close();
