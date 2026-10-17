@@ -73,6 +73,10 @@ Useful options include:
 - **Review notes:** when a diff mixes core implementation with generated, lockfile, or other mechanical files, identify the core files a reviewer should read first and any non-obvious review focus;
 - focused validation evidence when the evidence itself is unusual, disputed, or central to the claim.
 
+For a complex internal change with no useful screenshot or media, one **compact structural view** may explain the change better than prose. Use the smallest useful shape: a shallow component tree, call flow, data flow, ownership boundary, or before/after structure. The view should help a reviewer answer where responsibility moved or how the important path now connects, not act as decoration.
+
+Do not repeat the same fact in prose and a visual. If a diagram, tree, or table only restates a nearby bullet, omit the visual. Default to one structural view; use more than one only when each explains a materially different relationship. Avoid disconnected status boxes or diagrams whose arrows do not encode a real flow, dependency, or ownership relationship.
+
 Routine test commands, exact-head SHAs, CI check inventories, TDD RED/GREEN history, commit/file counts, and release-process narration belong in workflow evidence, merge-ready records, or full-review verdicts by default — not in the PR body.
 
 For visual changes, prefer a compact before/after table using preserved uploaded media. For benchmarks, show the target-branch baseline and candidate result with the same measurement method; do not publish a one-sided number as a comparison.
@@ -150,3 +154,4 @@ If review fixes or later commits materially changed behavior, scope, risk, or li
 - Stale scope, behavior, risk, or limitation claims after review-driven changes.
 - Body rewrites that accidentally remove screenshots, uploads, or videos.
 - Walls of implementation detail that hide the user or developer impact.
+- Decorative or duplicate structural views that repeat prose without making a relationship easier to review.
