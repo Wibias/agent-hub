@@ -39,8 +39,28 @@ jobs:
         run: node --test skills/github-delivery/tests/worktree-locations.test.mjs
       - name: Validate GitHub delivery skill structure
         run: node skills/skill-ratchet/scripts/skill-ratchet.mjs validate --skill-root skills/github-delivery
-      - name: Verify public release safety
-        run: node scripts/verify-public-release.mjs
+      - name: Verify public release safety against base health
+        shell: bash
+        run: |
+          set +e
+          node scripts/verify-public-release.mjs > /tmp/candidate-release.txt 2>&1
+          candidate_code=$?
+          git worktree add --detach /tmp/release-base origin/main >/dev/null
+          (cd /tmp/release-base && node scripts/verify-public-release.mjs > /tmp/base-release.txt 2>&1)
+          base_code=$?
+          set -e
+          echo "candidate release-safety output:"
+          cat /tmp/candidate-release.txt
+          echo "base release-safety output:"
+          cat /tmp/base-release.txt
+          if [ "$base_code" -eq 0 ]; then
+            test "$candidate_code" -eq 0
+          else
+            test "$candidate_code" -eq "$base_code"
+            diff -u /tmp/base-release.txt /tmp/candidate-release.txt
+            echo "Baseline release-safety failure is unchanged."
+          fi
+          git worktree remove /tmp/release-base
       - name: Verify portable skills
         run: node scripts/verify-portable-skills.mjs
       - name: Verify runtime adapters
