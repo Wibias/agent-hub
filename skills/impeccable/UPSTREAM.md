@@ -4,10 +4,10 @@ Agent Hub vendors the Impeccable skill from `pbakaus/impeccable`.
 
 ## Current pin
 
-- Upstream commit: `245ad82def45831dc56a21b683c7a1ff530b06cc`
-- Skill version: `4.5.2`
-- Engine version: `0.1.14`
-- Refreshed: `2026-10-13`
+- Upstream commit: `6af45ac9a5eb8792f033d3242f52e99812fd91fa`
+- Skill version: `4.6.0`
+- Engine version: `0.1.15`
+- Refreshed: `2026-10-17`
 
 ## Sync contract
 

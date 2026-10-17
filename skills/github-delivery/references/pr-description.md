@@ -70,7 +70,7 @@ Useful options include:
 - a before/after table with screenshots or video for visual changes;
 - a before/after benchmark table when performance is a material claim;
 - a short compatibility, risk, limitation, or review-focus note;
-- **Review notes:** when a diff mixes core implementation with generated, lockfile, or other mechanical files, identify the core files a reviewer should read first and any non-obvious review focus;
+- **Review notes:** when a diff mixes core implementation with generated, lockfile, or other mechanical files, identify the semantic source files a reviewer should read first, any non-obvious review focus, and how generated parity was verified when raw line diffs are not useful;
 - focused validation evidence when the evidence itself is unusual, disputed, or central to the claim.
 
 For a complex internal change with no useful screenshot or media, one **compact structural view** may explain the change better than prose. Use the smallest useful shape: a shallow component tree, call flow, data flow, ownership boundary, or before/after structure. The view should help a reviewer answer where responsibility moved or how the important path now connects, not act as decoration.

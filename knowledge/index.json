@@ -227,7 +227,7 @@
       ],
       "status": "active",
       "canonicalId": null,
-      "contentHash": "4d2bc7b1d6d40930837ac72796090c76785e9364bf322b163b7c5965df37608c"
+      "contentHash": "914ab3429bf8fc168ee76725d28c0ffc39eae2d4ce338322a6c386770bee6c85"
     },
     {
       "id": "agents/context-md",
@@ -577,7 +577,7 @@
       ],
       "status": "active",
       "canonicalId": null,
-      "contentHash": "caf5f1741ef9ec9f1ab560a0f473a893081360eae1ed37024be0ed67d28eaaca"
+      "contentHash": "66578a96dc62f72e451cc93943f998ea08e8e0532b3dcb31aecd28eed565933d"
     },
     {
       "id": "agents/improve-codebase-architecture",
