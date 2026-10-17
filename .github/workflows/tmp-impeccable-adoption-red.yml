@@ -1,0 +1,20 @@
+name: Temporary Impeccable adoption RED check
+
+on:
+  push:
+    branches:
+      - feat/adopt-humanlayer-pstack-2026-10-17
+
+permissions:
+  contents: read
+
+jobs:
+  red-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Run upstream adoption contract
+        run: node --test tests/skill-catalog/upstream-guidance-adoption.test.mjs
