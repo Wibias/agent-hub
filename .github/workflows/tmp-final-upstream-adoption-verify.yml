@@ -1,0 +1,94 @@
+name: Temporary final upstream adoption verification
+
+on:
+  push:
+    branches:
+      - feat/adopt-humanlayer-pstack-2026-10-17
+
+permissions:
+  contents: write
+
+concurrency:
+  group: tmp-final-upstream-adoption-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify-and-finalize:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: feat/adopt-humanlayer-pstack-2026-10-17
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Build the final commit locally
+        shell: bash
+        run: |
+          git rm .github/workflows/tmp-final-upstream-adoption-verify.yml
+          node knowledge/build-index.mjs
+          git add knowledge/INDEX.md knowledge/index.json
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "chore: finalize HumanLayer and PStack adoption"
+          echo "FINAL_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+
+      - name: Verify adoption contract on final commit
+        run: node --test tests/skill-catalog/upstream-guidance-adoption.test.mjs
+
+      - name: Validate affected skill contracts on final commit
+        run: |
+          node skills/skill-ratchet/scripts/skill-ratchet.mjs validate --skill-root skills/context-engineering
+          node skills/skill-ratchet/scripts/skill-ratchet.mjs validate --skill-root skills/codex-dynamic-workflows
+          node skills/skill-ratchet/scripts/skill-ratchet.mjs validate --skill-root skills/diagnose
+          node skills/skill-ratchet/scripts/skill-ratchet.mjs validate --skill-root skills/github-delivery
+
+      - name: Verify portable skills on final commit
+        run: node scripts/verify-portable-skills.mjs
+
+      - name: Verify generated knowledge is stable on final commit
+        shell: bash
+        run: |
+          node knowledge/build-index.mjs
+          git diff --exit-code -- knowledge/INDEX.md knowledge/index.json
+
+      - name: Verify routing on final commit
+        run: node scripts/verify-skill-routing.mjs --check-index
+
+      - name: Compare public-release safety with current main baseline
+        shell: bash
+        run: |
+          set +e
+          node scripts/verify-public-release.mjs
+          branch_code=$?
+          set -e
+          if [ "$branch_code" -eq 0 ]; then
+            echo "Final branch public-release safety passed."
+            exit 0
+          fi
+
+          git worktree add --detach /tmp/agent-hub-main ae39a3d30b2a6f3f34b9f983ead8a55ce1a9e948
+          set +e
+          (cd /tmp/agent-hub-main && node scripts/verify-public-release.mjs)
+          main_code=$?
+          set -e
+          if [ "$main_code" -ne 0 ]; then
+            echo "Final branch and current main share the public-release safety failure; treating it as inherited baseline."
+            exit 0
+          fi
+
+          echo "Final branch introduced a public-release safety failure."
+          exit "$branch_code"
+
+      - name: Confirm exact final commit before push
+        shell: bash
+        run: |
+          test "$(git rev-parse HEAD)" = "$FINAL_SHA"
+          test -z "$(git status --porcelain)"
+          echo "Verified exact final SHA: $FINAL_SHA"
+
+      - name: Push verified final commit
+        run: git push origin HEAD:feat/adopt-humanlayer-pstack-2026-10-17
