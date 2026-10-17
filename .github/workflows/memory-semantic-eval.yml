@@ -38,4 +38,6 @@ jobs:
       - name: Run real pinned E5 semantic evaluation
         env:
           MEMORY_E5_MODEL_CACHE: .cache/memory-engine/e5
-        run: node --test tests/memory-engine/e5-semantic-eval.test.mjs
+        run: |
+          node --test tests/memory-engine/e5-semantic-eval.test.mjs
+          node --test tests/memory-engine/recall-fast-path-live-health-production.test.mjs
