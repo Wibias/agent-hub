@@ -1,0 +1,38 @@
+name: Temporary memory fixture verifier
+
+on:
+  push:
+    branches:
+      - feat/adopt-humanlayer-pstack-2026-10-17
+
+permissions:
+  contents: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/adopt-humanlayer-pstack-2026-10-17
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Remove temporary verifier and publish final head
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm .github/workflows/tmp-memory-fixture-verify.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/workflows/tmp-memory-fixture-verify.yml
+          git commit -m "Remove temporary memory fixture verifier"
+          git push origin HEAD:feat/adopt-humanlayer-pstack-2026-10-17
+          echo "FINAL_HEAD=$(git rev-parse HEAD)"
+      - name: Verify recall benchmark fixture contract
+        run: node --test tests/memory-engine/recall-relevance-benchmark-fixture.test.mjs
+      - name: Verify production-shaped live health fixture contract
+        run: node --test tests/memory-engine/recall-fast-path-live-health-production.test.mjs
+      - name: Check diff cleanliness
+        run: git diff --check HEAD~1 HEAD
