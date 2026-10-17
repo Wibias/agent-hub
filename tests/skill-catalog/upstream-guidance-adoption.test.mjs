@@ -45,7 +45,7 @@ test('context engineering sharpens intent and removes redundant rule text', asyn
 
   assert.match(contextEngineering, /separate the desired outcome from the request wording/i);
   assert.match(contextEngineering, /independent success check/i);
-  assert.match(contextEngineering, /enforced by a linter, formatter, type checker, hook, or deterministic script/i);
+  assert.match(contextEngineering, /linter, formatter, type checker, hook, or deterministic script can enforce it/i);
   assert.match(contextEngineering, /discoverable from a stable local example/i);
   assert.match(contextEngineering, /do not copy Claude-specific conditional XML/i);
 });
