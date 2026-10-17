@@ -1,0 +1,65 @@
+name: Temporary Impeccable overlay repair
+
+on:
+  push:
+    branches:
+      - feat/adopt-humanlayer-pstack-2026-10-17
+
+permissions:
+  contents: write
+
+jobs:
+  repair-and-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Prove local-overlay regression is RED before repair
+        shell: bash
+        run: |
+          set +e
+          node --test tests/skill-catalog/upstream-guidance-adoption.test.mjs > /tmp/red.log 2>&1
+          code=$?
+          cat /tmp/red.log
+          if [ "$code" -eq 0 ]; then
+            echo "expected local-overlay regression to fail before repair" >&2
+            exit 1
+          fi
+          grep -q "Impeccable sync preserves Agent Hub runtime integration files" /tmp/red.log
+      - name: Check out old Impeccable upstream pin
+        uses: actions/checkout@v6
+        with:
+          repository: pbakaus/impeccable
+          ref: 245ad82def45831dc56a21b683c7a1ff530b06cc
+          path: _upstream-old/impeccable
+          persist-credentials: false
+      - name: Check out new Impeccable upstream pin
+        uses: actions/checkout@v6
+        with:
+          repository: pbakaus/impeccable
+          ref: 6af45ac9a5eb8792f033d3242f52e99812fd91fa
+          path: _upstream-new/impeccable
+          persist-credentials: false
+      - name: Restore Agent Hub-only runtime overlays and create candidate
+        run: python3 scripts/tmp-impeccable-local-overlay-repair.py
+      - name: Verify exact repaired candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --test tests/skill-catalog/upstream-guidance-adoption.test.mjs
+          node scripts/skill-ratchet.mjs validate --skill-root skills/context-engineering
+          node scripts/skill-ratchet.mjs validate --skill-root skills/github-delivery
+          node scripts/skill-ratchet.mjs validate --skill-root skills/impeccable
+          node scripts/verify-portable-skills.mjs
+          node scripts/verify-skill-routing.mjs --check-index
+          node knowledge/build-index.mjs
+          git diff --exit-code -- knowledge/index.json knowledge/INDEX.md
+          git diff --check HEAD^ HEAD
+          test -z "$(git status --porcelain)"
+          echo "verified_head=$(git rev-parse HEAD)"
+      - name: Push verified repair
+        run: git push origin HEAD:feat/adopt-humanlayer-pstack-2026-10-17
