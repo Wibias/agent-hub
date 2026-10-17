@@ -1,0 +1,63 @@
+name: Temporary public release home path fix
+
+on:
+  push:
+    branches:
+      - feat/adopt-humanlayer-pstack-2026-10-17
+
+permissions:
+  contents: write
+
+jobs:
+  fix-and-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Replace concrete test home paths with placeholders
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path('tests/memory-engine/recall-shadow-replay-cli.test.mjs')
+          text = path.read_text(encoding='utf-8')
+
+          win_old = r'Users\\ws'
+          win_new = r'Users\\<user>'
+          linux_old = '/home/' + 'ws'
+          linux_new = '/home/<user>'
+
+          assert text.count(win_old) == 4, text.count(win_old)
+          assert text.count(linux_old) == 1, text.count(linux_old)
+
+          text = text.replace(win_old, win_new).replace(linux_old, linux_new)
+          path.write_text(text, encoding='utf-8')
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify public release contract
+        run: |
+          node --test tests/public-release/verify-public-release.test.mjs
+          node scripts/verify-public-release.mjs
+
+      - name: Verify affected replay CLI test
+        run: node --test tests/memory-engine/recall-shadow-replay-cli.test.mjs
+
+      - name: Remove temporary workflow and push verified fix
+        shell: bash
+        run: |
+          rm .github/workflows/tmp-fix-public-release-home-path.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add tests/memory-engine/recall-shadow-replay-cli.test.mjs .github/workflows/tmp-fix-public-release-home-path.yml
+          git diff --cached --check
+          git commit -m "test: make replay CLI home paths portable"
+          git push origin HEAD:feat/adopt-humanlayer-pstack-2026-10-17
