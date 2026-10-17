@@ -80,7 +80,7 @@ def main() -> None:
     run("git", "config", "user.name", "github-actions[bot]")
     run("git", "config", "user.email", "41898282+github-actions[bot]@users.noreply.github.com")
     run("git", "add", "-A")
-    run("git", "diff", "--cached", "--check")
+    run("git", "diff", PRESYNC, "--check")
     run("git", "commit", "-m", "Preserve Impeccable Agent Hub runtime overlays")
 
 
