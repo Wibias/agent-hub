@@ -1,0 +1,77 @@
+name: Final evidence-first prose gate
+
+on:
+  push:
+    branches:
+      - feat/evidence-first-git-prose
+
+permissions:
+  contents: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Self-clean verifier and push exact candidate
+        run: |
+          rm .github/workflows/evidence-first-final-gate.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/workflows/evidence-first-final-gate.yml
+          git commit -m "Remove temporary evidence-first prose gate"
+          git push origin HEAD:feat/evidence-first-git-prose
+      - name: Confirm exact clean candidate
+        run: |
+          test "$(git rev-parse HEAD)" = "$(git rev-parse origin/feat/evidence-first-git-prose)"
+          test ! -e .github/workflows/evidence-first-final-gate.yml
+          git diff --check origin/main...HEAD
+      - name: Run skill-catalog tests on exact candidate
+        run: node --test tests/skill-catalog/*.test.mjs
+      - name: Compare github-delivery eval errors with main
+        run: |
+          git worktree add --detach /tmp/agent-hub-main origin/main
+          set +e
+          (cd skills/github-delivery && node scripts/validate-evals.mjs > /tmp/candidate-evals.txt 2>&1)
+          candidate_rc=$?
+          (cd /tmp/agent-hub-main/skills/github-delivery && node scripts/validate-evals.mjs > /tmp/main-evals.txt 2>&1)
+          main_rc=$?
+          set -e
+          CANDIDATE_RC="$candidate_rc" MAIN_RC="$main_rc" python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+
+          decoder = json.JSONDecoder()
+          def first_json(path):
+              text = Path(path).read_text().lstrip()
+              value, _ = decoder.raw_decode(text)
+              return value
+
+          candidate = first_json('/tmp/candidate-evals.txt')
+          main = first_json('/tmp/main-evals.txt')
+          expected = [{
+              'code': 'missing_skill_route',
+              'id': 'E4',
+              'expectedWorkflow': 'references/full-review-pr.md',
+          }]
+          assert int(os.environ['CANDIDATE_RC']) == int(os.environ['MAIN_RC']) == 1
+          assert main['errors'] == expected, main['errors']
+          assert candidate['errors'] == main['errors'], (candidate['errors'], main['errors'])
+          e5 = next(route for route in candidate['routes'] if route['id'] == 'E5')
+          assert e5['expectedWorkflow'] == 'references/git-workflow.md'
+          assert e5['actualWorkflow'] == 'references/git-workflow.md'
+          print(json.dumps({
+              'main_errors': main['errors'],
+              'candidate_errors': candidate['errors'],
+              'e5_route': e5,
+          }, indent=2))
+          PY
+      - name: Run Skill Ratchet structural gate
+        run: node scripts/skill-ratchet.mjs validate --skill-root "$(pwd)/skills/github-delivery"
+      - name: Show final diff
+        run: git diff --stat origin/main...HEAD && git diff --name-status origin/main...HEAD
