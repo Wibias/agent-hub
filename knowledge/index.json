@@ -364,23 +364,22 @@
       "harness": "agents",
       "scope": "global",
       "name": "diagnose",
-      "description": "Disciplined diagnosis loop for hard bugs, false-success writes, and performance regressions: reproduce, minimise, hypothesise, instrument, fix, regression-test. Use when a bug resists quick investigation, a write/patch/apply tool reports success but the file is unchanged, the same edit path fails more than once, you need a structured feedback-loop strategy, or the user says \"diagnose this\". Differentiator: superpowers:systematic-debugging is a lightweight first-pass for any bug; this skill is for the hard cases that require deliberate loop-building, bisection, and instrumentation discipline.",
+      "description": "Diagnose defects that resist normal first-pass debugging, including repeated false-success writes, concurrency failures, and performance regressions. Use after an initial debugging pass fails, when repeated fixes share a material assumption, when a write reports success but did not land, or when the user explicitly asks for Diagnose. Not for straightforward first-pass bugs or interface-design friction.",
       "tags": [
         "diagnose"
       ],
       "triggers": [
-        "Disciplined diagnosis loop for hard bugs",
-        "false-success writes",
-        "and performance regressions: reproduce",
-        "minimise",
-        "hypothesise",
-        "instrument",
-        "fix",
-        "regression-test."
+        "Diagnose defects that resist normal first-pass debugging",
+        "including repeated false-success writes",
+        "concurrency failures",
+        "and performance regressions. Use after an initial debugging pass fails",
+        "when repeated fixes share a material assumption",
+        "when a write reports success but did not land",
+        "or when the user explicitly asks for Diagnose. Not for straightforward first-pass bugs or interface-design friction"
       ],
       "status": "active",
       "canonicalId": null,
-      "contentHash": "4a2ad151eb53a7e23f10934de4513635fef2ae8c9821d9aaf4f7ce9d5611e5cc"
+      "contentHash": "17d9c7d5d01250af292a7c10c7141dbc66739482d1d92fd1de1906c0f5cdffc7"
     },
     {
       "id": "agents/domain-modeling",
@@ -1198,24 +1197,24 @@
       "harness": "agents",
       "scope": "global",
       "name": "vault-research",
-      "description": "Canonical external-research workflow. Use automatically when the user asks to research, investigate, verify, compare, or check current evidence; when current external facts materially affect the answer; when cheap local inspection leaves material uncertainty that external evidence can resolve; or when a hard, novel, or high-consequence problem needs broader evidence. Do not trigger only because a task is large, and do not replace domain owners for self-contained local work. Search summaries are leads, not proof: fetch sources, track coverage, seek counter-evidence, and persist only durable findings.",
+      "description": "Canonical external-research owner. Use when the user asks to research, investigate, verify, compare current sources, or check current evidence; when local evidence leaves a material external unknown; or when a hard, high-consequence decision needs broader current evidence. Not for self-contained local work, local bug diagnosis, or official-doc-only implementation grounding.",
       "tags": [
         "vault",
         "research"
       ],
       "triggers": [
-        "Canonical external-research workflow. Use automatically when the user asks to research",
+        "Canonical external-research owner.",
+        "the user asks to research",
         "investigate",
         "verify",
-        "compare",
+        "compare current sources",
         "or check current evidence",
-        "when current external facts materially affect the answer",
-        "when cheap local inspection leaves material uncertainty that external evidence can resolve",
+        "when local evidence leaves a material external unknown",
         "or when a hard"
       ],
       "status": "active",
       "canonicalId": null,
-      "contentHash": "1b64d99719d01219f04a9f58a80e026b4fa727bf9142e186e3c33fc66112de96"
+      "contentHash": "aa49a3c506bbff4c674418bf958052fed0289ac7d73dc285bd9e3c3f4759ccfa"
     },
     {
       "id": "agents/verification-harness",
