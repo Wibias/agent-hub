@@ -19,6 +19,8 @@
 {"id":"D19","prompt":"Remember this non-obvious debugging lesson and write a learning from it","expected_skill":"extract-approach"}
 {"id":"D20","prompt":"Use a swarm of parallel agents to orchestrate this migration","expected_skill":"codex-dynamic-workflows"}
 {"id":"D21","prompt":"Plan a large migration of this production database schema","expected_skill":"deprecation-and-migration"}
+{"id":"D22","prompt":"Research the current provider pricing and quota claims, compare current sources, and verify what is actually supported","expected_skill":"vault-research"}
+{"id":"D23","prompt":"The patch tool reports success but the file is still unchanged after two attempts; diagnose the false-success write path","expected_skill":"diagnose"}
 {"id":"N1","prompt":"Write tests for this Python parser","expected_skill":null}
 {"id":"N2","prompt":"What is the capital of France?","expected_skill":null}
 {"id":"N3","prompt":"Summarise this paragraph in two sentences","expected_skill":null}
