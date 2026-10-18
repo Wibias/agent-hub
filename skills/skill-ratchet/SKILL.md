@@ -1,16 +1,11 @@
 ---
 name: skill-ratchet
-description: >
-  Quality-gates the creation, modification, merging, debugging, and release of
-  Agent Skills through capability preflight, canonical acceptance cases,
-  deterministic validation, independent strong/weaker model review, and locked
-  regressions. Use when authoring, auditing, repairing, consolidating, or
-  preparing a SKILL.md for publication; checking whether it triggers for the
-  right requests and stays inactive for similar requests; deciding whether an
-  installed skill already owns a capability; or determining whether an Agent
-  Skill is ready to publish. Use alongside the host's native skill creator when
-  available. Do not use for ordinary execution of an existing domain skill,
-  general code review, or application testing unrelated to Agent Skills.
+description: >-
+  Create, audit, repair, consolidate, or release Agent Skills. Use when changing
+  a SKILL.md, validating its routing or behavior, deciding whether an existing
+  skill should be reused or extended, or checking publication readiness. Not
+  for ordinary domain execution, general code review, or application testing
+  unrelated to Agent Skills.
 ---
 
 # Skill Ratchet

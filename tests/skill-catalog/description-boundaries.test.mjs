@@ -93,10 +93,35 @@ test('extract-approach discovery does not prescribe automatic end-of-task execut
   assert.doesNotMatch(value, workflowLeak);
 });
 
+test('vault-research discovery stays evidence-focused without embedding its workflow', async () => {
+  const value = await description('vault-research');
+  assert.match(value, /research|investigate|verify|compare current sources|current evidence/i);
+  assert.match(value, /Not for self-contained local work|local bug diagnosis|official-doc-only/i);
+  assert.doesNotMatch(value, broadActivity);
+  assert.doesNotMatch(value, workflowLeak);
+});
+
+test('diagnose discovery is reserved for resistant bugs and false-success paths', async () => {
+  const value = await description('diagnose');
+  assert.match(value, /resist|first-pass|false-success|write reports success|repeated fixes/i);
+  assert.match(value, /Not for straightforward first-pass bugs|interface-design friction/i);
+  assert.doesNotMatch(value, broadActivity);
+  assert.doesNotMatch(value, workflowLeak);
+});
+
+test('skill-ratchet discovery identifies skill authoring and publication without procedure leakage', async () => {
+  const value = await description('skill-ratchet');
+  assert.match(value, /Agent Skills|SKILL\.md|publication readiness/i);
+  assert.match(value, /Not for ordinary domain execution|unrelated to Agent Skills/i);
+  assert.doesNotMatch(value, broadActivity);
+  assert.doesNotMatch(value, workflowLeak);
+});
+
 test('codex-dynamic-workflows requires explicit orchestration instead of task size alone', async () => {
   const value = await description('codex-dynamic-workflows');
   assert.match(value, /swarm|subagents|parallel agents|dynamic workflow|orchestrat/i);
   assert.match(value, /explicit|asks|requests|wants/i);
   assert.match(value, /domain|migration|audit/i);
   assert.doesNotMatch(value, /a large migration\s+or audit/i);
+  assert.doesNotMatch(value, workflowLeak);
 });

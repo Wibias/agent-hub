@@ -1,18 +1,11 @@
 ---
 name: design-with-ai
 description: >-
-  Canonical default visible-UI design owner for intentional, anti-slop product
-  surfaces. Use for generic look-better/polish and visual-hierarchy requests,
-  surface audits, restyles, redesigns, new product UI, product-UI charts/data
-  visualization, native/mobile UI, mobile-web/PWA UI, design specs/prompts,
-  building motion, motion opportunities/audits/reviews, animation performance,
-  or naming a motion effect. Commands: audit-surface, improve-existing,
-  restyle-existing, redesign-existing, build-product-surface, design-spec,
-  motion-build, motion-opportunities, motion-audit, motion-review,
-  motion-optimize, motion-name. Not for backend-only work, standalone
-  analytical/report chart generation, API/module interface design (use
-  codebase-design), copy-only edits, general code review, or explicit impeccable
-  invocations.
+  Canonical default owner for visible product-UI design, audit, polish,
+  restyling, redesign, new surfaces, product-UI data visualization, native/mobile
+  UI, and motion review. Use for ordinary "make this look better" work. Not for
+  backend-only work, non-UI chart/report generation, module interface design, or
+  copy-only edits. Explicit Impeccable requests stay with Impeccable.
 ---
 
 # Design with AI
