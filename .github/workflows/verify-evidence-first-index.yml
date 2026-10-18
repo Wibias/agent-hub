@@ -1,0 +1,38 @@
+name: Verify evidence-first knowledge index
+
+on:
+  push:
+    branches:
+      - feat/evidence-first-git-prose
+
+permissions:
+  contents: write
+
+jobs:
+  verify:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Self-clean and push exact final head
+        run: |
+          rm .github/workflows/verify-evidence-first-index.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add .github/workflows/verify-evidence-first-index.yml
+          git commit -m "Remove temporary knowledge index verifier"
+          git push origin HEAD:feat/evidence-first-git-prose
+          test "$(git rev-parse HEAD)" = "$(git rev-parse origin/feat/evidence-first-git-prose)"
+
+      - name: Regenerate and require current knowledge index
+        run: |
+          node knowledge/build-index.mjs
+          git diff --exit-code -- knowledge/INDEX.md knowledge/index.json
+          git diff --check origin/main...HEAD
