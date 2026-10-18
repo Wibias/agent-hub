@@ -39,7 +39,7 @@ test('prose quality explicitly covers commit messages as a late readability pass
   assert.match(proseQuality, /commit messages/i);
   assert.match(proseQuality, /after.*(?:facts|content|meaning).*established|establish.*(?:facts|content|meaning).*before/i);
   assert.match(proseQuality, /readability only/i);
-  assert.match(proseQuality, /do not score whether the text .*sounds human/i);
+  assert.match(proseQuality, /do not score\s+whether the text\s+"sounds human/i);
 });
 
 test('github delivery evaluates commit-message reviewer utility instead of human-likeness', async () => {
