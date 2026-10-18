@@ -41,3 +41,20 @@ test('prose quality explicitly covers commit messages as a late readability pass
   assert.match(proseQuality, /readability only/i);
   assert.match(proseQuality, /do not score whether the text .*sounds human/i);
 });
+
+test('github delivery evaluates commit-message reviewer utility instead of human-likeness', async () => {
+  const cases = (await text('skills/github-delivery/tests/evals/cases.jsonl'))
+    .trim()
+    .split(/\r?\n/)
+    .map((line) => JSON.parse(line));
+  const commitCase = cases.find((entry) => entry.id === 'E5');
+
+  assert.ok(commitCase, 'E5 commit-message evaluation case must exist');
+  assert.match(commitCase.prompt, /commit message/i);
+  assert.match(commitCase.prompt, /diff|effect|rationale|reason/i);
+  assert.ok(commitCase.expected_resources.includes('references/git-workflow.md'));
+  assert.ok(commitCase.expected_resources.includes('references/prose-quality.md'));
+  assert.ok(commitCase.assertion_ids.includes('commit-message-grounded-in-diff'));
+  assert.ok(commitCase.assertion_ids.includes('commit-message-rationale-preserved'));
+  assert.ok(commitCase.assertion_ids.includes('no-human-likeness-metric'));
+});
