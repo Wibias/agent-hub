@@ -337,25 +337,25 @@
       "harness": "agents",
       "scope": "global",
       "name": "design-with-ai",
-      "description": "Canonical default visible-UI design owner for intentional, anti-slop product surfaces. Use for generic look-better/polish and visual-hierarchy requests, surface audits, restyles, redesigns, new product UI, product-UI charts/data visualization, native/mobile UI, mobile-web/PWA UI, design specs/prompts, building motion, motion opportunities/audits/reviews, animation performance, or naming a motion effect. Commands: audit-surface, improve-existing, restyle-existing, redesign-existing, build-product-surface, design-spec, motion-build, motion-opportunities, motion-audit, motion-review, motion-optimize, motion-name. Not for backend-only work, standalone analytical/report chart generation, API/module interface design (use codebase-design), copy-only edits, general code review, or explicit impeccable invocations.",
+      "description": "Canonical default owner for visible product-UI design, audit, polish, restyling, redesign, new surfaces, product-UI data visualization, native/mobile UI, and motion review. Use for ordinary \"make this look better\" work. Not for backend-only work, non-UI chart/report generation, module interface design, or copy-only edits. Explicit Impeccable requests stay with Impeccable.",
       "tags": [
         "design",
         "with",
         "ai"
       ],
       "triggers": [
-        "Canonical default visible-UI design owner for intentional",
-        "anti-slop product surfaces.",
-        "generic look-better/polish and visual-hierarchy requests",
-        "surface audits",
-        "restyles",
-        "redesigns",
-        "new product UI",
-        "product-UI charts/data visualization"
+        "Canonical default owner for visible product-UI design",
+        "audit",
+        "polish",
+        "restyling",
+        "redesign",
+        "new surfaces",
+        "product-UI data visualization",
+        "native/mobile UI"
       ],
       "status": "active",
       "canonicalId": null,
-      "contentHash": "b3b2c193a4a497bc1fca3020a65ce3c4e3d72cc95fb5e75219a06a8192497982"
+      "contentHash": "d35735dc8c89829faf6ca2a66d1491527cd02a7efaa9b598eacb01f6fdb6c1b7"
     },
     {
       "id": "agents/diagnose",
@@ -1054,24 +1054,24 @@
       "harness": "agents",
       "scope": "global",
       "name": "skill-ratchet",
-      "description": "Quality-gates the creation, modification, merging, debugging, and release of Agent Skills through capability preflight, canonical acceptance cases, deterministic validation, independent strong/weaker model review, and locked regressions. Use when authoring, auditing, repairing, consolidating, or preparing a SKILL.md for publication; checking whether it triggers for the right requests and stays inactive for similar requests; deciding whether an installed skill already owns a capability; or determining whether an Agent Skill is ready to publish. Use alongside the host's native skill creator when available. Do not use for ordinary execution of an existing domain skill, general code review, or application testing unrelated to Agent Skills.",
+      "description": "Create, audit, repair, consolidate, or release Agent Skills. Use when changing a SKILL.md, validating its routing or behavior, deciding whether an existing skill should be reused or extended, or checking publication readiness. Not for ordinary domain execution, general code review, or application testing unrelated to Agent Skills.",
       "tags": [
         "skill",
         "ratchet"
       ],
       "triggers": [
-        "Quality-gates the creation",
-        "modification",
-        "merging",
-        "debugging",
-        "and release of Agent Skills through capability preflight",
-        "canonical acceptance cases",
-        "deterministic validation",
-        "independent strong/weaker model review"
+        "Create",
+        "audit",
+        "repair",
+        "consolidate",
+        "or release Agent Skills.",
+        "changing a SKILL.md",
+        "validating its routing or behavior",
+        "deciding whether an existing skill should be reused or extended"
       ],
       "status": "active",
       "canonicalId": null,
-      "contentHash": "0b2e46f1a15d85e3ce96fae640b7d9830edeaa21247a6b8ea3d6bbf08780119a"
+      "contentHash": "f86762795f5368c8cd731d9b7d8d794294dd64e42b6533033deed97713322367"
     },
     {
       "id": "agents/soul",
