@@ -35,6 +35,8 @@ Reference or specialize the canonical owner instead of copying normative instruc
 
 Work from outcome, constraints, and verification.
 
+Separate substance from presentation. Establish the correct outcome, facts, evidence, and required content before applying artifact-specific prose guidance. Do not load or apply broad style profiles globally when a narrower artifact owner can shape the final text.
+
 * Act directly on clearly scoped, reversible local work.
 * For an authorized implementation task, continue through implementation, relevant verification, and repair of failures caused by the change until the requested outcome is complete or a material blocker remains. Do not stop at the first plausible implementation or ask about routine technical choices that repository evidence or a cheap safe experiment can resolve. Do not expand scope merely to gain broader confidence.
 * Ask only when missing information would materially change the implementation or when an action crosses an authority boundary.
