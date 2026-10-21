@@ -83,6 +83,7 @@ Any score below 3 requires revision before the gate. See `critique-protocol.md`.
 | G09 | Invented metrics | Stats, testimonials, or logos are presented as factual without a source | Use real data, honest placeholder treatment, or remove |
 | G10 | Fake chrome | Hand-drawn browser/phone/IDE frame is presented as product evidence | Use real screenshot/capture or bare content |
 | G11 | Category reflex | Visual system is guessable from industry stereotype rather than product-specific reasoning | Rework material, structure, or identity from second-order product cues |
+| G74 | Utility dashboard cosplay | A compact popup or internal utility invents a logo mark, decorative platform dots, dashboard tabs, stat tiles, status chips, or forced dark chrome as a cluster without a real product or data need | Load `utility-surfaces.md`; remove identity decoration, use host-native utility hierarchy, and retain only information-bearing color/state treatment |
 
 ## P0 - Direction-dependent colour and type blockers
 

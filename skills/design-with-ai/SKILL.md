@@ -4,8 +4,9 @@ description: >-
   Canonical default owner for visible product-UI design, audit, polish,
   restyling, redesign, new surfaces, product-UI data visualization, native/mobile
   UI, and motion review. Use for ordinary "make this look better" work. Not for
-  backend-only work, non-UI chart/report generation, module interface design, or
-  copy-only edits. Explicit Impeccable requests stay with Impeccable.
+  backend-only work, general code review, non-UI chart/report generation,
+  module/API interface design (route those to codebase-design), or copy-only
+  edits. Explicit Impeccable requests stay with Impeccable.
 ---
 
 # Design with AI
@@ -84,6 +85,7 @@ concrete target evidence or explicit user intent:
 
 - charts, forecasts, funnels, KPI encodings, analytical visualizations -> `references/data-visualization.md`; use `references/design-guidance.md` only when a chart/interaction choice remains open;
 - browser/PWA UI on phones/tablets where viewport chrome, touch capability, safe areas, soft keyboard, overscroll, or mobile-browser behavior is material -> `references/mobile-web.md`;
+- browser-extension popups, toolbar popovers, embedded settings panels, or compact internal operator utilities -> `references/utility-surfaces.md`;
 - actual native/mobile target (SwiftUI, Compose, React Native, Flutter, etc.) or platform-specific safe-area, text-scaling, native gesture, or system-control behavior -> `references/native-mobile.md`; query `references/design-guidance.md` only for a specific unresolved outcome;
 - React Native/Expo motion implementation/review -> `references/react-native-motion.md`; exact package/API claims remain current-source questions rather than frozen skill truth;
 - direct drag/swipe/throw/reorder/sheet manipulation -> `references/direct-manipulation.md`;
@@ -146,6 +148,7 @@ Missing tooling is recorded as blocked, never silently passed.
 - `references/design-guidance.md`: bounded deterministic heuristic retrieval
 - `references/data-visualization.md`: chart and analytical visualization decisions inside product UI
 - `references/mobile-web.md`: browser/PWA-on-phone platform behavior
+- `references/utility-surfaces.md`: compact browser-extension popups and embedded utility controls
 - `references/native-mobile.md`: platform-aware native/mobile UI contract
 - `references/react-native-motion.md`: conditional React Native/Expo motion engineering
 - `references/direct-manipulation.md`: drag/swipe/gesture continuity and velocity mechanics

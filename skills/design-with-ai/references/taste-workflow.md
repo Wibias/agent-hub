@@ -44,6 +44,8 @@ For page/surface work use `macrostructures.md` and `pattern-vocabulary.md`. Comp
 
 Use `signature-moves.md` and, for marketing surfaces, `pols-slop.md`. Choose one recognisable move/artifact and record 3-5 defaults this product will not use.
 
+For compact internal utilities, derive the signature from the task rather than inventing a brand mark. A state treatment, direct action path, or information-dense summary can carry identity. Apply the removal test: delete each proposed ornamental element mentally; if comprehension, state recognition, and action choice do not change, it must not ship. Load `utility-surfaces.md` for browser popovers and embedded settings tools.
+
 ## 4. Build
 
 Lock tokens before broad generation. Load only relevant references:

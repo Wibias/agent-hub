@@ -38,6 +38,7 @@ Check the applicable questions:
 5. Can non-essential decoration be removed?
 6. Applicable states and failure paths are covered?
 7. Representative mobile/tablet/desktop layouts preserve content priority?
+8. Would a compact utility look at home beside native browser controls, or is it cosplaying a SaaS dashboard?
 
 ## Investment gates
 
