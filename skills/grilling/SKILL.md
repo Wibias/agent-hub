@@ -50,6 +50,13 @@ Load `references/intent-interview.md`. Its deliverable is a user-confirmed state
 
 Load `references/ideation.md`. Its deliverable is a bounded set of genuinely different directions, a recommended direction when the user is ready to converge, explicit assumptions, and a `Not Doing` list. It does not implement the idea or silently turn exploration into a build plan.
 
+## Failure and authority behavior
+
+- If no idea, outcome, decision, or other concrete exploration target can be resolved, surface the missing target and stop before inventing an idea or claiming the grilling pass complete.
+- If a mode requires a declared reference and that reference is missing or unavailable, surface the exact path. Do not silently fall back to another mode or claim the dependent mode completed.
+- If required grounding, fact-finding, or evidence inspection fails, surface the failure. Do not invent evidence or claim material was inspected. Continue only with questions or directions that do not depend on the missing evidence; otherwise mark that part blocked.
+- If the user asks to save or write a converged artifact and the write is denied or fails, preserve the conversational result, report the failed destination, and do not claim the artifact was saved or written.
+
 ## References
 <!-- eval:references -->
 - references/intent-interview.md -- when to read: intent mode
