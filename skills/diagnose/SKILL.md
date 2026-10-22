@@ -60,8 +60,8 @@ treat the repeated failure as evidence about that assumption.
 Before another fix that depends on it:
 
 1. State the shared premise as a falsifiable sentence.
-2. Choose an observation that would come out differently if the premise were
-   false, then measure that premise directly at the relevant actors or seam.
+2. Choose an observation that would come out differently if the premise were false.
+   Then measure that premise directly at the relevant actors or seam.
 3. Run the measurement before changing code.
 4. If the premise is false, update the model and regenerate the ranked
    explanations instead of adding another guard, retry, lock, or special case.
