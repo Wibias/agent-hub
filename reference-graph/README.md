@@ -49,6 +49,12 @@ The graph path is evaluated against the legacy selector before any cutover:
 
 This lets Reference Graph accumulate evidence without silently changing current design behavior.
 
+### Vector baseline
+
+P0 keeps vector nearest-neighbor lookup exact rather than adding an approximate ANN index. Every semantic query must first bind the exact `model_id` and `model_revision`, then compare only vectors from that compatible embedding space.
+
+HNSW/IVFFlat ANN is deferred until a measured scale or latency problem justifies it and there is an explicit model-scoped indexing strategy. This avoids mixing incompatible embedding spaces inside one approximate candidate graph and preserves a high-recall control while the graph is still being evaluated against the legacy selector.
+
 ## Supabase security posture
 
 The migration creates a dedicated `reference_graph` schema, enables RLS on every table, and revokes `anon` / `authenticated` schema and table access. P0 assumes trusted server-side/database access only. A later product/API surface must add explicit grants and narrowly scoped policies together; it must not make these tables public by accident.
