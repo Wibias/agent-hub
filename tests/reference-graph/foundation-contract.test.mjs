@@ -50,6 +50,18 @@ test('postgres contract covers the reference graph entities and keeps exposed ac
   assert.match(sql, /revoke all on all tables in schema reference_graph from anon, authenticated/i);
 });
 
+test('P0 vector retrieval stays exact until model-scoped ANN has measured justification', () => {
+  const sql = read('reference-graph/schema/001_reference_graph.sql');
+  const readme = read('reference-graph/README.md');
+
+  assert.doesNotMatch(sql, /using\s+(?:hnsw|ivfflat)\b/i);
+  assert.match(sql, /model_id\s+text\s+not null/i);
+  assert.match(sql, /model_revision\s+text\s+not null/i);
+  assert.match(readme, /exact.*vector|vector.*exact/i);
+  assert.match(readme, /model_id.*model_revision|model identity.*revision/i);
+  assert.match(readme, /ann.*defer|defer.*ann|hnsw.*defer/i);
+});
+
 test('foundation preserves the legacy control and authority boundaries', () => {
   const readme = read('reference-graph/README.md');
 
