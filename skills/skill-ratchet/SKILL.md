@@ -76,6 +76,16 @@ and optional detail in one-level `references/` files. Include what the skill
 does, when it triggers, and how it differs from neighboring skills in the
 frontmatter description.
 
+Write the **portable procedure, not a workaround for one model or runtime**.
+A mandatory step should still make sense if the model name and private tool name
+are removed from its justification. If a rule exists only because one model
+version misuses one command, place the compatibility workaround in host-local
+instructions, `agent-runtime/`, or an issue instead of taxing every activation
+of the shared skill. Prefer one discriminating observation over a chain of
+mechanical probes that all establish the same fact. Model-specific exceptions
+need evidence that they improve the intended behavior without constraining a
+stronger model that can already perform the procedure directly.
+
 Do not copy a durable normative rule merely to make the target self-contained.
 When `AGENTS.md`, another skill, or a shared policy surface already owns the
 rule, reference that owner and keep only the specialization this skill needs.

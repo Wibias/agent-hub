@@ -227,7 +227,7 @@
       ],
       "status": "active",
       "canonicalId": null,
-      "contentHash": "914ab3429bf8fc168ee76725d28c0ffc39eae2d4ce338322a6c386770bee6c85"
+      "contentHash": "2a730f4dc6a8dba53efeafe621276eeffbf24d2c4a6a47322c82558e7447c28a"
     },
     {
       "id": "agents/context-md",
@@ -275,7 +275,7 @@
       ],
       "status": "active",
       "canonicalId": null,
-      "contentHash": "20842d58f6807e99d10cc5d93b6b74fbca55fdfa4e45f3fafe909c2ed0df635c"
+      "contentHash": "db453dfe9bccac464ac7104d8e2dd0395651d4781c46541445cee49648cc17c2"
     },
     {
       "id": "agents/create-pr-from-local-work",
@@ -337,7 +337,7 @@
       "harness": "agents",
       "scope": "global",
       "name": "design-with-ai",
-      "description": "Canonical default owner for visible product-UI design, audit, polish, restyling, redesign, new surfaces, product-UI data visualization, native/mobile UI, and motion review. Use for ordinary \"make this look better\" work. Not for backend-only work, non-UI chart/report generation, module interface design, or copy-only edits. Explicit Impeccable requests stay with Impeccable.",
+      "description": "Canonical default owner for visible product-UI design, audit, polish, restyling, redesign, new surfaces, product-UI data visualization, native/mobile UI, and motion review. Use for ordinary \"make this look better\" work. Not for backend-only work, general code review, non-UI chart/report generation, module/API interface design (route those to codebase-design), or copy-only edits. Explicit Impeccable requests stay with Impeccable.",
       "tags": [
         "design",
         "with",
@@ -355,7 +355,7 @@
       ],
       "status": "active",
       "canonicalId": null,
-      "contentHash": "d35735dc8c89829faf6ca2a66d1491527cd02a7efaa9b598eacb01f6fdb6c1b7"
+      "contentHash": "c486df4c656b382d6530dca1e50e65798a2975f6c47d1766a076e8956ae36abe"
     },
     {
       "id": "agents/diagnose",
@@ -379,7 +379,7 @@
       ],
       "status": "active",
       "canonicalId": null,
-      "contentHash": "17d9c7d5d01250af292a7c10c7141dbc66739482d1d92fd1de1906c0f5cdffc7"
+      "contentHash": "407f92a78622a115c47023bb67fb801ef93065a05b8a86b58aa81db6df062ef0"
     },
     {
       "id": "agents/domain-modeling",
@@ -427,7 +427,7 @@
       ],
       "status": "active",
       "canonicalId": null,
-      "contentHash": "ea182fd1e4f26004fb784ffb125a0b7cb87dee485a8361e5cbea6fe1c68c4dcb"
+      "contentHash": "7e0d7b70ce08675f6d21235fd3279b43579d07d915f8c60c9d7ca7c29827ed4b"
     },
     {
       "id": "agents/firecrawl",
@@ -451,6 +451,32 @@
       "status": "active",
       "canonicalId": null,
       "contentHash": "97d988af25702b5164a2768f9cdcf932ea88398da472474321d7360168531891"
+    },
+    {
+      "id": "agents/formal-verification",
+      "path": "~/.agents/skills/formal-verification/SKILL.md",
+      "type": "skill",
+      "harness": "agents",
+      "scope": "global",
+      "name": "formal-verification",
+      "description": "Create or maintain project-local formal verification for high-consequence properties that ordinary tests cover poorly. Use when the user asks to model-check concurrency, races, or state machines within explicit bounds; prove an invariant or unreachable state; formally verify retries/parsers/ unsafe code; or keep an existing model, proof, or verifier tied to changed code. Not for ordinary tests, generic code review, or driving the real application at runtime; verification-harness owns reusable runtime proof.",
+      "tags": [
+        "formal",
+        "verification"
+      ],
+      "triggers": [
+        "Create or maintain project-local formal verification for high-consequence properties that ordinary tests cover poorly.",
+        "the user asks to model-check concurrency",
+        "races",
+        "or state machines within explicit bounds",
+        "prove an invariant or unreachable state",
+        "formally verify retries/parsers/ unsafe code",
+        "or keep an existing model",
+        "proof"
+      ],
+      "status": "active",
+      "canonicalId": null,
+      "contentHash": "da73db41c89afd730c6ea816aaace3c9a16c28e1a10891039433d1ea8e6fad0a"
     },
     {
       "id": "agents/fortify",
@@ -510,23 +536,23 @@
       "harness": "agents",
       "scope": "global",
       "name": "grilling",
-      "description": "Interview the user to reach shared understanding before acting. Use when the user says grill, grill me, stress-test this plan/decision/idea, wants a decision-tree interview, or explicitly wants intent extracted before a spec. `decision` mode preserves the multi-question frontier/tree workflow; `intent` mode asks one question at a time to discover outcome, user, success, binding constraint and out-of-scope. Called by improve-codebase-architecture after a candidate is picked. Not a code review and not an implementation skill.",
+      "description": "Interview or explore with the user before acting. Use when the user says grill, grill me, stress-test this plan/decision/idea, explicitly wants intent extracted before a spec, or asks to ideate/refine a still-vague idea, explore genuinely different directions, and converge before choosing. `decision` mode works a decision frontier, `intent` mode discovers the desired outcome one question at a time, and `ideation` mode expands distinct options before convergence. Not a code review or an implementation skill.",
       "tags": [
         "grilling"
       ],
       "triggers": [
-        "Interview the user to reach shared understanding before acting.",
+        "Interview or explore with the user before acting.",
         "the user says grill",
         "grill me",
         "stress-test this plan/decision/idea",
-        "wants a decision-tree interview",
-        "or explicitly wants intent extracted before a spec. `decision` mode preserves the multi-question frontier/tree workflow",
-        "`intent` mode asks one question at a time to discover outcome",
-        "user"
+        "explicitly wants intent extracted before a spec",
+        "or asks to ideate/refine a still-vague idea",
+        "explore genuinely different directions",
+        "and converge before choosing. `decision` mode works a decision frontier"
       ],
       "status": "active",
       "canonicalId": null,
-      "contentHash": "655d0a2872e624a07828dc3ee3a2c438d6f0db20a836ae425040c4416bce05a2"
+      "contentHash": "86887da0fb22b933b84e31798424751016bc1b3508502c207d032b462927fe29"
     },
     {
       "id": "agents/handoff",
@@ -700,7 +726,7 @@
       ],
       "status": "active",
       "canonicalId": null,
-      "contentHash": "ccb53f933c9a98de07c945af8ae6d425eee28775bdcc5d36d301122cc213216e"
+      "contentHash": "546944e09f8861fe33dfae640d6340fcc4cbc293a4d17048100197738828f989"
     },
     {
       "id": "agents/playwright",
@@ -1071,7 +1097,7 @@
       ],
       "status": "active",
       "canonicalId": null,
-      "contentHash": "f86762795f5368c8cd731d9b7d8d794294dd64e42b6533033deed97713322367"
+      "contentHash": "4278b4657f5b7d4e469534a0d772946cf51ac043270dfdbf0ab72a5ace4a824c"
     },
     {
       "id": "agents/soul",

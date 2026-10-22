@@ -12,7 +12,7 @@ description: >-
 license: MIT
 metadata:
   source: addyosmani/agent-skills
-  adapted: "2026-09-04"
+  adapted: "2026-10-22"
 ---
 
 # Performance
@@ -46,6 +46,25 @@ Prefer existing specialists when they own the primary ask:
 7. **Check trade-offs.** A latency win that increases memory, database load, correctness risk, cache staleness or cost may be a regression elsewhere.
 8. **Guard against recurrence.** Add the cheapest reliable benchmark, budget, query-plan check, metric, regression test or project constraint that would catch the same class without making the inner loop unusable.
 
+## Experiment ledger
+
+Performance work often produces useful **negative evidence** that disappears when a candidate is reverted. Preserve enough of that evidence that a later agent does not retry the same dead hypothesis as if nobody had measured it.
+
+For each materially tested hypothesis, record:
+
+```text
+Hypothesis: <what mechanism the change was supposed to improve>
+Baseline -> result: <same metric, workload and environment>
+Verdict: kept | reverted | inconclusive
+Reason: <signal exceeded noise / neutral / worse / correctness or trade-off failed / measurement invalid>
+```
+
+Use an existing durable work artifact when one already exists, such as the PR description, benchmark notes, issue, or project `PERF.md`. Do not create a permanent file merely to log one trivial experiment. If the work has no durable artifact, include the ledger in the handoff/report so the user can decide whether it should persist.
+
+A change that is **within measurement noise** is neutral, not a free optimization. Revert it unless some separate, already-required outcome justifies the change. Code kept solely because it was already written creates maintenance cost without measured benefit.
+
+Record reverted attempts as deliberately as successful ones. Before proposing a new optimization, check the available ledger or project history when it can cheaply show that the same hypothesis was already tested and rejected under comparable conditions.
+
 ## Evidence rules
 
 - Do not claim a bottleneck from static source inspection alone when runtime measurement is available and material.
@@ -55,7 +74,7 @@ Prefer existing specialists when they own the primary ask:
 - Do not report or act on a benchmark delta until you can explain the dominant limiter, confirm the intended work actually ran, count failures, and show the result exceeds run-to-run noise. If any of those are materially unknown, call the result inconclusive.
 - A microbenchmark win is not an end-to-end win. Bound the possible user-facing impact by the share of total time or resources the changed piece consumed.
 - Report blocked or inconclusive measurements honestly rather than substituting intuition.
-
+- Do not repeat a previously reverted hypothesis without new evidence that makes the old measurement materially inapplicable.
 
 ## Failure and authority behavior
 

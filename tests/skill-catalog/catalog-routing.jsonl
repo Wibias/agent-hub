@@ -21,6 +21,8 @@
 {"id":"D21","prompt":"Plan a large migration of this production database schema","expected_skill":"deprecation-and-migration"}
 {"id":"D22","prompt":"Research the current provider pricing and quota claims, compare current sources, and verify what is actually supported","expected_skill":"vault-research"}
 {"id":"D23","prompt":"The patch tool reports success but the file is still unchanged after two attempts; diagnose the false-success write path","expected_skill":"diagnose"}
+{"id":"D24","prompt":"Model-check this concurrency state machine, prove the invalid state is unreachable within explicit bounds, and keep the verification tied to the code as it changes","expected_skill":"formal-verification"}
+{"id":"D25","prompt":"Refine this vague product idea, explore genuinely different directions, then help me converge without implementing it","expected_skill":"grilling"}
 {"id":"N1","prompt":"Write tests for this Python parser","expected_skill":null}
 {"id":"N2","prompt":"What is the capital of France?","expected_skill":null}
 {"id":"N3","prompt":"Summarise this paragraph in two sentences","expected_skill":null}

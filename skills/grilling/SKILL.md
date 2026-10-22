@@ -1,25 +1,26 @@
 ---
 name: grilling
 description: >-
-  Interview the user to reach shared understanding before acting. Use when the
-  user says grill, grill me, stress-test this plan/decision/idea, wants a
-  decision-tree interview, or explicitly wants intent extracted before a spec.
-  `decision` mode preserves the multi-question frontier/tree workflow; `intent`
-  mode asks one question at a time to discover outcome, user, success, binding
-  constraint and out-of-scope. Called by improve-codebase-architecture after a
-  candidate is picked. Not a code review and not an implementation skill.
+  Interview or explore with the user before acting. Use when the user says grill,
+  grill me, stress-test this plan/decision/idea, explicitly wants intent
+  extracted before a spec, or asks to ideate/refine a still-vague idea, explore
+  genuinely different directions, and converge before choosing. `decision` mode
+  works a decision frontier, `intent` mode discovers the desired outcome one
+  question at a time, and `ideation` mode expands distinct options before
+  convergence. Not a code review or an implementation skill.
 ---
 
 # Grilling
 
-Choose the interview shape from the request. Do not silently combine both modes.
+Choose the interaction shape from the request. Do not silently combine modes.
 
 ## Mode routing
 
 - **`decision` (default for "grill", "stress-test", plan/architecture choices):** use the decision tree below. Ask the currently unblocked frontier in rounds.
 - **`intent` (explicit "interview me", "figure out what I actually want", underspecified product outcome before a spec):** load `references/intent-interview.md`. Ask one focused question at a time with a visible hypothesis/guess, then produce a confirmed intent statement.
+- **`ideation` (explicit "ideate", "refine this idea", "explore directions", or a vague idea that the user wants expanded before choosing):** load `references/ideation.md`. Ground in the rawest useful evidence, create meaningfully different directions, then converge on assumptions and trade-offs without implementing.
 
-If the user explicitly names a mode, honor it. If the ask is merely underspecified but the user did not ask for an interview, do not hijack a clearly actionable task with a long interview; ask only the genuinely blocking question or let the owning downstream skill handle its normal clarification contract.
+If the user explicitly names a mode, honor it. If the ask is merely underspecified but the user did not ask for an interview or ideation, do not hijack a clearly actionable task with a long discovery process; ask only the genuinely blocking question or let the owning downstream skill handle its normal clarification contract.
 
 ## Decision mode
 
@@ -44,3 +45,23 @@ The session is done when the frontier is empty: every material branch of the des
 ## Intent mode
 
 Load `references/intent-interview.md`. Its deliverable is a user-confirmed statement of intent, not a spec or implementation plan.
+
+## Ideation mode
+
+Load `references/ideation.md`. Its deliverable is a bounded set of genuinely different directions, a recommended direction when the user is ready to converge, explicit assumptions, and a `Not Doing` list. It does not implement the idea or silently turn exploration into a build plan.
+
+## Failure and authority behavior
+
+- If no idea, outcome, decision, or other concrete exploration target can be resolved, surface the missing target and stop before inventing an idea or claiming the grilling pass complete.
+- If a mode requires a declared reference and that reference is missing or unavailable, surface the exact path. Do not silently fall back to another mode or claim the dependent mode completed.
+- If required grounding, fact-finding, or evidence inspection fails, surface the failure. Do not invent evidence or claim material was inspected. Continue only with questions or directions that do not depend on the missing evidence; otherwise mark that part blocked.
+- If the user asks to save or write a converged artifact and the write is denied or fails, preserve the conversational result, report the failed destination, and do not claim the artifact was saved or written.
+
+## References
+<!-- eval:references -->
+- references/intent-interview.md -- when to read: intent mode
+- references/ideation.md -- when to read: ideation mode
+- tests/evals/cases.jsonl -- when to read: as canonical acceptance criteria during qualification review
+- tests/evals/regression-cases.jsonl -- when to read: when reviewing retained failures and successors
+- tests/evals/regression-lock.json -- when to read: when validating immutable retained regressions
+<!-- /eval:references -->

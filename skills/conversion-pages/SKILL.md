@@ -1,6 +1,6 @@
 ---
 name: conversion-pages
-description: Designs and writes high-conversion landing pages and pricing pages for SaaS products and services. Use when the user asks to build, rewrite, audit, or optimize a landing page or pricing page with conversion, persuasion, or CRO goals. Differentiator: covers CRO/AIDA frameworks, objection handling, SEO/AEO setup, and page-type-specific layout patterns for both landing and pricing pages -- distinct from impeccable (general frontend quality workflow), design-styles (visual style and taste), and writing-ticks (prose anti-slop). Product microcopy stays with `intent` plus `references/content-strategy.md` because `articulate` is not installed.
+description: "Designs and writes high-conversion landing pages and pricing pages for SaaS products and services. Use when the user asks to build, rewrite, audit, or optimize a landing page or pricing page with conversion, persuasion, or CRO goals. Differentiator: covers CRO/AIDA frameworks, objection handling, SEO/AEO setup, and page-type-specific layout patterns for both landing and pricing pages -- distinct from impeccable (general frontend quality workflow), design-styles (visual style and taste), and writing-ticks (prose anti-slop). Product microcopy stays with `intent` plus `references/content-strategy.md` because `articulate` is not installed."
 ---
 
 # Conversion Pages: Landing + Pricing

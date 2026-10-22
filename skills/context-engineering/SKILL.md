@@ -13,7 +13,7 @@ description: >-
 Feed agents the right information at the right time. Too little invents APIs.
 Too much loses the task. Hub `AGENTS.md` already owns default operating rules.
 
-> Sources: addyosmani/agent-skills (MIT), with context-pruning and task-sharpening ideas adapted from HumanLayer `improve-claude-md` and Cursor PStack `sharpen`, plus generated-context budgeting adapted from pbakaus/impeccable (MIT). Adapted 2026-10-17.
+> Sources: addyosmani/agent-skills (MIT), with context-pruning and task-sharpening ideas adapted from HumanLayer `improve-claude-md` and Cursor PStack `sharpen`, plus generated-context budgeting adapted from pbakaus/impeccable (MIT). Adapted 2026-10-22.
 
 ## When to use
 
@@ -27,9 +27,11 @@ Too much loses the task. Hub `AGENTS.md` already owns default operating rules.
 For non-trivial work, separate the desired outcome from the request wording before deciding what context to carry forward.
 
 1. State the outcome, observable success condition, and material constraints.
-2. Drop wording-level constraints that do not serve the outcome. Do not make the task bigger merely because more detail is available.
-3. Keep product, taste, compatibility, authority, and other genuine user decisions open unless the user already decided them. Resolve technical facts with repository evidence or a cheap safe experiment when possible.
-4. Name at least one independent success check that could show the result is wrong. Prefer a check outside the implementation path itself.
+2. Prefer the rawest relevant evidence a strong practitioner would inspect when it materially changes the answer: source code over a summary of the code, the failing output over a paraphrase, the real fixture/schema over a description of it, and the primary source over a second-hand digest. Do not re-fetch or expand evidence when a verified local fact already settles the question.
+3. Run a professional-depth check: name what a top practitioner would inspect, measure, or compare here that the request does not mention. Add it to the brief only when it can materially change the outcome; do not make the task bigger for ceremony.
+4. Drop wording-level constraints that do not serve the outcome. Do not make the task bigger merely because more detail is available.
+5. Keep product, taste, compatibility, authority, and other genuine user decisions open unless the user already decided them. Resolve technical facts with repository evidence or a cheap safe experiment when possible.
+6. Name at least one independent success check that could show the result is wrong. Prefer a check outside the implementation path itself.
 
 Do not hand back a rewritten prompt unless the user asked for one. Use the sharpened result to choose and pack context.
 
@@ -96,6 +98,8 @@ invent requirements.
 |---|---|
 | Context starvation | Load the rules file and the relevant source before editing |
 | Context flooding | Drop anything that is not this task |
+| Digested-only context | Prefer the primary artifact when the summary could hide the deciding fact |
+| Process inflation | Add expert methods only when they can materially change the outcome |
 | Stale context | Start a fresh session when the work changes |
 | Missing examples | Include one local pattern to follow |
 | Duplicated enforcement | Move enforceable rules into tooling and leave navigation/context only |
@@ -106,6 +110,8 @@ invent requirements.
 
 - [ ] Rules file covers stack, commands, conventions, boundaries
 - [ ] Non-trivial briefs state the outcome and an independent success check
+- [ ] The brief uses primary/raw evidence where a digest could hide a material fact
+- [ ] Any added expert method or measurement has a concrete reason to affect the outcome
 - [ ] Enforceable or reliably discoverable guidance was not duplicated as bulky prose
 - [ ] Output follows the relevant project patterns
 - [ ] References are real project files, not invented APIs
