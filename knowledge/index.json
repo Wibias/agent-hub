@@ -459,24 +459,24 @@
       "harness": "agents",
       "scope": "global",
       "name": "formal-verification",
-      "description": "Create or maintain project-local formal verification for high-consequence properties that ordinary tests cover poorly. Use when the user asks to model-check a race or state machine, prove an invariant, formally verify retries/parsers/unsafe code, or audit whether an existing model, proof, or verifier still matches changed code. Not for ordinary tests, generic code review, or driving the real application at runtime; verification-harness owns reusable runtime proof.",
+      "description": "Create or maintain project-local formal verification for high-consequence properties that ordinary tests cover poorly. Use when the user asks to model-check concurrency, races, or state machines within explicit bounds; prove an invariant or unreachable state; formally verify retries/parsers/ unsafe code; or keep an existing model, proof, or verifier tied to changed code. Not for ordinary tests, generic code review, or driving the real application at runtime; verification-harness owns reusable runtime proof.",
       "tags": [
         "formal",
         "verification"
       ],
       "triggers": [
         "Create or maintain project-local formal verification for high-consequence properties that ordinary tests cover poorly.",
-        "the user asks to model-check a race or state machine",
-        "prove an invariant",
-        "formally verify retries/parsers/unsafe code",
-        "or audit whether an existing model",
-        "proof",
-        "or verifier still matches changed code. Not for ordinary tests",
-        "generic code review"
+        "the user asks to model-check concurrency",
+        "races",
+        "or state machines within explicit bounds",
+        "prove an invariant or unreachable state",
+        "formally verify retries/parsers/ unsafe code",
+        "or keep an existing model",
+        "proof"
       ],
       "status": "active",
       "canonicalId": null,
-      "contentHash": "fac404c9ee8c2cfdf9ca8a28eca329591c86dda7c02ba5b6de17d41463b67347"
+      "contentHash": "da73db41c89afd730c6ea816aaace3c9a16c28e1a10891039433d1ea8e6fad0a"
     },
     {
       "id": "agents/fortify",
@@ -536,7 +536,7 @@
       "harness": "agents",
       "scope": "global",
       "name": "grilling",
-      "description": "Interview or explore with the user before acting. Use when the user says grill, grill me, stress-test this plan/decision/idea, explicitly wants intent extracted before a spec, or asks to ideate/refine a still-vague idea before choosing a direction. `decision` mode works a decision frontier, `intent` mode discovers the desired outcome one question at a time, and `ideation` mode expands distinct options before converging. Not a code review or an implementation skill.",
+      "description": "Interview or explore with the user before acting. Use when the user says grill, grill me, stress-test this plan/decision/idea, explicitly wants intent extracted before a spec, or asks to ideate/refine a still-vague idea, explore genuinely different directions, and converge before choosing. `decision` mode works a decision frontier, `intent` mode discovers the desired outcome one question at a time, and `ideation` mode expands distinct options before convergence. Not a code review or an implementation skill.",
       "tags": [
         "grilling"
       ],
@@ -546,13 +546,13 @@
         "grill me",
         "stress-test this plan/decision/idea",
         "explicitly wants intent extracted before a spec",
-        "or asks to ideate/refine a still-vague idea before choosing a direction. `decision` mode works a decision frontier",
-        "`intent` mode discovers the desired outcome one question at a time",
-        "and `ideation` mode expands distinct options before converging. Not a code review or an implementation skill"
+        "or asks to ideate/refine a still-vague idea",
+        "explore genuinely different directions",
+        "and converge before choosing. `decision` mode works a decision frontier"
       ],
       "status": "active",
       "canonicalId": null,
-      "contentHash": "4dcdfd2d92944dcc3bf243c9f0a43e0a54e550c17b6b9634aac8969c508dcab1"
+      "contentHash": "16c3caf5068ef52b3f3fc25e74043f3bdc158c868d5874e7dc1b1dc4f95a637c"
     },
     {
       "id": "agents/handoff",
