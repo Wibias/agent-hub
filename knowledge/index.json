@@ -275,7 +275,7 @@
       ],
       "status": "active",
       "canonicalId": null,
-      "contentHash": "20842d58f6807e99d10cc5d93b6b74fbca55fdfa4e45f3fafe909c2ed0df635c"
+      "contentHash": "db453dfe9bccac464ac7104d8e2dd0395651d4781c46541445cee49648cc17c2"
     },
     {
       "id": "agents/create-pr-from-local-work",
@@ -379,7 +379,7 @@
       ],
       "status": "active",
       "canonicalId": null,
-      "contentHash": "17d9c7d5d01250af292a7c10c7141dbc66739482d1d92fd1de1906c0f5cdffc7"
+      "contentHash": "407f92a78622a115c47023bb67fb801ef93065a05b8a86b58aa81db6df062ef0"
     },
     {
       "id": "agents/domain-modeling",
