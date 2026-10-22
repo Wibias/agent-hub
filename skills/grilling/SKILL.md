@@ -49,3 +49,12 @@ Load `references/intent-interview.md`. Its deliverable is a user-confirmed state
 ## Ideation mode
 
 Load `references/ideation.md`. Its deliverable is a bounded set of genuinely different directions, a recommended direction when the user is ready to converge, explicit assumptions, and a `Not Doing` list. It does not implement the idea or silently turn exploration into a build plan.
+
+## References
+<!-- eval:references -->
+- references/intent-interview.md -- when to read: intent mode
+- references/ideation.md -- when to read: ideation mode
+- tests/evals/cases.jsonl -- when to read: as canonical acceptance criteria during qualification review
+- tests/evals/regression-cases.jsonl -- when to read: when reviewing retained failures and successors
+- tests/evals/regression-lock.json -- when to read: when validating immutable retained regressions
+<!-- /eval:references -->
