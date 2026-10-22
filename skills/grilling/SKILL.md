@@ -3,11 +3,11 @@ name: grilling
 description: >-
   Interview or explore with the user before acting. Use when the user says grill,
   grill me, stress-test this plan/decision/idea, explicitly wants intent
-  extracted before a spec, or asks to ideate/refine a still-vague idea before
-  choosing a direction. `decision` mode works a decision frontier, `intent` mode
-  discovers the desired outcome one question at a time, and `ideation` mode
-  expands distinct options before converging. Not a code review or an
-  implementation skill.
+  extracted before a spec, or asks to ideate/refine a still-vague idea, explore
+  genuinely different directions, and converge before choosing. `decision` mode
+  works a decision frontier, `intent` mode discovers the desired outcome one
+  question at a time, and `ideation` mode expands distinct options before
+  convergence. Not a code review or an implementation skill.
 ---
 
 # Grilling
