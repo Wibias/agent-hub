@@ -32,6 +32,58 @@ export function parseTopLevelFrontmatterKeys(text) {
   return keys;
 }
 
+export function validatePortableFrontmatterSyntax(text) {
+  const lines = String(text).replace(/^\uFEFF/, '').split(/\r?\n/);
+  if (lines[0]?.trim() !== '---') return ['missing YAML frontmatter opening delimiter'];
+
+  const errors = [];
+  let closed = false;
+  for (let i = 1; i < lines.length; i += 1) {
+    const line = lines[i];
+    if (line.trim() === '---') {
+      closed = true;
+      break;
+    }
+    const lineNo = i + 1;
+    if (/^[ ]*\t/.test(line)) {
+      errors.push(`frontmatter line ${lineNo} uses a tab for indentation`);
+      continue;
+    }
+    if (/^\s/.test(line) || !line.trim() || /^\s*#/.test(line)) continue;
+
+    const field = /^([A-Za-z0-9_-]+)\s*:\s*(.*?)\s*$/.exec(line);
+    if (!field) continue;
+    const value = field[2];
+    if (!value || /^(?:>|>-|>\+|\||\|-|\|\+)$/.test(value)) continue;
+
+    const quote = value[0] === '"' || value[0] === "'" ? value[0] : null;
+    if (quote) {
+      if (value.length < 2 || !value.endsWith(quote)) {
+        errors.push(`frontmatter line ${lineNo} opens a quote that never closes`);
+      }
+      continue;
+    }
+
+    if (/^[`@%*,]/.test(value)) {
+      errors.push(`frontmatter line ${lineNo} starts an unquoted scalar with reserved '${value[0]}'`);
+      continue;
+    }
+    if (/^[|>]\S/.test(value)) {
+      errors.push(`frontmatter line ${lineNo} has an invalid block-scalar prefix`);
+      continue;
+    }
+    if (/^[-?&](?:\s|$)/.test(value)) {
+      errors.push(`frontmatter line ${lineNo} starts an unquoted YAML indicator`);
+      continue;
+    }
+    if (/:\s/.test(value)) {
+      errors.push(`frontmatter line ${lineNo} contains an unquoted ': ' mapping token`);
+    }
+  }
+  if (!closed) errors.push('frontmatter closing delimiter is missing');
+  return errors;
+}
+
 function parseTopLevelScalar(text, wantedKey) {
   const lines = String(text).replace(/^\uFEFF/, '').split(/\r?\n/);
   if (lines[0]?.trim() !== '---') return null;
@@ -69,6 +121,7 @@ async function topLevelSkills(root) {
       path: slash(relative(root, skillPath)),
       name: parseTopLevelScalar(text, 'name'),
       keys: parseTopLevelFrontmatterKeys(text),
+      frontmatterErrors: validatePortableFrontmatterSyntax(text),
     });
   }
   return skills.sort((a, b) => a.path.localeCompare(b.path));
@@ -102,6 +155,7 @@ export async function validateRepositoryRuntimePolicy(root = process.cwd()) {
   const byPath = new Map(skills.map((skill) => [skill.path, skill]));
   const byName = new Map();
   for (const skill of skills) {
+    for (const issue of skill.frontmatterErrors) errors.push(`${skill.path}: ${issue}`);
     if (!skill.name) {
       errors.push(`${skill.path}: missing simple top-level name`);
       continue;
