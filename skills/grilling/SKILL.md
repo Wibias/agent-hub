@@ -1,25 +1,26 @@
 ---
 name: grilling
 description: >-
-  Interview the user to reach shared understanding before acting. Use when the
-  user says grill, grill me, stress-test this plan/decision/idea, wants a
-  decision-tree interview, or explicitly wants intent extracted before a spec.
-  `decision` mode preserves the multi-question frontier/tree workflow; `intent`
-  mode asks one question at a time to discover outcome, user, success, binding
-  constraint and out-of-scope. Called by improve-codebase-architecture after a
-  candidate is picked. Not a code review and not an implementation skill.
+  Interview or explore with the user before acting. Use when the user says grill,
+  grill me, stress-test this plan/decision/idea, explicitly wants intent
+  extracted before a spec, or asks to ideate/refine a still-vague idea before
+  choosing a direction. `decision` mode works a decision frontier, `intent` mode
+  discovers the desired outcome one question at a time, and `ideation` mode
+  expands distinct options before converging. Not a code review or an
+  implementation skill.
 ---
 
 # Grilling
 
-Choose the interview shape from the request. Do not silently combine both modes.
+Choose the interaction shape from the request. Do not silently combine modes.
 
 ## Mode routing
 
 - **`decision` (default for "grill", "stress-test", plan/architecture choices):** use the decision tree below. Ask the currently unblocked frontier in rounds.
 - **`intent` (explicit "interview me", "figure out what I actually want", underspecified product outcome before a spec):** load `references/intent-interview.md`. Ask one focused question at a time with a visible hypothesis/guess, then produce a confirmed intent statement.
+- **`ideation` (explicit "ideate", "refine this idea", "explore directions", or a vague idea that the user wants expanded before choosing):** load `references/ideation.md`. Ground in the rawest useful evidence, create meaningfully different directions, then converge on assumptions and trade-offs without implementing.
 
-If the user explicitly names a mode, honor it. If the ask is merely underspecified but the user did not ask for an interview, do not hijack a clearly actionable task with a long interview; ask only the genuinely blocking question or let the owning downstream skill handle its normal clarification contract.
+If the user explicitly names a mode, honor it. If the ask is merely underspecified but the user did not ask for an interview or ideation, do not hijack a clearly actionable task with a long discovery process; ask only the genuinely blocking question or let the owning downstream skill handle its normal clarification contract.
 
 ## Decision mode
 
@@ -44,3 +45,7 @@ The session is done when the frontier is empty: every material branch of the des
 ## Intent mode
 
 Load `references/intent-interview.md`. Its deliverable is a user-confirmed statement of intent, not a spec or implementation plan.
+
+## Ideation mode
+
+Load `references/ideation.md`. Its deliverable is a bounded set of genuinely different directions, a recommended direction when the user is ready to converge, explicit assumptions, and a `Not Doing` list. It does not implement the idea or silently turn exploration into a build plan.
