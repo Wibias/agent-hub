@@ -3,11 +3,11 @@ name: formal-verification
 description: >-
   Create or maintain project-local formal verification for high-consequence
   properties that ordinary tests cover poorly. Use when the user asks to
-  model-check a race or state machine, prove an invariant, formally verify
-  retries/parsers/unsafe code, or audit whether an existing model, proof, or
-  verifier still matches changed code. Not for ordinary tests, generic code
-  review, or driving the real application at runtime; verification-harness owns
-  reusable runtime proof.
+  model-check concurrency, races, or state machines within explicit bounds;
+  prove an invariant or unreachable state; formally verify retries/parsers/
+  unsafe code; or keep an existing model, proof, or verifier tied to changed
+  code. Not for ordinary tests, generic code review, or driving the real
+  application at runtime; verification-harness owns reusable runtime proof.
 ---
 
 # Formal Verification
