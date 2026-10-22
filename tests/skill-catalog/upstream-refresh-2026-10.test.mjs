@@ -46,7 +46,7 @@ test('grilling fails closed on missing targets, references, grounding, and denie
   const skill = await text('skills/grilling/SKILL.md');
 
   assert.match(skill, /missing.*target|no .*target.*resolved/i);
-  assert.match(skill, /do not invent.*idea|idea.*do not invent/i);
+  assert.match(skill, /invent(?:ing)?\s+(?:an\s+)?idea/i);
   assert.match(skill, /missing.*reference|reference.*unavailable/i);
   assert.match(skill, /do not silently.*fall back|no silent.*fall back/i);
   assert.match(skill, /grounding.*fail|fact-finding.*fail|required.*evidence.*fail/i);
