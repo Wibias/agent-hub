@@ -40,3 +40,5 @@ jobs:
           git diff --exit-code -- knowledge/INDEX.md knowledge/index.json
       - name: Verify generated routing index after refresh
         run: node scripts/verify-skill-routing.mjs --check-index
+
+# Triggered only on the temporary verification branch.
