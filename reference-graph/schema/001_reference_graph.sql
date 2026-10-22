@@ -118,9 +118,8 @@ create table reference_graph.embeddings (
   primary key (chunk_id, model_id, model_revision)
 );
 
-create index reference_graph_embeddings_hnsw_idx
-  on reference_graph.embeddings
-  using hnsw (embedding vector_cosine_ops);
+create index reference_graph_embeddings_model_idx
+  on reference_graph.embeddings (model_id, model_revision, chunk_id);
 
 create table reference_graph.usage_feedback (
   id uuid primary key default gen_random_uuid(),
