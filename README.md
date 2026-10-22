@@ -98,9 +98,10 @@ backticks.
 |---|---|---|
 | <!-- skill-doc:diagnose -->[**diagnose**](skills/diagnose/SKILL.md) | Reproduce, localize, and find the root cause of hard bugs, false-success writes, and performance regressions. Diagnosis ends at diagnosis. | “Diagnose why this succeeds in logs but no row is created.” |
 | <!-- skill-doc:performance -->[**performance**](skills/performance/SKILL.md) | Measure and improve performance across browser/network, backend/runtime, APIs, databases, and end-to-end latency. | “Find what makes this endpoint p95 slow.” |
+| <!-- skill-doc:formal-verification -->[**formal-verification**](skills/formal-verification/SKILL.md) | Create or maintain code-bound model checks, proofs, and formal verifiers for high-consequence invariants ordinary tests cover poorly. | “Model-check this retry race and keep the proof in sync with the code.” |
 | <!-- skill-doc:observability -->[**observability**](skills/observability/SKILL.md) | Design vendor-neutral logs, metrics, traces, dashboards, alerts, and verification for a service or feature. | “Add an observability plan for checkout.” |
 | <!-- skill-doc:retrospective -->[**retrospective**](skills/retrospective/SKILL.md) | Turn completed work/incidents into durable prevention, hardening, and enforcement improvements for future agent runs. | “Do a retrospective on why this bug escaped review.” |
-| <!-- skill-doc:verification-harness -->[**verification-harness**](skills/verification-harness/SKILL.md) | Create or repair a portable project-local verification skill that agents can use to prove work. | “Build a verification harness for this repository.” |
+| <!-- skill-doc:verification-harness -->[**verification-harness**](skills/verification-harness/SKILL.md) | Create or repair a portable project-local verification skill that agents can use to prove real application behavior. | “Build a verification harness for this repository.” |
 
 ### GitHub & delivery
 
@@ -144,7 +145,7 @@ backticks.
 | Skill | Use it for | Example |
 |---|---|---|
 | <!-- skill-doc:codex-dynamic-workflows -->[**codex-dynamic-workflows**](skills/codex-dynamic-workflows/SKILL.md) | Plan and run explicit multi-agent orchestration with bounded work packets, doubt gates, and integration verification. | “Use subagents to inspect these four independent modules.” |
-| <!-- skill-doc:grilling -->[**grilling**](skills/grilling/SKILL.md) | Interview the user to eliminate material ambiguity before acting. | “Grill me on this product idea before we build anything.” |
+| <!-- skill-doc:grilling -->[**grilling**](skills/grilling/SKILL.md) | Interview, stress-test, or explore a still-vague idea before acting; includes decision, intent, and ideation modes. | “Refine this rough product idea before we choose a direction.” |
 | <!-- skill-doc:handoff -->[**handoff**](skills/handoff/SKILL.md) | Compact the current conversation/work state into a structured handoff for a fresh agent/session. | “Create a handoff so I can continue this in a fresh session.” |
 | <!-- skill-doc:work-recall -->[**work-recall**](skills/work-recall/SKILL.md) | Reconstruct current working state for a project, feature, bug, or recent workstream from available history/context. | “Recall where we left off on Agent Hub memory.” |
 | <!-- skill-doc:extract-approach -->[**extract-approach**](skills/extract-approach/SKILL.md) | Capture a verified reusable decision rule into durable local memory after a solve proves it useful. | “Extract the rule we learned from this incident.” |
