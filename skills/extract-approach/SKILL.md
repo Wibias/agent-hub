@@ -24,6 +24,8 @@ Do not use it merely because work was large or expensive.
 - Stable domain facts belong to `knowledge/`.
 - Durable behavior belongs to `rules/`.
 - Repeatable procedures belong to `skills/`.
+- Current work state belongs to `work-recall`; memory notes are historical
+  evidence, not a substitute for re-checking live repository/PR/runtime state.
 - Broad current research belongs to `vault-research`; `extract-approach`
   may run afterward only to preserve a genuinely reusable decision rule from
   the verified result.
@@ -72,6 +74,29 @@ Prefer, in order:
 A mechanical guard and a memory note may both be useful, but prose must not be
 the only owner when cheap structure can prevent the same mistake.
 
+## Historical provenance
+
+Memory notes record **what was learned at a point in history**. They must not
+silently turn code-specific observations into timeless claims.
+
+- When a lesson depends on repository code, configuration, a PR, or another
+  changing artifact, date the observation and cite the strongest available
+  provenance: preferably `owner/repo@<full-or-unambiguous-commit>`, otherwise a
+  PR/issue/release identifier plus date.
+- Phrase code-state claims as historical claims such as `As of repo@abc1234,
+  the release helper owned this behavior.` Do not write `the release helper owns
+  this behavior` unless a stable contract, not merely the observed code, makes
+  that timelessly true.
+- If later evidence changes the fact but the old episode is still useful, add a
+  new dated successor note or successor statement and mark/reference the old
+  claim as superseded. Do not rewrite the old note to make history look as if it
+  always matched the new state.
+- Future agents must verify live state before acting on a historical code claim.
+  `work-recall` owns that current-state reconstruction.
+
+The reusable **decision rule** may be durable even when the incident-specific
+code fact is historical. Keep those two layers distinguishable.
+
 ## Required storage contract
 
 Before persistence, read `references/storage-contract.md`.
@@ -106,9 +131,11 @@ After the trigger gate and initialization pass:
 3. Preserve every existing registry row and note.
 4. Keep the note under 40 lines when practical.
 5. State the reusable rule early. Omit narrative chronology.
-6. Use repository-relative paths, issue IDs, or public documentation links.
-   Never persist machine-specific absolute paths.
-7. Never write personal lesson content into `MEMORY.example.md`,
+6. Use repository-relative paths, issue IDs, commit IDs, or public documentation
+   links. Never persist machine-specific absolute paths.
+7. For code-dependent claims, include the date plus repository/commit or the
+   strongest available historical provenance.
+8. Never write personal lesson content into `MEMORY.example.md`,
    `pending-rules.example.md`, or another tracked public template.
 
 Use this shape:
@@ -118,9 +145,10 @@ Use this shape:
 
 **Tool/Context:** <tool or Multi>
 **Tags:** <max 3 keywords>
+**Provenance:** <repo@commit, PR/issue/release + date, or N/A>
 
 ## Observation
-<Underlying problem and recognition cues.>
+<Underlying problem and recognition cues, phrased historically when code-dependent.>
 
 ## Lesson
 <Precise reusable decision rule.>
@@ -129,7 +157,7 @@ Use this shape:
 <No | Yes - target>
 
 ## Links
-- <repo-relative path, issue, or public documentation>
+- <repo-relative path, commit/issue/PR, or public documentation>
 ```
 
 If a note or registry write is denied, surface the denial. When the available
