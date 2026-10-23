@@ -144,5 +144,5 @@ P0 is complete when:
 - vector lookup baseline is exact/model-bound;
 - Memory promotion is explicit and Evidence-only;
 - permanent CI runs the Reference Graph tests;
-- existing Agent Hub release governance remains green;
+- Reference Graph introduces no new Agent Hub release-governance failure; any pre-existing baseline failures are identified separately rather than repaired inside P0;
 - `design-with-ai` is unchanged in this delivery.
