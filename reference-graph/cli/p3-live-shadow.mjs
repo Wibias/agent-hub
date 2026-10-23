@@ -19,7 +19,11 @@ import {
   runCatalogShadowEvaluation,
 } from '../shadow-eval.mjs';
 import { ReferenceGraphSupabaseStore } from '../supabase-store.mjs';
-import { assertBoundSupabaseUrl, readTargetBinding } from '../target-binding.mjs';
+import {
+  assertBoundSupabaseUrl,
+  readTargetBinding,
+  redactDiagnostics,
+} from '../target-binding.mjs';
 
 const CASES_FILE = fileURLToPath(new URL('../shadow-cases.json', import.meta.url));
 const BENCHMARK_CONTROL_TIME = '2026-07-21T12:00:00.000Z';
@@ -257,6 +261,6 @@ async function main() {
 
 main().catch((error) => {
   const message = error instanceof Error ? error.message : String(error);
-  console.error(message);
+  console.error(redactDiagnostics(message, [process.env.SUPABASE_SERVICE_ROLE_KEY]));
   process.exitCode = 1;
 });
