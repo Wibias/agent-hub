@@ -28,15 +28,18 @@ jobs:
           count = text.count(needle)
           if count != 1:
               raise SystemExit(f'expected exactly one control character, got {count}')
-          replacement = '''          for (const file of [
-            'reference-graph/evidence/p10-runtime-projection-evidence.json',
-          ]) {
-            if (!existsSync(file)) continue;
-            const value = JSON.parse(readFileSync(file, 'utf8'));
-            assertSecretFreeP10Receipt(value);
-            console.log(`secret-free: ${file}`);
-          }
-'''
+          lines = [
+              "          for (const file of [",
+              "            'reference-graph/evidence/p10-runtime-projection-evidence.json',",
+              "          ]) {",
+              "            if (!existsSync(file)) continue;",
+              "            const value = JSON.parse(readFileSync(file, 'utf8'));",
+              "            assertSecretFreeP10Receipt(value);",
+              "            console.log(`secret-free: ${file}`);",
+              "          }",
+              "",
+          ]
+          replacement = '\n'.join(lines)
           fixed = text.replace(needle, replacement)
           if chr(1) in fixed:
               raise SystemExit('control character remains after replacement')
