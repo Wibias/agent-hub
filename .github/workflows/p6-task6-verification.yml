@@ -1,0 +1,83 @@
+name: P6 implementation verification
+
+on:
+  push:
+    branches:
+      - agent/reference-graph-p6
+    paths:
+      - .github/workflows/p6-task6-verification.yml
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Run full Reference Graph tests
+        run: node --test tests/reference-graph/*.test.mjs
+      - name: Run design-reference library regression
+        run: node --test knowledge/design-references/tests/library.test.mjs
+      - name: Measure current control
+        run: |
+          node reference-graph/cli/p6-live-quality.mjs --current-control --reference-date 2026-10-23 > /tmp/p6-current-control.json
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const x = JSON.parse(fs.readFileSync('/tmp/p6-current-control.json', 'utf8'));
+          const h = x.current_control_health;
+          if (x.production_source !== 'legacy-control') throw new Error('production source changed');
+          if (h?.fresh_pool_count !== 275 || h?.case_count !== 24 || h?.full_limit_case_count !== 24 || h?.cases_with_coverage_gaps !== 0 || h?.healthy !== true) {
+            throw new Error(`unexpected current control: ${JSON.stringify(h)}`);
+          }
+          console.log(JSON.stringify(h, null, 2));
+          NODE
+      - name: Scan Reference Graph secrets
+        run: python3 skills/security-review-redirect/scripts/scan_secrets.py reference-graph
+      - name: Review P5 to P6 changed-path boundary
+        run: |
+          git fetch origin agent/reference-graph-p5
+          node --input-type=module <<'NODE'
+          import { execFileSync } from 'node:child_process';
+          import fs from 'node:fs';
+
+          const base = 'fd904355c7d62ad716766eab3bfc41539f5ed18a';
+          const changed = execFileSync('git', ['diff', '--name-only', `${base}...HEAD`], { encoding: 'utf8' })
+            .trim().split('\n').filter(Boolean);
+          const allowed = new Set([
+            '.github/workflows/verify-reference-graph.yml',
+            '.github/workflows/p6-task6-verification.yml',
+            'docs/superpowers/plans/2026-10-23-reference-graph-p6-retrieval-quality.md',
+            'docs/superpowers/specs/2026-10-23-reference-graph-p6-retrieval-quality-design.md',
+            'reference-graph/cli/p6-live-quality.mjs',
+            'reference-graph/p6-live-shadow.mjs',
+            'reference-graph/p6-receipt.mjs',
+            'reference-graph/retrieval-policy.mjs',
+            'reference-graph/schema/006_reference_graph_retrieval_quality.sql',
+            'reference-graph/supabase-store.mjs',
+            'tests/reference-graph/foundation-contract.test.mjs',
+            'tests/reference-graph/p6-ci-contract.test.mjs',
+            'tests/reference-graph/p6-live-shadow.test.mjs',
+            'tests/reference-graph/p6-operator.test.mjs',
+            'tests/reference-graph/p6-receipt.test.mjs',
+            'tests/reference-graph/p6-retrieval-policy.test.mjs',
+            'tests/reference-graph/p6-rpc-contract.test.mjs',
+          ]);
+          const unexpected = changed.filter((file) => !allowed.has(file));
+          if (unexpected.length) throw new Error(`unexpected P5→P6 paths: ${unexpected.join(', ')}`);
+          if (changed.some((file) => /^reference-graph\/evidence\/p[345]-/.test(file))) throw new Error('historical P3/P4/P5 evidence changed');
+          if (changed.some((file) => file === 'reference-graph/schema/005_reference_graph_freshness.sql')) throw new Error('P5 RPC migration changed');
+          if (changed.some((file) => /^knowledge\/design-references\/(?:data|taxonomy\.json)/.test(file))) throw new Error('catalog authority changed');
+
+          const policy = fs.readFileSync('reference-graph/retrieval-policy.mjs', 'utf8');
+          if (!/profile must be quick/.test(policy)) throw new Error('P6 accidentally defines non-quick behavior');
+          if (/shadow-cases\.json|p5-live-shadow-evidence|p6-retrieval-quality-evidence|auth-mobile|design-system-mobile/i.test(policy)) {
+            throw new Error('benchmark leakage in P6 policy');
+          }
+          console.log(JSON.stringify({ changed }, null, 2));
+          NODE
