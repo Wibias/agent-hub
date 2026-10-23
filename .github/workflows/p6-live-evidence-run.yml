@@ -1,0 +1,348 @@
+name: P6 isolated live evidence measurement
+
+on:
+  push:
+    branches:
+      - agent/reference-graph-p6-evidence-run
+    paths:
+      - .github/workflows/p6-live-evidence-run.yml
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  measure:
+    runs-on: ubuntu-latest
+    env:
+      SUPABASE_URL: ${{ secrets.REFERENCE_GRAPH_SUPABASE_URL || secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.REFERENCE_GRAPH_SUPABASE_SERVICE_ROLE_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 15035ee9e48ef3dcb569a025bbd88aab44b4bea0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Verify live evidence credentials are configured
+        shell: bash
+        run: |
+          test -n "$SUPABASE_URL" || { echo "SUPABASE_URL secret is not configured" >&2; exit 2; }
+          test -n "$SUPABASE_SERVICE_ROLE_KEY" || { echo "SUPABASE_SERVICE_ROLE_KEY secret is not configured" >&2; exit 2; }
+          test "$SUPABASE_URL" = "https://vrznfnxzlxaavpqbzbzd.supabase.co" || { echo "SUPABASE_URL does not match bound Reference Graph target" >&2; exit 2; }
+
+      - name: Download and verify immutable P5 query-vector artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          curl --fail --location --silent --show-error \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -o /tmp/p5-query-embeddings.zip \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/artifacts/12483994833/zip"
+          echo "bffc63059fe1efb419207110adbf66897835ea10c2354c9da885cf2ab5a13667  /tmp/p5-query-embeddings.zip" | sha256sum -c -
+          mkdir -p /tmp/p5-query-embeddings
+          unzip -q /tmp/p5-query-embeddings.zip -d /tmp/p5-query-embeddings
+          echo "76a1af99643b1ca5a53bf114ffca8f0c942462693a8eda9cc43afebcd26316ac  /tmp/p5-query-embeddings/p5-query-embeddings.json" | sha256sum -c -
+
+      - name: Measure all 24 P6 cases without tuning
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import { readFileSync, writeFileSync } from 'node:fs';
+          import { performance } from 'node:perf_hooks';
+          import { loadRecords } from './knowledge/design-references/scripts/lib.mjs';
+          import { selectRecords } from './knowledge/design-references/scripts/selection.mjs';
+          import {
+            selectP6GuardedHybridResults,
+            selectP6LexicalResults,
+            selectP6SemanticResults,
+          } from './reference-graph/retrieval-policy.mjs';
+          import {
+            assessLegacyControlHealth,
+            compareShadowSelection,
+            shadowQueryText,
+            summarizeShadowEvaluation,
+          } from './reference-graph/shadow-eval.mjs';
+          import { ReferenceGraphSupabaseStore } from './reference-graph/supabase-store.mjs';
+
+          const IMPLEMENTATION_SHA = '15035ee9e48ef3dcb569a025bbd88aab44b4bea0';
+          const P5_BASE_SHA = 'fd904355c7d62ad716766eab3bfc41539f5ed18a';
+          const REFERENCE_TIME = '2026-10-23T12:00:00.000Z';
+          const REFERENCE_DATE = '2026-10-23';
+          const MODEL_ID = 'ollama/snowflake-arctic-embed:33m';
+          const MODEL_REVISION = 'e8db018629b4';
+          const CANDIDATE_LIMIT = 24;
+          const PRODUCTION_SOURCE = 'legacy-control';
+          const controlNow = new Date(REFERENCE_TIME);
+
+          const artifact = JSON.parse(readFileSync('/tmp/p5-query-embeddings/p5-query-embeddings.json', 'utf8'));
+          const cases = JSON.parse(readFileSync('reference-graph/shadow-cases.json', 'utf8'));
+          const records = loadRecords();
+          if (artifact.case_count !== 24 || artifact.rows?.length !== 24 || cases.length !== 24) {
+            throw new Error('expected exactly 24 immutable P5 query vectors and shadow cases');
+          }
+          if (artifact.reference_time !== REFERENCE_TIME) throw new Error('query-vector reference time changed');
+          if (artifact.profile?.model_revision !== MODEL_REVISION) throw new Error('query-vector model revision changed');
+          if (artifact.profile?.model_tag !== 'snowflake-arctic-embed:33m') throw new Error('query-vector model tag changed');
+          if (artifact.profile?.dimensions !== 384) throw new Error('query-vector dimensions changed');
+
+          const artifactById = new Map(artifact.rows.map((row) => [row.case_id, row]));
+          const controlHealth = assessLegacyControlHealth({ records, cases, now: controlNow });
+          if (controlHealth.healthy !== true
+            || controlHealth.fresh_pool_count !== 275
+            || controlHealth.full_limit_case_count !== 24
+            || controlHealth.cases_with_coverage_gaps !== 0) {
+            throw new Error(`current control changed before P6 measurement: ${JSON.stringify(controlHealth)}`);
+          }
+
+          const store = ReferenceGraphSupabaseStore.fromEnv(process.env);
+          const coverage = await store.embeddingCoverage(MODEL_ID, MODEL_REVISION, REFERENCE_DATE);
+          if (coverage.eligible_chunk_count !== 275
+            || coverage.compatible_count !== 275
+            || coverage.missing_count !== 0
+            || coverage.text_hash_mismatch_count !== 0
+            || coverage.coverage_rate !== 1) {
+            throw new Error(`exact embedding coverage changed before P6 measurement: ${JSON.stringify(coverage)}`);
+          }
+
+          const modes = { lexical: [], semantic: [], hybrid: [] };
+          const rawRows = [];
+
+          function candidateId(row) {
+            return row?.asset_id ?? row?.id ?? null;
+          }
+
+          function ids(rows) {
+            return [...new Set((Array.isArray(rows) ? rows : []).map(candidateId).filter(Boolean))];
+          }
+
+          function itemsFor(selection, context) {
+            const byId = new Map((context?.assets ?? []).map((asset) => [asset.id, asset]));
+            return selection.ids.map((id) => {
+              const asset = byId.get(id);
+              if (!asset) throw new Error(`missing context for selected asset ${id}`);
+              return asset;
+            });
+          }
+
+          async function timed(fn) {
+            const started = performance.now();
+            const value = await fn();
+            return { value, ms: performance.now() - started };
+          }
+
+          for (const request of cases) {
+            const artifactRow = artifactById.get(request.id);
+            if (!artifactRow) throw new Error(`missing immutable query vector for ${request.id}`);
+            const query = shadowQueryText(request);
+            if (query !== artifactRow.query) throw new Error(`query drift for ${request.id}`);
+            if (JSON.stringify(request) !== JSON.stringify(artifactRow.request)) {
+              throw new Error(`request drift for ${request.id}`);
+            }
+            const legacy = selectRecords(records, request, { now: controlNow });
+            const legacyIds = legacy.selected.map((record) => record.id);
+            if (JSON.stringify(legacyIds) !== JSON.stringify(artifactRow.legacy_ids)) {
+              throw new Error(`legacy control drift for ${request.id}`);
+            }
+
+            const filters = {
+              platform: request.platform || undefined,
+              surface_family: request.surface || undefined,
+              reference_date: REFERENCE_DATE,
+            };
+
+            const lexicalCall = await timed(() => store.lexicalCandidatesP6(query, filters, CANDIDATE_LIMIT));
+            const semanticCall = await timed(() => store.semanticCandidatesP6(
+              artifactRow.embedding,
+              MODEL_ID,
+              MODEL_REVISION,
+              filters,
+              CANDIDATE_LIMIT,
+            ));
+            const lexicalCandidates = lexicalCall.value;
+            const semanticCandidates = semanticCall.value;
+
+            const lexicalContextCall = await timed(() => store.candidateContextP6(ids(lexicalCandidates), filters));
+            const semanticContextCall = await timed(() => store.candidateContextP6(ids(semanticCandidates), filters));
+            const hybridSeedIds = [...new Set([...ids(lexicalCandidates), ...ids(semanticCandidates)])];
+            const hybridContextCall = await timed(() => store.candidateContextP6(hybridSeedIds, filters));
+
+            const lexicalPolicyStart = performance.now();
+            const lexicalSelection = selectP6LexicalResults({
+              lexicalCandidates,
+              assets: lexicalContextCall.value.assets,
+              request,
+              maxItems: request.limit,
+            });
+            const lexicalPolicyMs = performance.now() - lexicalPolicyStart;
+
+            const semanticPolicyStart = performance.now();
+            const semanticSelection = selectP6SemanticResults({
+              semanticCandidates,
+              assets: semanticContextCall.value.assets,
+              request,
+              maxItems: request.limit,
+            });
+            const semanticPolicyMs = performance.now() - semanticPolicyStart;
+
+            const hybridPolicyStart = performance.now();
+            const hybridSelection = selectP6GuardedHybridResults({
+              lexicalCandidates,
+              semanticCandidates,
+              assets: hybridContextCall.value.assets,
+              request,
+              maxItems: request.limit,
+            });
+            const hybridPolicyMs = performance.now() - hybridPolicyStart;
+
+            const bundles = {
+              lexical: {
+                items: itemsFor(lexicalSelection, lexicalContextCall.value),
+                diagnostics: lexicalSelection.diagnostics,
+                latency: lexicalCall.ms + lexicalContextCall.ms + lexicalPolicyMs,
+                candidate_count: lexicalCandidates.length,
+              },
+              semantic: {
+                items: itemsFor(semanticSelection, semanticContextCall.value),
+                diagnostics: semanticSelection.diagnostics,
+                latency: semanticCall.ms + semanticContextCall.ms + semanticPolicyMs,
+                candidate_count: semanticCandidates.length,
+              },
+              hybrid: {
+                items: itemsFor(hybridSelection, hybridContextCall.value),
+                diagnostics: hybridSelection.diagnostics,
+                latency: lexicalCall.ms + semanticCall.ms + hybridContextCall.ms + hybridPolicyMs,
+                lexical_candidate_count: lexicalCandidates.length,
+                semantic_candidate_count: semanticCandidates.length,
+                union_candidate_count: hybridSeedIds.length,
+              },
+            };
+
+            const rowEvidence = { case_id: request.id, request, query };
+            for (const mode of ['lexical', 'semantic', 'hybrid']) {
+              const bundle = bundles[mode];
+              const compared = compareShadowSelection({
+                request,
+                legacySelected: legacy.selected,
+                graphBundle: { items: bundle.items },
+              });
+              const row = {
+                ...compared,
+                graph_latency_ms: bundle.latency,
+                candidate_count: bundle.candidate_count,
+                lexical_candidate_count: bundle.lexical_candidate_count,
+                semantic_candidate_count: bundle.semantic_candidate_count,
+                union_candidate_count: bundle.union_candidate_count,
+                policy_diagnostics: bundle.diagnostics,
+              };
+              modes[mode].push(row);
+              rowEvidence[mode] = row;
+            }
+            rawRows.push(rowEvidence);
+          }
+
+          const evaluations = Object.fromEntries(
+            Object.entries(modes).map(([mode, rows]) => [mode, {
+              status: 'available',
+              summary: summarizeShadowEvaluation(rows),
+              rows,
+            }]),
+          );
+
+          function compareModeAgainstLexical(mode) {
+            const stats = {
+              overlap: { improved: 0, equal: 0, regressed: 0 },
+              top1: { gained: 0, preserved: 0, lost: 0, absent: 0 },
+              improved_cases: [],
+              regressed_cases: [],
+              top1_gain_cases: [],
+              top1_loss_cases: [],
+            };
+            for (let i = 0; i < modes.lexical.length; i += 1) {
+              const base = modes.lexical[i];
+              const candidate = modes[mode][i];
+              if (candidate.overlap_at_k > base.overlap_at_k) {
+                stats.overlap.improved += 1;
+                stats.improved_cases.push(base.request.id);
+              } else if (candidate.overlap_at_k < base.overlap_at_k) {
+                stats.overlap.regressed += 1;
+                stats.regressed_cases.push(base.request.id);
+              } else {
+                stats.overlap.equal += 1;
+              }
+              if (!base.legacy_top1_retained && candidate.legacy_top1_retained) {
+                stats.top1.gained += 1;
+                stats.top1_gain_cases.push(base.request.id);
+              } else if (base.legacy_top1_retained && !candidate.legacy_top1_retained) {
+                stats.top1.lost += 1;
+                stats.top1_loss_cases.push(base.request.id);
+              } else if (base.legacy_top1_retained && candidate.legacy_top1_retained) {
+                stats.top1.preserved += 1;
+              } else {
+                stats.top1.absent += 1;
+              }
+            }
+            return stats;
+          }
+
+          const output = {
+            schema_version: 'reference-graph.p6-live-measurement.v1',
+            measured_at: new Date().toISOString(),
+            reference_time: REFERENCE_TIME,
+            reference_date: REFERENCE_DATE,
+            production_source: PRODUCTION_SOURCE,
+            implementation_sha: IMPLEMENTATION_SHA,
+            p5_base_sha: P5_BASE_SHA,
+            target: {
+              purpose: 'agent-hub-reference-graph',
+              project_ref: 'vrznfnxzlxaavpqbzbzd',
+              project_name: 'agent-hub-reference-graph',
+              region: 'eu-central-1',
+            },
+            query_embedding_artifact: {
+              source_phase: 'P5',
+              workflow_run_id: 39914965493,
+              artifact_id: 12483994833,
+              zip_sha256: 'bffc63059fe1efb419207110adbf66897835ea10c2354c9da885cf2ab5a13667',
+              content_sha256: '76a1af99643b1ca5a53bf114ffca8f0c942462693a8eda9cc43afebcd26316ac',
+              case_count: 24,
+              model_id: MODEL_ID,
+              model_revision: MODEL_REVISION,
+              dimensions: 384,
+            },
+            latency_scope: 'Supabase candidate RPC(s) + P6 context RPC + local deterministic policy; query embedding generation excluded because immutable P5 vectors were reused',
+            current_control_health: controlHealth,
+            embedding_coverage: coverage,
+            candidate_limit: CANDIDATE_LIMIT,
+            evaluations,
+            semantic_vs_lexical: compareModeAgainstLexical('semantic'),
+            hybrid_vs_lexical: compareModeAgainstLexical('hybrid'),
+            rows: rawRows,
+          };
+          writeFileSync('/tmp/p6-live-measurement.json', `${JSON.stringify(output, null, 2)}\n`);
+          console.log(JSON.stringify({
+            current_control_health: controlHealth,
+            embedding_coverage: coverage,
+            lexical: evaluations.lexical.summary,
+            semantic: evaluations.semantic.summary,
+            hybrid: evaluations.hybrid.summary,
+            semantic_vs_lexical: output.semantic_vs_lexical,
+            hybrid_vs_lexical: output.hybrid_vs_lexical,
+          }, null, 2));
+          NODE
+
+      - name: Verify measurement is secret-free
+        shell: bash
+        run: |
+          ! grep -F "$SUPABASE_SERVICE_ROLE_KEY" /tmp/p6-live-measurement.json
+          python3 skills/security-review-redirect/scripts/scan_secrets.py /tmp/p6-live-measurement.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: p6-live-measurement
+          path: /tmp/p6-live-measurement.json
+          retention-days: 7
+          if-no-files-found: error
