@@ -57,12 +57,36 @@ function phaseBlockers(phases) {
     .map((phase) => `phase ${phase} is not successful`);
 }
 
+function isPositiveInteger(value) {
+  return Number.isInteger(Number(value)) && Number(value) > 0;
+}
+
+function isNonNegativeInteger(value) {
+  return Number.isInteger(Number(value)) && Number(value) >= 0;
+}
+
 function selectorVerified(value) {
-  return Boolean(value && typeof value === 'object' && !Array.isArray(value) && value.verified === true);
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const caseCount = Number(value.case_count);
+  return value.verified === true
+    && isPositiveInteger(value.fresh_pool_count)
+    && isPositiveInteger(caseCount)
+    && Number(value.full_limit_case_count) === caseCount
+    && isNonNegativeInteger(value.cases_with_coverage_gaps)
+    && Number(value.cases_with_coverage_gaps) === 0;
 }
 
 function controlHealthy(value) {
-  return Boolean(value && typeof value === 'object' && !Array.isArray(value) && value.healthy === true);
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const caseCount = Number(value.case_count);
+  const blockers = Array.isArray(value.blockers) ? value.blockers : [];
+  return value.healthy === true
+    && isPositiveInteger(value.fresh_pool_count)
+    && isPositiveInteger(caseCount)
+    && Number(value.full_limit_case_count) === caseCount
+    && isNonNegativeInteger(value.cases_with_coverage_gaps)
+    && Number(value.cases_with_coverage_gaps) === 0
+    && blockers.length === 0;
 }
 
 function embeddingComplete(value) {
