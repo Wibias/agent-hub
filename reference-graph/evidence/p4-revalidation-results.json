@@ -1,0 +1,55 @@
+{
+  "schema_version": "reference-graph.p4-revalidation-evidence.v1",
+  "recorded_at": "2026-10-23T06:00:52.000Z",
+  "implementation_git_sha": "72487cee8583fbdbb777788ed685da453f796796",
+  "frozen_population": {
+    "reference_date": "2026-10-23",
+    "plan_sha256": "48cde0c2962b6159c2ceb400dba6fb6a5e4e9d7e478517cea2991a0709e16939",
+    "freeze_run": 39901552303,
+    "freeze_artifact_id": 12479580040,
+    "freeze_artifact_zip_sha256": "bee56c1db5e5c198f1056cf840798ab5574e8702d50acce6ae35cb846247208e",
+    "target_count": 598,
+    "already_fresh_count": 2,
+    "excluded_count": 0,
+    "wave_count": 12,
+    "benchmark_independent": true
+  },
+  "execution": {
+    "verifier": "p4-source-analysis-audit-v1",
+    "terminal_decision_count": 598,
+    "confirm_count": 273,
+    "stale_count": 325,
+    "archive_count": 0,
+    "unresolved_count": 0,
+    "verified_at": "2026-10-23",
+    "access_status_by_verdict": {
+      "confirm": {
+        "AVAILABLE": 273
+      },
+      "stale": {
+        "AVAILABLE": 305,
+        "BLOCKED": 11,
+        "UNAVAILABLE": 9
+      }
+    },
+    "decision_hash_binding": {
+      "algorithm": "sha256",
+      "canonicalization": "concatenate decision_hash ordered by legacy_id",
+      "digest": "1fad111ddb23f2a039abfe1ac55dbe88c12a6ebbac57ed8bccc72d98dee23760",
+      "live_ledger_row_count": 598
+    },
+    "complete": true
+  },
+  "post_revalidation": {
+    "reviewed_accessible_fresh_count": 275,
+    "stale_count": 325,
+    "current_control_healthy": false,
+    "current_control_coverage_gap_cases": 3
+  },
+  "safety": {
+    "no_benchmark_membership_used_for_targeting": true,
+    "no_ttl_widening": true,
+    "no_link_health_only_confirmation": true,
+    "production_source": "legacy-control"
+  }
+}
