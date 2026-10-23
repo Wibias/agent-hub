@@ -1,0 +1,95 @@
+name: P5 exact query embeddings
+
+on:
+  push:
+    branches:
+      - agent/reference-graph-p5
+
+permissions:
+  contents: read
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install and start Ollama
+        run: |
+          curl -fsSL https://ollama.com/install.sh | sh
+          ollama serve >/tmp/ollama.log 2>&1 &
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:11434/api/tags >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/ollama.log
+          exit 1
+      - name: Pull exact pinned model
+        run: ollama pull snowflake-arctic-embed:33m
+      - name: Generate exact P5 query vectors
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          import crypto from 'node:crypto';
+          import { loadRecords } from './knowledge/design-references/scripts/lib.mjs';
+          import { selectRecords } from './knowledge/design-references/scripts/selection.mjs';
+          import {
+            REFERENCE_EMBEDDING_PROFILE,
+            createProfileQueryProvider,
+          } from './reference-graph/embedding-profile.mjs';
+          import { OllamaEmbeddingProvider } from './reference-graph/ollama-embeddings.mjs';
+          import { shadowQueryText } from './reference-graph/shadow-eval.mjs';
+
+          const cases = JSON.parse(fs.readFileSync('./reference-graph/shadow-cases.json', 'utf8'));
+          const records = loadRecords();
+          const referenceTime = new Date('2026-10-23T12:00:00.000Z');
+          const provider = new OllamaEmbeddingProvider({
+            modelTag: REFERENCE_EMEDDING_PROFILE?.modelTag ?? REFERENCE_EMBEDDING_PROFILE.modelTag,
+            modelRevision: REFERENCE_EMBEDDING_PROFILE.modelRevision,
+          });
+          const queryProvider = createProfileQueryProvider(provider);
+          const queries = cases.map(shadowQueryText);
+          const vectors = await queryProvider.embed(queries);
+          const digest = await provider.verifyModel();
+
+          const rows = cases.map((request, index) => ({
+            case_id: request.id,
+            request,
+            query: queries[index],
+            legacy_ids: selectRecords(records, request, { now: referenceTime }).selected.map((row) => row.id),
+            embedding: vectors[index],
+          }));
+
+          const output = {
+            schema_version: 'reference-graph.p5-query-embeddings.v1',
+            reference_time: referenceTime.toISOString(),
+            profile: {
+              id: REFERENCE_EMBEDDING_PROFILE.id,
+              model_id: provider.modelId,
+              model_tag: REFERENCE_EMBEDDING_PROFILE.modelTag,
+              model_revision: REFERENCE_EMBEDDING_PROFILE.modelRevision,
+              model_digest: digest,
+              dimensions: REFERENCE_EMBEDDING_PROFILE.dimensions,
+              query_prefix: REFERENCE_EMBEDDING_PROFILE.queryPrefix,
+            },
+            case_count: rows.length,
+            rows,
+          };
+          const serialized = `${JSON.stringify(output, null, 2)}\n`;
+          fs.writeFileSync('p5-query-embeddings.json', serialized);
+          console.log(JSON.stringify({
+            case_count: rows.length,
+            model_digest: digest,
+            sha256: crypto.createHash('sha256').update(serialized).digest('hex'),
+          }, null, 2));
+          NODE
+      - name: Upload query vectors
+        uses: actions/upload-artifact@v4
+        with:
+          name: p5-query-embeddings
+          path: p5-query-embeddings.json
+          if-no-files-found: error
