@@ -23,6 +23,7 @@ It is deliberately an additive backend behind existing contracts, not a second d
 - `schema/001_reference_graph.sql` — canonical tables, RLS, lexical index, and exact vector storage.
 - `schema/002_reference_graph_rpc.sql` — service-role-only ingest and retrieval RPCs.
 - `schema/003_reference_graph_embeddings_rpc.sql` — service-role-only provider-neutral embedding persistence.
+- `schema/004_reference_graph_lexical_overlap.sql` — deployed lexical candidate semantics aligned with the deterministic token-overlap baseline.
 - `capture.mjs` — deterministic capture-envelope normalization with PostgreSQL-compatible UUID identity.
 - `legacy-import.mjs` — adapter from the reviewed design-reference record shape.
 - `catalog-import.mjs` — deterministic 600-record import planning and batching.
@@ -40,6 +41,7 @@ It is deliberately an additive backend behind existing contracts, not a second d
 - `cli/p3-live-shadow.mjs` — read-only bound-target preflight, verification, and live-shadow operator.
 - `shadow-cases.json` — fixed representative shadow suite.
 - `evidence/p2-shadow-evidence.json` — durable real-model measurements and the P2 no-cutover decision.
+- `evidence/p3-live-shadow-evidence.json` — durable dedicated-project import, live lexical, latency, and no-cutover evidence.
 - `memory-promotion.mjs` — explicit Reference Graph -> `memory.protocol.v1` Evidence-only proposal boundary.
 
 ## Entity model
@@ -65,6 +67,7 @@ Apply migrations in numeric order to a dedicated Supabase/PostgreSQL database:
 001_reference_graph.sql
 002_reference_graph_rpc.sql
 003_reference_graph_embeddings_rpc.sql
+004_reference_graph_lexical_overlap.sql
 ```
 
 The exposed RPC surface lives in `public` so PostgREST can reach it, but execute permission is revoked from `public`, `anon`, and `authenticated` and granted only to `service_role`. The underlying `reference_graph` schema remains closed to exposed client roles.
@@ -275,6 +278,14 @@ The durable measurements are in `evidence/p2-shadow-evidence.json`. On the healt
 The independent cutover thresholds remain at least 0.65 average overlap and 0.75 legacy top-1 retention, alongside the existing case-count, empty-rate, surface, and platform gates. Even the best exploratory representation stayed below both quality thresholds and was not adopted.
 
 **P2 decision remains binding during P3: no cutover.** Semantic and hybrid retrieval remain measurement-only challengers; the legacy selector remains production control and fallback.
+
+### P3 live result
+
+The durable live measurements are in `evidence/p3-live-shadow-evidence.json`. The dedicated Supabase target contains 600 assets from 576 sources after two idempotent 25-record-batch imports. The live lexical path reproduces the healthy-snapshot lexical quality metrics exactly: overlap@k `0.53125`, legacy top-1 retention `0.70833`, exact surface/platform `1.0/1.0`, and graph empty rate `0` across 24 cases. Live graph latency measured p50 `54.65 ms` and p95 `191.03 ms`.
+
+The first deployed lexical run exposed an overly strict all-term query in `002_reference_graph_rpc.sql`; `004_reference_graph_lexical_overlap.sql` fixes the deployed RPC to use deterministic partial token overlap and is covered by fresh-database CI. No compatible exact-model document embeddings were available in the live target, so semantic and hybrid live modes are recorded as `unavailable` rather than assigned fabricated quality scores.
+
+**P3 decision: no cutover.** The live path is operational, but lexical overlap and top-1 retention remain below the independent quality thresholds.
 
 ## Memory boundary
 
