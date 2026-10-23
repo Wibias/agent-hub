@@ -23,7 +23,10 @@ jobs:
           node-version: 24
       - name: Decode and validate exact P6 evidence
         run: |
-          base64 -d reference-graph/.p6-evidence.json.gz.b64 | gzip -d > reference-graph/evidence/p6-retrieval-quality-evidence.json
+          cat reference-graph/.p6-evidence.part0 reference-graph/.p6-evidence.part1 reference-graph/.p6-evidence.part2 reference-graph/.p6-evidence.part3 > /tmp/p6-evidence.b64
+          base64 -d /tmp/p6-evidence.b64 > /tmp/p6-evidence.json.gz
+          echo "a71e1889c044bd3955ca2000651aa83e5d98c3bc8e24955f0fda36308925176e  /tmp/p6-evidence.json.gz" | sha256sum -c -
+          gzip -dc /tmp/p6-evidence.json.gz > reference-graph/evidence/p6-retrieval-quality-evidence.json
           echo "dba0ff5fc1d4802145577ca1da35c05ca5beddda2bff0abc0f5bcd29ab7e637c  reference-graph/evidence/p6-retrieval-quality-evidence.json" | sha256sum -c -
           echo "76a1af99643b1ca5a53bf114ffca8f0c942462693a8eda9cc43afebcd26316ac  reference-graph/.p6-live-query-embeddings.json" | sha256sum -c -
           node --input-type=module <<'NODE'
@@ -64,9 +67,9 @@ jobs:
           NODE
       - name: Commit evidence and remove normal transport files
         run: |
-          rm reference-graph/.p6-evidence.json.gz.b64 reference-graph/.p6-live-query-embeddings.json
+          rm reference-graph/.p6-evidence.json.gz.b64 reference-graph/.p6-evidence.part0 reference-graph/.p6-evidence.part1 reference-graph/.p6-evidence.part2 reference-graph/.p6-evidence.part3 reference-graph/.p6-live-query-embeddings.json
           git config user.name "Wibias"
           git config user.email "37517432+Wibias@users.noreply.github.com"
-          git add reference-graph/evidence/p6-retrieval-quality-evidence.json reference-graph/.p6-evidence.json.gz.b64 reference-graph/.p6-live-query-embeddings.json
+          git add reference-graph/evidence/p6-retrieval-quality-evidence.json reference-graph/.p6-evidence.json.gz.b64 reference-graph/.p6-evidence.part0 reference-graph/.p6-evidence.part1 reference-graph/.p6-evidence.part2 reference-graph/.p6-evidence.part3 reference-graph/.p6-live-query-embeddings.json
           git commit -m "evidence: record P6 live retrieval quality"
           git push origin HEAD:agent/reference-graph-p6
