@@ -6,6 +6,10 @@ import { fileURLToPath } from 'node:url';
 import { loadRecords, parseArgs } from '../../knowledge/design-references/scripts/lib.mjs';
 import { planLegacyCatalogImport } from '../catalog-import.mjs';
 import { buildEmbeddingRows } from '../embedding-pipeline.mjs';
+import {
+  REFERENCE_EMBEDDING_PROFILE,
+  createProfileQueryProvider,
+} from '../embedding-profile.mjs';
 import { createOfflineCatalogRetriever } from '../offline-shadow.mjs';
 import { OllamaEmbeddingProvider } from '../ollama-embeddings.mjs';
 import { createOfflineEmbeddedRetriever } from '../semantic-shadow.mjs';
@@ -28,8 +32,8 @@ function usage() {
     '',
     '--offline uses deterministic lexical retrieval only and requires no credentials.',
     '--supabase uses deployed lexical service-role RPCs and requires SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.',
-    '--ollama-semantic generates real local model-bound embeddings and ranks semantically.',
-    '--ollama-hybrid generates the same embeddings and fuses lexical + semantic ranks through the existing RRF path.',
+    '--ollama-semantic evaluates the current experimental embedding profile without changing production selection.',
+    '--ollama-hybrid evaluates the same experimental semantic signal fused with lexical ranking.',
     '--control-date freezes only the benchmark control clock; production behavior remains current-time legacy control.',
     `All modes keep production_source as ${PRODUCTION_CONTROL}.`,
   ].join('\n');
@@ -57,20 +61,25 @@ function parseControlDate(value) {
 
 async function buildOllamaRetriever(records, mode) {
   const plan = planLegacyCatalogImport(records);
-  const provider = new OllamaEmbeddingProvider({ url: process.env.OLLAMA_URL });
+  const documentProvider = new OllamaEmbeddingProvider({
+    url: process.env.OLLAMA_URL,
+    modelTag: REFERENCE_EMBEDDING_PROFILE.modelTag,
+    modelRevision: REFERENCE_EMBEDDING_PROFILE.modelRevision,
+  });
+  const queryProvider = createProfileQueryProvider(documentProvider);
   const embeddingRows = await buildEmbeddingRows({
     captures: plan.captures,
-    provider,
+    provider: documentProvider,
     batchSize: 32,
   });
   return {
     graphRetrieve: createOfflineEmbeddedRetriever({
       captures: plan.captures,
       embeddingRows,
-      provider,
+      provider: queryProvider,
       mode,
     }),
-    provider,
+    provider: documentProvider,
     embeddingCount: embeddingRows.length,
   };
 }
@@ -103,6 +112,9 @@ async function main() {
   let modelId = null;
   let modelRevision = null;
   let embeddingCount = null;
+  let embeddingProfile = null;
+  let qualityStatus = null;
+  let cutoverApproved = false;
 
   if (selectedMode === 'offline') {
     graphRetrieve = createOfflineCatalogRetriever(records);
@@ -124,6 +136,9 @@ async function main() {
     modelId = embedded.provider.modelId;
     modelRevision = embedded.provider.modelRevision;
     embeddingCount = embedded.embeddingCount;
+    embeddingProfile = REFERENCE_EMBEDDING_PROFILE.id;
+    qualityStatus = REFERENCE_EMBEDDING_PROFILE.qualityStatus;
+    cutoverApproved = REFERENCE_EMBEDDING_PROFILE.cutoverApproved;
     semanticEnabled = true;
     mode = selectedMode;
   }
@@ -146,6 +161,9 @@ async function main() {
     control_health: evaluation.control_health,
     current_control_health: currentControlHealth,
     semantic_enabled: semanticEnabled,
+    embedding_profile: embeddingProfile,
+    quality_status: qualityStatus,
+    cutover_approved: cutoverApproved,
     model_id: modelId,
     model_revision: modelRevision,
     embedding_count: embeddingCount,
