@@ -222,6 +222,10 @@ test('P9 phase failure blocks readiness even when evidence payloads claim green'
   assert.match(final.blockers.join('\n'), /phase migration/i);
 });
 
+test('P9 receipt secret scan accepts finalized structural security fields', () => {
+  assert.equal(assertSecretFreeP9Receipt(finalize()), true);
+});
+
 test('P9 receipt secret scan rejects credential-shaped fields and supplied key values', () => {
   const receipt = baseReceipt();
   assert.equal(assertSecretFreeP9Receipt(receipt), true);
