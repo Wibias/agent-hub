@@ -15,6 +15,15 @@ const functions = [
   'reference_graph_candidate_context_p6',
 ];
 
+function functionBody(sql, name) {
+  const match = sql.match(new RegExp(
+    `create\\s+or\\s+replace\\s+function\\s+public\\.${name}\\b[\\s\\S]*?as\\s+\\$\\$([\\s\\S]*?)\\$\\$;`,
+    'i',
+  ));
+  assert.ok(match, `${name} body must exist`);
+  return match[1];
+}
+
 test('migration 006 adds versioned P6 RPCs without replacing historical functions', () => {
   const sql = readMigration();
 
@@ -63,4 +72,12 @@ test('P6 candidate functions remain bounded and deterministic', () => {
   assert.match(sql, /limit\s+greatest\(1,\s*least\(coalesce\(p_limit,\s*48\),\s*100\)\)/i);
   assert.match(sql, /row_number\(\)\s+over\s*\(order\s+by\s+scored\.score\s+desc,\s*scored\.asset_id\)/i);
   assert.match(sql, /row_number\(\)\s+over\s*\(order\s+by\s+scored\.distance\s+asc,\s*scored\.asset_id\)/i);
+});
+
+test('P6 semantic candidates collapse multi-chunk matches to one best row per asset', () => {
+  const body = functionBody(readMigration(), 'reference_graph_semantic_candidates_p6');
+
+  assert.match(body, /group\s+by\s+c\.asset_id/i);
+  assert.match(body, /min\s*\(\s*e\.embedding\s*<=>\s*p_embedding_text::extensions\.vector\s*\)\s+as\s+distance/i);
+  assert.match(body, /1\s*-\s*min\s*\(\s*e\.embedding\s*<=>\s*p_embedding_text::extensions\.vector\s*\)\s+as\s+score/i);
 });
