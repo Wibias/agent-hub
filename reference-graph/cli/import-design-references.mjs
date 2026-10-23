@@ -3,7 +3,11 @@
 import { loadRecords, parseArgs } from '../../knowledge/design-references/scripts/lib.mjs';
 import { importLegacyCatalog, planLegacyCatalogImport } from '../catalog-import.mjs';
 import { ReferenceGraphSupabaseStore } from '../supabase-store.mjs';
-import { assertBoundSupabaseUrl, readTargetBinding } from '../target-binding.mjs';
+import {
+  assertBoundSupabaseUrl,
+  readTargetBinding,
+  redactDiagnostics,
+} from '../target-binding.mjs';
 
 function usage() {
   return [
@@ -95,6 +99,6 @@ async function main() {
 
 main().catch((error) => {
   const message = error instanceof Error ? error.message : String(error);
-  console.error(message);
+  console.error(redactDiagnostics(message, [process.env.SUPABASE_SERVICE_ROLE_KEY]));
   process.exitCode = 1;
 });
