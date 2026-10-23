@@ -2,116 +2,87 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build and live-verify a versioned P6 Reference Graph retrieval path that separates eligibility from request preference, restores the established quick selection/diversity policy on graph candidates, and prevents weak semantic evidence from blindly degrading lexical retrieval.
+**Goal:** Build and live-verify a versioned P6 retrieval path that separates hard eligibility from request preference, restores the established quick-selection/diversity policy on graph candidates, and prevents weak semantic evidence from blindly degrading lexical retrieval.
 
-**Architecture:** Preserve all P5 RPCs and historical evidence. Add parallel `_p6` read-only candidate/context RPCs with unchanged freshness/access/model eligibility but no hard surface/platform exclusion, then apply a pure deterministic JS retrieval policy using frozen pre-P6 surface/platform/token/diversity values. Hybrid becomes lexical-primary with semantic-only candidates limited to supplemental coverage/fill roles. A P6 operator and terminal receipt collect current-date evidence on the dedicated Supabase project; P6 never performs cutover.
+**Architecture:** Preserve all P5 RPCs/evidence. Add parallel `_p6` read-only candidate/context RPCs with unchanged freshness/access/model eligibility but no hard surface/platform exclusion, then apply a pure JS policy using frozen pre-P6 surface/platform/token/diversity values. Semantic-only remains diagnostic; terminal hybrid is lexical-primary and semantic-supplemental. P6 records live evidence but never cuts over.
 
-**Tech Stack:** Node.js ESM, `node:test`, PostgreSQL/Supabase SQL, pgvector cosine distance, GitHub Actions governance, Ollama Snowflake Arctic Embed 33m query embeddings.
+**Tech Stack:** Node.js ESM, `node:test`, PostgreSQL/Supabase SQL, pgvector, GitHub Actions, Ollama Snowflake Arctic Embed 33m.
 
 **Spec:** `docs/superpowers/specs/2026-10-23-reference-graph-p6-retrieval-quality-design.md`
 
 ## Global Constraints
 
-- Base exactly on P5 final evidence head `fd904355c7d62ad716766eab3bfc41539f5ed18a`.
-- Production source remains `legacy-control`; P6 never cuts over or merges itself.
-- Keep quality gates unchanged: overlap `>= 0.65`, top-1 `>= 0.75`, empty `<= 0.05`, exact surface `>= 0.70`, exact platform `>= 0.80`, minimum 20 comparable cases.
-- Keep current-control authority unchanged: no catalog freshness/status/TTL rewrite and no stale-record recovery in P6.
-- Keep exact semantic profile `snowflake-arctic-embed-33m-raw-v1`, model `ollama/snowflake-arctic-embed:33m`, revision `e8db018629b4`, 384 dimensions; no substitute vectors.
-- P5 RPCs and P3/P4/P5 evidence are immutable; P6 adds `_p6` RPCs rather than replacing historical functions.
-- P6 production code must not import/read `shadow-cases.json`, evidence JSON, shadow case IDs, expected legacy IDs, or per-case scores.
-- Frozen pre-P6 ranking values only: surface `+60`, platform `+15`, lexical overlap `×5`, repeated product `20`, source-family `8`, topology `6`.
-- Semantic confidence thresholds/weights must not be learned from the 24-case evaluation.
-- Dedicated live target only: `vrznfnxzlxaavpqbzbzd` / `agent-hub-reference-graph` / `eu-central-1`.
-- No ANN/HNSW/IVFFlat, relation fabrication, browser-extension work, `design-with-ai` routing changes, or unrelated `write-swift` repair.
+- Base: `fd904355c7d62ad716766eab3bfc41539f5ed18a`.
+- `production_source` remains `legacy-control`; no merge/cutover.
+- Gates unchanged: overlap `>=0.65`, top1 `>=0.75`, empty `<=0.05`, surface `>=0.70`, platform `>=0.80`, >=20 comparable cases.
+- No catalog freshness/status/TTL mutation; 325 stale records remain out of scope.
+- Exact semantic profile only: `snowflake-arctic-embed-33m-raw-v1`, revision `e8db018629b4`, 384 dimensions.
+- P5 RPCs and P3/P4/P5 evidence are immutable.
+- Production P6 code must not read shadow cases/evidence, case IDs, expected legacy IDs, or per-case scores.
+- Frozen pre-P6 values only: surface `+60`, platform `+15`, lexical overlap `×5`, product/source/topology repeat penalties `20/8/6`.
+- No learned semantic threshold/weight from the 24 evaluation cases.
+- Live target only: `vrznfnxzlxaavpqbzbzd` / `agent-hub-reference-graph` / `eu-central-1`.
+- No ANN, fabricated relations, browser-extension work, design-with-ai routing, or unrelated `write-swift` repair.
 
 ## Review Focus
 
-- A request whose exact surface/platform cell is sparse must still fill from other **fresh eligible** candidates while preserving feasible quick coverage; pin in Tasks 1–3.
-- An infeasible quick coverage request must remain deterministic and report the real shortfall rather than duplicating/fabricating candidates; pin in Task 1.
-- Semantic-only candidates must not evict fillable positive-score lexical candidates; pin in Task 1 and integration Task 3.
-- P6 SQL must relax only request preference, never freshness/access/model eligibility; pin in Task 2 DB-smoke tests.
-- Ties/input permutation must produce stable output by asset ID; pin in Tasks 1–3.
+- Sparse exact cells still fill from other **fresh eligible** candidates while preserving feasible quick coverage.
+- Infeasible coverage stays deterministic and honest.
+- Semantic-only candidates cannot evict fillable positive lexical results in hybrid.
+- SQL relaxes only surface/platform preference, never freshness/access/model eligibility.
+- Ties/input permutations remain deterministic by asset ID.
 
 ---
 
-### Task 1: Pure P6 Retrieval Policy Contract
+### Task 1: Pure P6 Retrieval Policy
 
 **Files:**
 - Create: `reference-graph/retrieval-policy.mjs`
 - Create: `tests/reference-graph/p6-retrieval-policy.test.mjs`
 
 **Interfaces:**
-- Consumes candidate rows `{ id, rank, score }`, graph asset context, full shadow/production request, and bounded `maxItems`.
-- Produces `selectP6LexicalResults({ lexicalCandidates, assets, request, maxItems }) -> { ids, diagnostics }`.
-- Produces `selectP6GuardedHybridResults({ lexicalCandidates, semanticCandidates, assets, request, maxItems }) -> { ids, diagnostics }`.
-- `diagnostics` records coverage feasibility/result and selected lexical/semantic-only counts without benchmark IDs.
+- `selectP6LexicalResults({ lexicalCandidates, assets, request, maxItems }) -> { ids, diagnostics }`
+- `selectP6SemanticResults({ semanticCandidates, assets, request, maxItems }) -> { ids, diagnostics }`
+- `selectP6GuardedHybridResults({ lexicalCandidates, semanticCandidates, assets, request, maxItems }) -> { ids, diagnostics }`
 
-- [ ] **Step 1: Write RED tests for frozen lexical scoring and diversity**
+- [ ] **Step 1: Write lexical RED tests**
 
-Pin synthetic fixtures proving:
+Assert synthetic fixtures use only `raw lexical score * 5 + exact surface 60 + exact platform 15`, then dynamic repeat penalties `product 20 / source_family 8 / topology 6`; stable ID resolves ties.
 
-- raw lexical overlap contributes `score * 5`;
-- exact requested surface contributes `+60`;
-- exact requested platform contributes `+15`;
-- after each selection, repeated product/source-family/topology subtract `20/8/6 * previous count`;
-- stable ID is the final tie-break.
-
-- [ ] **Step 2: Run the policy test and observe RED**
+- [ ] **Step 2: Run RED**
 
 Run: `node --test tests/reference-graph/p6-retrieval-policy.test.mjs`
+Expected: module missing / tests fail.
 
-Expected: FAIL because `reference-graph/retrieval-policy.mjs` does not exist.
+- [ ] **Step 3: Implement lexical policy minimally**
 
-- [ ] **Step 3: Implement `selectP6LexicalResults(...)` minimally**
+Normalize only `metadata.product`, `surface_family`, `platform`, `source_family`, `topology`; reject non-quick requests.
 
-Represent asset fields through one internal normalizer reading:
+- [ ] **Step 4: Add constructive-coverage RED tests**
 
-- `metadata.product`
-- `surface_family` / `metadata.surface_family`
-- `platform` / `metadata.platform`
-- `source_family`
-- `topology`
+Assert feasible quick coverage (`surface>=1`, `platform>=ceil(maxItems/2)`) survives every greedy choice; overlapping predicates count for both; infeasible joint constraints report honestly; missing requested dimensions remove only that requirement.
 
-Use only the spec's frozen values and deterministic asset ID tie-break.
+- [ ] **Step 5: Implement graph-shaped quick feasibility**
 
-- [ ] **Step 4: Add RED tests for constructive quick coverage**
+Keep it pure; do not depend on legacy record fixtures or shadow data.
 
-Synthetic cases must prove:
+- [ ] **Step 6: Add semantic diagnostic RED tests**
 
-- feasible `surface >= 1` and `platform >= ceil(maxItems / 2)` is preserved during greedy selection;
-- both-predicate records are counted for both requirements;
-- individually possible constraints that cannot jointly fit report infeasible honestly;
-- missing request surface/platform removes only that requirement;
-- standard/deep are rejected by the P6 quick-only policy rather than silently inheriting behavior.
+Assert `selectP6SemanticResults` preserves semantic score/rank order except when choosing the next highest candidate that keeps feasible quick coverage; no lexical/diversity weight; stable ID tie-break.
 
-- [ ] **Step 5: Implement generic quick feasibility inside the P6 module**
+- [ ] **Step 7: Add guarded-hybrid RED tests**
 
-Do not import `quick-coverage.mjs` if doing so would couple graph asset shapes to legacy records; keep the helper pure and graph-shaped.
+Assert semantic cannot displace fillable positive lexical results; semantic-only may fill missing slots or a coverage slot unavailable lexically; dual-channel candidates remain lexical-primary; semantic rank may break only an otherwise stable-ID tie at identical adjusted lexical score; permutation is deterministic.
 
-- [ ] **Step 6: Add RED guarded-hybrid tests**
+- [ ] **Step 8: Implement semantic + guarded hybrid minimally**
 
-Pin:
+No learned threshold or fusion weight.
 
-- semantic rank cannot displace a positive-score lexical result when lexical can fill limit + coverage;
-- semantic-only candidate may fill an otherwise empty slot;
-- semantic-only candidate may satisfy a feasible coverage slot that no remaining lexical candidate can satisfy;
-- candidate present in both channels remains lexical-primary;
-- semantic rank can replace only stable-ID tie-break for candidates with identical adjusted lexical score;
-- permutation of input candidates yields identical IDs.
-
-- [ ] **Step 7: Implement `selectP6GuardedHybridResults(...)` minimally**
-
-Do not add a learned threshold or semantic fusion weight.
-
-- [ ] **Step 8: Verify Task 1 GREEN**
+- [ ] **Step 9: Verify GREEN and commit**
 
 Run: `node --test tests/reference-graph/p6-retrieval-policy.test.mjs`
-
-Expected: all P6 policy tests PASS.
-
-- [ ] **Step 9: Commit Task 1**
-
-Commit message: `feat: add P6 guarded retrieval policy`
+Expected: PASS.
+Commit: `feat: add P6 guarded retrieval policy`
 
 ---
 
@@ -120,67 +91,39 @@ Commit message: `feat: add P6 guarded retrieval policy`
 **Files:**
 - Create: `reference-graph/schema/006_reference_graph_retrieval_quality.sql`
 - Create: `tests/reference-graph/p6-rpc-contract.test.mjs`
-- Modify: `tests/reference-graph/foundation-contract.test.mjs` only if migration enumeration is explicitly pinned there.
+- Modify: `tests/reference-graph/foundation-contract.test.mjs` only if migration enumeration requires it.
 
 **Interfaces:**
-- Produces SQL RPCs:
-  - `reference_graph_lexical_candidates_p6(text, jsonb, integer)`
-  - `reference_graph_semantic_candidates_p6(text, text, text, jsonb, integer)`
-  - `reference_graph_candidate_context_p6(uuid[], jsonb)`
-- All are `stable`, `security definer`, service-role-only, bounded, and read-only.
+- `reference_graph_lexical_candidates_p6(text,jsonb,integer)`
+- `reference_graph_semantic_candidates_p6(text,text,text,jsonb,integer)`
+- `reference_graph_candidate_context_p6(uuid[],jsonb)`
 
-- [ ] **Step 1: Write RED migration-contract tests**
+- [ ] **Step 1: Write RPC RED tests**
 
-Assert migration 006:
-
-- defines all three `_p6` functions;
-- revokes `public, anon, authenticated` and grants `service_role` only;
-- references `reference_graph.current_assets`;
-- requires `review_status = 'reviewed'`;
-- requires access in `AVAILABLE | PAYWALLED`;
-- requires TTL freshness against `reference_date`;
-- semantic RPC requires exact `model_id` and `model_revision`;
-- does **not** use surface/platform equality as a `WHERE` eligibility predicate;
-- context exposes `source_family` and `topology`.
+Require all three service-role-only functions; `current_assets`, reviewed/access/TTL predicates; exact model/revision in semantic; no surface/platform equality eligibility predicates; context exposes `source_family` and deterministic topology observation.
 
 - [ ] **Step 2: Run RED**
 
 Run: `node --test tests/reference-graph/p6-rpc-contract.test.mjs`
-
-Expected: FAIL because migration 006 does not exist.
+Expected: migration missing.
 
 - [ ] **Step 3: Implement lexical `_p6` RPC**
 
-Keep P5 tokenization/partial-overlap semantics and raw distinct-token score; remove request surface/platform exclusion only. Preserve deterministic rank and 1..100 bound.
+Copy P5 partial-token candidate semantics and raw score, but remove only hard surface/platform exclusion. Keep `score>0`, deterministic rank, limit 1..100.
 
 - [ ] **Step 4: Implement semantic `_p6` RPC**
 
-Keep cosine similarity and exact model/revision eligibility; remove surface/platform exclusion only.
+Keep cosine similarity, exact model/revision and all hard eligibility; remove only surface/platform exclusion.
 
 - [ ] **Step 5: Implement context `_p6` RPC**
 
-Keep current/fresh/reviewed/access eligibility. Return existing asset payload plus:
+Return existing context plus `source_family` and one deterministic `topology`; eligibility stays current/reviewed/access/fresh. Relations unchanged.
 
-- `source_family` from `sources.source_family`;
-- `topology` from a deterministic topology observation lookup (`observation_kind = 'topology'`, stable ordering if multiple exist).
+- [ ] **Step 6: Verify and commit**
 
-Do not relax eligibility for relation expansion.
-
-- [ ] **Step 6: Run migration-contract tests GREEN**
-
-Run: `node --test tests/reference-graph/p6-rpc-contract.test.mjs`
-
+Run: `node --test tests/reference-graph/p6-rpc-contract.test.mjs tests/reference-graph/*.test.mjs`
 Expected: PASS.
-
-- [ ] **Step 7: Run existing Reference Graph tests**
-
-Run: `node --test tests/reference-graph/*.test.mjs`
-
-Expected: PASS; historical P5 tests remain unchanged.
-
-- [ ] **Step 8: Commit Task 2**
-
-Commit message: `feat: add versioned P6 retrieval RPCs`
+Commit: `feat: add versioned P6 retrieval RPCs`
 
 ---
 
@@ -192,52 +135,38 @@ Commit message: `feat: add versioned P6 retrieval RPCs`
 - Create: `tests/reference-graph/p6-live-shadow.test.mjs`
 
 **Interfaces:**
-- `ReferenceGraphSupabaseStore.lexicalCandidatesP6(query, filters, limit)` calls lexical `_p6` RPC.
-- `ReferenceGraphSupabaseStore.semanticCandidatesP6(embedding, modelId, modelRevision, filters, limit)` calls semantic `_p6` RPC.
-- `ReferenceGraphSupabaseStore.candidateContextP6(assetIds, filters)` calls context `_p6` RPC.
-- `createP6SupabaseShadowRetriever({ store, queryProvider?, mode, modelId?, modelRevision?, candidateLimit? })` returns the same `{ items, relations, ... }` shape consumed by `runCatalogShadowEvaluation`.
+- `lexicalCandidatesP6(query, filters, limit)`
+- `semanticCandidatesP6(embedding, modelId, modelRevision, filters, limit)`
+- `candidateContextP6(assetIds, filters)`
+- `createP6SupabaseShadowRetriever({ store, queryProvider?, mode, modelId?, modelRevision?, candidateLimit? })`
 
-- [ ] **Step 1: Write RED store adapter tests**
+- [ ] **Step 1: Write store RED tests**
 
-Use the existing fetch/RPC stubbing pattern to assert exact `_p6` RPC names and payloads while preserving `reference_date`, requested surface/platform values as preference context, and candidate limit.
+Assert exact `_p6` RPC names/payloads and preserved `reference_date` plus requested surface/platform as policy context.
 
-- [ ] **Step 2: Implement the three store methods**
+- [ ] **Step 2: Implement store methods without touching historical methods**
 
-Do not modify existing P5 store methods.
+- [ ] **Step 3: Write retriever RED tests**
 
-- [ ] **Step 3: Write RED P6 retriever tests**
+Pin lexical -> lexical policy, semantic -> `selectP6SemanticResults`, hybrid -> guarded policy; full request reaches policy; lexical never calls query provider; semantic/hybrid require exact model/revision; maxItems is respected.
 
-Pin:
+- [ ] **Step 4: Implement P6 retriever**
 
-- lexical mode requests P6 lexical candidates + P6 context and invokes `selectP6LexicalResults`;
-- semantic mode requests P6 semantic candidates + context and uses deterministic semantic diagnostic ordering with quick coverage;
-- hybrid requests both channels but invokes guarded hybrid policy;
-- request object reaches the policy unchanged;
-- no query provider is called in lexical mode;
-- exact model/revision is mandatory in semantic/hybrid modes;
-- candidate limit is bounded and result count respects `maxItems`.
+Keep `createSupabaseShadowRetriever()` unchanged.
 
-- [ ] **Step 4: Implement `createP6SupabaseShadowRetriever(...)`**
+- [ ] **Step 5: Add sparse-cell integration fixture**
 
-Keep P5 `createSupabaseShadowRetriever()` untouched.
+One exact cell candidate plus cross-cell fresh candidates must fill four while meeting feasible quick coverage; stale/unavailable rows are never supplied by the RPC contract.
 
-- [ ] **Step 5: Add regression test for hard-filter removal behavior**
-
-Mock a pool containing one exact surface/platform asset plus valid cross-surface/cross-platform assets. Assert P6 can fill four while meeting quick coverage; historical P5 mock remains sparse under its exact-filter path.
-
-- [ ] **Step 6: Verify Task 3 GREEN**
+- [ ] **Step 6: Verify and commit**
 
 Run: `node --test tests/reference-graph/p6-retrieval-policy.test.mjs tests/reference-graph/p6-rpc-contract.test.mjs tests/reference-graph/p6-live-shadow.test.mjs`
-
 Expected: PASS.
-
-- [ ] **Step 7: Commit Task 3**
-
-Commit message: `feat: wire P6 retrieval shadow path`
+Commit: `feat: wire P6 retrieval shadow path`
 
 ---
 
-### Task 4: P6 Operator + Terminal Receipt
+### Task 4: P6 Operator + Receipt
 
 **Files:**
 - Create: `reference-graph/p6-receipt.mjs`
@@ -246,236 +175,116 @@ Commit message: `feat: wire P6 retrieval shadow path`
 - Create: `tests/reference-graph/p6-operator.test.mjs`
 
 **Interfaces:**
-- Receipt API follows P5 phase discipline:
-  - `createP6Receipt({ binding, gitSha, verificationAt, referenceTime, baseSha })`
-  - `recordP6Phase(receipt, { phase, status, detail? })`
-  - `finalizeP6Receipt(receipt, { currentControlHealth, embeddingCoverage, p5Baseline, evaluations, migration })`
-  - `assertSecretFreeP6Receipt(receipt, secrets)`
-- Operator modes:
-  - `--current-control`
-  - `--embedding-coverage`
-  - `--supabase-p6-lexical`
-  - `--supabase-p6-semantic`
-  - `--supabase-p6-hybrid`
+- `createP6Receipt({ binding, gitSha, verificationAt, referenceTime, baseSha })`
+- `recordP6Phase(receipt, { phase, status, detail? })`
+- `finalizeP6Receipt(receipt, { currentControlHealth, embeddingCoverage, p5Baseline, evaluations, migration })`
+- `assertSecretFreeP6Receipt(receipt, secrets)`
+- CLI modes: `--current-control`, `--embedding-coverage`, `--supabase-p6-lexical`, `--supabase-p6-semantic`, `--supabase-p6-hybrid`.
 
-- [ ] **Step 1: Write RED receipt lifecycle tests**
+- [ ] **Step 1: RED receipt tests**
 
-Pin terminal failed phases, exact target/base/implementation binding, structural 24/24 + 0-gap control gate, 275/275 compatible embedding gate, unchanged thresholds, and `production_source = legacy-control`.
+Pin terminal failed phases, target/base/SHA, structural 24/24+0-gap control, exact embedding coverage, unchanged thresholds, `legacy-control`, and review eligibility only when guarded hybrid `cutover_ready===true`.
 
-- [ ] **Step 2: Implement P6 receipt lifecycle**
+- [ ] **Step 2: Implement receipt**
 
-`eligible_for_cutover_review` can become true only if the guarded hybrid summary is available and `cutover_ready === true`; this does not perform cutover.
+- [ ] **Step 3: RED operator tests**
 
-- [ ] **Step 3: Write RED operator tests**
+Pin argument exclusivity, target binding, secret redaction, exact profile, P6 retriever choice, and blocked control/embedding paths.
 
-Pin argument exclusivity, target binding, secret redaction, exact profile, P6 retriever selection, and blocked behavior when control/embedding gates fail.
+- [ ] **Step 4: Implement operator**
 
-- [ ] **Step 4: Implement `p6-live-quality.mjs`**
+Reuse P5 helpers only where semantics stay unchanged; fixed cases remain evaluation-only.
 
-Reuse P5 helpers where safe, but do not alter P5 operator semantics. Keep the 24 shadow cases evaluation-only.
-
-- [ ] **Step 5: Verify Task 4 GREEN**
+- [ ] **Step 5: Verify and commit**
 
 Run: `node --test tests/reference-graph/p6-receipt.test.mjs tests/reference-graph/p6-operator.test.mjs`
-
 Expected: PASS.
-
-- [ ] **Step 6: Commit Task 4**
-
-Commit message: `feat: add P6 quality operator and receipt`
+Commit: `feat: add P6 quality operator and receipt`
 
 ---
 
-### Task 5: Permanent Governance + Anti-Leakage
+### Task 5: Permanent Governance
 
 **Files:**
 - Modify: `.github/workflows/verify-reference-graph.yml`
 - Create: `tests/reference-graph/p6-ci-contract.test.mjs`
 
-**Interfaces:**
-- Permanent PR governance owns P6 tests, anti-leakage, migration smoke, historical immutability, secret scanning, and current-control measurement.
+- [ ] **Step 1: RED CI contract test**
 
-- [ ] **Step 1: Write RED CI contract test**
+Require P6 tests, migration 006 DB smoke, secret scans, historical immutability and current-control measurement.
 
-Require the workflow to run all P6 test files and migration 006 in DB smoke.
+- [ ] **Step 2: Add anti-benchmark-leakage guard**
 
-- [ ] **Step 2: Add source-level anti-benchmark-leakage assertions**
-
-Fail if P6 production files contain imports/reads of:
-
-- `shadow-cases.json`
-- `p5-live-shadow-evidence.json`
-- `p6-retrieval-quality-evidence.json`
-- known shadow case IDs
-- expected legacy IDs
-
-The test fixture itself may name forbidden strings; production paths may not.
+Production P6 files must not reference shadow/evidence files, known case IDs, or expected IDs.
 
 - [ ] **Step 3: Extend DB smoke**
 
-After schema 001..006:
+After 001..006 verify `_p6` functions service-role-only; P5 RPCs still exist; fresh cross-surface/platform candidates remain visible to `_p6`; stale/unreviewed/blocked candidates remain excluded.
 
-- verify `_p6` RPCs exist;
-- service role can execute;
-- anon/authenticated cannot;
-- P5 RPCs still exist;
-- synthetic fresh rows outside requested surface/platform remain visible to `_p6` candidate functions;
-- stale/unreviewed/blocked rows remain excluded.
+- [ ] **Step 4: Pin P3/P4/P5 evidence immutability**
 
-- [ ] **Step 4: Extend immutable evidence checks**
-
-Pin P3/P4/P5 evidence blobs against the P5 base SHA or verify no P6 diff touches those files.
-
-- [ ] **Step 5: Run full Reference Graph suite**
+- [ ] **Step 5: Verify and commit**
 
 Run: `node --test tests/reference-graph/*.test.mjs`
-
 Expected: PASS.
-
-- [ ] **Step 6: Commit Task 5**
-
-Commit message: `ci: govern P6 retrieval quality`
+Commit: `ci: govern P6 retrieval quality`
 
 ---
 
-### Task 6: Final Implementation Verification + Whole-Branch Review
+### Task 6: Implementation Verification + Review
 
-**Files:**
-- No product files unless review finds a defect; any defect follows RED→GREEN before proceeding.
-
-**Interfaces:**
-- Produces one clean implementation SHA to which live P6 evidence is bound.
-
-- [ ] **Step 1: Run complete Reference Graph tests**
-
-Run: `node --test tests/reference-graph/*.test.mjs`
-
-Expected: PASS.
-
-- [ ] **Step 2: Run design-reference library regression suite**
-
-Run the existing design-reference test command used in P5 Task 6.
-
-Expected: PASS.
-
-- [ ] **Step 3: Run committed/tree secret scans**
-
-Use the permanent governance commands; no secret findings.
-
-- [ ] **Step 4: Review exact P5→P6 diff**
-
-Check specifically:
-
-- no P5 RPC replacement;
-- no P3/P4/P5 evidence rewrite;
-- no freshness/catalog mutation;
-- no threshold changes;
-- no case/expected-ID references in production P6 code;
-- semantic cannot displace fillable positive lexical candidates;
-- standard/deep behavior is not silently defined.
-
-- [ ] **Step 5: Fix any finding via RED→GREEN and re-run Steps 1–4**
-
-Do not proceed to live deployment with unresolved Important/Critical findings.
-
-- [ ] **Step 6: Record clean implementation SHA and green governance run**
-
-This SHA is immutable input to Task 7 evidence.
+- [ ] **Step 1:** Run full Reference Graph tests.
+- [ ] **Step 2:** Run the same design-reference library regression suite used by P5 Task 6.
+- [ ] **Step 3:** Run committed/tree secret scans.
+- [ ] **Step 4:** Review exact P5→P6 diff for P5-RPC/evidence mutation, threshold/catalog changes, benchmark leakage, semantic displacement, and accidental standard/deep behavior.
+- [ ] **Step 5:** Fix any finding RED→GREEN and repeat verification.
+- [ ] **Step 6:** Record one clean implementation SHA + green permanent governance run.
 
 ---
 
-### Task 7: Dedicated Supabase Migration + Live P6 Evidence
+### Task 7: Dedicated Supabase + Live Evidence
 
 **Files:**
-- Create after measurement: `reference-graph/evidence/p6-retrieval-quality-evidence.json`
-- No edits to P5 evidence.
+- Create: `reference-graph/evidence/p6-retrieval-quality-evidence.json`
 
-**Interfaces:**
-- Live target only: `vrznfnxzlxaavpqbzbzd`.
-- Migration name in Supabase history must identify P6 retrieval quality and correspond to committed schema 006.
-- Terminal evaluation uses the exact pinned query embedding provider/artifact.
+- [ ] **Step 1: Verify exact target identity/health**
 
-- [ ] **Step 1: Verify target identity and project health**
+Only `vrznfnxzlxaavpqbzbzd`.
 
-Require exact project ref/name/region and healthy status before DDL.
+- [ ] **Step 2: Re-measure preconditions**
 
-- [ ] **Step 2: Re-measure preconditions read-only**
+Require current control 24/24, 0 gaps, healthy; embedding coverage 275/275, 0 missing/hash mismatch; P5 evidence unchanged.
 
-Require:
+- [ ] **Step 3: Apply committed migration 006 only to dedicated target**
 
-- current control: 24/24 full, 0 gaps, healthy;
-- exact embedding coverage: eligible 275, compatible 275, missing 0, hash mismatch 0;
-- P5 evidence unchanged.
+- [ ] **Step 4: Verify grants + function semantics read-only**
 
-Stop P6 if these fail.
+- [ ] **Step 5: Reuse/generate exact pinned query embeddings and bind artifact hashes**
 
-- [ ] **Step 3: Apply committed migration 006 to the dedicated project**
+- [ ] **Step 6: Run P6 lexical, semantic diagnostic, guarded hybrid on all 24 cases**
 
-Use Supabase migration tooling. Do not apply DDL to any other project.
+Record raw returned IDs, overlap/top1, metadata rates, empty, latency, policy diagnostics.
 
-- [ ] **Step 4: Verify migration security and semantics**
+- [ ] **Step 7: Recompute summaries from raw IDs**
 
-Read-only checks confirm function definitions, grants, hard eligibility, soft preference candidate visibility, and unchanged P5 RPCs.
+Raw IDs win over inconsistent helper scalars.
 
-- [ ] **Step 5: Generate/reuse exact query embeddings**
+- [ ] **Step 8: Compare hybrid against P5 lexical**
 
-Use only `snowflake-arctic-embed:33m@e8db018629b4`; bind artifact/run/content SHA. No synthetic/substitute vectors.
+Record overlap improved/equal/regressed and top1 gained/preserved/lost.
 
-- [ ] **Step 6: Run live P6 lexical, semantic diagnostic, and guarded hybrid**
+- [ ] **Step 9: Build `finalizeP6Receipt()` + secret check, then commit evidence**
 
-Use the P6 operator against the fixed 24 evaluation cases at a fixed current P6 reference time.
+Commit: `chore: record P6 retrieval quality evidence`
 
-Record per-case IDs, overlap/top-1, exact metadata, empty, latency, and policy diagnostics.
-
-- [ ] **Step 7: Recompute summaries from returned IDs**
-
-Do not trust helper scalars when raw IDs disagree. Recompute overlap/top-1 from bound `legacy_ids ∩ graph_ids` exactly as P5 did.
-
-- [ ] **Step 8: Compare P6 hybrid against P5 lexical baseline**
-
-Record counts of overlap improved/equal/regressed and top-1 gained/preserved/lost. Do not hide regressions behind the average.
-
-- [ ] **Step 9: Build canonical P6 receipt**
-
-Use `finalizeP6Receipt()` + `assertSecretFreeP6Receipt()` and bind the clean Task-6 implementation SHA.
-
-- [ ] **Step 10: Commit durable P6 evidence**
-
-Commit message: `chore: record P6 retrieval quality evidence`
-
-- [ ] **Step 11: Run permanent Reference Graph governance on evidence head**
-
-Expected: PASS.
+- [ ] **Step 10: Require permanent Reference Graph governance GREEN on evidence head**
 
 ---
 
-### Task 8: Final PR + Stop Boundary
+### Task 8: Final Draft PR + Stop Boundary
 
-**Files:**
-- Update PR metadata/body only; no product changes unless final review finds a defect.
-
-**Interfaces:**
-- Produces stacked Draft PR `agent/reference-graph-p6` → `agent/reference-graph-p5`.
-
-- [ ] **Step 1: Perform final whole-branch review**
-
-Review exact P5 final head → P6 final evidence head using the spec's safety boundaries.
-
-- [ ] **Step 2: Confirm temporary workflows/helpers are absent**
-
-Final branch contains only permanent P6 product/governance/docs/evidence artifacts.
-
-- [ ] **Step 3: Update Draft PR with final evidence**
-
-Include base/head SHAs, migration identity, target, control/embedding gates, mode summaries, latency, regression counts, governance runs, Release-governance inherited `write-swift` status, and terminal decision.
-
-- [ ] **Step 4: Preserve stop boundary**
-
-PR remains `draft`, `open`, `unmerged`. Production source remains `legacy-control`. Do not mark ready, merge, or route traffic.
-
-- [ ] **Step 5: Final verification statement**
-
-Report one of:
-
-- `NO CUTOVER` with exact blockers; or
-- `eligible_for_cutover_review: true` if all unchanged gates pass, explicitly noting that no cutover was performed.
+- [ ] **Step 1:** Whole-branch P5→P6 review.
+- [ ] **Step 2:** Confirm no temporary workflows/helpers remain.
+- [ ] **Step 3:** Update stacked Draft PR P6→P5 with SHAs, migration, target, gates, live metrics, regression counts, governance and inherited `write-swift` failure.
+- [ ] **Step 4:** Keep PR open/draft/unmerged; keep `production_source=legacy-control`.
+- [ ] **Step 5:** Report `NO CUTOVER` with blockers, or only `eligible_for_cutover_review: true` if every unchanged gate passes. Never perform cutover in P6.
