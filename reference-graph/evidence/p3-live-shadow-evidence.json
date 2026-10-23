@@ -1,20 +1,20 @@
 {
   "schema_version": "reference-graph.p3-receipt.v1",
   "phase": "P3",
-  "recorded_at": "2026-10-23T02:52:12.000Z",
+  "recorded_at": "2026-10-23T03:14:09.000Z",
   "target": {
     "purpose": "agent-hub-reference-graph",
     "project_ref": "vrznfnxzlxaavpqbzbzd",
     "project_name": "agent-hub-reference-graph",
     "region": "eu-central-1"
   },
-  "git_sha": "7d606a28f65c6b72ef2312a0e9dace24dc2e2320",
-  "verification_at": "2026-10-23T02:51:25.000Z",
+  "git_sha": "6070704742b1f1cdab9c0e3438f8473143ab19d5",
+  "verification_at": "2026-10-23T03:14:09.000Z",
   "production_source": "legacy-control",
   "eligible_for_cutover_review": false,
   "cutover_ready": false,
   "decision": "no-cutover",
-  "decision_reason": "The dedicated live lexical path is operational and reproduces the healthy-snapshot lexical baseline, but average overlap and top-1 retention remain below the independent cutover thresholds. Exact-model live embeddings were unavailable, so semantic and hybrid modes were not fabricated or scored.",
+  "decision_reason": "The dedicated live lexical path is operational and reproduces the healthy-snapshot lexical baseline, but average overlap and top-1 retention remain below the independent cutover thresholds. Exact-model live embeddings are unavailable, so semantic and hybrid modes were not fabricated or scored.",
   "control_reference_time": "2026-07-21T12:00:00.000Z",
   "benchmark_control_health": {
     "reference_time": "2026-07-21T12:00:00.000Z",
@@ -30,7 +30,7 @@
     "healthy": true
   },
   "current_control_health": {
-    "reference_time": "2026-10-23T02:43:17.002Z",
+    "reference_time": "2026-10-23T03:06:59.501Z",
     "reviewed_accessible_count": 600,
     "fresh_pool_count": 2,
     "fresh_pool_rate": 0.0033333333333333335,
@@ -78,18 +78,25 @@
           "reference_graph_001_schema",
           "reference_graph_002_rpc",
           "reference_graph_003_embeddings_rpc",
-          "p3_task8_execution_bridge",
-          "p3_task8_lexical_shadow_bridge",
-          "reference_graph_004_lexical_overlap",
-          "p3_task8_lexical_shadow_after_fix_bridge"
+          "reference_graph_004_lexical_overlap"
         ],
-        "execution_harness_note": "The connected execution harness does not expose the privileged runtime credential or a direct Edge Function invoke action. Three one-shot bridge migrations temporarily installed the PostgreSQL http extension only to invoke fixed, input-free task runners. Each bridge dropped the extension before completion. These harness-only migration records remain visible in the dedicated non-production project and are not repository deployment migrations.",
+        "temporary_bridge_history_removed": true,
         "http_extension_installed_after_execution": false,
-        "task_runner_final_state": {
-          "version": 7,
-          "jwt_verification_required": true,
-          "behavior": "inert-http-410"
-        },
+        "pg_net_extension_installed_after_execution": false,
+        "execution_helpers": [
+          {
+            "name": "p3-fixed-import-runner",
+            "version": 7,
+            "jwt_verification_required": true,
+            "behavior": "inert-http-410"
+          },
+          {
+            "name": "p3-import-once-cfd826d4",
+            "version": 8,
+            "jwt_verification_required": true,
+            "behavior": "inert-http-410"
+          }
+        ],
         "rpc_permission_check": {
           "privileged_role": "allowed",
           "anon": "denied",
@@ -100,29 +107,28 @@
           "info": {
             "rls_enabled_no_policy": 11
           },
-          "note": "The INFO findings match the closed-by-default design: RLS is enabled, exposed client roles have schema/table access revoked, and supported RPC execution is privileged-only."
+          "note": "The INFO findings match the closed-by-default design: RLS is enabled, exposed client roles have schema and table access revoked, and supported RPC execution is privileged-only."
         },
         "performance_advisor": {
           "blocking_findings": 0,
           "info": {
             "unindexed_foreign_keys": 2,
-            "unused_indexes": 3
+            "unused_indexes": 2
           }
         },
         "live_lexical_repair": {
           "initial_empty_case_count": 24,
           "root_cause": "The deployed 002 lexical RPC used websearch_to_tsquery for long multi-term shadow queries, which made candidate matching too strict compared with the offline token-overlap baseline.",
-          "fix": "004_reference_graph_lexical_overlap.sql replaces all-term web search semantics with deterministic partial token overlap while preserving exact metadata filters and service-only execution.",
+          "fix": "004_reference_graph_lexical_overlap.sql replaces all-term web search semantics with deterministic partial token overlap while preserving exact metadata filters and privileged-only execution.",
           "regression_test": "tests/reference-graph/p3-lexical-overlap.test.mjs",
-          "post_fix_empty_case_count": 0,
-          "post_fix_candidate_smoke_count": 24
+          "final_empty_case_count": 0
         }
       }
     },
     "import": {
       "status": "success",
       "detail": {
-        "artifact_sha256": "7720e4c9d100ab3dba31de1c0a00f2db802a13738dc9419df5ebb75ae05c51f6",
+        "artifact_sha256": "863ad51942787ba0da3f819823e5d291fa467cbf37cce2ebc6c9588f3a27e5f1",
         "plan": {
           "record_count": 600,
           "capture_count": 600,
@@ -140,7 +146,6 @@
           "chunks": 600,
           "observations": 7264,
           "tags": 868,
-          "asset_tags": 2540,
           "relations": 0,
           "embeddings": 0
         }
@@ -154,9 +159,8 @@
         "model_revision": "e8db018629b4",
         "dimensions": 384,
         "quality_status": "experimental",
-        "persisted_total": 0,
         "persisted_active_profile": 0,
-        "reason": "The exact pinned Ollama provider was not available in this execution harness. No substitute or synthetic vectors were generated."
+        "reason": "The exact pinned Ollama provider is unavailable in this execution harness. No substitute or synthetic vectors were generated."
       }
     },
     "shadow": {
@@ -168,8 +172,7 @@
         "production_source": "legacy-control",
         "semantic_status": "unavailable",
         "hybrid_status": "unavailable",
-        "execution_method": "A fixed read-only task runner executed the same committed lexical-candidate and candidate-context RPC sequence for the same 24 fixed cases. This was used because the connected harness does not expose the privileged runtime credential or a direct function-invoke action.",
-        "task_runner_final_state": "jwt-protected-inert-http-410"
+        "execution_method": "A fixed read-only server-side helper executed the same committed lexical-candidate and candidate-context RPC sequence for the same 24 fixed cases. The helper was made inert immediately after the run."
       }
     }
   },
@@ -186,11 +189,11 @@
         "average_exact_surface_rate": 1,
         "average_exact_platform_rate": 1,
         "latency_ms": {
-          "min": 41.325450000000046,
-          "p50": 54.654730000000086,
-          "p95": 191.031245,
-          "max": 212.749676,
-          "average": 71.02424741666668
+          "min": 43.30415099999982,
+          "p50": 69.79798700000015,
+          "p95": 274.680961,
+          "max": 421.70553599999994,
+          "average": 95.34856466666668
         },
         "thresholds": {
           "minCases": 20,
@@ -222,6 +225,18 @@
       "reason": "Hybrid live evaluation requires compatible persisted semantic embeddings; none exist."
     }
   },
+  "execution_rulings": [
+    {
+      "ruling": "connector-safe live write execution",
+      "reason": "The connected Supabase interface does not expose privileged runtime material. Exact captures were generated by committed repository code and written through the same ingest RPC by a temporary server-side helper.",
+      "cleanup": "Both execution helpers are JWT-protected inert HTTP 410 endpoints and temporary HTTP extensions are removed."
+    },
+    {
+      "ruling": "lexical repair ownership",
+      "reason": "An intermediate exact-002 live run reproduced 24 of 24 empty cases. The branch already contained the committed and tested 004 repair, so the final live target was reset to a clean 001 through 004 migration history and reverified.",
+      "result": "Final live quality reproduces the offline baseline and no transient bridge migrations remain."
+    }
+  ],
   "verification": {
     "implementation_github_actions_run": 39891759367,
     "implementation_git_sha": "7d606a28f65c6b72ef2312a0e9dace24dc2e2320",
@@ -236,6 +251,9 @@
     ],
     "partial_overlap_smoke": "passed",
     "anonymous_rpc_rejection": "passed",
+    "capture_export_run": 39892688852,
+    "shadow_input_export_run": 39893249764,
+    "shadow_input_sha256": "263de2cbfb47675519457498dbcd0f4e1a04834d5132000556d2fc0a089e0cd1",
     "offline_benchmark_average_overlap_at_k": 0.53125,
     "offline_benchmark_legacy_top1_retention_rate": 0.7083333333333334
   }
