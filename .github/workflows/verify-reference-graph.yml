@@ -45,6 +45,7 @@ jobs:
           import { assertSecretFreeReceipt } from './reference-graph/p3-receipt.mjs';
           import { assertSecretFreeP4Receipt } from './reference-graph/p4-receipt.mjs';
           import { assertSecretFreeP5Receipt } from './reference-graph/p5-receipt.mjs';
+          import { assertSecretFreeP6Receipt } from './reference-graph/p6-receipt.mjs';
 
           for (const file of [
             'reference-graph/target.json',
@@ -75,6 +76,15 @@ jobs:
             assertSecretFreeP5Receipt(value);
             console.log(`secret-free: ${file}`);
           }
+
+          for (const file of [
+            'reference-graph/evidence/p6-retrieval-quality-evidence.json',
+          ]) {
+            if (!existsSync(file)) continue;
+            const value = JSON.parse(readFileSync(file, 'utf8'));
+            assertSecretFreeP6Receipt(value);
+            console.log(`secret-free: ${file}`);
+          }
           NODE
 
       - name: Scan Reference Graph tree for common secrets
@@ -95,7 +105,7 @@ jobs:
           console.log(JSON.stringify({ target_count: x.target_ids.length, already_fresh_count: x.already_fresh_ids.length, wave_count: x.waves.length }, null, 2));
           NODE
 
-      - name: Verify immutable P3 and P4 historical evidence
+      - name: Verify immutable P3, P4, and P5 historical evidence
         run: |
           node --input-type=module <<'NODE'
           import fs from 'node:fs';
@@ -116,9 +126,48 @@ jobs:
             throw new Error('immutable P4 decision changed');
           }
 
+          const p5Control = JSON.parse(fs.readFileSync('reference-graph/evidence/p5-control-coverage-evidence.json', 'utf8'));
+          const p5Selector = p5Control.selector_contract;
+          if (p5Control.production_source !== 'legacy-control'
+            || p5Selector?.fresh_pool_count !== 275
+            || p5Selector?.case_count !== 24
+            || p5Selector?.full_limit_case_count !== 24
+            || p5Selector?.cases_with_coverage_gaps !== 0
+            || p5Selector?.healthy !== true
+            || p5Control.catalog_authority?.catalog_mutated_by_p5 !== false
+            || p5Control.catalog_authority?.freshness_or_ttl_rewritten_by_p5 !== false) {
+            throw new Error(`immutable P5 control evidence changed: ${JSON.stringify(p5Control)}`);
+          }
+
+          const p5Live = JSON.parse(fs.readFileSync('reference-graph/evidence/p5-live-shadow-evidence.json', 'utf8'));
+          const p5LiveHealth = p5Live.current_control_health;
+          const p5Coverage = p5Live.embedding_coverage;
+          const p5Lexical = p5Live.evaluations?.lexical?.summary;
+          if (p5Live.production_source !== 'legacy-control'
+            || p5LiveHealth?.fresh_pool_count !== 275
+            || p5LiveHealth?.case_count !== 24
+            || p5LiveHealth?.full_limit_case_count !== 24
+            || p5LiveHealth?.cases_with_coverage_gaps !== 0
+            || p5LiveHealth?.healthy !== true
+            || p5Coverage?.eligible_chunk_count !== 275
+            || p5Coverage?.compatible_count !== 275
+            || p5Coverage?.missing_count !== 0
+            || p5Coverage?.text_hash_mismatch_count !== 0
+            || p5Lexical?.average_overlap_at_k !== 0.59375
+            || p5Lexical?.legacy_top1_retention_rate !== 0.75
+            || p5Live.thresholds?.changed_by_p5 !== false) {
+            throw new Error(`immutable P5 live evidence changed: ${JSON.stringify(p5Live)}`);
+          }
+
           console.log(JSON.stringify({
             p3: { control_reference_time: p3.control_reference_time, benchmark_control_health: p3Health },
             p4: { current_control_health: p4Health, decision: p4.decision },
+            p5: {
+              selector_contract: p5Selector,
+              current_control_health: p5LiveHealth,
+              embedding_coverage: p5Coverage,
+              lexical_summary: p5Lexical,
+            },
           }, null, 2));
           NODE
 
@@ -137,6 +186,26 @@ jobs:
             }
           }
           console.log('P5 selector benchmark leakage guard passed');
+          NODE
+
+      - name: Verify P6 retrieval policy is benchmark independent
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const sources = [
+            'reference-graph/retrieval-policy.mjs',
+            'reference-graph/p6-live-shadow.mjs',
+            'reference-graph/supabase-store.mjs',
+            'reference-graph/schema/006_reference_graph_retrieval_quality.sql',
+          ];
+          const forbidden = /p5-live-shadow-evidence\.json|p6-retrieval-quality-evidence\.json|authenticated-home-mobile|auth-mobile|design-system-mobile|expected[_-]?legacy|legacy[_-]?expected/i;
+          for (const file of sources) {
+            const source = fs.readFileSync(file, 'utf8');
+            if (forbidden.test(source)) throw new Error(`P6 benchmark leakage detected in ${file}`);
+          }
+          const operator = fs.readFileSync('reference-graph/cli/p6-live-quality.mjs', 'utf8');
+          if (forbidden.test(operator)) throw new Error('P6 benchmark outcomes leaked into operator');
+          console.log('P6 retrieval policy benchmark leakage guard passed');
           NODE
 
       - name: Measure current P5 legacy control health
@@ -193,6 +262,7 @@ jobs:
           psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f reference-graph/schema/003_reference_graph_embeddings_rpc.sql
           psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f reference-graph/schema/004_reference_graph_lexical_overlap.sql
           psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f reference-graph/schema/005_reference_graph_freshness.sql
+          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f reference-graph/schema/006_reference_graph_retrieval_quality.sql
 
       - name: Smoke-test P4 freshness, embedding coverage, verification ledger, and RPC grants
         env:
@@ -322,3 +392,154 @@ jobs:
             echo "authenticated unexpectedly executed a service-only Reference Graph RPC" >&2
             exit 1
           fi
+
+      - name: Smoke-test P6 retrieval eligibility, preference semantics, and RPC grants
+        env:
+          PGPASSWORD: postgres
+        run: |
+          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 <<'SQL'
+          -- Preserve all historical P5 RPC surfaces while adding parallel P6 RPCs.
+          select 1 / case when to_regprocedure('public.reference_graph_lexical_candidates(text,jsonb,integer)') is not null then 1 else 0 end as p5_lexical_exists;
+          select 1 / case when to_regprocedure('public.reference_graph_semantic_candidates(text,text,text,jsonb,integer)') is not null then 1 else 0 end as p5_semantic_exists;
+          select 1 / case when to_regprocedure('public.reference_graph_candidate_context(uuid[],jsonb)') is not null then 1 else 0 end as p5_context_exists;
+          select 1 / case when to_regprocedure('public.reference_graph_lexical_candidates_p6(text,jsonb,integer)') is not null then 1 else 0 end as p6_lexical_exists;
+          select 1 / case when to_regprocedure('public.reference_graph_semantic_candidates_p6(text,text,text,jsonb,integer)') is not null then 1 else 0 end as p6_semantic_exists;
+          select 1 / case when to_regprocedure('public.reference_graph_candidate_context_p6(uuid[],jsonb)') is not null then 1 else 0 end as p6_context_exists;
+
+          insert into reference_graph.sources (id, canonical_url, source_kind, source_family, metadata)
+          values
+            ('60000000-0000-5000-8000-000000000001', 'https://example.com/p6-exact', 'test', 'p6-exact-family', '{"access_status":"AVAILABLE"}'::jsonb),
+            ('60000000-0000-5000-8000-000000000002', 'https://example.com/p6-cross', 'test', 'p6-cross-family', '{"access_status":"AVAILABLE"}'::jsonb),
+            ('60000000-0000-5000-8000-000000000003', 'https://example.com/p6-stale', 'test', 'p6-stale-family', '{"access_status":"AVAILABLE"}'::jsonb),
+            ('60000000-0000-5000-8000-000000000004', 'https://example.com/p6-unreviewed', 'test', 'p6-unreviewed-family', '{"access_status":"AVAILABLE"}'::jsonb),
+            ('60000000-0000-5000-8000-000000000005', 'https://example.com/p6-blocked', 'test', 'p6-blocked-family', '{"access_status":"BLOCKED"}'::jsonb);
+
+          insert into reference_graph.assets (
+            id, source_id, asset_kind, canonical_locator, captured_at, content_hash, provenance, metadata
+          ) values
+            (
+              '60000000-0000-5000-8000-000000000011', '60000000-0000-5000-8000-000000000001', 'web-page',
+              'https://example.com/p6-exact/page', '2026-10-22', 'p6-exact',
+              '{"review_status":"reviewed","last_verified_at":"2026-10-22"}'::jsonb,
+              '{"legacy_id":"p6-exact","access_status":"AVAILABLE","ttl_days":90,"platform":"mobile","surface_family":"auth"}'::jsonb
+            ),
+            (
+              '60000000-0000-5000-8000-000000000012', '60000000-0000-5000-8000-000000000002', 'web-page',
+              'https://example.com/p6-cross/page', '2026-10-22', 'p6-cross',
+              '{"review_status":"reviewed","last_verified_at":"2026-10-22"}'::jsonb,
+              '{"legacy_id":"p6-cross","access_status":"AVAILABLE","ttl_days":90,"platform":"web-responsive","surface_family":"public-home"}'::jsonb
+            ),
+            (
+              '60000000-0000-5000-8000-000000000013', '60000000-0000-5000-8000-000000000003', 'web-page',
+              'https://example.com/p6-stale/page', '2026-01-01', 'p6-stale',
+              '{"review_status":"reviewed","last_verified_at":"2026-01-01"}'::jsonb,
+              '{"legacy_id":"p6-stale","access_status":"AVAILABLE","ttl_days":30,"platform":"mobile","surface_family":"auth"}'::jsonb
+            ),
+            (
+              '60000000-0000-5000-8000-000000000014', '60000000-0000-5000-8000-000000000004', 'web-page',
+              'https://example.com/p6-unreviewed/page', '2026-10-22', 'p6-unreviewed',
+              '{"review_status":"candidate","last_verified_at":"2026-10-22"}'::jsonb,
+              '{"legacy_id":"p6-unreviewed","access_status":"AVAILABLE","ttl_days":90,"platform":"mobile","surface_family":"auth"}'::jsonb
+            ),
+            (
+              '60000000-0000-5000-8000-000000000015', '60000000-0000-5000-8000-000000000005', 'web-page',
+              'https://example.com/p6-blocked/page', '2026-10-22', 'p6-blocked',
+              '{"review_status":"reviewed","last_verified_at":"2026-10-22"}'::jsonb,
+              '{"legacy_id":"p6-blocked","access_status":"BLOCKED","ttl_days":90,"platform":"mobile","surface_family":"auth"}'::jsonb
+            );
+
+          insert into reference_graph.chunks (id, asset_id, ordinal, content, metadata) values
+            ('60000000-0000-5000-8000-000000000021', '60000000-0000-5000-8000-000000000011', 0, 'p6 soft preference signal', '{"text_hash":"p6-hash-exact"}'),
+            ('60000000-0000-5000-8000-000000000022', '60000000-0000-5000-8000-000000000012', 0, 'p6 soft preference signal', '{"text_hash":"p6-hash-cross"}'),
+            ('60000000-0000-5000-8000-000000000023', '60000000-0000-5000-8000-000000000013', 0, 'p6 soft preference signal', '{"text_hash":"p6-hash-stale"}'),
+            ('60000000-0000-5000-8000-000000000024', '60000000-0000-5000-8000-000000000014', 0, 'p6 soft preference signal', '{"text_hash":"p6-hash-unreviewed"}'),
+            ('60000000-0000-5000-8000-000000000025', '60000000-0000-5000-8000-000000000015', 0, 'p6 soft preference signal', '{"text_hash":"p6-hash-blocked"}');
+
+          insert into reference_graph.embeddings (
+            chunk_id, model_id, model_revision, text_hash, dimensions, embedding
+          ) values
+            ('60000000-0000-5000-8000-000000000021', 'p6-test-model', 'v1', 'p6-hash-exact', 384, array_fill(0.01::real, array[384])::extensions.vector),
+            ('60000000-0000-5000-8000-000000000022', 'p6-test-model', 'v1', 'p6-hash-cross', 384, array_fill(0.02::real, array[384])::extensions.vector),
+            ('60000000-0000-5000-8000-000000000023', 'p6-test-model', 'v1', 'p6-hash-stale', 384, array_fill(0.03::real, array[384])::extensions.vector),
+            ('60000000-0000-5000-8000-000000000024', 'p6-test-model', 'v1', 'p6-hash-unreviewed', 384, array_fill(0.04::real, array[384])::extensions.vector),
+            ('60000000-0000-5000-8000-000000000025', 'p6-test-model', 'v1', 'p6-hash-blocked', 384, array_fill(0.05::real, array[384])::extensions.vector);
+
+          set role service_role;
+
+          -- cross-surface / cross-platform soft preference: both eligible records remain visible.
+          select 1 / case when count(*) = 2 then 1 else 0 end as p6_soft_preference_lexical_ok
+          from public.reference_graph_lexical_candidates_p6(
+            'preference signal',
+            '{"reference_date":"2026-10-23","platform":"mobile","surface_family":"auth"}'::jsonb,
+            20
+          )
+          where asset_id in (
+            '60000000-0000-5000-8000-000000000011'::uuid,
+            '60000000-0000-5000-8000-000000000012'::uuid
+          );
+
+          -- stale, unreviewed, and blocked records remain hard-ineligible.
+          select 1 / case when count(*) = 2 then 1 else 0 end as p6_hard_eligibility_ok
+          from public.reference_graph_lexical_candidates_p6(
+            'preference signal',
+            '{"reference_date":"2026-10-23","platform":"mobile","surface_family":"auth"}'::jsonb,
+            20
+          );
+
+          select 1 / case when count(*) = 2 then 1 else 0 end as p6_soft_preference_semantic_ok
+          from public.reference_graph_semantic_candidates_p6(
+            array_fill(0.01::real, array[384])::extensions.vector::text,
+            'p6-test-model',
+            'v1',
+            '{"reference_date":"2026-10-23","platform":"mobile","surface_family":"auth"}'::jsonb,
+            20
+          );
+
+          do $$
+          declare v jsonb;
+          begin
+            v := public.reference_graph_candidate_context_p6(
+              array[
+                '60000000-0000-5000-8000-000000000011'::uuid,
+                '60000000-0000-5000-8000-000000000012'::uuid
+              ],
+              '{"reference_date":"2026-10-23","platform":"mobile","surface_family":"auth"}'::jsonb
+            );
+            if jsonb_array_length(v->'assets') <> 2 then
+              raise exception 'unexpected P6 context assets: %', v;
+            end if;
+            if not exists (
+              select 1 from jsonb_array_elements(v->'assets') a
+              where a->>'source_family' = 'p6-cross-family'
+            ) then
+              raise exception 'P6 context did not expose source_family: %', v;
+            end if;
+          end
+          $$;
+
+          -- Historical P5 lexical path keeps its exact request-cell filtering semantics.
+          select 1 / case when count(*) = 1 then 1 else 0 end as p5_historical_filter_semantics_ok
+          from public.reference_graph_lexical_candidates(
+            'preference signal',
+            '{"reference_date":"2026-10-23","platform":"mobile","surface_family":"auth"}'::jsonb,
+            20
+          )
+          where asset_id in (
+            '60000000-0000-5000-8000-000000000011'::uuid,
+            '60000000-0000-5000-8000-000000000012'::uuid
+          );
+
+          reset role;
+          SQL
+
+          if psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -c "set role anon; select public.reference_graph_lexical_candidates_p6('signal','{\"reference_date\":\"2026-10-23\"}'::jsonb,1);"; then
+            echo "anon unexpectedly executed P6 lexical RPC" >&2
+            exit 1
+          fi
+
+          if psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -c "set role authenticated; select public.reference_graph_candidate_context_p6(array[]::uuid[],'{\"reference_date\":\"2026-10-23\"}'::jsonb);"; then
+            echo "authenticated unexpectedly executed P6 context RPC" >&2
+            exit 1
+          fi
+
+          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -c "set role service_role; select public.reference_graph_lexical_candidates_p6('signal','{\"reference_date\":\"2026-10-23\"}'::jsonb,1); reset role;"
