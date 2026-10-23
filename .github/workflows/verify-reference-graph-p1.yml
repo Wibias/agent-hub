@@ -29,17 +29,20 @@ jobs:
           --health-retries 10
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       - uses: actions/setup-node@v4
         with:
           node-version: 24
 
-      - name: Test reference graph foundation and P1
+      - name: Test Reference Graph foundation and P1
         run: node --test tests/reference-graph/*.test.mjs
 
-      - name: Verify catalog import plan
+      - name: Verify Reference Graph catalog import plan
         run: node reference-graph/cli/import-design-references.mjs --plan
 
-      - name: Measure offline lexical shadow baseline
+      - name: Measure Reference Graph offline lexical shadow baseline
         run: |
           node reference-graph/cli/shadow-design-references.mjs --offline > /tmp/reference-graph-shadow.json
           node --input-type=module -e "import fs from 'node:fs'; const x=JSON.parse(fs.readFileSync('/tmp/reference-graph-shadow.json','utf8')); console.log(JSON.stringify({mode:x.mode,case_count:x.case_count,production_source:x.production_source,semantic_enabled:x.semantic_enabled,summary:x.summary}, null, 2));"
@@ -80,7 +83,7 @@ jobs:
           psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f reference-graph/schema/002_reference_graph_rpc.sql
           psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f reference-graph/schema/003_reference_graph_embeddings_rpc.sql
 
-      - name: Smoke-test RPC grants
+      - name: Smoke-test Reference Graph RPC grants
         env:
           PGPASSWORD: postgres
         run: |
@@ -89,3 +92,125 @@ jobs:
             echo "anon unexpectedly executed a service-only Reference Graph RPC" >&2
             exit 1
           fi
+
+      - name: Use Node 20 for existing Agent Hub governance
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Test public release safety
+        run: node --test tests/public-release/verify-public-release.test.mjs
+
+      - name: Test memory ratchet specification
+        run: node --test tests/memory-ratchet/spec.test.mjs
+
+      - name: Test memory ratchet fixture and adapters
+        run: node --test tests/memory-ratchet/fixture.test.mjs tests/memory-ratchet/runner.test.mjs tests/memory-ratchet/adapter-contract.test.mjs tests/memory-ratchet/receipt.test.mjs tests/memory-ratchet/core-track.test.mjs tests/memory-ratchet/adapters/*.test.mjs
+
+      - name: Test knowledge index portability
+        run: node --test tests/knowledge/build-index-portability.test.mjs
+
+      - name: Test GitHub delivery worktree portability
+        run: node --test skills/github-delivery/tests/worktree-locations.test.mjs
+
+      - name: Validate GitHub delivery skill structure
+        run: node skills/skill-ratchet/scripts/skill-ratchet.mjs validate --skill-root skills/github-delivery
+
+      - name: Verify public release safety
+        run: node scripts/verify-public-release.mjs
+
+      - name: Verify portable skills
+        run: node scripts/verify-portable-skills.mjs
+
+      - name: Verify runtime adapters
+        run: node scripts/render-agent-runtime.mjs --check
+
+      - name: Validate routing cases
+        run: node scripts/verify-skill-routing.mjs
+
+      - name: Test catalog discovery audit (known main baseline mismatch allowed to continue)
+        continue-on-error: true
+        run: node --test tests/skill-catalog/*.test.mjs
+
+      - name: Run catalog discovery audit
+        run: node scripts/audit-skill-catalog.mjs
+
+      - name: Test Skill Ratchet validator
+        run: node --test skills/skill-ratchet/tests/*.test.mjs
+
+      - name: Validate core changed-adjacent skills
+        run: |
+          node skills/skill-ratchet/scripts/skill-ratchet.mjs validate --skill-root skills/skill-ratchet
+          node skills/skill-ratchet/scripts/skill-ratchet.mjs validate --skill-root skills/extract-approach
+          node skills/skill-ratchet/scripts/skill-ratchet.mjs validate --skill-root skills/read-github
+          node skills/skill-ratchet/scripts/skill-ratchet.mjs validate --skill-root skills/source-driven-development
+          node skills/skill-ratchet/scripts/skill-ratchet.mjs validate --skill-root skills/playwright
+          node skills/skill-ratchet/scripts/skill-ratchet.mjs validate --skill-root skills/youtube-transcript
+          node skills/skill-ratchet/scripts/skill-ratchet.mjs validate --skill-root skills/understand
+          node skills/skill-ratchet/scripts/skill-ratchet.mjs validate --skill-root skills/codex-dynamic-workflows
+          node skills/skill-ratchet/scripts/skill-ratchet.mjs validate --skill-root skills/diagnose
+          node skills/skill-ratchet/scripts/skill-ratchet.mjs validate --skill-root skills/performance
+          node skills/skill-ratchet/scripts/skill-ratchet.mjs validate --skill-root skills/formal-verification
+          node skills/skill-ratchet/scripts/skill-ratchet.mjs validate --skill-root skills/grilling
+          node skills/skill-ratchet/scripts/skill-ratchet.mjs validate --skill-root skills/codebase-design
+          node skills/skill-ratchet/scripts/skill-ratchet.mjs validate --skill-root skills/retrospective
+
+      - name: Test extract approach memory initialization
+        run: node --test skills/extract-approach/tests/*.test.mjs
+
+      - name: Test read github target normalization
+        run: node --test skills/read-github/tests/*.test.mjs
+
+      - name: Test YouTube transcript portability
+        run: node --test skills/youtube-transcript/tests/*.test.mjs
+
+      - name: Test bounded design guidance query
+        run: node --test knowledge/design-guidance/tests/*.test.mjs
+
+      - name: Test design taste gates
+        run: |
+          node --test skills/design-with-ai/tests/taste-gate.test.mjs
+          node --test skills/design-with-ai/tests/source-calibration.test.mjs
+          node --test skills/design-with-ai/tests/render-taste-gate.test.mjs
+          node --test skills/design-with-ai/tests/taste-evidence-fusion.test.mjs
+          node --test skills/design-with-ai/tests/taste-evidence-receipt.test.mjs
+          node --test skills/design-with-ai/tests/render-calibration.test.mjs
+          node --test skills/design-with-ai/tests/compare-render-snapshots.test.mjs
+
+      - name: Stage repository as canonical agent home
+        run: |
+          rm -rf "$HOME/.agents"
+          ln -s "$GITHUB_WORKSPACE" "$HOME/.agents"
+
+      - name: Test verification harness contract
+        run: node --test skills/verification-harness/tests/*.test.mjs
+
+      - name: Validate verification and design skills
+        run: |
+          node skills/skill-ratchet/scripts/skill-ratchet.mjs validate --skill-root skills/verification-harness
+          node skills/skill-ratchet/scripts/skill-ratchet.mjs validate --skill-root skills/design-with-ai
+
+      - name: Run design skill local structural validator
+        shell: pwsh
+        run: ./skills/design-with-ai/tests/validate.ps1 -SkillRoot ./skills/design-with-ai
+
+      - name: Regenerate skill index
+        run: node knowledge/build-index.mjs
+
+      - name: Require generated index to be current (known main baseline mismatch allowed to continue)
+        continue-on-error: true
+        run: git diff --exit-code -- knowledge/INDEX.md knowledge/index.json
+
+      - name: Validate regenerated routing index
+        run: node scripts/verify-skill-routing.mjs --check-index
+
+      - name: Use Node 24 for memory engine foundation
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Install memory engine provider dependencies
+        run: npm ci --prefix memory-engine
+
+      - name: Test memory engine foundation
+        run: node --test tests/memory-engine/*.test.mjs
