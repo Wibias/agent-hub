@@ -1,0 +1,68 @@
+name: P4 Task 8 apply revalidation
+
+on:
+  pull_request:
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  apply:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'agent/reference-graph-p4'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/reference-graph-p4
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Download SHA-bound revalidation evidence
+        uses: actions/download-artifact@v4
+        with:
+          name: p4-revalidation-audit
+          path: .p4-audit
+          github-token: ${{ github.token }}
+          repository: Wibias/agent-hub
+          run-id: '39901999569'
+      - name: Verify source artifact and decisions
+        run: |
+          test "$(sha256sum .p4-audit/p4-revalidation-plan.json | awk '{print $1}')" = "48cde0c2962b6159c2ceb400dba6fb6a5e4e9d7e478517cea2991a0709e16939"
+          node knowledge/design-references/scripts/revalidate-batch.mjs --plan --review-log .p4-audit/p4-review-log.jsonl > .p4-audit/apply-plan.json
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const plan = JSON.parse(fs.readFileSync('.p4-audit/apply-plan.json', 'utf8'));
+          if (plan.summary.decision_count !== 598 || plan.touched_ids.length !== 598) {
+            throw new Error(`expected 598 decisions, got ${plan.summary.decision_count}/${plan.touched_ids.length}`);
+          }
+          console.log(JSON.stringify(plan.summary, null, 2));
+          NODE
+      - name: Apply revalidation and rebuild indexes
+        run: |
+          node knowledge/design-references/scripts/revalidate-batch.mjs --apply --review-log .p4-audit/p4-review-log.jsonl > .p4-audit/apply-result.json
+          node knowledge/design-references/scripts/validate.mjs --production > .p4-audit/production-validation.json
+          node knowledge/design-references/scripts/build-index.mjs > .p4-audit/build-index.json
+          node knowledge/design-references/scripts/validate.mjs --production > .p4-audit/production-validation-after-index.json
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const report = JSON.parse(fs.readFileSync('.p4-audit/production-validation-after-index.json', 'utf8'));
+          if (!report.ok) throw new Error(JSON.stringify(report.errors));
+          if (report.counts.reviewStatus.reviewed !== 275 || report.counts.reviewStatus.stale !== 325) {
+            throw new Error(`unexpected status counts: ${JSON.stringify(report.counts.reviewStatus)}`);
+          }
+          console.log(JSON.stringify(report.counts.reviewStatus, null, 2));
+          NODE
+      - name: Commit only catalog and generated index changes
+        run: |
+          git status --short
+          git add knowledge/design-references/data knowledge/design-references/index.json knowledge/design-references/INDEX.md
+          if git diff --cached --quiet; then
+            echo "No catalog changes to commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "chore: apply P4 reference revalidation"
+          git push origin HEAD:agent/reference-graph-p4
