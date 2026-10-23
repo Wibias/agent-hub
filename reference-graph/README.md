@@ -12,6 +12,7 @@ It is deliberately an additive backend behind existing contracts, not a second d
 - Memory integration is explicit promotion only. Reference usage may produce a bounded Memory evidence proposal; it does not create an active Memory claim by itself.
 - Retrieval returns bounded reference bundles. Broad automatic injection is out of scope.
 - Reference Graph does not change `design-with-ai` routing or its qualified skill tree.
+- There is no live Supabase deployment in P1 until a target project is explicitly identified and authorized.
 
 ## Repository surfaces
 
