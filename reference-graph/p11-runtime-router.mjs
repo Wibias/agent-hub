@@ -83,6 +83,7 @@ export async function runP11RuntimeQuery({
   fetchCandidatePool,
   recordUsageFn = recordUsage,
   recordUsageEnabled = true,
+  usageLogPath,
   selectPatternsFn = selectPatterns,
   now = new Date(),
 } = {}) {
@@ -168,7 +169,7 @@ export async function runP11RuntimeQuery({
   let usageWarning = null;
   if (recordUsageEnabled) {
     try {
-      recordUsageFn(authoritativeSelection.selected, request);
+      recordUsageFn(authoritativeSelection.selected, request, usageLogPath);
     } catch (error) {
       usageWarning =
         'Selected records are valid, but local usage recording failed: '
