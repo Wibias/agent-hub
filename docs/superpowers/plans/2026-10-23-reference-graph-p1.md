@@ -32,7 +32,7 @@
   - legacy top-1 retention `0`;
   - `cutover_ready: false`, blocked by overlap and top-1 thresholds.
 - [x] Confirm the same run passes 26/26 Reference Graph tests, the 600-record import plan (`576` unique sources, `600` assets, `0` asset deduplications), all three migrations, and service-role/anonymous permission smoke tests.
-- [ ] Run broad Agent Hub governance on the final P1 revision, allowing only separately identified pre-existing `main` baseline mismatches to continue.
+- [x] Run broad Agent Hub governance on run `39878750874` / job `120170731477`. Reference Graph tests, import planning, shadow baseline, pgvector migrations, RPC permissions, Public Release, Memory Ratchet, routing, Skill Ratchet, design taste/structural gates, regenerated routing index, dependency install, and the full Node 24 Memory Engine suite all pass. The only softened checks are the two separately identified pre-existing `main` baseline mismatches: stale `write-swift` catalog expectation and stale generated `pnpm` / `write-swift` index entries.
 - [ ] Confirm final P1 diff contains no `skills/design-with-ai/**` changes and no credentials.
 - [ ] Remove the temporary branch-only P1 workflow after final broad evidence.
 
