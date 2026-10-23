@@ -1,0 +1,71 @@
+name: P5 finalize receipt evidence
+
+on:
+  push:
+    branches:
+      - agent/reference-graph-p5
+
+permissions:
+  contents: read
+
+jobs:
+  finalize:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Finalize and secret-check P5 receipt
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          import {
+            createP5Receipt,
+            recordP5Phase,
+            finalizeP5Receipt,
+            assertSecretFreeP5Receipt,
+          } from './reference-graph/p5-receipt.mjs';
+
+          const evidence = JSON.parse(fs.readFileSync('./reference-graph/evidence/p5-live-shadow-evidence.json', 'utf8'));
+          const control = JSON.parse(fs.readFileSync('./reference-graph/evidence/p5-control-coverage-evidence.json', 'utf8'));
+          const binding = {
+            purpose: evidence.target.purpose,
+            project_ref: evidence.target.project_ref,
+            project_name: evidence.target.project_name,
+            region: evidence.target.region,
+          };
+          let receipt = createP5Receipt({
+            binding,
+            gitSha: '2d235a6fb27cb96cbec208c776109086305c6c64',
+            verificationAt: new Date().toISOString(),
+            referenceTime: evidence.reference_time,
+          });
+          for (const phase of ['preflight', 'selector', 'embeddings', 'shadow']) {
+            receipt = recordP5Phase(receipt, { phase, status: 'success' });
+          }
+          receipt = finalizeP5Receipt(receipt, {
+            selectorContract: control.selector_contract,
+            currentControlHealth: evidence.current_control_health,
+            embeddingCoverage: evidence.embedding_coverage,
+            evaluations: evidence.evaluations,
+          });
+          assertSecretFreeP5Receipt(receipt, []);
+          if (receipt.production_source !== 'legacy-control') throw new Error('unexpected production source');
+          if (receipt.eligible_for_cutover_review !== false) throw new Error('P5 must remain no-cutover');
+          if (!receipt.blockers.includes('live hybrid evidence is unavailable or below quality gates')) {
+            throw new Error(`unexpected blockers: ${JSON.stringify(receipt.blockers)}`);
+          }
+          fs.writeFileSync('p5-finalized-receipt.json', `${JSON.stringify(receipt, null, 2)}\n`);
+          console.log(JSON.stringify({
+            git_sha: receipt.git_sha,
+            production_source: receipt.production_source,
+            eligible_for_cutover_review: receipt.eligible_for_cutover_review,
+            blockers: receipt.blockers,
+          }, null, 2));
+          NODE
+      - uses: actions/upload-artifact@v4
+        with:
+          name: p5-finalized-receipt
+          path: p5-finalized-receipt.json
+          if-no-files-found: error
