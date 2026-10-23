@@ -1,4 +1,4 @@
-name: P6 stage query artifact
+name: P6 finalize live evidence
 
 on:
   push:
@@ -8,31 +8,65 @@ on:
       - .github/workflows/p6-stage-query-artifact.yml
 
 permissions:
-  actions: read
   contents: write
 
 jobs:
-  stage:
+  finalize:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           ref: agent/reference-graph-p6
           fetch-depth: 0
-      - uses: actions/download-artifact@v4
+      - uses: actions/setup-node@v4
         with:
-          name: p5-query-embeddings
-          path: /tmp/p5-query
-          github-token: ${{ github.token }}
-          run-id: 39914965493
-      - name: Verify and stage exact artifact
+          node-version: 24
+      - name: Decode and validate exact P6 evidence
         run: |
-          FILE=/tmp/p5-query/p5-query-embeddings.json
-          test -f "$FILE"
-          echo "76a1af99643b1ca5a53bf114ffca8f0c942462693a8eda9cc43afebcd26316ac  $FILE" | sha256sum -c -
-          cp "$FILE" reference-graph/.p6-live-query-embeddings.json
+          base64 -d reference-graph/.p6-evidence.json.gz.b64 | gzip -d > reference-graph/evidence/p6-retrieval-quality-evidence.json
+          echo "dba0ff5fc1d4802145577ca1da35c05ca5beddda2bff0abc0f5bcd29ab7e637c  reference-graph/evidence/p6-retrieval-quality-evidence.json" | sha256sum -c -
+          echo "76a1af99643b1ca5a53bf114ffca8f0c942462693a8eda9cc43afebcd26316ac  reference-graph/.p6-live-query-embeddings.json" | sha256sum -c -
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          import { assertSecretFreeP6Receipt } from './reference-graph/p6-receipt.mjs';
+          const evidence = JSON.parse(fs.readFileSync('reference-graph/evidence/p6-retrieval-quality-evidence.json', 'utf8'));
+          const artifact = JSON.parse(fs.readFileSync('reference-graph/.p6-live-query-embeddings.json', 'utf8'));
+          if (evidence.rows.length !== 24 || artifact.rows.length !== 24) throw new Error('expected 24 evidence and artifact rows');
+          const artifactById = new Map(artifact.rows.map((row) => [row.case_id, row]));
+          for (const row of evidence.rows) {
+            const source = artifactById.get(row.case_id);
+            if (!source) throw new Error(`missing artifact case ${row.case_id}`);
+            if (JSON.stringify(source.legacy_ids) !== JSON.stringify(row.legacy_ids)) throw new Error(`legacy ids drifted for ${row.case_id}`);
+            for (const mode of ['lexical','semantic','hybrid']) {
+              const item = row[mode];
+              const returned = new Set(item.graph_legacy_ids);
+              const overlapCount = row.legacy_ids.filter((id) => returned.has(id)).length;
+              const overlap = overlapCount / row.legacy_ids.length;
+              const top1 = returned.has(row.legacy_ids[0]);
+              if (Math.abs(overlap - item.overlap_at_k) > 1e-12) throw new Error(`overlap mismatch ${row.case_id}/${mode}`);
+              if (top1 !== item.legacy_top1_retained) throw new Error(`top1 mismatch ${row.case_id}/${mode}`);
+            }
+          }
+          for (const mode of ['lexical','semantic','hybrid']) {
+            const rows = evidence.rows.map((row) => row[mode]);
+            const summary = evidence.evaluations[mode].summary;
+            const average = (field) => rows.reduce((sum, row) => sum + Number(row[field]), 0) / rows.length;
+            if (Math.abs(average('overlap_at_k') - summary.average_overlap_at_k) > 1e-12) throw new Error(`${mode} overlap summary mismatch`);
+            if (Math.abs(rows.filter((row) => row.legacy_top1_retained).length / rows.length - summary.legacy_top1_retention_rate) > 1e-12) throw new Error(`${mode} top1 summary mismatch`);
+            if (Math.abs(average('graph_exact_surface_rate') - summary.average_exact_surface_rate) > 1e-12) throw new Error(`${mode} surface summary mismatch`);
+            if (Math.abs(average('graph_exact_platform_rate') - summary.average_exact_platform_rate) > 1e-12) throw new Error(`${mode} platform summary mismatch`);
+          }
+          if (evidence.evaluations.hybrid.summary.cutover_ready !== false || evidence.receipt.cutover_ready !== false || evidence.production_source !== 'legacy-control') {
+            throw new Error('P6 evidence must preserve NO CUTOVER / legacy-control');
+          }
+          assertSecretFreeP6Receipt(evidence.receipt);
+          console.log('P6 evidence validated against exact query artifact and receipt contract');
+          NODE
+      - name: Commit evidence and remove normal transport files
+        run: |
+          rm reference-graph/.p6-evidence.json.gz.b64 reference-graph/.p6-live-query-embeddings.json
           git config user.name "Wibias"
           git config user.email "37517432+Wibias@users.noreply.github.com"
-          git add reference-graph/.p6-live-query-embeddings.json
-          git commit -m "chore: stage exact P6 live query artifact"
+          git add reference-graph/evidence/p6-retrieval-quality-evidence.json reference-graph/.p6-evidence.json.gz.b64 reference-graph/.p6-live-query-embeddings.json
+          git commit -m "evidence: record P6 live retrieval quality"
           git push origin HEAD:agent/reference-graph-p6
