@@ -6,3 +6,4 @@ Pre-flight: Task 2 receipt interfaces -> Tasks 6/8 consumers: production_source 
 Pre-flight: Task 4 live-shadow interfaces -> Tasks 6/8 consumers: deployed lexical/semantic/hybrid path aligns with persisted-embedding boundary.
 Pre-flight: Task 5 latency fields -> Tasks 6/8 consumers: additive evaluator fields preserve existing quality metrics.
 Pre-flight: Task 7 CI consumes all earlier P3 contracts; no interface conflict.
+Task 1: complete (RED run 39886107575: 51 pass / 3 expected fail missing target-binding; GREEN run 39886176970: full Reference Graph suite PASS, 54 tests).
