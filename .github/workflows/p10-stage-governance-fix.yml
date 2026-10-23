@@ -10,6 +10,7 @@ on:
 permissions:
   contents: write
 
+# Trigger the already-registered one-shot staging workflow.
 jobs:
   stage:
     runs-on: ubuntu-latest
