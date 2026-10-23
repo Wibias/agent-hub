@@ -3,15 +3,16 @@
 import { loadRecords, parseArgs } from '../../knowledge/design-references/scripts/lib.mjs';
 import { importLegacyCatalog, planLegacyCatalogImport } from '../catalog-import.mjs';
 import { ReferenceGraphSupabaseStore } from '../supabase-store.mjs';
+import { assertBoundSupabaseUrl, readTargetBinding } from '../target-binding.mjs';
 
 function usage() {
   return [
     'Usage:',
     '  node reference-graph/cli/import-design-references.mjs --plan',
-    '  node reference-graph/cli/import-design-references.mjs --apply [--batch-size 25]',
+    '  node reference-graph/cli/import-design-references.mjs --apply --target <path> [--batch-size 25]',
     '',
     '--plan performs no network calls and requires no credentials.',
-    '--apply requires SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.',
+    '--apply requires --target plus SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.',
   ].join('\n');
 }
 
@@ -36,6 +37,13 @@ function planSummary(plan) {
   };
 }
 
+function requireTargetPath(value) {
+  if (typeof value !== 'string' || value.trim().length === 0) {
+    throw new Error(`--apply requires --target <path>.\n\n${usage()}`);
+  }
+  return value.trim();
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const planMode = args.plan === true;
@@ -53,6 +61,13 @@ async function main() {
     return;
   }
 
+  const targetPath = requireTargetPath(args.target);
+  const binding = readTargetBinding(targetPath);
+  assertBoundSupabaseUrl({
+    binding,
+    supabaseUrl: process.env.SUPABASE_URL,
+  });
+
   const batchSize = parseBatchSize(args['batch-size']);
   const store = ReferenceGraphSupabaseStore.fromEnv(process.env);
   const imported = await importLegacyCatalog({
@@ -65,6 +80,7 @@ async function main() {
   console.log(JSON.stringify({
     mode: 'apply',
     applied: true,
+    target: binding,
     record_count: imported.record_count,
     capture_count: imported.capture_count,
     imported_count: imported.imported_count,
