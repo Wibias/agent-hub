@@ -50,6 +50,7 @@ jobs:
           import { assertSecretFreeP8Receipt } from './reference-graph/p8-receipt.mjs';
           import { assertSecretFreeP9Receipt } from './reference-graph/p9-receipt.mjs';
           import { assertSecretFreeP10Receipt } from './reference-graph/p10-receipt.mjs';
+          import { assertSecretFreeP11Receipt } from './reference-graph/p11-receipt.mjs';
 
           for (const file of [
             'reference-graph/target.json',
@@ -117,12 +118,13 @@ jobs:
           }
 
 
+
           for (const file of [
-            'reference-graph/evidence/p10-runtime-projection-evidence.json',
+            'reference-graph/evidence/p11-quick-activation-evidence.json',
           ]) {
             if (!existsSync(file)) continue;
             const value = JSON.parse(readFileSync(file, 'utf8'));
-            assertSecretFreeP10Receipt(value);
+            assertSecretFreeP11Receipt(value);
             console.log(`secret-free: ${file}`);
           }
 
@@ -338,41 +340,8 @@ jobs:
           }, null, 2));
           NODE
 
-      - name: Verify P8 production CLI remains legacy-only
-        run: |
-          EXPECTED_QUERY_BLOB='4963cfbaf4306a03084f4513a1e324f649ce36e5'
-          ACTUAL_QUERY_BLOB="$(git hash-object knowledge/design-references/scripts/query.mjs)"
-          if [ "$ACTUAL_QUERY_BLOB" != "$EXPECTED_QUERY_BLOB" ]; then
-            echo "production query CLI changed: expected $EXPECTED_QUERY_BLOB got $ACTUAL_QUERY_BLOB" >&2
-            exit 1
-          fi
-          node --input-type=module <<'NODE'
-          import fs from 'node:fs';
-          import path from 'node:path';
-          const root = 'knowledge/design-references';
-          const forbidden = /SUPABASE_SERVICE_ROLE_KEY|ReferenceGraphSupabaseStore|quickCandidatePoolP7|p7-parity-policy/;
-          function walk(dir) {
-            for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-              const full = path.join(dir, entry.name);
-              if (entry.isDirectory()) walk(full);
-              else if (entry.isFile()) {
-                const source = fs.readFileSync(full, 'utf8');
-                if (forbidden.test(source)) throw new Error(`P8 production-runtime graph credential/client leak: ${full}`);
-              }
-            }
-          }
-          walk(root);
-          console.log('P8 production query CLI blob and runtime credential boundary passed');
-          NODE
-
       - name: Verify immutable P8 runtime boundary
         run: |
-          EXPECTED_QUERY_BLOB='4963cfbaf4306a03084f4513a1e324f649ce36e5'
-          ACTUAL_QUERY_BLOB="$(git hash-object knowledge/design-references/scripts/query.mjs)"
-          if [ "$ACTUAL_QUERY_BLOB" != "$EXPECTED_QUERY_BLOB" ]; then
-            echo "P8 production query CLI changed: expected $EXPECTED_QUERY_BLOB got $ACTUAL_QUERY_BLOB" >&2
-            exit 1
-          fi
           node --input-type=module <<'NODE'
           import fs from 'node:fs';
           const p8 = JSON.parse(fs.readFileSync('reference-graph/evidence/p8-cutover-review-evidence.json', 'utf8'));
@@ -450,6 +419,80 @@ jobs:
             candidate_pool: pool,
             canary,
           }, null, 2));
+          NODE
+
+      - name: Verify immutable P10 runtime projection evidence
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const p10 = JSON.parse(fs.readFileSync('reference-graph/evidence/p10-runtime-projection-evidence.json', 'utf8'));
+          const security = p10.runtime_security;
+          const projection = p10.projection;
+          const canary = p10.canary;
+          if (p10.schema_version !== 'reference-graph.p10-runtime-projection.v1'
+            || p10.base_sha !== '535a0f9e5354ba53493fc581d0eb5a60fca04e05'
+            || p10.git_sha !== '25547b500038bc808a77ad31b41f142c2ce21f4c'
+            || p10.production_source !== 'legacy-control'
+            || p10.activation_performed !== false
+            || p10.least_privilege_transport_ready !== true
+            || p10.quick_shadow_canary_ready !== true
+            || p10.production_activation_ready !== false
+            || security?.service_role_used_by_canary !== false
+            || security?.security_advisor_p9_p10_warn_error_count !== 0
+            || projection?.candidate_count !== 275
+            || projection?.complete_metadata_count !== 275
+            || projection?.unique_legacy_id_count !== 275
+            || projection?.equivalent !== true
+            || canary?.case_count !== 24
+            || canary?.exact_record_count !== 24
+            || canary?.exact_pattern_count !== 24
+            || canary?.mismatch_count !== 0
+            || canary?.legacy_authoritative_count !== 24) {
+            throw new Error(`immutable P10 evidence changed: ${JSON.stringify(p10)}`);
+          }
+          console.log('P10 runtime projection evidence remains immutable');
+          NODE
+
+      - name: Verify P11 production runtime default-off and profile isolation
+        run: |
+          echo "P11 default legacy; standard no-network; deep no-network"
+          node --test tests/reference-graph/p11-runtime-router.test.mjs tests/reference-graph/p11-query-cli.test.mjs
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const source = fs.readFileSync('knowledge/design-references/scripts/query.mjs', 'utf8');
+          for (const required of [
+            'REFERENCE_GRAPH_QUICK_RUNTIME',
+            'SUPABASE_PUBLISHABLE_KEY',
+            'fetchP10QuickCandidatePool',
+            'runP11RuntimeQuery',
+            'timeoutMs: 1500',
+          ]) {
+            if (!source.includes(required)) throw new Error(`P11 production query is missing ${required}`);
+          }
+          if (!/graphMode === "graph"/.test(source)) throw new Error('P11 activation must require exact graph mode');
+          if (!/request\.profile === "quick"/.test(source)) throw new Error('P11 graph transport must remain quick-only');
+          console.log('P11 default legacy and standard/deep zero-network profile isolation verified');
+          NODE
+
+      - name: Verify P11 runtime source is benchmark independent and least privilege
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const files = [
+            'knowledge/design-references/scripts/query.mjs',
+            'reference-graph/p11-runtime-router.mjs',
+            'reference-graph/p10-runtime-client.mjs',
+          ];
+          const benchmarkForbidden = /shadow-cases\.json|reference-graph\/evidence\/|p(?:7|8|9|10|11).*evidence\.json|expected[_-]?legacy|legacy[_-]?expected/i;
+          const privilegeForbidden = /SUPABASE_SERVICE_ROLE_KEY|ReferenceGraphSupabaseStore|service[_-]?role[_-]?(?:key|token|secret)/i;
+          for (const file of files) {
+            const source = fs.readFileSync(file, 'utf8');
+            if (benchmarkForbidden.test(source)) throw new Error(`P11 benchmark leakage detected in ${file}`);
+            if (privilegeForbidden.test(source)) throw new Error(`P11 privileged runtime path detected in ${file}`);
+          }
+          const query = fs.readFileSync('knowledge/design-references/scripts/query.mjs', 'utf8');
+          if (!query.includes('SUPABASE_PUBLISHABLE_KEY')) throw new Error('P11 runtime must use publishable auth');
+          console.log('P11 runtime source is benchmark independent and publishable-only');
           NODE
 
       - name: Measure current P5 legacy control health

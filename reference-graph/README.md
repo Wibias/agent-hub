@@ -347,3 +347,14 @@ This phase certifies a reversible least-privilege canary boundary. A later, sepa
 P10 removes the publishable-key `SECURITY DEFINER` entry point introduced for the P9 shadow canary. The public runtime surface is now `reference_graph_quick_runtime_projection_p10`, a read-only projection protected by RLS. `anon` and `authenticated` have SELECT only; INSERT, UPDATE, and DELETE remain denied. RLS requires `snapshot_date = current_date`, so a stale or missing snapshot returns no usable graph candidates and runtime behavior fails closed to `legacy-control`.
 
 Only the service-role-only `reference_graph_refresh_quick_runtime_projection_p10()` function may rebuild the projection, and it always copies the current-date certified P7 quick pool. The P10 publishable-key client performs a PostgREST GET against the projection and has no service-role or write path. Standard and deep remain legacy-only and make no graph network call. P10 proves least-privilege transport and shadow-canary readiness only: there is **no production activation** in P10, and any activation decision plus refresh operations belong to a later phase.
+
+
+## P11 reversible quick runtime authority
+
+P11 connects the certified P10 current-date projection to the real production query entrypoint behind an explicit, reversible **quick-only** opt-in. The repository default remains `legacy-control`: when `REFERENCE_GRAPH_QUICK_RUNTIME` is unset or has any value other than the exact string `graph`, the quick path is the same legacy selector and performs no graph fetch.
+
+An opt-in quick request may attempt graph transport only when `REFERENCE_GRAPH_QUICK_RUNTIME=graph` and both `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` are present. Runtime transport reads the P10 RLS projection with publishable-key auth and a 1500 ms timeout; it never accepts or requires `SUPABASE_SERVICE_ROLE_KEY`.
+
+Graph authority is fail-closed. The router computes the legacy result first, hydrates graph IDs back to canonical local records, derives patterns through the unchanged legacy pattern selector, and accepts graph authority only when the ordered record IDs are **exact** and the ordered pattern IDs are **exact** for the same request. Transport errors, missing credentials, stale or empty snapshots, malformed payloads, unknown IDs, record mismatch, or pattern mismatch all fall back to the already-computed legacy result without changing public JSON or exit semantics.
+
+`standard` remains legacy-only and zero-network. `deep` remains legacy-only and zero-network. Usage is recorded exactly once after the authoritative result is chosen. P11 proves that the quick graph route can become activation-ready, but it performs **no global activation**: `repository_default_graph_enabled` stays false, `activation_performed` stays false, and production remains legacy by default until a later explicit operator decision.
