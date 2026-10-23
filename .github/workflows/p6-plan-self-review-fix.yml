@@ -1,0 +1,60 @@
+name: P6 plan self-review fix
+
+on:
+  push:
+    branches:
+      - agent/reference-graph-p6
+    paths:
+      - .github/workflows/p6-plan-self-review-fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/reference-graph-p6
+      - name: Pin semantic diagnostic selector contract
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          spec = Path('docs/superpowers/specs/2026-10-23-reference-graph-p6-retrieval-quality-design.md')
+          text = spec.read_text()
+          anchor = '''Standard/deep graph retrieval behavior is not expanded in P6. The P6 live-quality operator uses the fixed quick-profile shadow suite. A future production integration must separately define non-quick retrieval policy before routing traffic.\n\n## Guarded semantic policy\n'''
+          replacement = '''Standard/deep graph retrieval behavior is not expanded in P6. The P6 live-quality operator uses the fixed quick-profile shadow suite. A future production integration must separately define non-quick retrieval policy before routing traffic.\n\n## Semantic diagnostic policy\n\nThe pure policy module also exports `selectP6SemanticResults({ semanticCandidates, assets, request, maxItems })`. This mode is diagnostic only. It preserves semantic score/rank as the relevance order, applies the same constructive quick coverage feasibility rule, and uses stable asset ID as the final tie-break. It does **not** add lexical weights, diversity weights, or a learned semantic threshold. This keeps the semantic diagnostic interpretable while ensuring sparse exact cells can fall back to other fresh eligible candidates.\n\n## Guarded semantic policy\n'''
+          if anchor not in text:
+              raise SystemExit('design anchor missing')
+          spec.write_text(text.replace(anchor, replacement, 1))
+
+          plan = Path('docs/superpowers/plans/2026-10-23-reference-graph-p6-retrieval-quality.md')
+          text = plan.read_text()
+          old = '''- Produces `selectP6LexicalResults({ lexicalCandidates, assets, request, maxItems }) -> { ids, diagnostics }`.\n- Produces `selectP6GuardedHybridResults({ lexicalCandidates, semanticCandidates, assets, request, maxItems }) -> { ids, diagnostics }`.\n- `diagnostics` records coverage feasibility/result and selected lexical/semantic-only counts without benchmark IDs.\n'''
+          new = '''- Produces `selectP6LexicalResults({ lexicalCandidates, assets, request, maxItems }) -> { ids, diagnostics }`.\n- Produces `selectP6SemanticResults({ semanticCandidates, assets, request, maxItems }) -> { ids, diagnostics }`.\n- Produces `selectP6GuardedHybridResults({ lexicalCandidates, semanticCandidates, assets, request, maxItems }) -> { ids, diagnostics }`.\n- `diagnostics` records coverage feasibility/result and selected lexical/semantic-only counts without benchmark IDs.\n'''
+          if old not in text:
+              raise SystemExit('plan interface anchor missing')
+          text = text.replace(old, new, 1)
+          old2 = '''- [ ] **Step 6: Add RED guarded-hybrid tests**\n\nPin:\n'''
+          new2 = '''- [ ] **Step 6: Add RED semantic diagnostic + guarded-hybrid tests**\n\nPin semantic diagnostic behavior first:\n\n- semantic score/rank remains the relevance order;\n- constructive quick coverage can select a lower-ranked semantic candidate when needed to preserve a feasible final set;\n- no lexical/diversity weight is applied in semantic-only mode;\n- stable asset ID resolves final ties.\n\nThen pin guarded hybrid behavior:\n'''
+          if old2 not in text:
+              raise SystemExit('plan test anchor missing')
+          text = text.replace(old2, new2, 1)
+          old3 = '''- [ ] **Step 7: Implement `selectP6GuardedHybridResults(...)` minimally**\n\nDo not add a learned threshold or semantic fusion weight.\n'''
+          new3 = '''- [ ] **Step 7: Implement `selectP6SemanticResults(...)` and `selectP6GuardedHybridResults(...)` minimally**\n\nSemantic-only uses rank + constructive coverage only. Guarded hybrid follows the lexical-primary contract. Do not add a learned threshold or semantic fusion weight.\n'''
+          if old3 not in text:
+              raise SystemExit('plan implementation anchor missing')
+          plan.write_text(text.replace(old3, new3, 1))
+          PY
+      - name: Verify and commit
+        run: |
+          git diff --check
+          grep -q 'selectP6SemanticResults' docs/superpowers/specs/2026-10-23-reference-graph-p6-retrieval-quality-design.md
+          grep -q 'selectP6SemanticResults' docs/superpowers/plans/2026-10-23-reference-graph-p6-retrieval-quality.md
+          git config user.name "Wibias"
+          git config user.email "37517432+Wibias@users.noreply.github.com"
+          git add docs/superpowers/specs/2026-10-23-reference-graph-p6-retrieval-quality-design.md docs/superpowers/plans/2026-10-23-reference-graph-p6-retrieval-quality.md
+          git commit -m "docs: pin P6 semantic diagnostic policy"
+          git push origin HEAD:agent/reference-graph-p6
