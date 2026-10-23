@@ -1,0 +1,192 @@
+name: P10 build final evidence
+
+on:
+  push:
+    branches:
+      - agent/reference-graph-p10-evidence-builder
+    paths:
+      - .github/workflows/p10-build-final-evidence.yml
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/reference-graph-p10-evidence-builder
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Build canonical secret-free P10 receipt
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          import {
+            createP10Receipt,
+            recordP10Phase,
+            finalizeP10Receipt,
+            assertSecretFreeP10Receipt,
+          } from './reference-graph/p10-receipt.mjs';
+
+          const binding = {
+            purpose: 'agent-hub-reference-graph',
+            project_ref: 'vrznfnxzlxaavpqbzbzd',
+            project_name: 'agent-hub-reference-graph',
+            region: 'eu-central-1',
+          };
+
+          let receipt = createP10Receipt({
+            binding,
+            baseSha: '535a0f9e5354ba53493fc581d0eb5a60fca04e05',
+            gitSha: '25547b500038bc808a77ad31b41f142c2ce21f4c',
+            verificationAt: new Date().toISOString(),
+            referenceTime: '2026-10-23T12:00:00.000Z',
+          });
+
+          receipt = recordP10Phase(receipt, {
+            phase: 'preflight',
+            status: 'success',
+            detail: {
+              target_status: 'ACTIVE_HEALTHY',
+              reference_graph_governance_run: 40038855049,
+              implementation_sha: '25547b500038bc808a77ad31b41f142c2ce21f4c',
+              production_source: 'legacy-control',
+              activation_performed: false,
+            },
+          });
+          receipt = recordP10Phase(receipt, {
+            phase: 'migration',
+            status: 'success',
+            detail: {
+              migration_file: '009_reference_graph_runtime_projection.sql',
+              live_migration_version: '20261023231841',
+              live_migration_name: 'reference_graph_runtime_projection_p10',
+              security_advisor_warn_error_count: 0,
+              security_advisor_info_count: 12,
+            },
+          });
+          receipt = recordP10Phase(receipt, {
+            phase: 'projection',
+            status: 'success',
+            detail: {
+              snapshot_date: '2026-10-23',
+              candidate_count: 275,
+              source_minus_projection_count: 0,
+              projection_minus_source_count: 0,
+              canonical_md5: '2975440df38dfe0fd83991742852246e',
+            },
+          });
+          receipt = recordP10Phase(receipt, {
+            phase: 'canary',
+            status: 'success',
+            detail: {
+              live_http_probe_run: 40039139245,
+              artifact_id: 12538775877,
+              artifact_sha256: '89a0ad553d4126d47bdba31ecba64f22309701f425d611c745fe15542a89a160',
+              case_count: 24,
+              exact_record_count: 24,
+              exact_pattern_count: 24,
+              mismatch_count: 0,
+              legacy_authoritative_count: 24,
+            },
+          });
+
+          receipt = finalizeP10Receipt(receipt, {
+            migration: {
+              status: 'verified',
+              migration: '009_reference_graph_runtime_projection.sql',
+              projection: 'reference_graph_quick_runtime_projection_p10',
+              refresh_rpc: 'reference_graph_refresh_quick_runtime_projection_p10',
+              rls_enabled: true,
+              current_date_only: true,
+              p9_runtime_closed: true,
+            },
+            runtimeSecurity: {
+              p9_anon_execute: false,
+              p9_authenticated_execute: false,
+              projection_anon_select: true,
+              projection_authenticated_select: true,
+              projection_runtime_write_denied: true,
+              refresh_anon_execute: false,
+              refresh_authenticated_execute: false,
+              refresh_service_role_execute: true,
+              direct_table_select_denied: true,
+              service_role_used_by_canary: false,
+              security_advisor_p9_p10_warn_error_count: 0,
+            },
+            projection: {
+              status: 'available',
+              snapshot_date: '2026-10-23',
+              candidate_count: 275,
+              complete_metadata_count: 275,
+              unique_legacy_id_count: 275,
+              live_hash: '2975440df38dfe0fd83991742852246e',
+              offline_hash: '2975440df38dfe0fd83991742852246e',
+              equivalent: true,
+            },
+            transport: {
+              status: 'available',
+              live_http_transport_verified: true,
+              auth_mode: 'publishable',
+              candidate_count: 275,
+              snapshot_date: '2026-10-23',
+              run_id: 40039139245,
+              artifact_digest: 'sha256:89a0ad553d4126d47bdba31ecba64f22309701f425d611c745fe15542a89a160',
+            },
+            canary: {
+              status: 'available',
+              case_count: 24,
+              exact_record_count: 24,
+              exact_pattern_count: 24,
+              mismatch_count: 0,
+              legacy_authoritative_count: 24,
+            },
+            fallbackVerification: {
+              transport_failure_fallback: true,
+              malformed_payload_fallback: true,
+              stale_snapshot_fallback: true,
+              empty_snapshot_fallback: true,
+              standard_no_network: true,
+              deep_no_network: true,
+              usage_legacy_only: true,
+            },
+            blockers: [],
+          });
+
+          assertSecretFreeP10Receipt(receipt);
+          if (!receipt.least_privilege_transport_ready || !receipt.quick_shadow_canary_ready) {
+            throw new Error(`P10 receipt unexpectedly not ready: ${JSON.stringify(receipt.blockers)}`);
+          }
+          if (receipt.production_activation_ready !== false || receipt.activation_performed !== false || receipt.production_source !== 'legacy-control') {
+            throw new Error('P10 must not activate production');
+          }
+
+          fs.mkdirSync('/tmp/p10-evidence/reference-graph/evidence', { recursive: true });
+          fs.writeFileSync(
+            '/tmp/p10-evidence/reference-graph/evidence/p10-runtime-projection-evidence.json',
+            `${JSON.stringify(receipt, null, 2)}\n`,
+          );
+          console.log(JSON.stringify({
+            least_privilege_transport_ready: receipt.least_privilege_transport_ready,
+            quick_shadow_canary_ready: receipt.quick_shadow_canary_ready,
+            production_activation_ready: receipt.production_activation_ready,
+            production_source: receipt.production_source,
+            blockers: receipt.blockers,
+          }, null, 2));
+          NODE
+      - name: Commit evidence to P10 branch
+        run: |
+          cp /tmp/p10-evidence/reference-graph/evidence/p10-runtime-projection-evidence.json /tmp/p10-runtime-projection-evidence.json
+          git fetch origin agent/reference-graph-p10
+          git checkout -B agent/reference-graph-p10 origin/agent/reference-graph-p10
+          mkdir -p reference-graph/evidence
+          cp /tmp/p10-runtime-projection-evidence.json reference-graph/evidence/p10-runtime-projection-evidence.json
+          git config user.name "Wibias"
+          git config user.email "37517432+Wibias@users.noreply.github.com"
+          git add reference-graph/evidence/p10-runtime-projection-evidence.json
+          git commit -m "evidence: finalize P10 runtime projection"
+          git push origin HEAD:agent/reference-graph-p10
