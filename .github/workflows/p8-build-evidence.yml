@@ -1,0 +1,35 @@
+name: P8 isolated cutover review evidence
+
+on:
+  push:
+    branches:
+      - agent/reference-graph-p8-evidence-run
+    paths:
+      - .github/workflows/p8-build-evidence.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  evidence:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/reference-graph-p8-evidence-run
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Build canonical P8 evidence
+        run: node reference-graph/p8-build-evidence.mjs
+      - name: Scan P8 evidence for secrets
+        run: python3 skills/security-review-redirect/scripts/scan_secrets.py reference-graph/evidence/p8-cutover-review-evidence.json
+      - name: Commit evidence artifact
+        run: |
+          git config user.name "Wibias"
+          git config user.email "37517432+Wibias@users.noreply.github.com"
+          git add reference-graph/evidence/p8-cutover-review-evidence.json
+          git commit -m "evidence: record P8 cutover review decision"
+          git push origin HEAD:agent/reference-graph-p8-evidence-run
