@@ -1,9 +1,41 @@
+import { performance } from 'node:perf_hooks';
+
 import { isFresh } from '../knowledge/design-references/scripts/lib.mjs';
 import { selectRecords } from '../knowledge/design-references/scripts/selection.mjs';
 
 function finiteAverage(values) {
   if (values.length === 0) return null;
   return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function latencySummary(rows) {
+  const values = rows
+    .map((row) => row?.graph_latency_ms)
+    .filter((value) => Number.isFinite(value) && value >= 0)
+    .sort((left, right) => left - right);
+
+  if (values.length === 0) {
+    return {
+      min: null,
+      p50: null,
+      p95: null,
+      max: null,
+      average: null,
+    };
+  }
+
+  const nearestRank = (percentile) => {
+    const index = Math.max(0, Math.ceil(percentile * values.length) - 1);
+    return values[index];
+  };
+
+  return {
+    min: values[0],
+    p50: nearestRank(0.5),
+    p95: nearestRank(0.95),
+    max: values[values.length - 1],
+    average: finiteAverage(values),
+  };
 }
 
 function legacyIdFromGraphItem(item) {
@@ -157,6 +189,7 @@ export function summarizeShadowEvaluation(rows, thresholds = {}) {
     average_exact_platform_rate: finiteAverage(
       rows.map((row) => row.graph_exact_platform_rate ?? 0),
     ) ?? 0,
+    latency_ms: latencySummary(rows),
     thresholds: policy,
     blockers: [],
     cutover_ready: false,
@@ -210,11 +243,15 @@ export async function runCatalogShadowEvaluation({
   graphRetrieve,
   thresholds = {},
   controlNow = undefined,
+  nowMs = () => performance.now(),
 } = {}) {
   if (!Array.isArray(records)) throw new TypeError('records must be an array');
   if (!Array.isArray(cases)) throw new TypeError('cases must be an array');
   if (typeof graphRetrieve !== 'function') {
     throw new TypeError('graphRetrieve must be a function');
+  }
+  if (typeof nowMs !== 'function') {
+    throw new TypeError('nowMs must be a function');
   }
   const resolvedControlNow = resolveControlNow(controlNow);
   const controlHealth = assessLegacyControlHealth({
@@ -226,6 +263,7 @@ export async function runCatalogShadowEvaluation({
   const rows = [];
   for (const request of cases) {
     const legacy = selectRecords(records, request, { now: resolvedControlNow });
+    const startedAt = nowMs();
     const graphBundle = await graphRetrieve({
       request,
       query: shadowQueryText(request),
@@ -235,11 +273,20 @@ export async function runCatalogShadowEvaluation({
       },
       maxItems: request.limit,
     });
-    rows.push(compareShadowSelection({
-      request,
-      legacySelected: legacy.selected,
-      graphBundle,
-    }));
+    const finishedAt = nowMs();
+    const latency = Number.isFinite(startedAt)
+      && Number.isFinite(finishedAt)
+      && finishedAt >= startedAt
+      ? finishedAt - startedAt
+      : null;
+    rows.push({
+      ...compareShadowSelection({
+        request,
+        legacySelected: legacy.selected,
+        graphBundle,
+      }),
+      graph_latency_ms: latency,
+    });
   }
 
   return {
