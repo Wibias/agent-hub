@@ -57,7 +57,7 @@ jobs:
       - name: Commit only catalog and generated index changes
         run: |
           git status --short
-          git add knowledge/design-references/data knowledge/design-references/index.json knowledge/design-references/INDEX.md
+          git add -f knowledge/design-references/data knowledge/design-references/index.json knowledge/design-references/INDEX.md
           if git diff --cached --quiet; then
             echo "No catalog changes to commit."
             exit 0
