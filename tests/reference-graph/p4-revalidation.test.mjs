@@ -1,7 +1,13 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 
-import { stripInternal } from '../../knowledge/design-references/scripts/lib.mjs';
+import { stripInternal, validateRecord } from '../../knowledge/design-references/scripts/lib.mjs';
+
+const here = path.dirname(fileURLToPath(import.meta.url));
+const root = path.resolve(here, '../..');
 
 function record(overrides = {}) {
   return {
@@ -117,6 +123,37 @@ test('decision hashes are stable and content-sensitive', async () => {
   assert.match(first.decisionHash, /^[a-f0-9]{64}$/);
   assert.equal(first.decisionHash, repeat.decisionHash);
   assert.notEqual(first.decisionHash, changed.decisionHash);
+});
+
+test('production maintenance validation accepts terminal provenance states but rejects candidates', () => {
+  assert.deepEqual(validateRecord(record({ reviewStatus: 'stale' }), {
+    requireProductionStatus: true,
+  }), []);
+  assert.deepEqual(validateRecord(record({ reviewStatus: 'archived' }), {
+    requireProductionStatus: true,
+  }), []);
+
+  const candidateErrors = validateRecord(record({
+    reviewStatus: 'candidate',
+    reviewedBy: null,
+    reviewedAt: null,
+  }), { requireProductionStatus: true });
+  assert.match(candidateErrors.join('\n'), /production.*reviewed.*stale.*archived/i);
+});
+
+test('production validator uses maintenance status validation without weakening review-batch approval', () => {
+  const validator = readFileSync(
+    path.join(root, 'knowledge/design-references/scripts/validate.mjs'),
+    'utf8',
+  );
+  const reviewBatch = readFileSync(
+    path.join(root, 'knowledge/design-references/scripts/review-batch.mjs'),
+    'utf8',
+  );
+
+  assert.match(validator, /requireProductionStatus:\s*Boolean\(args\.production\)/);
+  assert.doesNotMatch(validator, /requireReviewed:\s*Boolean\(args\.production\)/);
+  assert.match(reviewBatch, /requireReviewed:\s*true/);
 });
 
 test('link-only decisions are rejected', async () => {
