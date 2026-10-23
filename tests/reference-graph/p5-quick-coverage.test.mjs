@@ -5,7 +5,10 @@ import {
   canCompleteQuickCoverage,
   quickCoverageRequirements,
 } from '../../knowledge/design-references/scripts/quick-coverage.mjs';
-import { selectRecords } from '../../knowledge/design-references/scripts/selection.mjs';
+import {
+  allocateDeep,
+  selectRecords,
+} from '../../knowledge/design-references/scripts/selection.mjs';
 
 const REFERENCE_NOW = new Date('2026-10-23T12:00:00.000Z');
 
@@ -205,4 +208,73 @@ test('quick selector preserves feasible platform coverage instead of spending ev
     first.selected.map((item) => item.id),
     reversed.selected.map((item) => item.id),
   );
+});
+
+test('an infeasible quick pool preserves deterministic best-effort selection and reports the platform gap', () => {
+  const records = [
+    record('ref-surface-a', { surfaceFamily: 'authenticated-home' }),
+    record('ref-surface-b', { surfaceFamily: 'authenticated-home' }),
+    record('ref-surface-c', { surfaceFamily: 'authenticated-home' }),
+    record('ref-surface-d', { surfaceFamily: 'authenticated-home' }),
+    record('ref-mobile-only', { platform: 'native-mobile' }),
+  ];
+  const request = {
+    profile: 'quick',
+    limit: 4,
+    surface: 'authenticated-home',
+    platform: 'native-mobile',
+    job: '',
+    dimensions: '',
+  };
+
+  const first = selectRecords(records, request, { now: REFERENCE_NOW });
+  const reversed = selectRecords([...records].reverse(), request, { now: REFERENCE_NOW });
+  const platformGap = first.coverageGaps.find((gap) => gap.kind === 'platform');
+
+  assert.equal(first.selected.length, 4);
+  assert.ok(platformGap);
+  assert.equal(platformGap.required, 2);
+  assert.equal(platformGap.selected < platformGap.required, true);
+  assert.deepEqual(
+    first.selected.map((item) => item.id),
+    reversed.selected.map((item) => item.id),
+  );
+});
+
+test('standard selection remains score-and-id deterministic outside the quick coverage repair', () => {
+  const records = Array.from({ length: 10 }, (_, index) =>
+    record(`ref-standard-${String(index).padStart(2, '0')}`),
+  );
+  const result = selectRecords([...records].reverse(), {
+    profile: 'standard',
+    limit: 8,
+    job: '',
+    dimensions: '',
+  }, { now: REFERENCE_NOW });
+
+  assert.deepEqual(
+    result.selected.map((item) => item.id),
+    records.slice(0, 8).map((item) => item.id),
+  );
+});
+
+test('deep selection keeps its existing stratum allocation and deterministic ordering', () => {
+  const quotas = allocateDeep(20);
+  const records = Object.entries(quotas).flatMap(([stratum, count]) =>
+    Array.from({ length: count }, (_, index) =>
+      record(`ref-${stratum}-${String(index).padStart(2, '0')}`, {
+        primaryStratum: stratum,
+      }),
+    ),
+  );
+  const expectedIds = records.map((item) => item.id).sort();
+  const result = selectRecords([...records].reverse(), {
+    profile: 'deep',
+    limit: 20,
+    job: '',
+    dimensions: '',
+  }, { now: REFERENCE_NOW });
+
+  assert.deepEqual(result.selected.map((item) => item.id), expectedIds);
+  assert.deepEqual(result.selectedByStratum, quotas);
 });
