@@ -6,10 +6,12 @@ import { fileURLToPath } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, '../..');
-const sql = readFileSync(
-  path.join(root, 'reference-graph/schema/002_reference_graph_rpc.sql'),
-  'utf8',
-);
+const sql = [
+  'reference-graph/schema/002_reference_graph_rpc.sql',
+  'reference-graph/schema/003_reference_graph_embeddings_rpc.sql',
+]
+  .map((relative) => readFileSync(path.join(root, relative), 'utf8'))
+  .join('\n');
 
 const chunkId = '00000000-0000-5000-8000-000000000001';
 
