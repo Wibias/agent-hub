@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
@@ -9,6 +10,14 @@ const root = path.resolve(here, '../..');
 
 function read(relative) {
   return readFileSync(path.join(root, relative), 'utf8');
+}
+
+function run(relative, args = [], env = {}) {
+  return spawnSync(process.execPath, [path.join(root, relative), ...args], {
+    cwd: root,
+    encoding: 'utf8',
+    env: { ...process.env, ...env },
+  });
 }
 
 test('P2 exposes an explicit embedding CLI with plan and apply boundaries', () => {
@@ -22,6 +31,27 @@ test('P2 exposes an explicit embedding CLI with plan and apply boundaries', () =
   assert.match(source, /SUPABASE_SERVICE_ROLE_KEY/);
   assert.match(source, /OllamaEmbeddingProvider/);
   assert.match(source, /persistEmbeddingRows/);
+});
+
+test('embedding CLI plan is credential-free and reports the pinned model without contacting services', () => {
+  const result = run('reference-graph/cli/embed-design-references.mjs', ['--plan'], {
+    SUPABASE_URL: '',
+    SUPABASE_SERVICE_ROLE_KEY: '',
+    OLLAMA_URL: 'http://127.0.0.1:1',
+  });
+
+  assert.equal(result.status, 0, result.stderr);
+  const body = JSON.parse(result.stdout);
+  assert.equal(body.record_count, 600);
+  assert.equal(body.chunk_count, 600);
+  assert.equal(body.model_id, 'ollama/all-minilm:22m-l6-v2-fp16');
+  assert.equal(body.model_revision, '1b226e2802db');
+});
+
+test('embedding CLI refuses work when neither plan nor apply is explicit', () => {
+  const result = run('reference-graph/cli/embed-design-references.mjs');
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /exactly one.*--plan.*--apply|choose exactly one/i);
 });
 
 test('shadow CLI exposes separate ollama semantic and hybrid modes without changing production control', () => {
