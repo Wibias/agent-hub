@@ -63,6 +63,14 @@ function normalizeContext(value) {
   };
 }
 
+function uniqueAssetIds(assetIds) {
+  return [...new Set(
+    (Array.isArray(assetIds) ? assetIds : [])
+      .map((value) => String(value ?? '').trim())
+      .filter(Boolean),
+  )];
+}
+
 export class ReferenceGraphSupabaseStore {
   constructor({ url, serviceRoleKey, fetchImpl = globalThis.fetch } = {}) {
     this.url = normalizeUrl(url);
@@ -175,13 +183,38 @@ export class ReferenceGraphSupabaseStore {
   }
 
   async candidateContext(assetIds, filters = {}) {
-    const uniqueIds = [...new Set(
-      (Array.isArray(assetIds) ? assetIds : [])
-        .map((value) => String(value ?? '').trim())
-        .filter(Boolean),
-    )];
+    const uniqueIds = uniqueAssetIds(assetIds);
     if (uniqueIds.length === 0) return { assets: [], relations: [] };
     return normalizeContext(await this.rpc('reference_graph_candidate_context', {
+      p_asset_ids: uniqueIds,
+      p_filters: filters,
+    }));
+  }
+
+  async lexicalCandidatesP6(query, filters = {}, limit = 48) {
+    const rows = await this.rpc('reference_graph_lexical_candidates_p6', {
+      p_query: String(query ?? ''),
+      p_filters: filters,
+      p_limit: limit,
+    });
+    return Array.isArray(rows) ? rows : [];
+  }
+
+  async semanticCandidatesP6(embedding, modelId, modelRevision, filters = {}, limit = 48) {
+    const rows = await this.rpc('reference_graph_semantic_candidates_p6', {
+      p_embedding_text: vectorText(embedding),
+      p_model_id: requireString(modelId, 'modelId'),
+      p_model_revision: requireString(modelRevision, 'modelRevision'),
+      p_filters: filters,
+      p_limit: limit,
+    });
+    return Array.isArray(rows) ? rows : [];
+  }
+
+  async candidateContextP6(assetIds, filters = {}) {
+    const uniqueIds = uniqueAssetIds(assetIds);
+    if (uniqueIds.length === 0) return { assets: [], relations: [] };
+    return normalizeContext(await this.rpc('reference_graph_candidate_context_p6', {
       p_asset_ids: uniqueIds,
       p_filters: filters,
     }));
