@@ -1,0 +1,56 @@
+name: P4 Task 8 control evidence
+
+on:
+  pull_request:
+    branches:
+      - agent/reference-graph-p3
+
+permissions:
+  contents: read
+
+jobs:
+  control-evidence:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Measure honest current control
+        run: |
+          node reference-graph/cli/p4-live-quality.mjs \
+            --current-control \
+            --reference-date 2026-10-23 \
+            --receipt-out p4-current-control.json
+          cat p4-current-control.json
+      - name: Preserve fixed historical regression benchmark
+        run: |
+          node reference-graph/cli/shadow-design-references.mjs \
+            --offline \
+            --control-date 2026-07-21 > p4-historical-benchmark.json
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const current = JSON.parse(fs.readFileSync('p4-current-control.json', 'utf8'));
+          const historical = JSON.parse(fs.readFileSync('p4-historical-benchmark.json', 'utf8'));
+          console.log(JSON.stringify({
+            current: {
+              reference_date: current.reference_date,
+              production_source: current.production_source,
+              health: current.current_control_health,
+            },
+            historical: {
+              control_reference_time: historical.control_reference_time,
+              control_health: historical.control_health,
+              case_count: historical.case_count,
+              summary: historical.summary,
+              production_source: historical.production_source,
+            },
+          }, null, 2));
+          NODE
+      - uses: actions/upload-artifact@v4
+        with:
+          name: p4-control-evidence
+          path: |
+            p4-current-control.json
+            p4-historical-benchmark.json
+          if-no-files-found: error
