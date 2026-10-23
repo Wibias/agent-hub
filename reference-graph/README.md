@@ -79,9 +79,12 @@ Apply migrations in numeric order to the dedicated Supabase/PostgreSQL database:
 003_reference_graph_embeddings_rpc.sql
 004_reference_graph_lexical_overlap.sql
 005_reference_graph_freshness.sql
+006_reference_graph_retrieval_quality.sql
+007_reference_graph_lexical_parity.sql
+008_reference_graph_runtime_canary.sql
 ```
 
-The exposed RPC surface lives in `public` so PostgREST can reach it, but execute permission is revoked from `public`, `anon`, and `authenticated` and granted only to `service_role`. The underlying `reference_graph` schema and `current_assets` view remain closed to exposed client roles.
+Historical/operator RPC surfaces live in `public` for PostgREST but remain service-role-only. P9 adds one deliberate exception: the zero-argument `reference_graph_quick_candidate_pool_runtime_p9()` wrapper may be executed by `anon`, `authenticated`, and `service_role`. It exposes only the already-certified current-date quick candidate pool; underlying `reference_graph` tables/views and all P7/P6/write/operator RPCs remain closed to runtime roles.
 
 Never place `SUPABASE_SERVICE_ROLE_KEY` in a browser, client bundle, repository file, evidence receipt, or public CI log. Store and operator code is server-side/trusted-runner only.
 
@@ -321,3 +324,18 @@ node reference-graph/cli/p8-cutover-review.mjs --offline-contract --reference-da
 ```
 
 A live P8 review requires the existing bound target plus the service-role credential in the explicit operator process only. It does not authorize a production cutover.
+
+## P9 least-privilege runtime canary boundary
+
+P9 is **shadow-only**. It proves that the already-certified `quick` candidate pool can be read through a narrow publishable/anon Supabase transport without putting `SUPABASE_SERVICE_ROLE_KEY` into a runtime process. There is **no production activation** in P9: `production_source` remains `legacy-control`, `production_activation_ready` stays `false`, and `activation_performed` stays `false` even when every P9 canary gate is green.
+
+- `reference_graph_quick_candidate_pool_runtime_p9()` is zero-argument and always evaluates the current date server-side. Runtime callers cannot choose arbitrary historical dates or filters.
+- `anon` and `authenticated` may execute only that narrow wrapper. P7/P6 retrieval RPCs, embedding coverage, ingest, verification writes, embedding writes, and direct Reference Graph table access remain denied.
+- The P9 runtime client accepts a Supabase publishable key (or compatibility anon key) only. It has no service-role credential path and does not construct `ReferenceGraphSupabaseStore`.
+- `quick` computes the legacy result first and keeps it authoritative. The graph result is diagnostic/shadow evidence only.
+- Transport failure, timeout, malformed payload, unknown identities, or order/pattern mismatch fails closed to the legacy result.
+- `standard` and `deep` remain legacy-only and perform no graph network request.
+- Usage recording remains attached only to the authoritative legacy records and occurs once.
+
+This phase certifies a reversible least-privilege canary boundary. A later, separately authorized phase would still be required to change production routing.
+
