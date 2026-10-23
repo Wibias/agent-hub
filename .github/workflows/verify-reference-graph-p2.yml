@@ -24,6 +24,47 @@ jobs:
       - name: Test Reference Graph P0-P2 contracts
         run: node --test tests/reference-graph/*.test.mjs
 
+      - name: Diagnose legacy-control eligibility against graph hard filters
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          import { loadRecords } from './knowledge/design-references/scripts/lib.mjs';
+          import { selectRecords } from './knowledge/design-references/scripts/selection.mjs';
+          const cases = JSON.parse(fs.readFileSync('./reference-graph/shadow-cases.json', 'utf8'));
+          const records = loadRecords();
+          const rows = cases.map((request) => {
+            const selected = selectRecords(records, request).selected;
+            const exactSurface = selected.filter((row) => row.surfaceFamily === request.surface).length;
+            const exactPlatform = selected.filter((row) => row.platform === request.platform).length;
+            const exactBoth = selected.filter(
+              (row) => row.surfaceFamily === request.surface && row.platform === request.platform,
+            ).length;
+            return {
+              id: request.id,
+              selected: selected.length,
+              exact_surface: exactSurface,
+              exact_platform: exactPlatform,
+              exact_both: exactBoth,
+              legacy_ids: selected.map((row) => row.id),
+            };
+          });
+          const totals = rows.reduce((out, row) => {
+            out.selected += row.selected;
+            out.exact_surface += row.exact_surface;
+            out.exact_platform += row.exact_platform;
+            out.exact_both += row.exact_both;
+            if (row.exact_both === 0) out.cases_with_zero_exact_both += 1;
+            return out;
+          }, {
+            selected: 0,
+            exact_surface: 0,
+            exact_platform: 0,
+            exact_both: 0,
+            cases_with_zero_exact_both: 0,
+          });
+          console.log(JSON.stringify({ totals, rows }, null, 2));
+          NODE
+
       - name: Start Ollama
         run: |
           docker run -d --name reference-graph-ollama -p 11434:11434 ollama/ollama:latest
