@@ -87,6 +87,38 @@ test('confirm advances verification without rewriting review authority', async (
   });
 });
 
+test('confirm can restore a previously stale reviewed record', async () => {
+  const { applyRevalidationDecisions } = await import(
+    '../../knowledge/design-references/scripts/revalidation-lib.mjs'
+  );
+  const before = record({ reviewStatus: 'stale' });
+
+  const result = applyRevalidationDecisions([before], [decision()]);
+  const after = result.records[0];
+
+  assert.equal(after.reviewStatus, 'reviewed');
+  assert.equal(after.lastVerifiedAt, '2026-10-23');
+  assert.equal(after.reviewedAt, before.reviewedAt);
+  assert.equal(after.reviewedBy, before.reviewedBy);
+  assert.equal(result.summary.confirmed, 1);
+});
+
+test('decision hashes are stable and content-sensitive', async () => {
+  const { validateRevalidationDecision } = await import(
+    '../../knowledge/design-references/scripts/revalidation-lib.mjs'
+  );
+
+  const first = validateRevalidationDecision(decision());
+  const repeat = validateRevalidationDecision(decision());
+  const changed = validateRevalidationDecision(decision({
+    notes: 'Rechecked the canonical source and analysis; the current evidence changed.',
+  }));
+
+  assert.match(first.decisionHash, /^[a-f0-9]{64}$/);
+  assert.equal(first.decisionHash, repeat.decisionHash);
+  assert.notEqual(first.decisionHash, changed.decisionHash);
+});
+
 test('link-only decisions are rejected', async () => {
   const { validateRevalidationDecision } = await import(
     '../../knowledge/design-references/scripts/revalidation-lib.mjs'
