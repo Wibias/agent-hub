@@ -84,6 +84,8 @@ test('permanent Reference Graph governance secret-scans committed P3 artifacts a
   assert.match(workflow, /reference-graph\/target\.json/);
   assert.match(workflow, /reference-graph\/evidence\/p3-live-shadow-evidence\.json/);
   assert.match(workflow, /assertSecretFreeReceipt/);
+  assert.match(workflow, /Scan Reference Graph tree for common secrets/i);
+  assert.match(workflow, /scan_secrets\.py\s+reference-graph/);
   assert.match(workflow, /tests\/reference-graph\/\*\.test\.mjs/);
   assert.match(workflow, /--offline\s+--control-date\s+2026-07-21/);
 });
