@@ -1,0 +1,1175 @@
+{
+  "schema_version": "reference-graph.p8-cutover-review.v1",
+  "target": {
+    "purpose": "agent-hub-reference-graph",
+    "project_ref": "vrznfnxzlxaavpqbzbzd",
+    "project_name": "agent-hub-reference-graph",
+    "region": "eu-central-1"
+  },
+  "base_sha": "2ce02e43a54549b0ddc2d7d78e7fc0e56430fe8d",
+  "git_sha": "1e10a15059ce1079e69e03654b62bcc01c9ab40c",
+  "verification_at": "2026-10-23T20:56:06.660Z",
+  "reference_time": "2026-10-23T12:00:00.000Z",
+  "production_source": "legacy-control",
+  "activation_performed": false,
+  "quick_path_review_eligible": true,
+  "production_activation_ready": false,
+  "profile_support": {
+    "quick": "review-eligible",
+    "standard": "legacy-only",
+    "deep": "legacy-only"
+  },
+  "review_blockers": [],
+  "blockers": [
+    "service-role is operator-only and not an approved production runtime credential"
+  ],
+  "phases": {
+    "preflight": {
+      "status": "success",
+      "detail": {
+        "target_status": "ACTIVE_HEALTHY",
+        "reference_graph_governance_run": 40022445825,
+        "production_query_blob": "4963cfbaf4306a03084f4513a1e324f649ce36e5",
+        "p7_receipt_git_sha": "e0f7ee73cf3700e3af3fefced0f446745f0e5ade"
+      },
+      "error": null
+    },
+    "offline_contract": {
+      "status": "success",
+      "detail": {
+        "review": {
+          "status": "available",
+          "case_count": 24,
+          "exact_handoff_count": 24,
+          "mismatch_count": 0,
+          "pattern_exact_count": 24,
+          "hydration_failure_count": 0,
+          "method": "offline-p7-policy-plus-local-hydration-and-pattern-selection"
+        },
+        "candidate_pool": {
+          "status": "available",
+          "eligible_count": 275,
+          "complete_metadata_count": 275,
+          "unique_legacy_id_count": 275
+        },
+        "handoff_md5": "a5b1773ed9775a5c90e653442c32ca53"
+      },
+      "error": null
+    },
+    "live_review": {
+      "status": "success",
+      "detail": {
+        "review": {
+          "status": "available",
+          "case_count": 24,
+          "exact_handoff_count": 24,
+          "mismatch_count": 0,
+          "pattern_exact_count": 24,
+          "hydration_failure_count": 0,
+          "method": "live-pool-hash-equivalence-plus-offline-policy-replay",
+          "live_handoff_md5": "a5b1773ed9775a5c90e653442c32ca53",
+          "offline_handoff_md5": "a5b1773ed9775a5c90e653442c32ca53",
+          "live_pool_byte_equivalent": true
+        },
+        "migration": {
+          "version": "20261023190807",
+          "name": "reference_graph_lexical_parity_p7"
+        },
+        "candidate_pool": {
+          "status": "available",
+          "eligible_count": 275,
+          "complete_metadata_count": 275,
+          "unique_legacy_id_count": 275,
+          "offline_handoff_md5": "a5b1773ed9775a5c90e653442c32ca53",
+          "live_handoff_md5": "a5b1773ed9775a5c90e653442c32ca53",
+          "byte_equivalent": true
+        },
+        "read_only": true,
+        "data_mutation_performed": false,
+        "ddl_performed": false
+      },
+      "error": null
+    },
+    "security_boundary": {
+      "status": "success",
+      "detail": {
+        "rpc": "reference_graph_quick_candidate_pool_p7(jsonb)",
+        "service_role_execute": true,
+        "anon_execute": false,
+        "authenticated_execute": false,
+        "normal_runtime_service_role_forbidden": true,
+        "production_query_blob": "4963cfbaf4306a03084f4513a1e324f649ce36e5"
+      },
+      "error": null
+    }
+  },
+  "p7_receipt": {
+    "schema_version": "reference-graph.p7-receipt.v1",
+    "target": {
+      "purpose": "agent-hub-reference-graph",
+      "project_ref": "vrznfnxzlxaavpqbzbzd",
+      "project_name": "agent-hub-reference-graph",
+      "region": "eu-central-1"
+    },
+    "base_sha": "6b1ed86a68ac485228596b9051bf76a7300eaccb",
+    "git_sha": "e0f7ee73cf3700e3af3fefced0f446745f0e5ade",
+    "verification_at": "2026-10-23T20:29:30.876Z",
+    "reference_time": "2026-10-23T12:00:00.000Z",
+    "production_source": "legacy-control",
+    "quality_thresholds": {
+      "min_cases": 20,
+      "min_comparable_cases": 20,
+      "min_average_overlap": 0.65,
+      "min_top1_retention": 0.75,
+      "max_empty_rate": 0.05,
+      "min_exact_surface_rate": 0.7,
+      "min_exact_platform_rate": 0.8
+    },
+    "eligible_for_cutover_review": true,
+    "cutover_ready": true,
+    "blockers": [],
+    "phases": {
+      "preflight": {
+        "status": "success",
+        "detail": {
+          "target_status": "ACTIVE_HEALTHY",
+          "reference_graph_governance_run": 40019225772,
+          "restacked_from_p7_evidence_head": "2461a5c5229b12120577e330e201fcb80e27d805",
+          "behavior_changed_by_restack": false
+        }
+      },
+      "migration": {
+        "status": "success",
+        "detail": {
+          "status": "applied",
+          "file": "reference-graph/schema/007_reference_graph_lexical_parity.sql",
+          "sha256": "cf11517a46573ae7fac4b745b2f90a0ce45452db32da327c0fbeeb8354eab7dd",
+          "live_history_version": "20261023190807",
+          "live_history_name": "reference_graph_lexical_parity_p7"
+        }
+      },
+      "reimport": {
+        "status": "success",
+        "detail": {
+          "status": "verified",
+          "import_runs": 2,
+          "unchanged": true,
+          "metadata_complete_count": 600
+        }
+      },
+      "shadow": {
+        "status": "success",
+        "detail": {
+          "case_count": 24,
+          "comparable_case_count": 24,
+          "average_overlap_at_k": 1,
+          "legacy_top1_retention_rate": 1,
+          "source_evidence_head": "2461a5c5229b12120577e330e201fcb80e27d805"
+        }
+      }
+    },
+    "current_control_health": {
+      "reference_time": "2026-10-23T12:00:00.000Z",
+      "reviewed_accessible_count": 275,
+      "fresh_pool_count": 275,
+      "fresh_pool_rate": 1,
+      "fresh_surface_family_count": 12,
+      "fresh_platform_count": 2,
+      "case_count": 24,
+      "full_limit_case_count": 24,
+      "cases_with_coverage_gaps": 0,
+      "blockers": [],
+      "healthy": true
+    },
+    "identity_evidence": {
+      "status": "verified",
+      "import_runs": 2,
+      "unchanged": true,
+      "metadata_complete_count": 600,
+      "before": {
+        "source_count": 576,
+        "asset_count": 600,
+        "current_asset_count": 600,
+        "chunk_count": 600,
+        "embedding_count": 600,
+        "fresh_eligible_count": 275,
+        "source_ids_sha256": "7600a84a0ad9a2e119a32e2be59e21b3a58393d9081c91772f05d6ee1d7c7462",
+        "asset_ids_sha256": "05e940347ee2913a2bf0a1280b6ee9a8f21dec5e621dfe70d93f302eca672f68",
+        "chunk_ids_sha256": "dc66684c6c43a8a6349ee7debe3c81a79c6ecf6deb03114deca5aad6fc5cc4c4",
+        "asset_content_hashes_sha256": "92bd6d7ebda8bca4fde52c1881babb90c0a11f61c4d7005918a34c74a53b554b",
+        "chunk_text_hashes_sha256": "f5d3e5818ffdc5a99472120341421ff7c6bd0aebefef399323154a428ef0b7cd"
+      },
+      "after": {
+        "source_count": 576,
+        "asset_count": 600,
+        "current_asset_count": 600,
+        "chunk_count": 600,
+        "embedding_count": 600,
+        "fresh_eligible_count": 275,
+        "source_ids_sha256": "7600a84a0ad9a2e119a32e2be59e21b3a58393d9081c91772f05d6ee1d7c7462",
+        "asset_ids_sha256": "05e940347ee2913a2bf0a1280b6ee9a8f21dec5e621dfe70d93f302eca672f68",
+        "chunk_ids_sha256": "dc66684c6c43a8a6349ee7debe3c81a79c6ecf6deb03114deca5aad6fc5cc4c4",
+        "asset_content_hashes_sha256": "92bd6d7ebda8bca4fde52c1881babb90c0a11f61c4d7005918a34c74a53b554b",
+        "chunk_text_hashes_sha256": "f5d3e5818ffdc5a99472120341421ff7c6bd0aebefef399323154a428ef0b7cd"
+      }
+    },
+    "embedding_coverage": {
+      "eligible_chunk_count": 275,
+      "compatible_count": 275,
+      "missing_count": 0,
+      "text_hash_mismatch_count": 0,
+      "coverage_rate": 1
+    },
+    "candidate_pool": {
+      "status": "available",
+      "eligible_count": 275,
+      "complete_metadata_count": 275,
+      "unique_legacy_id_count": 275,
+      "live_canonical_md5": "d489261eb810d8e27ed32bc774cf173f",
+      "offline_canonical_md5": "d489261eb810d8e27ed32bc774cf173f",
+      "byte_equivalent": true
+    },
+    "evaluation": {
+      "status": "available",
+      "summary": {
+        "case_count": 24,
+        "comparable_case_count": 24,
+        "legacy_empty_rate": 0,
+        "average_overlap_at_k": 1,
+        "legacy_top1_retention_rate": 1,
+        "graph_empty_rate": 0,
+        "average_exact_surface_rate": 0.96875,
+        "average_exact_platform_rate": 0.875,
+        "latency_ms": {
+          "min": 0,
+          "p50": 0,
+          "p95": 0,
+          "max": 0,
+          "average": 0
+        },
+        "thresholds": {
+          "minCases": 20,
+          "minComparableCases": 20,
+          "minAverageOverlap": 0.65,
+          "minTop1Retention": 0.75,
+          "maxEmptyRate": 0.05,
+          "minExactSurfaceRate": 0.7,
+          "minExactPlatformRate": 0.8
+        },
+        "blockers": [],
+        "cutover_ready": true
+      },
+      "rows": [
+        {
+          "request": {
+            "id": "public-home-creator",
+            "profile": "quick",
+            "limit": 4,
+            "surface": "public-home",
+            "platform": "web-responsive",
+            "job": "creator product landing page with clear primary CTA",
+            "dimensions": "visual-world,topology"
+          },
+          "comparable": true,
+          "legacy_empty": false,
+          "legacy_count": 4,
+          "graph_count": 4,
+          "overlap_count": 4,
+          "overlap_at_k": 1,
+          "legacy_top1_retained": true,
+          "graph_exact_surface_rate": 1,
+          "graph_exact_platform_rate": 1,
+          "graph_empty": false,
+          "legacy_ids": [
+            "ref-ecamm-homepage-20260719",
+            "ref-notion-product-marketing-20260719",
+            "ref-pitch-presentation-product-page-20260719",
+            "ref-streamelements-homepage-20260719"
+          ],
+          "graph_legacy_ids": [
+            "ref-ecamm-homepage-20260719",
+            "ref-notion-product-marketing-20260719",
+            "ref-pitch-presentation-product-page-20260719",
+            "ref-streamelements-homepage-20260719"
+          ],
+          "graph_latency_ms": 0
+        },
+        {
+          "request": {
+            "id": "public-home-proof",
+            "profile": "quick",
+            "limit": 4,
+            "surface": "public-home",
+            "platform": "web-responsive",
+            "job": "marketing homepage with product proof and sponsorship trust",
+            "dimensions": "first-screen,proof,traversal"
+          },
+          "comparable": true,
+          "legacy_empty": false,
+          "legacy_count": 4,
+          "graph_count": 4,
+          "overlap_count": 4,
+          "overlap_at_k": 1,
+          "legacy_top1_retained": true,
+          "graph_exact_surface_rate": 1,
+          "graph_exact_platform_rate": 1,
+          "graph_empty": false,
+          "legacy_ids": [
+            "ref-ecamm-homepage-20260719",
+            "ref-figma-homepage-20260719",
+            "ref-loom-homepage-20260719",
+            "ref-shopify-homepage-20260719"
+          ],
+          "graph_legacy_ids": [
+            "ref-ecamm-homepage-20260719",
+            "ref-figma-homepage-20260719",
+            "ref-loom-homepage-20260719",
+            "ref-shopify-homepage-20260719"
+          ],
+          "graph_latency_ms": 0
+        },
+        {
+          "request": {
+            "id": "authenticated-home-resume",
+            "profile": "quick",
+            "limit": 4,
+            "surface": "authenticated-home",
+            "platform": "web-responsive",
+            "job": "signed-in home that helps users resume active work",
+            "dimensions": "ia,first-screen,density"
+          },
+          "comparable": true,
+          "legacy_empty": false,
+          "legacy_count": 4,
+          "graph_count": 4,
+          "overlap_count": 4,
+          "overlap_at_k": 1,
+          "legacy_top1_retained": true,
+          "graph_exact_surface_rate": 1,
+          "graph_exact_platform_rate": 1,
+          "graph_empty": false,
+          "legacy_ids": [
+            "ref-power-bi-dashboards-for-business-users-20260719",
+            "ref-restream-home-screen-20260719",
+            "ref-carbon-ui-shell-header-usage-20260719",
+            "ref-figma-file-browser-guide-20260719"
+          ],
+          "graph_legacy_ids": [
+            "ref-power-bi-dashboards-for-business-users-20260719",
+            "ref-restream-home-screen-20260719",
+            "ref-carbon-ui-shell-header-usage-20260719",
+            "ref-figma-file-browser-guide-20260719"
+          ],
+          "graph_latency_ms": 0
+        },
+        {
+          "request": {
+            "id": "authenticated-home-mobile",
+            "profile": "quick",
+            "limit": 4,
+            "surface": "authenticated-home",
+            "platform": "native-mobile",
+            "job": "mobile signed-in dashboard with recent work and next actions",
+            "dimensions": "responsive,ia,visual-world"
+          },
+          "comparable": true,
+          "legacy_empty": false,
+          "legacy_count": 4,
+          "graph_count": 4,
+          "overlap_count": 4,
+          "overlap_at_k": 1,
+          "legacy_top1_retained": true,
+          "graph_exact_surface_rate": 1,
+          "graph_exact_platform_rate": 0.5,
+          "graph_empty": false,
+          "legacy_ids": [
+            "ref-nintendo-switch-online-guide-20260719",
+            "ref-spotify-for-artists-listener-and-follower-stats-20260719",
+            "ref-youtube-studio-android-navigation-home-20260719",
+            "ref-mailchimp-for-android-home-guide-20260719"
+          ],
+          "graph_legacy_ids": [
+            "ref-nintendo-switch-online-guide-20260719",
+            "ref-spotify-for-artists-listener-and-follower-stats-20260719",
+            "ref-youtube-studio-android-navigation-home-20260719",
+            "ref-mailchimp-for-android-home-guide-20260719"
+          ],
+          "graph_latency_ms": 0
+        },
+        {
+          "request": {
+            "id": "operator-control-live",
+            "profile": "quick",
+            "limit": 4,
+            "surface": "operator-control",
+            "platform": "web-responsive",
+            "job": "live production operator console with status and controls",
+            "dimensions": "ia,density,failure-states"
+          },
+          "comparable": true,
+          "legacy_empty": false,
+          "legacy_count": 4,
+          "graph_count": 4,
+          "overlap_count": 4,
+          "overlap_at_k": 1,
+          "legacy_top1_retained": true,
+          "graph_exact_surface_rate": 1,
+          "graph_exact_platform_rate": 1,
+          "graph_empty": false,
+          "legacy_ids": [
+            "ref-riverside-studio-20260719",
+            "ref-mailchimp-reports-workspace-20260719",
+            "ref-power-bi-dashboard-interaction-model-20260719",
+            "ref-youtube-live-control-room-setup-20260719"
+          ],
+          "graph_legacy_ids": [
+            "ref-riverside-studio-20260719",
+            "ref-mailchimp-reports-workspace-20260719",
+            "ref-power-bi-dashboard-interaction-model-20260719",
+            "ref-youtube-live-control-room-setup-20260719"
+          ],
+          "graph_latency_ms": 0
+        },
+        {
+          "request": {
+            "id": "operator-control-monitor",
+            "profile": "quick",
+            "limit": 4,
+            "surface": "operator-control",
+            "platform": "web-responsive",
+            "job": "monitor active system state and trigger high priority actions",
+            "dimensions": "hierarchy,status,topology"
+          },
+          "comparable": true,
+          "legacy_empty": false,
+          "legacy_count": 4,
+          "graph_count": 4,
+          "overlap_count": 4,
+          "overlap_at_k": 1,
+          "legacy_top1_retained": true,
+          "graph_exact_surface_rate": 1,
+          "graph_exact_platform_rate": 1,
+          "graph_empty": false,
+          "legacy_ids": [
+            "ref-carbon-data-table-usage-20260719",
+            "ref-microsoft-clarity-blog-20260719",
+            "ref-airtable-overview-interface-layout-20260719",
+            "ref-elgato-creator-hardware-20260719"
+          ],
+          "graph_legacy_ids": [
+            "ref-carbon-data-table-usage-20260719",
+            "ref-microsoft-clarity-blog-20260719",
+            "ref-airtable-overview-interface-layout-20260719",
+            "ref-elgato-creator-hardware-20260719"
+          ],
+          "graph_latency_ms": 0
+        },
+        {
+          "request": {
+            "id": "library-launcher-tools",
+            "profile": "quick",
+            "limit": 4,
+            "surface": "library-launcher",
+            "platform": "web-responsive",
+            "job": "launch tools from a browsable library while preserving recent work",
+            "dimensions": "ia,traversal,density"
+          },
+          "comparable": true,
+          "legacy_empty": false,
+          "legacy_count": 4,
+          "graph_count": 4,
+          "overlap_count": 4,
+          "overlap_at_k": 1,
+          "legacy_top1_retained": true,
+          "graph_exact_surface_rate": 1,
+          "graph_exact_platform_rate": 1,
+          "graph_empty": false,
+          "legacy_ids": [
+            "ref-google-drive-file-library-organisation-20260719",
+            "ref-ixdf-literature-topics-20260719",
+            "ref-jellyfin-server-library-configuration-20260719",
+            "ref-miro-templates-gallery-20260719"
+          ],
+          "graph_legacy_ids": [
+            "ref-google-drive-file-library-organisation-20260719",
+            "ref-ixdf-literature-topics-20260719",
+            "ref-jellyfin-server-library-configuration-20260719",
+            "ref-miro-templates-gallery-20260719"
+          ],
+          "graph_latency_ms": 0
+        },
+        {
+          "request": {
+            "id": "library-launcher-mobile",
+            "profile": "quick",
+            "limit": 4,
+            "surface": "library-launcher",
+            "platform": "native-mobile",
+            "job": "mobile library with categories search and quick launch",
+            "dimensions": "responsive,navigation,first-screen"
+          },
+          "comparable": true,
+          "legacy_empty": false,
+          "legacy_count": 4,
+          "graph_count": 4,
+          "overlap_count": 4,
+          "overlap_at_k": 1,
+          "legacy_top1_retained": true,
+          "graph_exact_surface_rate": 1,
+          "graph_exact_platform_rate": 1,
+          "graph_empty": false,
+          "legacy_ids": [
+            "ref-apple-books-reading-20260719",
+            "ref-ios-safari-tabs-20260719",
+            "ref-apple-music-library-20260719",
+            "ref-apple-tv-watch-20260719"
+          ],
+          "graph_legacy_ids": [
+            "ref-apple-books-reading-20260719",
+            "ref-ios-safari-tabs-20260719",
+            "ref-apple-music-library-20260719",
+            "ref-apple-tv-watch-20260719"
+          ],
+          "graph_latency_ms": 0
+        },
+        {
+          "request": {
+            "id": "creation-setup-stream",
+            "profile": "quick",
+            "limit": 4,
+            "surface": "creation-setup",
+            "platform": "web-responsive",
+            "job": "configure a new stream or interactive session before launch",
+            "dimensions": "workflow,progressive-disclosure,error-states"
+          },
+          "comparable": true,
+          "legacy_empty": false,
+          "legacy_count": 4,
+          "graph_count": 4,
+          "overlap_count": 4,
+          "overlap_at_k": 1,
+          "legacy_top1_retained": true,
+          "graph_exact_surface_rate": 1,
+          "graph_exact_platform_rate": 1,
+          "graph_empty": false,
+          "legacy_ids": [
+            "ref-airtable-create-new-base-setup-flow-20260719",
+            "ref-audacity-manual-20260719",
+            "ref-github-create-new-repository-setup-20260719",
+            "ref-nvidia-broadcast-app-20260719"
+          ],
+          "graph_legacy_ids": [
+            "ref-airtable-create-new-base-setup-flow-20260719",
+            "ref-audacity-manual-20260719",
+            "ref-github-create-new-repository-setup-20260719",
+            "ref-nvidia-broadcast-app-20260719"
+          ],
+          "graph_latency_ms": 0
+        },
+        {
+          "request": {
+            "id": "creation-setup-mobile",
+            "profile": "quick",
+            "limit": 4,
+            "surface": "creation-setup",
+            "platform": "native-mobile",
+            "job": "mobile setup flow with defaults preview and confirmation",
+            "dimensions": "responsive,workflow,form-density"
+          },
+          "comparable": true,
+          "legacy_empty": false,
+          "legacy_count": 4,
+          "graph_count": 4,
+          "overlap_count": 4,
+          "overlap_at_k": 1,
+          "legacy_top1_retained": true,
+          "graph_exact_surface_rate": 1,
+          "graph_exact_platform_rate": 1,
+          "graph_empty": false,
+          "legacy_ids": [
+            "ref-ios-clock-alarms-20260719",
+            "ref-ios-home-automations-20260719",
+            "ref-ios-notes-format-20260719",
+            "ref-ios-reminders-lists-20260719"
+          ],
+          "graph_legacy_ids": [
+            "ref-ios-clock-alarms-20260719",
+            "ref-ios-home-automations-20260719",
+            "ref-ios-notes-format-20260719",
+            "ref-ios-reminders-lists-20260719"
+          ],
+          "graph_latency_ms": 0
+        },
+        {
+          "request": {
+            "id": "realtime-lobby",
+            "profile": "quick",
+            "limit": 4,
+            "surface": "realtime-multiplayer",
+            "platform": "web-responsive",
+            "job": "multiplayer lobby with join readiness host state and start action",
+            "dimensions": "state-model,topology,visual-world"
+          },
+          "comparable": true,
+          "legacy_empty": false,
+          "legacy_count": 4,
+          "graph_count": 4,
+          "overlap_count": 4,
+          "overlap_at_k": 1,
+          "legacy_top1_retained": true,
+          "graph_exact_surface_rate": 1,
+          "graph_exact_platform_rate": 0.5,
+          "graph_empty": false,
+          "legacy_ids": [
+            "ref-miro-collaboration-home-20260719",
+            "ref-figjam-whiteboard-20260719",
+            "ref-steam-remote-play-store-20260719",
+            "ref-telegram-mobile-chat-20260719"
+          ],
+          "graph_legacy_ids": [
+            "ref-miro-collaboration-home-20260719",
+            "ref-figjam-whiteboard-20260719",
+            "ref-steam-remote-play-store-20260719",
+            "ref-telegram-mobile-chat-20260719"
+          ],
+          "graph_latency_ms": 0
+        },
+        {
+          "request": {
+            "id": "realtime-mobile-join",
+            "profile": "quick",
+            "limit": 4,
+            "surface": "realtime-multiplayer",
+            "platform": "native-mobile",
+            "job": "mobile participant join and ready flow for a live group experience",
+            "dimensions": "responsive,state-model,feedback"
+          },
+          "comparable": true,
+          "legacy_empty": false,
+          "legacy_count": 4,
+          "graph_count": 4,
+          "overlap_count": 4,
+          "overlap_at_k": 1,
+          "legacy_top1_retained": true,
+          "graph_exact_surface_rate": 1,
+          "graph_exact_platform_rate": 1,
+          "graph_empty": false,
+          "legacy_ids": [
+            "ref-steam-remote-play-store-20260719",
+            "ref-youtube-mobile-live-streaming-20260719",
+            "ref-telegram-mobile-chat-20260719",
+            "ref-facetime-shareplay-ios-20260719"
+          ],
+          "graph_legacy_ids": [
+            "ref-steam-remote-play-store-20260719",
+            "ref-youtube-mobile-live-streaming-20260719",
+            "ref-telegram-mobile-chat-20260719",
+            "ref-facetime-shareplay-ios-20260719"
+          ],
+          "graph_latency_ms": 0
+        },
+        {
+          "request": {
+            "id": "admin-permissions",
+            "profile": "quick",
+            "limit": 4,
+            "surface": "admin-settings",
+            "platform": "web-responsive",
+            "job": "admin settings for permissions integrations and destructive actions",
+            "dimensions": "ia,density,safety"
+          },
+          "comparable": true,
+          "legacy_empty": false,
+          "legacy_count": 4,
+          "graph_count": 4,
+          "overlap_count": 4,
+          "overlap_at_k": 1,
+          "legacy_top1_retained": true,
+          "graph_exact_surface_rate": 1,
+          "graph_exact_platform_rate": 1,
+          "graph_empty": false,
+          "legacy_ids": [
+            "ref-aws-organizations-administration-20260719",
+            "ref-supabase-project-access-control-20260719",
+            "ref-cloudflare-account-administration-20260719",
+            "ref-firebase-project-configuration-overview-20260719"
+          ],
+          "graph_legacy_ids": [
+            "ref-aws-organizations-administration-20260719",
+            "ref-supabase-project-access-control-20260719",
+            "ref-cloudflare-account-administration-20260719",
+            "ref-firebase-project-configuration-overview-20260719"
+          ],
+          "graph_latency_ms": 0
+        },
+        {
+          "request": {
+            "id": "admin-mobile-settings",
+            "profile": "quick",
+            "limit": 4,
+            "surface": "admin-settings",
+            "platform": "native-mobile",
+            "job": "mobile account settings with grouped preferences and save feedback",
+            "dimensions": "responsive,forms,feedback"
+          },
+          "comparable": true,
+          "legacy_empty": false,
+          "legacy_count": 4,
+          "graph_count": 4,
+          "overlap_count": 4,
+          "overlap_at_k": 1,
+          "legacy_top1_retained": true,
+          "graph_exact_surface_rate": 1,
+          "graph_exact_platform_rate": 1,
+          "graph_empty": false,
+          "legacy_ids": [
+            "ref-ios-mail-settings-20260719",
+            "ref-ios-standby-mode-20260719",
+            "ref-ios-accessibility-voiceover-20260719",
+            "ref-ios-find-my-devices-20260719"
+          ],
+          "graph_legacy_ids": [
+            "ref-ios-mail-settings-20260719",
+            "ref-ios-standby-mode-20260719",
+            "ref-ios-accessibility-voiceover-20260719",
+            "ref-ios-find-my-devices-20260719"
+          ],
+          "graph_latency_ms": 0
+        },
+        {
+          "request": {
+            "id": "auth-web",
+            "profile": "quick",
+            "limit": 4,
+            "surface": "auth-onboarding",
+            "platform": "web-responsive",
+            "job": "sign in and onboarding flow with recovery and clear next step",
+            "dimensions": "workflow,error-states,trust"
+          },
+          "comparable": true,
+          "legacy_empty": false,
+          "legacy_count": 4,
+          "graph_count": 4,
+          "overlap_count": 4,
+          "overlap_at_k": 1,
+          "legacy_top1_retained": true,
+          "graph_exact_surface_rate": 1,
+          "graph_exact_platform_rate": 1,
+          "graph_empty": false,
+          "legacy_ids": [
+            "ref-slack-create-workspace-20260719",
+            "ref-clerk-auth-docs-20260719",
+            "ref-firebase-authentication-ui-flows-20260719",
+            "ref-github-oauth-app-authorization-20260719"
+          ],
+          "graph_legacy_ids": [
+            "ref-slack-create-workspace-20260719",
+            "ref-clerk-auth-docs-20260719",
+            "ref-firebase-authentication-ui-flows-20260719",
+            "ref-github-oauth-app-authorization-20260719"
+          ],
+          "graph_latency_ms": 0
+        },
+        {
+          "request": {
+            "id": "auth-mobile",
+            "profile": "quick",
+            "limit": 4,
+            "surface": "auth-onboarding",
+            "platform": "native-mobile",
+            "job": "mobile sign up verification recovery and first-run onboarding",
+            "dimensions": "responsive,workflow,trust"
+          },
+          "comparable": true,
+          "legacy_empty": false,
+          "legacy_count": 4,
+          "graph_count": 4,
+          "overlap_count": 4,
+          "overlap_at_k": 1,
+          "legacy_top1_retained": true,
+          "graph_exact_surface_rate": 0.75,
+          "graph_exact_platform_rate": 0.5,
+          "graph_empty": false,
+          "legacy_ids": [
+            "ref-nielsen-norman-group-mobile-app-onboarding-patte-20260719",
+            "ref-firebase-authentication-ui-flows-20260719",
+            "ref-clerk-auth-docs-20260719",
+            "ref-discord-download-page-20260719"
+          ],
+          "graph_legacy_ids": [
+            "ref-nielsen-norman-group-mobile-app-onboarding-patte-20260719",
+            "ref-firebase-authentication-ui-flows-20260719",
+            "ref-clerk-auth-docs-20260719",
+            "ref-discord-download-page-20260719"
+          ],
+          "graph_latency_ms": 0
+        },
+        {
+          "request": {
+            "id": "checkout-web",
+            "profile": "quick",
+            "limit": 4,
+            "surface": "commerce-checkout",
+            "platform": "web-responsive",
+            "job": "checkout with pricing payment trust and clear completion state",
+            "dimensions": "trust,forms,hierarchy"
+          },
+          "comparable": true,
+          "legacy_empty": false,
+          "legacy_count": 4,
+          "graph_count": 4,
+          "overlap_count": 4,
+          "overlap_at_k": 1,
+          "legacy_top1_retained": true,
+          "graph_exact_surface_rate": 1,
+          "graph_exact_platform_rate": 1,
+          "graph_empty": false,
+          "legacy_ids": [
+            "ref-paddle-checkout-overview-20260719",
+            "ref-shopify-checkout-extensibility-20260719",
+            "ref-square-online-checkout-20260719",
+            "ref-apple-iphone-product-page-20260719"
+          ],
+          "graph_legacy_ids": [
+            "ref-paddle-checkout-overview-20260719",
+            "ref-shopify-checkout-extensibility-20260719",
+            "ref-square-online-checkout-20260719",
+            "ref-apple-iphone-product-page-20260719"
+          ],
+          "graph_latency_ms": 0
+        },
+        {
+          "request": {
+            "id": "checkout-mobile",
+            "profile": "quick",
+            "limit": 4,
+            "surface": "commerce-checkout",
+            "platform": "native-mobile",
+            "job": "mobile checkout with payment confirmation and failure recovery",
+            "dimensions": "responsive,trust,error-states"
+          },
+          "comparable": true,
+          "legacy_empty": false,
+          "legacy_count": 4,
+          "graph_count": 4,
+          "overlap_count": 4,
+          "overlap_at_k": 1,
+          "legacy_top1_retained": true,
+          "graph_exact_surface_rate": 1,
+          "graph_exact_platform_rate": 0.5,
+          "graph_empty": false,
+          "legacy_ids": [
+            "ref-apple-podcasts-subscribe-20260719",
+            "ref-roblox-mobile-app-store-20260719",
+            "ref-apple-iphone-product-page-20260719",
+            "ref-framer-templates-20260719"
+          ],
+          "graph_legacy_ids": [
+            "ref-apple-podcasts-subscribe-20260719",
+            "ref-roblox-mobile-app-store-20260719",
+            "ref-apple-iphone-product-page-20260719",
+            "ref-framer-templates-20260719"
+          ],
+          "graph_latency_ms": 0
+        },
+        {
+          "request": {
+            "id": "mobile-responsive-native",
+            "profile": "quick",
+            "limit": 4,
+            "surface": "mobile-responsive",
+            "platform": "native-mobile",
+            "job": "dense mobile product surface adapted for touch and narrow width",
+            "dimensions": "responsive,density,navigation"
+          },
+          "comparable": true,
+          "legacy_empty": false,
+          "legacy_count": 4,
+          "graph_count": 4,
+          "overlap_count": 4,
+          "overlap_at_k": 1,
+          "legacy_top1_retained": true,
+          "graph_exact_surface_rate": 1,
+          "graph_exact_platform_rate": 1,
+          "graph_empty": false,
+          "legacy_ids": [
+            "ref-whatsapp-home-20260719",
+            "ref-discord-download-page-20260719",
+            "ref-google-cast-help-20260719",
+            "ref-ios-browse-photo-library-20260719"
+          ],
+          "graph_legacy_ids": [
+            "ref-whatsapp-home-20260719",
+            "ref-discord-download-page-20260719",
+            "ref-google-cast-help-20260719",
+            "ref-ios-browse-photo-library-20260719"
+          ],
+          "graph_latency_ms": 0
+        },
+        {
+          "request": {
+            "id": "mobile-responsive-web",
+            "profile": "quick",
+            "limit": 4,
+            "surface": "mobile-responsive",
+            "platform": "web-responsive",
+            "job": "responsive web surface that preserves hierarchy across narrow widths",
+            "dimensions": "responsive,topology,hierarchy"
+          },
+          "comparable": true,
+          "legacy_empty": false,
+          "legacy_count": 4,
+          "graph_count": 4,
+          "overlap_count": 4,
+          "overlap_at_k": 1,
+          "legacy_top1_retained": true,
+          "graph_exact_surface_rate": 1,
+          "graph_exact_platform_rate": 1,
+          "graph_empty": false,
+          "legacy_ids": [
+            "ref-smashing-responsive-design-category-20260719",
+            "ref-spotify-windows-download-20260719",
+            "ref-nielsen-norman-responsive-design-20260719",
+            "ref-bootstrap-grid-20260719"
+          ],
+          "graph_legacy_ids": [
+            "ref-smashing-responsive-design-category-20260719",
+            "ref-spotify-windows-download-20260719",
+            "ref-nielsen-norman-responsive-design-20260719",
+            "ref-bootstrap-grid-20260719"
+          ],
+          "graph_latency_ms": 0
+        },
+        {
+          "request": {
+            "id": "editorial-web",
+            "profile": "quick",
+            "limit": 4,
+            "surface": "editorial-experimental",
+            "platform": "web-responsive",
+            "job": "editorial product story with expressive art direction and asymmetric rhythm",
+            "dimensions": "visual-world,typography,composition"
+          },
+          "comparable": true,
+          "legacy_empty": false,
+          "legacy_count": 4,
+          "graph_count": 4,
+          "overlap_count": 4,
+          "overlap_at_k": 1,
+          "legacy_top1_retained": true,
+          "graph_exact_surface_rate": 1,
+          "graph_exact_platform_rate": 1,
+          "graph_empty": false,
+          "legacy_ids": [
+            "ref-a16z-consumer-archives-20260719",
+            "ref-airbnb-design-20260719",
+            "ref-apple-newsroom-20260719",
+            "ref-basecamp-shape-up-page-20260719"
+          ],
+          "graph_legacy_ids": [
+            "ref-a16z-consumer-archives-20260719",
+            "ref-airbnb-design-20260719",
+            "ref-apple-newsroom-20260719",
+            "ref-basecamp-shape-up-page-20260719"
+          ],
+          "graph_latency_ms": 0
+        },
+        {
+          "request": {
+            "id": "editorial-mobile",
+            "profile": "quick",
+            "limit": 4,
+            "surface": "editorial-experimental",
+            "platform": "native-mobile",
+            "job": "mobile editorial experience with strong pacing imagery and narrative hierarchy",
+            "dimensions": "responsive,visual-world,composition"
+          },
+          "comparable": true,
+          "legacy_empty": false,
+          "legacy_count": 4,
+          "graph_count": 4,
+          "overlap_count": 4,
+          "overlap_at_k": 1,
+          "legacy_top1_retained": true,
+          "graph_exact_surface_rate": 1,
+          "graph_exact_platform_rate": 0.5,
+          "graph_empty": false,
+          "legacy_ids": [
+            "ref-android-official-blog-20260719",
+            "ref-signal-blog-20260719",
+            "ref-inter-font-specimen-20260719",
+            "ref-content-design-london-blog-20260719"
+          ],
+          "graph_legacy_ids": [
+            "ref-android-official-blog-20260719",
+            "ref-signal-blog-20260719",
+            "ref-inter-font-specimen-20260719",
+            "ref-content-design-london-blog-20260719"
+          ],
+          "graph_latency_ms": 0
+        },
+        {
+          "request": {
+            "id": "design-system-web",
+            "profile": "quick",
+            "limit": 4,
+            "surface": "design-system-craft",
+            "platform": "web-responsive",
+            "job": "component and token documentation with strong craft and examples",
+            "dimensions": "components,tokens,typography"
+          },
+          "comparable": true,
+          "legacy_empty": false,
+          "legacy_count": 4,
+          "graph_count": 4,
+          "overlap_count": 4,
+          "overlap_at_k": 1,
+          "legacy_top1_retained": true,
+          "graph_exact_surface_rate": 1,
+          "graph_exact_platform_rate": 1,
+          "graph_empty": false,
+          "legacy_ids": [
+            "ref-adobe-blog-20260719",
+            "ref-measuringu-blog-20260719",
+            "ref-atlassian-design-system-tokens-20260719",
+            "ref-carbon-design-system-empty-states-pattern-20260719"
+          ],
+          "graph_legacy_ids": [
+            "ref-adobe-blog-20260719",
+            "ref-measuringu-blog-20260719",
+            "ref-atlassian-design-system-tokens-20260719",
+            "ref-carbon-design-system-empty-states-pattern-20260719"
+          ],
+          "graph_latency_ms": 0
+        },
+        {
+          "request": {
+            "id": "design-system-mobile",
+            "profile": "quick",
+            "limit": 4,
+            "surface": "design-system-craft",
+            "platform": "native-mobile",
+            "job": "mobile component system guidance for states spacing and interaction patterns",
+            "dimensions": "components,responsive,interaction"
+          },
+          "comparable": true,
+          "legacy_empty": false,
+          "legacy_count": 4,
+          "graph_count": 4,
+          "overlap_count": 4,
+          "overlap_at_k": 1,
+          "legacy_top1_retained": true,
+          "graph_exact_surface_rate": 0.5,
+          "graph_exact_platform_rate": 0.5,
+          "graph_empty": false,
+          "legacy_ids": [
+            "ref-gov-uk-design-system-20260719",
+            "ref-carbon-accordion-usage-20260719",
+            "ref-lyft-home-20260719",
+            "ref-notion-help-center-20260719"
+          ],
+          "graph_legacy_ids": [
+            "ref-gov-uk-design-system-20260719",
+            "ref-carbon-accordion-usage-20260719",
+            "ref-lyft-home-20260719",
+            "ref-notion-help-center-20260719"
+          ],
+          "graph_latency_ms": 0
+        }
+      ]
+    },
+    "migration": {
+      "status": "applied",
+      "file": "reference-graph/schema/007_reference_graph_lexical_parity.sql",
+      "sha256": "cf11517a46573ae7fac4b745b2f90a0ce45452db32da327c0fbeeb8354eab7dd",
+      "live_history_version": "20261023190807",
+      "live_history_name": "reference_graph_lexical_parity_p7"
+    },
+    "p6_baseline": null,
+    "live_stats": null,
+    "restack_provenance": {
+      "old_p6_base_sha": "3ce32f5327f0da8b51b3764d3ed4502f01f885da",
+      "final_p6_base_sha": "6b1ed86a68ac485228596b9051bf76a7300eaccb",
+      "old_p7_implementation_sha": "55978ab930c2551626043bbd8e0187b592a0dd82",
+      "final_p7_implementation_sha": "e0f7ee73cf3700e3af3fefced0f446745f0e5ade",
+      "old_p7_evidence_head": "2461a5c5229b12120577e330e201fcb80e27d805",
+      "implementation_rebuilt_from_same_p7_file_blobs": true,
+      "p6_changes_between_old_and_final_base": [
+        "reference-graph/evidence/p6-retrieval-quality-evidence.json"
+      ],
+      "retrieval_behavior_changed": false,
+      "measurement_reused": true
+    }
+  },
+  "current_control_health": {
+    "reference_time": "2026-10-23T12:00:00.000Z",
+    "reviewed_accessible_count": 275,
+    "fresh_pool_count": 275,
+    "fresh_pool_rate": 1,
+    "fresh_surface_family_count": 12,
+    "fresh_platform_count": 2,
+    "case_count": 24,
+    "full_limit_case_count": 24,
+    "cases_with_coverage_gaps": 0,
+    "blockers": [],
+    "healthy": true
+  },
+  "candidate_pool": {
+    "status": "available",
+    "eligible_count": 275,
+    "complete_metadata_count": 275,
+    "unique_legacy_id_count": 275,
+    "offline_handoff_md5": "a5b1773ed9775a5c90e653442c32ca53",
+    "live_handoff_md5": "a5b1773ed9775a5c90e653442c32ca53",
+    "byte_equivalent": true
+  },
+  "offline_review": {
+    "status": "available",
+    "case_count": 24,
+    "exact_handoff_count": 24,
+    "mismatch_count": 0,
+    "pattern_exact_count": 24,
+    "hydration_failure_count": 0,
+    "method": "offline-p7-policy-plus-local-hydration-and-pattern-selection"
+  },
+  "live_review": {
+    "status": "available",
+    "case_count": 24,
+    "exact_handoff_count": 24,
+    "mismatch_count": 0,
+    "pattern_exact_count": 24,
+    "hydration_failure_count": 0,
+    "method": "live-pool-hash-equivalence-plus-offline-policy-replay",
+    "live_handoff_md5": "a5b1773ed9775a5c90e653442c32ca53",
+    "offline_handoff_md5": "a5b1773ed9775a5c90e653442c32ca53",
+    "live_pool_byte_equivalent": true
+  },
+  "evidence_method": {
+    "live_access": "Supabase connected read-only SQL",
+    "live_pool_equivalence": "canonical 15-field candidate serialization, tags sorted, rows ordered by asset_id, MD5 compared to offline P8 pool",
+    "policy_execution": "offline committed P7 policy replay over the byte-equivalent live pool",
+    "pattern_execution": "canonical local selectPatterns over hydrated graph-selected records"
+  },
+  "live_verification": {
+    "target_status": "ACTIVE_HEALTHY",
+    "migration": {
+      "version": "20261023190807",
+      "name": "reference_graph_lexical_parity_p7"
+    },
+    "rpc_exists": true,
+    "service_role_execute": true,
+    "anon_execute": false,
+    "authenticated_execute": false,
+    "candidate_pool": {
+      "status": "available",
+      "eligible_count": 275,
+      "complete_metadata_count": 275,
+      "unique_legacy_id_count": 275,
+      "offline_handoff_md5": "a5b1773ed9775a5c90e653442c32ca53",
+      "live_handoff_md5": "a5b1773ed9775a5c90e653442c32ca53",
+      "byte_equivalent": true
+    }
+  },
+  "implementation_governance_run": 40022445825,
+  "production_query_blob": "4963cfbaf4306a03084f4513a1e324f649ce36e5"
+}
