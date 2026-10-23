@@ -52,6 +52,9 @@ jobs:
           }
           NODE
 
+      - name: Scan Reference Graph tree for common secrets
+        run: python3 skills/security-review-redirect/scripts/scan_secrets.py reference-graph
+
       - name: Verify catalog import plan
         run: node reference-graph/cli/import-design-references.mjs --plan
 
