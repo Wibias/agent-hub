@@ -1,0 +1,106 @@
+name: P6 stage immutable query inputs
+
+on:
+  push:
+    branches:
+      - agent/reference-graph-p6-evidence-run
+    paths:
+      - .github/workflows/p6-stage-query-inputs.yml
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  stage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/reference-graph-p6-evidence-run
+          fetch-depth: 0
+      - name: Download and verify immutable P5 query-vector artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          curl --fail --location --silent --show-error \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -o /tmp/p5-query-embeddings.zip \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/artifacts/12483994833/zip"
+          echo "bffc63059fe1efb419207110adbf66897835ea10c2354c9da885cf2ab5a13667  /tmp/p5-query-embeddings.zip" | sha256sum -c -
+          mkdir -p /tmp/p5-query-embeddings
+          unzip -q /tmp/p5-query-embeddings.zip -d /tmp/p5-query-embeddings
+          echo "76a1af99643b1ca5a53bf114ffca8f0c942462693a8eda9cc43afebcd26316ac  /tmp/p5-query-embeddings/p5-query-embeddings.json" | sha256sum -c -
+
+      - name: Materialize non-secret pair inputs and manifest
+        run: |
+          python3 - <<'PY'
+          import hashlib
+          import json
+          from pathlib import Path
+
+          artifact = json.loads(Path('/tmp/p5-query-embeddings/p5-query-embeddings.json').read_text())
+          if artifact.get('case_count') != 24 or len(artifact.get('rows', [])) != 24:
+              raise SystemExit('expected 24 immutable P5 query-vector rows')
+          if artifact.get('reference_time') != '2026-10-23T12:00:00.000Z':
+              raise SystemExit('unexpected P5 query-vector reference time')
+          profile = artifact.get('profile', {})
+          if profile.get('model_tag') != 'snowflake-arctic-embed:33m' or profile.get('model_revision') != 'e8db018629b4' or profile.get('dimensions') != 384:
+              raise SystemExit('unexpected P5 query-vector profile')
+
+          out = Path('reference-graph/evidence-run')
+          out.mkdir(parents=True, exist_ok=True)
+          manifest = {
+              'schema_version': 'reference-graph.p6-query-input-manifest.v1',
+              'source_workflow_run_id': 39914965493,
+              'source_artifact_id': 12483994833,
+              'source_zip_sha256': 'bffc63059fe1efb419207110adbf66897835ea10c2354c9da885cf2ab5a13667',
+              'source_content_sha256': '76a1af99643b1ca5a53bf114ffca8f0c942462693a8eda9cc43afebcd26316ac',
+              'reference_time': artifact['reference_time'],
+              'model_tag': profile['model_tag'],
+              'model_revision': profile['model_revision'],
+              'dimensions': profile['dimensions'],
+              'case_count': 24,
+              'files': [],
+          }
+
+          rows = artifact['rows']
+          for index in range(12):
+              pair = rows[index * 2:(index + 1) * 2]
+              lines = []
+              for row in pair:
+                  request = row['request']
+                  vector = '[' + ','.join(format(float(value), '.9g') for value in row['embedding']) + ']'
+                  fields = [
+                      row['case_id'],
+                      request['surface'],
+                      request['platform'],
+                      str(request['limit']),
+                      row['query'],
+                      '|'.join(row['legacy_ids']),
+                      vector,
+                  ]
+                  if any('\t' in value or '\n' in value for value in fields):
+                      raise SystemExit(f'unsupported tab/newline in {row["case_id"]}')
+                  lines.append('\t'.join(fields))
+              content = '\n'.join(lines) + '\n'
+              name = f'p6-query-input-{index:02d}.tsv'
+              (out / name).write_text(content)
+              manifest['files'].append({
+                  'path': f'reference-graph/evidence-run/{name}',
+                  'case_ids': [row['case_id'] for row in pair],
+                  'md5': hashlib.md5(content.encode()).hexdigest(),
+                  'sha256': hashlib.sha256(content.encode()).hexdigest(),
+              })
+
+          (out / 'p6-query-input-manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')
+          PY
+
+      - name: Commit staged inputs
+        run: |
+          git config user.name "Wibias"
+          git config user.email "37517432+Wibias@users.noreply.github.com"
+          git add reference-graph/evidence-run
+          git commit -m "chore: stage immutable P6 query inputs"
+          git push origin HEAD:agent/reference-graph-p6-evidence-run
