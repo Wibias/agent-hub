@@ -1,0 +1,80 @@
+name: P6 diagnose retrieval regressions
+
+on:
+  push:
+    branches:
+      - agent/reference-graph-p6
+    paths:
+      - .github/workflows/p6-diagnose-retrieval.yml
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Compare P5 live modes case by case
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const evidence = JSON.parse(fs.readFileSync('reference-graph/evidence/p5-live-shadow-evidence.json', 'utf8'));
+          const rows = evidence.rows;
+
+          function compare(mode) {
+            const stats = {
+              overlap: { improved: 0, equal: 0, regressed: 0 },
+              top1: { gained: 0, preserved: 0, lost: 0, absent: 0 },
+              improvedCases: [],
+              regressedCases: [],
+              top1GainCases: [],
+              top1LossCases: [],
+            };
+            for (const row of rows) {
+              const base = row.lexical;
+              const candidate = row[mode];
+              if (candidate.overlap_at_k > base.overlap_at_k) {
+                stats.overlap.improved += 1;
+                stats.improvedCases.push(row.case_id);
+              } else if (candidate.overlap_at_k < base.overlap_at_k) {
+                stats.overlap.regressed += 1;
+                stats.regressedCases.push(row.case_id);
+              } else {
+                stats.overlap.equal += 1;
+              }
+
+              if (!base.legacy_top1_retained && candidate.legacy_top1_retained) {
+                stats.top1.gained += 1;
+                stats.top1GainCases.push(row.case_id);
+              } else if (base.legacy_top1_retained && !candidate.legacy_top1_retained) {
+                stats.top1.lost += 1;
+                stats.top1LossCases.push(row.case_id);
+              } else if (base.legacy_top1_retained && candidate.legacy_top1_retained) {
+                stats.top1.preserved += 1;
+              } else {
+                stats.top1.absent += 1;
+              }
+            }
+            return stats;
+          }
+
+          const sparse = rows
+            .filter((row) => row.lexical.graph_count < 4)
+            .map((row) => ({
+              case_id: row.case_id,
+              lexical_count: row.lexical.graph_count,
+              semantic_count: row.semantic.graph_count,
+              hybrid_count: row.hybrid.graph_count,
+            }));
+
+          console.log(JSON.stringify({
+            case_count: rows.length,
+            semantic_vs_lexical: compare('semantic'),
+            hybrid_vs_lexical: compare('hybrid'),
+            sparse_cases: sparse,
+          }, null, 2));
+          NODE
