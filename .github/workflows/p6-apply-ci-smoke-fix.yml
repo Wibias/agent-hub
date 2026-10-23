@@ -20,6 +20,7 @@ jobs:
           fetch-depth: 0
       - name: Replace caller-side vector cast and remove fixer
         run: |
+          # This helper applies one exact CI-only replacement, then deletes itself.
           python3 - <<'PY'
           from pathlib import Path
 
