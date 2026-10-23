@@ -70,8 +70,8 @@ as $$
   scored as (
     select
       c.asset_id,
-      1 - (e.embedding <=> p_embedding_text::extensions.vector) as score,
-      e.embedding <=> p_embedding_text::extensions.vector as distance
+      1 - min(e.embedding <=> p_embedding_text::extensions.vector) as score,
+      min(e.embedding <=> p_embedding_text::extensions.vector) as distance
     from reference_graph.embeddings e
     join reference_graph.chunks c on c.id = e.chunk_id
     join reference_graph.current_assets a on a.id = c.asset_id
@@ -83,6 +83,7 @@ as $$
       and coalesce(a.metadata->>'access_status', s.metadata->>'access_status') in ('AVAILABLE', 'PAYWALLED')
       and nullif(a.provenance->>'last_verified_at', '')::date
         + coalesce(nullif(a.metadata->>'ttl_days', '')::integer, 0) >= p.reference_date
+    group by c.asset_id
   )
   select
     scored.asset_id,
