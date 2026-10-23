@@ -28,20 +28,20 @@ checked_files AS MATERIALIZED (
 input_lines AS (
   SELECT line
   FROM checked_files
-  CROSS JOIN LATERAL regexp_split_to_table(content, E'\\n') AS line
+  CROSS JOIN LATERAL regexp_split_to_table(content, E'\n') AS line
   WHERE integrity_ok=1 AND line <> ''
 ),
 cases(case_id,surface,platform,max_items,query,embedding_text,expected_legacy_ids) AS (
   SELECT
-    split_part(line,E'\\t',1),
-    split_part(line,E'\\t',2),
-    split_part(line,E'\\t',3),
-    split_part(line,E'\\t',4)::int,
-    split_part(line,E'\\t',5),
-    split_part(line,E'\\t',7),
-    string_to_array(split_part(line,E'\\t',6),'|')
+    split_part(line,E'\t',1),
+    split_part(line,E'\t',2),
+    split_part(line,E'\t',3),
+    split_part(line,E'\t',4)::int,
+    split_part(line,E'\t',5),
+    split_part(line,E'\t',7),
+    string_to_array(split_part(line,E'\t',6),'|')
   FROM input_lines
-)
+),
 lex AS (
   SELECT c.case_id, r.asset_id, r.rank, r.score,
          a.metadata->>'legacy_id' AS legacy_id,

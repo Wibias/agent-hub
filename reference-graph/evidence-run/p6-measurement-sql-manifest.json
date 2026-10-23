@@ -2,8 +2,9 @@
   "schema_version": "reference-graph.p6-measurement-sql-manifest.v1",
   "data_sha": "8db756e69dfce9b3d781ac43f11becdcc130858d",
   "sql_path": "reference-graph/evidence-run/p6-measurement.sql",
-  "sql_md5": "9d6e4c5d15b82779f8981195a60cef8e",
-  "sql_sha256": "15675385f8f74b44ec65aa181cc23263d1749fcc0b3cf7f3689cf4063c924249",
+  "sql_md5": "8d25dcbabf9b297f37c770bf78645e1b",
+  "sql_sha256": "16464241387dd736a41ae43bfa6f2d538263137609d4374bf8438950cf23c523",
   "transactional": true,
-  "persistent_database_writes": false
+  "persistent_database_writes": false,
+  "syntax_fix": "cte-delimiter-and-tsv-escapes"
 }
