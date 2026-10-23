@@ -95,8 +95,9 @@ test('P10 standard path performs no fetch even when an injected fetch would fail
   assert.equal(fetchCount, 0);
   assert.equal(code, 0);
   const output = JSON.parse(stdout.chunks.join(''));
-  assert.equal(output.authoritative_source, 'legacy-control');
-  assert.equal(output.graph_canary.status, 'not-attempted');
+  assert.equal(output.production_source, 'legacy-control');
+  assert.equal(output.graph_canary.status, 'legacy-only');
+  assert.equal(output.graph_canary.attempted, false);
 });
 
 test('P10 strict quick mode remains legacy-authoritative and returns nonzero on invalid projection payload', async () => {
@@ -121,8 +122,9 @@ test('P10 strict quick mode remains legacy-authoritative and returns nonzero on 
   const serialized = stdout.chunks.join('');
   assert.doesNotMatch(serialized, /publishable-secret-value/);
   const output = JSON.parse(serialized);
-  assert.equal(output.authoritative_source, 'legacy-control');
+  assert.equal(output.production_source, 'legacy-control');
   assert.equal(output.graph_canary.status, 'fallback');
+  assert.equal(output.graph_canary.attempted, true);
 });
 
 test('P10 canary CLI source reuses P9 canary behavior and has no privileged credential path', () => {
