@@ -77,6 +77,11 @@ export function recordP3Phase(receipt, { phase, status, detail = null } = {}) {
   assertPhaseStatus(status);
   const index = phaseIndex(phase);
   const phases = receipt.phases ?? {};
+  const current = phases[phase]?.status;
+
+  if (current === 'failed') {
+    throw new Error(`phase ${phase} is terminal after failure`);
+  }
 
   for (let i = 0; i < index; i += 1) {
     const prior = phases[P3_PHASES[i]]?.status;
