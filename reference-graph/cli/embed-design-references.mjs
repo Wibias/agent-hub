@@ -6,16 +6,17 @@ import { buildEmbeddingRows, persistEmbeddingRows } from '../embedding-pipeline.
 import { REFERENCE_EMBEDDING_PROFILE } from '../embedding-profile.mjs';
 import { OllamaEmbeddingProvider } from '../ollama-embeddings.mjs';
 import { ReferenceGraphSupabaseStore } from '../supabase-store.mjs';
+import { assertBoundSupabaseUrl, readTargetBinding } from '../target-binding.mjs';
 
 function usage() {
   return [
     'Usage:',
     '  node reference-graph/cli/embed-design-references.mjs --plan',
-    '  node reference-graph/cli/embed-design-references.mjs --apply --allow-experimental [--embed-batch-size 32] [--persist-batch-size 50]',
+    '  node reference-graph/cli/embed-design-references.mjs --apply --allow-experimental --target <path> [--embed-batch-size 32] [--persist-batch-size 50]',
     '',
     '--plan performs no network calls and requires no credentials or Ollama.',
     '--apply persists the current experimental profile and therefore requires --allow-experimental.',
-    '--apply also requires a verified local Ollama model plus SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.',
+    '--apply also requires --target, a verified local Ollama model, SUPABASE_URL, and SUPABASE_SERVICE_ROLE_KEY.',
   ].join('\n');
 }
 
@@ -43,6 +44,13 @@ function profileOutput() {
     quality_status: REFERENCE_EMBEDDING_PROFILE.qualityStatus,
     cutover_approved: REFERENCE_EMBEDDING_PROFILE.cutoverApproved,
   };
+}
+
+function requireTargetPath(value) {
+  if (typeof value !== 'string' || value.trim().length === 0) {
+    throw new Error(`--apply requires --target <path>.\n\n${usage()}`);
+  }
+  return value.trim();
 }
 
 async function main() {
@@ -79,6 +87,13 @@ async function main() {
     return;
   }
 
+  const targetPath = requireTargetPath(args.target);
+  const binding = readTargetBinding(targetPath);
+  assertBoundSupabaseUrl({
+    binding,
+    supabaseUrl: process.env.SUPABASE_URL,
+  });
+
   const embedBatchSize = parseBoundedInteger(
     args['embed-batch-size'],
     '--embed-batch-size',
@@ -111,6 +126,7 @@ async function main() {
   console.log(JSON.stringify({
     mode: 'apply',
     applied: true,
+    target: binding,
     record_count: plan.record_count,
     chunk_count: chunkCount,
     embedding_count: rows.length,
