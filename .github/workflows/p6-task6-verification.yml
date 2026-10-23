@@ -81,3 +81,5 @@ jobs:
           }
           console.log(JSON.stringify({ changed }, null, 2));
           NODE
+
+# Final Task 6 rerun after multi-chunk semantic deduplication review fix.
