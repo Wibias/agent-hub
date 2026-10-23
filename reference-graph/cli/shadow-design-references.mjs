@@ -4,21 +4,30 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 import { loadRecords, parseArgs } from '../../knowledge/design-references/scripts/lib.mjs';
+import { planLegacyCatalogImport } from '../catalog-import.mjs';
+import { buildEmbeddingRows } from '../embedding-pipeline.mjs';
 import { createOfflineCatalogRetriever } from '../offline-shadow.mjs';
+import { OllamaEmbeddingProvider } from '../ollama-embeddings.mjs';
+import { createOfflineEmbeddedRetriever } from '../semantic-shadow.mjs';
 import { runCatalogShadowEvaluation } from '../shadow-eval.mjs';
 import { ReferenceGraphSupabaseStore } from '../supabase-store.mjs';
 
 const CASES_FILE = fileURLToPath(new URL('../shadow-cases.json', import.meta.url));
+const PRODUCTION_CONTROL = 'legacy-control';
 
 function usage() {
   return [
     'Usage:',
     '  node reference-graph/cli/shadow-design-references.mjs --offline',
     '  node reference-graph/cli/shadow-design-references.mjs --supabase',
+    '  node reference-graph/cli/shadow-design-references.mjs --ollama-semantic',
+    '  node reference-graph/cli/shadow-design-references.mjs --ollama-hybrid',
     '',
     '--offline uses deterministic lexical retrieval only and requires no credentials.',
-    '--supabase uses the deployed service-role RPCs and requires SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.',
-    'Neither mode changes the production selector; legacy remains the control.',
+    '--supabase uses deployed lexical service-role RPCs and requires SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.',
+    '--ollama-semantic generates real local model-bound embeddings and ranks semantically.',
+    '--ollama-hybrid generates the same embeddings and fuses lexical + semantic ranks through the existing RRF path.',
+    `All modes keep production_source as ${PRODUCTION_CONTROL}.`,
   ].join('\n');
 }
 
@@ -30,24 +39,53 @@ function loadCases() {
   return parsed;
 }
 
+async function buildOllamaRetriever(records, mode) {
+  const plan = planLegacyCatalogImport(records);
+  const provider = new OllamaEmbeddingProvider({ url: process.env.OLLAMA_URL });
+  const embeddingRows = await buildEmbeddingRows({
+    captures: plan.captures,
+    provider,
+    batchSize: 32,
+  });
+  return {
+    graphRetrieve: createOfflineEmbeddedRetriever({
+      captures: plan.captures,
+      embeddingRows,
+      provider,
+      mode,
+    }),
+    provider,
+    embeddingCount: embeddingRows.length,
+  };
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
-  const offline = args.offline === true;
-  const supabase = args.supabase === true;
+  const modes = [
+    ['offline', args.offline === true],
+    ['supabase', args.supabase === true],
+    ['ollama-semantic', args['ollama-semantic'] === true],
+    ['ollama-hybrid', args['ollama-hybrid'] === true],
+  ].filter(([, enabled]) => enabled);
 
-  if (offline === supabase) {
-    throw new Error(`Choose exactly one of --offline or --supabase.\n\n${usage()}`);
+  if (modes.length !== 1) {
+    throw new Error(`Choose exactly one shadow mode.\n\n${usage()}`);
   }
 
+  const selectedMode = modes[0][0];
   const records = loadRecords();
   const cases = loadCases();
   let graphRetrieve;
   let mode;
+  let semanticEnabled = false;
+  let modelId = null;
+  let modelRevision = null;
+  let embeddingCount = null;
 
-  if (offline) {
+  if (selectedMode === 'offline') {
     graphRetrieve = createOfflineCatalogRetriever(records);
     mode = 'offline-lexical';
-  } else {
+  } else if (selectedMode === 'supabase') {
     const store = ReferenceGraphSupabaseStore.fromEnv(process.env);
     graphRetrieve = async ({ query, filters, maxItems }) => store.retrieve({
       query,
@@ -55,6 +93,17 @@ async function main() {
       maxItems,
     });
     mode = 'supabase-lexical';
+  } else {
+    const embedded = await buildOllamaRetriever(
+      records,
+      selectedMode === 'ollama-semantic' ? 'semantic' : 'hybrid',
+    );
+    graphRetrieve = embedded.graphRetrieve;
+    modelId = embedded.provider.modelId;
+    modelRevision = embedded.provider.modelRevision;
+    embeddingCount = embedded.embeddingCount;
+    semanticEnabled = true;
+    mode = selectedMode;
   }
 
   const evaluation = await runCatalogShadowEvaluation({
@@ -62,12 +111,18 @@ async function main() {
     cases,
     graphRetrieve,
   });
+  if (evaluation.production_source !== PRODUCTION_CONTROL) {
+    throw new Error(`unexpected production control: ${evaluation.production_source}`);
+  }
 
   const output = {
     mode,
     case_count: cases.length,
     production_source: evaluation.production_source,
-    semantic_enabled: false,
+    semantic_enabled: semanticEnabled,
+    model_id: modelId,
+    model_revision: modelRevision,
+    embedding_count: embeddingCount,
     summary: evaluation.summary,
     rows: evaluation.rows,
   };
