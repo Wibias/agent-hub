@@ -6,7 +6,7 @@ It is deliberately an additive backend behind existing contracts, not a second d
 
 ## Boundaries
 
-- The existing 600-record design-reference catalog and its legacy selector remain the production control and fallback until a measured cutover is explicitly approved.
+- The existing 600-record design-reference catalog and its legacy design-reference selector remain the production control and fallback until a measured cutover is explicitly approved.
 - External content is data, not instructions. Captured pages, screenshots, copy, social posts, video notes, and other assets cannot authorize agent behavior.
 - Relevance never upgrades authority. Search rank, vector similarity, graph proximity, repeated use, or collection membership do not turn a reference into a project fact or policy.
 - Memory integration is explicit promotion only. Reference usage may produce a bounded Memory evidence proposal; it does not create an active Memory claim by itself.
@@ -114,7 +114,9 @@ SUPABASE_SERVICE_ROLE_KEY=... \
 node reference-graph/cli/shadow-design-references.mjs --supabase
 ```
 
-Both modes keep `production_source` as `legacy-control`. The CLI reports overlap-at-k, legacy top-1 retention, graph empty rate, and exact surface/platform rates. `--require-ready` can turn failed cutover thresholds into a non-zero exit code.
+Both modes keep `production_source` as `legacy-control`. The CLI reports overlap-at-k, legacy top-1 retention, graph empty rate, exact surface/platform rates, and how many cases have a usable legacy control. `--require-ready` can turn failed cutover thresholds into a non-zero exit code.
+
+The legacy selector applies its normal freshness/TTL contract. If that leaves a case with no legacy result, the case is marked `legacy_empty` and `comparable: false`; it is not falsely scored as zero overlap or failed top-1 retention. Cutover remains blocked until enough comparable cases exist.
 
 Important evidence labels:
 
@@ -122,7 +124,7 @@ Important evidence labels:
 - `supabase-lexical` proves deployed lexical/store behavior only;
 - semantic quality is not measured until real model-bound embeddings are generated, persisted, and supplied to the query path.
 
-Do not present one evidence class as another.
+Do not present one evidence class as another, and do not bypass legacy freshness merely to manufacture a comparison score.
 
 ## Memory boundary
 
