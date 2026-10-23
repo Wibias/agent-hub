@@ -912,6 +912,30 @@ jobs:
             echo "anon unexpectedly selected reference_graph.assets" >&2
             exit 1
           fi
+          if psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -c "set role anon; select public.reference_graph_lexical_candidates_p6('signal','{}'::jsonb,1);"; then
+            echo "anon unexpectedly executed P6 lexical RPC" >&2
+            exit 1
+          fi
+          if psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -c "set role authenticated; select public.reference_graph_embedding_coverage('model','revision',current_date);"; then
+            echo "authenticated unexpectedly executed embedding coverage RPC" >&2
+            exit 1
+          fi
+          if psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -c "set role anon; select public.reference_graph_ingest_capture('{}'::jsonb);"; then
+            echo "anon unexpectedly executed capture ingest RPC" >&2
+            exit 1
+          fi
+          if psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -c "set role authenticated; select public.reference_graph_record_verifications('[]'::jsonb);"; then
+            echo "authenticated unexpectedly executed verification write RPC" >&2
+            exit 1
+          fi
+          if psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -c "set role anon; select public.reference_graph_upsert_embeddings('[]'::jsonb);"; then
+            echo "anon unexpectedly executed embedding write RPC" >&2
+            exit 1
+          fi
+          if psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -c "set role authenticated; select count(*) from reference_graph.sources;"; then
+            echo "authenticated unexpectedly selected reference_graph.sources" >&2
+            exit 1
+          fi
 
       - name: Smoke-test P10 runtime projection RLS, refresh grants, and P9 closure
         env:
