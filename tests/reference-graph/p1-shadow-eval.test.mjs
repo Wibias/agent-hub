@@ -73,6 +73,8 @@ test('shadow comparison reports overlap, top-1 retention, eligibility, and bound
     },
   });
 
+  assert.equal(row.comparable, true);
+  assert.equal(row.legacy_empty, false);
   assert.equal(row.legacy_count, 4);
   assert.equal(row.graph_count, 4);
   assert.equal(row.overlap_count, 2);
@@ -83,11 +85,34 @@ test('shadow comparison reports overlap, top-1 retention, eligibility, and bound
   assert.equal(row.graph_empty, false);
 });
 
+test('shadow comparison marks an empty legacy control as incomparable instead of scoring false divergence', async () => {
+  const { compareShadowSelection } = await import('../../reference-graph/shadow-eval.mjs');
+
+  const row = compareShadowSelection({
+    request: {
+      profile: 'quick',
+      limit: 4,
+      surface: 'public-home',
+      platform: 'web-responsive',
+    },
+    legacySelected: [],
+    graphBundle: { items: [graphItem('ref-a')] },
+  });
+
+  assert.equal(row.comparable, false);
+  assert.equal(row.legacy_empty, true);
+  assert.equal(row.overlap_at_k, null);
+  assert.equal(row.legacy_top1_retained, null);
+  assert.equal(row.graph_empty, false);
+});
+
 test('shadow summary remains conservative and does not declare cutover from weak evidence', async () => {
   const { summarizeShadowEvaluation } = await import('../../reference-graph/shadow-eval.mjs');
 
   const summary = summarizeShadowEvaluation([
     {
+      comparable: true,
+      legacy_empty: false,
       overlap_at_k: 0.75,
       legacy_top1_retained: true,
       graph_exact_surface_rate: 1,
@@ -95,6 +120,8 @@ test('shadow summary remains conservative and does not declare cutover from weak
       graph_empty: false,
     },
     {
+      comparable: true,
+      legacy_empty: false,
       overlap_at_k: 0.25,
       legacy_top1_retained: false,
       graph_exact_surface_rate: 0.5,
@@ -102,6 +129,8 @@ test('shadow summary remains conservative and does not declare cutover from weak
       graph_empty: false,
     },
     {
+      comparable: true,
+      legacy_empty: false,
       overlap_at_k: 0,
       legacy_top1_retained: false,
       graph_exact_surface_rate: 0,
@@ -111,11 +140,46 @@ test('shadow summary remains conservative and does not declare cutover from weak
   ]);
 
   assert.equal(summary.case_count, 3);
+  assert.equal(summary.comparable_case_count, 3);
+  assert.equal(summary.legacy_empty_rate, 0);
   assert.equal(summary.average_overlap_at_k, 1 / 3);
   assert.equal(summary.legacy_top1_retention_rate, 1 / 3);
   assert.equal(summary.graph_empty_rate, 1 / 3);
   assert.equal(summary.cutover_ready, false);
   assert.ok(summary.blockers.length > 0);
+});
+
+test('shadow summary excludes incomparable controls and blocks cutover on insufficient comparable evidence', async () => {
+  const { summarizeShadowEvaluation } = await import('../../reference-graph/shadow-eval.mjs');
+
+  const summary = summarizeShadowEvaluation([
+    {
+      comparable: false,
+      legacy_empty: true,
+      overlap_at_k: null,
+      legacy_top1_retained: null,
+      graph_exact_surface_rate: 1,
+      graph_exact_platform_rate: 1,
+      graph_empty: false,
+    },
+    {
+      comparable: true,
+      legacy_empty: false,
+      overlap_at_k: 1,
+      legacy_top1_retained: true,
+      graph_exact_surface_rate: 1,
+      graph_exact_platform_rate: 1,
+      graph_empty: false,
+    },
+  ], { minComparableCases: 2 });
+
+  assert.equal(summary.case_count, 2);
+  assert.equal(summary.comparable_case_count, 1);
+  assert.equal(summary.legacy_empty_rate, 0.5);
+  assert.equal(summary.average_overlap_at_k, 1);
+  assert.equal(summary.legacy_top1_retention_rate, 1);
+  assert.equal(summary.cutover_ready, false);
+  assert.ok(summary.blockers.some((item) => /comparable shadow cases/i.test(item)));
 });
 
 test('catalog shadow runner evaluates legacy control against injected graph retrieval without changing production selection', async () => {
@@ -161,5 +225,6 @@ test('catalog shadow runner evaluates legacy control against injected graph retr
   assert.equal(result.rows.length, 1);
   assert.equal(result.rows[0].overlap_at_k, 1);
   assert.equal(result.summary.case_count, 1);
+  assert.equal(result.summary.comparable_case_count, 1);
   assert.equal(result.production_source, 'legacy-control');
 });
