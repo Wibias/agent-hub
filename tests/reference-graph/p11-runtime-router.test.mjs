@@ -187,18 +187,23 @@ test('pattern mismatch keeps legacy authoritative even when records are exact', 
 
 test('record mismatch keeps legacy authoritative', async () => {
   const request = requestFromCase();
+  const legacy = directLegacy(request);
+  const selectedIds = new Set(ids(legacy.selection.selected));
   const result = await runP11RuntimeQuery({
     records,
     patterns,
     request,
     now,
     graphMode: 'graph',
-    fetchCandidatePool: async () => ({ candidates: candidatePool.slice(1) }),
+    fetchCandidatePool: async () => ({
+      candidates: candidatePool.filter((row) => !selectedIds.has(row.legacy_id)),
+    }),
     recordUsageEnabled: false,
   });
 
   assert.equal(result.routing.authoritative_source, 'legacy-control');
-  assert.notEqual(result.routing.record_exact, true);
+  assert.equal(result.routing.record_exact, false);
+  assert.equal(result.routing.reason, 'handoff-mismatch');
 });
 
 test('missing runtime config fails closed without a fetch attempt', async () => {
@@ -223,9 +228,10 @@ test('transport, malformed payload, and unknown hydration ids fail closed withou
     async () => { throw new Error('SUPER SECRET REMOTE ERROR'); },
     async () => ({ nope: [] }),
     async () => ({
-      candidates: candidatePool.map((row, index) => index === 0
-        ? { ...row, legacy_id: 'unknown-p11-id' }
-        : row),
+      candidates: candidatePool.map((row, index) => ({
+        ...row,
+        legacy_id: `unknown-p11-${index}`,
+      })),
     }),
   ];
 
