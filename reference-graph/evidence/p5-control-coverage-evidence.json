@@ -1,0 +1,49 @@
+{
+  "schema_version": "reference-graph.p5-control-coverage-evidence.v1",
+  "recorded_at": "2026-10-23T07:24:40.155159Z",
+  "reference_time": "2026-10-23T12:00:00.000Z",
+  "production_source": "legacy-control",
+  "stack": {
+    "base_phase": "P4",
+    "base_sha": "4621574eca88f30296452b25fcb04be3a496d7d5",
+    "implementation_sha": "2d235a6fb27cb96cbec208c776109086305c6c64",
+    "implementation_reference_graph_governance_run": 39918274827,
+    "task6_verification_run": 39914465189,
+    "live_measurement_sha": "ffe3c92227a2711238a57b3e9e17183355d12562",
+    "live_measurement_reference_graph_governance_run": 39914612340,
+    "receipt_gate_fix_sha": "2d235a6fb27cb96cbec208c776109086305c6c64"
+  },
+  "catalog_authority": {
+    "record_count": 600,
+    "fresh_count": 275,
+    "stale_count": 325,
+    "catalog_mutated_by_p5": false,
+    "freshness_or_ttl_rewritten_by_p5": false
+  },
+  "selector_contract": {
+    "verified": true,
+    "profile_scope": "quick-only",
+    "minimum_surface": 1,
+    "minimum_platform_rule": "ceil(limit / 2)",
+    "fresh_pool_count": 275,
+    "case_count": 24,
+    "full_limit_case_count": 24,
+    "cases_with_coverage_gaps": 0,
+    "blockers": [],
+    "healthy": true,
+    "standard_behavior_changed": false,
+    "deep_behavior_changed": false,
+    "score_weights_changed": false
+  },
+  "historical_evidence_policy": {
+    "p3_rewritten": false,
+    "p4_rewritten": false,
+    "p4_historical_gap_count": 3
+  },
+  "decision": {
+    "selector_repair_verified": true,
+    "production_source": "legacy-control",
+    "cutover_performed": false
+  },
+  "finalized_at": "2026-10-23T15:45:32.191Z"
+}
