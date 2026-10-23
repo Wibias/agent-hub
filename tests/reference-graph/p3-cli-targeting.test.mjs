@@ -136,6 +136,14 @@ test('P3 preflight is read-only, secret-free, and can write a safe receipt fragm
   assert.equal(JSON.parse(receipt).production_source, 'legacy-control');
 });
 
+test('P3 live CLI error paths redact the Supabase credential before stderr', () => {
+  for (const cli of [importCli, embedCli, p3Cli]) {
+    const source = readFileSync(cli, 'utf8');
+    assert.match(source, /redactDiagnostics/);
+    assert.match(source, /redactDiagnostics\s*\(\s*message\s*,\s*\[?process\.env\.SUPABASE_SERVICE_ROLE_KEY/);
+  }
+});
+
 test('P3 operator source carries benchmark, current-control, embedding availability, and latency evidence fields', () => {
   const source = readFileSync(p3Cli, 'utf8');
   assert.match(source, /2026-07-21T12:00:00\.000Z/);
