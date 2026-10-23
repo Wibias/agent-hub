@@ -1,0 +1,53 @@
+name: P3 export live import captures
+
+on:
+  pull_request:
+    branches:
+      - agent/reference-graph-p2
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    if: github.head_ref == 'agent/reference-graph-p3'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Generate exact P3 import captures
+        run: |
+          node --input-type=module <<'NODE'
+          import { writeFileSync } from 'node:fs';
+          import { loadRecords } from './knowledge/design-references/scripts/lib.mjs';
+          import { planLegacyCatalogImport } from './reference-graph/catalog-import.mjs';
+
+          const plan = planLegacyCatalogImport(loadRecords());
+          const artifact = {
+            record_count: plan.record_count,
+            capture_count: plan.capture_count,
+            source_count: plan.source_count,
+            asset_count: plan.asset_count,
+            deduplicated_assets: plan.deduplicated_assets,
+            captures: plan.captures,
+          };
+          writeFileSync('p3-live-import-captures.json', JSON.stringify(artifact), 'utf8');
+          console.log(JSON.stringify({
+            record_count: artifact.record_count,
+            capture_count: artifact.capture_count,
+            source_count: artifact.source_count,
+            asset_count: artifact.asset_count,
+            deduplicated_assets: artifact.deduplicated_assets,
+          }));
+          NODE
+
+      - name: Upload exact captures
+        uses: actions/upload-artifact@v4
+        with:
+          name: p3-live-import-captures
+          path: p3-live-import-captures.json
+          if-no-files-found: error
+          retention-days: 1
