@@ -81,7 +81,9 @@ function runtimeSecurityReady(value) {
     && value.p6_denied === true
     && value.write_denied === true
     && value.direct_table_select_denied === true
-    && value.service_role_used_by_canary === false,
+    && value.service_role_used_by_canary === false
+    && Number.isInteger(value.security_advisor_p9_warn_error_count)
+    && value.security_advisor_p9_warn_error_count === 0,
   );
 }
 
