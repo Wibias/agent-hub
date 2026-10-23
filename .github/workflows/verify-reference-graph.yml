@@ -38,12 +38,32 @@ jobs:
       - name: Test reference graph contracts
         run: node --test tests/reference-graph/*.test.mjs
 
+      - name: Scan P3 committed artifacts for secrets
+        run: |
+          node --input-type=module <<'NODE'
+          import { existsSync, readFileSync } from 'node:fs';
+          import { assertSecretFreeReceipt } from './reference-graph/p3-receipt.mjs';
+
+          for (const file of [
+            'reference-graph/target.json',
+            'reference-graph/evidence/p3-live-shadow-evidence.json',
+          ]) {
+            if (!existsSync(file)) continue;
+            const value = JSON.parse(readFileSync(file, 'utf8'));
+            assertSecretFreeReceipt(value);
+            console.log(`secret-free: ${file}`);
+          }
+          NODE
+
+      - name: Scan Reference Graph tree for common secrets
+        run: python3 skills/security-review-redirect/scripts/scan_secrets.py reference-graph
+
       - name: Verify catalog import plan
         run: node reference-graph/cli/import-design-references.mjs --plan
 
       - name: Measure offline lexical shadow baseline
         run: |
-          node reference-graph/cli/shadow-design-references.mjs --offline > /tmp/reference-graph-shadow.json
+          node reference-graph/cli/shadow-design-references.mjs --offline --control-date 2026-07-21 > /tmp/reference-graph-shadow.json
           node --input-type=module -e "import fs from 'node:fs'; const x=JSON.parse(fs.readFileSync('/tmp/reference-graph-shadow.json','utf8')); console.log(JSON.stringify({mode:x.mode,case_count:x.case_count,production_source:x.production_source,semantic_enabled:x.semantic_enabled,summary:x.summary}, null, 2));"
 
       - name: Install PostgreSQL client when needed
@@ -81,12 +101,47 @@ jobs:
           psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f reference-graph/schema/001_reference_graph.sql
           psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f reference-graph/schema/002_reference_graph_rpc.sql
           psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f reference-graph/schema/003_reference_graph_embeddings_rpc.sql
+          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f reference-graph/schema/004_reference_graph_lexical_overlap.sql
 
-      - name: Smoke-test RPC grants
+      - name: Smoke-test lexical overlap and RPC grants
         env:
           PGPASSWORD: postgres
         run: |
-          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -c "set role service_role; select public.reference_graph_stats(); reset role;"
+          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 <<'SQL'
+          insert into reference_graph.sources (id, canonical_url, source_kind)
+          values ('10000000-0000-5000-8000-000000000001', 'https://example.com/p3-lexical-smoke', 'test');
+
+          insert into reference_graph.assets (
+            id, source_id, asset_kind, canonical_locator, captured_at, metadata
+          ) values (
+            '10000000-0000-5000-8000-000000000002',
+            '10000000-0000-5000-8000-000000000001',
+            'web-page',
+            'https://example.com/p3-lexical-smoke',
+            now(),
+            '{"platform":"web-responsive","surface_family":"public-home","legacy_id":"smoke-partial-overlap"}'::jsonb
+          );
+
+          insert into reference_graph.chunks (id, asset_id, ordinal, content)
+          values (
+            '10000000-0000-5000-8000-000000000003',
+            '10000000-0000-5000-8000-000000000002',
+            0,
+            'creator landing page clear call to action'
+          );
+
+          set role service_role;
+          select 1 / case when count(*) = 1 then 1 else 0 end as partial_overlap_ok
+          from public.reference_graph_lexical_candidates(
+            'creator product landing page impossible extra tokens',
+            '{"platform":"web-responsive","surface_family":"public-home"}'::jsonb,
+            24
+          )
+          where asset_id = '10000000-0000-5000-8000-000000000002';
+          select public.reference_graph_stats();
+          reset role;
+          SQL
+
           if psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -c "set role anon; select public.reference_graph_stats();"; then
             echo "anon unexpectedly executed a service-only Reference Graph RPC" >&2
             exit 1
