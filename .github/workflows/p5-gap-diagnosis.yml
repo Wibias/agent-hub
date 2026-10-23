@@ -1,0 +1,93 @@
+name: P5 control gap diagnosis
+
+on:
+  push:
+    branches:
+      - agent/reference-graph-p5
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Diagnose current control coverage
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          import { loadRecords, isFresh } from './knowledge/design-references/scripts/lib.mjs';
+          import { selectRecords } from './knowledge/design-references/scripts/selection.mjs';
+
+          const now = new Date('2026-10-23T12:00:00.000Z');
+          const cases = JSON.parse(fs.readFileSync('./reference-graph/shadow-cases.json', 'utf8'));
+          const records = loadRecords();
+          const eligible = records.filter((record) =>
+            record.reviewStatus === 'reviewed'
+            && ['AVAILABLE', 'PAYWALLED'].includes(record.accessStatus)
+            && isFresh(record, now)
+          );
+          const stale = records.filter((record) => record.reviewStatus === 'stale');
+
+          const gaps = [];
+          for (const request of cases) {
+            const selection = selectRecords(records, request, { now });
+            if (selection.coverageGaps.length === 0) continue;
+            gaps.push({
+              case_id: request.id,
+              surface: request.surface,
+              platform: request.platform,
+              limit: request.limit,
+              coverage: selection.coverage,
+              coverage_gaps: selection.coverageGaps,
+              selected_ids: selection.selected.map((record) => record.id),
+            });
+          }
+
+          const cellKeys = [...new Set(cases.map((request) => `${request.surface}::${request.platform}`))].sort();
+          const cells = cellKeys.map((key) => {
+            const [surface, platform] = key.split('::');
+            const fresh_exact_cell = eligible.filter((record) =>
+              record.surfaceFamily === surface && record.platform === platform
+            );
+            const fresh_surface = eligible.filter((record) => record.surfaceFamily === surface);
+            const fresh_platform = eligible.filter((record) => record.platform === platform);
+            const stale_exact_cell = stale.filter((record) =>
+              record.surfaceFamily === surface && record.platform === platform
+            );
+            return {
+              surface,
+              platform,
+              fresh_exact_cell_count: fresh_exact_cell.length,
+              fresh_surface_count: fresh_surface.length,
+              fresh_platform_count: fresh_platform.length,
+              stale_exact_cell_count: stale_exact_cell.length,
+              stale_exact_cell_access: stale_exact_cell.reduce((acc, record) => {
+                acc[record.accessStatus] = (acc[record.accessStatus] || 0) + 1;
+                return acc;
+              }, {}),
+              stale_exact_cell_ids: stale_exact_cell.map((record) => record.id).sort(),
+            };
+          });
+
+          const output = {
+            reference_time: now.toISOString(),
+            record_count: records.length,
+            eligible_count: eligible.length,
+            stale_count: stale.length,
+            gap_case_count: gaps.length,
+            gaps,
+            cells,
+          };
+          fs.writeFileSync('p5-gap-diagnosis.json', `${JSON.stringify(output, null, 2)}\n`);
+          console.log(JSON.stringify(output, null, 2));
+          NODE
+      - uses: actions/upload-artifact@v4
+        with:
+          name: p5-gap-diagnosis
+          path: p5-gap-diagnosis.json
+          if-no-files-found: error
