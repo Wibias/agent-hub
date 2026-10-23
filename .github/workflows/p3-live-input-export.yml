@@ -1,0 +1,50 @@
+name: P3 live input export
+
+on:
+  push:
+    branches:
+      - agent/reference-graph-p3
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Generate exact committed live-import inputs
+        run: |
+          mkdir -p /tmp/p3-live/repo/knowledge /tmp/p3-live/repo/reference-graph /tmp/p3-live/repo/tests/reference-graph /tmp/p3-live/repo/.github/workflows
+          node --input-type=module <<'NODE'
+          import { writeFileSync } from 'node:fs';
+          import { loadRecords } from './knowledge/design-references/scripts/lib.mjs';
+          import { planLegacyCatalogImport } from './reference-graph/catalog-import.mjs';
+
+          const plan = planLegacyCatalogImport(loadRecords());
+          writeFileSync('/tmp/p3-live/captures.json', JSON.stringify(plan.captures));
+          writeFileSync('/tmp/p3-live/import-plan.json', JSON.stringify({
+            record_count: plan.record_count,
+            capture_count: plan.capture_count,
+            source_count: plan.source_count,
+            asset_count: plan.asset_count,
+            deduplicated_assets: plan.deduplicated_assets,
+          }, null, 2));
+          NODE
+          cp -R knowledge/design-references /tmp/p3-live/repo/knowledge/
+          cp -R reference-graph/. /tmp/p3-live/repo/reference-graph/
+          cp -R tests/reference-graph/. /tmp/p3-live/repo/tests/reference-graph/
+          cp .github/workflows/verify-reference-graph.yml /tmp/p3-live/repo/.github/workflows/
+
+      - name: Upload secret-free execution bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: p3-live-input-${{ github.sha }}
+          path: /tmp/p3-live
+          retention-days: 1
+          if-no-files-found: error
