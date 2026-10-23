@@ -1,1 +1,1106 @@
-{"schema_version":"reference-graph.p5-live-shadow-evidence.v1","recorded_at":"2026-10-23T07:24:40.155159Z","reference_time":"2026-10-23T12:00:00.000Z","production_source":"legacy-control","target":{"purpose":"agent-hub-reference-graph","project_ref":"vrznfnxzlxaavpqbzbzd","project_name":"agent-hub-reference-graph","region":"eu-central-1","status":"ACTIVE_HEALTHY"},"implementation":{"sha":"ffe3c92227a2711238a57b3e9e17183355d12562","reference_graph_governance_run":39914612340,"task6_verification_run":39914465189},"current_control_health":{"reviewed_accessible_count":275,"fresh_pool_count":275,"fresh_surface_family_count":12,"fresh_platform_count":2,"case_count":24,"full_limit_case_count":24,"cases_with_coverage_gaps":0,"blockers":[],"healthy":true},"embedding_profile":{"id":"snowflake-arctic-embed-33m-raw-v1","model_id":"ollama/snowflake-arctic-embed:33m","model_tag":"snowflake-arctic-embed:33m","model_revision":"e8db018629b4","model_digest":"e8db018629b498a0a1a2eadbe8ab29477c1d7c4b6ba8ff2a69b0a6ed193713be","dimensions":384,"quality_status":"experimental","cutover_approved":false},"embedding_coverage":{"eligible_chunk_count":275,"compatible_count":275,"missing_count":0,"text_hash_mismatch_count":0,"coverage_rate":1},"live_target_stats":{"current_asset_count":600,"embedding_count":600,"relation_count":0},"query_embedding_artifact":{"workflow_run":39914965493,"artifact_id":12483994833,"case_count":24,"content_sha256":"76a1af99643b1ca5a53bf114ffca8f0c942462693a8eda9cc43afebcd26316ac","zip_sha256":"bffc63059fe1efb419207110adbf66897835ea10c2354c9da885cf2ab5a13667","persisted_in_repository":false},"measurement":{"read_only":true,"reference_date":"2026-10-23","candidate_limit":24,"result_limit_per_case":4,"hybrid_rrf_k":60,"relations_present":0,"overlap_recomputed_from_returned_ids":true,"latency_scope":"connector_sql_db_ms","latency_note":"Database-side RPC/context execution timing only; excludes query-embedding generation and external HTTP transport.","deployed_rpc_functions":["public.reference_graph_lexical_candidates","public.reference_graph_semantic_candidates","public.reference_graph_candidate_context","public.reference_graph_embedding_coverage"],"case_level_evidence":"Per-case metrics below were recomputed from exact returned legacy graph IDs against the bound legacy IDs; query-vector artifact and live target/model identity are bound above."},"thresholds":{"min_cases":20,"min_comparable_cases":20,"min_average_overlap":0.65,"min_top1_retention":0.75,"max_empty_rate":0.05,"min_exact_surface_rate":0.7,"min_exact_platform_rate":0.8,"changed_by_p5":false},"evaluations":{"lexical":{"status":"available","summary":{"case_count":24,"comparable_case_count":24,"legacy_empty_rate":0,"average_overlap_at_k":0.59375,"legacy_top1_retention_rate":0.75,"graph_empty_rate":0.041666666666666664,"average_exact_surface_rate":0.9583333333333334,"average_exact_platform_rate":0.9583333333333334,"latency_ms":{"scope":"connector_sql_db_ms","min":19.913,"p50":41.325,"p95":105.88,"max":134.937,"average":52.50445833333333},"thresholds":{"minCases":20,"minComparableCases":20,"minAverageOverlap":0.65,"minTop1Retention":0.75,"maxEmptyRate":0.05,"minExactSurfaceRate":0.7,"minExactPlatformRate":0.8},"blockers":["average overlap below threshold"],"cutover_ready":false}},"semantic":{"status":"available","summary":{"case_count":24,"comparable_case_count":24,"legacy_empty_rate":0,"average_overlap_at_k":0.4166666666666667,"legacy_top1_retention_rate":0.2916666666666667,"graph_empty_rate":0.041666666666666664,"average_exact_surface_rate":0.9583333333333334,"average_exact_platform_rate":0.9583333333333334,"latency_ms":{"scope":"connector_sql_db_ms","min":4.529,"p50":10.467,"p95":21.532,"max":29.573,"average":11.168416666666667},"thresholds":{"minCases":20,"minComparableCases":20,"minAverageOverlap":0.65,"minTop1Retention":0.75,"maxEmptyRate":0.05,"minExactSurfaceRate":0.7,"minExactPlatformRate":0.8},"blockers":["average overlap below threshold","legacy top-1 retention below threshold"],"cutover_ready":false}},"hybrid":{"status":"available","summary":{"case_count":24,"comparable_case_count":24,"legacy_empty_rate":0,"average_overlap_at_k":0.4791666666666667,"legacy_top1_retention_rate":0.625,"graph_empty_rate":0.041666666666666664,"average_exact_surface_rate":0.9583333333333334,"average_exact_platform_rate":0.9583333333333334,"latency_ms":{"scope":"connector_sql_db_ms","min":5.401,"p50":12.562,"p95":19.053,"max":21.578,"average":13.027875},"thresholds":{"minCases":20,"minComparableCases":20,"minAverageOverlap":0.65,"minTop1Retention":0.75,"maxEmptyRate":0.05,"minExactSurfaceRate":0.7,"minExactPlatformRate":0.8},"blockers":["average overlap below threshold","legacy top-1 retention below threshold"],"cutover_ready":false}}},"receipt":{"schema_version":"reference-graph.p5-receipt.v1","git_sha":"ffe3c92227a2711238a57b3e9e17183355d12562","verification_at":"2026-10-23T07:24:40.155159Z","reference_time":"2026-10-23T12:00:00.000Z","production_source":"legacy-control","phases":{"preflight":{"status":"success"},"selector":{"status":"success"},"embeddings":{"status":"success"},"shadow":{"status":"success"}},"selector_contract_verified":true,"current_control_healthy":true,"embedding_coverage_complete":true,"semantic_status":"available","hybrid_status":"available","hybrid_cutover_ready":false,"blockers":["live hybrid evidence unavailable or below unchanged quality gates"],"cutover_ready":false,"eligible_for_cutover_review":false},"decision":{"value":"NO CUTOVER","reason":"Current control and exact embedding coverage are healthy, but live hybrid quality remains below unchanged overlap and top-1 gates.","production_source":"legacy-control","cutover_performed":false},"rows":[{"case_id":"public-home-creator","lexical":{"graph_count":4,"overlap_at_k":0.75,"legacy_top1_retained":false,"graph_empty":false,"graph_exact_surface_rate":1,"graph_exact_platform_rate":1,"graph_latency_ms":20.809},"semantic":{"graph_count":4,"overlap_at_k":0.5,"legacy_top1_retained":true,"graph_empty":false,"graph_exact_surface_rate":1,"graph_exact_platform_rate":1,"graph_latency_ms":13.385},"hybrid":{"graph_count":4,"overlap_at_k":0.75,"legacy_top1_retained":true,"graph_empty":false,"graph_exact_surface_rate":1,"graph_exact_platform_rate":1,"graph_latency_ms":18.303}},{"case_id":"public-home-proof","lexical":{"graph_count":4,"overlap_at_k":0.25,"legacy_top1_retained":true,"graph_empty":false,"graph_exact_surface_rate":1,"graph_exact_platform_rate":1,"graph_latency_ms":61.728},"semantic":{"graph_count":4,"overlap_at_k":0.0,"legacy_top1_retained":false,"graph_empty":false,"graph_exact_surface_rate":1,"graph_exact_platform_rate":1,"graph_latency_ms":8.161},"hybrid":{"graph_count":4,"overlap_at_k":0.0,"legacy_top1_retained":false,"graph_empty":false,"graph_exact_surface_rate":1,"graph_exact_platform_rate":1,"graph_latency_ms":12.562}},{"case_id":"authenticated-home-resume","lexical":{"graph_count":4,"overlap_at_k":0.5,"legacy_top1_retained":true,"graph_empty":false,"graph_exact_surface_rate":1,"graph_exact_platform_rate":1,"graph_latency_ms":31.894},"semantic":{"graph_count":4,"overlap_at_k":0.5,"legacy_top1_retained":false,"graph_empty":false,"graph_exact_surface_rate":1,"graph_exact_platform_rate":1,"graph_latency_ms":13.104},"hybrid":{"graph_count":4,"overlap_at_k":0.5,"legacy_top1_retained":true,"graph_empty":false,"graph_exact_surface_rate":1,"graph_exact_platform_rate":1,"graph_latency_ms":17.341}},{"case_id":"authenticated-home-mobile","lexical":{"graph_count":4,"overlap_at_k":0.5,"legacy_top1_retained":false,"graph_empty":false,"graph_exact_surface_rate":1,"graph_exact_platform_rate":1,"graph_latency_ms":77.798},"semantic":{"graph_count":4,"overlap_at_k":0.5,"legacy_top1_retained":false,"graph_empty":false,"graph_exact_surface_rate":1,"graph_exact_platform_rate":1,"graph_latency_ms":6.222},"hybrid":{"graph_count":4,"overlap_at_k":0.5,"legacy_top1_retained":false,"graph_empty":false,"graph_exact_surface_rate":1,"graph_exact_platform_rate":1,"graph_latency_ms":8.733}},{"case_id":"operator-control-live","lexical":{"graph_count":4,"overlap_at_k":0.75,"legacy_top1_retained":true,"graph_empty":false,"graph_exact_surface_rate":1,"graph_exact_platform_rate":1,"graph_latency_ms":37.24},"semantic":{"graph_count":4,"overlap_at_k":0.25,"legacy_top1_retained":false,"graph_empty":false,"graph_exact_surface_rate":1,"graph_exact_platform_rate":1,"graph_latency_ms":14.223},"hybrid":{"graph_count":4,"overlap_at_k":0.25,"legacy_top1_retained":false,"graph_empty":false,"graph_exact_surface_rate":1,"graph_exact_platform_rate":1,"graph_latency_ms":17.82}},{"case_id":"operator-control-monitor","lexical":{"graph_count":4,"overlap_at_k":0.25,"legacy_top1_retained":true,"graph_empty":false,"graph_exact_surface_rate":1,"graph_exact_platform_rate":1,"graph_latency_ms":78.188},"semantic":{"graph_count":4,"overlap_at_k":0.25,"legacy_top1_retained":false,"graph_empty":false,"graph_exact_surface_rate":1,"graph_exact_platform_rate":1,"graph_latency_ms":7.67},"hybrid":{"graph_count":4,"overlap_at_k":0.0,"legacy_top1_retained":false,"graph_empty":false,"graph_exact_surface_rate":1,"graph_exact_platform_rate":1,"graph_latency_ms":11.726}},{"case_id":"library-launcher-tools","lexical":{"graph_count":4,"overlap_at_k":0.5,"legacy_top1_retained":true,"graph_empty":false,"graph_exact_surface_rate":1,"graph_exact_platform_rate":1,"graph_latency_ms":19.913},"semantic":{"graph_count":4,"overlap_at_k":0.25,"legacy_top1_retained":false,"graph_empty":false,"graph_exact_surface_rate":1,"graph_exact_platform_rate":1,"graph_latency_ms":10.467},"hybrid":{"graph_count":4,"overlap_at_k":0.5,"legacy_top1_retained":true,"graph_empty":false,"graph_exact_surface_rate":1,"graph_exact_platform_rate":1,"graph_latency_ms":13.668}},{"case_id":"library-launcher-mobile","lexical":{"graph_count":4,"overlap_at_k":0.75,"legacy_top1_retained":true,"graph_empty":false,"graph_exact_surface_rate":1,"graph_exact_platform_rate":1,"graph_latency_ms":51.304},"semantic":{"graph_count":4,"overlap_at_k":0.75,"legacy_top1_retained":false,"graph_empty":false,"graph_exact_surface_rate":1,"graph_exact_platform_rate":1,"graph_latency_ms":5.878},"hybrid":{"graph_count":4,"overlap_at_k":0.75,"legacy_top1_retained":true,"graph_empty":false,"graph_exact_surface_rate":1,"graph_exact_platform_rate":1,"graph_latency_ms":8.129}},{"case_id":"creation-setup-stream","lexical":{"graph_count":4,"overlap_at_k":0.75,"legacy_top1_retained":true,"graph_empty":false,"graph_exact_surface_rate":1,"graph_exact_platform_rate":1,"graph_latency_ms":28.479},"semantic":{"graph_count":4,"overlap_at_k":0.25,"legacy_top1_retained":false,"graph_empty":false,"graph_exact_surface_rate":1,"graph_exact_platform_rate":1,"graph_latency_ms":12.537},"hybrid":{"graph_count":4,"overlap_at_k":0.75,"legacy_top1_retained":true,"graph_empty":false,"graph_exact_surface_rate":1,"graph_exact_platform_rate":1,"graph_latency_ms":18.296}},{"case_id":"creation-setup-mobile","lexical":{"graph_count":4,"overlap_at_k":0.75,"legacy_top1_retained":false,"graph_empty":false,"graph_exact_surface_rate":1,"graph_exact_platform_rate":1,"graph_latency_ms":65.659},"semantic":{"graph_count":4,"overlap_at_k":0.75,"legacy_top1_retained":false,"graph_empty":false,"graph_exact_surface_rate":1,"graph_exact_platform_rate":1,"graph_latency_ms":5.738},"hybrid":{"graph_count":4,"overlap_at_k":0.75,"legacy_top1_retained":false,"graph_empty":false,"graph_exact_surface_rate":1,"graph_exact_platform_rate":1,"graph_latency_ms":8.275}},{"case_id":"realtime-lobby","lexical":{"graph_count":4,"overlap_at_k":0.25,"legacy_top1_retained":true,"graph_empty":false,"graph_exact_surface_rate":1,"graph_exact_platform_rate":1,"graph_latency_ms":54.763},"semantic":{"graph_count":4,"overlap_at_k":0.0,"legacy_top1_retained":false,"graph_empty":false,"graph_exact_surface_rate":1,"graph_exact_platform_rate":1,"graph_latency_ms":21.532},"hybrid":{"graph_count":4,"overlap_at_k":0.0,"legacy_top1_retained":false,"graph_empty":false,"graph_exact_surface_rate":1,"graph_exact_platform_rate":1,"graph_latency_ms":19.053}},{"case_id":"realtime-mobile-join","lexical":{"graph_count":4,"overlap_at_k":0.5,"legacy_top1_retained":true,"graph_empty":false,"graph_exact_surface_rate":1,"graph_exact_platform_rate":1,"graph_latency_ms":105.88},"semantic":{"graph_count":4,"overlap_at_k":0.75,"legacy_top1_retained":false,"graph_empty":false,"graph_exact_surface_rate":1,"graph_exact_platform_rate":1,"graph_latency_ms":12.605},"hybrid":{"graph_count":4,"overlap_at_k":0.5,"legacy_top1_retained":true,"graph_empty":false,"graph_exact_surface_rate":1,"graph_exact_platform_rate":1,"graph_latency_ms":8.996}},{"case_id":"admin-permissions","lexical":{"graph_count":4,"overlap_at_k":0.75,"legacy_top1_retained":true,"graph_empty":false,"graph_exact_surface_rate":1,"graph_exact_platform_rate":1,"graph_latency_ms":23.773},"semantic":{"graph_count":4,"overlap_at_k":0.5,"legacy_top1_retained":true,"graph_empty":false,"graph_exact_surface_rate":1,"graph_exact_platform_rate":1,"graph_latency_ms":12.685},"hybrid":{"graph_count":4,"overlap_at_k":0.5,"legacy_top1_retained":true,"graph_empty":false,"graph_exact_surface_rate":1,"graph_exact_platform_rate":1,"graph_latency_ms":15.653}},{"case_id":"admin-mobile-settings","lexical":{"graph_count":4,"overlap_at_k":0.75,"legacy_top1_retained":true,"graph_empty":false,"graph_exact_surface_rate":1,"graph_exact_platform_rate":1,"graph_latency_ms":57.537},"semantic":{"graph_count":4,"overlap_at_k":0.5,"legacy_top1_retained":true,"graph_empty":false,"graph_exact_surface_rate":1,"graph_exact_platform_rate":1,"graph_latency_ms":5.797},"hybrid":{"graph_count":4,"overlap_at_k":0.75,"legacy_top1_retained":true,"graph_empty":false,"graph_exact_surface_rate":1,"graph_exact_platform_rate":1,"graph_latency_ms":8.157}},{"case_id":"auth-web","lexical":{"graph_count":4,"overlap_at_k":0.75,"legacy_top1_retained":true,"graph_empty":false,"graph_exact_surface_rate":1,"graph_exact_platform_rate":1,"graph_latency_ms":41.325},"semantic":{"graph_count":4,"overlap_at_k":0.75,"legacy_top1_retained":false,"graph_empty":false,"graph_exact_surface_rate":1,"graph_exact_platform_rate":1,"graph_latency_ms":11.583},"hybrid":{"graph_count":4,"overlap_at_k":0.75,"legacy_top1_retained":true,"graph_empty":false,"graph_exact_surface_rate":1,"graph_exact_platform_rate":1,"graph_latency_ms":16.197}},{"case_id":"auth-mobile","lexical":{"graph_count":1,"overlap_at_k":0.25,"legacy_top1_retained":false,"graph_empty":false,"graph_exact_surface_rate":1,"graph_exact_platform_rate":1,"graph_latency_ms":35.593},"semantic":{"graph_count":1,"overlap_at_k":0.25,"legacy_top1_retained":false,"graph_empty":false,"graph_exact_surface_rate":1,"graph_exact_platform_rate":1,"graph_latency_ms":4.865},"hybrid":{"graph_count":1,"overlap_at_k":0.25,"legacy_top1_retained":false,"graph_empty":false,"graph_exact_surface_rate":1,"graph_exact_platform_rate":1,"graph_latency_ms":5.401}},{"case_id":"checkout-web","lexical":{"graph_count":4,"overlap_at_k":1.0,"legacy_top1_retained":true,"graph_empty":false,"graph_exact_surface_rate":1,"graph_exact_platform_rate":1,"graph_latency_ms":25.229},"semantic":{"graph_count":4,"overlap_at_k":0.75,"legacy_top1_retained":true,"graph_empty":false,"graph_exact_surface_rate":1,"graph_exact_platform_rate":1,"graph_latency_ms":14.886},"hybrid":{"graph_count":4,"overlap_at_k":0.75,"legacy_top1_retained":true,"graph_empty":false,"graph_exact_surface_rate":1,"graph_exact_platform_rate":1,"graph_latency_ms":18.228}},{"case_id":"checkout-mobile","lexical":{"graph_count":4,"overlap_at_k":1.0,"legacy_top1_retained":true,"graph_empty":false,"graph_exact_surface_rate":1,"graph_exact_platform_rate":1,"graph_latency_ms":29.286},"semantic":{"graph_count":4,"overlap_at_k":0.75,"legacy_top1_retained":true,"graph_empty":false,"graph_exact_surface_rate":1,"graph_exact_platform_rate":1,"graph_latency_ms":4.865},"hybrid":{"graph_count":4,"overlap_at_k":0.75,"legacy_top1_retained":true,"graph_empty":false,"graph_exact_surface_rate":1,"graph_exact_platform_rate":1,"graph_latency_ms":6.453}},{"case_id":"mobile-responsive-native","lexical":{"graph_count":4,"overlap_at_k":0.75,"legacy_top1_retained":true,"graph_empty":false,"graph_exact_surface_rate":1,"graph_exact_platform_rate":1,"graph_latency_ms":25.465},"semantic":{"graph_count":4,"overlap_at_k":0.25,"legacy_top1_retained":false,"graph_empty":false,"graph_exact_surface_rate":1,"graph_exact_platform_rate":1,"graph_latency_ms":13.718},"hybrid":{"graph_count":4,"overlap_at_k":0.75,"legacy_top1_retained":true,"graph_empty":false,"graph_exact_surface_rate":1,"graph_exact_platform_rate":1,"graph_latency_ms":17.08}},{"case_id":"mobile-responsive-web","lexical":{"graph_count":4,"overlap_at_k":0.75,"legacy_top1_retained":true,"graph_empty":false,"graph_exact_surface_rate":1,"graph_exact_platform_rate":1,"graph_latency_ms":66.475},"semantic":{"graph_count":4,"overlap_at_k":0.75,"legacy_top1_retained":true,"graph_empty":false,"graph_exact_surface_rate":1,"graph_exact_platform_rate":1,"graph_latency_ms":7.686},"hybrid":{"graph_count":4,"overlap_at_k":0.75,"legacy_top1_retained":true,"graph_empty":false,"graph_exact_surface_rate":1,"graph_exact_platform_rate":1,"graph_latency_ms":9.137}},{"case_id":"editorial-web","lexical":{"graph_count":4,"overlap_at_k":0.5,"legacy_top1_retained":true,"graph_empty":false,"graph_exact_surface_rate":1,"graph_exact_platform_rate":1,"graph_latency_ms":77.545},"semantic":{"graph_count":4,"overlap_at_k":0.0,"legacy_top1_retained":false,"graph_empty":false,"graph_exact_surface_rate":1,"graph_exact_platform_rate":1,"graph_latency_ms":29.573},"hybrid":{"graph_count":4,"overlap_at_k":0.25,"legacy_top1_retained":true,"graph_empty":false,"graph_exact_surface_rate":1,"graph_exact_platform_rate":1,"graph_latency_ms":21.578}},{"case_id":"editorial-mobile","lexical":{"graph_count":2,"overlap_at_k":0.5,"legacy_top1_retained":true,"graph_empty":false,"graph_exact_surface_rate":1,"graph_exact_platform_rate":1,"graph_latency_ms":134.937},"semantic":{"graph_count":2,"overlap_at_k":0.5,"legacy_top1_retained":true,"graph_empty":false,"graph_exact_surface_rate":1,"graph_exact_platform_rate":1,"graph_latency_ms":5.08},"hybrid":{"graph_count":2,"overlap_at_k":0.5,"legacy_top1_retained":true,"graph_empty":false,"graph_exact_surface_rate":1,"graph_exact_platform_rate":1,"graph_latency_ms":7.398}},{"case_id":"design-system-web","lexical":{"graph_count":4,"overlap_at_k":0.75,"legacy_top1_retained":false,"graph_empty":false,"graph_exact_surface_rate":1,"graph_exact_platform_rate":1,"graph_latency_ms":32.45},"semantic":{"graph_count":4,"overlap_at_k":0.25,"legacy_top1_retained":false,"graph_empty":false,"graph_exact_surface_rate":1,"graph_exact_platform_rate":1,"graph_latency_ms":21.253},"hybrid":{"graph_count":4,"overlap_at_k":0.25,"legacy_top1_retained":false,"graph_empty":false,"graph_exact_surface_rate":1,"graph_exact_platform_rate":1,"graph_latency_ms":18.04}},{"case_id":"design-system-mobile","lexical":{"graph_count":0,"overlap_at_k":0.0,"legacy_top1_retained":false,"graph_empty":true,"graph_exact_surface_rate":0,"graph_exact_platform_rate":0,"graph_latency_ms":76.837},"semantic":{"graph_count":0,"overlap_at_k":0.0,"legacy_top1_retained":false,"graph_empty":true,"graph_exact_surface_rate":0,"graph_exact_platform_rate":0,"graph_latency_ms":4.529},"hybrid":{"graph_count":0,"overlap_at_k":0.0,"legacy_top1_retained":false,"graph_empty":true,"graph_exact_surface_rate":0,"graph_exact_platform_rate":0,"graph_latency_ms":6.445}}]}
+{
+  "schema_version": "reference-graph.p5-live-shadow-evidence.v1",
+  "recorded_at": "2026-10-23T07:24:40.155159Z",
+  "reference_time": "2026-10-23T12:00:00.000Z",
+  "production_source": "legacy-control",
+  "target": {
+    "purpose": "agent-hub-reference-graph",
+    "project_ref": "vrznfnxzlxaavpqbzbzd",
+    "project_name": "agent-hub-reference-graph",
+    "region": "eu-central-1",
+    "status": "ACTIVE_HEALTHY"
+  },
+  "implementation": {
+    "sha": "2d235a6fb27cb96cbec208c776109086305c6c64",
+    "reference_graph_governance_run": 39918274827,
+    "task6_verification_run": 39914465189,
+    "live_measurement_sha": "ffe3c92227a2711238a57b3e9e17183355d12562",
+    "live_measurement_reference_graph_governance_run": 39914612340,
+    "retrieval_behavior_unchanged_since_measurement": true,
+    "receipt_finalization_run": 39981001203
+  },
+  "current_control_health": {
+    "reviewed_accessible_count": 275,
+    "fresh_pool_count": 275,
+    "fresh_surface_family_count": 12,
+    "fresh_platform_count": 2,
+    "case_count": 24,
+    "full_limit_case_count": 24,
+    "cases_with_coverage_gaps": 0,
+    "blockers": [],
+    "healthy": true
+  },
+  "embedding_profile": {
+    "id": "snowflake-arctic-embed-33m-raw-v1",
+    "model_id": "ollama/snowflake-arctic-embed:33m",
+    "model_tag": "snowflake-arctic-embed:33m",
+    "model_revision": "e8db018629b4",
+    "model_digest": "e8db018629b498a0a1a2eadbe8ab29477c1d7c4b6ba8ff2a69b0a6ed193713be",
+    "dimensions": 384,
+    "quality_status": "experimental",
+    "cutover_approved": false
+  },
+  "embedding_coverage": {
+    "eligible_chunk_count": 275,
+    "compatible_count": 275,
+    "missing_count": 0,
+    "text_hash_mismatch_count": 0,
+    "coverage_rate": 1
+  },
+  "live_target_stats": {
+    "current_asset_count": 600,
+    "embedding_count": 600,
+    "relation_count": 0
+  },
+  "query_embedding_artifact": {
+    "workflow_run": 39914965493,
+    "artifact_id": 12483994833,
+    "case_count": 24,
+    "content_sha256": "76a1af99643b1ca5a53bf114ffca8f0c942462693a8eda9cc43afebcd26316ac",
+    "zip_sha256": "bffc63059fe1efb419207110adbf66897835ea10c2354c9da885cf2ab5a13667",
+    "persisted_in_repository": false
+  },
+  "measurement": {
+    "read_only": true,
+    "reference_date": "2026-10-23",
+    "candidate_limit": 24,
+    "result_limit_per_case": 4,
+    "hybrid_rrf_k": 60,
+    "relations_present": 0,
+    "overlap_recomputed_from_returned_ids": true,
+    "latency_scope": "connector_sql_db_ms",
+    "latency_note": "Database-side RPC/context execution timing only; excludes query-embedding generation and external HTTP transport.",
+    "deployed_rpc_functions": [
+      "public.reference_graph_lexical_candidates",
+      "public.reference_graph_semantic_candidates",
+      "public.reference_graph_candidate_context",
+      "public.reference_graph_embedding_coverage"
+    ],
+    "case_level_evidence": "Per-case metrics below were recomputed from exact returned legacy graph IDs against the bound legacy IDs; query-vector artifact and live target/model identity are bound above."
+  },
+  "thresholds": {
+    "min_cases": 20,
+    "min_comparable_cases": 20,
+    "min_average_overlap": 0.65,
+    "min_top1_retention": 0.75,
+    "max_empty_rate": 0.05,
+    "min_exact_surface_rate": 0.7,
+    "min_exact_platform_rate": 0.8,
+    "changed_by_p5": false
+  },
+  "evaluations": {
+    "lexical": {
+      "status": "available",
+      "summary": {
+        "case_count": 24,
+        "comparable_case_count": 24,
+        "legacy_empty_rate": 0,
+        "average_overlap_at_k": 0.59375,
+        "legacy_top1_retention_rate": 0.75,
+        "graph_empty_rate": 0.041666666666666664,
+        "average_exact_surface_rate": 0.9583333333333334,
+        "average_exact_platform_rate": 0.9583333333333334,
+        "latency_ms": {
+          "scope": "connector_sql_db_ms",
+          "min": 19.913,
+          "p50": 41.325,
+          "p95": 105.88,
+          "max": 134.937,
+          "average": 52.50445833333333
+        },
+        "thresholds": {
+          "minCases": 20,
+          "minComparableCases": 20,
+          "minAverageOverlap": 0.65,
+          "minTop1Retention": 0.75,
+          "maxEmptyRate": 0.05,
+          "minExactSurfaceRate": 0.7,
+          "minExactPlatformRate": 0.8
+        },
+        "blockers": [
+          "average overlap below threshold"
+        ],
+        "cutover_ready": false
+      }
+    },
+    "semantic": {
+      "status": "available",
+      "summary": {
+        "case_count": 24,
+        "comparable_case_count": 24,
+        "legacy_empty_rate": 0,
+        "average_overlap_at_k": 0.4166666666666667,
+        "legacy_top1_retention_rate": 0.2916666666666667,
+        "graph_empty_rate": 0.041666666666666664,
+        "average_exact_surface_rate": 0.9583333333333334,
+        "average_exact_platform_rate": 0.9583333333333334,
+        "latency_ms": {
+          "scope": "connector_sql_db_ms",
+          "min": 4.529,
+          "p50": 10.467,
+          "p95": 21.532,
+          "max": 29.573,
+          "average": 11.168416666666667
+        },
+        "thresholds": {
+          "minCases": 20,
+          "minComparableCases": 20,
+          "minAverageOverlap": 0.65,
+          "minTop1Retention": 0.75,
+          "maxEmptyRate": 0.05,
+          "minExactSurfaceRate": 0.7,
+          "minExactPlatformRate": 0.8
+        },
+        "blockers": [
+          "average overlap below threshold",
+          "legacy top-1 retention below threshold"
+        ],
+        "cutover_ready": false
+      }
+    },
+    "hybrid": {
+      "status": "available",
+      "summary": {
+        "case_count": 24,
+        "comparable_case_count": 24,
+        "legacy_empty_rate": 0,
+        "average_overlap_at_k": 0.4791666666666667,
+        "legacy_top1_retention_rate": 0.625,
+        "graph_empty_rate": 0.041666666666666664,
+        "average_exact_surface_rate": 0.9583333333333334,
+        "average_exact_platform_rate": 0.9583333333333334,
+        "latency_ms": {
+          "scope": "connector_sql_db_ms",
+          "min": 5.401,
+          "p50": 12.562,
+          "p95": 19.053,
+          "max": 21.578,
+          "average": 13.027875
+        },
+        "thresholds": {
+          "minCases": 20,
+          "minComparableCases": 20,
+          "minAverageOverlap": 0.65,
+          "minTop1Retention": 0.75,
+          "maxEmptyRate": 0.05,
+          "minExactSurfaceRate": 0.7,
+          "minExactPlatformRate": 0.8
+        },
+        "blockers": [
+          "average overlap below threshold",
+          "legacy top-1 retention below threshold"
+        ],
+        "cutover_ready": false
+      }
+    }
+  },
+  "receipt": {
+    "schema_version": "reference-graph.p5-receipt.v1",
+    "target": {
+      "purpose": "agent-hub-reference-graph",
+      "project_ref": "vrznfnxzlxaavpqbzbzd",
+      "project_name": "agent-hub-reference-graph",
+      "region": "eu-central-1"
+    },
+    "git_sha": "2d235a6fb27cb96cbec208c776109086305c6c64",
+    "verification_at": "2026-10-23T15:45:32.191Z",
+    "reference_time": "2026-10-23T12:00:00.000Z",
+    "production_source": "legacy-control",
+    "eligible_for_cutover_review": false,
+    "cutover_ready": false,
+    "blockers": [
+      "live hybrid evidence is unavailable or below quality gates"
+    ],
+    "phases": {
+      "preflight": {
+        "status": "success",
+        "detail": null
+      },
+      "selector": {
+        "status": "success",
+        "detail": null
+      },
+      "embeddings": {
+        "status": "success",
+        "detail": null
+      },
+      "shadow": {
+        "status": "success",
+        "detail": null
+      }
+    },
+    "selector_contract": {
+      "verified": true,
+      "profile_scope": "quick-only",
+      "minimum_surface": 1,
+      "minimum_platform_rule": "ceil(limit / 2)",
+      "fresh_pool_count": 275,
+      "case_count": 24,
+      "full_limit_case_count": 24,
+      "cases_with_coverage_gaps": 0,
+      "blockers": [],
+      "healthy": true,
+      "standard_behavior_changed": false,
+      "deep_behavior_changed": false,
+      "score_weights_changed": false
+    },
+    "current_control_health": {
+      "reviewed_accessible_count": 275,
+      "fresh_pool_count": 275,
+      "fresh_surface_family_count": 12,
+      "fresh_platform_count": 2,
+      "case_count": 24,
+      "full_limit_case_count": 24,
+      "cases_with_coverage_gaps": 0,
+      "blockers": [],
+      "healthy": true
+    },
+    "embedding_coverage": {
+      "eligible_chunk_count": 275,
+      "compatible_count": 275,
+      "missing_count": 0,
+      "text_hash_mismatch_count": 0,
+      "coverage_rate": 1
+    },
+    "evaluations": {
+      "lexical": {
+        "status": "available",
+        "summary": {
+          "case_count": 24,
+          "comparable_case_count": 24,
+          "legacy_empty_rate": 0,
+          "average_overlap_at_k": 0.59375,
+          "legacy_top1_retention_rate": 0.75,
+          "graph_empty_rate": 0.041666666666666664,
+          "average_exact_surface_rate": 0.9583333333333334,
+          "average_exact_platform_rate": 0.9583333333333334,
+          "latency_ms": {
+            "scope": "connector_sql_db_ms",
+            "min": 19.913,
+            "p50": 41.325,
+            "p95": 105.88,
+            "max": 134.937,
+            "average": 52.50445833333333
+          },
+          "thresholds": {
+            "minCases": 20,
+            "minComparableCases": 20,
+            "minAverageOverlap": 0.65,
+            "minTop1Retention": 0.75,
+            "maxEmptyRate": 0.05,
+            "minExactSurfaceRate": 0.7,
+            "minExactPlatformRate": 0.8
+          },
+          "blockers": [
+            "average overlap below threshold"
+          ],
+          "cutover_ready": false
+        }
+      },
+      "semantic": {
+        "status": "available",
+        "summary": {
+          "case_count": 24,
+          "comparable_case_count": 24,
+          "legacy_empty_rate": 0,
+          "average_overlap_at_k": 0.4166666666666667,
+          "legacy_top1_retention_rate": 0.2916666666666667,
+          "graph_empty_rate": 0.041666666666666664,
+          "average_exact_surface_rate": 0.9583333333333334,
+          "average_exact_platform_rate": 0.9583333333333334,
+          "latency_ms": {
+            "scope": "connector_sql_db_ms",
+            "min": 4.529,
+            "p50": 10.467,
+            "p95": 21.532,
+            "max": 29.573,
+            "average": 11.168416666666667
+          },
+          "thresholds": {
+            "minCases": 20,
+            "minComparableCases": 20,
+            "minAverageOverlap": 0.65,
+            "minTop1Retention": 0.75,
+            "maxEmptyRate": 0.05,
+            "minExactSurfaceRate": 0.7,
+            "minExactPlatformRate": 0.8
+          },
+          "blockers": [
+            "average overlap below threshold",
+            "legacy top-1 retention below threshold"
+          ],
+          "cutover_ready": false
+        }
+      },
+      "hybrid": {
+        "status": "available",
+        "summary": {
+          "case_count": 24,
+          "comparable_case_count": 24,
+          "legacy_empty_rate": 0,
+          "average_overlap_at_k": 0.4791666666666667,
+          "legacy_top1_retention_rate": 0.625,
+          "graph_empty_rate": 0.041666666666666664,
+          "average_exact_surface_rate": 0.9583333333333334,
+          "average_exact_platform_rate": 0.9583333333333334,
+          "latency_ms": {
+            "scope": "connector_sql_db_ms",
+            "min": 5.401,
+            "p50": 12.562,
+            "p95": 19.053,
+            "max": 21.578,
+            "average": 13.027875
+          },
+          "thresholds": {
+            "minCases": 20,
+            "minComparableCases": 20,
+            "minAverageOverlap": 0.65,
+            "minTop1Retention": 0.75,
+            "maxEmptyRate": 0.05,
+            "minExactSurfaceRate": 0.7,
+            "minExactPlatformRate": 0.8
+          },
+          "blockers": [
+            "average overlap below threshold",
+            "legacy top-1 retention below threshold"
+          ],
+          "cutover_ready": false
+        }
+      }
+    }
+  },
+  "decision": {
+    "value": "NO CUTOVER",
+    "reason": "Current control and exact embedding coverage are healthy, but live hybrid quality remains below unchanged overlap and top-1 gates.",
+    "production_source": "legacy-control",
+    "cutover_performed": false
+  },
+  "rows": [
+    {
+      "case_id": "public-home-creator",
+      "lexical": {
+        "graph_count": 4,
+        "overlap_at_k": 0.75,
+        "legacy_top1_retained": false,
+        "graph_empty": false,
+        "graph_exact_surface_rate": 1,
+        "graph_exact_platform_rate": 1,
+        "graph_latency_ms": 20.809
+      },
+      "semantic": {
+        "graph_count": 4,
+        "overlap_at_k": 0.5,
+        "legacy_top1_retained": true,
+        "graph_empty": false,
+        "graph_exact_surface_rate": 1,
+        "graph_exact_platform_rate": 1,
+        "graph_latency_ms": 13.385
+      },
+      "hybrid": {
+        "graph_count": 4,
+        "overlap_at_k": 0.75,
+        "legacy_top1_retained": true,
+        "graph_empty": false,
+        "graph_exact_surface_rate": 1,
+        "graph_exact_platform_rate": 1,
+        "graph_latency_ms": 18.303
+      }
+    },
+    {
+      "case_id": "public-home-proof",
+      "lexical": {
+        "graph_count": 4,
+        "overlap_at_k": 0.25,
+        "legacy_top1_retained": true,
+        "graph_empty": false,
+        "graph_exact_surface_rate": 1,
+        "graph_exact_platform_rate": 1,
+        "graph_latency_ms": 61.728
+      },
+      "semantic": {
+        "graph_count": 4,
+        "overlap_at_k": 0,
+        "legacy_top1_retained": false,
+        "graph_empty": false,
+        "graph_exact_surface_rate": 1,
+        "graph_exact_platform_rate": 1,
+        "graph_latency_ms": 8.161
+      },
+      "hybrid": {
+        "graph_count": 4,
+        "overlap_at_k": 0,
+        "legacy_top1_retained": false,
+        "graph_empty": false,
+        "graph_exact_surface_rate": 1,
+        "graph_exact_platform_rate": 1,
+        "graph_latency_ms": 12.562
+      }
+    },
+    {
+      "case_id": "authenticated-home-resume",
+      "lexical": {
+        "graph_count": 4,
+        "overlap_at_k": 0.5,
+        "legacy_top1_retained": true,
+        "graph_empty": false,
+        "graph_exact_surface_rate": 1,
+        "graph_exact_platform_rate": 1,
+        "graph_latency_ms": 31.894
+      },
+      "semantic": {
+        "graph_count": 4,
+        "overlap_at_k": 0.5,
+        "legacy_top1_retained": false,
+        "graph_empty": false,
+        "graph_exact_surface_rate": 1,
+        "graph_exact_platform_rate": 1,
+        "graph_latency_ms": 13.104
+      },
+      "hybrid": {
+        "graph_count": 4,
+        "overlap_at_k": 0.5,
+        "legacy_top1_retained": true,
+        "graph_empty": false,
+        "graph_exact_surface_rate": 1,
+        "graph_exact_platform_rate": 1,
+        "graph_latency_ms": 17.341
+      }
+    },
+    {
+      "case_id": "authenticated-home-mobile",
+      "lexical": {
+        "graph_count": 4,
+        "overlap_at_k": 0.5,
+        "legacy_top1_retained": false,
+        "graph_empty": false,
+        "graph_exact_surface_rate": 1,
+        "graph_exact_platform_rate": 1,
+        "graph_latency_ms": 77.798
+      },
+      "semantic": {
+        "graph_count": 4,
+        "overlap_at_k": 0.5,
+        "legacy_top1_retained": false,
+        "graph_empty": false,
+        "graph_exact_surface_rate": 1,
+        "graph_exact_platform_rate": 1,
+        "graph_latency_ms": 6.222
+      },
+      "hybrid": {
+        "graph_count": 4,
+        "overlap_at_k": 0.5,
+        "legacy_top1_retained": false,
+        "graph_empty": false,
+        "graph_exact_surface_rate": 1,
+        "graph_exact_platform_rate": 1,
+        "graph_latency_ms": 8.733
+      }
+    },
+    {
+      "case_id": "operator-control-live",
+      "lexical": {
+        "graph_count": 4,
+        "overlap_at_k": 0.75,
+        "legacy_top1_retained": true,
+        "graph_empty": false,
+        "graph_exact_surface_rate": 1,
+        "graph_exact_platform_rate": 1,
+        "graph_latency_ms": 37.24
+      },
+      "semantic": {
+        "graph_count": 4,
+        "overlap_at_k": 0.25,
+        "legacy_top1_retained": false,
+        "graph_empty": false,
+        "graph_exact_surface_rate": 1,
+        "graph_exact_platform_rate": 1,
+        "graph_latency_ms": 14.223
+      },
+      "hybrid": {
+        "graph_count": 4,
+        "overlap_at_k": 0.25,
+        "legacy_top1_retained": false,
+        "graph_empty": false,
+        "graph_exact_surface_rate": 1,
+        "graph_exact_platform_rate": 1,
+        "graph_latency_ms": 17.82
+      }
+    },
+    {
+      "case_id": "operator-control-monitor",
+      "lexical": {
+        "graph_count": 4,
+        "overlap_at_k": 0.25,
+        "legacy_top1_retained": true,
+        "graph_empty": false,
+        "graph_exact_surface_rate": 1,
+        "graph_exact_platform_rate": 1,
+        "graph_latency_ms": 78.188
+      },
+      "semantic": {
+        "graph_count": 4,
+        "overlap_at_k": 0.25,
+        "legacy_top1_retained": false,
+        "graph_empty": false,
+        "graph_exact_surface_rate": 1,
+        "graph_exact_platform_rate": 1,
+        "graph_latency_ms": 7.67
+      },
+      "hybrid": {
+        "graph_count": 4,
+        "overlap_at_k": 0,
+        "legacy_top1_retained": false,
+        "graph_empty": false,
+        "graph_exact_surface_rate": 1,
+        "graph_exact_platform_rate": 1,
+        "graph_latency_ms": 11.726
+      }
+    },
+    {
+      "case_id": "library-launcher-tools",
+      "lexical": {
+        "graph_count": 4,
+        "overlap_at_k": 0.5,
+        "legacy_top1_retained": true,
+        "graph_empty": false,
+        "graph_exact_surface_rate": 1,
+        "graph_exact_platform_rate": 1,
+        "graph_latency_ms": 19.913
+      },
+      "semantic": {
+        "graph_count": 4,
+        "overlap_at_k": 0.25,
+        "legacy_top1_retained": false,
+        "graph_empty": false,
+        "graph_exact_surface_rate": 1,
+        "graph_exact_platform_rate": 1,
+        "graph_latency_ms": 10.467
+      },
+      "hybrid": {
+        "graph_count": 4,
+        "overlap_at_k": 0.5,
+        "legacy_top1_retained": true,
+        "graph_empty": false,
+        "graph_exact_surface_rate": 1,
+        "graph_exact_platform_rate": 1,
+        "graph_latency_ms": 13.668
+      }
+    },
+    {
+      "case_id": "library-launcher-mobile",
+      "lexical": {
+        "graph_count": 4,
+        "overlap_at_k": 0.75,
+        "legacy_top1_retained": true,
+        "graph_empty": false,
+        "graph_exact_surface_rate": 1,
+        "graph_exact_platform_rate": 1,
+        "graph_latency_ms": 51.304
+      },
+      "semantic": {
+        "graph_count": 4,
+        "overlap_at_k": 0.75,
+        "legacy_top1_retained": false,
+        "graph_empty": false,
+        "graph_exact_surface_rate": 1,
+        "graph_exact_platform_rate": 1,
+        "graph_latency_ms": 5.878
+      },
+      "hybrid": {
+        "graph_count": 4,
+        "overlap_at_k": 0.75,
+        "legacy_top1_retained": true,
+        "graph_empty": false,
+        "graph_exact_surface_rate": 1,
+        "graph_exact_platform_rate": 1,
+        "graph_latency_ms": 8.129
+      }
+    },
+    {
+      "case_id": "creation-setup-stream",
+      "lexical": {
+        "graph_count": 4,
+        "overlap_at_k": 0.75,
+        "legacy_top1_retained": true,
+        "graph_empty": false,
+        "graph_exact_surface_rate": 1,
+        "graph_exact_platform_rate": 1,
+        "graph_latency_ms": 28.479
+      },
+      "semantic": {
+        "graph_count": 4,
+        "overlap_at_k": 0.25,
+        "legacy_top1_retained": false,
+        "graph_empty": false,
+        "graph_exact_surface_rate": 1,
+        "graph_exact_platform_rate": 1,
+        "graph_latency_ms": 12.537
+      },
+      "hybrid": {
+        "graph_count": 4,
+        "overlap_at_k": 0.75,
+        "legacy_top1_retained": true,
+        "graph_empty": false,
+        "graph_exact_surface_rate": 1,
+        "graph_exact_platform_rate": 1,
+        "graph_latency_ms": 18.296
+      }
+    },
+    {
+      "case_id": "creation-setup-mobile",
+      "lexical": {
+        "graph_count": 4,
+        "overlap_at_k": 0.75,
+        "legacy_top1_retained": false,
+        "graph_empty": false,
+        "graph_exact_surface_rate": 1,
+        "graph_exact_platform_rate": 1,
+        "graph_latency_ms": 65.659
+      },
+      "semantic": {
+        "graph_count": 4,
+        "overlap_at_k": 0.75,
+        "legacy_top1_retained": false,
+        "graph_empty": false,
+        "graph_exact_surface_rate": 1,
+        "graph_exact_platform_rate": 1,
+        "graph_latency_ms": 5.738
+      },
+      "hybrid": {
+        "graph_count": 4,
+        "overlap_at_k": 0.75,
+        "legacy_top1_retained": false,
+        "graph_empty": false,
+        "graph_exact_surface_rate": 1,
+        "graph_exact_platform_rate": 1,
+        "graph_latency_ms": 8.275
+      }
+    },
+    {
+      "case_id": "realtime-lobby",
+      "lexical": {
+        "graph_count": 4,
+        "overlap_at_k": 0.25,
+        "legacy_top1_retained": true,
+        "graph_empty": false,
+        "graph_exact_surface_rate": 1,
+        "graph_exact_platform_rate": 1,
+        "graph_latency_ms": 54.763
+      },
+      "semantic": {
+        "graph_count": 4,
+        "overlap_at_k": 0,
+        "legacy_top1_retained": false,
+        "graph_empty": false,
+        "graph_exact_surface_rate": 1,
+        "graph_exact_platform_rate": 1,
+        "graph_latency_ms": 21.532
+      },
+      "hybrid": {
+        "graph_count": 4,
+        "overlap_at_k": 0,
+        "legacy_top1_retained": false,
+        "graph_empty": false,
+        "graph_exact_surface_rate": 1,
+        "graph_exact_platform_rate": 1,
+        "graph_latency_ms": 19.053
+      }
+    },
+    {
+      "case_id": "realtime-mobile-join",
+      "lexical": {
+        "graph_count": 4,
+        "overlap_at_k": 0.5,
+        "legacy_top1_retained": true,
+        "graph_empty": false,
+        "graph_exact_surface_rate": 1,
+        "graph_exact_platform_rate": 1,
+        "graph_latency_ms": 105.88
+      },
+      "semantic": {
+        "graph_count": 4,
+        "overlap_at_k": 0.75,
+        "legacy_top1_retained": false,
+        "graph_empty": false,
+        "graph_exact_surface_rate": 1,
+        "graph_exact_platform_rate": 1,
+        "graph_latency_ms": 12.605
+      },
+      "hybrid": {
+        "graph_count": 4,
+        "overlap_at_k": 0.5,
+        "legacy_top1_retained": true,
+        "graph_empty": false,
+        "graph_exact_surface_rate": 1,
+        "graph_exact_platform_rate": 1,
+        "graph_latency_ms": 8.996
+      }
+    },
+    {
+      "case_id": "admin-permissions",
+      "lexical": {
+        "graph_count": 4,
+        "overlap_at_k": 0.75,
+        "legacy_top1_retained": true,
+        "graph_empty": false,
+        "graph_exact_surface_rate": 1,
+        "graph_exact_platform_rate": 1,
+        "graph_latency_ms": 23.773
+      },
+      "semantic": {
+        "graph_count": 4,
+        "overlap_at_k": 0.5,
+        "legacy_top1_retained": true,
+        "graph_empty": false,
+        "graph_exact_surface_rate": 1,
+        "graph_exact_platform_rate": 1,
+        "graph_latency_ms": 12.685
+      },
+      "hybrid": {
+        "graph_count": 4,
+        "overlap_at_k": 0.5,
+        "legacy_top1_retained": true,
+        "graph_empty": false,
+        "graph_exact_surface_rate": 1,
+        "graph_exact_platform_rate": 1,
+        "graph_latency_ms": 15.653
+      }
+    },
+    {
+      "case_id": "admin-mobile-settings",
+      "lexical": {
+        "graph_count": 4,
+        "overlap_at_k": 0.75,
+        "legacy_top1_retained": true,
+        "graph_empty": false,
+        "graph_exact_surface_rate": 1,
+        "graph_exact_platform_rate": 1,
+        "graph_latency_ms": 57.537
+      },
+      "semantic": {
+        "graph_count": 4,
+        "overlap_at_k": 0.5,
+        "legacy_top1_retained": true,
+        "graph_empty": false,
+        "graph_exact_surface_rate": 1,
+        "graph_exact_platform_rate": 1,
+        "graph_latency_ms": 5.797
+      },
+      "hybrid": {
+        "graph_count": 4,
+        "overlap_at_k": 0.75,
+        "legacy_top1_retained": true,
+        "graph_empty": false,
+        "graph_exact_surface_rate": 1,
+        "graph_exact_platform_rate": 1,
+        "graph_latency_ms": 8.157
+      }
+    },
+    {
+      "case_id": "auth-web",
+      "lexical": {
+        "graph_count": 4,
+        "overlap_at_k": 0.75,
+        "legacy_top1_retained": true,
+        "graph_empty": false,
+        "graph_exact_surface_rate": 1,
+        "graph_exact_platform_rate": 1,
+        "graph_latency_ms": 41.325
+      },
+      "semantic": {
+        "graph_count": 4,
+        "overlap_at_k": 0.75,
+        "legacy_top1_retained": false,
+        "graph_empty": false,
+        "graph_exact_surface_rate": 1,
+        "graph_exact_platform_rate": 1,
+        "graph_latency_ms": 11.583
+      },
+      "hybrid": {
+        "graph_count": 4,
+        "overlap_at_k": 0.75,
+        "legacy_top1_retained": true,
+        "graph_empty": false,
+        "graph_exact_surface_rate": 1,
+        "graph_exact_platform_rate": 1,
+        "graph_latency_ms": 16.197
+      }
+    },
+    {
+      "case_id": "auth-mobile",
+      "lexical": {
+        "graph_count": 1,
+        "overlap_at_k": 0.25,
+        "legacy_top1_retained": false,
+        "graph_empty": false,
+        "graph_exact_surface_rate": 1,
+        "graph_exact_platform_rate": 1,
+        "graph_latency_ms": 35.593
+      },
+      "semantic": {
+        "graph_count": 1,
+        "overlap_at_k": 0.25,
+        "legacy_top1_retained": false,
+        "graph_empty": false,
+        "graph_exact_surface_rate": 1,
+        "graph_exact_platform_rate": 1,
+        "graph_latency_ms": 4.865
+      },
+      "hybrid": {
+        "graph_count": 1,
+        "overlap_at_k": 0.25,
+        "legacy_top1_retained": false,
+        "graph_empty": false,
+        "graph_exact_surface_rate": 1,
+        "graph_exact_platform_rate": 1,
+        "graph_latency_ms": 5.401
+      }
+    },
+    {
+      "case_id": "checkout-web",
+      "lexical": {
+        "graph_count": 4,
+        "overlap_at_k": 1,
+        "legacy_top1_retained": true,
+        "graph_empty": false,
+        "graph_exact_surface_rate": 1,
+        "graph_exact_platform_rate": 1,
+        "graph_latency_ms": 25.229
+      },
+      "semantic": {
+        "graph_count": 4,
+        "overlap_at_k": 0.75,
+        "legacy_top1_retained": true,
+        "graph_empty": false,
+        "graph_exact_surface_rate": 1,
+        "graph_exact_platform_rate": 1,
+        "graph_latency_ms": 14.886
+      },
+      "hybrid": {
+        "graph_count": 4,
+        "overlap_at_k": 0.75,
+        "legacy_top1_retained": true,
+        "graph_empty": false,
+        "graph_exact_surface_rate": 1,
+        "graph_exact_platform_rate": 1,
+        "graph_latency_ms": 18.228
+      }
+    },
+    {
+      "case_id": "checkout-mobile",
+      "lexical": {
+        "graph_count": 4,
+        "overlap_at_k": 1,
+        "legacy_top1_retained": true,
+        "graph_empty": false,
+        "graph_exact_surface_rate": 1,
+        "graph_exact_platform_rate": 1,
+        "graph_latency_ms": 29.286
+      },
+      "semantic": {
+        "graph_count": 4,
+        "overlap_at_k": 0.75,
+        "legacy_top1_retained": true,
+        "graph_empty": false,
+        "graph_exact_surface_rate": 1,
+        "graph_exact_platform_rate": 1,
+        "graph_latency_ms": 4.865
+      },
+      "hybrid": {
+        "graph_count": 4,
+        "overlap_at_k": 0.75,
+        "legacy_top1_retained": true,
+        "graph_empty": false,
+        "graph_exact_surface_rate": 1,
+        "graph_exact_platform_rate": 1,
+        "graph_latency_ms": 6.453
+      }
+    },
+    {
+      "case_id": "mobile-responsive-native",
+      "lexical": {
+        "graph_count": 4,
+        "overlap_at_k": 0.75,
+        "legacy_top1_retained": true,
+        "graph_empty": false,
+        "graph_exact_surface_rate": 1,
+        "graph_exact_platform_rate": 1,
+        "graph_latency_ms": 25.465
+      },
+      "semantic": {
+        "graph_count": 4,
+        "overlap_at_k": 0.25,
+        "legacy_top1_retained": false,
+        "graph_empty": false,
+        "graph_exact_surface_rate": 1,
+        "graph_exact_platform_rate": 1,
+        "graph_latency_ms": 13.718
+      },
+      "hybrid": {
+        "graph_count": 4,
+        "overlap_at_k": 0.75,
+        "legacy_top1_retained": true,
+        "graph_empty": false,
+        "graph_exact_surface_rate": 1,
+        "graph_exact_platform_rate": 1,
+        "graph_latency_ms": 17.08
+      }
+    },
+    {
+      "case_id": "mobile-responsive-web",
+      "lexical": {
+        "graph_count": 4,
+        "overlap_at_k": 0.75,
+        "legacy_top1_retained": true,
+        "graph_empty": false,
+        "graph_exact_surface_rate": 1,
+        "graph_exact_platform_rate": 1,
+        "graph_latency_ms": 66.475
+      },
+      "semantic": {
+        "graph_count": 4,
+        "overlap_at_k": 0.75,
+        "legacy_top1_retained": true,
+        "graph_empty": false,
+        "graph_exact_surface_rate": 1,
+        "graph_exact_platform_rate": 1,
+        "graph_latency_ms": 7.686
+      },
+      "hybrid": {
+        "graph_count": 4,
+        "overlap_at_k": 0.75,
+        "legacy_top1_retained": true,
+        "graph_empty": false,
+        "graph_exact_surface_rate": 1,
+        "graph_exact_platform_rate": 1,
+        "graph_latency_ms": 9.137
+      }
+    },
+    {
+      "case_id": "editorial-web",
+      "lexical": {
+        "graph_count": 4,
+        "overlap_at_k": 0.5,
+        "legacy_top1_retained": true,
+        "graph_empty": false,
+        "graph_exact_surface_rate": 1,
+        "graph_exact_platform_rate": 1,
+        "graph_latency_ms": 77.545
+      },
+      "semantic": {
+        "graph_count": 4,
+        "overlap_at_k": 0,
+        "legacy_top1_retained": false,
+        "graph_empty": false,
+        "graph_exact_surface_rate": 1,
+        "graph_exact_platform_rate": 1,
+        "graph_latency_ms": 29.573
+      },
+      "hybrid": {
+        "graph_count": 4,
+        "overlap_at_k": 0.25,
+        "legacy_top1_retained": true,
+        "graph_empty": false,
+        "graph_exact_surface_rate": 1,
+        "graph_exact_platform_rate": 1,
+        "graph_latency_ms": 21.578
+      }
+    },
+    {
+      "case_id": "editorial-mobile",
+      "lexical": {
+        "graph_count": 2,
+        "overlap_at_k": 0.5,
+        "legacy_top1_retained": true,
+        "graph_empty": false,
+        "graph_exact_surface_rate": 1,
+        "graph_exact_platform_rate": 1,
+        "graph_latency_ms": 134.937
+      },
+      "semantic": {
+        "graph_count": 2,
+        "overlap_at_k": 0.5,
+        "legacy_top1_retained": true,
+        "graph_empty": false,
+        "graph_exact_surface_rate": 1,
+        "graph_exact_platform_rate": 1,
+        "graph_latency_ms": 5.08
+      },
+      "hybrid": {
+        "graph_count": 2,
+        "overlap_at_k": 0.5,
+        "legacy_top1_retained": true,
+        "graph_empty": false,
+        "graph_exact_surface_rate": 1,
+        "graph_exact_platform_rate": 1,
+        "graph_latency_ms": 7.398
+      }
+    },
+    {
+      "case_id": "design-system-web",
+      "lexical": {
+        "graph_count": 4,
+        "overlap_at_k": 0.75,
+        "legacy_top1_retained": false,
+        "graph_empty": false,
+        "graph_exact_surface_rate": 1,
+        "graph_exact_platform_rate": 1,
+        "graph_latency_ms": 32.45
+      },
+      "semantic": {
+        "graph_count": 4,
+        "overlap_at_k": 0.25,
+        "legacy_top1_retained": false,
+        "graph_empty": false,
+        "graph_exact_surface_rate": 1,
+        "graph_exact_platform_rate": 1,
+        "graph_latency_ms": 21.253
+      },
+      "hybrid": {
+        "graph_count": 4,
+        "overlap_at_k": 0.25,
+        "legacy_top1_retained": false,
+        "graph_empty": false,
+        "graph_exact_surface_rate": 1,
+        "graph_exact_platform_rate": 1,
+        "graph_latency_ms": 18.04
+      }
+    },
+    {
+      "case_id": "design-system-mobile",
+      "lexical": {
+        "graph_count": 0,
+        "overlap_at_k": 0,
+        "legacy_top1_retained": false,
+        "graph_empty": true,
+        "graph_exact_surface_rate": 0,
+        "graph_exact_platform_rate": 0,
+        "graph_latency_ms": 76.837
+      },
+      "semantic": {
+        "graph_count": 0,
+        "overlap_at_k": 0,
+        "legacy_top1_retained": false,
+        "graph_empty": true,
+        "graph_exact_surface_rate": 0,
+        "graph_exact_platform_rate": 0,
+        "graph_latency_ms": 4.529
+      },
+      "hybrid": {
+        "graph_count": 0,
+        "overlap_at_k": 0,
+        "legacy_top1_retained": false,
+        "graph_empty": true,
+        "graph_exact_surface_rate": 0,
+        "graph_exact_platform_rate": 0,
+        "graph_latency_ms": 6.445
+      }
+    }
+  ],
+  "receipt_finalized_at": "2026-10-23T15:45:32.191Z",
+  "receipt_contract": {
+    "builder": "finalizeP5Receipt",
+    "secret_check": "assertSecretFreeP5Receipt",
+    "structural_gate_fix_sha": "2d235a6fb27cb96cbec208c776109086305c6c64"
+  }
+}
