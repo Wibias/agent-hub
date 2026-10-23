@@ -30,13 +30,13 @@ test('P8 governance executes the offline 24-case record and pattern handoff cont
   assert.match(WORKFLOW, /mismatch_count/);
 });
 
-test('P8 governance keeps P7 receipt semantics immutable and does not introduce migration 008', () => {
+test('P8 governance keeps P7 receipt semantics immutable while later phases preserve the P8 boundary', () => {
   assert.match(WORKFLOW, /p7-lexical-parity-evidence\.json/);
   assert.match(WORKFLOW, /average_overlap_at_k[^\n]*1|legacy_top1_retention_rate[^\n]*1/s);
   assert.match(WORKFLOW, /eligible_for_cutover_review/);
   assert.match(WORKFLOW, /production_source[^\n]*legacy-control/s);
   assert.match(WORKFLOW, /007_reference_graph_lexical_parity\.sql/);
-  assert.equal(/008_reference_graph/.test(WORKFLOW), false);
+  assert.match(WORKFLOW, /Verify immutable P8 runtime boundary/);
 });
 
 test('P8 README documents review-only quick eligibility and service-role non-runtime boundary', () => {
