@@ -23,14 +23,34 @@ function candidateId(row) {
   return null;
 }
 
-function vectorText(embedding) {
+function validateEmbedding(embedding) {
   if (!Array.isArray(embedding) || embedding.length !== 384) {
     throw new TypeError('embedding must be a 384-number array');
   }
   if (embedding.some((value) => !Number.isFinite(value))) {
     throw new TypeError('embedding must contain only finite numbers');
   }
-  return `[${embedding.join(',')}]`;
+  return embedding;
+}
+
+function vectorText(embedding) {
+  return `[${validateEmbedding(embedding).join(',')}]`;
+}
+
+function normalizeEmbeddingRow(row, index) {
+  if (!row || typeof row !== 'object' || Array.isArray(row)) {
+    throw new TypeError(`embeddings[${index}] must be an object`);
+  }
+  return {
+    chunk_id: requireString(row.chunk_id, `embeddings[${index}].chunk_id`),
+    model_id: requireString(row.model_id, `embeddings[${index}].model_id`),
+    model_revision: requireString(
+      row.model_revision,
+      `embeddings[${index}].model_revision`,
+    ),
+    text_hash: requireString(row.text_hash, `embeddings[${index}].text_hash`),
+    embedding: [...validateEmbedding(row.embedding)],
+  };
 }
 
 function normalizeContext(value) {
@@ -104,6 +124,16 @@ export class ReferenceGraphSupabaseStore {
       throw new TypeError('captures must be an array');
     }
     return this.rpc('reference_graph_ingest_captures', { p_captures: captures });
+  }
+
+  async persistEmbeddings(embeddings) {
+    if (!Array.isArray(embeddings)) {
+      throw new TypeError('embeddings must be an array');
+    }
+    const normalized = embeddings.map(normalizeEmbeddingRow);
+    return this.rpc('reference_graph_upsert_embeddings', {
+      p_embeddings: normalized,
+    });
   }
 
   async lexicalCandidates(query, filters = {}, limit = 48) {
