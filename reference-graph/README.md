@@ -13,6 +13,7 @@ It is deliberately an additive backend behind existing contracts, not a second d
 - Retrieval returns bounded reference bundles. Broad automatic injection is out of scope.
 - Reference Graph does not change `design-with-ai` routing or its qualified skill tree.
 - There is no live Supabase deployment in P1 until a target project is explicitly identified and authorized.
+- P1 does not add a browser extension or automatic web-capture surface.
 
 ## Repository surfaces
 
