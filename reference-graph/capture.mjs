@@ -97,7 +97,9 @@ export function normalizeReferenceCapture(input) {
       ordinal: 0,
       content: assetInput.contentText,
       content_role: 'untrusted_reference_data',
-      metadata: {},
+      metadata: {
+        text_hash: textHash,
+      },
     });
   }
 

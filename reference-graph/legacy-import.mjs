@@ -82,6 +82,7 @@ export function adaptLegacyDesignReference(record) {
         density: record.density ?? null,
         motion: record.motion ?? null,
         ttl_days: record.ttlDays ?? null,
+        access_status: record.accessStatus ?? null,
         replacement_for: record.replacementFor ?? null,
       },
     },
