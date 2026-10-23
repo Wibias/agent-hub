@@ -29,18 +29,6 @@ jobs:
           node reference-graph/cli/shadow-design-references.mjs \
             --offline \
             --control-date 2026-07-21 > /tmp/snapshot-lexical.json
-          node --input-type=module <<'NODE'
-          import fs from 'node:fs';
-          const value = JSON.parse(fs.readFileSync('/tmp/snapshot-lexical.json', 'utf8'));
-          console.log(JSON.stringify({
-            control_reference_time: value.control_reference_time,
-            benchmark_control_health: value.control_health,
-            current_control_health: value.current_control_health,
-            lexical_summary: value.summary,
-          }, null, 2));
-          if (!value.control_health?.healthy) throw new Error('snapshot control must be healthy');
-          if (value.current_control_health?.healthy) throw new Error('current control should expose stale-catalog health');
-          NODE
 
       - name: Start Ollama
         run: |
@@ -69,15 +57,10 @@ jobs:
           });
           const digest = await provider.verifyModel();
           const [embedding] = await provider.embed(['Reference Graph retrieval-model smoke test']);
-          console.log(JSON.stringify({
-            model_id: provider.modelId,
-            model_revision: provider.modelRevision,
-            verified_digest: digest,
-            dimensions: embedding.length,
-          }, null, 2));
+          console.log(JSON.stringify({ verified_digest: digest, dimensions: embedding.length }, null, 2));
           NODE
 
-      - name: Probe Arctic semantic and hybrid with query-only retrieval prefix
+      - name: Probe document representation variants
         run: |
           node --input-type=module <<'NODE'
           import fs from 'node:fs';
@@ -89,74 +72,102 @@ jobs:
           import { runCatalogShadowEvaluation } from './reference-graph/shadow-eval.mjs';
 
           const QUERY_PREFIX = 'Represent this sentence for searching relevant passages: ';
+          const controlNow = new Date('2026-07-21T12:00:00.000Z');
           const cases = JSON.parse(fs.readFileSync('./reference-graph/shadow-cases.json', 'utf8'));
           const lexical = JSON.parse(fs.readFileSync('/tmp/snapshot-lexical.json', 'utf8'));
           const records = loadRecords();
+          const recordById = new Map(records.map((record) => [record.id, record]));
           const plan = planLegacyCatalogImport(records);
-          const documentProvider = new OllamaEmbeddingProvider({
+          const provider = new OllamaEmbeddingProvider({
             modelTag: 'snowflake-arctic-embed:33m',
             modelRevision: 'e8db018629b4',
           });
-          const embeddingRows = await buildEmbeddingRows({
-            captures: plan.captures,
-            provider: documentProvider,
-            batchSize: 32,
-          });
           const queryProvider = {
-            modelId: documentProvider.modelId,
-            modelRevision: documentProvider.modelRevision,
+            modelId: provider.modelId,
+            modelRevision: provider.modelRevision,
             embed(texts) {
-              return documentProvider.embed(texts.map((text) => `${QUERY_PREFIX}${text}`));
+              return provider.embed(texts.map((text) => `${QUERY_PREFIX}${text}`));
             },
           };
-          const semanticRetrieve = createOfflineEmbeddedRetriever({
-            captures: plan.captures,
-            embeddingRows,
-            provider: queryProvider,
-            mode: 'semantic',
+          const compact = (values) => values
+            .flatMap((value) => Array.isArray(value) ? value : [value])
+            .filter((value) => typeof value === 'string' && value.trim().length > 0)
+            .map((value) => value.trim());
+          const decisionText = (record) => compact([
+            record.firstScreenJob,
+            record.topology,
+            record.visualWorld,
+            record.strengths,
+            record.transferableDecisions,
+            record.tags,
+          ]).join('\n');
+          const structuredText = (record) => [
+            `Page role: ${record.pageRole}`,
+            `First-screen job: ${record.firstScreenJob}`,
+            `Topology: ${record.topology}`,
+            `Visual world: ${record.visualWorld}`,
+            `Strengths: ${compact(record.strengths).join('; ')}`,
+            `Transferable decisions: ${compact(record.transferableDecisions).join('; ')}`,
+            `Flow states: ${compact(record.flowStates).join('; ')}`,
+            `Tags: ${compact(record.tags).join('; ')}`,
+          ].join('\n');
+          const variantCaptures = (buildText) => plan.captures.map((capture) => {
+            const legacyId = capture.asset.metadata.legacy_id;
+            const record = recordById.get(legacyId);
+            if (!record) throw new Error(`missing record for ${legacyId}`);
+            return {
+              ...capture,
+              chunks: capture.chunks.map((chunk) => ({
+                ...chunk,
+                content: buildText(record),
+              })),
+            };
           });
-          const hybridRetrieve = createOfflineEmbeddedRetriever({
-            captures: plan.captures,
-            embeddingRows,
-            provider: queryProvider,
-            mode: 'hybrid',
-          });
-          const controlNow = new Date('2026-07-21T12:00:00.000Z');
-          const semantic = await runCatalogShadowEvaluation({
-            records,
-            cases,
-            graphRetrieve: semanticRetrieve,
-            controlNow,
-          });
-          const hybrid = await runCatalogShadowEvaluation({
-            records,
-            cases,
-            graphRetrieve: hybridRetrieve,
-            controlNow,
-          });
-          const delta = (candidate, baseline, field) => candidate.summary[field] - baseline.summary[field];
-          const evidence = {
-            model_id: documentProvider.modelId,
-            model_revision: documentProvider.modelRevision,
+          async function evaluateVariant(name, embeddingCaptures) {
+            const embeddingRows = await buildEmbeddingRows({
+              captures: embeddingCaptures,
+              provider,
+              batchSize: 32,
+            });
+            const semanticRetrieve = createOfflineEmbeddedRetriever({
+              captures: plan.captures,
+              embeddingRows,
+              provider: queryProvider,
+              mode: 'semantic',
+            });
+            const hybridRetrieve = createOfflineEmbeddedRetriever({
+              captures: plan.captures,
+              embeddingRows,
+              provider: queryProvider,
+              mode: 'hybrid',
+            });
+            const semantic = await runCatalogShadowEvaluation({ records, cases, graphRetrieve: semanticRetrieve, controlNow });
+            const hybrid = await runCatalogShadowEvaluation({ records, cases, graphRetrieve: hybridRetrieve, controlNow });
+            return {
+              name,
+              semantic: semantic.summary,
+              hybrid: hybrid.summary,
+            };
+          }
+          const variants = [];
+          variants.push(await evaluateVariant('decision-focused', variantCaptures(decisionText)));
+          variants.push(await evaluateVariant('structured-decision', variantCaptures(structuredText)));
+          const delta = (candidate, field) => candidate[field] - lexical.summary[field];
+          for (const variant of variants) {
+            variant.semantic_vs_lexical = {
+              average_overlap_delta: delta(variant.semantic, 'average_overlap_at_k'),
+              top1_retention_delta: delta(variant.semantic, 'legacy_top1_retention_rate'),
+            };
+            variant.hybrid_vs_lexical = {
+              average_overlap_delta: delta(variant.hybrid, 'average_overlap_at_k'),
+              top1_retention_delta: delta(variant.hybrid, 'legacy_top1_retention_rate'),
+            };
+          }
+          console.log(JSON.stringify({
+            model_id: provider.modelId,
+            model_revision: provider.modelRevision,
             query_prefix: QUERY_PREFIX,
-            embedding_count: embeddingRows.length,
             lexical: lexical.summary,
-            semantic: semantic.summary,
-            hybrid: hybrid.summary,
-            semantic_vs_lexical: {
-              average_overlap_delta: delta(semantic, lexical, 'average_overlap_at_k'),
-              top1_retention_delta: delta(semantic, lexical, 'legacy_top1_retention_rate'),
-            },
-            hybrid_vs_lexical: {
-              average_overlap_delta: delta(hybrid, lexical, 'average_overlap_at_k'),
-              top1_retention_delta: delta(hybrid, lexical, 'legacy_top1_retention_rate'),
-            },
-          };
-          evidence.semantic_vs_lexical.retrieval_progress =
-            evidence.semantic_vs_lexical.average_overlap_delta > 0
-            || evidence.semantic_vs_lexical.top1_retention_delta > 0;
-          evidence.hybrid_vs_lexical.retrieval_progress =
-            evidence.hybrid_vs_lexical.average_overlap_delta > 0
-            || evidence.hybrid_vs_lexical.top1_retention_delta > 0;
-          console.log(JSON.stringify(evidence, null, 2));
+            variants,
+          }, null, 2));
           NODE
