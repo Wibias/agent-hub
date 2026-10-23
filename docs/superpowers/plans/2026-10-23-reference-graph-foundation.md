@@ -17,8 +17,8 @@
 - [x] Add explicit Reference Graph -> `memory.protocol.v1` Evidence-only promotion proposals.
 - [x] Keep P0 semantic lookup exact and model/revision-bound; defer ANN pending measurement.
 - [x] Add permanent Reference Graph CI gate.
-- [ ] Run broad Agent Hub release governance on the final branch state.
-- [ ] Remove the temporary branch-only verification workflow after final green evidence.
+- [ ] Complete broad Agent Hub governance through all unaffected gates. Two pre-existing `main` baseline mismatches are recorded separately: the catalog test still expects removed `write-swift`, and the committed generated skill index still lists removed `pnpm` / `write-swift` entries.
+- [ ] Remove the temporary branch-only verification workflow after final broad evidence.
 - [ ] Confirm final diff contains no `skills/design-with-ai/**` changes.
 
 ## Explicitly deferred
