@@ -75,7 +75,7 @@ jobs:
           if (changed.some((file) => /^knowledge\/design-references\/(?:data|taxonomy\.json)/.test(file))) throw new Error('catalog authority changed');
 
           const policy = fs.readFileSync('reference-graph/retrieval-policy.mjs', 'utf8');
-          if (!/profile must be quick/.test(policy)) throw new Error('P6 accidentally defines non-quick behavior');
+          if (!/supports quick requests only/.test(policy)) throw new Error('P6 accidentally defines non-quick behavior');
           if (/shadow-cases\.json|p5-live-shadow-evidence|p6-retrieval-quality-evidence|auth-mobile|design-system-mobile/i.test(policy)) {
             throw new Error('benchmark leakage in P6 policy');
           }
