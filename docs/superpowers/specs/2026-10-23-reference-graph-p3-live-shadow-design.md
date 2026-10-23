@@ -62,6 +62,8 @@ P3 introduces a non-secret target binding containing only stable public identity
 }
 ```
 
+The `project_ref` field is populated only after the dedicated project is created or explicitly selected. Its value is a deployment-time identity, not an unresolved design decision.
+
 The binding may live in a repository configuration file after the project exists because project ref/name/region are not service credentials. Secret/service-role keys remain outside the repository.
 
 Every live CLI path must receive or resolve the expected project ref and verify that the Supabase URL host matches it before performing a write. A URL/key pair alone is not sufficient authorization.
