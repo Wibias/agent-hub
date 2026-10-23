@@ -60,6 +60,7 @@ test('P1 SQL exposes only service-role RPCs and keeps exact model-bound vector r
 
   for (const fn of [
     'reference_graph_ingest_capture',
+    'reference_graph_ingest_captures',
     'reference_graph_lexical_candidates',
     'reference_graph_semantic_candidates',
     'reference_graph_candidate_context',
@@ -105,6 +106,72 @@ test('Supabase store persists through the locked RPC surface', async () => {
   assert.deepEqual(JSON.parse(requests[0].init.body), { p_capture: capture });
 });
 
+test('Supabase store retrieves lexical and semantic candidates before P0 fusion', async () => {
+  const { ReferenceGraphSupabaseStore } = await import('../../reference-graph/supabase-store.mjs');
+  const assetA = '00000000-0000-5000-8000-000000000001';
+  const assetB = '00000000-0000-5000-8000-000000000002';
+  const rpcNames = [];
+  const fetchImpl = async (url) => {
+    const name = url.split('/').at(-1);
+    rpcNames.push(name);
+    const payloads = {
+      reference_graph_lexical_candidates: [
+        { asset_id: assetA, rank: 1, score: 1 },
+        { asset_id: assetB, rank: 2, score: 0.8 },
+      ],
+      reference_graph_semantic_candidates: [
+        { asset_id: assetB, rank: 1, score: 0.95 },
+        { asset_id: assetA, rank: 2, score: 0.9 },
+      ],
+      reference_graph_candidate_context: {
+        assets: [
+          {
+            id: assetA,
+            platform: 'web-responsive',
+            surface_family: 'public-home',
+            tags: ['landing'],
+            metadata: { legacy_id: 'ref-a', platform: 'web-responsive', surface_family: 'public-home' },
+          },
+          {
+            id: assetB,
+            platform: 'web-responsive',
+            surface_family: 'public-home',
+            tags: ['landing'],
+            metadata: { legacy_id: 'ref-b', platform: 'web-responsive', surface_family: 'public-home' },
+          },
+        ],
+        relations: [],
+      },
+    };
+    return new Response(JSON.stringify(payloads[name]), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+  };
+
+  const store = new ReferenceGraphSupabaseStore({
+    url: 'https://example.supabase.co',
+    serviceRoleKey: 'service-secret',
+    fetchImpl,
+  });
+  const bundle = await store.retrieve({
+    query: 'creator landing page',
+    embedding: Array(384).fill(0.01),
+    modelId: 'test-embedding',
+    modelRevision: 'v1',
+    filters: { platform: 'web-responsive', surface_family: 'public-home' },
+    maxItems: 2,
+  });
+
+  assert.deepEqual(rpcNames, [
+    'reference_graph_lexical_candidates',
+    'reference_graph_semantic_candidates',
+    'reference_graph_candidate_context',
+  ]);
+  assert.equal(bundle.items.length, 2);
+  assert.deepEqual(new Set(bundle.items.map((item) => item.id)), new Set([assetA, assetB]));
+});
+
 test('legacy catalog produces a complete 600-record deterministic import plan', async () => {
   const { planLegacyCatalogImport } = await import('../../reference-graph/catalog-import.mjs');
   const records = loadRecords();
@@ -116,4 +183,26 @@ test('legacy catalog produces a complete 600-record deterministic import plan', 
   assert.equal(new Set(plan.legacy_ids).size, 600);
   assert.ok(plan.captures.every((capture) => UUID_RE.test(capture.asset.id)));
   assert.ok(plan.captures.every((capture) => capture.asset.metadata.legacy_id));
+});
+
+test('legacy catalog import batches all 600 captures without dropping records', async () => {
+  const { importLegacyCatalog } = await import('../../reference-graph/catalog-import.mjs');
+  const batchSizes = [];
+  const store = {
+    persistCaptures: async (captures) => {
+      batchSizes.push(captures.length);
+      return { capture_count: captures.length };
+    },
+  };
+
+  const result = await importLegacyCatalog({
+    records: loadRecords(),
+    store,
+    batchSize: 50,
+  });
+
+  assert.equal(result.imported_count, 600);
+  assert.equal(result.batch_count, 12);
+  assert.equal(batchSizes.reduce((sum, size) => sum + size, 0), 600);
+  assert.ok(batchSizes.every((size) => size > 0 && size <= 50));
 });
