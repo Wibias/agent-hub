@@ -1,0 +1,40 @@
+name: P6 apply targeted CI smoke fix
+
+on:
+  push:
+    branches:
+      - agent/reference-graph-p6
+    paths:
+      - .github/workflows/p6-apply-ci-smoke-fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/reference-graph-p6
+          fetch-depth: 0
+      - name: Replace caller-side vector cast and remove fixer
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          workflow = Path('.github/workflows/verify-reference-graph.yml')
+          text = workflow.read_text()
+          old = "            array_fill(0.01::real, array[384])::extensions.vector::text,"
+          new = "            ('[' || array_to_string(array_fill(0.01::real, array[384]), ',') || ']'),"
+          count = text.count(old)
+          if count != 1:
+              raise SystemExit(f'expected exactly one caller-side vector cast, found {count}')
+          workflow.write_text(text.replace(old, new))
+          Path('.github/workflows/p6-apply-ci-smoke-fix.yml').unlink()
+          PY
+          git config user.name "Wibias"
+          git config user.email "37517432+Wibias@users.noreply.github.com"
+          git add .github/workflows/verify-reference-graph.yml .github/workflows/p6-apply-ci-smoke-fix.yml
+          git commit -m "test: pass semantic smoke vector as RPC text"
+          git push origin HEAD:agent/reference-graph-p6
