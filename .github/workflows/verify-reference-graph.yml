@@ -118,7 +118,15 @@ jobs:
           }
 
 
-
+          for (const file of [
+            'reference-graph/evidence/p10-runtime-projection-evidence.json',
+          ]) {
+            if (!existsSync(file)) continue;
+            const value = JSON.parse(readFileSync(file, 'utf8'));
+            assertSecretFreeP10Receipt(value);
+            console.log(`secret-free: ${file}`);
+          }
+
           for (const file of [
             'reference-graph/evidence/p11-quick-activation-evidence.json',
           ]) {
