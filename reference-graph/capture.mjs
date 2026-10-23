@@ -1,5 +1,7 @@
 import { createHash } from 'node:crypto';
 
+const UUID_NAMESPACE_URL = Buffer.from('6ba7b8119dad11d180b400c04fd430c8', 'hex');
+
 function nonEmptyString(value, name) {
   if (typeof value !== 'string' || value.trim().length === 0) {
     throw new TypeError(`${name} must be a non-empty string`);
@@ -19,9 +21,22 @@ function plainObject(value, name) {
   return value;
 }
 
-function stableId(prefix, value) {
-  const digest = createHash('sha256').update(String(value), 'utf8').digest('hex');
-  return `${prefix}_${digest.slice(0, 16)}`;
+function stableUuid(scope, value) {
+  const digest = createHash('sha1')
+    .update(UUID_NAMESPACE_URL)
+    .update(`${scope}\n${String(value)}`, 'utf8')
+    .digest();
+  const bytes = Buffer.from(digest.subarray(0, 16));
+  bytes[6] = (bytes[6] & 0x0f) | 0x50;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = bytes.toString('hex');
+  return [
+    hex.slice(0, 8),
+    hex.slice(8, 12),
+    hex.slice(12, 16),
+    hex.slice(16, 20),
+    hex.slice(20, 32),
+  ].join('-');
 }
 
 function contentHash(value) {
@@ -47,7 +62,7 @@ export function normalizeReferenceCapture(input) {
 
   const canonicalUrl = nonEmptyString(sourceInput.canonicalUrl, 'source.canonicalUrl');
   const sourceKind = nonEmptyString(sourceInput.sourceKind, 'source.sourceKind');
-  const sourceId = stableId('src', `${sourceKind}\n${canonicalUrl}`);
+  const sourceId = stableUuid('source', canonicalUrl);
 
   const canonicalLocator = nonEmptyString(
     assetInput.canonicalLocator,
@@ -56,7 +71,7 @@ export function normalizeReferenceCapture(input) {
   const assetKind = nonEmptyString(assetInput.kind, 'asset.kind');
   const capturedAt = nonEmptyString(assetInput.capturedAt, 'asset.capturedAt');
   const textHash = contentHash(assetInput.contentText);
-  const assetId = stableId(
+  const assetId = stableUuid(
     'asset',
     `${sourceId}\n${assetKind}\n${canonicalLocator}\n${textHash ?? capturedAt}`,
   );
@@ -77,7 +92,7 @@ export function normalizeReferenceCapture(input) {
   const chunks = [];
   if (typeof assetInput.contentText === 'string' && assetInput.contentText.length > 0) {
     chunks.push({
-      id: stableId('chunk', `${assetId}\n0\n${assetInput.contentText}`),
+      id: stableUuid('chunk', `${assetId}\n0\n${assetInput.contentText}`),
       asset_id: assetId,
       ordinal: 0,
       content: assetInput.contentText,
@@ -92,7 +107,7 @@ export function normalizeReferenceCapture(input) {
       const kind = nonEmptyString(observation.kind, `observations[${index}].kind`);
       const body = nonEmptyString(observation.body, `observations[${index}].body`);
       return {
-        id: stableId('obs', `${assetId}\n${index}\n${kind}\n${body}`),
+        id: stableUuid('observation', `${assetId}\n${index}\n${kind}\n${body}`),
         asset_id: assetId,
         observation_kind: kind,
         body,
