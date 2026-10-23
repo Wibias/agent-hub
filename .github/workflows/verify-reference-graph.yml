@@ -450,6 +450,7 @@ jobs:
 
           insert into reference_graph.chunks (id, asset_id, ordinal, content, metadata) values
             ('60000000-0000-5000-8000-000000000021', '60000000-0000-5000-8000-000000000011', 0, 'p6 soft preference signal', '{"text_hash":"p6-hash-exact"}'),
+            ('60000000-0000-5000-8000-000000000026', '60000000-0000-5000-8000-000000000011', 1, 'p6 soft preference signal alternate', '{"text_hash":"p6-hash-exact-alt"}'),
             ('60000000-0000-5000-8000-000000000022', '60000000-0000-5000-8000-000000000012', 0, 'p6 soft preference signal', '{"text_hash":"p6-hash-cross"}'),
             ('60000000-0000-5000-8000-000000000023', '60000000-0000-5000-8000-000000000013', 0, 'p6 soft preference signal', '{"text_hash":"p6-hash-stale"}'),
             ('60000000-0000-5000-8000-000000000024', '60000000-0000-5000-8000-000000000014', 0, 'p6 soft preference signal', '{"text_hash":"p6-hash-unreviewed"}'),
@@ -459,6 +460,7 @@ jobs:
             chunk_id, model_id, model_revision, text_hash, dimensions, embedding
           ) values
             ('60000000-0000-5000-8000-000000000021', 'p6-test-model', 'v1', 'p6-hash-exact', 384, array_fill(0.01::real, array[384])::extensions.vector),
+            ('60000000-0000-5000-8000-000000000026', 'p6-test-model', 'v1', 'p6-hash-exact-alt', 384, array_fill(0.015::real, array[384])::extensions.vector),
             ('60000000-0000-5000-8000-000000000022', 'p6-test-model', 'v1', 'p6-hash-cross', 384, array_fill(0.02::real, array[384])::extensions.vector),
             ('60000000-0000-5000-8000-000000000023', 'p6-test-model', 'v1', 'p6-hash-stale', 384, array_fill(0.03::real, array[384])::extensions.vector),
             ('60000000-0000-5000-8000-000000000024', 'p6-test-model', 'v1', 'p6-hash-unreviewed', 384, array_fill(0.04::real, array[384])::extensions.vector),
@@ -486,6 +488,7 @@ jobs:
             20
           );
 
+          -- Multi-chunk exact asset must still produce one semantic candidate row.
           select 1 / case when count(*) = 2 then 1 else 0 end as p6_soft_preference_semantic_ok
           from public.reference_graph_semantic_candidates_p6(
             ('[' || array_to_string(array_fill(0.01::real, array[384]), ',') || ']'),
