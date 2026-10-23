@@ -9,7 +9,10 @@ import { buildEmbeddingRows } from '../embedding-pipeline.mjs';
 import { createOfflineCatalogRetriever } from '../offline-shadow.mjs';
 import { OllamaEmbeddingProvider } from '../ollama-embeddings.mjs';
 import { createOfflineEmbeddedRetriever } from '../semantic-shadow.mjs';
-import { runCatalogShadowEvaluation } from '../shadow-eval.mjs';
+import {
+  assessLegacyControlHealth,
+  runCatalogShadowEvaluation,
+} from '../shadow-eval.mjs';
 import { ReferenceGraphSupabaseStore } from '../supabase-store.mjs';
 
 const CASES_FILE = fileURLToPath(new URL('../shadow-cases.json', import.meta.url));
@@ -18,15 +21,16 @@ const PRODUCTION_CONTROL = 'legacy-control';
 function usage() {
   return [
     'Usage:',
-    '  node reference-graph/cli/shadow-design-references.mjs --offline',
-    '  node reference-graph/cli/shadow-design-references.mjs --supabase',
-    '  node reference-graph/cli/shadow-design-references.mjs --ollama-semantic',
-    '  node reference-graph/cli/shadow-design-references.mjs --ollama-hybrid',
+    '  node reference-graph/cli/shadow-design-references.mjs --offline [--control-date YYYY-MM-DD]',
+    '  node reference-graph/cli/shadow-design-references.mjs --supabase [--control-date YYYY-MM-DD]',
+    '  node reference-graph/cli/shadow-design-references.mjs --ollama-semantic [--control-date YYYY-MM-DD]',
+    '  node reference-graph/cli/shadow-design-references.mjs --ollama-hybrid [--control-date YYYY-MM-DD]',
     '',
     '--offline uses deterministic lexical retrieval only and requires no credentials.',
     '--supabase uses deployed lexical service-role RPCs and requires SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.',
     '--ollama-semantic generates real local model-bound embeddings and ranks semantically.',
     '--ollama-hybrid generates the same embeddings and fuses lexical + semantic ranks through the existing RRF path.',
+    '--control-date freezes only the benchmark control clock; production behavior remains current-time legacy control.',
     `All modes keep production_source as ${PRODUCTION_CONTROL}.`,
   ].join('\n');
 }
@@ -35,6 +39,18 @@ function loadCases() {
   const parsed = JSON.parse(readFileSync(CASES_FILE, 'utf8'));
   if (!Array.isArray(parsed) || parsed.length === 0) {
     throw new Error('shadow-cases.json must contain at least one case');
+  }
+  return parsed;
+}
+
+function parseControlDate(value) {
+  if (value === undefined) return undefined;
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    throw new Error('--control-date must be YYYY-MM-DD');
+  }
+  const parsed = new Date(`${value}T12:00:00.000Z`);
+  if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== value) {
+    throw new Error('--control-date must be a valid YYYY-MM-DD date');
   }
   return parsed;
 }
@@ -72,9 +88,15 @@ async function main() {
     throw new Error(`Choose exactly one shadow mode.\n\n${usage()}`);
   }
 
+  const controlNow = parseControlDate(args['control-date']);
   const selectedMode = modes[0][0];
   const records = loadRecords();
   const cases = loadCases();
+  const currentControlHealth = assessLegacyControlHealth({
+    records,
+    cases,
+    now: new Date(),
+  });
   let graphRetrieve;
   let mode;
   let semanticEnabled = false;
@@ -110,6 +132,7 @@ async function main() {
     records,
     cases,
     graphRetrieve,
+    controlNow,
   });
   if (evaluation.production_source !== PRODUCTION_CONTROL) {
     throw new Error(`unexpected production control: ${evaluation.production_source}`);
@@ -119,6 +142,9 @@ async function main() {
     mode,
     case_count: cases.length,
     production_source: evaluation.production_source,
+    control_reference_time: evaluation.control_reference_time,
+    control_health: evaluation.control_health,
+    current_control_health: currentControlHealth,
     semantic_enabled: semanticEnabled,
     model_id: modelId,
     model_revision: modelRevision,
