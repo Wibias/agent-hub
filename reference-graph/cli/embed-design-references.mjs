@@ -1,8 +1,15 @@
 #!/usr/bin/env node
 
+import { writeFileSync } from 'node:fs';
+
 import { loadRecords, parseArgs } from '../../knowledge/design-references/scripts/lib.mjs';
 import { planLegacyCatalogImport } from '../catalog-import.mjs';
-import { buildEmbeddingRows, persistEmbeddingRows } from '../embedding-pipeline.mjs';
+import {
+  assertCompleteEmbeddingCoverage,
+  buildEmbeddingRows,
+  createEmbeddingExportArtifact,
+  persistEmbeddingRows,
+} from '../embedding-pipeline.mjs';
 import { REFERENCE_EMBEDDING_PROFILE } from '../embedding-profile.mjs';
 import { OllamaEmbeddingProvider } from '../ollama-embeddings.mjs';
 import { ReferenceGraphSupabaseStore } from '../supabase-store.mjs';
@@ -16,9 +23,11 @@ function usage() {
   return [
     'Usage:',
     '  node reference-graph/cli/embed-design-references.mjs --plan',
+    '  node reference-graph/cli/embed-design-references.mjs --export-rows <path> [--embed-batch-size 32]',
     '  node reference-graph/cli/embed-design-references.mjs --apply --allow-experimental --target <path> [--embed-batch-size 32] [--persist-batch-size 50]',
     '',
     '--plan performs no network calls and requires no credentials or Ollama.',
+    '--export-rows requires the pinned Ollama model but no Supabase credentials.',
     '--apply persists the current experimental profile and therefore requires --allow-experimental.',
     '--apply also requires --target, a verified local Ollama model, SUPABASE_URL, and SUPABASE_SERVICE_ROLE_KEY.',
   ].join('\n');
@@ -45,6 +54,7 @@ function profileOutput() {
     embedding_profile: REFERENCE_EMBEDDING_PROFILE.id,
     model_id: `ollama/${REFERENCE_EMBEDDING_PROFILE.modelTag}`,
     model_revision: REFERENCE_EMBEDDING_PROFILE.modelRevision,
+    dimensions: REFERENCE_EMBEDDING_PROFILE.dimensions,
     quality_status: REFERENCE_EMBEDDING_PROFILE.qualityStatus,
     cutover_approved: REFERENCE_EMBEDDING_PROFILE.cutoverApproved,
   };
@@ -57,12 +67,36 @@ function requireTargetPath(value) {
   return value.trim();
 }
 
+function requireExportPath(value) {
+  if (typeof value !== 'string' || value.trim().length === 0) {
+    throw new Error(`--export-rows requires a path.\n\n${usage()}`);
+  }
+  return value.trim();
+}
+
+function assertSecretFreeExport(serialized, env = process.env) {
+  for (const key of [
+    'SUPABASE_SERVICE_ROLE_KEY',
+    'DATABASE_PASSWORD',
+    'SUPABASE_DB_PASSWORD',
+    'ACCESS_TOKEN',
+  ]) {
+    const secret = env[key];
+    if (typeof secret === 'string' && secret.length > 0 && serialized.includes(secret)) {
+      throw new Error(`embedding export contains secret material from ${key}`);
+    }
+  }
+  return true;
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const planMode = args.plan === true;
   const applyMode = args.apply === true;
-  if (planMode === applyMode) {
-    throw new Error(`Choose exactly one of --plan or --apply.\n\n${usage()}`);
+  const exportRequested = args['export-rows'] !== undefined;
+  const selectedModes = Number(planMode) + Number(applyMode) + Number(exportRequested);
+  if (selectedModes !== 1) {
+    throw new Error(`Choose exactly one of --plan, --export-rows, or --apply.\n\n${usage()}`);
   }
 
   if (
@@ -91,12 +125,17 @@ async function main() {
     return;
   }
 
-  const targetPath = requireTargetPath(args.target);
-  const binding = readTargetBinding(targetPath);
-  assertBoundSupabaseUrl({
-    binding,
-    supabaseUrl: process.env.SUPABASE_URL,
-  });
+  let binding = null;
+  let store = null;
+  if (applyMode) {
+    const targetPath = requireTargetPath(args.target);
+    binding = readTargetBinding(targetPath);
+    assertBoundSupabaseUrl({
+      binding,
+      supabaseUrl: process.env.SUPABASE_URL,
+    });
+    store = ReferenceGraphSupabaseStore.fromEnv(process.env);
+  }
 
   const embedBatchSize = parseBoundedInteger(
     args['embed-batch-size'],
@@ -104,38 +143,68 @@ async function main() {
     32,
     64,
   );
+  const provider = new OllamaEmbeddingProvider({
+    url: process.env.OLLAMA_URL,
+    modelTag: REFERENCE_EMBEDDING_PROFILE.modelTag,
+    modelRevision: REFERENCE_EMBEDDING_PROFILE.modelRevision,
+  });
+  const rows = await buildEmbeddingRows({
+    captures: plan.captures,
+    provider,
+    batchSize: embedBatchSize,
+  });
+
+  if (exportRequested) {
+    const outputPath = requireExportPath(args['export-rows']);
+    const artifact = createEmbeddingExportArtifact({
+      rows,
+      profile: REFERENCE_EMBEDDING_PROFILE,
+    });
+    const serialized = `${JSON.stringify(artifact, null, 2)}\n`;
+    assertSecretFreeExport(serialized);
+    writeFileSync(outputPath, serialized, 'utf8');
+    console.log(JSON.stringify({
+      mode: 'export',
+      applied: false,
+      output: outputPath,
+      record_count: plan.record_count,
+      chunk_count: chunkCount,
+      embedding_count: rows.length,
+      ...profileOutput(),
+    }, null, 2));
+    return;
+  }
+
   const persistBatchSize = parseBoundedInteger(
     args['persist-batch-size'],
     '--persist-batch-size',
     50,
     100,
   );
-  const provider = new OllamaEmbeddingProvider({
-    url: process.env.OLLAMA_URL,
-    modelTag: REFERENCE_EMBEDDING_PROFILE.modelTag,
-    modelRevision: REFERENCE_EMBEDDING_PROFILE.modelRevision,
-  });
-  const store = ReferenceGraphSupabaseStore.fromEnv(process.env);
-  const rows = await buildEmbeddingRows({
-    captures: plan.captures,
-    provider,
-    batchSize: embedBatchSize,
-  });
   const persisted = await persistEmbeddingRows({
     rows,
     store,
     batchSize: persistBatchSize,
   });
+  const referenceDate = new Date().toISOString().slice(0, 10);
+  const coverage = await store.embeddingCoverage(
+    `ollama/${REFERENCE_EMBEDDING_PROFILE.modelTag}`,
+    REFERENCE_EMBEDDING_PROFILE.modelRevision,
+    referenceDate,
+  );
+  assertCompleteEmbeddingCoverage(coverage);
 
   console.log(JSON.stringify({
     mode: 'apply',
     applied: true,
     target: binding,
+    reference_date: referenceDate,
     record_count: plan.record_count,
     chunk_count: chunkCount,
     embedding_count: rows.length,
     persisted_count: persisted.persisted_count,
     persist_batch_count: persisted.batch_count,
+    embedding_coverage: coverage,
     ...profileOutput(),
   }, null, 2));
 }
