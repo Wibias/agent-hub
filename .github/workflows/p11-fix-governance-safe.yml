@@ -1,0 +1,49 @@
+name: P11 fix governance safely
+
+on:
+  push:
+    branches:
+      - agent/reference-graph-p11
+    paths:
+      - .github/workflows/p11-fix-governance-safe.yml
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/reference-graph-p11
+          fetch-depth: 0
+      - name: Stage corrected governance as ordinary file
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('.github/workflows/verify-reference-graph.yml')
+          text = p.read_text()
+          needle = chr(1)
+          count = text.count(needle)
+          if count != 1:
+              raise SystemExit(f'expected exactly one control character, got {count}')
+          replacement = '''          for (const file of [
+            'reference-graph/evidence/p10-runtime-projection-evidence.json',
+          ]) {
+            if (!existsSync(file)) continue;
+            const value = JSON.parse(readFileSync(file, 'utf8'));
+            assertSecretFreeP10Receipt(value);
+            console.log(`secret-free: ${file}`);
+          }
+'''
+          fixed = text.replace(needle, replacement)
+          if chr(1) in fixed:
+              raise SystemExit('control character remains after replacement')
+          Path('reference-graph/.p11-fixed-governance.yml').write_text(fixed)
+          PY
+          git config user.name "Wibias"
+          git config user.email "37517432+Wibias@users.noreply.github.com"
+          git add reference-graph/.p11-fixed-governance.yml
+          git commit -m "chore: stage corrected P11 governance"
+          git push origin HEAD:agent/reference-graph-p11
