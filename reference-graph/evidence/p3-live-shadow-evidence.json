@@ -1,0 +1,242 @@
+{
+  "schema_version": "reference-graph.p3-receipt.v1",
+  "phase": "P3",
+  "recorded_at": "2026-10-23T02:52:12.000Z",
+  "target": {
+    "purpose": "agent-hub-reference-graph",
+    "project_ref": "vrznfnxzlxaavpqbzbzd",
+    "project_name": "agent-hub-reference-graph",
+    "region": "eu-central-1"
+  },
+  "git_sha": "7d606a28f65c6b72ef2312a0e9dace24dc2e2320",
+  "verification_at": "2026-10-23T02:51:25.000Z",
+  "production_source": "legacy-control",
+  "eligible_for_cutover_review": false,
+  "cutover_ready": false,
+  "decision": "no-cutover",
+  "decision_reason": "The dedicated live lexical path is operational and reproduces the healthy-snapshot lexical baseline, but average overlap and top-1 retention remain below the independent cutover thresholds. Exact-model live embeddings were unavailable, so semantic and hybrid modes were not fabricated or scored.",
+  "control_reference_time": "2026-07-21T12:00:00.000Z",
+  "benchmark_control_health": {
+    "reference_time": "2026-07-21T12:00:00.000Z",
+    "reviewed_accessible_count": 600,
+    "fresh_pool_count": 600,
+    "fresh_pool_rate": 1,
+    "fresh_surface_family_count": 12,
+    "fresh_platform_count": 2,
+    "case_count": 24,
+    "full_limit_case_count": 24,
+    "cases_with_coverage_gaps": 0,
+    "blockers": [],
+    "healthy": true
+  },
+  "current_control_health": {
+    "reference_time": "2026-10-23T02:43:17.002Z",
+    "reviewed_accessible_count": 600,
+    "fresh_pool_count": 2,
+    "fresh_pool_rate": 0.0033333333333333335,
+    "fresh_surface_family_count": 1,
+    "fresh_platform_count": 1,
+    "case_count": 24,
+    "full_limit_case_count": 0,
+    "cases_with_coverage_gaps": 24,
+    "blockers": [
+      "fresh pool is smaller than the largest requested limit",
+      "one or more control cases cannot fill the requested limit",
+      "one or more control cases have coverage gaps"
+    ],
+    "healthy": false
+  },
+  "cutover_thresholds": {
+    "min_cases": 20,
+    "min_comparable_cases": 20,
+    "min_average_overlap": 0.65,
+    "min_top1_retention": 0.75,
+    "max_empty_rate": 0.05,
+    "min_exact_surface_rate": 0.7,
+    "min_exact_platform_rate": 0.8
+  },
+  "phases": {
+    "preflight": {
+      "status": "success",
+      "detail": {
+        "project_status": "ACTIVE_HEALTHY",
+        "project_url": "https://vrznfnxzlxaavpqbzbzd.supabase.co",
+        "binding_verified": true,
+        "dedicated_target": true
+      }
+    },
+    "schema": {
+      "status": "success",
+      "detail": {
+        "committed_migrations": [
+          "001_reference_graph.sql",
+          "002_reference_graph_rpc.sql",
+          "003_reference_graph_embeddings_rpc.sql",
+          "004_reference_graph_lexical_overlap.sql"
+        ],
+        "live_migration_history": [
+          "reference_graph_001_schema",
+          "reference_graph_002_rpc",
+          "reference_graph_003_embeddings_rpc",
+          "p3_task8_execution_bridge",
+          "p3_task8_lexical_shadow_bridge",
+          "reference_graph_004_lexical_overlap",
+          "p3_task8_lexical_shadow_after_fix_bridge"
+        ],
+        "execution_harness_note": "The connected execution harness does not expose the privileged runtime credential or a direct Edge Function invoke action. Three one-shot bridge migrations temporarily installed the PostgreSQL http extension only to invoke fixed, input-free task runners. Each bridge dropped the extension before completion. These harness-only migration records remain visible in the dedicated non-production project and are not repository deployment migrations.",
+        "http_extension_installed_after_execution": false,
+        "task_runner_final_state": {
+          "version": 7,
+          "jwt_verification_required": true,
+          "behavior": "inert-http-410"
+        },
+        "rpc_permission_check": {
+          "privileged_role": "allowed",
+          "anon": "denied",
+          "authenticated": "denied"
+        },
+        "security_advisor": {
+          "blocking_findings": 0,
+          "info": {
+            "rls_enabled_no_policy": 11
+          },
+          "note": "The INFO findings match the closed-by-default design: RLS is enabled, exposed client roles have schema/table access revoked, and supported RPC execution is privileged-only."
+        },
+        "performance_advisor": {
+          "blocking_findings": 0,
+          "info": {
+            "unindexed_foreign_keys": 2,
+            "unused_indexes": 3
+          }
+        },
+        "live_lexical_repair": {
+          "initial_empty_case_count": 24,
+          "root_cause": "The deployed 002 lexical RPC used websearch_to_tsquery for long multi-term shadow queries, which made candidate matching too strict compared with the offline token-overlap baseline.",
+          "fix": "004_reference_graph_lexical_overlap.sql replaces all-term web search semantics with deterministic partial token overlap while preserving exact metadata filters and service-only execution.",
+          "regression_test": "tests/reference-graph/p3-lexical-overlap.test.mjs",
+          "post_fix_empty_case_count": 0,
+          "post_fix_candidate_smoke_count": 24
+        }
+      }
+    },
+    "import": {
+      "status": "success",
+      "detail": {
+        "artifact_sha256": "7720e4c9d100ab3dba31de1c0a00f2db802a13738dc9419df5ebb75ae05c51f6",
+        "plan": {
+          "record_count": 600,
+          "capture_count": 600,
+          "source_count": 576,
+          "asset_count": 600,
+          "deduplicated_assets": 0
+        },
+        "batch_size": 25,
+        "batches_per_run": 24,
+        "runs": 2,
+        "idempotent": true,
+        "store_stats": {
+          "sources": 576,
+          "assets": 600,
+          "chunks": 600,
+          "observations": 7264,
+          "tags": 868,
+          "asset_tags": 2540,
+          "relations": 0,
+          "embeddings": 0
+        }
+      }
+    },
+    "embeddings": {
+      "status": "unavailable",
+      "detail": {
+        "profile_id": "snowflake-arctic-embed-33m-raw-v1",
+        "model_id": "ollama/snowflake-arctic-embed:33m",
+        "model_revision": "e8db018629b4",
+        "dimensions": 384,
+        "quality_status": "experimental",
+        "persisted_total": 0,
+        "persisted_active_profile": 0,
+        "reason": "The exact pinned Ollama provider was not available in this execution harness. No substitute or synthetic vectors were generated."
+      }
+    },
+    "shadow": {
+      "status": "success",
+      "detail": {
+        "mode": "supabase-lexical",
+        "case_count": 24,
+        "control_reference_time": "2026-07-21T12:00:00.000Z",
+        "production_source": "legacy-control",
+        "semantic_status": "unavailable",
+        "hybrid_status": "unavailable",
+        "execution_method": "A fixed read-only task runner executed the same committed lexical-candidate and candidate-context RPC sequence for the same 24 fixed cases. This was used because the connected harness does not expose the privileged runtime credential or a direct function-invoke action.",
+        "task_runner_final_state": "jwt-protected-inert-http-410"
+      }
+    }
+  },
+  "evaluations": {
+    "lexical": {
+      "status": "measured",
+      "summary": {
+        "case_count": 24,
+        "comparable_case_count": 24,
+        "legacy_empty_rate": 0,
+        "average_overlap_at_k": 0.53125,
+        "legacy_top1_retention_rate": 0.7083333333333334,
+        "graph_empty_rate": 0,
+        "average_exact_surface_rate": 1,
+        "average_exact_platform_rate": 1,
+        "latency_ms": {
+          "min": 41.325450000000046,
+          "p50": 54.654730000000086,
+          "p95": 191.031245,
+          "max": 212.749676,
+          "average": 71.02424741666668
+        },
+        "thresholds": {
+          "minCases": 20,
+          "minComparableCases": 20,
+          "minAverageOverlap": 0.65,
+          "minTop1Retention": 0.75,
+          "maxEmptyRate": 0.05,
+          "minExactSurfaceRate": 0.7,
+          "minExactPlatformRate": 0.8
+        },
+        "blockers": [
+          "average overlap below threshold",
+          "legacy top-1 retention below threshold"
+        ],
+        "cutover_ready": false
+      },
+      "baseline_reproduction": {
+        "offline_average_overlap_at_k": 0.53125,
+        "offline_legacy_top1_retention_rate": 0.7083333333333334,
+        "live_matches_offline_quality_metrics": true
+      }
+    },
+    "semantic": {
+      "status": "unavailable",
+      "reason": "No exact-model persisted embeddings exist in the live target."
+    },
+    "hybrid": {
+      "status": "unavailable",
+      "reason": "Hybrid live evaluation requires compatible persisted semantic embeddings; none exist."
+    }
+  },
+  "verification": {
+    "implementation_github_actions_run": 39891759367,
+    "implementation_git_sha": "7d606a28f65c6b72ef2312a0e9dace24dc2e2320",
+    "tests": 73,
+    "passes": 73,
+    "failures": 0,
+    "fresh_pgvector_migrations": [
+      "001_reference_graph.sql",
+      "002_reference_graph_rpc.sql",
+      "003_reference_graph_embeddings_rpc.sql",
+      "004_reference_graph_lexical_overlap.sql"
+    ],
+    "partial_overlap_smoke": "passed",
+    "anonymous_rpc_rejection": "passed",
+    "offline_benchmark_average_overlap_at_k": 0.53125,
+    "offline_benchmark_legacy_top1_retention_rate": 0.7083333333333334
+  }
+}
