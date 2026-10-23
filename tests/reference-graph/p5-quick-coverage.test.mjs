@@ -76,14 +76,14 @@ test('quick coverage is infeasible when remaining predicate supply cannot satisf
   );
 });
 
-test('quick coverage is infeasible when both requirements cannot fit in remaining slots', () => {
+test('quick coverage is infeasible when individually available requirements cannot fit in the remaining slot', () => {
   const request = {
     profile: 'quick',
     limit: 3,
     surface: 'authenticated-home',
     platform: 'native-mobile',
   };
-  const selectedRecords = [record('ref-selected')];
+  const selectedRecords = [record('ref-selected-a'), record('ref-selected-b')];
   const remainingRecords = [
     record('ref-surface-only', { surfaceFamily: 'authenticated-home' }),
     record('ref-platform-only', { platform: 'native-mobile' }),
