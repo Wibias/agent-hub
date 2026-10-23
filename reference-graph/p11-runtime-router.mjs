@@ -138,11 +138,12 @@ export async function runP11RuntimeQuery({
       );
 
       if (recordExact && patternExact) {
-        authoritativeSelection = {
-          ...legacySelection,
-          selected: graphRecords,
-        };
-        authoritativePatterns = graphPatterns;
+        // Graph parity authorizes the route, but the public payload remains
+        // the already-sanitized legacy selection/pattern output. This keeps
+        // internal loader metadata (for example __file) out of production
+        // JSON and preserves legacy-only fields such as selectionScore.
+        authoritativeSelection = legacySelection;
+        authoritativePatterns = legacyPatterns;
         route = routing({
           graphMode,
           attempted: true,
