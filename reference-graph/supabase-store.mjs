@@ -136,6 +136,24 @@ export class ReferenceGraphSupabaseStore {
     });
   }
 
+  async recordVerifications(rows) {
+    if (!Array.isArray(rows)) {
+      throw new TypeError('verification rows must be an array');
+    }
+    return this.rpc('reference_graph_record_verifications', {
+      p_verifications: rows,
+    });
+  }
+
+  async embeddingCoverage(modelId, modelRevision, referenceDate) {
+    const result = await this.rpc('reference_graph_embedding_coverage', {
+      p_model_id: requireString(modelId, 'modelId'),
+      p_model_revision: requireString(modelRevision, 'modelRevision'),
+      p_reference_date: requireString(referenceDate, 'referenceDate'),
+    });
+    return result && typeof result === 'object' && !Array.isArray(result) ? result : {};
+  }
+
   async lexicalCandidates(query, filters = {}, limit = 48) {
     const rows = await this.rpc('reference_graph_lexical_candidates', {
       p_query: String(query ?? ''),
