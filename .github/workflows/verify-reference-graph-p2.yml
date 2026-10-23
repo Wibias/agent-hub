@@ -63,7 +63,47 @@ jobs:
           }, null, 2));
           NODE
 
-      - name: Diagnose legacy-control eligibility against graph hard filters
+      - name: Test healthy snapshot-control hypothesis
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const RealDate = globalThis.Date;
+          const snapshotInstant = new RealDate('2026-07-21T12:00:00Z').getTime();
+          globalThis.Date = class FrozenDate extends RealDate {
+            constructor(...args) {
+              super(...(args.length ? args : [snapshotInstant]));
+            }
+            static now() { return snapshotInstant; }
+          };
+          const { loadRecords } = await import('./knowledge/design-references/scripts/lib.mjs');
+          const { selectRecords } = await import('./knowledge/design-references/scripts/selection.mjs');
+          const cases = JSON.parse(fs.readFileSync('./reference-graph/shadow-cases.json', 'utf8'));
+          const records = loadRecords();
+          const rows = cases.map((request) => {
+            const selected = selectRecords(records, request).selected;
+            const exactBoth = selected.filter(
+              (row) => row.surfaceFamily === request.surface && row.platform === request.platform,
+            ).length;
+            return {
+              id: request.id,
+              selected: selected.length,
+              exact_both: exactBoth,
+              legacy_ids: selected.map((row) => row.id),
+            };
+          });
+          const uniqueIds = new Set(rows.flatMap((row) => row.legacy_ids));
+          console.log(JSON.stringify({
+            control_date: '2026-07-21',
+            total_selected: rows.reduce((sum, row) => sum + row.selected, 0),
+            unique_selected_ids: uniqueIds.size,
+            cases_with_full_limit: rows.filter((row) => row.selected === 4).length,
+            cases_with_zero_exact_both: rows.filter((row) => row.exact_both === 0).length,
+            exact_both_total: rows.reduce((sum, row) => sum + row.exact_both, 0),
+            rows,
+          }, null, 2));
+          NODE
+
+      - name: Diagnose current legacy-control eligibility against graph hard filters
         run: |
           node --input-type=module <<'NODE'
           import fs from 'node:fs';
