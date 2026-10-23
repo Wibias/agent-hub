@@ -1,0 +1,122 @@
+{
+  "schema_version": "reference-graph.p6-query-input-manifest.v1",
+  "source_workflow_run_id": 39914965493,
+  "source_artifact_id": 12483994833,
+  "source_zip_sha256": "bffc63059fe1efb419207110adbf66897835ea10c2354c9da885cf2ab5a13667",
+  "source_content_sha256": "76a1af99643b1ca5a53bf114ffca8f0c942462693a8eda9cc43afebcd26316ac",
+  "reference_time": "2026-10-23T12:00:00.000Z",
+  "model_tag": "snowflake-arctic-embed:33m",
+  "model_revision": "e8db018629b4",
+  "dimensions": 384,
+  "case_count": 24,
+  "files": [
+    {
+      "path": "reference-graph/evidence-run/p6-query-input-00.tsv",
+      "case_ids": [
+        "public-home-creator",
+        "public-home-proof"
+      ],
+      "md5": "6a316f099e1986b9bfb01059df4a68ec",
+      "sha256": "a1e3951f5ec9048822d63f425c9fa671ca717faddea17c029680788d8033ba7a"
+    },
+    {
+      "path": "reference-graph/evidence-run/p6-query-input-01.tsv",
+      "case_ids": [
+        "authenticated-home-resume",
+        "authenticated-home-mobile"
+      ],
+      "md5": "d792394d5ff1b93fb7a66155998f3b3e",
+      "sha256": "9c5d2eb6373d123567feffcfca2f166b80919f3e6b6f4f7bdc8fd95799fcb8bb"
+    },
+    {
+      "path": "reference-graph/evidence-run/p6-query-input-02.tsv",
+      "case_ids": [
+        "operator-control-live",
+        "operator-control-monitor"
+      ],
+      "md5": "76454a86931bb3267fba04238cbc42d2",
+      "sha256": "e36946360b7d21ba94473a567261f62f9f536c68e7a0bc91c05f9f1b5ba3f521"
+    },
+    {
+      "path": "reference-graph/evidence-run/p6-query-input-03.tsv",
+      "case_ids": [
+        "library-launcher-tools",
+        "library-launcher-mobile"
+      ],
+      "md5": "5f25d3d9aceac05c9fa8f881ed5a307d",
+      "sha256": "5aa0fba46ccfb3bfc581a9b9348eb42762059deb67918ca6635c7c6465e964bf"
+    },
+    {
+      "path": "reference-graph/evidence-run/p6-query-input-04.tsv",
+      "case_ids": [
+        "creation-setup-stream",
+        "creation-setup-mobile"
+      ],
+      "md5": "7ccdb4437e6b3424763e1270c82a3771",
+      "sha256": "5e235a8f0122453a4693b8df65c7c54d8589ef53437f1af74ac27897fcefc4c6"
+    },
+    {
+      "path": "reference-graph/evidence-run/p6-query-input-05.tsv",
+      "case_ids": [
+        "realtime-lobby",
+        "realtime-mobile-join"
+      ],
+      "md5": "d0e92d87a13fcb71adb6878452947d1e",
+      "sha256": "5fe9e4f675ac13808527afeb66362f8b4302ecc59148c72bd7d75d922265773d"
+    },
+    {
+      "path": "reference-graph/evidence-run/p6-query-input-06.tsv",
+      "case_ids": [
+        "admin-permissions",
+        "admin-mobile-settings"
+      ],
+      "md5": "42cf5e33b1baa67fb5c01395bd687042",
+      "sha256": "687e28f8f7f2cfb48ce0952c1b8829c2af17c4ab4afbab771eaf80c88178a412"
+    },
+    {
+      "path": "reference-graph/evidence-run/p6-query-input-07.tsv",
+      "case_ids": [
+        "auth-web",
+        "auth-mobile"
+      ],
+      "md5": "a67822a5ab27579ee6349d554a335571",
+      "sha256": "6b70321b886f3446171dc9990e4728d431ec6fec6355b590347f84c3a2638ded"
+    },
+    {
+      "path": "reference-graph/evidence-run/p6-query-input-08.tsv",
+      "case_ids": [
+        "checkout-web",
+        "checkout-mobile"
+      ],
+      "md5": "c2ddf669f13bd466af6891103a4c47fe",
+      "sha256": "8b9ae9196bd86ea37b10ac708a43b28431ce38ed99dc3a2d80573abfc5e83082"
+    },
+    {
+      "path": "reference-graph/evidence-run/p6-query-input-09.tsv",
+      "case_ids": [
+        "mobile-responsive-native",
+        "mobile-responsive-web"
+      ],
+      "md5": "269c17aedf3c8e6904da940935725169",
+      "sha256": "3ec3b296e9cb1d3284c8850f7bb9363e2b93e174472d64e047b6e86db7e34f2f"
+    },
+    {
+      "path": "reference-graph/evidence-run/p6-query-input-10.tsv",
+      "case_ids": [
+        "editorial-web",
+        "editorial-mobile"
+      ],
+      "md5": "41223cca6718865fa24762286a2067a0",
+      "sha256": "7327be102ea67d373dc4228771a217df6782e0e67dea16233c737158035eda01"
+    },
+    {
+      "path": "reference-graph/evidence-run/p6-query-input-11.tsv",
+      "case_ids": [
+        "design-system-web",
+        "design-system-mobile"
+      ],
+      "md5": "3a0a9b30214d9ca2944c4e684f427f33",
+      "sha256": "c19bec6c8f6558ba4657b9d2f35fbe71b3599d6d874d7b7fc4d9f16edb879e8c"
+    }
+  ]
+}
