@@ -34,7 +34,7 @@ PATTERNS = [
 ]
 
 CODE_REFERENCE = re.compile(
-    r"^[A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)+$"
+    r"^(?:this|env|config|process\.env)(?:\.[A-Za-z_$][A-Za-z0-9_$]*)+$"
 )
 
 
