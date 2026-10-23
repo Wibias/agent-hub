@@ -11,12 +11,81 @@ permissions:
 jobs:
   verify:
     runs-on: ubuntu-latest
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      OLLAMA_URL: http://127.0.0.1:11434
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: 996095b6c6d7ab99363559f9c5312ba2abdea842
       - uses: actions/setup-node@v4
         with:
           node-version: 24
+
       - name: Run design-reference library regression
         run: node --test knowledge/design-references/tests/library.test.mjs
       - name: Scan Reference Graph tree for common secrets
         run: python3 skills/security-review-redirect/scripts/scan_secrets.py reference-graph
+
+      - name: Verify required live credentials are configured
+        run: |
+          if [ -z "$SUPABASE_URL" ]; then
+            echo "SUPABASE_URL is not configured" >&2
+            exit 2
+          fi
+          if [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then
+            echo "SUPABASE_SERVICE_ROLE_KEY is not configured" >&2
+            exit 2
+          fi
+
+      - name: Measure current control and exact embedding coverage
+        run: |
+          mkdir -p /tmp/p6-evidence
+          node reference-graph/cli/p6-live-quality.mjs --current-control --reference-date 2026-10-23 --receipt-out /tmp/p6-evidence/current-control.json >/dev/null
+          node reference-graph/cli/p6-live-quality.mjs --embedding-coverage --target reference-graph/target.json --reference-date 2026-10-23 --receipt-out /tmp/p6-evidence/embedding-coverage.json >/dev/null
+
+      - name: Install and start Ollama
+        run: |
+          curl -fsSL https://ollama.com/install.sh | sh
+          ollama serve >/tmp/ollama.log 2>&1 &
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:11434/api/tags >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/ollama.log
+          exit 1
+
+      - name: Pull exact pinned model
+        run: ollama pull snowflake-arctic-embed:33m
+
+      - name: Measure P6 lexical semantic and guarded hybrid
+        run: |
+          node reference-graph/cli/p6-live-quality.mjs --supabase-p6-lexical --target reference-graph/target.json --reference-date 2026-10-23 --receipt-out /tmp/p6-evidence/lexical.json >/dev/null
+          node reference-graph/cli/p6-live-quality.mjs --supabase-p6-semantic --target reference-graph/target.json --reference-date 2026-10-23 --receipt-out /tmp/p6-evidence/semantic.json >/dev/null
+          node reference-graph/cli/p6-live-quality.mjs --supabase-p6-hybrid --target reference-graph/target.json --reference-date 2026-10-23 --receipt-out /tmp/p6-evidence/hybrid.json >/dev/null
+
+      - name: Verify outputs are complete and secret-free
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          import { assertSecretFreeP6Receipt } from './reference-graph/p6-receipt.mjs';
+          const dir = '/tmp/p6-evidence';
+          const files = ['current-control.json','embedding-coverage.json','lexical.json','semantic.json','hybrid.json'];
+          for (const file of files) {
+            const value = JSON.parse(fs.readFileSync(`${dir}/${file}`, 'utf8'));
+            assertSecretFreeP6Receipt(value, [process.env.SUPABASE_SERVICE_ROLE_KEY]);
+            if (file === 'current-control.json' && value.current_control_health?.healthy !== true) throw new Error('current control is unhealthy');
+            if (file === 'embedding-coverage.json' && value.verified !== true) throw new Error('embedding coverage is incomplete');
+            if (!['current-control.json','embedding-coverage.json'].includes(file) && value.status !== 'available') throw new Error(`${file} is not available`);
+          }
+          NODE
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: p6-live-evidence-raw
+          path: /tmp/p6-evidence/*.json
+          if-no-files-found: error
+          retention-days: 30
