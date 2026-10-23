@@ -5,9 +5,8 @@ import {
   loadRecords,
   parseArgs,
 } from "./lib.mjs";
-import { selectRecords } from "./selection.mjs";
-import { selectPatterns } from "./pattern-selection.mjs";
-import { recordUsage } from "./usage.mjs";
+import { fetchP10QuickCandidatePool } from "../../../reference-graph/p10-runtime-client.mjs";
+import { runP11RuntimeQuery } from "../../../reference-graph/p11-runtime-router.mjs";
 
 const args = parseArgs(process.argv.slice(2));
 for (const required of ["surface", "job", "platform", "dimensions"]) {
@@ -42,45 +41,38 @@ const request = {
   job: args.job || "",
   dimensions: args.dimensions || "",
 };
-const { selected, selectedByStratum, coverageGaps, coverage } = selectRecords(
-  loadRecords(),
-  request,
-);
-const patterns = selectPatterns(loadPatterns(), selected, request);
-let usageWarning = null;
-if (!args["no-record-usage"]) {
-  try {
-    recordUsage(selected, request, args["usage-log"]);
-  } catch (error) {
-    usageWarning =
-      "Selected records are valid, but local usage recording failed: " +
-      (error instanceof Error ? error.message : String(error));
-  }
+const now = new Date();
+const graphMode = process.env.REFERENCE_GRAPH_QUICK_RUNTIME || "legacy";
+const supabaseUrl = String(process.env.SUPABASE_URL || "").trim();
+const publishableKey = String(process.env.SUPABASE_PUBLISHABLE_KEY || "").trim();
+
+let fetchCandidatePool;
+if (
+  request.profile === "quick" &&
+  graphMode === "graph" &&
+  supabaseUrl &&
+  publishableKey
+) {
+  const expectedDate = now.toISOString().slice(0, 10);
+  fetchCandidatePool = () =>
+    fetchP10QuickCandidatePool({
+      supabaseUrl,
+      publishableKey,
+      timeoutMs: 1500,
+      expectedDate,
+    });
 }
 
-console.log(
-  JSON.stringify(
-    {
-      profile,
-      requested: {
-        surface: request.surface || null,
-        platform: request.platform || null,
-        job: args.job || null,
-        dimensions: args.dimensions
-          ? String(args.dimensions).split(",").filter(Boolean)
-          : [],
-        limit,
-      },
-      countsByStratum: selectedByStratum,
-      coverage,
-      coverageGaps,
-      requiresTargetedResearch: coverageGaps.length > 0,
-      usageWarning,
-      records: selected,
-      patterns,
-    },
-    null,
-    2,
-  ),
-);
-process.exitCode = coverageGaps.length ? 2 : 0;
+const { result } = await runP11RuntimeQuery({
+  records: loadRecords(),
+  patterns: loadPatterns(),
+  request,
+  graphMode,
+  fetchCandidatePool,
+  recordUsageEnabled: !args["no-record-usage"],
+  usageLogPath: args["usage-log"],
+  now,
+});
+
+console.log(JSON.stringify(result, null, 2));
+process.exitCode = result.coverageGaps.length ? 2 : 0;
