@@ -220,6 +220,13 @@ export class ReferenceGraphSupabaseStore {
     }));
   }
 
+  async quickCandidatePoolP7(filters = {}) {
+    const rows = await this.rpc('reference_graph_quick_candidate_pool_p7', {
+      p_filters: filters,
+    });
+    return Array.isArray(rows) ? rows : [];
+  }
+
   async stats() {
     const result = await this.rpc('reference_graph_stats', {});
     return result && typeof result === 'object' ? result : {};

@@ -66,7 +66,7 @@ test('permanent governance pins P3 P4 and P5 evidence history while measuring cu
   assert.match(source, /p3-live-shadow-evidence\.json/);
   assert.match(source, /p4-freshness-quality-evidence\.json/);
   assert.match(source, /p5-control-coverage-evidence\.json|p5-live-shadow-evidence\.json/);
-  assert.match(source, /Verify immutable P3, P4, and P5 historical evidence/i);
+  assert.match(source, /Verify immutable P3, P4(?:, and P5|, P5, and P6) historical evidence/i);
   assert.match(source, /Measure current P5 legacy control health/i);
   assert.match(source, /fresh_pool_count[^\n]*275|275[^\n]*fresh_pool_count/i);
   assert.match(source, /full_limit_case_count[^\n]*24|24[^\n]*full_limit_case_count/i);

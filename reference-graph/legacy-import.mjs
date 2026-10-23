@@ -84,6 +84,10 @@ export function adaptLegacyDesignReference(record) {
         ttl_days: record.ttlDays ?? null,
         access_status: record.accessStatus ?? null,
         replacement_for: record.replacementFor ?? null,
+        evidence_class: record.evidenceClass ?? null,
+        ordinary_or_failure_prone: record.ordinaryOrFailureProne ?? null,
+        multi_state_flow: record.multiStateFlow ?? null,
+        source_family: record.sourceFamily ?? null,
       },
     },
     provenance: {
