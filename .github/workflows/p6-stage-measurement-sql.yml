@@ -1,0 +1,61 @@
+name: P6 stage transactional measurement SQL
+
+on:
+  push:
+    branches:
+      - agent/reference-graph-p6-evidence-run
+    paths:
+      - .github/workflows/p6-stage-measurement-sql.yml
+
+permissions:
+  contents: write
+
+jobs:
+  stage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/reference-graph-p6-evidence-run
+          fetch-depth: 0
+      - name: Materialize SHA-pinned measurement SQL
+        env:
+          TEMPLATE_B64: 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
+        run: |
+          python3 - <<'PY'
+          import base64
+          import gzip
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+
+          template = gzip.decompress(base64.b64decode(os.environ['TEMPLATE_B64'])).decode()
+          data_sha = os.popen('git rev-parse HEAD').read().strip()
+          if len(data_sha) != 40:
+              raise SystemExit('invalid data SHA')
+          sql = template.replace('__DATA_SHA__', data_sha)
+          if '__DATA_SHA__' in sql:
+              raise SystemExit('unresolved data SHA placeholder')
+          out = Path('reference-graph/evidence-run')
+          sql_path = out / 'p6-measurement.sql'
+          sql_path.write_text(sql)
+          manifest = {
+              'schema_version': 'reference-graph.p6-measurement-sql-manifest.v1',
+              'data_sha': data_sha,
+              'sql_path': 'reference-graph/evidence-run/p6-measurement.sql',
+              'sql_md5': hashlib.md5(sql.encode()).hexdigest(),
+              'sql_sha256': hashlib.sha256(sql.encode()).hexdigest(),
+              'transactional': True,
+              'persistent_database_writes': False,
+          }
+          (out / 'p6-measurement-sql-manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')
+          print(json.dumps(manifest, indent=2))
+          PY
+      - name: Commit measurement SQL
+        run: |
+          git config user.name "Wibias"
+          git config user.email "37517432+Wibias@users.noreply.github.com"
+          git add reference-graph/evidence-run/p6-measurement.sql reference-graph/evidence-run/p6-measurement-sql-manifest.json
+          git commit -m "chore: stage transactional P6 measurement SQL"
+          git push origin HEAD:agent/reference-graph-p6-evidence-run
