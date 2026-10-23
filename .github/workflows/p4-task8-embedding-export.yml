@@ -49,13 +49,16 @@ jobs:
           node - <<'NODE'
           const fs = require('node:fs');
           const artifact = JSON.parse(fs.readFileSync('p4-embedding-export.json', 'utf8'));
-          if (artifact.embedding_count !== 600 || artifact.rows.length !== 600) {
-            throw new Error(`expected 600 embedding rows, got ${artifact.embedding_count}/${artifact.rows.length}`);
+          if (artifact.summary?.row_count !== 600 || artifact.rows?.length !== 600) {
+            throw new Error(`expected 600 embedding rows, got ${artifact.summary?.row_count}/${artifact.rows?.length}`);
           }
-          if (artifact.model_id !== 'ollama/snowflake-arctic-embed:33m' || artifact.model_revision !== 'e8db018629b4' || artifact.dimensions !== 384) {
+          if (artifact.profile?.model_id !== 'ollama/snowflake-arctic-embed:33m' || artifact.profile?.model_revision !== 'e8db018629b4' || artifact.profile?.dimensions !== 384) {
             throw new Error('embedding artifact profile mismatch');
           }
-          console.log(JSON.stringify({ embedding_count: artifact.embedding_count, model_id: artifact.model_id, model_revision: artifact.model_revision, dimensions: artifact.dimensions }, null, 2));
+          if (artifact.summary?.text_hash_count !== 600) {
+            throw new Error(`expected 600 text hashes, got ${artifact.summary?.text_hash_count}`);
+          }
+          console.log(JSON.stringify({ row_count: artifact.summary.row_count, text_hash_count: artifact.summary.text_hash_count, model_id: artifact.profile.model_id, model_revision: artifact.profile.model_revision, dimensions: artifact.profile.dimensions }, null, 2));
           NODE
       - uses: actions/upload-artifact@v4
         with:
