@@ -61,6 +61,109 @@ function flattenChunks(captures) {
   return chunks;
 }
 
+function requireProfile(profile) {
+  if (!profile || typeof profile !== 'object' || Array.isArray(profile)) {
+    throw new TypeError('profile must be an object');
+  }
+  const modelTag = String(profile.modelTag ?? '').trim();
+  const modelRevision = String(profile.modelRevision ?? '').trim();
+  if (!modelTag) throw new TypeError('profile.modelTag must be non-empty');
+  if (!modelRevision) throw new TypeError('profile.modelRevision must be non-empty');
+  if (profile.dimensions !== 384) throw new TypeError('profile dimensions must be 384');
+  return {
+    modelId: `ollama/${modelTag}`,
+    modelRevision,
+    dimensions: profile.dimensions,
+  };
+}
+
+function validateExpectedRows(rows, profile) {
+  if (!Array.isArray(rows)) throw new TypeError('rows must be an array');
+  const expected = requireProfile(profile);
+  const seenChunks = new Set();
+  const textHashes = new Set();
+
+  rows.forEach((row, index) => {
+    if (!row || typeof row !== 'object' || Array.isArray(row)) {
+      throw new TypeError(`rows[${index}] must be an object`);
+    }
+    const chunkId = String(row.chunk_id ?? '').trim();
+    if (!chunkId) throw new TypeError(`rows[${index}].chunk_id must be non-empty`);
+    if (seenChunks.has(chunkId)) throw new Error(`duplicate embedding chunk id: ${chunkId}`);
+    seenChunks.add(chunkId);
+    if (row.model_id !== expected.modelId) {
+      throw new Error(`embedding profile model id mismatch: expected ${expected.modelId}, got ${row.model_id}`);
+    }
+    if (row.model_revision !== expected.modelRevision) {
+      throw new Error(`embedding profile revision mismatch: expected ${expected.modelRevision}, got ${row.model_revision}`);
+    }
+    const hash = String(row.text_hash ?? '').trim();
+    if (!hash) throw new TypeError(`rows[${index}].text_hash must be non-empty`);
+    textHashes.add(hash);
+    validateVector(row.embedding, index);
+  });
+
+  return { expected, textHashes };
+}
+
+export function summarizeExpectedEmbeddingRows(rows, profile) {
+  const { expected, textHashes } = validateExpectedRows(rows, profile);
+  return {
+    row_count: rows.length,
+    model_id: expected.modelId,
+    model_revision: expected.modelRevision,
+    dimensions: expected.dimensions,
+    text_hash_count: textHashes.size,
+  };
+}
+
+export function createEmbeddingExportArtifact({ rows, profile } = {}) {
+  const summary = summarizeExpectedEmbeddingRows(rows, profile);
+  const sortedRows = [...rows]
+    .sort((left, right) => String(left.chunk_id).localeCompare(String(right.chunk_id)))
+    .map((row) => ({
+      chunk_id: row.chunk_id,
+      model_id: row.model_id,
+      model_revision: row.model_revision,
+      text_hash: row.text_hash,
+      embedding: [...row.embedding],
+    }));
+  return {
+    schema_version: 'reference-graph.embedding-export.v1',
+    profile: {
+      id: String(profile.id),
+      model_id: summary.model_id,
+      model_revision: summary.model_revision,
+      dimensions: summary.dimensions,
+      quality_status: profile.qualityStatus,
+      cutover_approved: profile.cutoverApproved === true,
+    },
+    summary,
+    rows: sortedRows,
+  };
+}
+
+export function assertCompleteEmbeddingCoverage(coverage) {
+  if (!coverage || typeof coverage !== 'object' || Array.isArray(coverage)) {
+    throw new TypeError('embedding coverage must be an object');
+  }
+  const eligible = Number(coverage.eligible_chunk_count);
+  const compatible = Number(coverage.compatible_count);
+  const missing = Number(coverage.missing_count);
+  const mismatch = Number(coverage.text_hash_mismatch_count);
+  const rate = Number(coverage.coverage_rate);
+  if (![eligible, compatible, missing, mismatch, rate].every(Number.isFinite)) {
+    throw new TypeError('embedding coverage fields must be finite numbers');
+  }
+  if (eligible < 1) throw new Error('embedding coverage is incomplete: no eligible chunks');
+  if (compatible !== eligible || missing !== 0 || mismatch !== 0 || rate !== 1) {
+    throw new Error(
+      `embedding coverage is incomplete: compatible=${compatible}/${eligible}, missing=${missing}, text_hash_mismatch=${mismatch}, rate=${rate}`,
+    );
+  }
+  return true;
+}
+
 export async function buildEmbeddingRows({
   captures,
   provider,

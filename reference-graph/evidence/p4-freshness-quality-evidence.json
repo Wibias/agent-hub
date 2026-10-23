@@ -1,0 +1,203 @@
+{
+  "schema_version": "reference-graph.p4-receipt.v1",
+  "target": {
+    "purpose": "agent-hub-reference-graph",
+    "project_ref": "vrznfnxzlxaavpqbzbzd",
+    "project_name": "agent-hub-reference-graph",
+    "region": "eu-central-1"
+  },
+  "git_sha": "72487cee8583fbdbb777788ed685da453f796796",
+  "verification_at": "2026-10-23T06:00:52.000Z",
+  "production_source": "legacy-control",
+  "eligible_for_cutover_review": false,
+  "cutover_ready": false,
+  "blockers": [
+    "phase shadow is not successful",
+    "current control unhealthy",
+    "live hybrid evidence unavailable or below quality gates",
+    "current control has coverage gaps after honest full revalidation"
+  ],
+  "phases": {
+    "preflight": {
+      "status": "success",
+      "detail": {
+        "dedicated_target": true,
+        "migrations": [
+          "reference_graph_001_schema",
+          "reference_graph_002_rpc",
+          "reference_graph_003_embeddings_rpc",
+          "reference_graph_004_lexical_overlap",
+          "reference_graph_005_freshness"
+        ]
+      }
+    },
+    "revalidation": {
+      "status": "success",
+      "detail": {
+        "initial_plan_sha256": "48cde0c2962b6159c2ceb400dba6fb6a5e4e9d7e478517cea2991a0709e16939",
+        "initial_target_count": 598,
+        "initial_already_fresh_count": 2,
+        "initial_wave_count": 12,
+        "terminal_decision_count": 598,
+        "ordered_decision_hashes_sha256": "1fad111ddb23f2a039abfe1ac55dbe88c12a6ebbac57ed8bccc72d98dee23760",
+        "verifier": "p4-source-analysis-audit-v1"
+      }
+    },
+    "import": {
+      "status": "success",
+      "detail": {
+        "sources": 576,
+        "assets": 600,
+        "chunks": 600,
+        "observations": 7264,
+        "tags": 868,
+        "relations": 0,
+        "current_assets": 600,
+        "verification_rows": 598
+      }
+    },
+    "embeddings": {
+      "status": "success",
+      "detail": {
+        "profile_id": "snowflake-arctic-embed-33m-raw-v1",
+        "model_id": "ollama/snowflake-arctic-embed:33m",
+        "model_revision": "e8db018629b4",
+        "dimensions": 384,
+        "persisted_total": 600,
+        "current_exact_coverage": {
+          "eligible_chunk_count": 275,
+          "compatible_count": 275,
+          "missing_count": 0,
+          "text_hash_mismatch_count": 0,
+          "coverage_rate": 1
+        },
+        "quality_status": "experimental",
+        "cutover_approved": false
+      }
+    },
+    "shadow": {
+      "status": "unavailable",
+      "detail": {
+        "reason": "Current legacy control is unhealthy after honest revalidation; current lexical/semantic/hybrid scores are intentionally not promoted as comparable cutover evidence.",
+        "historical_benchmark_source": "reference-graph/evidence/p3-live-shadow-evidence.json",
+        "historical_reference_time": "2026-07-21T12:00:00.000Z"
+      }
+    }
+  },
+  "revalidation": {
+    "target_count": 598,
+    "terminal_decision_count": 598,
+    "confirm_count": 273,
+    "stale_count": 325,
+    "archive_count": 0,
+    "complete": true
+  },
+  "current_control_health": {
+    "reference_time": "2026-10-23T12:00:00.000Z",
+    "reviewed_accessible_count": 275,
+    "fresh_pool_count": 275,
+    "fresh_pool_rate": 1,
+    "fresh_surface_family_count": 12,
+    "fresh_platform_count": 2,
+    "case_count": 24,
+    "full_limit_case_count": 24,
+    "cases_with_coverage_gaps": 3,
+    "blockers": [
+      "one or more control cases have coverage gaps"
+    ],
+    "healthy": false
+  },
+  "embedding_coverage": {
+    "eligible_chunk_count": 275,
+    "compatible_count": 275,
+    "missing_count": 0,
+    "text_hash_mismatch_count": 0,
+    "coverage_rate": 1
+  },
+  "evaluations": {
+    "lexical": {
+      "status": "blocked",
+      "reason": "Current legacy control is unhealthy because 3 of 24 fixed cases have coverage gaps after honest full revalidation; P4 does not score current live retrieval against an unhealthy control."
+    },
+    "semantic": {
+      "status": "blocked",
+      "reason": "Exact-profile embeddings are complete, but current live quality scoring is blocked by unhealthy current control."
+    },
+    "hybrid": {
+      "status": "blocked",
+      "reason": "Exact-profile embeddings are complete, but current live quality scoring is blocked by unhealthy current control."
+    }
+  },
+  "phase": "P4",
+  "recorded_at": "2026-10-23T06:00:52.000Z",
+  "decision": "no-cutover",
+  "decision_reason": "Full benchmark-independent revalidation and exact-profile embedding coverage succeeded, but the honest current legacy control still has coverage gaps in 3 of 24 fixed cases. P4 therefore does not score current live retrieval as comparable cutover evidence and production remains legacy-control.",
+  "cutover_thresholds": {
+    "min_cases": 20,
+    "min_comparable_cases": 20,
+    "min_average_overlap": 0.65,
+    "min_top1_retention": 0.75,
+    "max_empty_rate": 0.05,
+    "min_exact_surface_rate": 0.7,
+    "min_exact_platform_rate": 0.8
+  },
+  "historical_benchmark": {
+    "source": "reference-graph/evidence/p3-live-shadow-evidence.json",
+    "immutable": true,
+    "reference_time": "2026-07-21T12:00:00.000Z",
+    "benchmark_control_health": {
+      "healthy": true,
+      "fresh_pool_count": 600,
+      "full_limit_case_count": 24,
+      "cases_with_coverage_gaps": 0
+    },
+    "lexical_summary": {
+      "case_count": 24,
+      "comparable_case_count": 24,
+      "average_overlap_at_k": 0.53125,
+      "legacy_top1_retention_rate": 0.7083333333333334,
+      "graph_empty_rate": 0,
+      "average_exact_surface_rate": 1,
+      "average_exact_platform_rate": 1,
+      "cutover_ready": false
+    }
+  },
+  "live_target_snapshot": {
+    "sources": 576,
+    "assets": 600,
+    "chunks": 600,
+    "observations": 7264,
+    "tags": 868,
+    "relations": 0,
+    "embeddings": 600,
+    "verifications": 598,
+    "current_assets": 600
+  },
+  "security": {
+    "blocking_advisor_findings": 0,
+    "rls_enabled_no_policy_info": 12,
+    "rpc_access": {
+      "anon": "denied",
+      "authenticated": "denied",
+      "service_role": "allowed"
+    }
+  },
+  "performance": {
+    "blocking_advisor_findings": 0,
+    "unindexed_foreign_keys_info": 2,
+    "unused_indexes_info": 2
+  },
+  "verification": {
+    "implementation_git_sha": "72487cee8583fbdbb777788ed685da453f796796",
+    "reference_graph_governance_run": 39908919784,
+    "tests": 124,
+    "passes": 124,
+    "failures": 0,
+    "control_evidence_run": 39908791650,
+    "control_evidence_artifact_sha256": "a53c3a22f9ca84501bc45763289e6e46b77ecd8aa672b1f7531332932f0c6e52",
+    "release_governance": {
+      "status": "inherited-base-failure",
+      "reason": "Unchanged baseline skill-catalog check requires missing skills/write-swift/SKILL.md; this predates P4 and is not repaired here."
+    }
+  }
+}

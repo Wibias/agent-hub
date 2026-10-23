@@ -270,6 +270,7 @@ export async function runCatalogShadowEvaluation({
       filters: {
         platform: request.platform || undefined,
         surface_family: request.surface || undefined,
+        reference_date: resolvedControlNow.toISOString().slice(0, 10),
       },
       maxItems: request.limit,
     });

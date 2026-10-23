@@ -43,6 +43,7 @@ jobs:
           node --input-type=module <<'NODE'
           import { existsSync, readFileSync } from 'node:fs';
           import { assertSecretFreeReceipt } from './reference-graph/p3-receipt.mjs';
+          import { assertSecretFreeP4Receipt } from './reference-graph/p4-receipt.mjs';
 
           for (const file of [
             'reference-graph/target.json',
@@ -53,6 +54,16 @@ jobs:
             assertSecretFreeReceipt(value);
             console.log(`secret-free: ${file}`);
           }
+
+          for (const file of [
+            'reference-graph/evidence/p4-revalidation-results.json',
+            'reference-graph/evidence/p4-freshness-quality-evidence.json',
+          ]) {
+            if (!existsSync(file)) continue;
+            const value = JSON.parse(readFileSync(file, 'utf8'));
+            assertSecretFreeP4Receipt(value);
+            console.log(`secret-free: ${file}`);
+          }
           NODE
 
       - name: Scan Reference Graph tree for common secrets
@@ -61,10 +72,43 @@ jobs:
       - name: Verify catalog import plan
         run: node reference-graph/cli/import-design-references.mjs --plan
 
-      - name: Measure offline lexical shadow baseline
+      - name: Verify P4 revalidation plan is population-wide
         run: |
-          node reference-graph/cli/shadow-design-references.mjs --offline --control-date 2026-07-21 > /tmp/reference-graph-shadow.json
-          node --input-type=module -e "import fs from 'node:fs'; const x=JSON.parse(fs.readFileSync('/tmp/reference-graph-shadow.json','utf8')); console.log(JSON.stringify({mode:x.mode,case_count:x.case_count,production_source:x.production_source,semantic_enabled:x.semantic_enabled,summary:x.summary}, null, 2));"
+          node reference-graph/cli/plan-revalidation.mjs --now 2026-10-23 --wave-size 50 > /tmp/reference-graph-p4-revalidation.json
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const x = JSON.parse(fs.readFileSync('/tmp/reference-graph-p4-revalidation.json', 'utf8'));
+          const population = x.target_ids.length + x.already_fresh_ids.length + x.excluded_ids.length;
+          if (population !== 600) throw new Error(`expected 600-record population, got ${population}`);
+          if (x.target_ids.length <= 24) throw new Error('revalidation target must not collapse to benchmark membership');
+          console.log(JSON.stringify({ target_count: x.target_ids.length, already_fresh_count: x.already_fresh_ids.length, wave_count: x.waves.length }, null, 2));
+          NODE
+
+      - name: Verify immutable P2/P3 historical benchmark evidence
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const x = JSON.parse(fs.readFileSync('reference-graph/evidence/p3-live-shadow-evidence.json', 'utf8'));
+          const h = x.benchmark_control_health;
+          if (x.control_reference_time !== '2026-07-21T12:00:00.000Z') throw new Error('historical control reference time changed');
+          if (h?.healthy !== true || h?.fresh_pool_count !== 600 || h?.full_limit_case_count !== 24 || h?.cases_with_coverage_gaps !== 0) {
+            throw new Error(`immutable P3 benchmark health changed: ${JSON.stringify(h)}`);
+          }
+          if (x.production_source !== 'legacy-control') throw new Error(`unexpected P3 production source: ${x.production_source}`);
+          console.log(JSON.stringify({ control_reference_time: x.control_reference_time, benchmark_control_health: h, production_source: x.production_source }, null, 2));
+          NODE
+
+      - name: Measure current P4 legacy control health
+        run: |
+          node reference-graph/cli/p4-live-quality.mjs --current-control --reference-date 2026-10-23 > /tmp/reference-graph-p4-current-control.json
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const x = JSON.parse(fs.readFileSync('/tmp/reference-graph-p4-current-control.json', 'utf8'));
+          if (x.reference_date !== '2026-10-23') throw new Error(`unexpected current reference date: ${x.reference_date}`);
+          if (x.production_source !== 'legacy-control') throw new Error(`unexpected current production source: ${x.production_source}`);
+          if (x.current_control_health?.case_count !== 24) throw new Error(`unexpected current control case count: ${x.current_control_health?.case_count}`);
+          console.log(JSON.stringify({ reference_date: x.reference_date, production_source: x.production_source, current_control_health: x.current_control_health }, null, 2));
+          NODE
 
       - name: Install PostgreSQL client when needed
         run: |
@@ -102,47 +146,133 @@ jobs:
           psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f reference-graph/schema/002_reference_graph_rpc.sql
           psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f reference-graph/schema/003_reference_graph_embeddings_rpc.sql
           psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f reference-graph/schema/004_reference_graph_lexical_overlap.sql
+          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f reference-graph/schema/005_reference_graph_freshness.sql
 
-      - name: Smoke-test lexical overlap and RPC grants
+      - name: Smoke-test P4 freshness, embedding coverage, verification ledger, and RPC grants
         env:
           PGPASSWORD: postgres
         run: |
           psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 <<'SQL'
-          insert into reference_graph.sources (id, canonical_url, source_kind)
-          values ('10000000-0000-5000-8000-000000000001', 'https://example.com/p3-lexical-smoke', 'test');
-
-          insert into reference_graph.assets (
-            id, source_id, asset_kind, canonical_locator, captured_at, metadata
-          ) values (
-            '10000000-0000-5000-8000-000000000002',
-            '10000000-0000-5000-8000-000000000001',
-            'web-page',
-            'https://example.com/p3-lexical-smoke',
-            now(),
-            '{"platform":"web-responsive","surface_family":"public-home","legacy_id":"smoke-partial-overlap"}'::jsonb
+          insert into reference_graph.sources (id, canonical_url, source_kind, metadata)
+          values (
+            '30000000-0000-5000-8000-000000000001',
+            'https://example.com/p4-ci',
+            'test',
+            '{"access_status":"AVAILABLE"}'::jsonb
           );
 
-          insert into reference_graph.chunks (id, asset_id, ordinal, content)
-          values (
-            '10000000-0000-5000-8000-000000000003',
-            '10000000-0000-5000-8000-000000000002',
-            0,
-            'creator landing page clear call to action'
+          insert into reference_graph.assets (
+            id, source_id, asset_kind, canonical_locator, captured_at, content_hash, provenance, metadata
+          ) values
+            (
+              '30000000-0000-5000-8000-000000000011',
+              '30000000-0000-5000-8000-000000000001',
+              'web-page',
+              'https://example.com/p4-ci/old',
+              '2026-07-01',
+              'old',
+              '{"review_status":"reviewed","last_verified_at":"2026-07-01"}'::jsonb,
+              '{"legacy_id":"ref-p4-ci","access_status":"AVAILABLE","ttl_days":365,"platform":"web-responsive","surface_family":"public-home"}'::jsonb
+            ),
+            (
+              '30000000-0000-5000-8000-000000000012',
+              '30000000-0000-5000-8000-000000000001',
+              'web-page',
+              'https://example.com/p4-ci/current',
+              '2026-10-20',
+              'current',
+              '{"review_status":"reviewed","last_verified_at":"2026-10-20"}'::jsonb,
+              '{"legacy_id":"ref-p4-ci","access_status":"AVAILABLE","ttl_days":90,"platform":"web-responsive","surface_family":"public-home"}'::jsonb
+            ),
+            (
+              '30000000-0000-5000-8000-000000000013',
+              '30000000-0000-5000-8000-000000000001',
+              'web-page',
+              'https://example.com/p4-ci/independent',
+              '2026-10-20',
+              'independent',
+              '{"review_status":"reviewed","last_verified_at":"2026-10-20"}'::jsonb,
+              '{"access_status":"AVAILABLE","ttl_days":90,"platform":"web-responsive","surface_family":"public-home"}'::jsonb
+            ),
+            (
+              '30000000-0000-5000-8000-000000000014',
+              '30000000-0000-5000-8000-000000000001',
+              'web-page',
+              'https://example.com/p4-ci/stale',
+              '2026-07-01',
+              'stale',
+              '{"review_status":"reviewed","last_verified_at":"2026-07-01"}'::jsonb,
+              '{"legacy_id":"ref-p4-ci-stale","access_status":"AVAILABLE","ttl_days":90,"platform":"web-responsive","surface_family":"public-home"}'::jsonb
+            );
+
+          insert into reference_graph.chunks (id, asset_id, ordinal, content, metadata) values
+            ('30000000-0000-5000-8000-000000000021', '30000000-0000-5000-8000-000000000011', 0, 'creator landing historical', '{"text_hash":"hash-old"}'),
+            ('30000000-0000-5000-8000-000000000022', '30000000-0000-5000-8000-000000000012', 0, 'creator landing current', '{"text_hash":"hash-current"}'),
+            ('30000000-0000-5000-8000-000000000023', '30000000-0000-5000-8000-000000000013', 0, 'creator landing independent', '{"text_hash":"hash-independent"}'),
+            ('30000000-0000-5000-8000-000000000024', '30000000-0000-5000-8000-000000000014', 0, 'creator landing stale', '{"text_hash":"hash-stale"}');
+
+          insert into reference_graph.embeddings (
+            chunk_id, model_id, model_revision, text_hash, dimensions, embedding
+          ) values
+            ('30000000-0000-5000-8000-000000000022', 'test-model', 'v1', 'hash-current', 384, array_fill(0.01::real, array[384])::extensions.vector),
+            ('30000000-0000-5000-8000-000000000023', 'test-model', 'v1', 'wrong-hash', 384, array_fill(0.02::real, array[384])::extensions.vector);
+
+          select 1 / case when count(*) = 2 then 1 else 0 end as current_assets_ok
+          from reference_graph.current_assets
+          where id in (
+            '30000000-0000-5000-8000-000000000011'::uuid,
+            '30000000-0000-5000-8000-000000000012'::uuid,
+            '30000000-0000-5000-8000-000000000013'::uuid
           );
 
           set role service_role;
-          select 1 / case when count(*) = 1 then 1 else 0 end as partial_overlap_ok
+          select 1 / case when count(*) = 2 then 1 else 0 end as current_reference_date_retrieval_ok
           from public.reference_graph_lexical_candidates(
-            'creator product landing page impossible extra tokens',
-            '{"platform":"web-responsive","surface_family":"public-home"}'::jsonb,
-            24
+            'creator landing',
+            '{"reference_date":"2026-10-23","platform":"web-responsive","surface_family":"public-home"}'::jsonb,
+            20
           )
-          where asset_id = '10000000-0000-5000-8000-000000000002';
-          select public.reference_graph_stats();
+          where asset_id in (
+            '30000000-0000-5000-8000-000000000012'::uuid,
+            '30000000-0000-5000-8000-000000000013'::uuid
+          );
+
+          select 1 / case when count(*) = 1 then 1 else 0 end as historical_reference_date_ok
+          from public.reference_graph_lexical_candidates(
+            'stale',
+            '{"reference_date":"2026-07-15"}'::jsonb,
+            20
+          )
+          where asset_id = '30000000-0000-5000-8000-000000000014'::uuid;
+
+          do $$
+          declare v jsonb;
+          begin
+            v := public.reference_graph_embedding_coverage('test-model', 'v1', '2026-10-23');
+            if (v->>'eligible_chunk_count')::int <> 2
+              or (v->>'compatible_count')::int <> 1
+              or (v->>'missing_count')::int <> 0
+              or (v->>'text_hash_mismatch_count')::int <> 1 then
+              raise exception 'unexpected embedding coverage: %', v;
+            end if;
+          end
+          $$;
+
+          select public.reference_graph_record_verifications('[{"decision_hash":"p4-ci-decision","legacy_id":"ref-p4-ci","verdict":"confirm","verified_at":"2026-10-23","verifier":"ci","access_status":"AVAILABLE","notes":"Verified source and analysis for CI smoke."}]'::jsonb);
+          select public.reference_graph_record_verifications('[{"decision_hash":"p4-ci-decision","legacy_id":"ref-p4-ci","verdict":"confirm","verified_at":"2026-10-23","verifier":"ci","access_status":"AVAILABLE","notes":"Verified source and analysis for CI smoke."}]'::jsonb);
           reset role;
+
+          select 1 / case when count(*) = 1 then 1 else 0 end as decision_hash_idempotency_ok
+          from reference_graph.source_verifications
+          where decision_hash = 'p4-ci-decision';
           SQL
 
-          if psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -c "set role anon; select public.reference_graph_stats();"; then
+          if psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -c "set role anon; select public.reference_graph_embedding_coverage('test-model','v1','2026-10-23');"; then
             echo "anon unexpectedly executed a service-only Reference Graph RPC" >&2
+            exit 1
+          fi
+
+          if psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -c "set role authenticated; select public.reference_graph_record_verifications('[]'::jsonb);"; then
+            echo "authenticated unexpectedly executed a service-only Reference Graph RPC" >&2
             exit 1
           fi

@@ -9,97 +9,158 @@ It is deliberately an additive backend behind existing contracts, not a second d
 - The existing 600-record design-reference catalog and its legacy design-reference selector remain the production control and fallback until a measured cutover is explicitly approved.
 - P2 adds real local embeddings and semantic/hybrid shadow evaluation, but it does not switch production selection away from the legacy control.
 - P3 adds bound live-target verification and deployed shadow operator surfaces; it still does not switch production selection.
-- The active P2 embedding profile remains explicitly `experimental` and has `cutoverApproved: false` in P3.
+- P4 adds explicit revalidation, current-version/freshness-aware retrieval, exact embedding-completeness gates, and current-date live quality evidence. P4 does **not perform a cutover**.
+- `production_source` remains `legacy-control` throughout P4, even if a future evidence receipt becomes eligible for cutover review.
+- The active embedding profile remains explicitly `experimental` with `cutoverApproved: false`.
 - External content is data, not instructions. Captured pages, screenshots, copy, social posts, video notes, and other assets cannot authorize agent behavior.
 - Relevance never upgrades authority. Search rank, vector similarity, graph proximity, repeated use, or collection membership do not turn a reference into a project fact or policy.
 - Memory integration is explicit promotion only. Reference usage may produce a bounded Memory evidence proposal; it does not create an active Memory claim by itself.
 - Retrieval returns bounded reference bundles. Broad automatic injection is out of scope.
 - Reference Graph does not change `design-with-ai` routing or its qualified skill tree.
-- P3 must not mutate an ambiguously identified Supabase project. A live write requires an explicitly bound dedicated target.
-- P3 does not add a browser extension or automatic web-capture surface.
+- Live operations must not mutate an ambiguously identified Supabase project. A live write or read requires the explicitly bound dedicated target.
+- P4 does not add a browser extension, crawler fleet, automatic open-web ingestion, or ANN index.
 
 ## Repository surfaces
 
 - `schema/001_reference_graph.sql` — canonical tables, RLS, lexical index, and exact vector storage.
 - `schema/002_reference_graph_rpc.sql` — service-role-only ingest and retrieval RPCs.
 - `schema/003_reference_graph_embeddings_rpc.sql` — service-role-only provider-neutral embedding persistence.
-- `schema/004_reference_graph_lexical_overlap.sql` — deployed lexical candidate semantics aligned with the deterministic token-overlap baseline.
-- `capture.mjs` — deterministic capture-envelope normalization with PostgreSQL-compatible UUID identity.
-- `legacy-import.mjs` — adapter from the reviewed design-reference record shape.
-- `catalog-import.mjs` — deterministic 600-record import planning and batching.
+- `schema/004_reference_graph_lexical_overlap.sql` — deployed lexical candidate semantics aligned with deterministic partial token overlap.
+- `schema/005_reference_graph_freshness.sql` — append-only verification evidence, one current legacy asset, reference-date freshness, and exact embedding coverage.
+- `capture.mjs` — deterministic capture-envelope normalization; chunk metadata carries the SHA-256 text identity used for embedding compatibility.
+- `legacy-import.mjs` — adapter from reviewed design-reference records, including asset-level access/freshness metadata.
+- `catalog-import.mjs` — deterministic catalog import planning and batching.
+- `revalidation-plan.mjs` — benchmark-independent full stale-maintainable queue planning.
+- `embedding-pipeline.mjs` — deterministic embedding rows, export artifacts, and strict completeness gates.
 - `supabase-store.mjs` — service-role REST/RPC adapter; no Supabase client dependency and no embedding-provider dependency.
 - `retrieval.mjs` — bounded lexical/vector fusion plus one-hop graph expansion and legacy control/fallback handling.
-- `shadow-eval.mjs` — comparison metrics, control-health reporting, latency evidence, and conservative cutover blockers.
-- `offline-shadow.mjs` — deterministic lexical-only local baseline.
-- `ollama-embeddings.mjs` — local Ollama embedding adapter with exact revision verification and 384-dimensional validation.
-- `embedding-profile.mjs` — the measured P2 embedding profile, including query representation and explicit experimental/cutover state.
-- `embedding-pipeline.mjs` — deterministic chunk-to-embedding batching and persistence rows.
-- `semantic-shadow.mjs` — exact local semantic ranking and lexical+semantic hybrid shadow retrieval.
-- `live-shadow.mjs` — deployed Supabase lexical/semantic/hybrid shadow adapters using persisted document embeddings.
+- `shadow-eval.mjs` — control-vs-graph metrics, explicit reference-date alignment, control health, latency, and conservative gates.
+- `ollama-embeddings.mjs` — local Ollama adapter with exact model-revision verification and 384-dimensional validation.
+- `embedding-profile.mjs` — pinned Snowflake profile, query representation, and explicit experimental/cutover state.
+- `live-shadow.mjs` — deployed lexical/semantic/hybrid shadow adapters.
 - `target-binding.mjs` — dedicated-project identity validation and URL/project-ref matching.
-- `p3-receipt.mjs` — P3 phase-state and secret-free evidence receipt contract.
-- `cli/p3-live-shadow.mjs` — read-only bound-target preflight, verification, and live-shadow operator.
-- `shadow-cases.json` — fixed representative shadow suite.
-- `evidence/p2-shadow-evidence.json` — durable real-model measurements and the P2 no-cutover decision.
-- `evidence/p3-live-shadow-evidence.json` — durable dedicated-project import, live lexical, latency, and no-cutover evidence.
+- `p3-receipt.mjs` — historical P3 evidence receipt contract.
+- `p4-receipt.mjs` — P4 ordered phase state, evidence gates, secret scan, and review-eligibility decision.
+- `cli/p3-live-shadow.mjs` — P3 historical read-only live operator.
+- `cli/p4-live-quality.mjs` — P4 read-only current-quality operator.
+- `cli/plan-revalidation.mjs` — read-only deterministic P4 revalidation queue.
+- `shadow-cases.json` — fixed representative 24-case shadow suite.
+- `evidence/p2-shadow-evidence.json` — durable P2 real-model measurements.
+- `evidence/p3-live-shadow-evidence.json` — durable P3 live lexical evidence and no-cutover decision.
+- `evidence/p4-revalidation-results.json` — durable P4 revalidation evidence when produced.
+- `evidence/p4-freshness-quality-evidence.json` — durable P4 current/live quality evidence when produced.
 - `memory-promotion.mjs` — explicit Reference Graph -> `memory.protocol.v1` Evidence-only proposal boundary.
 
-## Entity model
+## Entity and authority model
 
-The schema keeps source identity, captured assets, searchable text chunks, tags, typed relations, observations, collections, embeddings, and usage feedback separate. Provenance is retained on canonical rows; embeddings and search vectors are retrieval aids, not authority.
+The schema keeps source identity, historical captured assets, searchable text chunks, tags, typed relations, observations, collections, embeddings, usage feedback, and source-verification evidence separate. Retrieval aids never become authority.
 
 ```text
 source
-  -> assets
+  -> assets (historical retained)
        -> chunks -> embeddings
        -> observations
        -> tags
        -> relations -> assets
        -> collection_items -> collections
        -> usage_feedback
+  -> source_verifications (append-only)
 ```
+
+For records carrying a non-empty `legacy_id`, P4 retrieval exposes exactly one current asset: newest `captured_at`, then deterministic asset-ID tie break. Older captures remain provenance history. Non-legacy assets remain independently eligible.
 
 ## Deployment order
 
-Apply migrations in numeric order to a dedicated Supabase/PostgreSQL database:
+Apply migrations in numeric order to the dedicated Supabase/PostgreSQL database:
 
 ```text
 001_reference_graph.sql
 002_reference_graph_rpc.sql
 003_reference_graph_embeddings_rpc.sql
 004_reference_graph_lexical_overlap.sql
+005_reference_graph_freshness.sql
 ```
 
-The exposed RPC surface lives in `public` so PostgREST can reach it, but execute permission is revoked from `public`, `anon`, and `authenticated` and granted only to `service_role`. The underlying `reference_graph` schema remains closed to exposed client roles.
+The exposed RPC surface lives in `public` so PostgREST can reach it, but execute permission is revoked from `public`, `anon`, and `authenticated` and granted only to `service_role`. The underlying `reference_graph` schema and `current_assets` view remain closed to exposed client roles.
 
-Never place `SUPABASE_SERVICE_ROLE_KEY` in a browser, client bundle, repository file, or public CI log. The store adapter is server-side/trusted-runner code only.
+Never place `SUPABASE_SERVICE_ROLE_KEY` in a browser, client bundle, repository file, evidence receipt, or public CI log. Store and operator code is server-side/trusted-runner only.
 
-## Bound P3 targets
+## Bound live target
 
-P3 live operations use a non-secret target file whose public identity must match the Supabase URL exactly:
+The non-secret target file is an identity binding, not a credential:
 
 ```json
 {
   "purpose": "agent-hub-reference-graph",
-  "project_ref": "<dedicated-project-ref>",
+  "project_ref": "vrznfnxzlxaavpqbzbzd",
   "project_name": "agent-hub-reference-graph",
   "region": "eu-central-1"
 }
 ```
 
-The target file never contains an API key, database password, bearer token, or Authorization header. Live write and read paths verify that `SUPABASE_URL` is exactly `https://<project_ref>.supabase.co` before constructing the store or performing network work. A URL/key pair by itself is not sufficient authorization.
+Live paths require `SUPABASE_URL` to match exactly `https://<project_ref>.supabase.co` before store construction or network work. A URL/key pair without the committed target binding is insufficient authorization. The connected generically named Supabase project is not considered a Reference Graph target by assumption.
 
-The connected generically named Supabase project is not considered a Reference Graph target by assumption. Dedicated project provisioning is a separately authorized infrastructure action.
+## Freshness and revalidation
 
-## Importing the existing catalog
+P4 does not equate HTTP reachability with reviewed freshness. Link health is triage/maintenance evidence only. A record becomes revalidated only through an explicit decision that confirms the source, the referenced analysis, and rights state.
 
-Planning is read-only and requires no credentials or target:
+A decision must carry:
+
+- stable reference ID;
+- `verifiedAt` (`YYYY-MM-DD`);
+- verifier identity;
+- `sourceChecked: true`;
+- `analysisChecked: true`;
+- `rightsChecked: true`;
+- current access status;
+- substantive notes;
+- verdict `confirm`, `stale`, or `archive`.
+
+`confirm` may advance `lastVerifiedAt` and access state while preserving review authority. `reviewedAt` is **not rewritten or advanced** by revalidation, and `reviewedBy` does not change. `stale` and `archive` make the record ineligible for normal selection while preserving provenance.
+
+The P4 target population is the **full stale maintainable** catalog population and is benchmark-independent. Shadow-case membership, expected winners, and retrieval scores are forbidden inputs to the revalidation queue. The work is processed in deterministic waves and is not complete until every frozen target has a terminal decision.
+
+Plan the current queue without network calls:
+
+```bash
+node reference-graph/cli/plan-revalidation.mjs \
+  --now 2026-10-23 \
+  --wave-size 50
+```
+
+Validate a decision wave before changing catalog shards:
+
+```bash
+node knowledge/design-references/scripts/revalidate-batch.mjs \
+  --plan \
+  --review-log knowledge/design-references/reviews/p4-wave-01.jsonl
+```
+
+Apply only an already-reviewed decision log:
+
+```bash
+node knowledge/design-references/scripts/revalidate-batch.mjs \
+  --apply \
+  --review-log knowledge/design-references/reviews/p4-wave-01.jsonl
+```
+
+Do not extend TTLs, bulk-rewrite verification dates, or refresh only records selected by the benchmark to manufacture quality.
+
+## Current versus historical clocks
+
+P4 keeps **current and historical** evaluation clocks separate. Current health uses the explicit present reference date (for example `2026-10-23`). The historical regression benchmark remains fixed at `2026-07-21T12:00:00.000Z` so P2/P3 quality numbers remain reproducible.
+
+The legacy selector and deployed graph always receive the same evaluation date. SQL freshness uses reviewed status, access status, `last_verified_at`, and `ttl_days` at the supplied `reference_date`. A healthy historical benchmark can never make an unhealthy current control appear healthy.
+
+## Importing current catalog state
+
+Planning remains credential-free:
 
 ```bash
 node reference-graph/cli/import-design-references.mjs --plan
 ```
 
-A write requires explicit `--apply`, a bound target, and server-side credentials:
+A live write requires explicit apply, bound target, and server credentials:
 
 ```bash
 SUPABASE_URL=... \
@@ -110,26 +171,11 @@ node reference-graph/cli/import-design-references.mjs \
   --batch-size 25
 ```
 
-Running the import CLI without exactly one of `--plan` or `--apply` fails closed. The import adapts the current 600 reviewed records and sends deterministic captures through the locked batch RPC. Deterministic IDs make a second import an idempotency verification rather than a duplicate-data path.
+Deterministic IDs make unchanged captures idempotent. Changed searchable content produces new deterministic asset/chunk identity, preserving the older capture rather than destructively replacing it. `current_assets` keeps retrieval on one current legacy version.
 
-## Retrieval policy
+## Exact vector baseline
 
-The graph path is evaluated against the legacy selector before any cutover:
-
-1. apply metadata eligibility filters;
-2. combine lexical and semantic ranks deterministically;
-3. expand at most one relation hop from the strongest seeds;
-4. re-rank and enforce a final item budget;
-5. in `shadow` mode, return the legacy selector result as the production bundle and expose the graph bundle only for comparison;
-6. in `active` mode, use the graph bundle, but fall back to the legacy selector when graph retrieval is unavailable or empty.
-
-P3 does not switch production selection to Reference Graph.
-
-### Vector baseline
-
-Vector nearest-neighbor lookup remains exact rather than approximate. Every semantic query binds the exact `model_id` and `model_revision`, then compares only vectors from that compatible embedding space.
-
-The persistence boundary remains provider-neutral: `persistEmbeddings(...)` stores supplied vectors and does not own an embedding provider. P2 adds an optional local Ollama generator and a separately versioned embedding profile above that boundary. Input vectors must contain exactly 384 finite numbers and are persisted with `text_hash`, `model_id`, and `model_revision`.
+Vector nearest-neighbor lookup remains **exact**. ANN/HNSW/IVFFlat is deferred until measured scale or latency evidence justifies a model-scoped strategy. Every semantic query is bound to exact `model_id` and `model_revision`.
 
 The active experimental profile is:
 
@@ -142,19 +188,25 @@ quality:  experimental
 cutover:  false
 ```
 
-Documents use the normal catalog chunk text. Queries alone receive the profile prefix `Represent this sentence for searching relevant passages: `. The profile is intentionally marked experimental because measured retrieval quality does not justify production use.
+Document chunks use their ordinary text. Queries alone receive the configured search prefix. Embeddings are compatible only when model ID, model revision, 384 finite dimensions, and persisted `text_hash` all match the current chunk.
 
-HNSW/IVFFlat ANN remains deferred until measured scale or latency evidence justifies it and there is an explicit model-scoped indexing strategy.
+### Plan, export, apply, verify
 
-## Generating embeddings
-
-Planning the full 600-record / 600-chunk batch is credential-free and performs no Ollama or Supabase calls:
+Plan without Ollama or Supabase:
 
 ```bash
 node reference-graph/cli/embed-design-references.mjs --plan
 ```
 
-The current profile is experimental, so persistence fails closed unless that state is explicitly acknowledged. P3 also requires a bound live target:
+Generate a deterministic exact-profile artifact through Ollama **without Supabase credentials**:
+
+```bash
+OLLAMA_URL=http://127.0.0.1:11434 \
+node reference-graph/cli/embed-design-references.mjs \
+  --export-rows /tmp/reference-graph-embeddings.json
+```
+
+Persist exact-profile rows only after explicitly acknowledging the experimental profile:
 
 ```bash
 SUPABASE_URL=... \
@@ -166,126 +218,85 @@ node reference-graph/cli/embed-design-references.mjs \
   --target reference-graph/target.json
 ```
 
-`--allow-experimental` authorizes only persistence of the experimental vectors. It does not approve a retrieval cutover and does not change `production_source`.
+Apply mode immediately calls live embedding coverage and exits non-zero unless eligible coverage is exactly `1`, missing is `0`, and text-hash mismatch is `0`.
 
-## Shadow evaluation
-
-The fixed shadow suite contains 24 representative quick-selection cases across the catalog's surface families.
-
-The credential-free offline baseline is lexical only:
-
-```bash
-node reference-graph/cli/shadow-design-references.mjs --offline
-```
-
-A deployed Supabase lexical store can be evaluated separately with a bound target:
+Read-only live verification is separate:
 
 ```bash
 SUPABASE_URL=... \
 SUPABASE_SERVICE_ROLE_KEY=... \
-node reference-graph/cli/shadow-design-references.mjs \
-  --supabase \
-  --target reference-graph/target.json
+node reference-graph/cli/p4-live-quality.mjs \
+  --verify-embeddings \
+  --target reference-graph/target.json \
+  --reference-date 2026-10-23
 ```
 
-Deployed semantic and hybrid shadow modes embed only queries locally. The 600 document vectors come from the exact model/revision-bound embeddings already persisted in Supabase:
+## P4 read-only quality operator
+
+`cli/p4-live-quality.mjs` never applies migrations, edits the catalog, imports captures, persists vectors, records verification decisions, or changes routing. It supports exactly one mode per invocation:
+
+```text
+--preflight
+--current-control
+--verify-import
+--verify-embeddings
+--shadow-lexical
+--shadow-semantic
+--shadow-hybrid
+```
+
+Examples:
 
 ```bash
+node reference-graph/cli/p4-live-quality.mjs \
+  --current-control \
+  --reference-date 2026-10-23
+
+SUPABASE_URL=... \
+SUPABASE_SERVICE_ROLE_KEY=... \
+node reference-graph/cli/p4-live-quality.mjs \
+  --shadow-lexical \
+  --target reference-graph/target.json \
+  --reference-date 2026-10-23
+
 SUPABASE_URL=... \
 SUPABASE_SERVICE_ROLE_KEY=... \
 OLLAMA_URL=http://127.0.0.1:11434 \
-node reference-graph/cli/shadow-design-references.mjs \
-  --supabase-semantic \
+node reference-graph/cli/p4-live-quality.mjs \
+  --shadow-hybrid \
   --target reference-graph/target.json \
-  --control-date 2026-07-21
-
-node reference-graph/cli/shadow-design-references.mjs \
-  --supabase-hybrid \
-  --target reference-graph/target.json \
-  --control-date 2026-07-21
+  --reference-date 2026-10-23 \
+  --receipt-out /tmp/p4-hybrid.json
 ```
 
-Real local semantic and hybrid challengers remain available for P2-style offline evidence:
+Semantic/hybrid evaluation does not run when exact-profile live embedding coverage is incomplete. That state is reported as incomplete evidence rather than fabricated retrieval quality.
 
-```bash
-node reference-graph/cli/shadow-design-references.mjs \
-  --ollama-semantic \
-  --control-date 2026-07-21
+## Quality gates and no-cutover boundary
 
-node reference-graph/cli/shadow-design-references.mjs \
-  --ollama-hybrid \
-  --control-date 2026-07-21
-```
+The independent thresholds remain unchanged:
 
-All modes keep `production_source` as `legacy-control`. The evaluator reports overlap-at-k, legacy top-1 retention, graph empty rate, exact surface/platform rates, control health, model identity for semantic modes, comparable-case counts, and P3 graph latency summaries. `--require-ready` can turn failed cutover thresholds into a non-zero exit code, but it cannot perform a cutover.
+- average overlap@k >= `0.65`;
+- legacy top-1 retention >= `0.75`;
+- graph empty rate <= `0.05`;
+- exact surface rate >= `0.70`;
+- exact platform rate >= `0.80`;
+- at least 20 total and 20 comparable cases.
 
-### P3 read-only operator
+A P4 receipt can set `cutover_ready: true` / `eligible_for_cutover_review: true` only when all required phases succeed, full revalidation is complete, current control is healthy, exact embedding coverage is complete, live hybrid evidence is available, and every quality gate passes. Even then, P4 **does not perform a cutover**: `production_source` remains `legacy-control`. Any actual routing change requires a separately authorized future phase.
 
-`cli/p3-live-shadow.mjs` provides one explicit read/verify phase per invocation. It never applies migrations, imports data, persists embeddings, creates a project, or changes production routing.
+Partial revalidation, unhealthy current control, missing vectors, text-hash mismatch, unavailable semantic/hybrid evidence, or a failed quality threshold forces a no-cutover result.
 
-Preflight validates the target/URL binding and confirms a service credential is present without printing it:
+## Historical measured evidence
 
-```bash
-SUPABASE_URL=... \
-SUPABASE_SERVICE_ROLE_KEY=... \
-node reference-graph/cli/p3-live-shadow.mjs \
-  --preflight \
-  --target reference-graph/target.json
-```
+### P2
 
-After deployment/import, read-only verification modes are:
+P2 established real-model local semantic/hybrid measurement. The active Snowflake profile remained below independent cutover quality thresholds, so no production change was made. Durable details live in `evidence/p2-shadow-evidence.json`.
 
-```bash
-node reference-graph/cli/p3-live-shadow.mjs --verify-import --target reference-graph/target.json
-node reference-graph/cli/p3-live-shadow.mjs --verify-embeddings --target reference-graph/target.json
-```
+### P3
 
-`--verify-import` expects `600` assets and `576` sources. `--verify-embeddings` probes the exact committed model/revision semantic space. Exact persisted model/revision counts for final P3 evidence are additionally verified through read-only SQL during live deployment verification.
+P3 deployed the dedicated target and proved idempotent catalog import plus live lexical retrieval. The lexical result reproduced the healthy historical baseline (`0.53125` overlap@k and `0.70833` top-1 retention), still below the independent thresholds. No compatible exact-model document embeddings existed in the live target, so semantic/hybrid were recorded as unavailable rather than assigned fabricated scores. Durable details live in `evidence/p3-live-shadow-evidence.json`.
 
-Live evidence modes are:
-
-```bash
-node reference-graph/cli/p3-live-shadow.mjs --shadow-lexical --target reference-graph/target.json
-node reference-graph/cli/p3-live-shadow.mjs --shadow-semantic --target reference-graph/target.json
-node reference-graph/cli/p3-live-shadow.mjs --shadow-hybrid --target reference-graph/target.json
-```
-
-When compatible persisted embeddings do not exist, semantic/hybrid availability is reported as `unavailable` and is not misrepresented as a retrieval-quality failure. Provider/RPC exceptions remain real failures and are not downgraded to `unavailable`.
-
-Use `--receipt-out <path>` to write the same secret-scanned JSON result to a file. The operator rejects credential-shaped receipt fields and supplied secret values before writing.
-
-### Control health and reproducible benchmark time
-
-The legacy selector applies its normal freshness/TTL contract. By 2026-10-23, only 2 of the 600 reviewed and accessible catalog records were still fresh under that policy, so the live control had collapsed to an unsuitable quality benchmark. This does not change production behavior: the legacy selector remains the production source.
-
-For reproducible shadow quality measurement, P3 uses `2026-07-21T12:00:00.000Z` as the benchmark control time. At that reference time all 600 records are fresh and all 24 cases can fill their requested limit. The operator reports this benchmark separately from `current_control_health`, so a healthy historical comparison cannot masquerade as healthy current production data.
-
-Do not bypass or rewrite record TTLs to manufacture a comparison score.
-
-### P2 measured result
-
-The durable measurements are in `evidence/p2-shadow-evidence.json`. On the healthy 24-case snapshot:
-
-| Challenger | overlap@k | legacy top-1 | exact surface | exact platform | cutover |
-| --- | ---: | ---: | ---: | ---: | --- |
-| lexical baseline | 0.53125 | 0.70833 | 1.0 | 1.0 | no |
-| all-minilm semantic probe | 0.22917 | 0.29167 | 1.0 | 1.0 | no |
-| all-minilm hybrid probe | 0.40625 | 0.54167 | 1.0 | 1.0 | no |
-| active Snowflake raw semantic profile | 0.28125 | 0.41667 | 1.0 | 1.0 | no |
-| active Snowflake raw hybrid profile | 0.42708 | 0.50000 | 1.0 | 1.0 | no |
-| best exploratory Snowflake hybrid probe | 0.52083 | 0.66667 | 1.0 | 1.0 | no |
-
-The independent cutover thresholds remain at least 0.65 average overlap and 0.75 legacy top-1 retention, alongside the existing case-count, empty-rate, surface, and platform gates. Even the best exploratory representation stayed below both quality thresholds and was not adopted.
-
-**P2 decision remains binding during P3: no cutover.** Semantic and hybrid retrieval remain measurement-only challengers; the legacy selector remains production control and fallback.
-
-### P3 live result
-
-The durable live measurements are in `evidence/p3-live-shadow-evidence.json`. The dedicated Supabase target contains 600 assets from 576 sources after two idempotent 25-record-batch imports. The live lexical path reproduces the healthy-snapshot lexical quality metrics exactly: overlap@k `0.53125`, legacy top-1 retention `0.70833`, exact surface/platform `1.0/1.0`, and graph empty rate `0` across 24 cases. Live graph latency measured p50 `54.65 ms` and p95 `191.03 ms`.
-
-The first deployed lexical run exposed an overly strict all-term query in `002_reference_graph_rpc.sql`; `004_reference_graph_lexical_overlap.sql` fixes the deployed RPC to use deterministic partial token overlap and is covered by fresh-database CI. No compatible exact-model document embeddings were available in the live target, so semantic and hybrid live modes are recorded as `unavailable` rather than assigned fabricated quality scores.
-
-**P3 decision: no cutover.** The live path is operational, but lexical overlap and top-1 retention remain below the independent quality thresholds.
+**P3 decision: no cutover.** The legacy selector remains production control and fallback.
 
 ## Memory boundary
 

@@ -1,13 +1,13 @@
 # Design Reference Index
 
-Generated: 2026-07-20T23:10:32.195Z
+Generated: 2026-10-23T04:52:29.663Z
 
 Records: 600
 Patterns: 24
 
 ## Counts
 
-- Status: {"reviewed":600}
+- Status: {"stale":325,"reviewed":275}
 - Strata: {"adjacent-domain":120,"evidence-craft":180,"outside-domain":120,"direct-domain":180}
 - Platforms: {"web-responsive":450,"native-mobile":150}
 

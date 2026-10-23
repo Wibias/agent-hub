@@ -80,20 +80,18 @@ test('shadow CLI exposes separate ollama semantic and hybrid modes without chang
   assert.match(source, /quality_status/);
 });
 
-test('offline shadow CLI can benchmark against the explicit healthy catalog snapshot', () => {
-  const result = run(
-    'reference-graph/cli/shadow-design-references.mjs',
-    ['--offline', '--control-date', '2026-07-21'],
-  );
+test('P3 historical benchmark remains immutable after P4 catalog revalidation', () => {
+  const evidence = JSON.parse(read('reference-graph/evidence/p3-live-shadow-evidence.json'));
 
-  assert.equal(result.status, 0, result.stderr);
-  const body = JSON.parse(result.stdout);
-  assert.equal(body.control_reference_time, '2026-07-21T12:00:00.000Z');
-  assert.equal(body.control_health.healthy, true);
-  assert.equal(body.control_health.fresh_pool_count, 600);
-  assert.equal(body.current_control_health.healthy, false);
-  assert.equal(body.production_source, 'legacy-control');
-  assert.equal(body.case_count, 24);
+  assert.equal(evidence.control_reference_time, '2026-07-21T12:00:00.000Z');
+  assert.equal(evidence.benchmark_control_health.reference_time, '2026-07-21T12:00:00.000Z');
+  assert.equal(evidence.benchmark_control_health.healthy, true);
+  assert.equal(evidence.benchmark_control_health.reviewed_accessible_count, 600);
+  assert.equal(evidence.benchmark_control_health.fresh_pool_count, 600);
+  assert.equal(evidence.benchmark_control_health.full_limit_case_count, 24);
+  assert.equal(evidence.benchmark_control_health.cases_with_coverage_gaps, 0);
+  assert.equal(evidence.production_source, 'legacy-control');
+  assert.equal(evidence.phases.shadow.detail.case_count, 24);
 });
 
 test('shadow CLI rejects an invalid control date before retrieval work', () => {
