@@ -47,6 +47,7 @@ jobs:
           import { assertSecretFreeP5Receipt } from './reference-graph/p5-receipt.mjs';
           import { assertSecretFreeP6Receipt } from './reference-graph/p6-receipt.mjs';
           import { assertSecretFreeP7Receipt } from './reference-graph/p7-receipt.mjs';
+          import { assertSecretFreeP8Receipt } from './reference-graph/p8-receipt.mjs';
 
           for (const file of [
             'reference-graph/target.json',
@@ -93,6 +94,15 @@ jobs:
             if (!existsSync(file)) continue;
             const value = JSON.parse(readFileSync(file, 'utf8'));
             assertSecretFreeP7Receipt(value);
+            console.log(`secret-free: ${file}`);
+          }
+
+          for (const file of [
+            'reference-graph/evidence/p8-cutover-review-evidence.json',
+          ]) {
+            if (!existsSync(file)) continue;
+            const value = JSON.parse(readFileSync(file, 'utf8'));
+            assertSecretFreeP8Receipt(value);
             console.log(`secret-free: ${file}`);
           }
           NODE
@@ -275,6 +285,88 @@ jobs:
 
       - name: Verify P7 metadata identity invariant
         run: node --test tests/reference-graph/p7-metadata-parity.test.mjs
+
+      - name: Verify immutable P7 cutover-review evidence
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const p7 = JSON.parse(fs.readFileSync('reference-graph/evidence/p7-lexical-parity-evidence.json', 'utf8'));
+          const summary = p7.evaluation?.summary;
+          if (p7.schema_version !== 'reference-graph.p7-receipt.v1'
+            || p7.base_sha !== '6b1ed86a68ac485228596b9051bf76a7300eaccb'
+            || p7.git_sha !== 'e0f7ee73cf3700e3af3fefced0f446745f0e5ade'
+            || p7.cutover_ready !== true
+            || p7.eligible_for_cutover_review !== true
+            || p7.production_source !== 'legacy-control'
+            || !Array.isArray(p7.blockers)
+            || p7.blockers.length !== 0
+            || summary?.case_count !== 24
+            || summary?.comparable_case_count !== 24
+            || summary?.average_overlap_at_k !== 1
+            || summary?.legacy_top1_retention_rate !== 1
+            || summary?.graph_empty_rate !== 0) {
+            throw new Error(`immutable P7 evidence changed: ${JSON.stringify(p7)}`);
+          }
+          console.log(JSON.stringify({
+            base_sha: p7.base_sha,
+            git_sha: p7.git_sha,
+            cutover_ready: p7.cutover_ready,
+            eligible_for_cutover_review: p7.eligible_for_cutover_review,
+            production_source: p7.production_source,
+            summary,
+          }, null, 2));
+          NODE
+
+      - name: Verify P8 production CLI remains legacy-only
+        run: |
+          EXPECTED_QUERY_BLOB='4963cfbaf4306a03084f4513a1e324f649ce36e5'
+          ACTUAL_QUERY_BLOB="$(git hash-object knowledge/design-references/scripts/query.mjs)"
+          if [ "$ACTUAL_QUERY_BLOB" != "$EXPECTED_QUERY_BLOB" ]; then
+            echo "production query CLI changed: expected $EXPECTED_QUERY_BLOB got $ACTUAL_QUERY_BLOB" >&2
+            exit 1
+          fi
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          import path from 'node:path';
+          const root = 'knowledge/design-references';
+          const forbidden = /SUPABASE_SERVICE_ROLE_KEY|ReferenceGraphSupabaseStore|quickCandidatePoolP7|p7-parity-policy/;
+          function walk(dir) {
+            for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+              const full = path.join(dir, entry.name);
+              if (entry.isDirectory()) walk(full);
+              else if (entry.isFile()) {
+                const source = fs.readFileSync(full, 'utf8');
+                if (forbidden.test(source)) throw new Error(`P8 production-runtime graph credential/client leak: ${full}`);
+              }
+            }
+          }
+          walk(root);
+          console.log('P8 production query CLI blob and runtime credential boundary passed');
+          NODE
+
+      - name: Verify P8 offline quick handoff contract
+        run: |
+          node reference-graph/cli/p8-cutover-review.mjs --offline-contract --reference-date 2026-10-23 > /tmp/reference-graph-p8-offline-review.json
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const x = JSON.parse(fs.readFileSync('/tmp/reference-graph-p8-offline-review.json', 'utf8'));
+          const pool = x.candidate_pool;
+          const review = x.review;
+          if (x.production_source !== 'legacy-control'
+            || x.activation_performed !== false
+            || x.reference_date !== '2026-10-23'
+            || pool?.eligible_count !== 275
+            || pool?.complete_metadata_count !== 275
+            || pool?.unique_legacy_id_count !== 275
+            || review?.case_count !== 24
+            || review?.exact_handoff_count !== 24
+            || review?.pattern_exact_count !== 24
+            || review?.mismatch_count !== 0
+            || review?.hydration_failure_count !== 0) {
+            throw new Error(`P8 offline quick handoff drifted: ${JSON.stringify(x)}`);
+          }
+          console.log(JSON.stringify({ production_source: x.production_source, candidate_pool: pool, review }, null, 2));
+          NODE
 
       - name: Measure current P5 legacy control health
         run: |

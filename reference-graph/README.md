@@ -301,3 +301,23 @@ P3 deployed the dedicated target and proved idempotent catalog import plus live 
 ## Memory boundary
 
 Reference-derived learnings enter Memory only through explicit `memory.protocol.v1` `capture_evidence` proposals. Reference Graph never automatically emits `assert_claim`, never sets authority class, and never treats repeated retrieval as promotion.
+
+
+## P8 cutover review boundary
+
+P8 is **review-only**. P7 proved exact lexical parity for the `quick` profile, but production still uses `legacy-control` through the unchanged local `knowledge/design-references/scripts/query.mjs` command.
+
+- `quick` may be evaluated as a future graph cutover candidate only through the explicit P8 review operator.
+- `standard` and `deep` remain legacy-only because P7 did not certify those profiles.
+- The normal design-reference runtime remains local/offline and must not require the Supabase service-role credential.
+- The service-role credential is operator/evidence-only; it is not an approved production runtime credential.
+- P8 adds no migration 008, does not weaken P7 RPC grants, does not record usage during review, and does not alter production routing.
+- A P8 result may mark the quick path review-eligible while still keeping `production_activation_ready: false`, `production_source: legacy-control`, and `activation_performed: false`.
+
+Use the read-only offline contract check without credentials:
+
+```bash
+node reference-graph/cli/p8-cutover-review.mjs --offline-contract --reference-date 2026-10-23
+```
+
+A live P8 review requires the existing bound target plus the service-role credential in the explicit operator process only. It does not authorize a production cutover.
