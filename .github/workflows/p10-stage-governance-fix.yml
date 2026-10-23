@@ -10,7 +10,6 @@ on:
 permissions:
   contents: write
 
-# Trigger the already-registered one-shot staging workflow.
 jobs:
   stage:
     runs-on: ubuntu-latest
@@ -23,43 +22,13 @@ jobs:
         run: |
           python3 - <<'PY'
           from pathlib import Path
-
           src = Path('.github/workflows/verify-reference-graph.yml')
           text = src.read_text()
-          anchor = '''          if psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -c "set role anon; select count(*) from reference_graph.assets;"; then
-            echo "anon unexpectedly selected reference_graph.assets" >&2
-            exit 1
-          fi
-'''
-          extra = '''          if psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -c "set role anon; select public.reference_graph_lexical_candidates_p6('signal','{}'::jsonb,1);"; then
-            echo "anon unexpectedly executed P6 lexical RPC" >&2
-            exit 1
-          fi
-          if psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -c "set role authenticated; select public.reference_graph_embedding_coverage('model','revision',current_date);"; then
-            echo "authenticated unexpectedly executed embedding coverage RPC" >&2
-            exit 1
-          fi
-          if psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -c "set role anon; select public.reference_graph_ingest_capture('{}'::jsonb);"; then
-            echo "anon unexpectedly executed capture ingest RPC" >&2
-            exit 1
-          fi
-          if psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -c "set role authenticated; select public.reference_graph_record_verifications('[]'::jsonb);"; then
-            echo "authenticated unexpectedly executed verification write RPC" >&2
-            exit 1
-          fi
-          if psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -c "set role anon; select public.reference_graph_upsert_embeddings('[]'::jsonb);"; then
-            echo "anon unexpectedly executed embedding write RPC" >&2
-            exit 1
-          fi
-          if psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -c "set role authenticated; select count(*) from reference_graph.sources;"; then
-            echo "authenticated unexpectedly selected reference_graph.sources" >&2
-            exit 1
-          fi
-'''
+          anchor = "          if psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -c \"set role anon; select count(*) from reference_graph.assets;\"; then\n            echo \"anon unexpectedly selected reference_graph.assets\" >&2\n            exit 1\n          fi\n"
+          extra = "          if psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -c \"set role anon; select public.reference_graph_lexical_candidates_p6('signal','{}'::jsonb,1);\"; then\n            echo \"anon unexpectedly executed P6 lexical RPC\" >&2\n            exit 1\n          fi\n          if psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -c \"set role authenticated; select public.reference_graph_embedding_coverage('model','revision',current_date);\"; then\n            echo \"authenticated unexpectedly executed embedding coverage RPC\" >&2\n            exit 1\n          fi\n          if psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -c \"set role anon; select public.reference_graph_ingest_capture('{}'::jsonb);\"; then\n            echo \"anon unexpectedly executed capture ingest RPC\" >&2\n            exit 1\n          fi\n          if psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -c \"set role authenticated; select public.reference_graph_record_verifications('[]'::jsonb);\"; then\n            echo \"authenticated unexpectedly executed verification write RPC\" >&2\n            exit 1\n          fi\n          if psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -c \"set role anon; select public.reference_graph_upsert_embeddings('[]'::jsonb);\"; then\n            echo \"anon unexpectedly executed embedding write RPC\" >&2\n            exit 1\n          fi\n          if psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -c \"set role authenticated; select count(*) from reference_graph.sources;\"; then\n            echo \"authenticated unexpectedly selected reference_graph.sources\" >&2\n            exit 1\n          fi\n"
           if text.count(anchor) != 1:
               raise SystemExit(f'expected one P9 raw-table anchor, got {text.count(anchor)}')
-          staged = text.replace(anchor, anchor + extra)
-          Path('reference-graph/.p10-fixed-governance.yml').write_text(staged)
+          Path('reference-graph/.p10-fixed-governance.yml').write_text(text.replace(anchor, anchor + extra))
           PY
           git config user.name "Wibias"
           git config user.email "37517432+Wibias@users.noreply.github.com"
