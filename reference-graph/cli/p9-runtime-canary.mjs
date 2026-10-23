@@ -12,6 +12,9 @@ import { recordUsage } from '../../knowledge/design-references/scripts/usage.mjs
 import { fetchP9QuickCandidatePool } from '../p9-runtime-client.mjs';
 import { runP9ShadowCanary } from '../p9-runtime-canary.mjs';
 
+const STRICT_CANARY_FLAG = '--strict-canary';
+const NO_RECORD_USAGE_FLAG = '--no-record-usage';
+
 export function parseP9RuntimeCanaryArgs(argv, env = process.env) {
   const args = parseArgs(argv);
   for (const required of ['surface', 'job', 'platform', 'dimensions']) {
@@ -56,8 +59,8 @@ export function parseP9RuntimeCanaryArgs(argv, env = process.env) {
     supabaseUrl,
     publishableKey,
     timeoutMs,
-    strictCanary: Boolean(args['strict-canary']),
-    recordUsageEnabled: !args['no-record-usage'],
+    strictCanary: Boolean(args[STRICT_CANARY_FLAG.slice(2)]),
+    recordUsageEnabled: !args[NO_RECORD_USAGE_FLAG.slice(2)],
     usageLog: args['usage-log'] || undefined,
   };
 }
