@@ -91,6 +91,13 @@ test('P10 refresh is a no-argument current-date service-role-only SECURITY DEFIN
   assert.doesNotMatch(body, /p_filters|p_reference_date|p_query|embedding|model/i);
 });
 
+test('P10 refresh preserves P7 boolean normalization for historical eligible rows', () => {
+  const body = refreshBody(readMigration());
+
+  assert.match(body, /coalesce\s*\(\s*p\.ordinary_or_failure_prone\s*,\s*false\s*\)/i);
+  assert.match(body, /coalesce\s*\(\s*p\.multi_state_flow\s*,\s*false\s*\)/i);
+});
+
 test('migration 009 does not broaden access to underlying Reference Graph tables or historical RPCs', () => {
   const sql = readMigration();
 
