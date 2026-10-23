@@ -1,0 +1,41 @@
+name: P4 Task 8 freeze
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  freeze:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Freeze benchmark-independent population
+        run: |
+          node reference-graph/cli/plan-revalidation.mjs --now 2026-10-23 --wave-size 50 > p4-revalidation-plan.json
+          sha256sum p4-revalidation-plan.json | tee p4-revalidation-plan.sha256
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const plan = JSON.parse(fs.readFileSync('p4-revalidation-plan.json', 'utf8'));
+          console.log(JSON.stringify({
+            target_count: plan.target_ids.length,
+            already_fresh_count: plan.already_fresh_ids.length,
+            pending_count: plan.pending_ids.length,
+            completed_count: plan.completed_ids.length,
+            excluded_count: plan.excluded_ids.length,
+            wave_count: plan.waves.length,
+            first_target_id: plan.target_ids[0] ?? null,
+            last_target_id: plan.target_ids.at(-1) ?? null,
+          }, null, 2));
+          NODE
+      - uses: actions/upload-artifact@v4
+        with:
+          name: p4-revalidation-freeze
+          path: |
+            p4-revalidation-plan.json
+            p4-revalidation-plan.sha256
+          if-no-files-found: error
