@@ -20,6 +20,16 @@ jobs:
           fetch-depth: 0
       - name: Stage patched governance and README as ordinary files
         run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('reference-graph/p11-stage-governance.py')
+          text = p.read_text()
+          old = "p10-runtime-projection-evidence\\\\.json"
+          new = "p10-runtime-projection-evidence\\.json"
+          if text.count(old) != 1:
+              raise SystemExit(f'expected one over-escaped P10 regex anchor, got {text.count(old)}')
+          p.write_text(text.replace(old, new))
+          PY
           python3 reference-graph/p11-stage-governance.py
           git config user.name "Wibias"
           git config user.email "37517432+Wibias@users.noreply.github.com"
