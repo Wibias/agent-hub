@@ -82,9 +82,10 @@ Apply migrations in numeric order to the dedicated Supabase/PostgreSQL database:
 006_reference_graph_retrieval_quality.sql
 007_reference_graph_lexical_parity.sql
 008_reference_graph_runtime_canary.sql
+009_reference_graph_runtime_projection.sql
 ```
 
-Historical/operator RPC surfaces live in `public` for PostgREST but remain service-role-only. P9 adds one deliberate exception: the zero-argument `reference_graph_quick_candidate_pool_runtime_p9()` wrapper may be executed by `anon`, `authenticated`, and `service_role`. It exposes only the already-certified current-date quick candidate pool; underlying `reference_graph` tables/views and all P7/P6/write/operator RPCs remain closed to runtime roles.
+Historical/operator RPC surfaces live in `public` for PostgREST but remain service-role-only. P9 historically exposed one narrow publishable-key `SECURITY DEFINER` wrapper. P10 closes that wrapper to `anon` and `authenticated` and replaces runtime access with the RLS-backed `reference_graph_quick_runtime_projection_p10` table. Runtime roles receive SELECT only, and Row Level Security exposes only rows whose `snapshot_date = current_date`; a stale or missing snapshot is therefore invisible and the canary falls back to `legacy-control`. The service-role-only `reference_graph_refresh_quick_runtime_projection_p10()` function refreshes the projection from the certified P7 quick pool. Standard and deep remain legacy-only, and P10 performs no production activation; activation is deferred to a later explicit phase.
 
 Never place `SUPABASE_SERVICE_ROLE_KEY` in a browser, client bundle, repository file, evidence receipt, or public CI log. Store and operator code is server-side/trusted-runner only.
 
@@ -339,3 +340,10 @@ P9 is **shadow-only**. It proves that the already-certified `quick` candidate po
 
 This phase certifies a reversible least-privilege canary boundary. A later, separately authorized phase would still be required to change production routing.
 
+
+
+## P10 least-privilege runtime projection
+
+P10 removes the publishable-key `SECURITY DEFINER` entry point introduced for the P9 shadow canary. The public runtime surface is now `reference_graph_quick_runtime_projection_p10`, a read-only projection protected by RLS. `anon` and `authenticated` have SELECT only; INSERT, UPDATE, and DELETE remain denied. RLS requires `snapshot_date = current_date`, so a stale or missing snapshot returns no usable graph candidates and runtime behavior fails closed to `legacy-control`.
+
+Only the service-role-only `reference_graph_refresh_quick_runtime_projection_p10()` function may rebuild the projection, and it always copies the current-date certified P7 quick pool. The P10 publishable-key client performs a PostgREST GET against the projection and has no service-role or write path. Standard and deep remain legacy-only and make no graph network call. P10 proves least-privilege transport and shadow-canary readiness only: there is **no production activation** in P10, and any activation decision plus refresh operations belong to a later phase.
