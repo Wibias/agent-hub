@@ -6,6 +6,7 @@ on:
       - agent/reference-graph-p9
     paths:
       - reference-graph/scripts/stage-p9-governance.py
+      - .github/workflows/p9-stage-governance-v2.yml
 
 permissions:
   contents: write
