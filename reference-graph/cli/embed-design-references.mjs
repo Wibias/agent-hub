@@ -3,21 +3,19 @@
 import { loadRecords, parseArgs } from '../../knowledge/design-references/scripts/lib.mjs';
 import { planLegacyCatalogImport } from '../catalog-import.mjs';
 import { buildEmbeddingRows, persistEmbeddingRows } from '../embedding-pipeline.mjs';
-import {
-  OLLAMA_MODEL_REVISION,
-  OLLAMA_MODEL_TAG,
-  OllamaEmbeddingProvider,
-} from '../ollama-embeddings.mjs';
+import { REFERENCE_EMBEDDING_PROFILE } from '../embedding-profile.mjs';
+import { OllamaEmbeddingProvider } from '../ollama-embeddings.mjs';
 import { ReferenceGraphSupabaseStore } from '../supabase-store.mjs';
 
 function usage() {
   return [
     'Usage:',
     '  node reference-graph/cli/embed-design-references.mjs --plan',
-    '  node reference-graph/cli/embed-design-references.mjs --apply [--embed-batch-size 32] [--persist-batch-size 50]',
+    '  node reference-graph/cli/embed-design-references.mjs --apply --allow-experimental [--embed-batch-size 32] [--persist-batch-size 50]',
     '',
     '--plan performs no network calls and requires no credentials or Ollama.',
-    '--apply requires a verified local Ollama model plus SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.',
+    '--apply persists the current experimental profile and therefore requires --allow-experimental.',
+    '--apply also requires a verified local Ollama model plus SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.',
   ].join('\n');
 }
 
@@ -37,6 +35,16 @@ function countChunks(captures) {
   );
 }
 
+function profileOutput() {
+  return {
+    embedding_profile: REFERENCE_EMBEDDING_PROFILE.id,
+    model_id: `ollama/${REFERENCE_EMBEDDING_PROFILE.modelTag}`,
+    model_revision: REFERENCE_EMBEDDING_PROFILE.modelRevision,
+    quality_status: REFERENCE_EMBEDDING_PROFILE.qualityStatus,
+    cutover_approved: REFERENCE_EMBEDDING_PROFILE.cutoverApproved,
+  };
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const planMode = args.plan === true;
@@ -45,10 +53,19 @@ async function main() {
     throw new Error(`Choose exactly one of --plan or --apply.\n\n${usage()}`);
   }
 
+  if (
+    applyMode
+    && REFERENCE_EMBEDDING_PROFILE.qualityStatus === 'experimental'
+    && args['allow-experimental'] !== true
+  ) {
+    throw new Error(
+      'The active embedding profile is experimental. Re-run with --allow-experimental to acknowledge experimental persistence.',
+    );
+  }
+
   const records = loadRecords();
   const plan = planLegacyCatalogImport(records);
   const chunkCount = countChunks(plan.captures);
-  const modelId = `ollama/${OLLAMA_MODEL_TAG}`;
 
   if (planMode) {
     console.log(JSON.stringify({
@@ -57,8 +74,7 @@ async function main() {
       record_count: plan.record_count,
       capture_count: plan.capture_count,
       chunk_count: chunkCount,
-      model_id: modelId,
-      model_revision: OLLAMA_MODEL_REVISION,
+      ...profileOutput(),
     }, null, 2));
     return;
   }
@@ -75,7 +91,11 @@ async function main() {
     50,
     100,
   );
-  const provider = new OllamaEmbeddingProvider({ url: process.env.OLLAMA_URL });
+  const provider = new OllamaEmbeddingProvider({
+    url: process.env.OLLAMA_URL,
+    modelTag: REFERENCE_EMBEDDING_PROFILE.modelTag,
+    modelRevision: REFERENCE_EMBEDDING_PROFILE.modelRevision,
+  });
   const store = ReferenceGraphSupabaseStore.fromEnv(process.env);
   const rows = await buildEmbeddingRows({
     captures: plan.captures,
@@ -96,8 +116,7 @@ async function main() {
     embedding_count: rows.length,
     persisted_count: persisted.persisted_count,
     persist_batch_count: persisted.batch_count,
-    model_id: provider.modelId,
-    model_revision: provider.modelRevision,
+    ...profileOutput(),
   }, null, 2));
 }
 
