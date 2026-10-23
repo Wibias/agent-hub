@@ -1,3 +1,4 @@
+import { isFresh } from '../knowledge/design-references/scripts/lib.mjs';
 import { selectRecords } from '../knowledge/design-references/scripts/selection.mjs';
 
 function finiteAverage(values) {
@@ -14,6 +15,14 @@ function exactRate(items, expected, readValue) {
   if (!expected || items.length === 0) return items.length === 0 ? 0 : 1;
   const matching = items.filter((item) => readValue(item) === expected).length;
   return matching / items.length;
+}
+
+function resolveControlNow(value) {
+  const resolved = value ?? new Date();
+  if (!(resolved instanceof Date) || Number.isNaN(resolved.getTime())) {
+    throw new TypeError('control time must be a valid Date');
+  }
+  return resolved;
 }
 
 export function compareShadowSelection({ request, legacySelected, graphBundle } = {}) {
@@ -57,6 +66,57 @@ export function compareShadowSelection({ request, legacySelected, graphBundle } 
     graph_empty: graphItems.length === 0,
     legacy_ids: legacyIds,
     graph_legacy_ids: graphLegacyIds,
+  };
+}
+
+export function assessLegacyControlHealth({ records, cases, now = new Date() } = {}) {
+  if (!Array.isArray(records)) throw new TypeError('records must be an array');
+  if (!Array.isArray(cases)) throw new TypeError('cases must be an array');
+  const controlNow = resolveControlNow(now);
+  const reviewedAccessible = records.filter(
+    (record) => record?.reviewStatus === 'reviewed'
+      && ['AVAILABLE', 'PAYWALLED'].includes(record?.accessStatus),
+  );
+  const freshPool = reviewedAccessible.filter((record) => isFresh(record, controlNow));
+  const selections = cases.map((request) => selectRecords(records, request, { now: controlNow }));
+  const fullLimitCaseCount = selections.filter(
+    (selection, index) => selection.selected.length === cases[index].limit,
+  ).length;
+  const casesWithCoverageGaps = selections.filter(
+    (selection) => selection.coverageGaps.length > 0,
+  ).length;
+  const freshSurfaceFamilies = new Set(freshPool.map((record) => record.surfaceFamily));
+  const freshPlatforms = new Set(freshPool.map((record) => record.platform));
+  const blockers = [];
+  const maxRequestedLimit = cases.reduce(
+    (max, request) => Math.max(max, Number.isInteger(request?.limit) ? request.limit : 0),
+    0,
+  );
+
+  if (freshPool.length < maxRequestedLimit) {
+    blockers.push('fresh pool is smaller than the largest requested limit');
+  }
+  if (fullLimitCaseCount < cases.length) {
+    blockers.push('one or more control cases cannot fill the requested limit');
+  }
+  if (casesWithCoverageGaps > 0) {
+    blockers.push('one or more control cases have coverage gaps');
+  }
+
+  return {
+    reference_time: controlNow.toISOString(),
+    reviewed_accessible_count: reviewedAccessible.length,
+    fresh_pool_count: freshPool.length,
+    fresh_pool_rate: reviewedAccessible.length === 0
+      ? 0
+      : freshPool.length / reviewedAccessible.length,
+    fresh_surface_family_count: freshSurfaceFamilies.size,
+    fresh_platform_count: freshPlatforms.size,
+    case_count: cases.length,
+    full_limit_case_count: fullLimitCaseCount,
+    cases_with_coverage_gaps: casesWithCoverageGaps,
+    blockers,
+    healthy: blockers.length === 0,
   };
 }
 
@@ -149,16 +209,23 @@ export async function runCatalogShadowEvaluation({
   cases,
   graphRetrieve,
   thresholds = {},
+  controlNow = undefined,
 } = {}) {
   if (!Array.isArray(records)) throw new TypeError('records must be an array');
   if (!Array.isArray(cases)) throw new TypeError('cases must be an array');
   if (typeof graphRetrieve !== 'function') {
     throw new TypeError('graphRetrieve must be a function');
   }
+  const resolvedControlNow = resolveControlNow(controlNow);
+  const controlHealth = assessLegacyControlHealth({
+    records,
+    cases,
+    now: resolvedControlNow,
+  });
 
   const rows = [];
   for (const request of cases) {
-    const legacy = selectRecords(records, request);
+    const legacy = selectRecords(records, request, { now: resolvedControlNow });
     const graphBundle = await graphRetrieve({
       request,
       query: shadowQueryText(request),
@@ -177,6 +244,8 @@ export async function runCatalogShadowEvaluation({
 
   return {
     production_source: 'legacy-control',
+    control_reference_time: resolvedControlNow.toISOString(),
+    control_health: controlHealth,
     rows,
     summary: summarizeShadowEvaluation(rows, thresholds),
   };

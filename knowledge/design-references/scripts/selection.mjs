@@ -65,7 +65,15 @@ function scoreRecord(record, request) {
   return value;
 }
 
-export function selectRecords(records, request) {
+function resolveSelectionNow(value) {
+  if (value === undefined) return new Date();
+  if (!(value instanceof Date) || Number.isNaN(value.getTime())) {
+    throw new TypeError("options.now must be a valid Date");
+  }
+  return value;
+}
+
+export function selectRecords(records, request, options = {}) {
   const profilePolicy = TAXONOMY.profiles[request.profile];
   if (!profilePolicy) throw new Error("Unknown profile: " + request.profile);
   if (
@@ -83,9 +91,10 @@ export function selectRecords(records, request) {
     );
   }
 
+  const selectionNow = resolveSelectionNow(options.now);
   const eligible = records
     .filter(
-      (record) => record.reviewStatus === "reviewed" && isFresh(record),
+      (record) => record.reviewStatus === "reviewed" && isFresh(record, selectionNow),
     )
     .filter(
       (record) => ["AVAILABLE", "PAYWALLED"].includes(record.accessStatus),
