@@ -24,6 +24,45 @@ jobs:
       - name: Test Reference Graph P0-P2 contracts
         run: node --test tests/reference-graph/*.test.mjs
 
+      - name: Diagnose legacy control freshness health
+        run: |
+          node --input-type=module <<'NODE'
+          import { isFresh, loadRecords } from './knowledge/design-references/scripts/lib.mjs';
+          const records = loadRecords();
+          const reviewedAccessible = records.filter(
+            (row) => row.reviewStatus === 'reviewed' && ['AVAILABLE', 'PAYWALLED'].includes(row.accessStatus),
+          );
+          const maxVerified = reviewedAccessible
+            .map((row) => row.lastVerifiedAt)
+            .sort()
+            .at(-1);
+          const snapshotNow = new Date(`${maxVerified}T12:00:00Z`);
+          const currentFresh = reviewedAccessible.filter((row) => isFresh(row));
+          const snapshotFresh = reviewedAccessible.filter((row) => isFresh(row, snapshotNow));
+          const bySurface = (rows) => Object.fromEntries(
+            [...new Set(rows.map((row) => row.surfaceFamily))]
+              .sort()
+              .map((surface) => [surface, rows.filter((row) => row.surfaceFamily === surface).length]),
+          );
+          const byPlatform = (rows) => Object.fromEntries(
+            [...new Set(rows.map((row) => row.platform))]
+              .sort()
+              .map((platform) => [platform, rows.filter((row) => row.platform === platform).length]),
+          );
+          console.log(JSON.stringify({
+            total_records: records.length,
+            reviewed_accessible: reviewedAccessible.length,
+            max_last_verified_at: maxVerified,
+            current_fresh_count: currentFresh.length,
+            current_fresh_ids: currentFresh.map((row) => row.id),
+            current_fresh_by_surface: bySurface(currentFresh),
+            current_fresh_by_platform: byPlatform(currentFresh),
+            snapshot_fresh_count: snapshotFresh.length,
+            snapshot_fresh_by_surface: bySurface(snapshotFresh),
+            snapshot_fresh_by_platform: byPlatform(snapshotFresh),
+          }, null, 2));
+          NODE
+
       - name: Diagnose legacy-control eligibility against graph hard filters
         run: |
           node --input-type=module <<'NODE'
