@@ -1,6 +1,9 @@
+import { createHash } from "node:crypto";
+
 import { TAXONOMY } from "./lib.mjs";
 
 const VERDICTS = new Set(["confirm", "stale", "archive"]);
+const REVALIDATABLE_REVIEW_STATUSES = new Set(["reviewed", "stale"]);
 const ID_RE = /^ref-[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -37,6 +40,12 @@ function requireChecked(value, name) {
   return true;
 }
 
+function hashDecisionPayload(payload) {
+  return createHash("sha256")
+    .update(JSON.stringify(payload), "utf8")
+    .digest("hex");
+}
+
 export function validateRevalidationDecision(input) {
   const decision = requireObject(input, "decision");
   const id = requireString(decision.id, "decision.id");
@@ -59,7 +68,7 @@ export function validateRevalidationDecision(input) {
     throw new TypeError("decision.notes must be substantive");
   }
 
-  return {
+  const normalized = {
     id,
     verdict,
     verifiedAt: requireDate(decision.verifiedAt, "decision.verifiedAt"),
@@ -69,6 +78,11 @@ export function validateRevalidationDecision(input) {
     rightsChecked: requireChecked(decision.rightsChecked, "decision.rightsChecked"),
     accessStatus,
     notes,
+  };
+
+  return {
+    ...normalized,
+    decisionHash: hashDecisionPayload(normalized),
   };
 }
 
@@ -108,8 +122,8 @@ export function applyRevalidationDecisions(records, decisions) {
   const output = records.map((record) => {
     const decision = normalized.get(record.id);
     if (!decision) return record;
-    if (record.reviewStatus !== "reviewed") {
-      throw new Error("revalidation requires an existing reviewed record: " + record.id);
+    if (!REVALIDATABLE_REVIEW_STATUSES.has(record.reviewStatus)) {
+      throw new Error("revalidation requires an existing reviewed or stale record: " + record.id);
     }
 
     const nextStatus = {
