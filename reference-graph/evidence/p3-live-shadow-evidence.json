@@ -1,15 +1,15 @@
 {
   "schema_version": "reference-graph.p3-receipt.v1",
   "phase": "P3",
-  "recorded_at": "2026-10-23T03:14:09.000Z",
+  "recorded_at": "2026-10-23T03:22:24.000Z",
   "target": {
     "purpose": "agent-hub-reference-graph",
     "project_ref": "vrznfnxzlxaavpqbzbzd",
     "project_name": "agent-hub-reference-graph",
     "region": "eu-central-1"
   },
-  "git_sha": "6070704742b1f1cdab9c0e3438f8473143ab19d5",
-  "verification_at": "2026-10-23T03:14:09.000Z",
+  "git_sha": "0675bfe7e0cc2ea0749be7982930d0b33850664b",
+  "verification_at": "2026-10-23T03:22:24.000Z",
   "production_source": "legacy-control",
   "eligible_for_cutover_review": false,
   "cutover_ready": false,
@@ -246,6 +246,11 @@
     "tests": 73,
     "passes": 73,
     "failures": 0,
+    "final_reference_graph_github_actions_run": 39894585286,
+    "final_reference_graph_git_sha": "0675bfe7e0cc2ea0749be7982930d0b33850664b",
+    "final_reference_graph_tests": 81,
+    "final_reference_graph_passes": 81,
+    "final_reference_graph_failures": 0,
     "fresh_pgvector_migrations": [
       "001_reference_graph.sql",
       "002_reference_graph_rpc.sql",
@@ -258,6 +263,13 @@
     "shadow_input_export_run": 39893249764,
     "shadow_input_sha256": "263de2cbfb47675519457498dbcd0f4e1a04834d5132000556d2fc0a089e0cd1",
     "offline_benchmark_average_overlap_at_k": 0.53125,
-    "offline_benchmark_legacy_top1_retention_rate": 0.7083333333333334
+    "offline_benchmark_legacy_top1_retention_rate": 0.7083333333333334,
+    "release_governance": {
+      "status": "inherited-base-failure",
+      "head_run": 39894585304,
+      "base_run": 39884114014,
+      "base_sha": "4dbc6e1db1f42eb1b854f455e07f2325251ed855",
+      "reason": "The unchanged skill-catalog test requires skills/write-swift/SKILL.md, but that path is already absent on the P2 base. The failure is not introduced by P3."
+    }
   }
 }
