@@ -1,0 +1,56 @@
+name: P6 stage multi-chunk DB smoke
+
+on:
+  push:
+    branches:
+      - agent/reference-graph-p6
+    paths:
+      - .github/workflows/p6-stage-multichunk-smoke.yml
+
+permissions:
+  contents: write
+
+jobs:
+  stage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/reference-graph-p6
+          fetch-depth: 0
+      - name: Stage corrected permanent governance blob
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          source = Path('.github/workflows/verify-reference-graph.yml')
+          staged = Path('reference-graph/.p6-governance-multichunk.yml')
+          text = source.read_text()
+
+          old_chunks = """            ('60000000-0000-5000-8000-000000000021', '60000000-0000-5000-8000-000000000011', 0, 'p6 soft preference signal', '{\"text_hash\":\"p6-hash-exact\"}'),\n            ('60000000-0000-5000-8000-000000000022', '60000000-0000-5000-8000-000000000012', 0, 'p6 soft preference signal', '{\"text_hash\":\"p6-hash-cross\"}'),"""
+          new_chunks = """            ('60000000-0000-5000-8000-000000000021', '60000000-0000-5000-8000-000000000011', 0, 'p6 soft preference signal', '{\"text_hash\":\"p6-hash-exact\"}'),\n            ('60000000-0000-5000-8000-000000000026', '60000000-0000-5000-8000-000000000011', 1, 'p6 soft preference signal alternate', '{\"text_hash\":\"p6-hash-exact-alt\"}'),\n            ('60000000-0000-5000-8000-000000000022', '60000000-0000-5000-8000-000000000012', 0, 'p6 soft preference signal', '{\"text_hash\":\"p6-hash-cross\"}'),"""
+          if text.count(old_chunks) != 1:
+              raise SystemExit('expected exactly one P6 chunk fixture block')
+          text = text.replace(old_chunks, new_chunks)
+
+          old_embeddings = """            ('60000000-0000-5000-8000-000000000021', 'p6-test-model', 'v1', 'p6-hash-exact', 384, array_fill(0.01::real, array[384])::extensions.vector),\n            ('60000000-0000-5000-8000-000000000022', 'p6-test-model', 'v1', 'p6-hash-cross', 384, array_fill(0.02::real, array[384])::extensions.vector),"""
+          new_embeddings = """            ('60000000-0000-5000-8000-000000000021', 'p6-test-model', 'v1', 'p6-hash-exact', 384, array_fill(0.01::real, array[384])::extensions.vector),\n            ('60000000-0000-5000-8000-000000000026', 'p6-test-model', 'v1', 'p6-hash-exact-alt', 384, array_fill(0.015::real, array[384])::extensions.vector),\n            ('60000000-0000-5000-8000-000000000022', 'p6-test-model', 'v1', 'p6-hash-cross', 384, array_fill(0.02::real, array[384])::extensions.vector),"""
+          if text.count(old_embeddings) != 1:
+              raise SystemExit('expected exactly one P6 embedding fixture block')
+          text = text.replace(old_embeddings, new_embeddings)
+
+          marker = "          select 1 / case when count(*) = 2 then 1 else 0 end as p6_soft_preference_semantic_ok"
+          if text.count(marker) != 1:
+              raise SystemExit('expected semantic count assertion')
+          text = text.replace(
+              marker,
+              "          -- Multi-chunk exact asset must still produce one semantic candidate row.\n" + marker,
+          )
+
+          staged.write_text(text)
+          PY
+          git config user.name "Wibias"
+          git config user.email "37517432+Wibias@users.noreply.github.com"
+          git add reference-graph/.p6-governance-multichunk.yml
+          git commit -m "chore: stage P6 multi-chunk governance blob"
+          git push origin HEAD:agent/reference-graph-p6
