@@ -43,3 +43,12 @@ test('broad secret scan still rejects literal assigned secrets', () => {
   assert.match(result.stdout, /assigned_secret|openai_key/);
   assert.doesNotMatch(result.stdout, /sk-test-literal-secret-value-1234567890/);
 });
+
+test('broad secret scan does not mistake an unquoted dotted token for a code reference', () => {
+  const token = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c';
+  const result = runScanner(`token: ${token}\n`);
+
+  assert.equal(result.status, 1, result.stdout + result.stderr);
+  assert.match(result.stdout, /assigned_secret/);
+  assert.doesNotMatch(result.stdout, new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+});
