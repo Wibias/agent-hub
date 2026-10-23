@@ -26,41 +26,23 @@ jobs:
 
       - name: Measure healthy lexical snapshot baseline
         run: |
-          node reference-graph/cli/shadow-design-references.mjs \
-            --offline \
-            --control-date 2026-07-21 > /tmp/snapshot-lexical.json
+          node reference-graph/cli/shadow-design-references.mjs --offline --control-date 2026-07-21 > /tmp/snapshot-lexical.json
 
       - name: Start Ollama
         run: |
           docker run -d --name reference-graph-ollama -p 11434:11434 ollama/ollama:latest
           for attempt in $(seq 1 60); do
-            if curl -fsS http://127.0.0.1:11434/api/version; then
-              break
-            fi
-            if [ "$attempt" -eq 60 ]; then
-              docker logs reference-graph-ollama
-              exit 1
-            fi
+            if curl -fsS http://127.0.0.1:11434/api/version; then break; fi
+            if [ "$attempt" -eq 60 ]; then docker logs reference-graph-ollama; exit 1; fi
             sleep 1
           done
 
       - name: Pull pinned Snowflake Arctic small model
         run: |
-          curl -fsS http://127.0.0.1:11434/api/pull \
-            -H 'content-type: application/json' \
+          curl -fsS http://127.0.0.1:11434/api/pull -H 'content-type: application/json' \
             -d '{"model":"snowflake-arctic-embed:33m","stream":false}'
-          node --input-type=module <<'NODE'
-          import { OllamaEmbeddingProvider } from './reference-graph/ollama-embeddings.mjs';
-          const provider = new OllamaEmbeddingProvider({
-            modelTag: 'snowflake-arctic-embed:33m',
-            modelRevision: 'e8db018629b4',
-          });
-          const digest = await provider.verifyModel();
-          const [embedding] = await provider.embed(['Reference Graph retrieval-model smoke test']);
-          console.log(JSON.stringify({ verified_digest: digest, dimensions: embedding.length }, null, 2));
-          NODE
 
-      - name: Probe document representation variants
+      - name: Probe query representation variants
         run: |
           node --input-type=module <<'NODE'
           import fs from 'node:fs';
@@ -85,22 +67,12 @@ jobs:
           const queryProvider = {
             modelId: provider.modelId,
             modelRevision: provider.modelRevision,
-            embed(texts) {
-              return provider.embed(texts.map((text) => `${QUERY_PREFIX}${text}`));
-            },
+            embed(texts) { return provider.embed(texts.map((text) => `${QUERY_PREFIX}${text}`)); },
           };
           const compact = (values) => values
             .flatMap((value) => Array.isArray(value) ? value : [value])
             .filter((value) => typeof value === 'string' && value.trim().length > 0)
             .map((value) => value.trim());
-          const decisionText = (record) => compact([
-            record.firstScreenJob,
-            record.topology,
-            record.visualWorld,
-            record.strengths,
-            record.transferableDecisions,
-            record.tags,
-          ]).join('\n');
           const structuredText = (record) => [
             `Page role: ${record.pageRole}`,
             `First-screen job: ${record.firstScreenJob}`,
@@ -111,63 +83,49 @@ jobs:
             `Flow states: ${compact(record.flowStates).join('; ')}`,
             `Tags: ${compact(record.tags).join('; ')}`,
           ].join('\n');
-          const variantCaptures = (buildText) => plan.captures.map((capture) => {
-            const legacyId = capture.asset.metadata.legacy_id;
-            const record = recordById.get(legacyId);
-            if (!record) throw new Error(`missing record for ${legacyId}`);
+          const embeddingCaptures = plan.captures.map((capture) => {
+            const record = recordById.get(capture.asset.metadata.legacy_id);
             return {
               ...capture,
-              chunks: capture.chunks.map((chunk) => ({
-                ...chunk,
-                content: buildText(record),
-              })),
+              chunks: capture.chunks.map((chunk) => ({ ...chunk, content: structuredText(record) })),
             };
           });
-          async function evaluateVariant(name, embeddingCaptures) {
-            const embeddingRows = await buildEmbeddingRows({
-              captures: embeddingCaptures,
-              provider,
-              batchSize: 32,
+          const embeddingRows = await buildEmbeddingRows({ captures: embeddingCaptures, provider, batchSize: 32 });
+          const semanticInner = createOfflineEmbeddedRetriever({ captures: plan.captures, embeddingRows, provider: queryProvider, mode: 'semantic' });
+          const hybridInner = createOfflineEmbeddedRetriever({ captures: plan.captures, embeddingRows, provider: queryProvider, mode: 'hybrid' });
+          const variants = [
+            ['current', (request, query) => query],
+            ['job-dimensions', (request) => `${request.job} ${request.dimensions}`],
+            ['job-only', (request) => request.job],
+            ['structured-job-dimensions', (request) => `Task: ${request.job}\nDesign dimensions: ${request.dimensions}`],
+          ];
+          const results = [];
+          for (const [name, buildQuery] of variants) {
+            const wrap = (inner) => ({ request, query, ...rest }) => inner({
+              ...rest,
+              query: buildQuery(request, query),
             });
-            const semanticRetrieve = createOfflineEmbeddedRetriever({
-              captures: plan.captures,
-              embeddingRows,
-              provider: queryProvider,
-              mode: 'semantic',
-            });
-            const hybridRetrieve = createOfflineEmbeddedRetriever({
-              captures: plan.captures,
-              embeddingRows,
-              provider: queryProvider,
-              mode: 'hybrid',
-            });
-            const semantic = await runCatalogShadowEvaluation({ records, cases, graphRetrieve: semanticRetrieve, controlNow });
-            const hybrid = await runCatalogShadowEvaluation({ records, cases, graphRetrieve: hybridRetrieve, controlNow });
-            return {
-              name,
-              semantic: semantic.summary,
-              hybrid: hybrid.summary,
-            };
+            const semantic = await runCatalogShadowEvaluation({ records, cases, graphRetrieve: wrap(semanticInner), controlNow });
+            const hybrid = await runCatalogShadowEvaluation({ records, cases, graphRetrieve: wrap(hybridInner), controlNow });
+            results.push({ name, semantic: semantic.summary, hybrid: hybrid.summary });
           }
-          const variants = [];
-          variants.push(await evaluateVariant('decision-focused', variantCaptures(decisionText)));
-          variants.push(await evaluateVariant('structured-decision', variantCaptures(structuredText)));
           const delta = (candidate, field) => candidate[field] - lexical.summary[field];
-          for (const variant of variants) {
-            variant.semantic_vs_lexical = {
-              average_overlap_delta: delta(variant.semantic, 'average_overlap_at_k'),
-              top1_retention_delta: delta(variant.semantic, 'legacy_top1_retention_rate'),
+          for (const result of results) {
+            result.semantic_vs_lexical = {
+              average_overlap_delta: delta(result.semantic, 'average_overlap_at_k'),
+              top1_retention_delta: delta(result.semantic, 'legacy_top1_retention_rate'),
             };
-            variant.hybrid_vs_lexical = {
-              average_overlap_delta: delta(variant.hybrid, 'average_overlap_at_k'),
-              top1_retention_delta: delta(variant.hybrid, 'legacy_top1_retention_rate'),
+            result.hybrid_vs_lexical = {
+              average_overlap_delta: delta(result.hybrid, 'average_overlap_at_k'),
+              top1_retention_delta: delta(result.hybrid, 'legacy_top1_retention_rate'),
             };
           }
           console.log(JSON.stringify({
             model_id: provider.modelId,
             model_revision: provider.modelRevision,
+            document_representation: 'structured-decision',
             query_prefix: QUERY_PREFIX,
             lexical: lexical.summary,
-            variants,
+            variants: results,
           }, null, 2));
           NODE
