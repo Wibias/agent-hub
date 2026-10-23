@@ -12,6 +12,39 @@ function graphItem(id, surface = 'public-home', platform = 'web-responsive') {
   };
 }
 
+function legacyRecord(id, overrides = {}) {
+  const suffix = id.replace(/^ref-/, '').toUpperCase();
+  return {
+    id,
+    title: `${suffix} reference`,
+    reviewStatus: 'reviewed',
+    lastVerifiedAt: '2026-10-22',
+    ttlDays: 90,
+    accessStatus: 'AVAILABLE',
+    surfaceFamily: 'public-home',
+    primaryStratum: 'direct-domain',
+    platform: 'web-responsive',
+    product: suffix,
+    sourceFamily: suffix.toLowerCase(),
+    pageRole: 'creator landing page',
+    topology: 'Hero proof CTA',
+    firstScreenJob: 'creator landing page',
+    traversal: 'hero -> proof -> cta',
+    responsiveBehavior: 'stack',
+    motion: 'low',
+    visualWorld: 'dark creator surface',
+    flowStates: ['landing'],
+    strengths: ['clear hierarchy'],
+    weaknesses: ['generic proof'],
+    transferableDecisions: ['lead with creator outcome'],
+    tags: ['creator', 'landing', 'visual-verified'],
+    multiStateFlow: false,
+    ordinaryOrFailureProne: false,
+    evidenceClass: 'OBSERVED',
+    ...overrides,
+  };
+}
+
 test('shadow comparison reports overlap, top-1 retention, eligibility, and bounded counts', async () => {
   const { compareShadowSelection } = await import('../../reference-graph/shadow-eval.mjs');
 
@@ -89,75 +122,23 @@ test('catalog shadow runner evaluates legacy control against injected graph retr
   const { runCatalogShadowEvaluation } = await import('../../reference-graph/shadow-eval.mjs');
 
   const records = [
-    {
-      id: 'ref-a',
-      reviewStatus: 'reviewed',
-      lastVerifiedAt: '2026-10-22',
-      ttlDays: 90,
-      accessStatus: 'AVAILABLE',
-      surfaceFamily: 'public-home',
-      primaryStratum: 'direct-domain',
-      platform: 'web-responsive',
-      product: 'A',
-      sourceFamily: 'a',
-      topology: 'Hero CTA',
-      firstScreenJob: 'creator landing page',
-      traversal: 'hero -> cta',
-      responsiveBehavior: 'stack',
-      motion: 'low',
-      visualWorld: 'dark creator surface',
-      transferableDecisions: ['lead with creator outcome'],
-      tags: ['creator', 'landing', 'visual-verified'],
-      multiStateFlow: false,
-      ordinaryOrFailureProne: false,
-      evidenceClass: 'OBSERVED',
-    },
-    {
-      id: 'ref-b',
-      reviewStatus: 'reviewed',
-      lastVerifiedAt: '2026-10-22',
-      ttlDays: 90,
-      accessStatus: 'AVAILABLE',
-      surfaceFamily: 'public-home',
-      primaryStratum: 'direct-domain',
-      platform: 'web-responsive',
+    legacyRecord('ref-a'),
+    legacyRecord('ref-b', {
       product: 'B',
       sourceFamily: 'b',
       topology: 'Hero proof CTA',
-      firstScreenJob: 'creator landing page',
-      traversal: 'hero -> proof -> cta',
-      responsiveBehavior: 'stack',
-      motion: 'low',
       visualWorld: 'editorial creator surface',
       transferableDecisions: ['show proof early'],
-      tags: ['creator', 'landing', 'visual-verified'],
-      multiStateFlow: false,
-      ordinaryOrFailureProne: false,
-      evidenceClass: 'OBSERVED',
-    },
-    {
-      id: 'ref-c',
-      reviewStatus: 'reviewed',
-      lastVerifiedAt: '2026-10-22',
-      ttlDays: 90,
-      accessStatus: 'AVAILABLE',
-      surfaceFamily: 'public-home',
+    }),
+    legacyRecord('ref-c', {
       primaryStratum: 'adjacent-domain',
-      platform: 'web-responsive',
       product: 'C',
       sourceFamily: 'c',
       topology: 'Hero cards CTA',
-      firstScreenJob: 'creator landing page',
       traversal: 'hero -> cards -> cta',
-      responsiveBehavior: 'stack',
-      motion: 'low',
       visualWorld: 'high contrast creator surface',
       transferableDecisions: ['use asymmetry'],
-      tags: ['creator', 'landing', 'visual-verified'],
-      multiStateFlow: false,
-      ordinaryOrFailureProne: false,
-      evidenceClass: 'OBSERVED',
-    },
+    }),
   ];
 
   const request = {
