@@ -24,122 +24,106 @@ jobs:
       - name: Test Reference Graph P0-P2 contracts
         run: node --test tests/reference-graph/*.test.mjs
 
-      - name: Diagnose legacy control freshness health
+      - name: Measure current and snapshot control health
         run: |
+          node reference-graph/cli/shadow-design-references.mjs \
+            --offline \
+            --control-date 2026-07-21 > /tmp/snapshot-lexical.json
           node --input-type=module <<'NODE'
-          import { isFresh, loadRecords } from './knowledge/design-references/scripts/lib.mjs';
-          const records = loadRecords();
-          const reviewedAccessible = records.filter(
-            (row) => row.reviewStatus === 'reviewed' && ['AVAILABLE', 'PAYWALLED'].includes(row.accessStatus),
-          );
-          const maxVerified = reviewedAccessible
-            .map((row) => row.lastVerifiedAt)
-            .sort()
-            .at(-1);
-          const snapshotNow = new Date(`${maxVerified}T12:00:00Z`);
-          const currentFresh = reviewedAccessible.filter((row) => isFresh(row));
-          const snapshotFresh = reviewedAccessible.filter((row) => isFresh(row, snapshotNow));
-          const bySurface = (rows) => Object.fromEntries(
-            [...new Set(rows.map((row) => row.surfaceFamily))]
-              .sort()
-              .map((surface) => [surface, rows.filter((row) => row.surfaceFamily === surface).length]),
-          );
-          const byPlatform = (rows) => Object.fromEntries(
-            [...new Set(rows.map((row) => row.platform))]
-              .sort()
-              .map((platform) => [platform, rows.filter((row) => row.platform === platform).length]),
-          );
+          import fs from 'node:fs';
+          const value = JSON.parse(fs.readFileSync('/tmp/snapshot-lexical.json', 'utf8'));
           console.log(JSON.stringify({
-            total_records: records.length,
-            reviewed_accessible: reviewedAccessible.length,
-            max_last_verified_at: maxVerified,
-            current_fresh_count: currentFresh.length,
-            current_fresh_ids: currentFresh.map((row) => row.id),
-            current_fresh_by_surface: bySurface(currentFresh),
-            current_fresh_by_platform: byPlatform(currentFresh),
-            snapshot_fresh_count: snapshotFresh.length,
-            snapshot_fresh_by_surface: bySurface(snapshotFresh),
-            snapshot_fresh_by_platform: byPlatform(snapshotFresh),
+            control_reference_time: value.control_reference_time,
+            benchmark_control_health: value.control_health,
+            current_control_health: value.current_control_health,
+            lexical_summary: value.summary,
+          }, null, 2));
+          if (!value.control_health?.healthy) {
+            throw new Error('snapshot control must be healthy');
+          }
+          if (value.current_control_health?.healthy) {
+            throw new Error('current control was expected to expose the measured stale-catalog health problem');
+          }
+          NODE
+
+      - name: Start Ollama
+        run: |
+          docker run -d --name reference-graph-ollama -p 11434:11434 ollama/ollama:latest
+          for attempt in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:11434/api/version; then
+              break
+            fi
+            if [ "$attempt" -eq 60 ]; then
+              docker logs reference-graph-ollama
+              exit 1
+            fi
+            sleep 1
+          done
+
+      - name: Pull and verify pinned all-minilm model
+        run: |
+          curl -fsS http://127.0.0.1:11434/api/pull \
+            -H 'content-type: application/json' \
+            -d '{"model":"all-minilm:22m-l6-v2-fp16","stream":false}'
+          node --input-type=module <<'NODE'
+          import { OllamaEmbeddingProvider } from './reference-graph/ollama-embeddings.mjs';
+          const provider = new OllamaEmbeddingProvider();
+          const digest = await provider.verifyModel();
+          const [embedding] = await provider.embed(['Reference Graph real-model smoke test']);
+          console.log(JSON.stringify({
+            model_id: provider.modelId,
+            model_revision: provider.modelRevision,
+            verified_digest: digest,
+            dimensions: embedding.length,
           }, null, 2));
           NODE
 
-      - name: Test healthy snapshot-control hypothesis
+      - name: Measure lexical, semantic, and hybrid against healthy snapshot control
         run: |
+          node reference-graph/cli/shadow-design-references.mjs \
+            --ollama-semantic \
+            --control-date 2026-07-21 > /tmp/snapshot-semantic.json
+          node reference-graph/cli/shadow-design-references.mjs \
+            --ollama-hybrid \
+            --control-date 2026-07-21 > /tmp/snapshot-hybrid.json
           node --input-type=module <<'NODE'
           import fs from 'node:fs';
-          const RealDate = globalThis.Date;
-          const snapshotInstant = new RealDate('2026-07-21T12:00:00Z').getTime();
-          globalThis.Date = class FrozenDate extends RealDate {
-            constructor(...args) {
-              super(...(args.length ? args : [snapshotInstant]));
-            }
-            static now() { return snapshotInstant; }
+          const read = (path) => JSON.parse(fs.readFileSync(path, 'utf8'));
+          const lexical = read('/tmp/snapshot-lexical.json');
+          const semantic = read('/tmp/snapshot-semantic.json');
+          const hybrid = read('/tmp/snapshot-hybrid.json');
+          const pick = (value) => ({
+            mode: value.mode,
+            control_reference_time: value.control_reference_time,
+            control_healthy: value.control_health?.healthy,
+            semantic_enabled: value.semantic_enabled,
+            model_id: value.model_id,
+            model_revision: value.model_revision,
+            summary: value.summary,
+          });
+          const delta = (candidate, baseline, field) => {
+            const left = candidate.summary[field];
+            const right = baseline.summary[field];
+            return Number.isFinite(left) && Number.isFinite(right) ? left - right : null;
           };
-          const { loadRecords } = await import('./knowledge/design-references/scripts/lib.mjs');
-          const { selectRecords } = await import('./knowledge/design-references/scripts/selection.mjs');
-          const cases = JSON.parse(fs.readFileSync('./reference-graph/shadow-cases.json', 'utf8'));
-          const records = loadRecords();
-          const rows = cases.map((request) => {
-            const selected = selectRecords(records, request).selected;
-            const exactBoth = selected.filter(
-              (row) => row.surfaceFamily === request.surface && row.platform === request.platform,
-            ).length;
-            return {
-              id: request.id,
-              selected: selected.length,
-              exact_both: exactBoth,
-              legacy_ids: selected.map((row) => row.id),
-            };
-          });
-          const uniqueIds = new Set(rows.flatMap((row) => row.legacy_ids));
-          console.log(JSON.stringify({
-            control_date: '2026-07-21',
-            total_selected: rows.reduce((sum, row) => sum + row.selected, 0),
-            unique_selected_ids: uniqueIds.size,
-            cases_with_full_limit: rows.filter((row) => row.selected === 4).length,
-            cases_with_zero_exact_both: rows.filter((row) => row.exact_both === 0).length,
-            exact_both_total: rows.reduce((sum, row) => sum + row.exact_both, 0),
-            rows,
-          }, null, 2));
-          NODE
-
-      - name: Diagnose current legacy-control eligibility against graph hard filters
-        run: |
-          node --input-type=module <<'NODE'
-          import fs from 'node:fs';
-          import { loadRecords } from './knowledge/design-references/scripts/lib.mjs';
-          import { selectRecords } from './knowledge/design-references/scripts/selection.mjs';
-          const cases = JSON.parse(fs.readFileSync('./reference-graph/shadow-cases.json', 'utf8'));
-          const records = loadRecords();
-          const rows = cases.map((request) => {
-            const selected = selectRecords(records, request).selected;
-            const exactSurface = selected.filter((row) => row.surfaceFamily === request.surface).length;
-            const exactPlatform = selected.filter((row) => row.platform === request.platform).length;
-            const exactBoth = selected.filter(
-              (row) => row.surfaceFamily === request.surface && row.platform === request.platform,
-            ).length;
-            return {
-              id: request.id,
-              selected: selected.length,
-              exact_surface: exactSurface,
-              exact_platform: exactPlatform,
-              exact_both: exactBoth,
-              legacy_ids: selected.map((row) => row.id),
-            };
-          });
-          const totals = rows.reduce((out, row) => {
-            out.selected += row.selected;
-            out.exact_surface += row.exact_surface;
-            out.exact_platform += row.exact_platform;
-            out.exact_both += row.exact_both;
-            if (row.exact_both === 0) out.cases_with_zero_exact_both += 1;
-            return out;
-          }, {
-            selected: 0,
-            exact_surface: 0,
-            exact_platform: 0,
-            exact_both: 0,
-            cases_with_zero_exact_both: 0,
-          });
-          console.log(JSON.stringify({ totals, rows }, null, 2));
+          const evidence = {
+            lexical: pick(lexical),
+            semantic: pick(semantic),
+            hybrid: pick(hybrid),
+            semantic_vs_lexical: {
+              average_overlap_delta: delta(semantic, lexical, 'average_overlap_at_k'),
+              top1_retention_delta: delta(semantic, lexical, 'legacy_top1_retention_rate'),
+            },
+            hybrid_vs_lexical: {
+              average_overlap_delta: delta(hybrid, lexical, 'average_overlap_at_k'),
+              top1_retention_delta: delta(hybrid, lexical, 'legacy_top1_retention_rate'),
+            },
+          };
+          evidence.semantic_vs_lexical.retrieval_progress =
+            evidence.semantic_vs_lexical.average_overlap_delta > 0
+            || evidence.semantic_vs_lexical.top1_retention_delta > 0;
+          evidence.hybrid_vs_lexical.retrieval_progress =
+            evidence.hybrid_vs_lexical.average_overlap_delta > 0
+            || evidence.hybrid_vs_lexical.top1_retention_delta > 0;
+          console.log(JSON.stringify(evidence, null, 2));
           NODE
