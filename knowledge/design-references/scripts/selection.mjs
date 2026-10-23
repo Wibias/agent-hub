@@ -6,6 +6,7 @@ import {
   stripInternal,
   tokenize,
 } from "./lib.mjs";
+import { canCompleteQuickCoverage } from "./quick-coverage.mjs";
 
 export function allocateDeep(total) {
   const order = [
@@ -103,6 +104,12 @@ export function selectRecords(records, request, options = {}) {
       record,
       baseScore: scoreRecord(record, request),
     }));
+  const quickCoverageFeasible = request.profile === "quick"
+    && canCompleteQuickCoverage({
+      selectedRecords: [],
+      remainingRecords: eligible.map(({ record }) => record),
+      request,
+    });
   const quotas =
     request.profile === "deep"
       ? allocateDeep(request.limit)
@@ -139,7 +146,19 @@ export function selectRecords(records, request, options = {}) {
           left.record.id.localeCompare(right.record.id),
       );
     if (!candidates.length) break;
-    const chosen = candidates[0];
+
+    let chosen = candidates[0];
+    if (quickCoverageFeasible) {
+      chosen = candidates.find(({ record }) => {
+        const selectedRecords = [...selected, record];
+        const selectedIds = new Set(selectedRecords.map((item) => item.id));
+        const remainingRecords = eligible
+          .map((item) => item.record)
+          .filter((item) => !selectedIds.has(item.id));
+        return canCompleteQuickCoverage({ selectedRecords, remainingRecords, request });
+      }) ?? chosen;
+    }
+
     selected.push({
       ...stripInternal(chosen.record),
       selectionScore: chosen.score,
