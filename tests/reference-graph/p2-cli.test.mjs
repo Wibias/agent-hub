@@ -27,13 +27,13 @@ test('P2 exposes an explicit embedding CLI with plan and apply boundaries', () =
 
   assert.match(source, /--plan/);
   assert.match(source, /--apply/);
+  assert.match(source, /--allow-experimental/);
   assert.match(source, /SUPABASE_URL/);
   assert.match(source, /SUPABASE_SERVICE_ROLE_KEY/);
-  assert.match(source, /OllamaEmbeddingProvider/);
   assert.match(source, /persistEmbeddingRows/);
 });
 
-test('embedding CLI plan is credential-free and reports the pinned model without contacting services', () => {
+test('embedding CLI plan is credential-free and reports the experimental pinned profile without contacting services', () => {
   const result = run('reference-graph/cli/embed-design-references.mjs', ['--plan'], {
     SUPABASE_URL: '',
     SUPABASE_SERVICE_ROLE_KEY: '',
@@ -44,14 +44,27 @@ test('embedding CLI plan is credential-free and reports the pinned model without
   const body = JSON.parse(result.stdout);
   assert.equal(body.record_count, 600);
   assert.equal(body.chunk_count, 600);
-  assert.equal(body.model_id, 'ollama/all-minilm:22m-l6-v2-fp16');
-  assert.equal(body.model_revision, '1b226e2802db');
+  assert.equal(body.embedding_profile, 'snowflake-arctic-embed-33m-raw-v1');
+  assert.equal(body.model_id, 'ollama/snowflake-arctic-embed:33m');
+  assert.equal(body.model_revision, 'e8db018629b4');
+  assert.equal(body.quality_status, 'experimental');
+  assert.equal(body.cutover_approved, false);
 });
 
 test('embedding CLI refuses work when neither plan nor apply is explicit', () => {
   const result = run('reference-graph/cli/embed-design-references.mjs');
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /exactly one.*--plan.*--apply|choose exactly one/i);
+});
+
+test('embedding CLI refuses experimental persistence without explicit acknowledgement', () => {
+  const result = run('reference-graph/cli/embed-design-references.mjs', ['--apply'], {
+    SUPABASE_URL: '',
+    SUPABASE_SERVICE_ROLE_KEY: '',
+    OLLAMA_URL: 'http://127.0.0.1:1',
+  });
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /allow-experimental/i);
 });
 
 test('shadow CLI exposes separate ollama semantic and hybrid modes without changing production control', () => {
@@ -64,6 +77,7 @@ test('shadow CLI exposes separate ollama semantic and hybrid modes without chang
   assert.match(source, /production_source/);
   assert.match(source, /legacy-control/);
   assert.match(source, /semantic_enabled/);
+  assert.match(source, /quality_status/);
 });
 
 test('offline shadow CLI can benchmark against the explicit healthy catalog snapshot', () => {
