@@ -16,18 +16,18 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-      - name: Install and start Ollama
+      - name: Start isolated Ollama container
         run: |
-          curl -fsSL https://ollama.com/install.sh | sh
-          nohup ollama serve > /tmp/ollama.log 2>&1 &
-          for i in $(seq 1 30); do
+          docker pull ollama/ollama:latest
+          docker run -d --name p4-ollama -p 11434:11434 ollama/ollama:latest
+          for i in $(seq 1 60); do
             if curl -fsS http://127.0.0.1:11434/api/tags >/dev/null; then break; fi
             sleep 1
           done
           curl -fsS http://127.0.0.1:11434/api/tags >/dev/null
       - name: Pull exact pinned model
         run: |
-          ollama pull snowflake-arctic-embed:33m
+          docker exec p4-ollama ollama pull snowflake-arctic-embed:33m
           curl -fsS http://127.0.0.1:11434/api/tags > p4-ollama-tags.json
           node - <<'NODE'
           const fs = require('node:fs');
