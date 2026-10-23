@@ -121,6 +121,8 @@
           "root_cause": "The deployed 002 lexical RPC used websearch_to_tsquery for long multi-term shadow queries, which made candidate matching too strict compared with the offline token-overlap baseline.",
           "fix": "004_reference_graph_lexical_overlap.sql replaces all-term web search semantics with deterministic partial token overlap while preserving exact metadata filters and privileged-only execution.",
           "regression_test": "tests/reference-graph/p3-lexical-overlap.test.mjs",
+          "post_fix_empty_case_count": 0,
+          "post_fix_candidate_smoke_count": 24,
           "final_empty_case_count": 0
         }
       }
@@ -159,6 +161,7 @@
         "model_revision": "e8db018629b4",
         "dimensions": 384,
         "quality_status": "experimental",
+        "persisted_total": 0,
         "persisted_active_profile": 0,
         "reason": "The exact pinned Ollama provider is unavailable in this execution harness. No substitute or synthetic vectors were generated."
       }
