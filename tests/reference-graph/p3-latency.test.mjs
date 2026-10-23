@@ -115,7 +115,7 @@ test('P3 catalog shadow runner records per-case latency from an injected monoton
   const records = [legacyRecord('ref-a')];
   const cases = [{
     profile: 'quick',
-    limit: 1,
+    limit: 3,
     surface: 'public-home',
     platform: 'web-responsive',
     job: 'creator landing page',
