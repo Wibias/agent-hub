@@ -1,5 +1,6 @@
 name: P10 live HTTP probe
 
+# Trigger after workflow registration.
 on:
   push:
     branches:
