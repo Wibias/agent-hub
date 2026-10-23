@@ -1,0 +1,28 @@
+name: P9 stage governance v2
+
+on:
+  push:
+    branches:
+      - agent/reference-graph-p9
+    paths:
+      - reference-graph/scripts/stage-p9-governance.py
+
+permissions:
+  contents: write
+
+jobs:
+  stage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/reference-graph-p9
+          fetch-depth: 0
+      - name: Stage permanent P9 governance
+        run: |
+          python3 reference-graph/scripts/stage-p9-governance.py
+          git config user.name "Wibias"
+          git config user.email "37517432+Wibias@users.noreply.github.com"
+          git add reference-graph/.p9-staged-governance.yml reference-graph/README.md tests/reference-graph/p8-ci-contract.test.mjs
+          git commit -m "ci: stage P9 least privilege governance"
+          git push origin HEAD:agent/reference-graph-p9
