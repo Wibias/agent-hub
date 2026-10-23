@@ -34,7 +34,8 @@
 - [x] Confirm the same run passes 26/26 Reference Graph tests, the 600-record import plan (`576` unique sources, `600` assets, `0` asset deduplications), all three migrations, and service-role/anonymous permission smoke tests.
 - [x] Run broad Agent Hub governance on run `39878750874` / job `120170731477`. Reference Graph tests, import planning, shadow baseline, pgvector migrations, RPC permissions, Public Release, Memory Ratchet, routing, Skill Ratchet, design taste/structural gates, regenerated routing index, dependency install, and the full Node 24 Memory Engine suite all pass. The only softened checks are the two separately identified pre-existing `main` baseline mismatches: stale `write-swift` catalog expectation and stale generated `pnpm` / `write-swift` index entries.
 - [x] Confirm P0 -> P1 is 33 commits ahead / 0 behind and changes only Reference Graph code/tests/docs and its CI. No `skills/design-with-ai/**` file is changed. Public Release safety passes on the same branch and the diff contains no credential/secret artifact; only environment-variable names and server-side credential handling are present.
-- [ ] Remove the temporary branch-only P1 workflow after the final doc-only broad verification run.
+- [x] Re-run the complete broad verification on the doc-final P1 revision `1b6c07458c3c617bc3846124d00e08e99fe30814`: run `39879031256`, job `120171758079`, conclusion `success`. All hard Reference Graph and Agent Hub gates pass, including the full Memory Engine suite; only the same two documented pre-existing `main` baseline mismatches are allowed to continue.
+- [x] Remove the temporary branch-only P1 workflow after the final doc-only broad verification run.
 
 ## Shadow conclusion
 
