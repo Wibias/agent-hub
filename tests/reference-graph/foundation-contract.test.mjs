@@ -62,14 +62,27 @@ test('P0 vector retrieval stays exact until model-scoped ANN has measured justif
   assert.match(readme, /ann.*defer|defer.*ann|hnsw.*defer/i);
 });
 
-test('foundation preserves the legacy control and authority boundaries', () => {
+test('foundation preserves historical P0 boundaries while current docs enforce P3 safety', () => {
   const readme = read('reference-graph/README.md');
+  const p0Spec = read('docs/superpowers/specs/2026-10-23-reference-graph-foundation-design.md');
 
   assert.match(readme, /legacy design-reference selector.*control|control.*legacy design-reference selector/i);
   assert.match(readme, /fallback/i);
   assert.match(readme, /external content.*data.*not instructions/i);
   assert.match(readme, /relevance.*never.*authority/i);
   assert.match(readme, /memory.*explicit.*promotion|explicit.*promotion.*memory/i);
-  assert.match(readme, /no live supabase deployment|does not deploy supabase/i);
-  assert.match(readme, /no browser extension|does not add a browser extension/i);
+  assert.match(p0Spec, /does not deploy Supabase|live infrastructure deployment is intentionally deferred/i);
+  assert.match(readme, /must not mutate an ambiguously identified Supabase project|not considered a Reference Graph target by assumption/i);
+  assert.match(readme, /does not add a browser extension|no browser extension/i);
+  assert.match(readme, /does not switch production selection|production_source.*legacy-control|legacy selector remains production/i);
+});
+
+test('permanent Reference Graph governance secret-scans committed P3 target and evidence artifacts', () => {
+  const workflow = read('.github/workflows/verify-reference-graph.yml');
+
+  assert.match(workflow, /Scan P3 committed artifacts for secrets/i);
+  assert.match(workflow, /reference-graph\/target\.json/);
+  assert.match(workflow, /reference-graph\/evidence\/p3-live-shadow-evidence\.json/);
+  assert.match(workflow, /assertSecretFreeReceipt/);
+  assert.match(workflow, /tests\/reference-graph\/\*\.test\.mjs/);
 });
