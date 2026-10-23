@@ -52,6 +52,7 @@ function security(overrides = {}) {
     write_denied: true,
     direct_table_select_denied: true,
     service_role_used_by_canary: false,
+    security_advisor_p9_warn_error_count: 0,
     ...overrides,
   };
 }
