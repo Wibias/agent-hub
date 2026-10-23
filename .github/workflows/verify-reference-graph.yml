@@ -38,6 +38,23 @@ jobs:
       - name: Test reference graph contracts
         run: node --test tests/reference-graph/*.test.mjs
 
+      - name: Scan P3 committed artifacts for secrets
+        run: |
+          node --input-type=module <<'NODE'
+          import { existsSync, readFileSync } from 'node:fs';
+          import { assertSecretFreeReceipt } from './reference-graph/p3-receipt.mjs';
+
+          for (const file of [
+            'reference-graph/target.json',
+            'reference-graph/evidence/p3-live-shadow-evidence.json',
+          ]) {
+            if (!existsSync(file)) continue;
+            const value = JSON.parse(readFileSync(file, 'utf8'));
+            assertSecretFreeReceipt(value);
+            console.log(`secret-free: ${file}`);
+          }
+          NODE
+
       - name: Verify catalog import plan
         run: node reference-graph/cli/import-design-references.mjs --plan
 
