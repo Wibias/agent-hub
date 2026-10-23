@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 
 function asset(id) {
@@ -151,4 +153,16 @@ test('P3 embedding availability probe is exact-model bound and distinguishes una
     }),
     /rpc exploded/,
   );
+});
+
+test('P3 shadow CLI exposes bound Supabase semantic and hybrid modes without changing production control', () => {
+  const cliPath = fileURLToPath(new URL('../../reference-graph/cli/shadow-design-references.mjs', import.meta.url));
+  const source = readFileSync(cliPath, 'utf8');
+
+  assert.match(source, /--supabase-semantic/);
+  assert.match(source, /--supabase-hybrid/);
+  assert.match(source, /--target/);
+  assert.match(source, /createSupabaseShadowRetriever/);
+  assert.match(source, /probeCompatibleEmbeddings/);
+  assert.match(source, /legacy-control/);
 });
