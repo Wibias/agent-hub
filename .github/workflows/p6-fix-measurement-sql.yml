@@ -1,0 +1,55 @@
+name: P6 fix transactional measurement SQL
+
+on:
+  push:
+    branches:
+      - agent/reference-graph-p6-evidence-run
+    paths:
+      - .github/workflows/p6-fix-measurement-sql.yml
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/reference-graph-p6-evidence-run
+          fetch-depth: 0
+      - name: Fix CTE delimiter and TSV escape literals
+        run: |
+          python3 - <<'PY'
+          import hashlib
+          import json
+          from pathlib import Path
+
+          sql_path = Path('reference-graph/evidence-run/p6-measurement.sql')
+          text = sql_path.read_text()
+          if text.count('FROM input_lines\n)\nlex AS (') != 1:
+              raise SystemExit('expected one missing CTE delimiter')
+          text = text.replace('FROM input_lines\n)\nlex AS (', 'FROM input_lines\n),\nlex AS (')
+          if text.count("E'\\\\n'") != 1:
+              raise SystemExit('expected one over-escaped newline literal')
+          text = text.replace("E'\\\\n'", "E'\\n'")
+          if text.count("E'\\\\t'") != 7:
+              raise SystemExit(f'expected seven over-escaped tab literals, got {text.count("E\\'\\\\\\\\t\\'")}')
+          text = text.replace("E'\\\\t'", "E'\\t'")
+          sql_path.write_text(text)
+
+          manifest_path = Path('reference-graph/evidence-run/p6-measurement-sql-manifest.json')
+          manifest = json.loads(manifest_path.read_text())
+          manifest['sql_md5'] = hashlib.md5(text.encode()).hexdigest()
+          manifest['sql_sha256'] = hashlib.sha256(text.encode()).hexdigest()
+          manifest['syntax_fix'] = 'cte-delimiter-and-tsv-escapes'
+          manifest_path.write_text(json.dumps(manifest, indent=2) + '\n')
+          print(json.dumps(manifest, indent=2))
+          PY
+      - name: Commit corrected measurement SQL
+        run: |
+          git config user.name "Wibias"
+          git config user.email "37517432+Wibias@users.noreply.github.com"
+          git add reference-graph/evidence-run/p6-measurement.sql reference-graph/evidence-run/p6-measurement-sql-manifest.json
+          git commit -m "chore: fix transactional P6 measurement SQL"
+          git push origin HEAD:agent/reference-graph-p6-evidence-run
