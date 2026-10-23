@@ -1,0 +1,39 @@
+name: P6 task6 implementation verification
+
+on:
+  push:
+    branches:
+      - agent/reference-graph-p6
+    paths:
+      - .github/workflows/p6-task6-verification.yml
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Full Reference Graph tests
+        run: node --test tests/reference-graph/*.test.mjs
+      - name: Design-reference library regression
+        run: node --test knowledge/design-references/tests/library.test.mjs
+      - name: Current control verification
+        run: |
+          node reference-graph/cli/p6-live-quality.mjs --current-control --reference-date 2026-10-23 > /tmp/p6-current-control.json
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const x = JSON.parse(fs.readFileSync('/tmp/p6-current-control.json', 'utf8'));
+          const h = x.current_control_health;
+          if (x.production_source !== 'legacy-control') throw new Error(`unexpected production source: ${x.production_source}`);
+          if (h?.fresh_pool_count !== 275 || h?.case_count !== 24 || h?.full_limit_case_count !== 24 || h?.cases_with_coverage_gaps !== 0 || h?.healthy !== true) {
+            throw new Error(`unexpected current control: ${JSON.stringify(h)}`);
+          }
+          console.log(JSON.stringify(x, null, 2));
+          NODE
+      - name: Reference Graph secret scan
+        run: python3 skills/security-review-redirect/scripts/scan_secrets.py reference-graph
