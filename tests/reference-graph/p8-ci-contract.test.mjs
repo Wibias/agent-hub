@@ -10,15 +10,14 @@ test('P8 governance secret-scans optional P8 evidence with the P8 receipt contra
   assert.match(WORKFLOW, /reference-graph\/evidence\/p8-cutover-review-evidence\.json/);
 });
 
-test('P8 governance pins the production query CLI blob and runtime credential boundary', () => {
-  assert.match(WORKFLOW, /Verify P8 production CLI remains legacy-only/);
-  assert.match(WORKFLOW, /4963cfbaf4306a03084f4513a1e324f649ce36e5/);
-  assert.match(WORKFLOW, /git hash-object knowledge\/design-references\/scripts\/query\.mjs/);
+test('P8 historical runtime boundary remains immutable while P11 owns current opt-in routing', () => {
+  assert.match(WORKFLOW, /Verify immutable P8 runtime boundary/);
+  assert.match(WORKFLOW, /p8-cutover-review-evidence\.json/);
+  assert.match(WORKFLOW, /production_source[^\n]*legacy-control/s);
+  assert.match(WORKFLOW, /activation_performed[^\n]*false/s);
+  assert.match(WORKFLOW, /production_activation_ready[^\n]*false/s);
+  assert.match(WORKFLOW, /Verify P11 production runtime default-off and profile isolation/);
   assert.match(WORKFLOW, /SUPABASE_SERVICE_ROLE_KEY/);
-  assert.match(WORKFLOW, /ReferenceGraphSupabaseStore/);
-  assert.match(WORKFLOW, /quickCandidatePoolP7/);
-  assert.match(WORKFLOW, /p7-parity-policy/);
-  assert.match(WORKFLOW, /knowledge\/design-references/);
 });
 
 test('P8 governance executes the offline 24-case record and pattern handoff contract', () => {
