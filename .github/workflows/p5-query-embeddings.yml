@@ -48,7 +48,7 @@ jobs:
           const records = loadRecords();
           const referenceTime = new Date('2026-10-23T12:00:00.000Z');
           const provider = new OllamaEmbeddingProvider({
-            modelTag: REFERENCE_EMEDDING_PROFILE?.modelTag ?? REFERENCE_EMBEDDING_PROFILE.modelTag,
+            modelTag: REFERENCE_EMBEDDING_PROFILE.modelTag,
             modelRevision: REFERENCE_EMBEDDING_PROFILE.modelRevision,
           });
           const queryProvider = createProfileQueryProvider(provider);
