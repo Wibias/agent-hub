@@ -77,7 +77,7 @@ test('foundation preserves historical P0 boundaries while current docs enforce P
   assert.match(readme, /does not switch production selection|production_source.*legacy-control|legacy selector remains production/i);
 });
 
-test('permanent Reference Graph governance secret-scans committed P3 target and evidence artifacts', () => {
+test('permanent Reference Graph governance secret-scans committed P3 artifacts and pins the healthy benchmark date', () => {
   const workflow = read('.github/workflows/verify-reference-graph.yml');
 
   assert.match(workflow, /Scan P3 committed artifacts for secrets/i);
@@ -85,4 +85,5 @@ test('permanent Reference Graph governance secret-scans committed P3 target and 
   assert.match(workflow, /reference-graph\/evidence\/p3-live-shadow-evidence\.json/);
   assert.match(workflow, /assertSecretFreeReceipt/);
   assert.match(workflow, /tests\/reference-graph\/\*\.test\.mjs/);
+  assert.match(workflow, /--offline\s+--control-date\s+2026-07-21/);
 });
