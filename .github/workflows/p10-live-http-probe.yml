@@ -1,0 +1,185 @@
+name: P10 live HTTP probe
+
+on:
+  push:
+    branches:
+      - agent/reference-graph-p10-http-probe
+    paths:
+      - .github/workflows/p10-live-http-probe.yml
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Run exact P10 publishable HTTP canary
+        env:
+          SUPABASE_URL: https://vrznfnxzlxaavpqbzbzd.supabase.co
+          SUPABASE_PUBLISHABLE_KEY: sb_publishable_rdBBU9vE1K0jlxWIOoqevQ_Yg9x1BdG
+          REFERENCE_DATE: '2026-10-23'
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          import { fetchP10QuickCandidatePool } from './reference-graph/p10-runtime-client.mjs';
+          import { runP10RuntimeCanaryCli } from './reference-graph/cli/p10-runtime-canary.mjs';
+
+          const cases = JSON.parse(fs.readFileSync('./reference-graph/shadow-cases.json', 'utf8'));
+          const supabaseUrl = process.env.SUPABASE_URL;
+          const publishableKey = process.env.SUPABASE_PUBLISHABLE_KEY;
+          const referenceDate = process.env.REFERENCE_DATE;
+
+          const remote = await fetchP10QuickCandidatePool({
+            supabaseUrl,
+            publishableKey,
+            timeoutMs: 5000,
+            expectedDate: referenceDate,
+          });
+          if (remote.candidates.length !== 275) {
+            throw new Error(`expected 275 live candidates, got ${remote.candidates.length}`);
+          }
+
+          const rows = [];
+          for (const c of cases) {
+            let text = '';
+            const exitCode = await runP10RuntimeCanaryCli({
+              argv: [
+                '--profile', c.profile,
+                '--limit', String(c.limit),
+                '--surface', c.surface,
+                '--platform', c.platform,
+                '--job', c.job,
+                '--dimensions', c.dimensions,
+                '--supabase-url', supabaseUrl,
+                '--reference-date', referenceDate,
+                '--timeout-ms', '5000',
+                '--strict-canary',
+                '--no-record-usage',
+              ],
+              env: {
+                SUPABASE_URL: supabaseUrl,
+                SUPABASE_PUBLISHABLE_KEY: publishableKey,
+              },
+              stdout: { write(chunk) { text += String(chunk); } },
+            });
+            const result = JSON.parse(text);
+            rows.push({
+              id: c.id,
+              exit_code: exitCode,
+              status: result.graph_canary.status,
+              record_exact: result.graph_canary.record_exact,
+              pattern_exact: result.graph_canary.pattern_exact,
+              candidate_count: result.graph_canary.transport?.candidate_count ?? null,
+              production_source: result.production_source,
+              activation_performed: result.activation_performed,
+              coverage_gap_count: result.coverageGaps.length,
+            });
+          }
+
+          let fallbackText = '';
+          const fallbackExitCode = await runP10RuntimeCanaryCli({
+            argv: [
+              '--profile', 'quick', '--limit', '4',
+              '--surface', cases[0].surface,
+              '--platform', cases[0].platform,
+              '--job', cases[0].job,
+              '--dimensions', cases[0].dimensions,
+              '--supabase-url', supabaseUrl,
+              '--reference-date', referenceDate,
+              '--no-record-usage',
+            ],
+            env: { SUPABASE_URL: supabaseUrl, SUPABASE_PUBLISHABLE_KEY: publishableKey },
+            stdout: { write(chunk) { fallbackText += String(chunk); } },
+            fetchImpl: async () => { throw new Error('intentional transport failure'); },
+          });
+          const fallbackResult = JSON.parse(fallbackText);
+          const fallbackVerified = fallbackResult.production_source === 'legacy-control'
+            && fallbackResult.activation_performed === false
+            && fallbackResult.graph_canary.status === 'fallback';
+
+          const noNetwork = {};
+          for (const [profile, limit] of [['standard', 8], ['deep', 20]]) {
+            let fetchCount = 0;
+            let text = '';
+            const code = await runP10RuntimeCanaryCli({
+              argv: [
+                '--profile', profile, '--limit', String(limit),
+                '--surface', cases[0].surface,
+                '--platform', cases[0].platform,
+                '--job', cases[0].job,
+                '--dimensions', cases[0].dimensions,
+                '--no-record-usage',
+              ],
+              env: {},
+              stdout: { write(chunk) { text += String(chunk); } },
+              fetchImpl: async () => { fetchCount += 1; throw new Error('network must not run'); },
+            });
+            const result = JSON.parse(text);
+            noNetwork[profile] = {
+              exit_code: code,
+              fetch_count: fetchCount,
+              production_source: result.production_source,
+              graph_status: result.graph_canary.status,
+            };
+          }
+
+          const summary = {
+            schema_version: 'reference-graph.p10-live-http-probe.v1',
+            auth_mode: 'publishable',
+            live_http_transport_verified: true,
+            snapshot_date: remote.transport.snapshot_date,
+            candidate_count: remote.candidates.length,
+            case_count: rows.length,
+            exact_record_count: rows.filter((x) => x.record_exact === true).length,
+            exact_pattern_count: rows.filter((x) => x.pattern_exact === true).length,
+            mismatch_count: rows.filter((x) => x.status !== 'exact' || x.exit_code !== 0).length,
+            legacy_authoritative_count: rows.filter((x) => x.production_source === 'legacy-control' && x.activation_performed === false).length,
+            fallback: {
+              verified: fallbackVerified,
+              exit_code: fallbackExitCode,
+              status: fallbackResult.graph_canary.status,
+              production_source: fallbackResult.production_source,
+              activation_performed: fallbackResult.activation_performed,
+            },
+            no_network: noNetwork,
+            rows,
+          };
+          fs.writeFileSync('/tmp/p10-live-http-probe.json', JSON.stringify(summary, null, 2));
+          console.log(JSON.stringify({
+            auth_mode: summary.auth_mode,
+            live_http_transport_verified: summary.live_http_transport_verified,
+            snapshot_date: summary.snapshot_date,
+            candidate_count: summary.candidate_count,
+            case_count: summary.case_count,
+            exact_record_count: summary.exact_record_count,
+            exact_pattern_count: summary.exact_pattern_count,
+            mismatch_count: summary.mismatch_count,
+            legacy_authoritative_count: summary.legacy_authoritative_count,
+            fallback_verified: summary.fallback.verified,
+            standard_fetch_count: summary.no_network.standard.fetch_count,
+            deep_fetch_count: summary.no_network.deep.fetch_count,
+          }, null, 2));
+
+          if (
+            summary.case_count !== 24
+            || summary.exact_record_count !== 24
+            || summary.exact_pattern_count !== 24
+            || summary.mismatch_count !== 0
+            || summary.legacy_authoritative_count !== 24
+            || summary.fallback.verified !== true
+            || summary.no_network.standard.fetch_count !== 0
+            || summary.no_network.standard.exit_code !== 0
+            || summary.no_network.deep.fetch_count !== 0
+            || summary.no_network.deep.exit_code !== 0
+          ) process.exitCode = 1;
+          NODE
+      - uses: actions/upload-artifact@v4
+        with:
+          name: p10-live-http-probe
+          path: /tmp/p10-live-http-probe.json
+          if-no-files-found: error
