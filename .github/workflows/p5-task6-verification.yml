@@ -1,0 +1,26 @@
+name: P5 Task 6 verification
+
+on:
+  push:
+    branches:
+      - agent/reference-graph-p5
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Run Reference Graph suite
+        run: node --test tests/reference-graph/*.test.mjs
+      - name: Run design-reference library suite
+        run: node --test knowledge/design-references/tests/library.test.mjs
+      - name: Verify P5 current control
+        run: node reference-graph/cli/p5-live-quality.mjs --current-control --reference-date 2026-10-23
+      - name: Scan Reference Graph secrets
+        run: python3 skills/security-review-redirect/scripts/scan_secrets.py reference-graph
