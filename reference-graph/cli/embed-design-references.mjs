@@ -6,7 +6,11 @@ import { buildEmbeddingRows, persistEmbeddingRows } from '../embedding-pipeline.
 import { REFERENCE_EMBEDDING_PROFILE } from '../embedding-profile.mjs';
 import { OllamaEmbeddingProvider } from '../ollama-embeddings.mjs';
 import { ReferenceGraphSupabaseStore } from '../supabase-store.mjs';
-import { assertBoundSupabaseUrl, readTargetBinding } from '../target-binding.mjs';
+import {
+  assertBoundSupabaseUrl,
+  readTargetBinding,
+  redactDiagnostics,
+} from '../target-binding.mjs';
 
 function usage() {
   return [
@@ -138,6 +142,6 @@ async function main() {
 
 main().catch((error) => {
   const message = error instanceof Error ? error.message : String(error);
-  console.error(message);
+  console.error(redactDiagnostics(message, [process.env.SUPABASE_SERVICE_ROLE_KEY]));
   process.exitCode = 1;
 });
