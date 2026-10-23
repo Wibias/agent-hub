@@ -48,6 +48,14 @@ test('P3 receipt enforces ordered deployment phases and blocks progress after fa
     /failed|blocked/i,
   );
   assert.throws(
+    () => recordP3Phase(afterSchema, {
+      phase: 'schema',
+      status: 'success',
+      detail: { retry: true },
+    }),
+    /failed|terminal|already/i,
+  );
+  assert.throws(
     () => recordP3Phase(afterPreflight, {
       phase: 'schema',
       status: 'done',
