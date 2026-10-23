@@ -274,6 +274,23 @@ test('usage is written exactly once for the authoritative result', async () => {
   assert.equal(calls[0].request, request);
 });
 
+test('custom usage log path is forwarded exactly once to the usage writer', async () => {
+  const calls = [];
+  await runP11RuntimeQuery({
+    records,
+    patterns,
+    request: requestFromCase(),
+    now,
+    usageLogPath: '/tmp/custom-p11-usage.jsonl',
+    recordUsageFn(selected, req, usageLogPath) {
+      calls.push({ ids: ids(selected), request: req, usageLogPath });
+    },
+  });
+
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].usageLogPath, '/tmp/custom-p11-usage.jsonl');
+});
+
 test('usage failure is non-fatal and preserves existing warning semantics', async () => {
   const result = await runP11RuntimeQuery({
     records,
