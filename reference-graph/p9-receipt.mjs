@@ -15,7 +15,7 @@ const PHASE_STATUSES = new Set([
   'unavailable',
 ]);
 
-const CREDENTIAL_KEY_RE = /(?:service[_-]?role|publishable|anon|database[_-]?password|authorization|access[_-]?token|bearer[_-]?token|secret[_-]?key).*(?:key|secret|password|token)?/i;
+const CREDENTIAL_KEY_RE = /^(?:authorization|database[_-]?password|access[_-]?token|bearer[_-]?token|secret[_-]?key|(?:.*[_-])?(?:service[_-]?role|publishable|anon)(?:[_-](?:api[_-]?)?)?(?:key|secret|password|token))$/i;
 
 function clone(value) {
   return structuredClone(value);
