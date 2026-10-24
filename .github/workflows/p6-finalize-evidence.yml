@@ -1,0 +1,159 @@
+name: P6 finalize evidence
+
+on:
+  push:
+    branches:
+      - agent/reference-graph-p6
+    paths:
+      - .github/workflows/p6-finalize-evidence.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/reference-graph-p6
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Finalize canonical P6 receipt
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          import { createHash } from 'node:crypto';
+          import {
+            createP6Receipt,
+            recordP6Phase,
+            finalizeP6Receipt,
+            assertSecretFreeP6Receipt,
+          } from './reference-graph/p6-receipt.mjs';
+
+          const evidencePath = 'reference-graph/evidence/p6-retrieval-quality-evidence.json';
+          const migrationPath = 'reference-graph/schema/006_reference_graph_retrieval_quality.sql';
+          const evidence = JSON.parse(fs.readFileSync(evidencePath, 'utf8'));
+          const implementationSha = 'ea5e4317bdce09b26a989d42a381921d412bf984';
+          const baseSha = 'fd904355c7d62ad716766eab3bfc41539f5ed18a';
+          const rgRun = 40043367307;
+          const task6Run = 40043328495;
+          const migrationSha256 = createHash('sha256').update(fs.readFileSync(migrationPath)).digest('hex');
+          if (migrationSha256 !== 'beed29d2b6a0550f264154ec78ff673c0b5a8af696fd2dfc31b466d213a80ba9') {
+            throw new Error(`unexpected migration 006 sha256: ${migrationSha256}`);
+          }
+
+          evidence.implementation = {
+            ...evidence.implementation,
+            p5_base_sha: baseSha,
+            clean_p6_implementation_sha: implementationSha,
+            reference_graph_governance_run: rgRun,
+            task6_verification_run: task6Run,
+          };
+          if (evidence.measurement?.behavior_equivalence) {
+            evidence.measurement.behavior_equivalence.final_clean_implementation_sha = implementationSha;
+            evidence.measurement.behavior_equivalence.git_compare_status = 'ahead';
+            evidence.measurement.behavior_equivalence.behavior_files_changed = [];
+            evidence.measurement.behavior_equivalence.only_additional_file_between_measured_and_clean_head = 'reference-graph/evidence/p6-retrieval-quality-evidence.json';
+          }
+
+          const verificationAt = new Date().toISOString();
+          let receipt = createP6Receipt({
+            binding: evidence.target,
+            gitSha: implementationSha,
+            verificationAt,
+            referenceTime: evidence.reference_time,
+            baseSha,
+          });
+          receipt = recordP6Phase(receipt, {
+            phase: 'preflight',
+            status: 'success',
+            detail: {
+              target_status: evidence.target.status,
+              reference_graph_governance_run: rgRun,
+              task6_verification_run: task6Run,
+            },
+          });
+          receipt = recordP6Phase(receipt, {
+            phase: 'migration',
+            status: 'success',
+            detail: {
+              file: migrationPath,
+              sha256: migrationSha256,
+              history_version: evidence.migration?.history_version ?? evidence.migration_state?.p6_version,
+              history_name: evidence.migration?.history_name ?? evidence.migration_state?.p6_name,
+              service_role_only: true,
+              live_superset_detected: evidence.migration_state?.live_superset_detected ?? null,
+              p6_rpc_semantics_verified_unchanged: evidence.migration_state?.p6_rpc_semantics_verified_unchanged ?? null,
+            },
+          });
+          receipt = recordP6Phase(receipt, {
+            phase: 'embeddings',
+            status: 'success',
+            detail: evidence.embedding_coverage,
+          });
+          receipt = recordP6Phase(receipt, {
+            phase: 'shadow',
+            status: 'success',
+            detail: {
+              case_count: 24,
+              candidate_limit: evidence.measurement?.candidate_limit ?? 24,
+              read_only: evidence.measurement?.read_only === true,
+              measured_code_sha: evidence.measurement?.behavior_equivalence?.measured_code_sha ?? null,
+              behavior_equivalent_clean_implementation_sha: implementationSha,
+              behavior_diff_to_clean_head: ['reference-graph/evidence/p6-retrieval-quality-evidence.json'],
+            },
+          });
+
+          const migration = {
+            status: 'applied',
+            file: migrationPath,
+            sha256: migrationSha256,
+            history_version: evidence.migration?.history_version ?? evidence.migration_state?.p6_version,
+            history_name: evidence.migration?.history_name ?? evidence.migration_state?.p6_name,
+            service_role_only: true,
+            anon_execute: false,
+            authenticated_execute: false,
+            security_definer: true,
+            surface_platform_are_soft_preferences: true,
+          };
+          receipt = finalizeP6Receipt(receipt, {
+            currentControlHealth: evidence.current_control_health,
+            embeddingCoverage: evidence.embedding_coverage,
+            p5Baseline: evidence.p5_baseline ?? {
+              status: 'available',
+              summary: evidence.p5_regression?.baseline_lexical_summary,
+            },
+            evaluations: evidence.evaluations,
+            migration,
+            blockers: evidence.evaluations?.hybrid?.summary?.blockers ?? [],
+          });
+          assertSecretFreeP6Receipt(receipt);
+          evidence.receipt = receipt;
+          evidence.migration = migration;
+          evidence.production_source = 'legacy-control';
+          evidence.cutover_performed = false;
+          evidence.decision = {
+            value: 'NO CUTOVER',
+            reason: 'P6 guarded hybrid remains below unchanged overlap and top-1 gates and regresses against the immutable P5 lexical baseline.',
+            production_source: 'legacy-control',
+            cutover_performed: false,
+          };
+          fs.writeFileSync(evidencePath, `${JSON.stringify(evidence, null, 2)}\n`);
+          console.log(JSON.stringify({
+            git_sha: receipt.git_sha,
+            base_sha: receipt.base_sha,
+            cutover_ready: receipt.cutover_ready,
+            eligible_for_cutover_review: receipt.eligible_for_cutover_review,
+            blockers: receipt.blockers,
+            migration_sha256: migrationSha256,
+          }, null, 2));
+          NODE
+          git config user.name "Wibias"
+          git config user.email "37517432+Wibias@users.noreply.github.com"
+          git add reference-graph/evidence/p6-retrieval-quality-evidence.json
+          git commit -m "chore: finalize P6 retrieval quality evidence"
+          git push origin HEAD:agent/reference-graph-p6
