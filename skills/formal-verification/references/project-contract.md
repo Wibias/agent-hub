@@ -23,6 +23,12 @@ or an agreed Mermaid statechart that should become a TLA+ skeleton, read
 nested statechart runtime is a modeling and visualization capability, not a
 second routing owner.
 
+For every TLA+/TLC handoff result, reference `statechart.md` for the interpretation
+step: surface the shortest readable path for violations and a state-machine
+overview for passing checks when that overview materially helps the reader. Keep
+statechart CLI commands, options, and file paths in the shared reference instead
+of copying release-sensitive details into the project-local verifier.
+
 ## Required record
 
 The project-local `SKILL.md` or a directly linked one-level reference must state:

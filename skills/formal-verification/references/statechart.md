@@ -16,6 +16,12 @@ node statechart/scripts/statechart.mjs --help
 
 Use `--fixed` to compare a proposed implementation fix with the current model. Use `--against` to compare a model of the code with an agreed specification. Use `--cover` when the complete overview is too large; bug paths remain included while the command reports what the overview leaves out.
 
+## Interpret model-check results
+
+For every TLA+/TLC model-check result, use statechart as the interpretation layer before handoff. If a rule is violated, surface the shortest readable counterexample path the checker found. If the check is passing, provide a state-machine overview when it materially helps the reader understand the verified behavior.
+
+A chart is interpretation evidence, not proof and not a verdict. `formal-verification` remains responsible for deciding what the model establishes, whether a counterexample maps to real code, and what final status to report. Keep release-sensitive statechart commands, options, and file paths in this reference; project-local verification artifacts should reference statechart by capability instead of copying those details.
+
 ## Evidence boundary
 
 A TLC counterexample is evidence about the model. When the model describes implementation code, replay each counterexample against the current code before calling it a product bug. Drive only feasible entry points and map one model action to one indivisible implementation step. If the path cannot occur in the code, treat that as model drift or a modeling error until evidence shows otherwise.
