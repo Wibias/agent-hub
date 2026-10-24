@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - main
+      - agent/reference-graph-p17
   workflow_dispatch:
 
 permissions:
