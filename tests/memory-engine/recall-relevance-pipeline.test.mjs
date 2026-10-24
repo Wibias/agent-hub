@@ -100,6 +100,9 @@ test('selector audit exposes only operational telemetry', async () => {
     judge_called: true,
     duration_ms: 15,
     failed: false,
+    route: 'judge',
+    local_duration_ms: 0,
+    total_duration_ms: 15,
   });
   assert.equal(JSON.stringify(result.selector).includes('private query'), false);
 });
