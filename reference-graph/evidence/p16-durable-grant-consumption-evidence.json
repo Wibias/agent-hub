@@ -1,0 +1,64 @@
+{
+  "schema_version": "reference-graph.p16-durable-grant-consumption.v1",
+  "p15_evidence_head": "04b6056721697060d10dac640899a11d68c7bc05",
+  "p15_evidence_sha256": "f95e2b2112962881d499191d21a762b2f2dca0e3abe28c65e2e8abc2f67bdbe7",
+  "git_sha": "bb2473ddf2763984c21cef59c6d92a27acbd8237",
+  "reference_graph_governance_run_id": 40057733870,
+  "p16_governance_run_id": 40057733866,
+  "release_governance_run_id": 40057733880,
+  "verification_at": "2026-10-24T03:28:46.004Z",
+  "infrastructure_ready": true,
+  "replay_ledger_ready": true,
+  "live_target": {
+    "project_ref": "vrznfnxzlxaavpqbzbzd",
+    "project_name": "agent-hub-reference-graph",
+    "region": "eu-central-1"
+  },
+  "live_migration": {
+    "version": "20261024032812",
+    "name": "reference_graph_activation_grant_consumption_p16"
+  },
+  "live_ledger": {
+    "table_present": true,
+    "rpc_present": true,
+    "row_count": 0,
+    "anon_execute": false,
+    "authenticated_execute": false,
+    "service_role_execute": true,
+    "anon_select": false,
+    "authenticated_select": false,
+    "service_role_select": false,
+    "service_role_insert": false
+  },
+  "synthetic_live_nonce_consumed": false,
+  "advisors": {
+    "p16_security_warn_error_count": 0,
+    "p16_performance_warn_error_count": 0,
+    "existing_security_info_count": 12,
+    "existing_performance_info_count": 4
+  },
+  "authority_state": "awaiting-external-enrollment",
+  "grant_state": "not-issued",
+  "grant_consumed": false,
+  "activation_authorized": false,
+  "activation_performed": false,
+  "repository_default_graph_enabled": false,
+  "production_source": "legacy-control",
+  "host_actuator_state": "unbound",
+  "external_blocker": "production-ed25519-authority-grant-and-host-actuator-not-provided",
+  "checks": {
+    "p15_binding": true,
+    "atomic_nonce_consumption_ci": true,
+    "concurrent_replay_ci": true,
+    "service_only_rpc": true,
+    "private_ledger_no_direct_service_access": true,
+    "live_migration_010": true,
+    "live_ledger_empty": true,
+    "no_synthetic_live_consumption": true,
+    "no_p16_advisor_warn_error": true,
+    "repository_default_off": true,
+    "production_legacy_control": true,
+    "host_actuator_unbound": true
+  },
+  "blockers": []
+}
