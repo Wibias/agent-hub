@@ -44,7 +44,13 @@ function requireDate(value, name = 'snapshot date') {
 }
 
 function requireExactTarget(target) {
-  const normalized = validateTargetBinding(target);
+  let normalized;
+  try {
+    normalized = validateTargetBinding(target);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`target binding is invalid: ${message}`);
+  }
   for (const [key, expected] of Object.entries(TARGET)) {
     if (normalized[key] !== expected) {
       throw new Error(`target ${key} must be ${expected}`);
