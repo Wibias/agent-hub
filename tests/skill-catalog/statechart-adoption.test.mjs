@@ -29,10 +29,12 @@ test('formal verification owns the nested statechart capability', async () => {
   );
 
   const formal = await text('skills/formal-verification/SKILL.md');
+  const contract = await text('skills/formal-verification/references/project-contract.md');
   const reference = await text('skills/formal-verification/references/statechart.md');
 
-  assert.match(formal, /statechart/i);
-  assert.match(formal, /references\/statechart\.md/i);
+  assert.match(formal, /state machines|state-machine/i);
+  assert.match(contract, /statechart\.md/i);
+  assert.match(contract, /formal-verification.*(?:owns|owner)|(?:owns|owner).*formal-verification/i);
   assert.match(reference, /from-spec/);
   assert.match(reference, /from-chart/);
   assert.match(reference, /\brender\b/);
