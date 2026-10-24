@@ -6,8 +6,14 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 
-import { executeP17Activation } from '../../reference-graph/p17-activation-runner.mjs';
-import { readP17RawState } from '../../reference-graph/p17-local-runtime-actuator.mjs';
+import {
+  executeP17Activation,
+  probeP17Runtime,
+} from '../../reference-graph/p17-activation-runner.mjs';
+import {
+  applyP17LocalActivation,
+  readP17RawState,
+} from '../../reference-graph/p17-local-runtime-actuator.mjs';
 import {
   createP14EnrollmentManifest,
   createP14UnsignedGrantPayload,
@@ -74,6 +80,18 @@ function graphProbe() {
       authoritative_source: 'reference-graph',
       record_exact: true,
       pattern_exact: true,
+    },
+    standard: { authoritative_source: 'legacy-control' },
+    deep: { authoritative_source: 'legacy-control' },
+  };
+}
+
+function legacyProbe() {
+  return {
+    quick: {
+      authoritative_source: 'legacy-control',
+      record_exact: null,
+      pattern_exact: null,
     },
     standard: { authoritative_source: 'legacy-control' },
     deep: { authoritative_source: 'legacy-control' },
@@ -167,6 +185,127 @@ test('P17 runner refuses a store without the P16 irreversible consumption capabi
     }),
     /consumeActivationGrantNonceP16/,
   );
+});
+
+test('P17 production probe uses the same durable projection and requires exact Quick graph plus Standard and Deep legacy', async () => {
+  const statePath = await tempStatePath();
+  await applyP17LocalActivation({
+    activation_flag: 'REFERENCE_GRAPH_QUICK_RUNTIME',
+    activation_value: 'graph',
+    grant_payload_hash: 'a'.repeat(64),
+    consumption_id: 'probe-consumption',
+  }, { statePath });
+
+  const seen = [];
+  const result = await probeP17Runtime({
+    statePath,
+    env: { REFERENCE_GRAPH_QUICK_RUNTIME: 'legacy', KEEP_ME: 'yes' },
+    now: new Date('2026-10-24T02:05:00.000Z'),
+    runProfile: async ({ profile, graphMode, env, request }) => {
+      seen.push({ profile, graphMode, activation: env.REFERENCE_GRAPH_QUICK_RUNTIME, request });
+      if (profile === 'quick') {
+        return {
+          authoritative_source: 'reference-graph',
+          record_exact: true,
+          pattern_exact: true,
+        };
+      }
+      return {
+        authoritative_source: 'legacy-control',
+        record_exact: null,
+        pattern_exact: null,
+      };
+    },
+  });
+
+  assert.deepEqual(result, graphProbe());
+  assert.deepEqual(seen.map((row) => row.profile), ['quick', 'standard', 'deep']);
+  assert.ok(seen.every((row) => row.graphMode === 'graph'));
+  assert.ok(seen.every((row) => row.activation === 'graph'));
+  assert.ok(seen.every((row) => row.request.surface === 'operator-control'));
+  assert.ok(seen.every((row) => row.request.platform === 'web-responsive'));
+});
+
+test('P17 production probe fails closed to legacy projection when durable state is absent even if caller env requests graph', async () => {
+  const statePath = await tempStatePath();
+  const seen = [];
+  const result = await probeP17Runtime({
+    statePath,
+    env: { REFERENCE_GRAPH_QUICK_RUNTIME: 'graph' },
+    now: new Date('2026-10-24T02:05:00.000Z'),
+    runProfile: async ({ profile, graphMode, env }) => {
+      seen.push({ profile, graphMode, activation: env.REFERENCE_GRAPH_QUICK_RUNTIME });
+      return {
+        authoritative_source: 'legacy-control',
+        record_exact: null,
+        pattern_exact: null,
+      };
+    },
+  });
+
+  assert.deepEqual(result, legacyProbe());
+  assert.ok(seen.every((row) => row.graphMode === 'legacy'));
+  assert.ok(seen.every((row) => row.activation === undefined));
+});
+
+test('P17 production probe rejects malformed routing instead of inventing parity', async () => {
+  const statePath = await tempStatePath();
+  await applyP17LocalActivation({
+    activation_flag: 'REFERENCE_GRAPH_QUICK_RUNTIME',
+    activation_value: 'graph',
+    grant_payload_hash: 'b'.repeat(64),
+    consumption_id: 'probe-malformed',
+  }, { statePath });
+
+  await assert.rejects(
+    probeP17Runtime({
+      statePath,
+      now: new Date('2026-10-24T02:05:00.000Z'),
+      runProfile: async ({ profile }) => profile === 'quick'
+        ? { authoritative_source: 'reference-graph', pattern_exact: true }
+        : { authoritative_source: 'legacy-control', record_exact: null, pattern_exact: null },
+    }),
+    /routing/i,
+  );
+});
+
+test('P17 post-mutation probe failure rolls back local state and verifies restored legacy', async () => {
+  const statePath = await tempStatePath();
+  const ceremony = ceremonyFixture();
+  let probeCount = 0;
+  const result = await executeP17Activation({
+    p13Evidence: p13Evidence(),
+    enrollmentManifest: ceremony.enrollmentManifest,
+    grant: ceremony.grant,
+    supabaseStore: {
+      async consumeActivationGrantNonceP16() {
+        return { consumed: true, consumption_id: 'rollback-consumption' };
+      },
+    },
+    statePath,
+    now: () => new Date('2026-10-24T02:05:00.000Z'),
+    probeRuntime: async () => {
+      probeCount += 1;
+      const state = await readP17RawState({ statePath });
+      if (probeCount === 1) {
+        assert.equal(state?.mode, 'graph');
+        return {
+          ...graphProbe(),
+          quick: { ...graphProbe().quick, record_exact: false },
+        };
+      }
+      assert.equal(state?.mode, 'legacy');
+      return legacyProbe();
+    },
+  });
+
+  assert.equal(result.status, 'rolled-back');
+  assert.equal(result.activation_performed, false);
+  assert.equal(result.rollback_performed, true);
+  assert.equal(result.rollback_verified, true);
+  assert.equal(result.retry_requires_new_grant, true);
+  assert.equal(probeCount, 2);
+  assert.equal((await readP17RawState({ statePath }))?.mode, 'legacy');
 });
 
 test('P17 production runner introduces no signer or private-key implementation', async () => {
