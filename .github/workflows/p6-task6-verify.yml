@@ -1,0 +1,25 @@
+name: P6 task 6 verification
+
+on:
+  push:
+    branches:
+      - agent/reference-graph-p6
+    paths:
+      - .github/workflows/p6-task6-verify.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Run design-reference library regression suite
+        run: node --test knowledge/design-references/tests/library.test.mjs
+      - name: Run Reference Graph tree secret scan
+        run: python3 skills/security-review-redirect/scripts/scan_secrets.py reference-graph
