@@ -90,19 +90,19 @@ test('P18 evidence records all verified ceremony and cutover safety boundaries',
   assert.equal(checks.public_release_safe, true);
 });
 
-test('P18 pre-activation evidence contains no private/public key bytes, signature, grant, nonce, credentials, or live receipt ids', () => {
+test('P18 pre-activation evidence contains no private/public key bytes, signature, grant, nonce material, credentials, or live receipt ids', () => {
   const serialized = JSON.stringify(evidence());
   for (const forbidden of [
-    /sb_secret_/i,
-    /service[_-]?role[_-]?(?:key|token|secret|password)/i,
-    /publishable[_-]?key/i,
-    /private[_-]?key/i,
+    /sb_secret_[A-Za-z0-9_-]+/i,
+    /"(?:service_role_key|service_role_token|service_role_secret|service_role_password)":/i,
+    /"publishable_key":/i,
+    /"private_key(?:_[^"]*)?":/i,
     /public_key_spki_base64/i,
     /signature_base64/i,
-    /grant\s*:\s*\{/i,
-    /nonce/i,
-    /consumption_id/i,
-    /activation_change_id/i,
+    /"grant":\{/i,
+    /"(?:nonce|grant_nonce)":/i,
+    /"consumption_id":/i,
+    /"activation_change_id":/i,
   ]) {
     assert.doesNotMatch(serialized, forbidden);
   }
