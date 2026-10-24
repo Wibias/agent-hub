@@ -11,7 +11,7 @@ import {
 
 const P12_HEAD = '5f676c806ae864b507723ea867f5e3afd6fd4adb';
 const P12_BINDING_HASH = '68930447847df8d31de01b7fb60049136ae6fd0d74c837283fb837ff7e79961b';
-const P12_EVIDENCE_SHA256 = 'a'.repeat(64);
+const P12_EVIDENCE_SHA256 = '15a0db3e27ede261554fe9993d775db07ffabcaa74b9ec49b3df55d788659bcb';
 const GIT_SHA = 'b'.repeat(40);
 const TARGET = {
   purpose: 'agent-hub-reference-graph',
@@ -143,6 +143,15 @@ test('failed phase or false check keeps infrastructure blocked with unique reaso
 });
 
 test('receipt creation rejects drifted P12 anchors and malformed metadata', () => {
+  assert.throws(
+    () => createP13Receipt({
+      grantRequest: { ...grantRequest(), p12_evidence_sha256: '0'.repeat(64) },
+      gitSha: GIT_SHA,
+      verificationAt: '2026-10-24T02:00:00.000Z',
+      referenceTime: '2026-10-24T02:00:00.000Z',
+    }),
+    /grant request|P12|evidence/i,
+  );
   assert.throws(
     () => createP13Receipt({
       grantRequest: { ...grantRequest(), p12_binding_hash: '0'.repeat(64) },
