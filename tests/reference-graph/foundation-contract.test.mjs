@@ -90,7 +90,7 @@ test('permanent Reference Graph governance secret-scans evidence and separates h
   assert.match(workflow, /Scan Reference Graph tree for common secrets/i);
   assert.match(workflow, /scan_secrets\.py\s+reference-graph/);
   assert.match(workflow, /tests\/reference-graph\/\*\.test\.mjs/);
-  assert.match(workflow, /Verify immutable P3 and P4 historical evidence/i);
+  assert.match(workflow, /Verify immutable P3(?: and P4|, P4, and P5) historical evidence/i);
   assert.match(workflow, /2026-07-21T12:00:00\.000Z/);
   assert.match(workflow, /Measure current P5 legacy control health/i);
   assert.match(workflow, /--current-control\s+--reference-date\s+2026-10-23/);
