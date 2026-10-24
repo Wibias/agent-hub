@@ -16,6 +16,34 @@ const EXECUTION_KEYS = Object.freeze([
   'readActivationState',
   'rollbackActivation',
 ]);
+const INITIAL_RECEIPT_KEYS = Object.freeze([
+  'activation_authorized',
+  'activation_change_id',
+  'activation_performed',
+  'authority_hash',
+  'blockers',
+  'consumption_id',
+  'enrollment_manifest',
+  'external_blocker',
+  'git_sha',
+  'grant',
+  'grant_consumed',
+  'grant_payload_hash',
+  'grant_state',
+  'grant_verified',
+  'p14_evidence_head',
+  'p14_evidence_sha256',
+  'production_source',
+  'repository_default_graph_enabled',
+  'request_hash',
+  'retry_requires_new_grant',
+  'rollback_change_id',
+  'rollback_performed',
+  'rollback_verified',
+  'schema_version',
+  'state',
+  'verification_at',
+]);
 
 function requireObject(value, name) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
@@ -60,6 +88,47 @@ function scanCredentialKeys(value, path = []) {
     }
     scanCredentialKeys(entry, [...path, key]);
   }
+}
+
+function validateInitialReceipt(receipt) {
+  const value = requireObject(receipt, 'P15 initial receipt');
+  if (!hasExactKeys(value, INITIAL_RECEIPT_KEYS)) {
+    throw new Error('P15 initial receipt must contain the exact blocked authority fields');
+  }
+
+  requireGitSha(value.git_sha);
+  requireIso(value.verification_at, 'verification_at');
+  const valid = value.schema_version === 'reference-graph.p15-activation-executor.v1'
+    && value.p14_evidence_head === P14_EVIDENCE_HEAD
+    && value.p14_evidence_sha256 === P14_EVIDENCE_SHA256
+    && value.state === 'blocked'
+    && value.grant_state === 'not-issued'
+    && value.grant_verified === false
+    && value.grant_consumed === false
+    && value.consumption_id === null
+    && value.activation_authorized === false
+    && value.activation_performed === false
+    && value.activation_change_id === null
+    && value.rollback_performed === false
+    && value.rollback_verified === false
+    && value.rollback_change_id === null
+    && value.retry_requires_new_grant === false
+    && value.repository_default_graph_enabled === false
+    && value.production_source === 'legacy-control'
+    && value.request_hash === null
+    && value.authority_hash === null
+    && value.grant_payload_hash === null
+    && value.external_blocker === 'production-ed25519-authority-and-grant-not-provided'
+    && Array.isArray(value.blockers)
+    && value.blockers.length === 0
+    && value.enrollment_manifest === null
+    && value.grant === null;
+  if (!valid) {
+    throw new Error('P15 initial receipt must match the exact blocked P14 authority boundary');
+  }
+
+  assertSecretFreeP15Receipt(value);
+  return value;
 }
 
 function receiptState(result) {
@@ -119,12 +188,10 @@ export function createP15Receipt({ gitSha, verificationAt } = {}) {
 }
 
 export async function finalizeP15Receipt(receipt, options = {}) {
-  const base = requireObject(receipt, 'receipt');
+  const base = validateInitialReceipt(receipt);
   const value = requireObject(options, 'P15 finalization options');
-  const optionKeys = Object.keys(value);
-  if (optionKeys.length === 0) return structuredClone(base);
   if (!hasExactKeys(value, ['execution'])) {
-    throw new Error('P15 finalization accepts exactly one execution artifact object and never caller activation claims');
+    throw new Error('P15 finalization requires exactly one real execution artifact object and never caller activation claims');
   }
   if (!hasExactKeys(value.execution, EXECUTION_KEYS)) {
     throw new Error('P15 execution artifacts must contain the exact ceremony and actuator fields');
