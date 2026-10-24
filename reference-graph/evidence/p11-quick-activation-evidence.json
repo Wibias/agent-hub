@@ -1,0 +1,116 @@
+{
+  "schema_version": "reference-graph.p11-activation-readiness.v1",
+  "target": {
+    "purpose": "agent-hub-reference-graph",
+    "project_ref": "vrznfnxzlxaavpqbzbzd",
+    "project_name": "agent-hub-reference-graph",
+    "region": "eu-central-1"
+  },
+  "base_sha": "43a81a3fb2ee42e083c7ca4bf6d132663c54d51d",
+  "git_sha": "849a8782be4081a5821bdb354e54c33b2e2b0fb9",
+  "verification_at": "2026-10-24T00:00:57.000Z",
+  "reference_time": "2026-10-24T00:00:33.000Z",
+  "production_source": "legacy-control",
+  "repository_default_graph_enabled": false,
+  "activation_performed": false,
+  "quick_activation_ready": true,
+  "profile_support": {
+    "quick": "activation-ready",
+    "standard": "legacy-only",
+    "deep": "legacy-only"
+  },
+  "blockers": [],
+  "phases": {
+    "preflight": {
+      "status": "success",
+      "detail": {
+        "verified": true,
+        "projection_snapshot_date": "2026-10-24",
+        "projection_candidate_count": 275,
+        "security_advisor_warn_error_count": 0
+      },
+      "error": null
+    },
+    "router": {
+      "status": "success",
+      "detail": {
+        "verified": true,
+        "public_output_parity_regression": true,
+        "governance_run_id": 40042873232
+      },
+      "error": null
+    },
+    "live_canary": {
+      "status": "success",
+      "detail": {
+        "verified": true,
+        "run_id": 40042748708,
+        "artifact_id": 12539867164,
+        "artifact_sha256": "dfb1bdc8c622b8ff6de68a3cac35269f84bd88769ab61570e5345bbaffd45a37"
+      },
+      "error": null
+    },
+    "rollback": {
+      "status": "success",
+      "detail": {
+        "verified": true,
+        "repository_default_graph_enabled": false,
+        "standard_deep_zero_network": true
+      },
+      "error": null
+    }
+  },
+  "default_off": {
+    "verified": true,
+    "repository_default_graph_enabled": false,
+    "default_quick_legacy_equivalent": true,
+    "default_graph_fetch_count": 0
+  },
+  "live_activated_canary": {
+    "status": "available",
+    "case_count": 24,
+    "authoritative_graph_count": 24,
+    "exact_record_count": 24,
+    "exact_pattern_count": 24,
+    "coverage_exit_exact_count": 24,
+    "mismatch_count": 0,
+    "auth_mode": "publishable",
+    "candidate_count": 275,
+    "default_cli_equivalent_count": 24,
+    "reference_date": "2026-10-24",
+    "run_id": 40042748708,
+    "artifact_id": 12539867164,
+    "artifact_sha256": "dfb1bdc8c622b8ff6de68a3cac35269f84bd88769ab61570e5345bbaffd45a37"
+  },
+  "fallback_verification": {
+    "transport_failure_fallback": true,
+    "missing_key_zero_fetch_fallback": true,
+    "stale_snapshot_fallback": true,
+    "empty_snapshot_fallback": true,
+    "malformed_payload_fallback": true,
+    "usage_exact_once_graph": true,
+    "usage_exact_once_fallback": true
+  },
+  "profile_isolation": {
+    "standard_legacy_only": true,
+    "deep_legacy_only": true,
+    "standard_fetch_count": 0,
+    "deep_fetch_count": 0
+  },
+  "security": {
+    "runtime_auth_mode": "publishable",
+    "service_role_runtime_used": false,
+    "security_advisor_p9_p10_warn_error_count": 0,
+    "projection_refresh_operator_only": true
+  },
+  "evidence": {
+    "implementation_governance_run_id": 40042873232,
+    "live_canary_run_id": 40042748708,
+    "live_canary_artifact_id": 12539867164,
+    "live_canary_artifact_sha256": "dfb1bdc8c622b8ff6de68a3cac35269f84bd88769ab61570e5345bbaffd45a37",
+    "projection_snapshot_date": "2026-10-24",
+    "projection_candidate_count": 275,
+    "public_output_bug_found_and_regressed": true,
+    "repository_default_unchanged": true
+  }
+}

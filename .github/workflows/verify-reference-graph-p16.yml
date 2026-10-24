@@ -1,0 +1,147 @@
+name: Reference graph P16 governance
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: reference-graph-p16-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Test P16 contracts
+        run: node --test tests/reference-graph/p16-*.test.mjs
+
+      - name: Scan Reference Graph tree for common secrets
+        run: python3 skills/security-review-redirect/scripts/scan_secrets.py reference-graph
+
+      - name: Install PostgreSQL client when needed
+        run: |
+          if ! command -v psql >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y postgresql-client
+          fi
+
+      - name: Bootstrap Supabase-compatible database roles
+        env:
+          PGPASSWORD: postgres
+        run: |
+          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 <<'SQL'
+          create schema if not exists extensions;
+          do $$
+          begin
+            if not exists (select 1 from pg_roles where rolname = 'anon') then
+              create role anon nologin;
+            end if;
+            if not exists (select 1 from pg_roles where rolname = 'authenticated') then
+              create role authenticated nologin;
+            end if;
+            if not exists (select 1 from pg_roles where rolname = 'service_role') then
+              create role service_role nologin;
+            end if;
+          end
+          $$;
+          SQL
+
+      - name: Execute Reference Graph migrations through P16
+        env:
+          PGPASSWORD: postgres
+        run: |
+          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f reference-graph/schema/001_reference_graph.sql
+          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f reference-graph/schema/002_reference_graph_rpc.sql
+          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f reference-graph/schema/003_reference_graph_embeddings_rpc.sql
+          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f reference-graph/schema/004_reference_graph_lexical_overlap.sql
+          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f reference-graph/schema/005_reference_graph_freshness.sql
+          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f reference-graph/schema/006_reference_graph_retrieval_quality.sql
+          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f reference-graph/schema/007_reference_graph_lexical_parity.sql
+          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f reference-graph/schema/008_reference_graph_runtime_canary.sql
+          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f reference-graph/schema/009_reference_graph_runtime_projection.sql
+          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f reference-graph/schema/010_reference_graph_activation_grant_consumption.sql
+
+      - name: Smoke-test P16 durable grant consumption replay and privileges
+        env:
+          PGPASSWORD: postgres
+        run: |
+          consume_sql="set role service_role; select public.reference_graph_consume_activation_grant_nonce_p16('1616161616161616161616161616161616161616161616161616161616161616','bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb','cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc','dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd')::text;"
+
+          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -Atqc "$consume_sql" > /tmp/p16-consume-a &
+          pid_a=$!
+          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -Atqc "$consume_sql" > /tmp/p16-consume-b &
+          pid_b=$!
+          wait "$pid_a"
+          wait "$pid_b"
+
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const results = [
+            JSON.parse(fs.readFileSync('/tmp/p16-consume-a', 'utf8').trim()),
+            JSON.parse(fs.readFileSync('/tmp/p16-consume-b', 'utf8').trim()),
+          ];
+          const consumed = results.filter((value) => value.consumed === true && typeof value.consumption_id === 'string' && value.consumption_id.length > 0);
+          const replay = results.filter((value) => value.consumed === false && value.consumption_id === null);
+          if (consumed.length !== 1 || replay.length !== 1) {
+            throw new Error(`expected one P16 first-use success and one false/null replay: ${JSON.stringify(results)}`);
+          }
+          console.log(JSON.stringify(results));
+          NODE
+
+          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 <<'SQL'
+          do $$
+          declare
+            v_count bigint;
+          begin
+            select count(*) into v_count
+            from reference_graph.activation_grant_consumptions_p16;
+            if v_count <> 1 then
+              raise exception 'expected exactly one P16 consumption row, got %', v_count;
+            end if;
+
+            if has_function_privilege('anon', 'public.reference_graph_consume_activation_grant_nonce_p16(text,text,text,text)', 'EXECUTE') then
+              raise exception 'anon unexpectedly has P16 consume RPC execute';
+            end if;
+            if has_function_privilege('authenticated', 'public.reference_graph_consume_activation_grant_nonce_p16(text,text,text,text)', 'EXECUTE') then
+              raise exception 'authenticated unexpectedly has P16 consume RPC execute';
+            end if;
+            if not has_function_privilege('service_role', 'public.reference_graph_consume_activation_grant_nonce_p16(text,text,text,text)', 'EXECUTE') then
+              raise exception 'service_role lacks P16 consume RPC execute';
+            end if;
+
+            if has_table_privilege('anon', 'reference_graph.activation_grant_consumptions_p16', 'SELECT')
+              or has_table_privilege('authenticated', 'reference_graph.activation_grant_consumptions_p16', 'SELECT')
+              or has_table_privilege('service_role', 'reference_graph.activation_grant_consumptions_p16', 'SELECT') then
+              raise exception 'P16 private ledger unexpectedly exposes SELECT';
+            end if;
+            if has_table_privilege('anon', 'reference_graph.activation_grant_consumptions_p16', 'INSERT')
+              or has_table_privilege('authenticated', 'reference_graph.activation_grant_consumptions_p16', 'INSERT')
+              or has_table_privilege('service_role', 'reference_graph.activation_grant_consumptions_p16', 'INSERT') then
+              raise exception 'P16 private ledger unexpectedly exposes INSERT';
+            end if;
+          end
+          $$;
+          SQL

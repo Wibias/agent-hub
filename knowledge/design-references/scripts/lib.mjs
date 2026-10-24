@@ -287,6 +287,12 @@ export function validateRecord(record, options = {}) {
   if (options.requireReviewed && record.reviewStatus !== "reviewed") {
     errors.push("production records must be reviewed");
   }
+  if (
+    options.requireProductionStatus
+    && !["reviewed", "stale", "archived"].includes(record.reviewStatus)
+  ) {
+    errors.push("production records must be reviewed, stale, or archived");
+  }
   return errors;
 }
 

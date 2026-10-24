@@ -6,6 +6,7 @@ import {
   stripInternal,
   tokenize,
 } from "./lib.mjs";
+import { canCompleteQuickCoverage } from "./quick-coverage.mjs";
 
 export function allocateDeep(total) {
   const order = [
@@ -65,7 +66,15 @@ function scoreRecord(record, request) {
   return value;
 }
 
-export function selectRecords(records, request) {
+function resolveSelectionNow(value) {
+  if (value === undefined) return new Date();
+  if (!(value instanceof Date) || Number.isNaN(value.getTime())) {
+    throw new TypeError("options.now must be a valid Date");
+  }
+  return value;
+}
+
+export function selectRecords(records, request, options = {}) {
   const profilePolicy = TAXONOMY.profiles[request.profile];
   if (!profilePolicy) throw new Error("Unknown profile: " + request.profile);
   if (
@@ -83,9 +92,10 @@ export function selectRecords(records, request) {
     );
   }
 
+  const selectionNow = resolveSelectionNow(options.now);
   const eligible = records
     .filter(
-      (record) => record.reviewStatus === "reviewed" && isFresh(record),
+      (record) => record.reviewStatus === "reviewed" && isFresh(record, selectionNow),
     )
     .filter(
       (record) => ["AVAILABLE", "PAYWALLED"].includes(record.accessStatus),
@@ -94,6 +104,12 @@ export function selectRecords(records, request) {
       record,
       baseScore: scoreRecord(record, request),
     }));
+  const quickCoverageFeasible = request.profile === "quick"
+    && canCompleteQuickCoverage({
+      selectedRecords: [],
+      remainingRecords: eligible.map(({ record }) => record),
+      request,
+    });
   const quotas =
     request.profile === "deep"
       ? allocateDeep(request.limit)
@@ -130,7 +146,19 @@ export function selectRecords(records, request) {
           left.record.id.localeCompare(right.record.id),
       );
     if (!candidates.length) break;
-    const chosen = candidates[0];
+
+    let chosen = candidates[0];
+    if (quickCoverageFeasible) {
+      chosen = candidates.find(({ record }) => {
+        const selectedRecords = [...selected, record];
+        const selectedIds = new Set(selectedRecords.map((item) => item.id));
+        const remainingRecords = eligible
+          .map((item) => item.record)
+          .filter((item) => !selectedIds.has(item.id));
+        return canCompleteQuickCoverage({ selectedRecords, remainingRecords, request });
+      }) ?? chosen;
+    }
+
     selected.push({
       ...stripInternal(chosen.record),
       selectionScore: chosen.score,

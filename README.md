@@ -90,7 +90,6 @@ backticks.
 | <!-- skill-doc:ponytail-review -->[**ponytail-review**](skills/ponytail-review/SKILL.md) | Explicit-only cut-list review for over-engineering: identify what can be deleted or flattened without changing behavior. | “Run ponytail-review on this abstraction layer.” |
 | <!-- skill-doc:quality-constraints -->[**quality-constraints**](skills/quality-constraints/SKILL.md) | Define and maintain a project's persistent blocking/warning quality bar in `CONSTRAINTS.md`. | “Define the quality constraints for this service.” |
 | <!-- skill-doc:test-quality -->[**test-quality**](skills/test-quality/SKILL.md) | Evaluate whether tests actually protect behavior and improve low-value, brittle, or misleading test suites. | “Review these tests for signal, not just coverage.” |
-| <!-- skill-doc:write-swift -->[**write-swift**](skills/write-swift/SKILL.md) | Canonical Swift engineering owner for modeling, concurrency, testing, performance, refactoring, and migrations. | “Review this actor isolation design.” |
 
 ### Debugging, performance & quality
 
@@ -136,7 +135,6 @@ backticks.
 | <!-- skill-doc:playwright -->[**playwright**](skills/playwright/SKILL.md) | Drive a real browser with Playwright for navigation, interaction, screenshots, multi-tab flows, and UI verification. | “Use Playwright to reproduce this checkout bug.” |
 | <!-- skill-doc:firecrawl -->[**firecrawl**](skills/firecrawl/SKILL.md) | Search, scrape, and interact with web content through Firecrawl tooling. | “Scrape these docs with Firecrawl.” |
 | <!-- skill-doc:shadcn -->[**shadcn**](skills/shadcn/SKILL.md) | Search, add, compose, fix, style, and update shadcn/ui components and registries. | “Add the correct shadcn command-menu primitive.” |
-| <!-- skill-doc:pnpm -->[**pnpm**](skills/pnpm/SKILL.md) | Handle pnpm-specific package management, workspace, dependency-resolution, and command behavior. | “Fix this pnpm workspace dependency issue.” |
 | <!-- skill-doc:vite -->[**vite**](skills/vite/SKILL.md) | Own Vite-specific configuration, plugins, dev-server, and build behavior. | “Why does this Vite plugin only fail in production build?” |
 | <!-- skill-doc:vitest -->[**vitest**](skills/vitest/SKILL.md) | Own Vitest-specific configuration, test behavior, and failing Vitest suites. | “Fix this Vitest environment/config failure.” |
 
@@ -252,22 +250,6 @@ skills to invoke.
 | <!-- route-doc:codex-dynamic-workflows:work-packets -->**Work packets** | Give each agent one bounded task with explicit inputs, outputs, allowed scope, and completion evidence. |
 | <!-- route-doc:codex-dynamic-workflows:doubt-gate -->**Doubt Gate** | Stop integration when unresolved uncertainty remains instead of letting agents silently guess. |
 | <!-- route-doc:codex-dynamic-workflows:verification -->**Verification / integration** | Independently reconcile agent outputs and prove the combined result before declaring completion. |
-
-</details>
-
-<details>
-<summary><strong><code>write-swift</code> — Swift engineering routes</strong></summary>
-
-| Route | Use it for |
-|---|---|
-| <!-- route-doc:write-swift:core-language -->**Core language** | Data modeling, API design, value/reference semantics, protocols/generics, Codable, and durable Swift language choices. |
-| <!-- route-doc:write-swift:concurrency -->**Concurrency** | `async/await`, actors, isolation, `Sendable`, structured tasks, cancellation, and concurrency correctness. |
-| <!-- route-doc:write-swift:testing-and-performance -->**Testing & performance** | Swift Testing/XCTest strategy, benchmarks, profiling, and measured optimization. |
-| <!-- route-doc:write-swift:broad-review -->**Broad review** | Review mixed Swift code and load only the language/concurrency/testing references that the code actually needs. |
-
-Version-sensitive Swift/Xcode/compiler/SDK/API facts compose with
-`source-driven-development` and current official Swift sources rather than being
-frozen into the skill.
 
 </details>
 
