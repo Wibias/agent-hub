@@ -14,5 +14,9 @@
   {
     "id": "E4-2026-10-04",
     "sha256": "5f66d68f2be73dd7c0df5b925c3ca545f3e667b0203365146ea1a0f289b9220c"
+  },
+  {
+    "id": "R-plugin-cache-readonly-2026-10-24",
+    "sha256": "3007cca7bbd61bab6c3931da7ac7995d6c3247daeb2c693791ddd1750cf02470"
   }
 ]

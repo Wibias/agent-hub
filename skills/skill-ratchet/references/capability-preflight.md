@@ -15,6 +15,14 @@ The cross-platform CLI checks existing locations when present:
   `.cursor/rules`, `.agents/skills`, `.codex/skills`, and `.github/skills`;
 - repeatable caller-supplied `--root` paths.
 
+`$CODEX_HOME/plugins/cache` is discovery evidence only, not an authoring root.
+Preflight results mark that root and candidates discovered from it with
+`mutation_policy: "discovery-only"`. Never mutate the plugin cache directly.
+If a cached skill needs an authorized change, choose a persistent writable skill
+destination outside the cache first, copy the skill there, and edit only the
+persistent copy. Use the active harness's canonical writable root instead of
+assuming a vendor-specific destination path.
+
 Missing optional roots are reported but are not fatal. Secret, credential,
 VCS, dependency, and sandbox-secret directories are never inventoried.
 

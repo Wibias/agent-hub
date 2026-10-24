@@ -6,16 +6,23 @@ import {
   similarity, tokenize, walkFiles,
 } from './shared.mjs';
 
-function addRoot(roots, label, candidatePath, kind, priority, caller = false) {
+function addRoot(roots, label, candidatePath, kind, priority, caller = false, mutationPolicy = null) {
   if (!candidatePath) return;
   if (!path.isAbsolute(candidatePath)) {
     if (caller) roots.warnings.push(`Relative root skipped: ${candidatePath}`);
     return;
   }
-  roots.items.push({ label, path: path.resolve(candidatePath), kind, priority, caller });
+  roots.items.push({
+    label,
+    path: path.resolve(candidatePath),
+    kind,
+    priority,
+    caller,
+    ...(mutationPolicy ? { mutation_policy: mutationPolicy } : {}),
+  });
 }
 
-async function candidateFromFile(filePath, source, kind, priority, discoveryOnly) {
+async function candidateFromFile(filePath, source, kind, priority, discoveryOnly, mutationPolicy = null) {
   if (isExcluded(filePath)) return null;
   if (kind === 'skill') {
     const text = await readText(filePath, 8192);
@@ -41,6 +48,7 @@ async function candidateFromFile(filePath, source, kind, priority, discoveryOnly
       canonical: name.toLowerCase(),
       tokens: tokenize(surface),
       negative_tokens: tokenize(negative),
+      ...(mutationPolicy ? { mutation_policy: mutationPolicy } : {}),
       security_flags: [
         /ignore (?:all )?(?:previous|prior) instructions/i.test(text) && 'instruction-override',
         /(?:reveal|print|output|expose).{0,40}system prompt/i.test(text) && 'system-prompt-exfiltration',
@@ -60,6 +68,7 @@ async function candidateFromFile(filePath, source, kind, priority, discoveryOnly
     canonical: '',
     tokens: tokenize(surface),
     negative_tokens: new Set(),
+    ...(mutationPolicy ? { mutation_policy: mutationPolicy } : {}),
   };
 }
 
@@ -77,7 +86,15 @@ export async function runPreflight(options) {
     addRoot(roots, 'agents-rules', path.join(agentsHome, 'rules'), 'rules', 0);
     addRoot(roots, 'agents-hub', path.join(agentsHome, 'AGENTS.md'), 'agents-file', 0);
     addRoot(roots, 'codex-system-skills', path.join(codexHome, 'skills', '.system'), 'skills', 2);
-    addRoot(roots, 'codex-plugin-cache', path.join(codexHome, 'plugins', 'cache'), 'skills', 3);
+    addRoot(
+      roots,
+      'codex-plugin-cache',
+      path.join(codexHome, 'plugins', 'cache'),
+      'skills',
+      3,
+      false,
+      'discovery-only',
+    );
   }
 
   if (options.projectRoot) {
@@ -108,24 +125,51 @@ export async function runPreflight(options) {
   const candidates = [];
   for (const root of uniqueRoots) {
     const exists = await pathExists(root.path);
-    rootsChecked.push({ label: root.label, path: root.path, kind: root.kind, exists });
+    rootsChecked.push({
+      label: root.label,
+      path: root.path,
+      kind: root.kind,
+      exists,
+      ...(root.mutation_policy ? { mutation_policy: root.mutation_policy } : {}),
+    });
     if (!exists) {
       if (root.caller) roots.warnings.push(`Root not found, skipped: ${root.path}`);
       continue;
     }
     if (root.kind === 'agents-file') {
-      const candidate = await candidateFromFile(root.path, root.label, 'agents', root.priority, options.discoveryOnly);
+      const candidate = await candidateFromFile(
+        root.path,
+        root.label,
+        'agents',
+        root.priority,
+        options.discoveryOnly,
+        root.mutation_policy,
+      );
       if (candidate) candidates.push(candidate);
       continue;
     }
     const files = await walkFiles(root.path);
     for (const file of files) {
       if ((root.kind === 'skills' || root.kind === 'mixed') && path.basename(file) === 'SKILL.md') {
-        const candidate = await candidateFromFile(file, root.label, 'skill', root.priority, options.discoveryOnly);
+        const candidate = await candidateFromFile(
+          file,
+          root.label,
+          'skill',
+          root.priority,
+          options.discoveryOnly,
+          root.mutation_policy,
+        );
         if (candidate) candidates.push(candidate);
       }
       if ((root.kind === 'rules' || root.kind === 'mixed') && path.basename(file) !== 'SKILL.md' && ['.md', '.mdc'].includes(path.extname(file))) {
-        const candidate = await candidateFromFile(file, root.label, 'rule', root.priority, options.discoveryOnly);
+        const candidate = await candidateFromFile(
+          file,
+          root.label,
+          'rule',
+          root.priority,
+          options.discoveryOnly,
+          root.mutation_policy,
+        );
         if (candidate) candidates.push(candidate);
       }
     }
@@ -172,6 +216,7 @@ export async function runPreflight(options) {
       plausible: candidate.score >= plausibleCutoff && index < 5,
     };
     if (candidate.variant_note) result.variant_note = candidate.variant_note;
+    if (candidate.mutation_policy) result.mutation_policy = candidate.mutation_policy;
     if (candidate.security_flags?.length) result.security_flags = candidate.security_flags;
     return result;
   });
