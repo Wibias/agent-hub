@@ -1,0 +1,92 @@
+name: Reference graph P18 governance
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - agent/reference-graph-p18
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: reference-graph-p18-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Configure disposable P18 local state
+        shell: bash
+        run: echo "AGENT_HUB_REFERENCE_GRAPH_STATE=$RUNNER_TEMP/reference-graph-p18/activation-state-v1.json" >> "$GITHUB_ENV"
+
+      - name: Test P18 contracts
+        run: node --test tests/reference-graph/p18-*.test.mjs
+
+      - name: Scan Reference Graph tree for common secrets
+        run: python3 skills/security-review-redirect/scripts/scan_secrets.py reference-graph
+
+      - name: Verify public release safety
+        run: node scripts/verify-public-release.mjs
+
+      - name: Verify P18 owns no migration 011
+        shell: bash
+        run: |
+          if find reference-graph/schema -maxdepth 1 -type f -name '011_*' | grep -q .; then
+            echo 'P18 must not add migration 011' >&2
+            exit 1
+          fi
+
+      - name: Verify external OpenSSL Ed25519 ceremony compatibility
+        shell: bash
+        run: |
+          set -euo pipefail
+          openssl version
+          CEREMONY_DIR="$RUNNER_TEMP/p18-openssl-ceremony"
+          mkdir -p "$CEREMONY_DIR"
+
+          openssl genpkey -algorithm ED25519 -out "$CEREMONY_DIR/authority-private.pem"
+          openssl pkey -in "$CEREMONY_DIR/authority-private.pem" -pubout -outform DER -out "$CEREMONY_DIR/authority-public.der"
+
+          AUTHORITY_HASH="$(node reference-graph/cli/p18-production-activation.mjs \
+            --authority-descriptor \
+            "$CEREMONY_DIR/authority-public.der" \
+            "p18-ci-ephemeral-authority" \
+            "p18-ci-ephemeral-key" \
+            "$CEREMONY_DIR/authority.json")"
+          printf '%s\n' "$AUTHORITY_HASH" > "$CEREMONY_DIR/authority-approved.sha256"
+
+          PAYLOAD_HASH="$(node reference-graph/cli/p18-production-activation.mjs \
+            --prepare-grant \
+            "$CEREMONY_DIR/authority.json" \
+            "$CEREMONY_DIR/authority-approved.sha256" \
+            "$CEREMONY_DIR/grant.payload.json" \
+            "$CEREMONY_DIR/grant.canonical.json")"
+          test "${#PAYLOAD_HASH}" -eq 64
+
+          openssl pkeyutl -sign -rawin \
+            -inkey "$CEREMONY_DIR/authority-private.pem" \
+            -in "$CEREMONY_DIR/grant.canonical.json" \
+            -out "$CEREMONY_DIR/grant.sig"
+
+          ASSEMBLED="$(node reference-graph/cli/p18-production-activation.mjs \
+            --assemble-grant \
+            "$CEREMONY_DIR/authority.json" \
+            "$CEREMONY_DIR/authority-approved.sha256" \
+            "$CEREMONY_DIR/grant.payload.json" \
+            "$CEREMONY_DIR/grant.sig" \
+            "$CEREMONY_DIR/grant.json")"
+          node -e '
+            const value = JSON.parse(process.argv[1]);
+            if (value.grant_verified !== true || value.activation_authorized !== true || value.activation_performed !== false) process.exit(1);
+          ' "$ASSEMBLED"
+
+          rm -rf "$CEREMONY_DIR"
