@@ -45,6 +45,14 @@ Add `--project-root "<absolute-path>"` when project-local rules and skills may
 own the capability. Add repeatable `--root "<absolute-path>"` options for other
 registries.
 
+Treat `$CODEX_HOME/plugins/cache` as discovery-only. Never edit, rename, delete,
+or generate files inside that cache. If a cached skill is the correct owner and
+the user authorizes a change, stop before mutation and report:
+`Plugin cache is discovery-only; choose a persistent writable skill destination.`
+Record a persistent writable destination outside the cache, copy the skill
+there, and edit only that copy. Use the active harness's canonical writable
+skill root; do not assume another harness's vendor-specific path.
+
 The command inventories candidates; it never makes the semantic decision.
 Open every entry marked `plausible: true`, read its `SKILL.md` fully, then
 record one verdict with cited paths:
