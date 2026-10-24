@@ -202,7 +202,7 @@ export function createP14UnsignedGrantPayload({
   expiresAt,
   nonce,
 } = {}) {
-  const evidence = requireObject(p13Evidence, 'P13 evidence');
+  const evidence = assertP13Evidence(p13Evidence, P13_EVIDENCE_SHA256);
   const enrollment = validateEnrollmentManifest(evidence, enrollmentManifest);
   const issued = requireCanonicalTimestamp(issuedAt, 'issued_at');
   const notBeforeMs = requireCanonicalTimestamp(notBefore, 'not_before');
@@ -250,7 +250,7 @@ export function verifyP14SignedGrant({
   grant,
   now,
 } = {}) {
-  const evidence = requireObject(p13Evidence, 'P13 evidence');
+  const evidence = assertP13Evidence(p13Evidence, P13_EVIDENCE_SHA256);
   const enrollment = validateEnrollmentManifest(evidence, enrollmentManifest);
   const result = verifyP13ActivationGrant({
     request: evidence.grant_request,
