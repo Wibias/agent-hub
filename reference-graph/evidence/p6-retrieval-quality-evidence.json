@@ -14,9 +14,9 @@
   },
   "implementation": {
     "p5_base_sha": "fd904355c7d62ad716766eab3bfc41539f5ed18a",
-    "clean_p6_implementation_sha": "bf882095e01df421681686774004abdcaa407732",
-    "reference_graph_governance_run": 40016340509,
-    "task6_verification_run": 40016271607,
+    "clean_p6_implementation_sha": "ea5e4317bdce09b26a989d42a381921d412bf984",
+    "reference_graph_governance_run": 40043367307,
+    "task6_verification_run": 40043328495,
     "release_governance_run": 40016340738,
     "release_governance_status": "inherited-baseline-failure",
     "release_governance_failed_step": "Test catalog discovery audit"
@@ -100,7 +100,7 @@
     "guarded_hybrid_all_cases_lexical_fill": true,
     "behavior_equivalence": {
       "measured_code_sha": "15035ee9e48ef3dcb569a025bbd88aab44b4bea0",
-      "final_clean_implementation_sha": "bf882095e01df421681686774004abdcaa407732",
+      "final_clean_implementation_sha": "ea5e4317bdce09b26a989d42a381921d412bf984",
       "git_compare_status": "ahead",
       "behavior_files_changed": [],
       "only_additional_file_between_measured_and_clean_head": "reference-graph/evidence/p6-retrieval-quality-evidence.json"
@@ -501,20 +501,9 @@
   },
   "decision": {
     "value": "NO CUTOVER",
-    "reason": "Current control, migration, grants, and exact embedding coverage are healthy, but guarded-hybrid average overlap and legacy top-1 retention are both below unchanged quality gates.",
+    "reason": "P6 guarded hybrid remains below unchanged overlap and top-1 gates and regresses against the immutable P5 lexical baseline.",
     "production_source": "legacy-control",
-    "eligible_for_cutover_review": false,
-    "cutover_ready": false,
-    "cutover_performed": false,
-    "blockers": [
-      "average overlap below threshold",
-      "legacy top-1 retention below threshold"
-    ],
-    "receipt_blockers": [
-      "P6 guarded hybrid evidence is unavailable or below quality gates",
-      "average overlap below threshold",
-      "legacy top-1 retention below threshold"
-    ]
+    "cutover_performed": false
   },
   "rows": [
     {
@@ -2135,8 +2124,8 @@
       "region": "eu-central-1"
     },
     "base_sha": "fd904355c7d62ad716766eab3bfc41539f5ed18a",
-    "git_sha": "bf882095e01df421681686774004abdcaa407732",
-    "verification_at": "2026-10-23T20:16:16.250Z",
+    "git_sha": "ea5e4317bdce09b26a989d42a381921d412bf984",
+    "verification_at": "2026-10-24T00:22:04.206Z",
     "reference_time": "2026-10-23T12:00:00.000Z",
     "production_source": "legacy-control",
     "quality_thresholds": {
@@ -2160,8 +2149,8 @@
         "status": "success",
         "detail": {
           "target_status": "ACTIVE_HEALTHY",
-          "reference_graph_governance_run": 40016340509,
-          "task6_verification_run": 40016271607
+          "reference_graph_governance_run": 40043367307,
+          "task6_verification_run": 40043328495
         }
       },
       "migration": {
@@ -2171,7 +2160,9 @@
           "sha256": "beed29d2b6a0550f264154ec78ff673c0b5a8af696fd2dfc31b466d213a80ba9",
           "history_version": "20261023165434",
           "history_name": "reference_graph_retrieval_quality_p6",
-          "service_role_only": true
+          "service_role_only": true,
+          "live_superset_detected": null,
+          "p6_rpc_semantics_verified_unchanged": null
         }
       },
       "embeddings": {
@@ -2191,7 +2182,7 @@
           "candidate_limit": 24,
           "read_only": true,
           "measured_code_sha": "15035ee9e48ef3dcb569a025bbd88aab44b4bea0",
-          "behavior_equivalent_clean_implementation_sha": "bf882095e01df421681686774004abdcaa407732",
+          "behavior_equivalent_clean_implementation_sha": "ea5e4317bdce09b26a989d42a381921d412bf984",
           "behavior_diff_to_clean_head": [
             "reference-graph/evidence/p6-retrieval-quality-evidence.json"
           ]
