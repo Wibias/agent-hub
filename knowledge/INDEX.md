@@ -4,7 +4,7 @@ Entries: 68 | Duplicate clusters: 2
 
 ## Knowledge catalogs
 
-- **Design Reference Intelligence Library** — `~/.agents/knowledge/design-references/index.json`; query: `node knowledge/design-references/scripts/query.mjs --profile deep --surface <surface> --job <job> --platform <platform> --dimensions <dimensions>`
+- **Design Reference Intelligence Library** — `~/.agents/knowledge/design-references/index.json`; query: `node knowledge/design-references/scripts/query-runtime.mjs --profile deep --surface <surface> --job <job> --platform <platform> --dimensions <dimensions>`
 
 ## agents
 

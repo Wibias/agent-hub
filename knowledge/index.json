@@ -1636,7 +1636,7 @@
       "path": "~/.agents/knowledge/design-references/index.json",
       "name": "Design Reference Intelligence Library",
       "description": "Curated design observations queried selectively by design-with-ai.",
-      "queryCommand": "node knowledge/design-references/scripts/query.mjs --profile deep --surface <surface> --job <job> --platform <platform> --dimensions <dimensions>"
+      "queryCommand": "node knowledge/design-references/scripts/query-runtime.mjs --profile deep --surface <surface> --job <job> --platform <platform> --dimensions <dimensions>"
     }
   ]
 }
