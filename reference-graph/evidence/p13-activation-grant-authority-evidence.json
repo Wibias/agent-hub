@@ -3,9 +3,9 @@
   "p12_evidence_head": "5f676c806ae864b507723ea867f5e3afd6fd4adb",
   "p12_binding_hash": "68930447847df8d31de01b7fb60049136ae6fd0d74c837283fb837ff7e79961b",
   "p12_evidence_sha256": "15a0db3e27ede261554fe9993d775db07ffabcaa74b9ec49b3df55d788659bcb",
-  "git_sha": "6577735244121b4a9ff67eb608fb7b0ef221e03f",
-  "verification_at": "2026-10-24T01:21:30.843Z",
-  "reference_time": "2026-10-24T01:21:30.843Z",
+  "git_sha": "d9eba7560154bc147bbd664c1802bdddcddc138f",
+  "verification_at": "2026-10-24T01:23:27.275Z",
+  "reference_time": "2026-10-24T01:23:27.275Z",
   "target": {
     "purpose": "agent-hub-reference-graph",
     "project_ref": "vrznfnxzlxaavpqbzbzd",
