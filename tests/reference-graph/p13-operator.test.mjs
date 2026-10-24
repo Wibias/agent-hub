@@ -90,7 +90,7 @@ test('P13 plan and request modes are read-only and bind the exact P12 authority 
   assert.equal(emittedValue.activation_authorized, false);
 });
 
-test('repository verification recomputes P12 evidence bytes and preserves graph-off defaults', () => {
+test('repository verification recomputes P12 evidence bytes and reports later schema evolution', () => {
   const result = run(['--verify-repository']);
   assert.equal(result.status, 0, result.stderr);
   const value = JSON.parse(result.stdout);
@@ -98,7 +98,7 @@ test('repository verification recomputes P12 evidence bytes and preserves graph-
   assert.match(value.repository.p12_evidence_sha256, /^[0-9a-f]{64}$/);
   assert.equal(value.grant_request.p12_evidence_sha256, value.repository.p12_evidence_sha256);
   assert.equal(value.repository.repository_default_graph_enabled, false);
-  assert.equal(value.repository.migration_010_or_later_present, false);
+  assert.equal(value.repository.migration_010_or_later_present, true);
   assert.equal(value.repository.signing_private_key_path, false);
   assert.equal(value.repository.activation_mutation_path, false);
   assert.equal(value.repository.supabase_mutation_path, false);
@@ -149,7 +149,7 @@ test('verify-grant can authenticate an exact ephemeral grant without authorizing
   }
 });
 
-test('repository finalization emits infrastructure-ready evidence while production authority remains absent', () => {
+test('historical P13 finalization fails closed after a later migration is present', () => {
   const dir = mkdtempSync(join(tmpdir(), 'p13-finalize-'));
   try {
     const snapshot = join(dir, 'snapshot.json');
@@ -161,7 +161,7 @@ test('repository finalization emits infrastructure-ready evidence while producti
     const result = run(['--finalize-repository', snapshot]);
     assert.equal(result.status, 0, result.stderr);
     const value = JSON.parse(result.stdout);
-    assert.equal(value.infrastructure_ready, true, JSON.stringify(value.blockers));
+    assert.equal(value.infrastructure_ready, false);
     assert.equal(value.authority_state, 'unconfigured');
     assert.equal(value.trusted_authority_sha256, null);
     assert.equal(value.grant_state, 'not-issued');
@@ -170,6 +170,7 @@ test('repository finalization emits infrastructure-ready evidence while producti
     assert.equal(value.activation_performed, false);
     assert.equal(value.repository_default_graph_enabled, false);
     assert.equal(value.production_source, 'legacy-control');
+    assert.match(value.blockers.join('\n'), /activation_boundary|no_activation_path|not successful/i);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
