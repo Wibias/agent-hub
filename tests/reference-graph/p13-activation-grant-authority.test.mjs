@@ -180,6 +180,44 @@ test('request and authority hashes are canonical and semantic-drift-sensitive', 
   );
 });
 
+test('unknown request, authority, and grant fields fail closed', () => {
+  const req = request();
+  const { authority, privateKey } = authorityFixture();
+
+  assert.throws(
+    () => hashP13AuthorityDescriptor({ ...authority, private_key: 'forbidden-extra-field' }),
+    /exact fields|unexpected authority field/i,
+  );
+
+  const trusted = hashP13AuthorityDescriptor(authority);
+  const requestWithExtra = { ...req, activation_authorized: true };
+  const requestResult = verifyP13ActivationGrant({
+    request: requestWithExtra,
+    grant: signedGrant({ req: requestWithExtra, authority, privateKey }),
+    authority,
+    trustedAuthoritySha256: trusted,
+    now: new Date('2026-10-24T01:05:00.000Z'),
+  });
+  assert.equal(requestResult.grantVerified, false);
+  assert.equal(requestResult.checks.request_contract, false);
+
+  const grantWithExtra = signedGrant({
+    req,
+    authority,
+    privateKey,
+    patch: { activation_authorized: true },
+  });
+  const grantResult = verifyP13ActivationGrant({
+    request: req,
+    grant: grantWithExtra,
+    authority,
+    trustedAuthoritySha256: trusted,
+    now: new Date('2026-10-24T01:05:00.000Z'),
+  });
+  assert.equal(grantResult.grantVerified, false);
+  assert.equal(grantResult.checks.grant_contract, false);
+});
+
 test('authority descriptor rejects a non-Ed25519 SPKI even when the algorithm label says Ed25519', () => {
   const req = request();
   const { publicKey, privateKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
