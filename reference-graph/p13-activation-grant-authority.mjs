@@ -2,6 +2,7 @@ import { createHash, createPublicKey, verify as verifySignature } from 'node:cry
 
 export const P12_EVIDENCE_HEAD = '5f676c806ae864b507723ea867f5e3afd6fd4adb';
 export const P12_BINDING_HASH = '68930447847df8d31de01b7fb60049136ae6fd0d74c837283fb837ff7e79961b';
+export const P12_EVIDENCE_SHA256 = '15a0db3e27ede261554fe9993d775db07ffabcaa74b9ec49b3df55d788659bcb';
 export const P13_MAX_GRANT_LIFETIME_MS = 15 * 60 * 1000;
 
 const TARGET = Object.freeze({
@@ -93,8 +94,9 @@ function p12ReceiptReady(receipt) {
 function requestReady(request) {
   try {
     const value = requireObject(request, 'request');
-    requireSha256(value.p12_evidence_sha256, 'p12 evidence SHA-256');
-    return value.schema_version === 'reference-graph.p13-activation-grant-request.v1'
+    const evidenceSha256 = requireSha256(value.p12_evidence_sha256, 'p12 evidence SHA-256');
+    return evidenceSha256 === P12_EVIDENCE_SHA256
+      && value.schema_version === 'reference-graph.p13-activation-grant-request.v1'
       && value.p12_evidence_head === P12_EVIDENCE_HEAD
       && value.p12_binding_hash === P12_BINDING_HASH
       && sameValue(value.target, TARGET)
@@ -151,11 +153,15 @@ export function createP13GrantRequest({ p12Receipt, p12EvidenceSha256 } = {}) {
     throw new Error('P12 receipt does not match the frozen preflight-ready non-authorizing contract');
   }
   const binding = p12Receipt.activation_binding;
+  const evidenceSha256 = requireSha256(p12EvidenceSha256, 'P12 evidence SHA-256');
+  if (evidenceSha256 !== P12_EVIDENCE_SHA256) {
+    throw new Error('P12 evidence SHA-256 does not match the frozen final P12 evidence bytes');
+  }
   return {
     schema_version: 'reference-graph.p13-activation-grant-request.v1',
     p12_evidence_head: P12_EVIDENCE_HEAD,
     p12_binding_hash: P12_BINDING_HASH,
-    p12_evidence_sha256: requireSha256(p12EvidenceSha256, 'P12 evidence SHA-256'),
+    p12_evidence_sha256: evidenceSha256,
     target: structuredClone(TARGET),
     profile: binding.profile,
     activation_flag: binding.activation_flag,
