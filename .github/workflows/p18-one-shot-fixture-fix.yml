@@ -1,0 +1,38 @@
+name: P18 one-shot fixture fix
+
+on:
+  push:
+    branches:
+      - agent/reference-graph-p18
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    if: ${{ !contains(github.event.head_commit.message, '[p18-fixture]') }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/reference-graph-p18
+          fetch-depth: 0
+      - name: Materialize signed grant in P18 CLI fixture
+        shell: python
+        run: |
+          from pathlib import Path
+          path = Path('tests/reference-graph/p18-production-activation-cli.test.mjs')
+          text = path.read_text(encoding='utf-8')
+          old = "  await writeFile(paths.signature, signature);\n  return { paths, authority, approved, artifacts };"
+          new = "  await writeFile(paths.signature, signature);\n  await writeFile(paths.grant, `${JSON.stringify({ ...artifacts.grant_payload, signature_base64: signature.toString('base64') }, null, 2)}\\n`);\n  return { paths, authority, approved, artifacts };"
+          if old not in text:
+              raise SystemExit('fixture patch anchor missing')
+          path.write_text(text.replace(old, new), encoding='utf-8')
+      - name: Commit fixture repair
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add tests/reference-graph/p18-production-activation-cli.test.mjs
+          git diff --cached --check
+          git commit -m "test: materialize P18 signed grant fixture [p18-fixture]"
+          git push origin HEAD:agent/reference-graph-p18
