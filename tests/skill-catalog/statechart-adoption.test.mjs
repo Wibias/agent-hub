@@ -43,6 +43,33 @@ test('formal verification owns the nested statechart capability', async () => {
   assert.match(reference, /replay.*counterexample.*code|counterexample.*replay.*code/i);
 });
 
+test('TLA/TLC handoffs interpret every model-check result through statechart without yielding verdict ownership', async () => {
+  const contract = await text('skills/formal-verification/references/project-contract.md');
+  const reference = await text('skills/formal-verification/references/statechart.md');
+
+  assert.match(
+    reference,
+    /every.*(?:TLA\+|TLC).*result.*statechart|statechart.*every.*(?:TLA\+|TLC).*result/i,
+  );
+  assert.match(
+    reference,
+    /shortest.*(?:counterexample|violation).*path|(?:counterexample|violation).*shortest.*path/i,
+  );
+  assert.match(
+    reference,
+    /pass(?:ing|es|ed)?.*overview|overview.*pass(?:ing|es|ed)?/i,
+  );
+  assert.match(
+    reference,
+    /chart.*(?:evidence|interpretation).*not.*proof|not.*proof.*chart/i,
+  );
+  assert.match(
+    contract,
+    /TLA\+\/TLC.*(?:result|handoff).*statechart|statechart.*TLA\+\/TLC.*(?:result|handoff)/i,
+  );
+  assert.doesNotMatch(contract, /node\s+statechart\/scripts\/statechart\.mjs|--(?:help|fixed|against|cover)\b/i);
+});
+
 test('statechart vendor pin and MIT attribution stay explicit', async () => {
   assert.equal(
     await exists('skills/formal-verification/statechart/UPSTREAM.md'),
