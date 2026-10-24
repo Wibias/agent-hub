@@ -2,6 +2,7 @@ import {
   P13_EVIDENCE_HEAD,
   P13_EVIDENCE_SHA256,
   P13_REQUEST_HASH,
+  verifyP14SignedGrant,
 } from './p14-authority-enrollment-grant.mjs';
 
 export const P14_PHASES = Object.freeze([
@@ -14,6 +15,7 @@ export const P14_PHASES = Object.freeze([
 
 const PHASE_STATUSES = new Set(['pending', 'success', 'failed', 'skipped', 'unavailable']);
 const CREDENTIAL_KEY_RE = /^(?:authorization|password|access[_-]?token|bearer[_-]?token|secret(?:[_-]?key)?|private[_-]?key|signing[_-]?key|jwt|(?:.*[_-])?service[_-]?role(?:[_-](?:api[_-]?)?)?(?:key|secret|password|token))$/i;
+const CEREMONY_KEYS = Object.freeze(['enrollmentManifest', 'grant', 'now', 'p13Evidence']);
 
 function clone(value) {
   return structuredClone(value);
@@ -24,6 +26,12 @@ function requireObject(value, name) {
     throw new TypeError(`${name} must be an object`);
   }
   return value;
+}
+
+function hasExactKeys(value, expected) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const actual = Object.keys(value).sort();
+  return actual.length === expected.length && actual.every((key, index) => key === expected[index]);
 }
 
 function requireGitSha(value) {
@@ -138,17 +146,27 @@ export function finalizeP14Receipt(receipt, { checks = null, ceremony = null, bl
   next.grant = null;
 
   if (ceremony !== null && ceremony !== undefined) {
+    if (!next.ceremony_ready) throw new Error('P14 ceremony cannot finalize while infrastructure blockers remain');
     const value = requireObject(ceremony, 'ceremony');
-    const verification = requireObject(value.verification, 'ceremony verification');
-    if (!value.enrollmentManifest || !value.grant
-        || verification.grantVerified !== true
+    if (!hasExactKeys(value, CEREMONY_KEYS)) {
+      throw new Error('P14 ceremony artifacts must contain P13 evidence, enrollment manifest, grant, and verification time for cryptographic re-verification');
+    }
+    if (!(value.now instanceof Date) || Number.isNaN(value.now.valueOf())) {
+      throw new TypeError('P14 ceremony verification time must be a valid Date');
+    }
+    const verification = verifyP14SignedGrant({
+      p13Evidence: value.p13Evidence,
+      enrollmentManifest: value.enrollmentManifest,
+      grant: value.grant,
+      now: value.now,
+    });
+    if (verification.grantVerified !== true
         || verification.activationAuthorized !== true
         || verification.activationPerformed !== false
         || verification.repositoryDefaultGraphEnabled !== false
         || verification.productionSource !== 'legacy-control') {
-      throw new Error('P14 ceremony cannot authorize activation unless the exact grant is verified and activation remains unperformed');
+      throw new Error(`P14 ceremony cryptographic re-verification failed: ${verification.blockers.join('; ')}`);
     }
-    if (!next.ceremony_ready) throw new Error('P14 ceremony cannot finalize while infrastructure blockers remain');
     next.authority_state = 'enrolled';
     next.grant_state = 'issued';
     next.grant_verified = true;
