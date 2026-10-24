@@ -40,7 +40,7 @@ test('P12 plan is credential-free and explicitly non-authorizing', () => {
   assert.deepEqual(value.allowed_modes, ['--plan', '--verify-repository', '--finalize-snapshot <path>']);
 });
 
-test('P12 repository verification hashes the exact bound production sources and P11 evidence', () => {
+test('P12 repository verification hashes the exact bound production sources and reports later schema evolution', () => {
   const result = run(['--verify-repository']);
   assert.equal(result.status, 0, result.stderr);
   const value = JSON.parse(result.stdout);
@@ -50,12 +50,12 @@ test('P12 repository verification hashes the exact bound production sources and 
   assert.equal(value.repository.p11_evidence_sha256, sha256(P11_EVIDENCE));
   assert.equal(value.repository.p11_evidence_head_matches, true);
   assert.equal(value.repository.repository_default_graph_enabled, false);
-  assert.equal(value.repository.migration_010_present, false);
+  assert.equal(value.repository.migration_010_present, true);
   assert.equal(value.repository.service_role_runtime_reference, false);
   assert.match(value.binding_hash, /^[0-9a-f]{64}$/);
 });
 
-test('P12 finalizes a supplied live snapshot through structural preflight and canonical receipt', () => {
+test('historical P12 finalization fails closed once a later migration exists', () => {
   const dir = mkdtempSync(join(tmpdir(), 'p12-preflight-'));
   try {
     const file = join(dir, 'snapshot.json');
@@ -83,13 +83,13 @@ test('P12 finalizes a supplied live snapshot through structural preflight and ca
     assert.equal(result.status, 0, result.stderr);
     const receipt = JSON.parse(result.stdout);
     assert.equal(receipt.schema_version, 'reference-graph.p12-activation-authority.v1');
-    assert.equal(receipt.preflight_ready, true);
+    assert.equal(receipt.preflight_ready, false);
     assert.equal(receipt.grant_state, 'not-issued');
     assert.equal(receipt.activation_authorized, false);
     assert.equal(receipt.activation_performed, false);
     assert.equal(receipt.repository_default_graph_enabled, false);
     assert.equal(receipt.production_source, 'legacy-control');
-    assert.deepEqual(receipt.blockers, []);
+    assert.match(receipt.blockers.join('\n'), /migration 010|repository_no_migration_010|repository.*not successful/i);
     assert.match(receipt.binding_hash, /^[0-9a-f]{64}$/);
   } finally {
     rmSync(dir, { recursive: true, force: true });
