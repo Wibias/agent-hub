@@ -175,6 +175,31 @@ test('repository finalization emits infrastructure-ready evidence while producti
   }
 });
 
+test('verify-grant rejects non-canonical verification time', () => {
+  const requestResult = run(['--emit-request']);
+  assert.equal(requestResult.status, 0, requestResult.stderr);
+  const request = JSON.parse(requestResult.stdout).grant_request;
+  const fixture = ephemeralGrant(request);
+  const dir = mkdtempSync(join(tmpdir(), 'p13-time-'));
+  try {
+    const grantPath = join(dir, 'grant.json');
+    const authorityPath = join(dir, 'authority.json');
+    writeFileSync(grantPath, JSON.stringify(fixture.grant));
+    writeFileSync(authorityPath, JSON.stringify(fixture.authority));
+    const result = run([
+      '--verify-grant',
+      grantPath,
+      authorityPath,
+      fixture.trusted,
+      '2026-10-24T04:05:00+02:00',
+    ]);
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /canonical UTC ISO timestamp/i);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('activation-like or malformed modes are rejected', () => {
   for (const args of [[], ['--activate'], ['--sign'], ['--issue'], ['--deploy'], ['--set-env']]) {
     const result = run(args);
