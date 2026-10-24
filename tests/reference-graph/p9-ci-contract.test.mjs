@@ -16,11 +16,12 @@ test('P9 governance secret-scans optional P9 evidence with the P9 receipt contra
   assert.match(WORKFLOW, /reference-graph\/evidence\/p9-runtime-canary-evidence\.json/);
 });
 
-test('P9 governance executes migrations through 008 and pins the immutable production CLI', () => {
+test('P9 historical runtime boundary remains immutable while P11 owns current opt-in routing', () => {
   assert.match(WORKFLOW, /008_reference_graph_runtime_canary\.sql/);
-  assert.match(WORKFLOW, /4963cfbaf4306a03084f4513a1e324f649ce36e5/);
-  assert.match(WORKFLOW, /git hash-object knowledge\/design-references\/scripts\/query\.mjs/);
-  assert.match(WORKFLOW, /Verify immutable P8 runtime boundary/);
+  assert.match(WORKFLOW, /Verify immutable P9 runtime canary evidence/);
+  assert.match(WORKFLOW, /p9-runtime-canary-evidence\.json/);
+  assert.match(WORKFLOW, /Verify P11 production runtime default-off and profile isolation/);
+  assert.match(WORKFLOW, /SUPABASE_SERVICE_ROLE_KEY/);
 });
 
 test('P9 permanent DB smoke proves the narrow runtime wrapper and negative privilege matrix', () => {

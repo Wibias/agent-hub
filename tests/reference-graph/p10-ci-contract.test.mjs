@@ -13,11 +13,12 @@ test('P10 governance secret-scans optional P10 evidence with the P10 receipt con
   assert.match(WORKFLOW, /reference-graph\/evidence\/p10-runtime-projection-evidence\.json/);
 });
 
-test('P10 governance executes migration 009 and keeps the production query CLI pinned', () => {
+test('P10 historical runtime projection remains immutable while P11 owns current opt-in routing', () => {
   assert.match(WORKFLOW, /009_reference_graph_runtime_projection\.sql/);
-  assert.match(WORKFLOW, /4963cfbaf4306a03084f4513a1e324f649ce36e5/);
-  assert.match(WORKFLOW, /git hash-object knowledge\/design-references\/scripts\/query\.mjs/);
-  assert.match(WORKFLOW, /Verify immutable P9 runtime canary evidence/);
+  assert.match(WORKFLOW, /Verify immutable P10 runtime projection evidence/);
+  assert.match(WORKFLOW, /p10-runtime-projection-evidence\.json/);
+  assert.match(WORKFLOW, /Verify P11 production runtime default-off and profile isolation/);
+  assert.match(WORKFLOW, /SUPABASE_PUBLISHABLE_KEY/);
 });
 
 test('P10 permanent DB smoke proves projection RLS, closed P9 runtime, and service-only refresh', () => {
