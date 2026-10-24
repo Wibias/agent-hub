@@ -22,17 +22,17 @@ async function tempStatePath() {
 test('P17 state path follows AgentHub Windows and XDG state conventions', () => {
   assert.equal(
     defaultP17ActivationStatePath({
-      env: { LOCALAPPDATA: 'C:\\Users\\tester\\AppData\\Local' },
+      env: { LOCALAPPDATA: 'C:\\portable-state' },
       platform: 'win32',
-      homeDir: 'C:\\Users\\tester',
+      homeDir: 'C:\\portable-home',
     }),
-    win32.join('C:\\Users\\tester\\AppData\\Local', 'agent-hub', 'reference-graph', 'activation-state-v1.json'),
+    win32.join('C:\\portable-state', 'agent-hub', 'reference-graph', 'activation-state-v1.json'),
   );
   assert.equal(
     defaultP17ActivationStatePath({
       env: { XDG_STATE_HOME: '/var/state/tester' },
       platform: 'linux',
-      homeDir: '/home/tester',
+      homeDir: '/opt/portable-home',
     }),
     posix.join('/var/state/tester', 'agent-hub', 'reference-graph', 'activation-state-v1.json'),
   );
@@ -40,7 +40,7 @@ test('P17 state path follows AgentHub Windows and XDG state conventions', () => 
     defaultP17ActivationStatePath({
       env: { AGENT_HUB_REFERENCE_GRAPH_STATE: '/tmp/custom-p17.json' },
       platform: 'linux',
-      homeDir: '/home/tester',
+      homeDir: '/opt/portable-home',
     }),
     '/tmp/custom-p17.json',
   );
