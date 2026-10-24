@@ -1,0 +1,69 @@
+name: Reference graph P17 governance
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: reference-graph-p17-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    env:
+      AGENT_HUB_REFERENCE_GRAPH_STATE: ${{ runner.temp }}/reference-graph-p17/activation-state-v1.json
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Test P17 contracts
+        run: node --test tests/reference-graph/p17-*.test.mjs
+
+      - name: Scan Reference Graph tree for common secrets
+        run: python3 skills/security-review-redirect/scripts/scan_secrets.py reference-graph
+
+      - name: Verify public release safety
+        run: node scripts/verify-public-release.mjs
+
+      - name: Verify P17 owns no migration 011
+        shell: bash
+        run: |
+          if find reference-graph/schema -maxdepth 1 -type f -name '011_*' | grep -q .; then
+            echo 'P17 must not add migration 011' >&2
+            exit 1
+          fi
+
+      - name: Smoke-test repository-default legacy projection
+        env:
+          REFERENCE_GRAPH_QUICK_RUNTIME: graph
+        shell: bash
+        run: |
+          rm -f "$AGENT_HUB_REFERENCE_GRAPH_STATE"
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import { planP17QueryRuntime } from './knowledge/design-references/scripts/query-runtime.mjs';
+
+          const plan = await planP17QueryRuntime({
+            argv: ['--profile', 'quick'],
+            env: {
+              ...process.env,
+              REFERENCE_GRAPH_QUICK_RUNTIME: 'graph',
+            },
+            statePath: process.env.AGENT_HUB_REFERENCE_GRAPH_STATE,
+          });
+
+          assert.equal(plan.mode, 'legacy');
+          assert.equal(
+            Object.hasOwn(plan.env, 'REFERENCE_GRAPH_QUICK_RUNTIME'),
+            false,
+          );
+          NODE
