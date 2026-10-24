@@ -75,16 +75,14 @@ test('green infrastructure finalizes ceremony-ready without fabricating authorit
   assert.equal(value.production_source, 'legacy-control');
 });
 
-test('verified external ceremony may authorize but can never perform activation', () => {
+test('caller-claimed ceremony verification cannot authorize a P14 receipt', () => {
   let value = receipt();
   for (const phase of P14_PHASES) value = recordP14Phase(value, { phase, status: 'success' });
-  const enrollmentManifest = { schema_version: 'reference-graph.p14-authority-enrollment.v1', authority_sha256: 'b'.repeat(64) };
-  const grant = { schema_version: 'reference-graph.p13-activation-grant.v1', signature_base64: 'public-signature' };
-  value = finalizeP14Receipt(value, {
+  assert.throws(() => finalizeP14Receipt(value, {
     checks: greenChecks(),
     ceremony: {
-      enrollmentManifest,
-      grant,
+      enrollmentManifest: { schema_version: 'reference-graph.p14-authority-enrollment.v1' },
+      grant: { schema_version: 'reference-graph.p13-activation-grant.v1' },
       verification: {
         grantVerified: true,
         activationAuthorized: true,
@@ -93,16 +91,7 @@ test('verified external ceremony may authorize but can never perform activation'
         productionSource: 'legacy-control',
       },
     },
-  });
-  assert.equal(value.ceremony_ready, true);
-  assert.equal(value.authority_state, 'enrolled');
-  assert.equal(value.grant_state, 'issued');
-  assert.equal(value.grant_verified, true);
-  assert.equal(value.activation_authorized, true);
-  assert.equal(value.activation_performed, false);
-  assert.equal(value.repository_default_graph_enabled, false);
-  assert.equal(value.production_source, 'legacy-control');
-  assert.equal(value.external_blocker, null);
+  }), /ceremony artifacts|cryptographic|re-verification/i);
 });
 
 test('false checks or inconsistent ceremony fail closed', () => {
