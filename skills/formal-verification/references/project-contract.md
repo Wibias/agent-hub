@@ -15,6 +15,14 @@ Do not use the `verify-*` prefix reserved by Agent Hub runtime-verification
 routing. Formal verification is not a substitute for driving the real
 application.
 
+## Statechart capability
+
+For TLA+/TLC-backed state-machine visualization, concrete counterexample paths,
+or an agreed Mermaid statechart that should become a TLA+ skeleton, read
+`statechart.md`. `formal-verification` remains the proof and verdict owner; the
+nested statechart runtime is a modeling and visualization capability, not a
+second routing owner.
+
 ## Required record
 
 The project-local `SKILL.md` or a directly linked one-level reference must state:

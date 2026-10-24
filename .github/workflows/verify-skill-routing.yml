@@ -57,6 +57,12 @@ jobs:
       - name: Validate routing cases
         run: node scripts/verify-skill-routing.mjs
 
+      - name: Test formal verification statechart runtime
+        run: node --test skills/formal-verification/tests/statechart-runtime.test.mjs
+
+      - name: Validate formal verification skill structure
+        run: node skills/skill-ratchet/scripts/skill-ratchet.mjs validate --skill-root skills/formal-verification
+
       - name: Test catalog discovery audit
         run: node --test tests/skill-catalog/*.test.mjs
 
@@ -104,9 +110,6 @@ jobs:
 
       - name: Validate performance skill structure
         run: node skills/skill-ratchet/scripts/skill-ratchet.mjs validate --skill-root skills/performance
-
-      - name: Validate formal verification skill structure
-        run: node skills/skill-ratchet/scripts/skill-ratchet.mjs validate --skill-root skills/formal-verification
 
       - name: Validate grilling skill structure
         run: node skills/skill-ratchet/scripts/skill-ratchet.mjs validate --skill-root skills/grilling
@@ -182,4 +185,3 @@ jobs:
 
       - name: Test memory engine foundation
         run: node --test tests/memory-engine/*.test.mjs
-

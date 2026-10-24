@@ -40,6 +40,18 @@ test('PStack principle refresh stays semantic instead of mechanism-specific', as
   );
 });
 
+test('PStack plugin-cache safety keeps discovery but forbids mutation in cache', async () => {
+  const preflight = await text('skills/skill-ratchet/scripts/preflight.mjs');
+  const skill = await text('skills/skill-ratchet/SKILL.md');
+  const reference = await text('skills/skill-ratchet/references/capability-preflight.md');
+
+  assert.match(preflight, /codex-plugin-cache[\s\S]{0,240}discovery-only/);
+  assert.match(skill, /plugins\/cache[\s\S]{0,600}discovery-only/i);
+  assert.match(skill, /persistent writable/i);
+  assert.match(reference, /mutation_policy/i);
+  assert.match(reference, /discovery-only/i);
+});
+
 test('context engineering sharpens intent and removes redundant rule text', async () => {
   const contextEngineering = await text('skills/context-engineering/SKILL.md');
 
