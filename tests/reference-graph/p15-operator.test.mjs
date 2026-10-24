@@ -27,14 +27,14 @@ test('P15 operator plan is read-only and exposes only plan and repository verifi
   assert.equal(value.production_source, 'legacy-control');
 });
 
-test('P15 repository verification proves frozen P14 bytes and graph-off mutation boundaries', () => {
+test('P15 repository verification proves frozen P14 bytes and reports P16 schema evolution', () => {
   const result = run('--verify-repository');
   assert.equal(result.status, 0, result.stderr);
   const value = JSON.parse(result.stdout);
   assert.equal(value.p14_evidence_head, '43fd2adf9e73749b03283f7ae7c6e700bd383b35');
   assert.equal(value.p14_evidence_bytes, true);
   assert.equal(value.repository_default_graph_enabled, false);
-  assert.equal(value.migration_010_or_later_present, false);
+  assert.equal(value.migration_010_or_later_present, true);
   assert.equal(value.production_private_key_or_signing_path, false);
   assert.equal(value.operator_activation_or_deployment_path, false);
   assert.equal(value.operator_supabase_mutation_path, false);

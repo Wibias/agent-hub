@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 const WORKFLOW = '.github/workflows/verify-reference-graph.yml';
 const P14_EVIDENCE = 'reference-graph/evidence/p14-authority-enrollment-grant-evidence.json';
+const P15_EVIDENCE = 'reference-graph/evidence/p15-activation-executor-evidence.json';
 const QUERY = 'knowledge/design-references/scripts/query.mjs';
 const P15_SOURCES = [
   'reference-graph/p15-activation-executor.mjs',
@@ -43,9 +44,14 @@ test('P15 production sources pin immutable P14 bytes and contain no production s
   assert.match(source, /610f9f832d994e565fe6912e3aa1e25d5fe5b549fa08f1a48f477ee9b3956393/);
 });
 
-test('P15 adds no migration 010 or later and repository runtime default stays legacy', () => {
-  const migrations = readdirSync('reference-graph/schema').filter((name) => /^\d{3}_/.test(name));
-  assert.equal(migrations.some((name) => Number.parseInt(name.slice(0, 3), 10) >= 10), false);
+test('P15 owns no migration 010 while immutable P15 evidence preserves its pre-P16 boundary', () => {
+  const source = P15_SOURCES.map((path) => readFileSync(path, 'utf8')).join('\n');
+  assert.doesNotMatch(source, /activation_grant_consumptions_p16|010_reference_graph_activation_grant_consumption/i);
+
+  const frozen = JSON.parse(readFileSync(P15_EVIDENCE, 'utf8'));
+  assert.equal(frozen.checks.no_migration_010_or_later, true);
+  assert.equal(frozen.activation_performed, false);
+  assert.equal(frozen.repository_default_graph_enabled, false);
 
   const query = readFileSync(QUERY, 'utf8');
   assert.match(query, /REFERENCE_GRAPH_QUICK_RUNTIME\s*\|\|\s*["']legacy["']/);

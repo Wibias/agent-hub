@@ -7,6 +7,38 @@ function requireString(value, name) {
   return value.trim();
 }
 
+function requireLowercaseHex64(value, name) {
+  if (typeof value !== 'string' || !/^[0-9a-f]{64}$/.test(value)) {
+    throw new TypeError(`${name} must be a 64-character lowercase hex string`);
+  }
+  return value;
+}
+
+function normalizeP16ConsumptionResponse(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('P16 grant consumption response is malformed');
+  }
+  const keys = Object.keys(value).sort();
+  if (keys.length !== 2 || keys[0] !== 'consumed' || keys[1] !== 'consumption_id') {
+    throw new Error('P16 grant consumption response is malformed');
+  }
+  if (value.consumed === true
+      && typeof value.consumption_id === 'string'
+      && value.consumption_id.trim().length > 0) {
+    return {
+      consumed: true,
+      consumption_id: value.consumption_id,
+    };
+  }
+  if (value.consumed === false && value.consumption_id === null) {
+    return {
+      consumed: false,
+      consumption_id: null,
+    };
+  }
+  throw new Error('P16 grant consumption response is malformed');
+}
+
 function normalizeUrl(value) {
   const url = requireString(value, 'url').replace(/\/+$/, '');
   if (!/^https?:\/\//i.test(url)) {
@@ -225,6 +257,21 @@ export class ReferenceGraphSupabaseStore {
       p_filters: filters,
     });
     return Array.isArray(rows) ? rows : [];
+  }
+
+  async consumeActivationGrantNonceP16({
+    nonce,
+    grant_payload_hash,
+    request_hash,
+    authority_hash,
+  } = {}) {
+    const result = await this.rpc('reference_graph_consume_activation_grant_nonce_p16', {
+      p_nonce: requireLowercaseHex64(nonce, 'nonce'),
+      p_grant_payload_hash: requireLowercaseHex64(grant_payload_hash, 'grant_payload_hash'),
+      p_request_hash: requireLowercaseHex64(request_hash, 'request_hash'),
+      p_authority_hash: requireLowercaseHex64(authority_hash, 'authority_hash'),
+    });
+    return normalizeP16ConsumptionResponse(result);
   }
 
   async stats() {
