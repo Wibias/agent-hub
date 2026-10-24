@@ -5,8 +5,9 @@ import test from 'node:test';
 import { assertSecretFreeP15Receipt } from '../../reference-graph/p15-receipt.mjs';
 
 const EVIDENCE_PATH = 'reference-graph/evidence/p15-activation-executor-evidence.json';
-const IMPLEMENTATION_SHA = '309f22813eedec583f2969bc45f2c91027fc60c5';
-const GOVERNANCE_RUN_ID = 40054504210;
+const IMPLEMENTATION_SHA = 'eba504f9b5472e34a9ae806ec22a5fcc6380697b';
+const GOVERNANCE_RUN_ID = 40054923135;
+const VERIFICATION_AT = '2026-10-24T02:37:50.000Z';
 
 function evidence() {
   return JSON.parse(readFileSync(EVIDENCE_PATH, 'utf8'));
@@ -19,7 +20,7 @@ test('durable P15 evidence pins the tested implementation and real green governa
   assert.equal(value.p14_evidence_sha256, '610f9f832d994e565fe6912e3aa1e25d5fe5b549fa08f1a48f477ee9b3956393');
   assert.equal(value.git_sha, IMPLEMENTATION_SHA);
   assert.equal(value.reference_graph_governance_run_id, GOVERNANCE_RUN_ID);
-  assert.match(value.verification_at, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+  assert.equal(value.verification_at, VERIFICATION_AT);
   assert.equal(new Date(value.verification_at).toISOString(), value.verification_at);
 });
 
