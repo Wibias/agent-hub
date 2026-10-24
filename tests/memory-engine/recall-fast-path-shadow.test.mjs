@@ -222,3 +222,27 @@ test('shadow fallback stays observational and is reported without content', asyn
   assert.equal(serialized.includes('a'), true); // aggregate/status strings may contain the letter a
   assert.equal(Object.hasOwn(result.selector.shadow_telemetry, 'selected_ids'), false);
 });
+
+test('judge-only selector telemetry identifies judge route and preserves total duration', async () => {
+  let now = 1_000;
+
+  const result = await filterRecallRelianceForContext({
+    query: 'which memory applies?',
+    reliance: reliance(['a', 'b']),
+    judge: async () => {
+      now = 1_042;
+      return {
+        selected_ids: ['b'],
+        reason: 'fixture',
+      };
+    },
+    clockMs: () => now,
+  });
+
+  assert.deepEqual(ids(result), ['b']);
+  assert.equal(result.selector.telemetry.route, 'judge');
+  assert.equal(result.selector.telemetry.local_duration_ms, 0);
+  assert.equal(result.selector.telemetry.total_duration_ms, 42);
+  assert.equal(result.selector.telemetry.duration_ms, 42);
+  assert.equal(result.selector.telemetry.judge_called, true);
+});

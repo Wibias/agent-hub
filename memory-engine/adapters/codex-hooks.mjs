@@ -21,6 +21,7 @@ import {
 } from './codex-recall-context-selection.mjs';
 import { recallTelemetryRunId } from '../recall-observability.mjs';
 import { captureRecallShadowReplayPacket } from '../recall-shadow-replay-capture.mjs';
+import { persistLiveRecallShadowCalibration } from '../recall-shadow-live-calibration.mjs';
 
 function nonEmptyString(value) {
   return typeof value === 'string' && value.trim().length > 0;
@@ -1196,6 +1197,8 @@ export function createCodexMemoryHookAdapter({
   recallFastPathShadowMode = false,
   recallFastPathShadowReplayMode = false,
   recallShadowReplayStore = null,
+  recallShadowCalibrationStore = null,
+  recallShadowTelemetryStore = null,
   onRecallSelectorTelemetry = null,
   clock = () => new Date().toISOString(),
   git = null,
@@ -1260,6 +1263,28 @@ export function createCodexMemoryHookAdapter({
   ) {
     throw new TypeError(
       'recallFastPathShadowReplayMode requires recallShadowReplayStore',
+    );
+  }
+  if (
+    recallShadowCalibrationStore !== null
+    && (
+      typeof recallShadowCalibrationStore !== 'object'
+      || typeof recallShadowCalibrationStore.record !== 'function'
+    )
+  ) {
+    throw new TypeError(
+      'recallShadowCalibrationStore must expose record() or be null',
+    );
+  }
+  if (
+    recallShadowTelemetryStore !== null
+    && (
+      typeof recallShadowTelemetryStore !== 'object'
+      || typeof recallShadowTelemetryStore.record !== 'function'
+    )
+  ) {
+    throw new TypeError(
+      'recallShadowTelemetryStore must expose record() or be null',
     );
   }
   if (
@@ -1852,6 +1877,7 @@ export function createCodexMemoryHookAdapter({
           recallFastPathShadowReplayMode,
         });
 
+        let recallShadowReplayPacket = null;
         const reliance = await selectCodexAuthoritativeRecall({
           query: event.prompt,
           items: recalledItems,
@@ -1863,7 +1889,7 @@ export function createCodexMemoryHookAdapter({
           recallFastPathObserver: selectionRuntime.recallFastPathObserver,
           onRecallFastPathObservation: recallFastPathShadowReplayMode
             ? async ({ candidates, fastResult }) => {
-                captureRecallShadowReplayPacket({
+                const captured = captureRecallShadowReplayPacket({
                   store: recallShadowReplayStore,
                   projectId,
                   branch: context.branch,
@@ -1876,11 +1902,31 @@ export function createCodexMemoryHookAdapter({
                   maxSelected: recallMaxSelected,
                   createdAt: clock(),
                 });
+                recallShadowReplayPacket = captured.packet;
               }
             : null,
           fastPathContext: { retrievalTelemetry },
           maxSelected: recallMaxSelected,
         });
+
+        if (
+          recallFastPathShadowReplayMode
+          && recallShadowReplayPacket !== null
+          && recallShadowCalibrationStore !== null
+        ) {
+          try {
+            persistLiveRecallShadowCalibration({
+              packet: recallShadowReplayPacket,
+              selector: reliance.selector,
+              calibrationStore: recallShadowCalibrationStore,
+              telemetryStore: recallShadowTelemetryStore,
+              observedAt: clock(),
+            });
+          } catch {
+            // Live calibration is observational and must never affect authority.
+          }
+        }
+
         if (onRecallSelectorTelemetry !== null) {
           for (const telemetry of [
             reliance.selector?.telemetry ?? null,

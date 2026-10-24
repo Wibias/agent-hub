@@ -256,7 +256,7 @@ function promptEntry({ hubRoot, nodePath }) {
       type: 'command',
       command: `node ${quote(script)} ${args.join(' ')}`,
       commandWindows: windowsPowerShellCommand(nodePath, [script, ...args]),
-      timeout: 10,
+      timeout: 30,
       statusMessage: 'Recalling project memory',
       additionalContextLimit: 2500,
     }],

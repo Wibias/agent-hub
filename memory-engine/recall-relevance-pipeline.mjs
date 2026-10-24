@@ -266,7 +266,12 @@ export async function filterRecallRelianceForContext({
     const selector = {
       enabled: true, failed: selection.failed, fallback_reason: selection.fallback_reason,
       selected_ids: selection.selected_ids, judgment: selection.judgment,
-      error: selection.error ?? null, telemetry: selection.telemetry,
+      error: selection.error ?? null, telemetry: {
+        ...selection.telemetry,
+        route: 'judge',
+        local_duration_ms: 0,
+        total_duration_ms: selection.telemetry.duration_ms,
+      },
     };
 
     if (shadowFastPath !== null) {

@@ -370,6 +370,7 @@ test('hybrid UserPromptSubmit self-heals a missing worker from the prepared loca
   };
 
   await runCodexMemoryHook({
+    platform: 'linux',
     event: event(),
     env: {},
     configOptions: {
@@ -503,4 +504,90 @@ test('hybrid UserPromptSubmit skips worker startup when the prepared cache is ab
   });
 
   assert.equal(ensureCalls, 0);
+});
+
+test('Windows UserPromptSubmit does not start a missing embedding worker', async () => {
+  const memory = {
+    getProject() {
+      return { project_id: 'github.com/example/project' };
+    },
+    close() {},
+  };
+
+  let ensureCalls = 0;
+
+  await runCodexMemoryHook({
+    event: event(),
+    env: {},
+    platform: 'win32',
+    configOptions: {
+      hybridRecall: true,
+      embeddingCacheDir: 'C:/agent-hub/.cache/memory-engine/e5',
+      embeddingSocketPath: 'test-pipe',
+    },
+    resolveProjectScope() {
+      return {
+        projectId: 'github.com/example/project',
+        repoIdentity: 'github.com/example/project',
+        canonicalRemote: 'github.com/example/project',
+      };
+    },
+    ensureDbDirectory() {},
+    createEngine() {
+      return memory;
+    },
+    embeddingCacheAvailable() {
+      return true;
+    },
+    async ensureEmbeddingWorker() {
+      ensureCalls += 1;
+      return {
+        status: 'started',
+        pid: 4242,
+        socketPath: 'test-pipe',
+      };
+    },
+    createEmbeddingClient() {
+      return {
+        modelId: E5_MODEL_ID,
+        modelRevision: E5_MODEL_REVISION,
+        dimensions: E5_DIMENSIONS,
+        async embedQuery() {
+          return new Float32Array(E5_DIMENSIONS);
+        },
+        async embedPassages() {
+          return [new Float32Array(E5_DIMENSIONS)];
+        },
+      };
+    },
+    createHybridRetriever() {
+      return {
+        async recall() {
+          return { items: [], conflicts: [] };
+        },
+        async indexClaim() {
+          return { indexed: false };
+        },
+      };
+    },
+    createProtocol() {
+      return { handle() {} };
+    },
+    createAdapter() {
+      return {
+        async handle() {
+          return null;
+        },
+      };
+    },
+    restoreLockExists() {
+      return false;
+    },
+  });
+
+  assert.equal(
+    ensureCalls,
+    0,
+    'Windows UserPromptSubmit must not spawn the long-lived embedding worker',
+  );
 });

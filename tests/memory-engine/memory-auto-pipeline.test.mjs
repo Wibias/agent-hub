@@ -247,6 +247,7 @@ test('Codex auto-pipeline launch happens only after memory closes and uses froze
   let launchArgs = null;
 
   const output = await runCodexMemoryHook({
+    platform: 'linux',
     event: event(),
     env: {
       AGENT_HUB_MEMORY_DB: '/shared/memory.sqlite3',
@@ -871,4 +872,53 @@ test('stalled worker records partial run and a visible pipeline-control failure'
   } finally {
     await rm(root, { recursive: true, force: true });
   }
+});
+
+test('Windows UserPromptSubmit does not launch candidate pipeline workers', async () => {
+  const memory = fakeMemory({ importance: 1 });
+  let launches = 0;
+
+  await runCodexMemoryHook({
+    event: event(),
+    env: {
+      AGENT_HUB_MEMORY_DB: '/shared/memory.sqlite3',
+      AGENT_HUB_MEMORY_PROJECT_ID: 'project-a',
+    },
+    platform: 'win32',
+    configOptions: {
+      autoPipeline: true,
+    },
+    createEngine() {
+      return memory;
+    },
+    createProtocol() {
+      return { handle() {} };
+    },
+    createAdapter() {
+      return {
+        async handle() {
+          return null;
+        },
+      };
+    },
+    resolvePipelineGitContext() {
+      return {
+        repoPath: '/repo/project',
+        branch: 'main',
+        revisionSha: 'f'.repeat(40),
+      };
+    },
+    launchCandidatePipeline() {
+      launches += 1;
+    },
+    restoreLockExists() {
+      return false;
+    },
+  });
+
+  assert.equal(
+    launches,
+    0,
+    'Windows UserPromptSubmit must not spawn a long-lived candidate pipeline worker',
+  );
 });

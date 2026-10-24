@@ -158,7 +158,7 @@ test('installer plan adds current memory hooks while preserving unrelated hooks 
   assert.match(promptWindows, /codex-hook-cli\.mjs/);
   assert.match(promptWindows, /'--candidate-capture'/);
   assert.match(promptWindows, /; exit \$LASTEXITCODE$/);
-  assert.equal(prompt.timeout, 10);
+  assert.equal(prompt.timeout, 30);
   assert.equal(prompt.additionalContextLimit, 2500);
 
   const session = managedSessionHook(plan.config);

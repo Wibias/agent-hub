@@ -26,6 +26,8 @@ import {
 } from '../recall-observability.mjs';
 import { createRecallFastPathRuntime } from '../recall-fast-path-runtime.mjs';
 import { RecallShadowReplayStore } from '../recall-shadow-replay-store.mjs';
+import { RecallShadowCalibrationStore } from '../recall-shadow-calibration-store.mjs';
+import { RecallSelectorTelemetryStore } from '../recall-selector-telemetry-store.mjs';
 import {
   createRecallSelectorTelemetryRecorder,
 } from '../recall-selector-telemetry-recorder.mjs';
@@ -398,6 +400,8 @@ export async function runCodexMemoryHook({
   createDiagnosticsRetriever = (options) => new HybridMemoryRetriever(options),
   createRecallFastPath = createRecallFastPathRuntime,
   createRecallShadowReplayStore = (options) => new RecallShadowReplayStore(options),
+  createRecallShadowCalibrationStore = (options) => new RecallShadowCalibrationStore(options),
+  createRecallShadowTelemetryStore = (options) => new RecallSelectorTelemetryStore(options),
   createSelectorTelemetryRecorder = createRecallSelectorTelemetryRecorder,
   createRecallJsonJudge = defaultCreateRecallJsonJudge,
   resolveProjectScope = resolveCodexProjectScope,
@@ -409,6 +413,7 @@ export async function runCodexMemoryHook({
   restoreLockExists = (dbPath) => memoryRestoreLocked({ dbPath }),
   auditCodex = auditCodexState,
   prepareRecallRuntime = prepareCodexMemoryRecallRuntime,
+  platform = process.platform,
 } = {}) {
   const config = parseCodexMemoryConfig(env, configOptions);
   const recallFastPathModeCount = [
@@ -435,6 +440,7 @@ export async function runCodexMemoryHook({
   let memory = null;
   let recallRuntime = null;
   let selectorTelemetryRecorder = null;
+  let recallShadowTelemetryStore = null;
   let output = null;
   let pipelineLaunch = null;
   try {
@@ -504,7 +510,8 @@ export async function runCodexMemoryHook({
         : defaultCodexEmbeddingCacheDir();
 
       if (
-        typeof embeddingCacheAvailable === 'function'
+        platform !== 'win32'
+        && typeof embeddingCacheAvailable === 'function'
         && typeof ensureEmbeddingWorker === 'function'
         && embeddingCacheAvailable(cacheDir)
       ) {
@@ -634,13 +641,31 @@ export async function runCodexMemoryHook({
         });
       },
     });
+    const recallShadowRoot = join(dirname(config.dbPath), 'shadow-replay');
     const recallShadowReplayStore = (
       configOptions.recallFastPathShadowReplay === true
         ? createRecallShadowReplayStore({
-            rootDir: join(dirname(config.dbPath), 'shadow-replay'),
+            rootDir: recallShadowRoot,
           })
         : null
     );
+    let recallShadowCalibrationStore = null;
+    if (configOptions.recallFastPathShadowReplay === true) {
+      try {
+        recallShadowCalibrationStore = createRecallShadowCalibrationStore({
+          rootDir: recallShadowRoot,
+        });
+      } catch {
+        recallShadowCalibrationStore = null;
+      }
+      try {
+        recallShadowTelemetryStore = createRecallShadowTelemetryStore({
+          dbPath: config.dbPath,
+        });
+      } catch {
+        recallShadowTelemetryStore = null;
+      }
+    }
 
     const adapter = createAdapter({
       protocol,
@@ -653,6 +678,8 @@ export async function runCodexMemoryHook({
       recallFastPathShadowMode: configOptions.recallFastPathShadow === true,
       recallFastPathShadowReplayMode: configOptions.recallFastPathShadowReplay === true,
       recallShadowReplayStore,
+      recallShadowCalibrationStore,
+      recallShadowTelemetryStore,
       recallFastPath,
       onRecallSelectorTelemetry: selectorTelemetryRecorder
         ? (event) => selectorTelemetryRecorder.record(event)
@@ -725,7 +752,10 @@ export async function runCodexMemoryHook({
     } else {
       output = await adapter.handle(event);
 
-      if (configOptions.autoPipeline === true) {
+      if (
+          platform !== 'win32'
+          && configOptions.autoPipeline === true
+        ) {
         try {
           const git = recallRuntime?.git
             ?? resolvePipelineGitContext({ cwd: event?.cwd });
@@ -750,6 +780,17 @@ export async function runCodexMemoryHook({
     output = null;
     pipelineLaunch = null;
   } finally {
+    if (
+      recallShadowTelemetryStore
+      && typeof recallShadowTelemetryStore.close === 'function'
+    ) {
+      try {
+        recallShadowTelemetryStore.close();
+      } catch {
+        // Live Shadow telemetry teardown must never block the prompt.
+      }
+      recallShadowTelemetryStore = null;
+    }
     if (selectorTelemetryRecorder) {
       try {
         selectorTelemetryRecorder.close();
