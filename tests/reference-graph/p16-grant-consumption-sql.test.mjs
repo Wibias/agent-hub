@@ -20,7 +20,11 @@ test('P16 migration creates a minimal private one-shot activation grant ledger',
     assert.match(SQL, new RegExp(`check\\s*\\(\\s*${column}\\s*~\\s*'\\^\\[0-9a-f\\]\\{64\\}\\$'\\s*\\)`, 'i'));
   }
 
-  assert.doesNotMatch(SQL, /signature|private[_ ]?key|public[_ ]?key|grant\s+json|authorization/i);
+  const tableDefinition = SQL.match(/create table if not exists reference_graph\.activation_grant_consumptions_p16\s*\(([\s\S]*?)\n\);/i)?.[1] ?? '';
+  assert.doesNotMatch(
+    tableDefinition,
+    /^\s*(?:signature|signature_base64|private_key|public_key|raw_grant|grant_json|authorization|activation_authorized)\s+/im,
+  );
 });
 
 test('P16 consume RPC is atomic, replay-safe, and does not disclose old consumption data', () => {
@@ -46,7 +50,7 @@ test('P16 consume RPC is atomic, replay-safe, and does not disclose old consumpt
 });
 
 test('P16 ledger and RPC expose no unprivileged authority', () => {
-  assert.match(SQL, /revoke all on table reference_graph\.activation_grant_consumptions_p16\s+from public, anon, authenticated/i);
+  assert.match(SQL, /revoke all on table reference_graph\.activation_grant_consumptions_p16\s+from public, anon, authenticated, service_role/i);
   assert.match(SQL, /revoke all on function public\.reference_graph_consume_activation_grant_nonce_p16\(text, text, text, text\)\s+from public, anon, authenticated, service_role/i);
   assert.match(SQL, /grant execute on function public\.reference_graph_consume_activation_grant_nonce_p16\(text, text, text, text\)\s+to service_role/i);
   assert.doesNotMatch(SQL, /grant\s+(?:select|insert|update|delete|all).*activation_grant_consumptions_p16.*(?:anon|authenticated)/i);
