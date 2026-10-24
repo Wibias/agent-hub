@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 
 import {
@@ -41,14 +41,18 @@ test('P14 production source contains no private-key generation, parsing, or sign
   assert.doesNotMatch(value, /private_key\s*[:=]\s*["'][^"']+/i);
 });
 
-test('P14 introduces no activation, environment, deployment, Supabase, or migration mutation', () => {
+test('P14 source owns no activation, deployment, Supabase, or P16 ledger mutation', () => {
   const value = source();
   assert.doesNotMatch(value, /process\.env\.REFERENCE_GRAPH_QUICK_RUNTIME\s*=/);
   assert.doesNotMatch(value, /from\s+['"]@supabase\//);
   assert.doesNotMatch(value, /\bcreateClient\s*\(/);
   assert.doesNotMatch(value, /reference_graph_refresh_quick_runtime_projection/i);
-  const migrations = readdirSync('reference-graph/schema').filter((name) => /^\d{3}_/.test(name));
-  assert.equal(migrations.some((name) => Number.parseInt(name.slice(0, 3), 10) >= 10), false);
+  assert.doesNotMatch(value, /activation_grant_consumptions_p16|010_reference_graph_activation_grant_consumption/i);
+
+  const frozen = JSON.parse(readFileSync(EVIDENCE, 'utf8'));
+  assert.equal(frozen.ceremony_ready, true);
+  assert.equal(frozen.activation_performed, false);
+  assert.equal(frozen.repository_default_graph_enabled, false);
 });
 
 test('repository runtime remains exact graph opt-in with legacy default', () => {
