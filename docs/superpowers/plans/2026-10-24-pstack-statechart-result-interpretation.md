@@ -36,14 +36,14 @@
 - Consumes: current statechart integration reference and project contract.
 - Produces: regression assertions for result interpretation, proof ownership, and non-copied volatile command details.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Add assertions that the statechart reference requires interpreting each TLA+/TLC result, describes shortest readable counterexample paths and PASS overviews, and that the project contract records this handoff while preserving `formal-verification` ownership.
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
-Run: `node --test tests/skill-catalog/statechart-adoption.test.mjs`
-Expected: FAIL because the new result-interpretation contract text is absent.
+Run through Release governance on RED commit `a16feb57b3188abac8d7c5b87c71463a1eefc4a2`.
+Observed: the new statechart contract test failed because the result-interpretation text was absent. The same catalog run also exposed the unrelated existing `write-swift skill must exist` failure.
 
 ### Task 2: Extend the existing statechart and project contract minimally
 
@@ -55,24 +55,28 @@ Expected: FAIL because the new result-interpretation contract text is absent.
 - Consumes: Task 1 assertions.
 - Produces: documented TLA+/TLC result-interpretation contract.
 
-- [ ] **Step 1: Update `statechart.md`**
+- [x] **Step 1: Update `statechart.md`**
 
 State that every completed TLA+/TLC model-check result should be interpreted through statechart: shortest readable path for violations, state-machine overview for passing checks when useful, with chart output explicitly remaining evidence rather than proof. Keep commands/options/paths centralized in this reference.
 
-- [ ] **Step 2: Update `project-contract.md`**
+- [x] **Step 2: Update `project-contract.md`**
 
 Require TLA+/TLC-backed project-local verification handoffs to reference the statechart interpretation step rather than embedding statechart CLI details.
 
-- [ ] **Step 3: Run focused tests**
+- [x] **Step 3: Run focused tests**
 
-Run: `node --test tests/skill-catalog/statechart-adoption.test.mjs skills/formal-verification/tests/statechart-runtime.test.mjs`
-Expected: PASS.
+Release governance on GREEN head `9c4d305468efc9fed208546eb4fd6adba403c499` observed:
+- statechart runtime tests: 2/2 PASS;
+- the new statechart result-interpretation catalog test: PASS;
+- existing statechart ownership/vendor tests: PASS.
 
-- [ ] **Step 4: Run routing/catalog verification**
+- [x] **Step 4: Run routing/catalog verification**
 
-Run: `node scripts/verify-skill-routing.mjs && node --test tests/skill-catalog/*.test.mjs`
-Expected: PASS.
+Release governance on GREEN head observed:
+- `node scripts/verify-skill-routing.mjs`: PASS;
+- formal-verification structural validation: PASS;
+- catalog: 57/58 PASS. The only remaining failure is the unrelated pre-existing Emil assertion `write-swift skill must exist`; the new statechart test is green.
 
-- [ ] **Step 5: Review diff**
+- [x] **Step 5: Review diff**
 
-Confirm only the plan, two contract/reference files, and the focused regression test changed; confirm no vendored runtime files changed.
+Confirmed the change is limited to this plan, the two contract/reference files, and the focused regression test. No vendored `skills/formal-verification/statechart/scripts/` files changed.
