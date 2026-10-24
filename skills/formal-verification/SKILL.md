@@ -45,6 +45,13 @@ prove different things and neither substitutes for the other.
 Read `references/project-contract.md` before creating or materially updating the
 project-local formal-verification artifact.
 
+### Statechart mode
+
+When the task needs a TLA+/TLC-backed view of state-machine behavior, a concrete
+counterexample path, or an agreed Mermaid statechart turned into a TLA+ skeleton,
+read `references/statechart.md`. Keep this skill as the proof and verdict owner;
+statechart is a modeling and visualization tool, not a separate routing owner.
+
 ## Create
 
 1. **Name the property and harm.** Start from the user's named area. Otherwise
@@ -138,6 +145,7 @@ blocked check, state why the sync commit was not advanced.
 ## References
 <!-- eval:references -->
 - references/project-contract.md -- when to read: before creating or materially updating project-local formal verification
+- references/statechart.md -- when to read: when using TLA+/TLC statechart modeling, counterexample visualization, chart-to-spec conversion, or chart rendering
 - tests/evals/cases.jsonl -- when to read: as canonical acceptance criteria during qualification review
 - tests/evals/regression-cases.jsonl -- when to read: when reviewing retained failures and successors
 - tests/evals/regression-lock.json -- when to read: when validating immutable retained regressions
