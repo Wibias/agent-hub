@@ -55,10 +55,14 @@ function loadJson(path, name) {
 }
 
 function requireTimestamp(value, name) {
-  if (typeof value !== 'string' || value.trim().length === 0 || Number.isNaN(Date.parse(value))) {
-    throw new TypeError(`${name} must be an ISO timestamp`);
+  if (typeof value !== 'string' || value.trim().length === 0) {
+    throw new TypeError(`${name} must be a canonical UTC ISO timestamp`);
   }
-  return new Date(value).toISOString();
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.valueOf()) || parsed.toISOString() !== value) {
+    throw new TypeError(`${name} must be a canonical UTC ISO timestamp`);
+  }
+  return value;
 }
 
 function requireGitSha(value, name) {
