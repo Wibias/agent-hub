@@ -8,7 +8,7 @@ selectively rather than injected into every design context.
 
 From USERPROFILE/.agents run:
 
-    node knowledge/design-references/scripts/query.mjs --profile <profile> --surface <surface-family> --job "<single job>" --platform <platform> --dimensions <comma-separated-dimensions>
+    node knowledge/design-references/scripts/query-runtime.mjs --profile <profile> --surface <surface-family> --job "<single job>" --platform <platform> --dimensions <comma-separated-dimensions>
 
 Use the surface taxonomy from
 knowledge/design-references/taxonomy.json. Read the command's JSON output, not
