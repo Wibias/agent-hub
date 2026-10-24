@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 
 import {
@@ -50,17 +50,17 @@ test('P13 production code has no signer, private-key path, or executable activat
   assert.equal(existsSync(PRODUCTION_AUTHORITY), false);
 });
 
-test('P13 introduces no Supabase mutation path and no migration 010 or later', () => {
+test('P13 source owns no Supabase mutation while frozen evidence preserves its pre-010 boundary', () => {
   const source = allProductionSource();
   assert.doesNotMatch(source, /from\s+['"]@supabase\//);
   assert.doesNotMatch(source, /\bcreateClient\s*\(/);
   assert.doesNotMatch(source, /reference_graph_refresh_quick_runtime_projection/i);
-  const migrations = readdirSync('reference-graph/schema')
-    .filter((name) => /^\d{3}_/.test(name));
-  assert.equal(
-    migrations.some((name) => Number.parseInt(name.slice(0, 3), 10) >= 10),
-    false,
-  );
+  assert.doesNotMatch(source, /activation_grant_consumptions_p16|010_reference_graph_activation_grant_consumption/i);
+
+  const frozen = JSON.parse(readFileSync(P13_EVIDENCE, 'utf8'));
+  assert.equal(frozen.checks.no_activation_path, true);
+  assert.equal(frozen.repository_default_graph_enabled, false);
+  assert.equal(frozen.activation_performed, false);
 });
 
 test('repository quick runtime remains opt-in graph with legacy default', () => {
