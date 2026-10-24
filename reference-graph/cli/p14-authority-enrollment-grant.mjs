@@ -196,12 +196,18 @@ function finalizeRepository(snapshotPath) {
 
 function finalizeCeremony(snapshotPath, authorityPath, approved, grantPath, nowIso) {
   const { checks } = repositoryChecks();
+  const { evidence } = p13Context();
   const manifest = enrollment(authorityPath, approved);
   const grant = loadJson(grantPath, 'grant');
-  const verification = verifyGrant(authorityPath, approved, grantPath, nowIso);
+  const now = new Date(requireCanonicalIso(nowIso, 'now'));
   const receipt = finalizeP14Receipt(baseReceipt(snapshot(snapshotPath), checks), {
     checks,
-    ceremony: { enrollmentManifest: manifest, grant, verification },
+    ceremony: {
+      p13Evidence: evidence,
+      enrollmentManifest: manifest,
+      grant,
+      now,
+    },
   });
   assertSecretFreeP14Receipt(receipt);
   return receipt;
