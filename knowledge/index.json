@@ -755,31 +755,6 @@
       "contentHash": "49d6dd16ff8f1c2492f8134b3af0a379ac5b513016d429d4468e5c0c66bee144"
     },
     {
-      "id": "agents/pnpm",
-      "path": "~/.agents/skills/pnpm/SKILL.md",
-      "type": "skill",
-      "harness": "agents",
-      "scope": "global",
-      "name": "pnpm",
-      "description": "Node.js package manager with strict dependency resolution. Use when running pnpm specific commands, configuring workspaces via pnpm-workspace.yaml, or managing dependencies with catalogs, patches, overrides, config dependencies, or the global virtual store.",
-      "tags": [
-        "pnpm"
-      ],
-      "triggers": [
-        "Node.js package manager with strict dependency resolution.",
-        "running pnpm specific commands",
-        "configuring workspaces via pnpm-workspace.yaml",
-        "or managing dependencies with catalogs",
-        "patches",
-        "overrides",
-        "config dependencies",
-        "or the global virtual store"
-      ],
-      "status": "active",
-      "canonicalId": null,
-      "contentHash": "e566e11119186f5b4a7d06b60413ce57f9cb9a88fd223e2f57d64265b93afd87"
-    },
-    {
       "id": "agents/ponytail-review",
       "path": "~/.agents/skills/ponytail-review/SKILL.md",
       "type": "skill",
@@ -1342,32 +1317,6 @@
       "status": "active",
       "canonicalId": null,
       "contentHash": "a828e3baff3245ca07854d2301867e4c5067c1b0576649c9d88abdf1ccca838d"
-    },
-    {
-      "id": "agents/write-swift",
-      "path": "~/.agents/skills/write-swift/SKILL.md",
-      "type": "skill",
-      "harness": "agents",
-      "scope": "global",
-      "name": "write-swift",
-      "description": "Canonical Swift engineering owner. Use for writing, reviewing, refactoring, or migrating Swift; data modeling/value semantics; protocols/generics; errors; Swift concurrency, actors, Sendable, cancellation, and data races; Swift testing; ARC/memory; and Swift performance. Durable language principles live here. Version-sensitive compiler, SwiftPM, Xcode, SDK, framework, or newly introduced API facts compose with source-driven-development and current official Swift sources instead of being frozen as timeless guidance.",
-      "tags": [
-        "write",
-        "swift"
-      ],
-      "triggers": [
-        "Canonical Swift engineering owner.",
-        "writing",
-        "reviewing",
-        "refactoring",
-        "or migrating Swift",
-        "data modeling/value semantics",
-        "protocols/generics",
-        "errors"
-      ],
-      "status": "active",
-      "canonicalId": null,
-      "contentHash": "ee7f620ac8829beb879bb47bc5b5d8e5a498fa3f66ffd79bfba33eb593a09832"
     },
     {
       "id": "agents/writing-ticks",
