@@ -1,0 +1,60 @@
+{
+  "schema_version": "reference-graph.p18-production-activation-receipt.v1",
+  "activation_main_sha": "6c60d1a56c3a08b689b6b58b5f79cc6f45c7ea67",
+  "preflight_evidence_path": "reference-graph/evidence/p18-production-activation-preflight-evidence.json",
+  "preflight_evidence_sha256": "1b52fbed9883bbe89e53956a1b258eda57d3216d1a829bdcd90ea3f16dba4e99",
+  "post_merge_governance": {
+    "reference_graph_governance_run_id": 40143207911,
+    "p16_governance_run_id": 40143207933,
+    "p17_governance_run_id": 40143207898,
+    "p18_governance_run_id": 40143207913,
+    "release_governance_run_id": 40143207937,
+    "all_success": true
+  },
+  "ceremony_attempt_id": "attempt-20261024T234734Z",
+  "evidence_frozen_at": "2026-10-24T23:51:46.000Z",
+  "production_target": {
+    "project_ref": "vrznfnxzlxaavpqbzbzd",
+    "project_name": "agent-hub-reference-graph",
+    "region": "eu-central-1",
+    "url": "https://vrznfnxzlxaavpqbzbzd.supabase.co"
+  },
+  "authority_sha256": "e3554b76b8add430a6e0276e97c9cb16702f6af57764db53445d00b49f6e965c",
+  "request_hash": "ed31630f9bda1362f42e747a6366d8504d17638b8ba458228db6fec5a2074ce7",
+  "grant_payload_hash": "e2ae9a9608590b1256573b6770a226daf4b38ae0440027570f90752ec6caa465",
+  "preflight_receipt": {
+    "preflight_ready": true,
+    "target_project_ref": "vrznfnxzlxaavpqbzbzd",
+    "elevated_key_type": "secret",
+    "grant_verified": true,
+    "activation_authorized": true,
+    "production_source": "legacy-control",
+    "quick_graph_enabled": false,
+    "repository_default_graph_enabled": false
+  },
+  "activation_receipt": {
+    "status": "activated",
+    "grant_verified": true,
+    "activation_authorized": true,
+    "grant_consumed": true,
+    "activation_performed": true,
+    "rollback_performed": false,
+    "rollback_verified": false,
+    "production_source": "reference-graph",
+    "retry_requires_new_grant": true,
+    "blocker": null
+  },
+  "post_activation_status": {
+    "production_source": "reference-graph",
+    "quick_graph_enabled": true,
+    "repository_default_graph_enabled": false
+  },
+  "receipt_contract": {
+    "operator_run_receipt_sanitized": true,
+    "credentials_cleared_after_ceremony": true,
+    "nonce_reuse_forbidden": true,
+    "p17_live_probe_required_for_activated_status": true,
+    "rollback_required_on_post_mutation_probe_failure": true,
+    "secret_material_present": false
+  }
+}
