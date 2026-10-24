@@ -249,6 +249,8 @@ test('time, nonce, malformed signature, and overlong lifetime fail closed', () =
     { patch: { expires_at: '2026-10-24T01:04:00.000Z' }, now: '2026-10-24T01:05:00.000Z' },
     { patch: { expires_at: '2026-10-24T01:15:00.001Z' }, now: '2026-10-24T01:05:00.000Z' },
     { patch: { not_before: '2026-10-24T00:59:59.999Z' }, now: '2026-10-24T01:05:00.000Z' },
+    { patch: { issued_at: 'October 24, 2026 01:00 UTC' }, now: '2026-10-24T01:05:00.000Z' },
+    { patch: { expires_at: '2026-10-24T03:15:00+02:00' }, now: '2026-10-24T01:05:00.000Z' },
   ];
   for (const { patch, now } of cases) {
     const result = verifyP13ActivationGrant({
