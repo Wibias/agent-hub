@@ -18,13 +18,15 @@ concurrency:
 jobs:
   verify:
     runs-on: ubuntu-24.04
-    env:
-      AGENT_HUB_REFERENCE_GRAPH_STATE: ${{ runner.temp }}/reference-graph-p17/activation-state-v1.json
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 24
+
+      - name: Configure disposable P17 state
+        shell: bash
+        run: echo "AGENT_HUB_REFERENCE_GRAPH_STATE=$RUNNER_TEMP/reference-graph-p17/activation-state-v1.json" >> "$GITHUB_ENV"
 
       - name: Test P17 contracts
         run: node --test tests/reference-graph/p17-*.test.mjs
