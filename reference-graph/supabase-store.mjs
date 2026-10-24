@@ -114,23 +114,30 @@ export class ReferenceGraphSupabaseStore {
   }
 
   static fromEnv(env = process.env, options = {}) {
+    const modernSecret = typeof env.SUPABASE_SECRET_KEY === 'string'
+      && env.SUPABASE_SECRET_KEY.trim().length > 0
+      ? env.SUPABASE_SECRET_KEY
+      : null;
     return new ReferenceGraphSupabaseStore({
       url: env.SUPABASE_URL,
-      serviceRoleKey: env.SUPABASE_SERVICE_ROLE_KEY,
+      serviceRoleKey: modernSecret ?? env.SUPABASE_SERVICE_ROLE_KEY,
       ...options,
     });
   }
 
   async rpc(name, args = {}) {
     const rpcName = requireString(name, 'RPC name');
+    const headers = {
+      apikey: this.serviceRoleKey,
+      'content-type': 'application/json',
+      accept: 'application/json',
+    };
+    if (!this.serviceRoleKey.startsWith('sb_secret_')) {
+      headers.authorization = `Bearer ${this.serviceRoleKey}`;
+    }
     const response = await this.fetchImpl(`${this.url}/rest/v1/rpc/${rpcName}`, {
       method: 'POST',
-      headers: {
-        apikey: this.serviceRoleKey,
-        authorization: `Bearer ${this.serviceRoleKey}`,
-        'content-type': 'application/json',
-        accept: 'application/json',
-      },
+      headers,
       body: JSON.stringify(args),
     });
 
