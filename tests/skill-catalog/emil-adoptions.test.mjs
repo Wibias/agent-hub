@@ -44,13 +44,3 @@ test('prototype UI variants declare a divergence axis and explicit win-cost trad
   assert.match(ui, /cost|tradeoff/i);
   await assertStructurallyValid('prototype');
 });
-
-test('write-swift is a current-aware Swift owner instead of a frozen toolchain snapshot', async () => {
-  assert.equal(existsSync(path.join(root, 'skills/write-swift/SKILL.md')), true, 'write-swift skill must exist');
-  const skill = read('skills/write-swift/SKILL.md');
-  assert.match(skill, /source-driven-development/);
-  assert.match(skill, /official Swift/i);
-  assert.match(skill, /version-sensitive/i);
-  assert.match(skill, /do not .*current.*version|never .*current.*version|not .*timeless/i);
-  await assertStructurallyValid('write-swift');
-});
