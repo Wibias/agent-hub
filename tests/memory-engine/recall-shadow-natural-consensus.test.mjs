@@ -46,3 +46,14 @@ test('strict gates can retain a uniquely supported two-candidate positive', () =
   assert.equal(votes.fast_errors, 0);
   assert.equal(report.best_observed_gate, 'unique_high');
 });
+
+test('promotion evidence rejects zero-coverage gates even after the sample target is met', () => {
+  const records = Array.from({ length: 100 }, () => record({ highs: [0.84], judge: [] }));
+  const report = evaluateNaturalConsensusRecords(records);
+  const best = report.gates.find((entry) => entry.gate === report.best_observed_gate);
+
+  assert.equal(report.evidence.exact_runtime_sample_count, 100);
+  assert.equal(best.fast_cases, 0);
+  assert.equal(best.coverage, 0);
+  assert.equal(report.evidence.promotion_evidence_sufficient, false);
+});
