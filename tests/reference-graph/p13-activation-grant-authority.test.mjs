@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { generateKeyPairSync, sign } from 'node:crypto';
+import { createHash, generateKeyPairSync, sign } from 'node:crypto';
 import test from 'node:test';
 
 import {
@@ -178,6 +178,34 @@ test('request and authority hashes are canonical and semantic-drift-sensitive', 
     hashP13AuthorityDescriptor({ ...authority, key_id: 'other-key' }),
     hashP13AuthorityDescriptor(authority),
   );
+});
+
+test('authority descriptor rejects a non-Ed25519 SPKI even when the algorithm label says Ed25519', () => {
+  const req = request();
+  const { publicKey, privateKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
+  const authority = {
+    schema_version: 'reference-graph.p13-ed25519-authority.v1',
+    authority_id: 'rsa-masquerading-as-ed25519',
+    key_id: 'wrong-key-type',
+    algorithm: 'Ed25519',
+    public_key_spki_base64: publicKey.export({ type: 'spki', format: 'der' }).toString('base64'),
+  };
+  const trusted = createHash('sha256').update(canonicalJson(authority), 'utf8').digest('hex');
+  const grant = signedGrant({ req, authority, privateKey });
+
+  assert.throws(
+    () => hashP13AuthorityDescriptor(authority),
+    /actual Ed25519 public key|key type/i,
+  );
+  const result = verifyP13ActivationGrant({
+    request: req,
+    grant,
+    authority,
+    trustedAuthoritySha256: trusted,
+    now: new Date('2026-10-24T01:05:00.000Z'),
+  });
+  assert.equal(result.grantVerified, false);
+  assert.equal(result.checks.authority_contract, false);
 });
 
 test('valid Ed25519 grant verifies only with the exact external authority hash', () => {
