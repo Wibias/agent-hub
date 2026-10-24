@@ -1,6 +1,7 @@
 import {
   P12_BINDING_HASH,
   P12_EVIDENCE_HEAD,
+  P12_EVIDENCE_SHA256,
   hashP13GrantRequest,
 } from './p13-activation-grant-authority.mjs';
 
@@ -56,7 +57,7 @@ function requestReady(request) {
     return value.schema_version === 'reference-graph.p13-activation-grant-request.v1'
       && value.p12_evidence_head === P12_EVIDENCE_HEAD
       && value.p12_binding_hash === P12_BINDING_HASH
-      && requireSha256(value.p12_evidence_sha256, 'P12 evidence SHA-256') === value.p12_evidence_sha256.toLowerCase()
+      && requireSha256(value.p12_evidence_sha256, 'P12 evidence SHA-256') === P12_EVIDENCE_SHA256
       && value.profile === 'quick'
       && value.activation_flag === 'REFERENCE_GRAPH_QUICK_RUNTIME'
       && value.activation_value === 'graph'
