@@ -12,6 +12,60 @@ const TARGET = Object.freeze({
   region: 'eu-central-1',
 });
 
+const REQUEST_KEYS = Object.freeze([
+  'activation_flag',
+  'activation_value',
+  'deep_mode',
+  'fallback_source',
+  'legacy_first',
+  'p12_binding_hash',
+  'p12_evidence_head',
+  'p12_evidence_sha256',
+  'pattern_parity_required',
+  'production_source_before',
+  'profile',
+  'record_parity_required',
+  'repository_default_graph_enabled_before',
+  'rollback_action',
+  'runtime_auth_mode',
+  'schema_version',
+  'standard_mode',
+  'target',
+  'timeout_ms',
+]);
+const AUTHORITY_KEYS = Object.freeze([
+  'algorithm',
+  'authority_id',
+  'key_id',
+  'public_key_spki_base64',
+  'schema_version',
+]);
+const GRANT_KEYS = Object.freeze([
+  'activation_flag',
+  'activation_value',
+  'expires_at',
+  'issued_at',
+  'issuer',
+  'key_id',
+  'nonce',
+  'not_before',
+  'p12_binding_hash',
+  'p12_evidence_head',
+  'profile',
+  'request_hash',
+  'schema_version',
+  'signature_algorithm',
+  'signature_base64',
+  'target',
+]);
+
+function hasExactKeys(value, expectedKeys) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const actual = Object.keys(value).sort();
+  return actual.length === expectedKeys.length
+    && actual.every((key, index) => key === expectedKeys[index]);
+}
+
 function requireObject(value, name) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new TypeError(`${name} must be an object`);
@@ -94,6 +148,7 @@ function p12ReceiptReady(receipt) {
 function requestReady(request) {
   try {
     const value = requireObject(request, 'request');
+    if (!hasExactKeys(value, REQUEST_KEYS)) return false;
     const evidenceSha256 = requireSha256(value.p12_evidence_sha256, 'p12 evidence SHA-256');
     return evidenceSha256 === P12_EVIDENCE_SHA256
       && value.schema_version === 'reference-graph.p13-activation-grant-request.v1'
@@ -121,6 +176,9 @@ function requestReady(request) {
 
 function validateAuthority(authority) {
   const value = requireObject(authority, 'authority');
+  if (!hasExactKeys(value, AUTHORITY_KEYS)) {
+    throw new Error('authority descriptor must contain the exact fields for reference-graph.p13-ed25519-authority.v1');
+  }
   if (value.schema_version !== 'reference-graph.p13-ed25519-authority.v1') {
     throw new Error('authority schema must be reference-graph.p13-ed25519-authority.v1');
   }
@@ -267,7 +325,9 @@ export function verifyP13ActivationGrant({
     authority_contract: authorityValid,
     trusted_authority_present: trustedAuthorityPresent,
     trusted_authority_match: trustedAuthority,
-    grant_contract: value.schema_version === 'reference-graph.p13-activation-grant.v1',
+    grant_contract:
+      hasExactKeys(value, GRANT_KEYS)
+      && value.schema_version === 'reference-graph.p13-activation-grant.v1',
     request_hash: expectedRequestHash !== null && value.request_hash === expectedRequestHash,
     p12_evidence_head: value.p12_evidence_head === P12_EVIDENCE_HEAD,
     p12_binding_hash: value.p12_binding_hash === P12_BINDING_HASH,
