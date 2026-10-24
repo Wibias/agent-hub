@@ -56,6 +56,7 @@ async function fixture() {
   await writeFile(paths.payload, `${JSON.stringify(artifacts.grant_payload, null, 2)}\n`);
   await writeFile(paths.canonical, artifacts.canonical_payload_utf8);
   await writeFile(paths.signature, signature);
+  await writeFile(paths.grant, `${JSON.stringify({ ...artifacts.grant_payload, signature_base64: signature.toString('base64') }, null, 2)}\n`);
   return { paths, authority, approved, artifacts };
 }
 
