@@ -14,7 +14,7 @@ test('decommissioned skills stay absent from active catalog surfaces', () => {
   const readme = read('README.md');
   const indexMd = read('knowledge/INDEX.md');
   const indexJson = JSON.parse(read('knowledge/index.json'));
-  const indexedIds = new Set(indexJson.records.map((record) => record.id));
+  const indexedIds = new Set(indexJson.entries.map((entry) => entry.id));
 
   for (const skill of DECOMMISSIONED_SKILLS) {
     assert.equal(existsSync(path.join(root, 'skills', skill, 'SKILL.md')), false, `${skill} must remain decommissioned`);
