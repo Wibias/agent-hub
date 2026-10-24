@@ -130,11 +130,14 @@ function validateAuthority(authority) {
     throw new Error('authority algorithm must be Ed25519');
   }
   requireNonEmpty(value.public_key_spki_base64, 'authority public key');
-  createPublicKey({
+  const publicKey = createPublicKey({
     key: Buffer.from(value.public_key_spki_base64, 'base64'),
     format: 'der',
     type: 'spki',
   });
+  if (publicKey.asymmetricKeyType !== 'ed25519') {
+    throw new Error('authority public key must be an actual Ed25519 public key');
+  }
   return value;
 }
 
