@@ -140,8 +140,9 @@ function validateAuthority(authority) {
 
 function parseTimestamp(value) {
   if (typeof value !== 'string' || value.trim().length === 0) return null;
-  const timestamp = Date.parse(value);
-  return Number.isFinite(timestamp) ? timestamp : null;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.valueOf()) || parsed.toISOString() !== value) return null;
+  return parsed.valueOf();
 }
 
 function unique(values) {
