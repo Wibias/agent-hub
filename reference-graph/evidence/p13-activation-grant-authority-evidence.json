@@ -1,0 +1,97 @@
+{
+  "schema_version": "reference-graph.p13-activation-grant-authority.v1",
+  "p12_evidence_head": "5f676c806ae864b507723ea867f5e3afd6fd4adb",
+  "p12_binding_hash": "68930447847df8d31de01b7fb60049136ae6fd0d74c837283fb837ff7e79961b",
+  "p12_evidence_sha256": "15a0db3e27ede261554fe9993d775db07ffabcaa74b9ec49b3df55d788659bcb",
+  "git_sha": "ed4f31ec3e750c66d32d0214fcb18d32df277bbb",
+  "verification_at": "2026-10-24T01:15:59.010Z",
+  "reference_time": "2026-10-24T01:15:59.010Z",
+  "target": {
+    "purpose": "agent-hub-reference-graph",
+    "project_ref": "vrznfnxzlxaavpqbzbzd",
+    "project_name": "agent-hub-reference-graph",
+    "region": "eu-central-1"
+  },
+  "grant_request": {
+    "schema_version": "reference-graph.p13-activation-grant-request.v1",
+    "p12_evidence_head": "5f676c806ae864b507723ea867f5e3afd6fd4adb",
+    "p12_binding_hash": "68930447847df8d31de01b7fb60049136ae6fd0d74c837283fb837ff7e79961b",
+    "p12_evidence_sha256": "15a0db3e27ede261554fe9993d775db07ffabcaa74b9ec49b3df55d788659bcb",
+    "target": {
+      "purpose": "agent-hub-reference-graph",
+      "project_ref": "vrznfnxzlxaavpqbzbzd",
+      "project_name": "agent-hub-reference-graph",
+      "region": "eu-central-1"
+    },
+    "profile": "quick",
+    "activation_flag": "REFERENCE_GRAPH_QUICK_RUNTIME",
+    "activation_value": "graph",
+    "runtime_auth_mode": "publishable",
+    "timeout_ms": 1500,
+    "legacy_first": true,
+    "record_parity_required": "exact-ordered",
+    "pattern_parity_required": "exact-ordered",
+    "fallback_source": "legacy-control",
+    "standard_mode": "legacy-only",
+    "deep_mode": "legacy-only",
+    "repository_default_graph_enabled_before": false,
+    "production_source_before": "legacy-control",
+    "rollback_action": "unset-or-change-REFERENCE_GRAPH_QUICK_RUNTIME"
+  },
+  "request_hash": "ed31630f9bda1362f42e747a6366d8504d17638b8ba458228db6fec5a2074ce7",
+  "infrastructure_ready": true,
+  "authority_state": "unconfigured",
+  "trusted_authority_sha256": null,
+  "grant_state": "not-issued",
+  "grant_verified": false,
+  "activation_authorized": false,
+  "activation_performed": false,
+  "repository_default_graph_enabled": false,
+  "production_source": "legacy-control",
+  "checks": {
+    "p12_binding": true,
+    "p12_evidence_bytes": true,
+    "authority_requires_external_trust": true,
+    "verifier_fail_closed": true,
+    "repository_default_off": true,
+    "no_activation_path": true
+  },
+  "blockers": [],
+  "phases": {
+    "p12_binding": {
+      "status": "success",
+      "detail": {
+        "verified": true,
+        "p12_evidence_head": "5f676c806ae864b507723ea867f5e3afd6fd4adb",
+        "p12_binding_hash": "68930447847df8d31de01b7fb60049136ae6fd0d74c837283fb837ff7e79961b",
+        "p12_evidence_sha256": "15a0db3e27ede261554fe9993d775db07ffabcaa74b9ec49b3df55d788659bcb"
+      },
+      "error": null
+    },
+    "authority_policy": {
+      "status": "success",
+      "detail": {
+        "verified": true,
+        "production_authority_enrolled": false
+      },
+      "error": null
+    },
+    "grant_verifier": {
+      "status": "success",
+      "detail": {
+        "verified": true,
+        "algorithm": "Ed25519",
+        "max_lifetime_seconds": 900
+      },
+      "error": null
+    },
+    "activation_boundary": {
+      "status": "success",
+      "detail": {
+        "verified": true,
+        "production_source": "legacy-control"
+      },
+      "error": null
+    }
+  }
+}
