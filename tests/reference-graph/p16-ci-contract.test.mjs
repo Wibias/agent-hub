@@ -2,28 +2,34 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 
-const WORKFLOW = '.github/workflows/verify-reference-graph.yml';
+const WORKFLOW = '.github/workflows/verify-reference-graph-p16.yml';
 const DOC = 'reference-graph/P16.md';
 
 function workflow() {
+  assert.equal(existsSync(WORKFLOW), true, 'P16 governance workflow must exist');
   return readFileSync(WORKFLOW, 'utf8');
 }
 
-test('permanent Reference Graph governance applies migration 010 and runs the P16 replay smoke', () => {
+test('permanent P16 governance applies migrations through 010 and runs the replay smoke', () => {
   const source = workflow();
+  for (const migration of ['001','002','003','004','005','006','007','008','009','010']) {
+    assert.match(source, new RegExp(`${migration}_reference_graph`));
+  }
   assert.match(source, /010_reference_graph_activation_grant_consumption\.sql/);
   assert.match(source, /Smoke-test P16 durable grant consumption replay and privileges/);
   assert.match(source, /reference_graph_consume_activation_grant_nonce_p16/);
   assert.match(source, /activation_grant_consumptions_p16/);
 });
 
-test('P16 DB smoke proves first-use success, replay false-null, and one durable ledger row', () => {
+test('P16 DB smoke proves concurrent first-use success, replay false-null, and one durable ledger row', () => {
   const source = workflow();
-  assert.match(source, /'consumed'\s*:\s*true|consumed.*true/i);
-  assert.match(source, /'consumed'\s*:\s*false|consumed.*false/i);
+  assert.match(source, /p16-consume-a/);
+  assert.match(source, /p16-consume-b/);
+  assert.match(source, /consumed.*true/i);
+  assert.match(source, /consumed.*false/i);
   assert.match(source, /consumption_id.*null|null.*consumption_id/i);
-  assert.match(source, /count\(\*\).*activation_grant_consumptions_p16|activation_grant_consumptions_p16[\s\S]*count\(\*\)/i);
-  assert.match(source, /expected exactly one P16 consumption row|count.*<>\s*1/i);
+  assert.match(source, /activation_grant_consumptions_p16[\s\S]*count\(\*\)|count\(\*\)[\s\S]*activation_grant_consumptions_p16/i);
+  assert.match(source, /expected exactly one P16 consumption row/i);
 });
 
 test('P16 DB smoke proves RPC and private table privileges are closed to runtime roles', () => {
