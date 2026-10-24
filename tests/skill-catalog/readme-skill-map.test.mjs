@@ -128,12 +128,6 @@ const requiredRouteMarkers = [
   "codex-dynamic-workflows:doubt-gate",
   "codex-dynamic-workflows:verification",
 
-  // write-swift routes
-  "write-swift:core-language",
-  "write-swift:concurrency",
-  "write-swift:testing-and-performance",
-  "write-swift:broad-review",
-
   // github-delivery routed workflows
   "github-delivery:prd",
   "github-delivery:issue-breakdown",

@@ -1,0 +1,145 @@
+{
+  "phase": "P2",
+  "recorded_at": "2026-10-23",
+  "production_source": "legacy-control",
+  "decision": "no-cutover",
+  "cutover_approved": false,
+  "decision_reason": "No measured semantic or hybrid candidate beat the healthy-snapshot lexical baseline or met the independent overlap and top-1 cutover thresholds. Semantic retrieval remains shadow-only.",
+  "control_reference_time": "2026-07-21T12:00:00.000Z",
+  "benchmark_control_health": {
+    "healthy": true,
+    "reviewed_accessible_count": 600,
+    "fresh_pool_count": 600,
+    "fresh_pool_rate": 1,
+    "fresh_surface_family_count": 12,
+    "fresh_platform_count": 2,
+    "case_count": 24,
+    "full_limit_case_count": 24,
+    "cases_with_coverage_gaps": 0
+  },
+  "current_control_health": {
+    "observed_at": "2026-10-23T01:05:11.058Z",
+    "healthy": false,
+    "reviewed_accessible_count": 600,
+    "fresh_pool_count": 2,
+    "fresh_pool_rate": 0.0033333333333333335,
+    "fresh_surface_family_count": 1,
+    "fresh_platform_count": 1,
+    "case_count": 24,
+    "full_limit_case_count": 0,
+    "cases_with_coverage_gaps": 24,
+    "blockers": [
+      "fresh pool is smaller than the largest requested limit",
+      "one or more control cases cannot fill the requested limit",
+      "one or more control cases have coverage gaps"
+    ]
+  },
+  "cutover_thresholds": {
+    "min_cases": 20,
+    "min_comparable_cases": 20,
+    "min_average_overlap": 0.65,
+    "min_top1_retention": 0.75,
+    "max_empty_rate": 0.05,
+    "min_exact_surface_rate": 0.7,
+    "min_exact_platform_rate": 0.8
+  },
+  "lexical_baseline": {
+    "case_count": 24,
+    "comparable_case_count": 24,
+    "average_overlap_at_k": 0.53125,
+    "legacy_top1_retention_rate": 0.7083333333333334,
+    "graph_empty_rate": 0,
+    "average_exact_surface_rate": 1,
+    "average_exact_platform_rate": 1,
+    "cutover_ready": false
+  },
+  "all_minilm_probe": {
+    "github_actions_run": 39881950029,
+    "model_id": "ollama/all-minilm:22m-l6-v2-fp16",
+    "model_revision": "1b226e2802db",
+    "model_digest": "1b226e2802dbb772b5fc32a58f103ca1804ef7501331012de126ab22f67475ef",
+    "dimensions": 384,
+    "semantic": {
+      "average_overlap_at_k": 0.22916666666666666,
+      "legacy_top1_retention_rate": 0.2916666666666667,
+      "graph_empty_rate": 0,
+      "average_exact_surface_rate": 1,
+      "average_exact_platform_rate": 1,
+      "cutover_ready": false
+    },
+    "hybrid": {
+      "average_overlap_at_k": 0.40625,
+      "legacy_top1_retention_rate": 0.5416666666666666,
+      "graph_empty_rate": 0,
+      "average_exact_surface_rate": 1,
+      "average_exact_platform_rate": 1,
+      "cutover_ready": false
+    }
+  },
+  "active_experimental_profile": {
+    "github_actions_run": 39882352517,
+    "id": "snowflake-arctic-embed-33m-raw-v1",
+    "model_id": "ollama/snowflake-arctic-embed:33m",
+    "model_revision": "e8db018629b4",
+    "model_digest": "e8db018629b498a0a1a2eadbe8ab29477c1d7c4b6ba8ff2a69b0a6ed193713be",
+    "dimensions": 384,
+    "document_representation": "raw-catalog-chunk",
+    "query_prefix": "Represent this sentence for searching relevant passages: ",
+    "quality_status": "experimental",
+    "cutover_approved": false,
+    "semantic": {
+      "average_overlap_at_k": 0.28125,
+      "legacy_top1_retention_rate": 0.4166666666666667,
+      "graph_empty_rate": 0,
+      "average_exact_surface_rate": 1,
+      "average_exact_platform_rate": 1,
+      "cutover_ready": false
+    },
+    "hybrid": {
+      "average_overlap_at_k": 0.4270833333333333,
+      "legacy_top1_retention_rate": 0.5,
+      "graph_empty_rate": 0,
+      "average_exact_surface_rate": 1,
+      "average_exact_platform_rate": 1,
+      "cutover_ready": false
+    }
+  },
+  "best_exploratory_probe": {
+    "github_actions_run": 39883080852,
+    "adopted": false,
+    "model_id": "ollama/snowflake-arctic-embed:33m",
+    "model_revision": "e8db018629b4",
+    "dimensions": 384,
+    "document_representation": "structured-decision",
+    "query_variant": "structured-job-dimensions",
+    "query_prefix": "Represent this sentence for searching relevant passages: ",
+    "semantic": {
+      "average_overlap_at_k": 0.3645833333333333,
+      "legacy_top1_retention_rate": 0.5833333333333334,
+      "graph_empty_rate": 0,
+      "average_exact_surface_rate": 1,
+      "average_exact_platform_rate": 1,
+      "cutover_ready": false
+    },
+    "hybrid": {
+      "average_overlap_at_k": 0.5208333333333334,
+      "legacy_top1_retention_rate": 0.6666666666666666,
+      "graph_empty_rate": 0,
+      "average_exact_surface_rate": 1,
+      "average_exact_platform_rate": 1,
+      "cutover_ready": false
+    }
+  },
+  "additional_exploratory_runs": [
+    {
+      "github_actions_run": 39882708171,
+      "purpose": "document representation comparison"
+    }
+  ],
+  "github_actions_runs": [
+    39881950029,
+    39882352517,
+    39882708171,
+    39883080852
+  ]
+}

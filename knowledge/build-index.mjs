@@ -670,7 +670,7 @@ const index = {
       description:
         "Curated design observations queried selectively by design-with-ai.",
       queryCommand:
-        "node knowledge/design-references/scripts/query.mjs --profile deep --surface <surface> --job <job> --platform <platform> --dimensions <dimensions>",
+        "node knowledge/design-references/scripts/query-runtime.mjs --profile deep --surface <surface> --job <job> --platform <platform> --dimensions <dimensions>",
     },
   ],
 };

@@ -1,0 +1,275 @@
+{
+  "schema_version": "reference-graph.p3-receipt.v1",
+  "phase": "P3",
+  "recorded_at": "2026-10-23T03:22:24.000Z",
+  "target": {
+    "purpose": "agent-hub-reference-graph",
+    "project_ref": "vrznfnxzlxaavpqbzbzd",
+    "project_name": "agent-hub-reference-graph",
+    "region": "eu-central-1"
+  },
+  "git_sha": "0675bfe7e0cc2ea0749be7982930d0b33850664b",
+  "verification_at": "2026-10-23T03:22:24.000Z",
+  "production_source": "legacy-control",
+  "eligible_for_cutover_review": false,
+  "cutover_ready": false,
+  "decision": "no-cutover",
+  "decision_reason": "The dedicated live lexical path is operational and reproduces the healthy-snapshot lexical baseline, but average overlap and top-1 retention remain below the independent cutover thresholds. Exact-model live embeddings are unavailable, so semantic and hybrid modes were not fabricated or scored.",
+  "control_reference_time": "2026-07-21T12:00:00.000Z",
+  "benchmark_control_health": {
+    "reference_time": "2026-07-21T12:00:00.000Z",
+    "reviewed_accessible_count": 600,
+    "fresh_pool_count": 600,
+    "fresh_pool_rate": 1,
+    "fresh_surface_family_count": 12,
+    "fresh_platform_count": 2,
+    "case_count": 24,
+    "full_limit_case_count": 24,
+    "cases_with_coverage_gaps": 0,
+    "blockers": [],
+    "healthy": true
+  },
+  "current_control_health": {
+    "reference_time": "2026-10-23T03:06:59.501Z",
+    "reviewed_accessible_count": 600,
+    "fresh_pool_count": 2,
+    "fresh_pool_rate": 0.0033333333333333335,
+    "fresh_surface_family_count": 1,
+    "fresh_platform_count": 1,
+    "case_count": 24,
+    "full_limit_case_count": 0,
+    "cases_with_coverage_gaps": 24,
+    "blockers": [
+      "fresh pool is smaller than the largest requested limit",
+      "one or more control cases cannot fill the requested limit",
+      "one or more control cases have coverage gaps"
+    ],
+    "healthy": false
+  },
+  "cutover_thresholds": {
+    "min_cases": 20,
+    "min_comparable_cases": 20,
+    "min_average_overlap": 0.65,
+    "min_top1_retention": 0.75,
+    "max_empty_rate": 0.05,
+    "min_exact_surface_rate": 0.7,
+    "min_exact_platform_rate": 0.8
+  },
+  "phases": {
+    "preflight": {
+      "status": "success",
+      "detail": {
+        "project_status": "ACTIVE_HEALTHY",
+        "project_url": "https://vrznfnxzlxaavpqbzbzd.supabase.co",
+        "binding_verified": true,
+        "dedicated_target": true
+      }
+    },
+    "schema": {
+      "status": "success",
+      "detail": {
+        "committed_migrations": [
+          "001_reference_graph.sql",
+          "002_reference_graph_rpc.sql",
+          "003_reference_graph_embeddings_rpc.sql",
+          "004_reference_graph_lexical_overlap.sql"
+        ],
+        "live_migration_history": [
+          "reference_graph_001_schema",
+          "reference_graph_002_rpc",
+          "reference_graph_003_embeddings_rpc",
+          "reference_graph_004_lexical_overlap"
+        ],
+        "temporary_bridge_history_removed": true,
+        "http_extension_installed_after_execution": false,
+        "pg_net_extension_installed_after_execution": false,
+        "execution_helpers": [
+          {
+            "name": "p3-fixed-import-runner",
+            "version": 7,
+            "jwt_verification_required": true,
+            "behavior": "inert-http-410"
+          },
+          {
+            "name": "p3-import-once-cfd826d4",
+            "version": 8,
+            "jwt_verification_required": true,
+            "behavior": "inert-http-410"
+          }
+        ],
+        "rpc_permission_check": {
+          "privileged_role": "allowed",
+          "anon": "denied",
+          "authenticated": "denied"
+        },
+        "security_advisor": {
+          "blocking_findings": 0,
+          "info": {
+            "rls_enabled_no_policy": 11
+          },
+          "note": "The INFO findings match the closed-by-default design: RLS is enabled, exposed client roles have schema and table access revoked, and supported RPC execution is privileged-only."
+        },
+        "performance_advisor": {
+          "blocking_findings": 0,
+          "info": {
+            "unindexed_foreign_keys": 2,
+            "unused_indexes": 2
+          }
+        },
+        "live_lexical_repair": {
+          "initial_empty_case_count": 24,
+          "root_cause": "The deployed 002 lexical RPC used websearch_to_tsquery for long multi-term shadow queries, which made candidate matching too strict compared with the offline token-overlap baseline.",
+          "fix": "004_reference_graph_lexical_overlap.sql replaces all-term web search semantics with deterministic partial token overlap while preserving exact metadata filters and privileged-only execution.",
+          "regression_test": "tests/reference-graph/p3-lexical-overlap.test.mjs",
+          "post_fix_empty_case_count": 0,
+          "post_fix_candidate_smoke_count": 24,
+          "final_empty_case_count": 0
+        }
+      }
+    },
+    "import": {
+      "status": "success",
+      "detail": {
+        "artifact_sha256": "863ad51942787ba0da3f819823e5d291fa467cbf37cce2ebc6c9588f3a27e5f1",
+        "plan": {
+          "record_count": 600,
+          "capture_count": 600,
+          "source_count": 576,
+          "asset_count": 600,
+          "deduplicated_assets": 0
+        },
+        "batch_size": 25,
+        "batches_per_run": 24,
+        "runs": 2,
+        "idempotent": true,
+        "store_stats": {
+          "sources": 576,
+          "assets": 600,
+          "chunks": 600,
+          "observations": 7264,
+          "tags": 868,
+          "relations": 0,
+          "embeddings": 0
+        }
+      }
+    },
+    "embeddings": {
+      "status": "unavailable",
+      "detail": {
+        "profile_id": "snowflake-arctic-embed-33m-raw-v1",
+        "model_id": "ollama/snowflake-arctic-embed:33m",
+        "model_revision": "e8db018629b4",
+        "dimensions": 384,
+        "quality_status": "experimental",
+        "persisted_total": 0,
+        "persisted_active_profile": 0,
+        "reason": "The exact pinned Ollama provider is unavailable in this execution harness. No substitute or synthetic vectors were generated."
+      }
+    },
+    "shadow": {
+      "status": "success",
+      "detail": {
+        "mode": "supabase-lexical",
+        "case_count": 24,
+        "control_reference_time": "2026-07-21T12:00:00.000Z",
+        "production_source": "legacy-control",
+        "semantic_status": "unavailable",
+        "hybrid_status": "unavailable",
+        "execution_method": "A fixed read-only server-side helper executed the same committed lexical-candidate and candidate-context RPC sequence for the same 24 fixed cases. The helper was made inert immediately after the run."
+      }
+    }
+  },
+  "evaluations": {
+    "lexical": {
+      "status": "measured",
+      "summary": {
+        "case_count": 24,
+        "comparable_case_count": 24,
+        "legacy_empty_rate": 0,
+        "average_overlap_at_k": 0.53125,
+        "legacy_top1_retention_rate": 0.7083333333333334,
+        "graph_empty_rate": 0,
+        "average_exact_surface_rate": 1,
+        "average_exact_platform_rate": 1,
+        "latency_ms": {
+          "min": 43.30415099999982,
+          "p50": 69.79798700000015,
+          "p95": 274.680961,
+          "max": 421.70553599999994,
+          "average": 95.34856466666668
+        },
+        "thresholds": {
+          "minCases": 20,
+          "minComparableCases": 20,
+          "minAverageOverlap": 0.65,
+          "minTop1Retention": 0.75,
+          "maxEmptyRate": 0.05,
+          "minExactSurfaceRate": 0.7,
+          "minExactPlatformRate": 0.8
+        },
+        "blockers": [
+          "average overlap below threshold",
+          "legacy top-1 retention below threshold"
+        ],
+        "cutover_ready": false
+      },
+      "baseline_reproduction": {
+        "offline_average_overlap_at_k": 0.53125,
+        "offline_legacy_top1_retention_rate": 0.7083333333333334,
+        "live_matches_offline_quality_metrics": true
+      }
+    },
+    "semantic": {
+      "status": "unavailable",
+      "reason": "No exact-model persisted embeddings exist in the live target."
+    },
+    "hybrid": {
+      "status": "unavailable",
+      "reason": "Hybrid live evaluation requires compatible persisted semantic embeddings; none exist."
+    }
+  },
+  "execution_rulings": [
+    {
+      "ruling": "connector-safe live write execution",
+      "reason": "The connected Supabase interface does not expose privileged runtime material. Exact captures were generated by committed repository code and written through the same ingest RPC by a temporary server-side helper.",
+      "cleanup": "Both execution helpers are JWT-protected inert HTTP 410 endpoints and temporary HTTP extensions are removed."
+    },
+    {
+      "ruling": "lexical repair ownership",
+      "reason": "An intermediate exact-002 live run reproduced 24 of 24 empty cases. The branch already contained the committed and tested 004 repair, so the final live target was reset to a clean 001 through 004 migration history and reverified.",
+      "result": "Final live quality reproduces the offline baseline and no transient bridge migrations remain."
+    }
+  ],
+  "verification": {
+    "implementation_github_actions_run": 39891759367,
+    "implementation_git_sha": "7d606a28f65c6b72ef2312a0e9dace24dc2e2320",
+    "tests": 73,
+    "passes": 73,
+    "failures": 0,
+    "final_reference_graph_github_actions_run": 39894585286,
+    "final_reference_graph_git_sha": "0675bfe7e0cc2ea0749be7982930d0b33850664b",
+    "final_reference_graph_tests": 81,
+    "final_reference_graph_passes": 81,
+    "final_reference_graph_failures": 0,
+    "fresh_pgvector_migrations": [
+      "001_reference_graph.sql",
+      "002_reference_graph_rpc.sql",
+      "003_reference_graph_embeddings_rpc.sql",
+      "004_reference_graph_lexical_overlap.sql"
+    ],
+    "partial_overlap_smoke": "passed",
+    "anonymous_rpc_rejection": "passed",
+    "capture_export_run": 39892688852,
+    "shadow_input_export_run": 39893249764,
+    "shadow_input_sha256": "263de2cbfb47675519457498dbcd0f4e1a04834d5132000556d2fc0a089e0cd1",
+    "offline_benchmark_average_overlap_at_k": 0.53125,
+    "offline_benchmark_legacy_top1_retention_rate": 0.7083333333333334,
+    "release_governance": {
+      "status": "inherited-base-failure",
+      "head_run": 39894585304,
+      "base_run": 39884114014,
+      "base_sha": "4dbc6e1db1f42eb1b854f455e07f2325251ed855",
+      "reason": "The unchanged skill-catalog test requires skills/write-swift/SKILL.md, but that path is already absent on the P2 base. The failure is not introduced by P3."
+    }
+  }
+}

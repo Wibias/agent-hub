@@ -1,0 +1,109 @@
+{
+  "schema_version": "reference-graph.p12-activation-authority.v1",
+  "target": {
+    "purpose": "agent-hub-reference-graph",
+    "project_ref": "vrznfnxzlxaavpqbzbzd",
+    "project_name": "agent-hub-reference-graph",
+    "region": "eu-central-1"
+  },
+  "base_sha": "541e9667ea28c75de5492b79d84edf89f9cac8ac",
+  "git_sha": "8031d9d7932db8c892c401de8dea4a7f9c97bee8",
+  "verification_at": "2026-10-24T00:45:39.128Z",
+  "reference_time": "2026-10-24T00:45:39.128Z",
+  "activation_binding": {
+    "schema_version": "reference-graph.p12-activation-binding.v1",
+    "p11_evidence_head": "541e9667ea28c75de5492b79d84edf89f9cac8ac",
+    "p11_implementation_sha": "849a8782be4081a5821bdb354e54c33b2e2b0fb9",
+    "target": {
+      "purpose": "agent-hub-reference-graph",
+      "project_ref": "vrznfnxzlxaavpqbzbzd",
+      "project_name": "agent-hub-reference-graph",
+      "region": "eu-central-1"
+    },
+    "profile": "quick",
+    "activation_flag": "REFERENCE_GRAPH_QUICK_RUNTIME",
+    "activation_value": "graph",
+    "runtime_auth_mode": "publishable",
+    "service_role_runtime_allowed": false,
+    "timeout_ms": 1500,
+    "legacy_first": true,
+    "record_parity_required": "exact-ordered",
+    "pattern_parity_required": "exact-ordered",
+    "fallback_source": "legacy-control",
+    "standard_mode": "legacy-only",
+    "deep_mode": "legacy-only",
+    "repository_default_graph_enabled": false,
+    "projection_snapshot_date": "2026-10-24",
+    "projection_candidate_count": 275,
+    "projection_metadata_complete_count": 275,
+    "projection_unique_legacy_id_count": 275,
+    "query_source_sha256": "42da9697adef82a926c0d72d24358754fc9234bf14309a651f893c14af2af030",
+    "router_source_sha256": "d7fff8a91986e29e589a967493eb3f1bf897094db4196aef729416d5ef203982",
+    "p11_evidence_sha256": "dde26fd6da42f0bf3669973d021f1efec181af230a3a0002844c2900ef22b136",
+    "rollback_action": "unset-or-change-REFERENCE_GRAPH_QUICK_RUNTIME"
+  },
+  "binding_hash": "68930447847df8d31de01b7fb60049136ae6fd0d74c837283fb837ff7e79961b",
+  "preflight_ready": true,
+  "grant_state": "not-issued",
+  "activation_authorized": false,
+  "activation_performed": false,
+  "repository_default_graph_enabled": false,
+  "production_source": "legacy-control",
+  "profile_support": {
+    "quick": "preflight-ready",
+    "standard": "legacy-only",
+    "deep": "legacy-only"
+  },
+  "checks": {
+    "binding_contract": true,
+    "p11_readiness": true,
+    "p11_canary": true,
+    "p11_fallback": true,
+    "p11_profile_isolation": true,
+    "p11_security": true,
+    "repository_binding": true,
+    "repository_default_off": true,
+    "repository_no_migration_010": true,
+    "repository_no_service_role_runtime": true,
+    "live_target_healthy": true,
+    "live_snapshot_current_utc_date": true,
+    "live_projection_complete": true,
+    "live_projection_identity_clean": true,
+    "security_boundary": true
+  },
+  "blockers": [],
+  "phases": {
+    "binding": {
+      "status": "success",
+      "detail": {
+        "verified": true,
+        "binding_hash": "68930447847df8d31de01b7fb60049136ae6fd0d74c837283fb837ff7e79961b"
+      },
+      "error": null
+    },
+    "repository": {
+      "status": "success",
+      "detail": {
+        "verified": true
+      },
+      "error": null
+    },
+    "live_preflight": {
+      "status": "success",
+      "detail": {
+        "verified": true,
+        "snapshot_date": "2026-10-24",
+        "candidate_count": 275
+      },
+      "error": null
+    },
+    "rollback": {
+      "status": "success",
+      "detail": {
+        "verified": true,
+        "action": "unset-or-change-REFERENCE_GRAPH_QUICK_RUNTIME"
+      },
+      "error": null
+    }
+  }
+}

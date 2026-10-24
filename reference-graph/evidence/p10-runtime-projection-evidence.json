@@ -1,0 +1,131 @@
+{
+  "schema_version": "reference-graph.p10-runtime-projection.v1",
+  "target": {
+    "purpose": "agent-hub-reference-graph",
+    "project_ref": "vrznfnxzlxaavpqbzbzd",
+    "project_name": "agent-hub-reference-graph",
+    "region": "eu-central-1"
+  },
+  "base_sha": "535a0f9e5354ba53493fc581d0eb5a60fca04e05",
+  "git_sha": "25547b500038bc808a77ad31b41f142c2ce21f4c",
+  "verification_at": "2026-10-23T23:24:26.430Z",
+  "reference_time": "2026-10-23T12:00:00.000Z",
+  "production_source": "legacy-control",
+  "activation_performed": false,
+  "least_privilege_transport_ready": true,
+  "quick_shadow_canary_ready": true,
+  "production_activation_ready": false,
+  "profile_support": {
+    "quick": "shadow-ready",
+    "standard": "legacy-only",
+    "deep": "legacy-only"
+  },
+  "blockers": [],
+  "phases": {
+    "preflight": {
+      "status": "success",
+      "detail": {
+        "target_status": "ACTIVE_HEALTHY",
+        "reference_graph_governance_run": 40038855049,
+        "implementation_sha": "25547b500038bc808a77ad31b41f142c2ce21f4c",
+        "production_source": "legacy-control",
+        "activation_performed": false
+      },
+      "error": null
+    },
+    "migration": {
+      "status": "success",
+      "detail": {
+        "migration_file": "009_reference_graph_runtime_projection.sql",
+        "live_migration_version": "20261023231841",
+        "live_migration_name": "reference_graph_runtime_projection_p10",
+        "security_advisor_warn_error_count": 0,
+        "security_advisor_info_count": 12
+      },
+      "error": null
+    },
+    "projection": {
+      "status": "success",
+      "detail": {
+        "snapshot_date": "2026-10-23",
+        "candidate_count": 275,
+        "source_minus_projection_count": 0,
+        "projection_minus_source_count": 0,
+        "canonical_md5": "2975440df38dfe0fd83991742852246e"
+      },
+      "error": null
+    },
+    "canary": {
+      "status": "success",
+      "detail": {
+        "live_http_probe_run": 40039139245,
+        "artifact_id": 12538775877,
+        "artifact_sha256": "89a0ad553d4126d47bdba31ecba64f22309701f425d611c745fe15542a89a160",
+        "case_count": 24,
+        "exact_record_count": 24,
+        "exact_pattern_count": 24,
+        "mismatch_count": 0,
+        "legacy_authoritative_count": 24
+      },
+      "error": null
+    }
+  },
+  "migration": {
+    "status": "verified",
+    "migration": "009_reference_graph_runtime_projection.sql",
+    "projection": "reference_graph_quick_runtime_projection_p10",
+    "refresh_rpc": "reference_graph_refresh_quick_runtime_projection_p10",
+    "rls_enabled": true,
+    "current_date_only": true,
+    "p9_runtime_closed": true
+  },
+  "runtime_security": {
+    "p9_anon_execute": false,
+    "p9_authenticated_execute": false,
+    "projection_anon_select": true,
+    "projection_authenticated_select": true,
+    "projection_runtime_write_denied": true,
+    "refresh_anon_execute": false,
+    "refresh_authenticated_execute": false,
+    "refresh_service_role_execute": true,
+    "direct_table_select_denied": true,
+    "service_role_used_by_canary": false,
+    "security_advisor_p9_p10_warn_error_count": 0
+  },
+  "projection": {
+    "status": "available",
+    "snapshot_date": "2026-10-23",
+    "candidate_count": 275,
+    "complete_metadata_count": 275,
+    "unique_legacy_id_count": 275,
+    "live_hash": "2975440df38dfe0fd83991742852246e",
+    "offline_hash": "2975440df38dfe0fd83991742852246e",
+    "equivalent": true
+  },
+  "transport": {
+    "status": "available",
+    "live_http_transport_verified": true,
+    "auth_mode": "publishable",
+    "candidate_count": 275,
+    "snapshot_date": "2026-10-23",
+    "run_id": 40039139245,
+    "artifact_digest": "sha256:89a0ad553d4126d47bdba31ecba64f22309701f425d611c745fe15542a89a160"
+  },
+  "canary": {
+    "status": "available",
+    "case_count": 24,
+    "exact_record_count": 24,
+    "exact_pattern_count": 24,
+    "mismatch_count": 0,
+    "legacy_authoritative_count": 24
+  },
+  "fallback_verification": {
+    "transport_failure_fallback": true,
+    "malformed_payload_fallback": true,
+    "stale_snapshot_fallback": true,
+    "empty_snapshot_fallback": true,
+    "standard_no_network": true,
+    "deep_no_network": true,
+    "usage_legacy_only": true
+  }
+}

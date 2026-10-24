@@ -36,7 +36,7 @@ const cacheHashes = new Map();
 
 for (const record of records) {
   const recordErrors = validateRecord(record, {
-    requireReviewed: Boolean(args.production),
+    requireProductionStatus: Boolean(args.production),
   });
   for (const error of recordErrors) {
     errors.push(record.id + ": " + error);

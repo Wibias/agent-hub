@@ -33,6 +33,10 @@ PATTERNS = [
     ),
 ]
 
+CODE_REFERENCE = re.compile(
+    r"^(?:this|env|config|process\.env)(?:\.[A-Za-z_$][A-Za-z0-9_$]*)+$"
+)
+
 
 def is_binary(path: Path) -> bool:
     try:
@@ -55,6 +59,18 @@ def should_skip(path: Path, root: Path) -> bool:
     return any(part in DEFAULT_EXCLUDES for part in rel_parts)
 
 
+def is_unquoted_code_reference(line: str, match: re.Match) -> bool:
+    if match.lastindex is None or match.lastindex < 2:
+        return False
+
+    start, _ = match.span(2)
+    prefix = line[:start].rstrip()
+    if prefix.endswith(("'", '"')):
+        return False
+
+    return CODE_REFERENCE.fullmatch(match.group(2)) is not None
+
+
 def scan(root: Path):
     for dirpath, dirnames, filenames in os.walk(root):
         current = Path(dirpath)
@@ -71,6 +87,8 @@ def scan(root: Path):
                 for label, pattern in PATTERNS:
                     match = pattern.search(line)
                     if not match:
+                        continue
+                    if label == "assigned_secret" and is_unquoted_code_reference(line, match):
                         continue
                     preview = match.group(2) if label == "assigned_secret" and match.lastindex else match.group(0)
                     yield path, line_no, label, redact(preview)

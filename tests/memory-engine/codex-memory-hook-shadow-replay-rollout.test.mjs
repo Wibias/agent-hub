@@ -56,7 +56,7 @@ test('managed UserPromptSubmit is prepared for non-blocking replay Shadow rollou
   assertRolloutArgs(prompt.command);
   assertRolloutArgs(decodeWindows(prompt), { windows: true });
 
-  assert.equal(prompt.timeout, 10);
+  assert.equal(prompt.timeout, 30);
   assert.equal(prompt.additionalContextLimit, 2500);
   assert.match(prompt.command, /--hybrid-recall/);
   assert.match(prompt.command, /--candidate-capture/);
