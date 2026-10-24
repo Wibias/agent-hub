@@ -57,6 +57,9 @@ jobs:
       - name: Validate routing cases
         run: node scripts/verify-skill-routing.mjs
 
+      - name: Test formal verification statechart runtime
+        run: node --test skills/formal-verification/tests/statechart-runtime.test.mjs
+
       - name: Test catalog discovery audit
         run: node --test tests/skill-catalog/*.test.mjs
 
@@ -182,4 +185,3 @@ jobs:
 
       - name: Test memory engine foundation
         run: node --test tests/memory-engine/*.test.mjs
-
