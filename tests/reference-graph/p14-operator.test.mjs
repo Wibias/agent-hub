@@ -34,7 +34,7 @@ function fixture() {
   return { authority, privateKey, approved: hashP13AuthorityDescriptor(authority) };
 }
 
-test('plan and repository verification remain ceremony-only and legacy-production', () => {
+test('plan remains ceremony-only while repository verification reports later schema evolution', () => {
   const plan = run(['--plan']);
   assert.equal(plan.status, 0, plan.stderr);
   const p = JSON.parse(plan.stdout);
@@ -52,7 +52,7 @@ test('plan and repository verification remain ceremony-only and legacy-productio
   assert.equal(v.repository.private_key_or_signing_path, false);
   assert.equal(v.repository.activation_mutation_path, false);
   assert.equal(v.repository.supabase_mutation_path, false);
-  assert.equal(v.repository.migration_010_or_later_present, false);
+  assert.equal(v.repository.migration_010_or_later_present, true);
 });
 
 test('enrollment and unsigned payload require the independent approved authority hash', () => {
@@ -115,7 +115,7 @@ test('externally signed grant can authorize but operator never activates it', ()
   }
 });
 
-test('repository finalization records ceremony-ready external blocker', () => {
+test('historical P14 repository finalization fails closed after a later migration is present', () => {
   const dir = mkdtempSync(join(tmpdir(), 'p14-finalize-'));
   try {
     const snapshot = join(dir, 'snapshot.json');
@@ -127,12 +127,13 @@ test('repository finalization records ceremony-ready external blocker', () => {
     const result = run(['--finalize-repository', snapshot]);
     assert.equal(result.status, 0, result.stderr);
     const value = JSON.parse(result.stdout);
-    assert.equal(value.ceremony_ready, true);
+    assert.equal(value.ceremony_ready, false);
     assert.equal(value.authority_state, 'awaiting-external-enrollment');
     assert.equal(value.grant_state, 'not-issued');
     assert.equal(value.activation_authorized, false);
     assert.equal(value.activation_performed, false);
-    assert.equal(value.external_blocker, 'production-ed25519-authority-not-provided');
+    assert.equal(value.production_source, 'legacy-control');
+    assert.match(value.blockers.join('\n'), /activation_boundary|no_activation_path|not successful/i);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
