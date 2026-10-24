@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import test from 'node:test';
 
@@ -24,7 +24,6 @@ test('existing permanent Reference Graph workflow executes the full P12 test con
   assert.match(source, /node --test tests\/reference-graph\/\*\.test\.mjs/);
   assert.match(source, /scan_secrets\.py reference-graph/);
   assert.match(source, /009_reference_graph_runtime_projection\.sql/);
-  assert.doesNotMatch(source, /010_[A-Za-z0-9_-]+\.sql/);
 });
 
 test('permanent P12 contract secret-scans durable evidence whenever it exists', () => {
@@ -39,7 +38,7 @@ test('permanent P12 contract secret-scans durable evidence whenever it exists', 
   assert.equal(value.production_source, 'legacy-control');
 });
 
-test('permanent governance pins final P11 readiness and the P12 repository binding', () => {
+test('permanent governance pins final P11 readiness and preserves the frozen P12 repository boundary', () => {
   const p11 = JSON.parse(readFileSync(P11_EVIDENCE, 'utf8'));
   assert.equal(p11.schema_version, 'reference-graph.p11-activation-readiness.v1');
   assert.equal(p11.git_sha, P11_IMPLEMENTATION);
@@ -64,9 +63,13 @@ test('permanent governance pins final P11 readiness and the P12 repository bindi
   assert.equal(repositoryValue.activation_binding.p11_implementation_sha, P11_IMPLEMENTATION);
   assert.equal(repositoryValue.repository.p11_evidence_head_matches, true);
   assert.equal(repositoryValue.repository.repository_default_graph_enabled, false);
-  assert.equal(repositoryValue.repository.migration_010_present, false);
+  assert.equal(repositoryValue.repository.migration_010_present, true);
   assert.equal(repositoryValue.repository.service_role_runtime_reference, false);
   assert.match(repositoryValue.binding_hash, /^[0-9a-f]{64}$/);
+
+  const frozen = JSON.parse(readFileSync(P12_EVIDENCE, 'utf8'));
+  assert.equal(frozen.checks.repository_no_migration_010, true);
+  assert.equal(frozen.preflight_ready, true);
 });
 
 test('permanent P12 source governance forbids benchmark leakage, privileged credentials, and executable activation', () => {
@@ -91,12 +94,11 @@ test('permanent P12 source governance forbids benchmark leakage, privileged cred
   assert.match(query, /graphMode\s*===\s*["']graph["']/);
 });
 
-test('P12 adds no schema migration 010 or later', () => {
-  const migrations = readdirSync('reference-graph/schema')
-    .filter((name) => /^\d{3}_/.test(name))
-    .sort();
-  assert.equal(migrations.at(-1)?.slice(0, 3), '009');
-  assert.equal(migrations.some((name) => /^01\d_/.test(name)), false);
+test('P12 immutable evidence records its pre-010 schema boundary even after later phases extend the schema', () => {
+  const frozen = JSON.parse(readFileSync(P12_EVIDENCE, 'utf8'));
+  assert.equal(frozen.checks.repository_no_migration_010, true);
+  assert.equal(frozen.repository_default_graph_enabled, false);
+  assert.equal(frozen.activation_performed, false);
 });
 
 test('P12 documentation separates technical preflight readiness from activation authority', () => {
