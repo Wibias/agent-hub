@@ -39,6 +39,29 @@ function normalizeP16ConsumptionResponse(value) {
   throw new Error('P16 grant consumption response is malformed');
 }
 
+function normalizeP19AttestationResponse(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('P19 activation attestation response is malformed');
+  }
+  const keys = Object.keys(value).sort();
+  if (keys.length !== 3
+      || keys[0] !== 'exact_match'
+      || keys[1] !== 'matching_count'
+      || keys[2] !== 'total_count') {
+    throw new Error('P19 activation attestation response is malformed');
+  }
+  if (!Number.isInteger(value.matching_count) || value.matching_count < 0
+      || !Number.isInteger(value.total_count) || value.total_count < 0
+      || typeof value.exact_match !== 'boolean') {
+    throw new Error('P19 activation attestation response is malformed');
+  }
+  return {
+    matching_count: value.matching_count,
+    total_count: value.total_count,
+    exact_match: value.exact_match,
+  };
+}
+
 function normalizeUrl(value) {
   const url = requireString(value, 'url').replace(/\/+$/, '');
   if (!/^https?:\/\//i.test(url)) {
@@ -279,6 +302,19 @@ export class ReferenceGraphSupabaseStore {
       p_authority_hash: requireLowercaseHex64(authority_hash, 'authority_hash'),
     });
     return normalizeP16ConsumptionResponse(result);
+  }
+
+  async attestActivationConsumptionP19({
+    grant_payload_hash,
+    request_hash,
+    authority_hash,
+  } = {}) {
+    const result = await this.rpc('reference_graph_attest_activation_consumption_p19', {
+      p_grant_payload_hash: requireLowercaseHex64(grant_payload_hash, 'grant_payload_hash'),
+      p_request_hash: requireLowercaseHex64(request_hash, 'request_hash'),
+      p_authority_hash: requireLowercaseHex64(authority_hash, 'authority_hash'),
+    });
+    return normalizeP19AttestationResponse(result);
   }
 
   async stats() {
