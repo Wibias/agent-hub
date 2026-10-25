@@ -64,13 +64,13 @@ test('P19 PostgreSQL smoke consumes one synthetic P16 row then attests only its 
 
 test('P19 governance proves service-role-only attestation without widening P16 table privileges', () => {
   const source = workflow();
-  assert.match(source, /has_function_privilege\('anon'.*reference_graph_attest_activation_consumption_p19.*EXECUTE/is);
-  assert.match(source, /has_function_privilege\('authenticated'.*reference_graph_attest_activation_consumption_p19.*EXECUTE/is);
-  assert.match(source, /has_function_privilege\('service_role'.*reference_graph_attest_activation_consumption_p19.*EXECUTE/is);
-  assert.match(source, /has_table_privilege\('anon'.*activation_grant_consumptions_p16.*SELECT/is);
-  assert.match(source, /has_table_privilege\('authenticated'.*activation_grant_consumptions_p16.*SELECT/is);
-  assert.match(source, /has_table_privilege\('service_role'.*activation_grant_consumptions_p16.*SELECT/is);
-  assert.match(source, /has_table_privilege\('service_role'.*activation_grant_consumptions_p16.*INSERT/is);
+  assert.match(source, /has_function_privilege\(\s*'anon'.*reference_graph_attest_activation_consumption_p19.*EXECUTE/is);
+  assert.match(source, /has_function_privilege\(\s*'authenticated'.*reference_graph_attest_activation_consumption_p19.*EXECUTE/is);
+  assert.match(source, /has_function_privilege\(\s*'service_role'.*reference_graph_attest_activation_consumption_p19.*EXECUTE/is);
+  assert.match(source, /has_table_privilege\(\s*'anon'.*activation_grant_consumptions_p16.*SELECT/is);
+  assert.match(source, /has_table_privilege\(\s*'authenticated'.*activation_grant_consumptions_p16.*SELECT/is);
+  assert.match(source, /has_table_privilege\(\s*'service_role'.*activation_grant_consumptions_p16.*SELECT/is);
+  assert.match(source, /has_table_privilege\(\s*'service_role'.*activation_grant_consumptions_p16.*INSERT/is);
 });
 
 test('P19 workflow is disposable-only and contains no production activation or production-project credential path', () => {
