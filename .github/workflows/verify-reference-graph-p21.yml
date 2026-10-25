@@ -120,7 +120,7 @@ jobs:
               raise exception 'expected exactly one P21 cron job, got %', v_count;
             end if;
 
-            select active, schedule, btrim(command)
+            select active, schedule, command
               into v_active, v_schedule, v_command
               from cron.job
              where jobname = 'reference-graph-p10-daily-refresh';
@@ -131,7 +131,7 @@ jobs:
             if v_schedule <> '0,5 0 * * *' then
               raise exception 'unexpected P21 cron schedule: %', v_schedule;
             end if;
-            if regexp_replace(v_command, '\s+', ' ', 'g') <>
+            if btrim(regexp_replace(v_command, '\s+', ' ', 'g')) <>
                'select public.reference_graph_refresh_quick_runtime_projection_p10();' then
               raise exception 'unexpected P21 cron command: %', v_command;
             end if;
