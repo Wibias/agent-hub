@@ -1,0 +1,189 @@
+name: Reference graph P21 governance
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: reference-graph-p21-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: supabase/postgres:17.11.0.007
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Test P21 contracts
+        run: node --test tests/reference-graph/p21-*.test.mjs
+
+      - name: Scan Reference Graph tree for common secrets
+        run: python3 skills/security-review-redirect/scripts/scan_secrets.py reference-graph
+
+      - name: Verify public release safety
+        run: node scripts/verify-public-release.mjs
+
+      - name: Install PostgreSQL client when needed
+        run: |
+          if ! command -v psql >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y postgresql-client
+          fi
+
+      - name: Bootstrap Supabase-compatible database roles
+        env:
+          PGPASSWORD: postgres
+        run: |
+          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 <<'SQL'
+          create schema if not exists extensions;
+          do $$
+          begin
+            if not exists (select 1 from pg_roles where rolname = 'anon') then
+              create role anon nologin;
+            end if;
+            if not exists (select 1 from pg_roles where rolname = 'authenticated') then
+              create role authenticated nologin;
+            end if;
+            if not exists (select 1 from pg_roles where rolname = 'service_role') then
+              create role service_role nologin;
+            end if;
+          end
+          $$;
+          SQL
+
+      - name: Execute Reference Graph migrations through P21
+        env:
+          PGPASSWORD: postgres
+        run: |
+          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f reference-graph/schema/001_reference_graph.sql
+          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f reference-graph/schema/002_reference_graph_rpc.sql
+          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f reference-graph/schema/003_reference_graph_embeddings_rpc.sql
+          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f reference-graph/schema/004_reference_graph_lexical_overlap.sql
+          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f reference-graph/schema/005_reference_graph_freshness.sql
+          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f reference-graph/schema/006_reference_graph_retrieval_quality.sql
+          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f reference-graph/schema/007_reference_graph_lexical_parity.sql
+          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f reference-graph/schema/008_reference_graph_runtime_canary.sql
+          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f reference-graph/schema/009_reference_graph_runtime_projection.sql
+          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f reference-graph/schema/010_reference_graph_activation_grant_consumption.sql
+          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f reference-graph/schema/011_reference_graph_activation_attestation.sql
+          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f reference-graph/schema/012_reference_graph_safeupdate_refresh.sql
+          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f reference-graph/schema/013_reference_graph_daily_refresh_cron.sql
+
+      - name: Reapply P21 scheduler migration to prove idempotence
+        env:
+          PGPASSWORD: postgres
+        run: |
+          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f reference-graph/schema/013_reference_graph_daily_refresh_cron.sql
+
+      - name: Smoke-test P21 cron identity, refresh execution, and privileges
+        env:
+          PGPASSWORD: postgres
+        run: |
+          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 <<'SQL'
+          do $$
+          declare
+            v_count integer;
+            v_active boolean;
+            v_schedule text;
+            v_command text;
+          begin
+            select count(*)
+              into v_count
+              from cron.job
+             where jobname = 'reference-graph-p10-daily-refresh';
+
+            if v_count <> 1 then
+              raise exception 'expected exactly one P21 cron job, got %', v_count;
+            end if;
+
+            select active, schedule, btrim(command)
+              into v_active, v_schedule, v_command
+              from cron.job
+             where jobname = 'reference-graph-p10-daily-refresh';
+
+            if v_active is not true then
+              raise exception 'P21 cron job is not active';
+            end if;
+            if v_schedule <> '0,5 0 * * *' then
+              raise exception 'unexpected P21 cron schedule: %', v_schedule;
+            end if;
+            if regexp_replace(v_command, '\s+', ' ', 'g') <>
+               'select public.reference_graph_refresh_quick_runtime_projection_p10();' then
+              raise exception 'unexpected P21 cron command: %', v_command;
+            end if;
+          end
+          $$;
+          SQL
+
+          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -Atqc "
+            set role service_role;
+            select public.reference_graph_refresh_quick_runtime_projection_p10()::text;
+          " > /tmp/p21-refresh.json
+
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const receipt = JSON.parse(fs.readFileSync('/tmp/p21-refresh.json', 'utf8').trim());
+          if (typeof receipt.snapshot_date !== 'string') {
+            throw new Error(`missing snapshot_date: ${JSON.stringify(receipt)}`);
+          }
+          if (!Number.isInteger(receipt.candidate_count) || receipt.candidate_count < 0) {
+            throw new Error(`invalid candidate_count: ${JSON.stringify(receipt)}`);
+          }
+          if (typeof receipt.refreshed_at !== 'string') {
+            throw new Error(`missing refreshed_at: ${JSON.stringify(receipt)}`);
+          }
+          console.log(JSON.stringify(receipt));
+          NODE
+
+          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 <<'SQL'
+          do $$
+          begin
+            if has_function_privilege(
+              'anon',
+              'public.reference_graph_refresh_quick_runtime_projection_p10()',
+              'EXECUTE'
+            ) then
+              raise exception 'anon unexpectedly has P10 refresh execute';
+            end if;
+            if has_function_privilege(
+              'authenticated',
+              'public.reference_graph_refresh_quick_runtime_projection_p10()',
+              'EXECUTE'
+            ) then
+              raise exception 'authenticated unexpectedly has P10 refresh execute';
+            end if;
+            if not has_function_privilege(
+              'service_role',
+              'public.reference_graph_refresh_quick_runtime_projection_p10()',
+              'EXECUTE'
+            ) then
+              raise exception 'service_role lacks P10 refresh execute';
+            end if;
+          end
+          $$;
+          SQL
