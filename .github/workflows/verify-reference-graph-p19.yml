@@ -1,0 +1,188 @@
+name: Reference graph P19 governance
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: reference-graph-p19-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Test P19 contracts
+        run: node --test tests/reference-graph/p19-*.test.mjs
+
+      - name: Scan Reference Graph tree for common secrets
+        run: python3 skills/security-review-redirect/scripts/scan_secrets.py reference-graph
+
+      - name: Verify public release safety
+        run: node scripts/verify-public-release.mjs
+
+      - name: Install PostgreSQL client when needed
+        run: |
+          if ! command -v psql >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y postgresql-client
+          fi
+
+      - name: Bootstrap Supabase-compatible database roles
+        env:
+          PGPASSWORD: postgres
+        run: |
+          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 <<'SQL'
+          create schema if not exists extensions;
+          do $$
+          begin
+            if not exists (select 1 from pg_roles where rolname = 'anon') then
+              create role anon nologin;
+            end if;
+            if not exists (select 1 from pg_roles where rolname = 'authenticated') then
+              create role authenticated nologin;
+            end if;
+            if not exists (select 1 from pg_roles where rolname = 'service_role') then
+              create role service_role nologin;
+            end if;
+          end
+          $$;
+          SQL
+
+      - name: Execute Reference Graph migrations through P19
+        env:
+          PGPASSWORD: postgres
+        run: |
+          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f reference-graph/schema/001_reference_graph.sql
+          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f reference-graph/schema/002_reference_graph_rpc.sql
+          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f reference-graph/schema/003_reference_graph_embeddings_rpc.sql
+          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f reference-graph/schema/004_reference_graph_lexical_overlap.sql
+          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f reference-graph/schema/005_reference_graph_freshness.sql
+          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f reference-graph/schema/006_reference_graph_retrieval_quality.sql
+          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f reference-graph/schema/007_reference_graph_lexical_parity.sql
+          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f reference-graph/schema/008_reference_graph_runtime_canary.sql
+          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f reference-graph/schema/009_reference_graph_runtime_projection.sql
+          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f reference-graph/schema/010_reference_graph_activation_grant_consumption.sql
+          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f reference-graph/schema/011_reference_graph_activation_attestation.sql
+
+      - name: Smoke-test P19 read-only activation attestation and privileges
+        env:
+          PGPASSWORD: postgres
+        run: |
+          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -Atqc "
+            set role service_role;
+            select public.reference_graph_consume_activation_grant_nonce_p16(
+              '1919191919191919191919191919191919191919191919191919191919191919',
+              'a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1',
+              'b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2',
+              'c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3'
+            )::text;
+          " > /tmp/p19-consume.json
+
+          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -Atqc "
+            set role service_role;
+            select public.reference_graph_attest_activation_consumption_p19(
+              'a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1',
+              'b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2',
+              'c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3'
+            )::text;
+          " > /tmp/p19-attestation.json
+
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const consumed = JSON.parse(fs.readFileSync('/tmp/p19-consume.json', 'utf8').trim());
+          if (consumed.consumed !== true || typeof consumed.consumption_id !== 'string' || !consumed.consumption_id) {
+            throw new Error(`expected one synthetic P16 first-use consumption: ${JSON.stringify(consumed)}`);
+          }
+          const attestation = JSON.parse(fs.readFileSync('/tmp/p19-attestation.json', 'utf8').trim());
+          if (attestation.matching_count !== 1) {
+            throw new Error(`expected P19 matching_count 1, got ${JSON.stringify(attestation)}`);
+          }
+          if (attestation.total_count !== 1) {
+            throw new Error(`expected P19 total_count 1, got ${JSON.stringify(attestation)}`);
+          }
+          if (attestation.exact_match !== true) {
+            throw new Error(`expected P19 exact_match true, got ${JSON.stringify(attestation)}`);
+          }
+          console.log(JSON.stringify(attestation));
+          NODE
+
+          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 <<'SQL'
+          do $$
+          declare
+            v_count bigint;
+            v_definition text;
+          begin
+            select count(*) into v_count
+            from reference_graph.activation_grant_consumptions_p16;
+            if v_count <> 1 then
+              raise exception 'expected exactly one synthetic P16 row, got %', v_count;
+            end if;
+
+            if has_function_privilege(
+              'anon',
+              'public.reference_graph_attest_activation_consumption_p19(text,text,text)',
+              'EXECUTE'
+            ) then
+              raise exception 'anon unexpectedly has P19 attestation execute';
+            end if;
+            if has_function_privilege(
+              'authenticated',
+              'public.reference_graph_attest_activation_consumption_p19(text,text,text)',
+              'EXECUTE'
+            ) then
+              raise exception 'authenticated unexpectedly has P19 attestation execute';
+            end if;
+            if not has_function_privilege(
+              'service_role',
+              'public.reference_graph_attest_activation_consumption_p19(text,text,text)',
+              'EXECUTE'
+            ) then
+              raise exception 'service_role lacks P19 attestation execute';
+            end if;
+
+            if has_table_privilege('anon', 'reference_graph.activation_grant_consumptions_p16', 'SELECT')
+              or has_table_privilege('authenticated', 'reference_graph.activation_grant_consumptions_p16', 'SELECT')
+              or has_table_privilege('service_role', 'reference_graph.activation_grant_consumptions_p16', 'SELECT') then
+              raise exception 'P19 unexpectedly widened P16 ledger SELECT';
+            end if;
+            if has_table_privilege('anon', 'reference_graph.activation_grant_consumptions_p16', 'INSERT')
+              or has_table_privilege('authenticated', 'reference_graph.activation_grant_consumptions_p16', 'INSERT')
+              or has_table_privilege('service_role', 'reference_graph.activation_grant_consumptions_p16', 'INSERT') then
+              raise exception 'P19 unexpectedly widened P16 ledger INSERT';
+            end if;
+
+            select pg_get_functiondef(
+              'public.reference_graph_attest_activation_consumption_p19(text,text,text)'::regprocedure
+            ) into v_definition;
+            if v_definition ~* '\m(insert|update|delete|truncate)\M' then
+              raise exception 'P19 attestation function unexpectedly contains DML';
+            end if;
+          end
+          $$;
+          SQL

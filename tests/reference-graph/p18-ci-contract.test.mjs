@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 
 const WORKFLOW = '.github/workflows/verify-reference-graph-p18.yml';
@@ -52,11 +52,10 @@ test('P18 governance can never exercise the production activation or P16 live co
   assert.doesNotMatch(source, /reference_graph_consume_activation_grant_nonce_p16/);
 });
 
-test('P18 owns no migration 011 and governance enforces that boundary', () => {
+test('P18 owns no P19 migration 011 attestation surface', () => {
   const source = workflow();
-  assert.match(source, /011/);
-  const migrations = readdirSync('reference-graph/schema');
-  assert.equal(migrations.some((name) => /^011_/.test(name)), false);
+  assert.doesNotMatch(source, /011_reference_graph_activation_attestation\.sql/i);
+  assert.doesNotMatch(source, /reference_graph_attest_activation_consumption_p19/i);
 });
 
 test('P18 runbook still states repository work alone does not activate production', () => {

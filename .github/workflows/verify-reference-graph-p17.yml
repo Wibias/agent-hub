@@ -37,14 +37,6 @@ jobs:
       - name: Verify public release safety
         run: node scripts/verify-public-release.mjs
 
-      - name: Verify P17 owns no migration 011
-        shell: bash
-        run: |
-          if find reference-graph/schema -maxdepth 1 -type f -name '011_*' | grep -q .; then
-            echo 'P17 must not add migration 011' >&2
-            exit 1
-          fi
-
       - name: Smoke-test repository-default legacy projection
         env:
           REFERENCE_GRAPH_QUICK_RUNTIME: graph
