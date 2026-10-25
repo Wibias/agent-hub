@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 
 const WORKFLOW = '.github/workflows/verify-reference-graph-p17.yml';
@@ -27,19 +27,13 @@ test('permanent P17 governance runs only disposable local-actuator contracts', (
   assert.doesNotMatch(source, /SUPABASE_SERVICE_ROLE_KEY/);
 });
 
-test('P17 governance proves repository-default legacy projection and never creates migration 011', () => {
+test('P17 governance proves repository-default legacy projection without owning P19 migration 011', () => {
   const source = workflow();
   assert.match(source, /REFERENCE_GRAPH_QUICK_RUNTIME/);
   assert.match(source, /legacy/i);
   assert.match(source, /query-runtime\.mjs/);
-  assert.match(source, /011|migration/i);
-
-  const migrations = readdirSync('reference-graph/schema');
-  assert.equal(
-    migrations.some((name) => /^011_/.test(name)),
-    false,
-    'P17 must not add migration 011',
-  );
+  assert.doesNotMatch(source, /011_reference_graph_activation_attestation\.sql/i);
+  assert.doesNotMatch(source, /reference_graph_attest_activation_consumption_p19/i);
 });
 
 test('P17 workflow contains no production authority ceremony or activation secret surface', () => {
