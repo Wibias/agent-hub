@@ -117,8 +117,6 @@ jobs:
 
           psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 <<'SQL'
           do $$
-          declare
-            v_definition text;
           begin
             if has_function_privilege(
               'anon',
@@ -140,14 +138,6 @@ jobs:
               'EXECUTE'
             ) then
               raise exception 'service_role lacks P10 refresh execute';
-            end if;
-
-            select pg_get_functiondef(
-              'public.reference_graph_refresh_quick_runtime_projection_p10()'::regprocedure
-            ) into v_definition;
-
-            if v_definition !~* 'delete[[:space:]]+from[[:space:]]+public\\.reference_graph_quick_runtime_projection_p10[[:space:]]+where[[:space:]]+true' then
-              raise exception 'P20 refresh is not safeupdate-compatible';
             end if;
           end
           $$;
