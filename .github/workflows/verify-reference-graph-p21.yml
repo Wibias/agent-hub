@@ -21,13 +21,12 @@ jobs:
       postgres:
         image: supabase/postgres:17.11.0.007
         env:
-          POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
           POSTGRES_DB: postgres
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-cmd "pg_isready -U supabase_admin -d postgres"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 20
@@ -59,7 +58,7 @@ jobs:
         env:
           PGPASSWORD: postgres
         run: |
-          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 <<'SQL'
+          psql -h localhost -U supabase_admin -d postgres -v ON_ERROR_STOP=1 <<'SQL'
           create schema if not exists extensions;
           do $$
           begin
@@ -80,31 +79,31 @@ jobs:
         env:
           PGPASSWORD: postgres
         run: |
-          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f reference-graph/schema/001_reference_graph.sql
-          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f reference-graph/schema/002_reference_graph_rpc.sql
-          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f reference-graph/schema/003_reference_graph_embeddings_rpc.sql
-          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f reference-graph/schema/004_reference_graph_lexical_overlap.sql
-          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f reference-graph/schema/005_reference_graph_freshness.sql
-          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f reference-graph/schema/006_reference_graph_retrieval_quality.sql
-          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f reference-graph/schema/007_reference_graph_lexical_parity.sql
-          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f reference-graph/schema/008_reference_graph_runtime_canary.sql
-          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f reference-graph/schema/009_reference_graph_runtime_projection.sql
-          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f reference-graph/schema/010_reference_graph_activation_grant_consumption.sql
-          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f reference-graph/schema/011_reference_graph_activation_attestation.sql
-          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f reference-graph/schema/012_reference_graph_safeupdate_refresh.sql
-          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f reference-graph/schema/013_reference_graph_daily_refresh_cron.sql
+          psql -h localhost -U supabase_admin -d postgres -v ON_ERROR_STOP=1 -f reference-graph/schema/001_reference_graph.sql
+          psql -h localhost -U supabase_admin -d postgres -v ON_ERROR_STOP=1 -f reference-graph/schema/002_reference_graph_rpc.sql
+          psql -h localhost -U supabase_admin -d postgres -v ON_ERROR_STOP=1 -f reference-graph/schema/003_reference_graph_embeddings_rpc.sql
+          psql -h localhost -U supabase_admin -d postgres -v ON_ERROR_STOP=1 -f reference-graph/schema/004_reference_graph_lexical_overlap.sql
+          psql -h localhost -U supabase_admin -d postgres -v ON_ERROR_STOP=1 -f reference-graph/schema/005_reference_graph_freshness.sql
+          psql -h localhost -U supabase_admin -d postgres -v ON_ERROR_STOP=1 -f reference-graph/schema/006_reference_graph_retrieval_quality.sql
+          psql -h localhost -U supabase_admin -d postgres -v ON_ERROR_STOP=1 -f reference-graph/schema/007_reference_graph_lexical_parity.sql
+          psql -h localhost -U supabase_admin -d postgres -v ON_ERROR_STOP=1 -f reference-graph/schema/008_reference_graph_runtime_canary.sql
+          psql -h localhost -U supabase_admin -d postgres -v ON_ERROR_STOP=1 -f reference-graph/schema/009_reference_graph_runtime_projection.sql
+          psql -h localhost -U supabase_admin -d postgres -v ON_ERROR_STOP=1 -f reference-graph/schema/010_reference_graph_activation_grant_consumption.sql
+          psql -h localhost -U supabase_admin -d postgres -v ON_ERROR_STOP=1 -f reference-graph/schema/011_reference_graph_activation_attestation.sql
+          psql -h localhost -U supabase_admin -d postgres -v ON_ERROR_STOP=1 -f reference-graph/schema/012_reference_graph_safeupdate_refresh.sql
+          psql -h localhost -U supabase_admin -d postgres -v ON_ERROR_STOP=1 -f reference-graph/schema/013_reference_graph_daily_refresh_cron.sql
 
       - name: Reapply P21 scheduler migration to prove idempotence
         env:
           PGPASSWORD: postgres
         run: |
-          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f reference-graph/schema/013_reference_graph_daily_refresh_cron.sql
+          psql -h localhost -U supabase_admin -d postgres -v ON_ERROR_STOP=1 -f reference-graph/schema/013_reference_graph_daily_refresh_cron.sql
 
       - name: Smoke-test P21 cron identity, refresh execution, and privileges
         env:
           PGPASSWORD: postgres
         run: |
-          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 <<'SQL'
+          psql -h localhost -U supabase_admin -d postgres -v ON_ERROR_STOP=1 <<'SQL'
           do $$
           declare
             v_count integer;
@@ -140,7 +139,7 @@ jobs:
           $$;
           SQL
 
-          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -Atqc "
+          psql -h localhost -U supabase_admin -d postgres -v ON_ERROR_STOP=1 -Atqc "
             set role service_role;
             select public.reference_graph_refresh_quick_runtime_projection_p10()::text;
           " > /tmp/p21-refresh.json
@@ -160,7 +159,7 @@ jobs:
           console.log(JSON.stringify(receipt));
           NODE
 
-          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 <<'SQL'
+          psql -h localhost -U supabase_admin -d postgres -v ON_ERROR_STOP=1 <<'SQL'
           do $$
           begin
             if has_function_privilege(
