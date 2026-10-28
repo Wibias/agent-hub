@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { readFile, mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -139,4 +139,25 @@ test('GET /api/graph is scoped, guarded, browser-safe, and read-only', async (t)
   assert.equal(response.status, 405);
   payload = await response.json();
   assert.equal(payload.error, 'method_not_allowed');
+});
+
+test('Memory Console exposes an interactive Graph tab with safe graph affordances', async () => {
+  const [html, app, css] = await Promise.all([
+    readFile(new URL('../../memory-ui/index.html', import.meta.url), 'utf8'),
+    readFile(new URL('../../memory-ui/app.js', import.meta.url), 'utf8'),
+    readFile(new URL('../../memory-ui/styles.css', import.meta.url), 'utf8'),
+  ]);
+
+  assert.match(html, /data-view="graph"[^>]*>Graph</);
+  assert.match(app, /['"]\/api\/graph['"]/);
+  assert.match(app, /Explicit relation/);
+  assert.match(app, /Inferred similarity/);
+  assert.match(app, /Open in Memories/);
+  assert.match(app, /graph-search/);
+  assert.match(app, /graph-origin-filter/);
+  assert.match(app, /graph-state-filter/);
+  assert.match(app, /<svg[\s\S]*graph-canvas/);
+  assert.match(css, /\.graph-layout\b/);
+  assert.match(css, /\.graph-edge\.inferred\b/);
+  assert.match(css, /\.graph-node\b/);
 });
