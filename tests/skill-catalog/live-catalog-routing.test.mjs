@@ -11,10 +11,17 @@ const cli = path.join(repoRoot, 'scripts', 'audit-skill-catalog.mjs');
 const cases = path.join(repoRoot, 'tests', 'skill-catalog', 'catalog-routing.jsonl');
 
 test('live skill catalog satisfies every declared routing case', async () => {
-  await execFileAsync(process.execPath, [
-    cli,
-    '--skills-root', path.join(repoRoot, 'skills'),
-    '--cases', cases,
-    '--strict',
-  ], { cwd: repoRoot });
+  try {
+    await execFileAsync(process.execPath, [
+      cli,
+      '--skills-root', path.join(repoRoot, 'skills'),
+      '--cases', cases,
+      '--strict',
+    ], { cwd: repoRoot });
+  } catch (error) {
+    const output = [error?.stdout, error?.stderr].filter(Boolean).join('\n').trim();
+    throw new Error(`live catalog routing audit failed${output ? `\n${output}` : ''}`, {
+      cause: error,
+    });
+  }
 });
