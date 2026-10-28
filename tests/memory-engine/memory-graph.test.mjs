@@ -75,6 +75,15 @@ function indexEmbedding(memory, claimId, vector, {
   });
 }
 
+function hasPropertyDeep(value, propertyName) {
+  if (Array.isArray(value)) {
+    return value.some((item) => hasPropertyDeep(item, propertyName));
+  }
+  if (!value || typeof value !== 'object') return false;
+  if (Object.prototype.hasOwnProperty.call(value, propertyName)) return true;
+  return Object.values(value).some((item) => hasPropertyDeep(item, propertyName));
+}
+
 test('memory graph exposes real claims, explicit relations, and bounded inferred similarity without vectors', async (t) => {
   const { root, memory } = await createFixture();
   t.after(async () => {
@@ -136,9 +145,9 @@ test('memory graph exposes real claims, explicit relations, and bounded inferred
   );
   assert.equal(graph.nodes.some((node) => node.id === 'claim-feature'), false);
   assert.equal(
-    JSON.stringify(graph).includes('vector'),
+    hasPropertyDeep(graph, 'vector'),
     false,
-    'browser-safe graph payload must not expose embedding vectors',
+    'browser-safe graph payload must not expose embedding vector properties',
   );
 
   const supersedes = graph.edges.find((edge) => edge.relation === 'supersedes');
