@@ -120,6 +120,18 @@ jobs:
       - name: Validate retrospective skill structure
         run: node skills/skill-ratchet/scripts/skill-ratchet.mjs validate --skill-root skills/retrospective
 
+      - name: Validate diagram design skill structure
+        run: node skills/skill-ratchet/scripts/skill-ratchet.mjs validate --skill-root skills/diagram-design
+
+      - name: Validate diagram design vendored helpers
+        run: |
+          python3 -m py_compile skills/diagram-design/scripts/*.py
+          python3 skills/diagram-design/scripts/self_check.py skills/diagram-design/assets/example-architecture.html
+
+      - name: Validate diagram design eval JSON
+        run: |
+          node -e "const fs=require('fs'); JSON.parse(fs.readFileSync('skills/diagram-design/tests/evals/regression-lock.json','utf8')); for (const p of ['skills/diagram-design/tests/evals/cases.jsonl','skills/diagram-design/tests/evals/regression-cases.jsonl','tests/skill-catalog/diagram-design-routing.jsonl']) fs.readFileSync(p,'utf8').split(/\\r?\\n/).filter(Boolean).forEach(JSON.parse)"
+
       - name: Test bounded design guidance query
         run: node --test knowledge/design-guidance/tests/*.test.mjs
 
