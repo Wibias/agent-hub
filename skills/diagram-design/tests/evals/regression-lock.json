@@ -1,1 +1,10 @@
-[]
+[
+  {
+    "id": "R1",
+    "sha256": "a51b7abc108f59a349eef9c0a0e4ae1da0443e874df3c4cd012f63dafea19b2f"
+  },
+  {
+    "id": "R2",
+    "sha256": "7d465477d39fc2dea8d07a4fd51d289169c4c3d5ac36d68a494044942a8fdaae"
+  }
+]
