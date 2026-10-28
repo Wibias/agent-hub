@@ -1,0 +1,39 @@
+name: Temporary Penpot index refresh
+
+on:
+  push:
+    branches:
+      - agent/penpot-design-with-ai-p4
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/penpot-design-with-ai-p4
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Regenerate knowledge index
+        run: node knowledge/build-index.mjs
+
+      - name: Commit generated index if changed
+        shell: bash
+        run: |
+          if git diff --quiet -- knowledge/INDEX.md knowledge/index.json; then
+            echo "Knowledge index already current."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add knowledge/INDEX.md knowledge/index.json
+          git commit -m "chore: refresh knowledge index for Penpot"
+          git push origin HEAD:agent/penpot-design-with-ai-p4
