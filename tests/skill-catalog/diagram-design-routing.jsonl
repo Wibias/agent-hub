@@ -1,0 +1,6 @@
+{"id":"DG1","prompt":"Create a polished publishable architecture diagram of this system as branded HTML and SVG","expected_skill":"diagram-design"}
+{"id":"DG2","prompt":"Turn this API interaction into a clean sequence diagram I can publish in the docs","expected_skill":"diagram-design"}
+{"id":"DG3","prompt":"Redraw this Mermaid flowchart as a polished editorial diagram for a presentation","expected_skill":"diagram-design"}
+{"id":"DGN1","prompt":"Design the module boundaries and compare two software architecture options before implementation","expected_skill":"codebase-design"}
+{"id":"DGN2","prompt":"Model-check this state machine and prove the invalid state is unreachable","expected_skill":"formal-verification"}
+{"id":"DGN3","prompt":"Map the onboarding service blueprint and identify the highest-friction customer and backstage handoffs","expected_skill":"intent"}

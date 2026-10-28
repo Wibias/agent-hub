@@ -382,6 +382,32 @@
       "contentHash": "407f92a78622a115c47023bb67fb801ef93065a05b8a86b58aa81db6df062ef0"
     },
     {
+      "id": "agents/diagram-design",
+      "path": "~/.agents/skills/diagram-design/SKILL.md",
+      "type": "skill",
+      "harness": "agents",
+      "scope": "global",
+      "name": "diagram-design",
+      "description": "Canonical owner for drawing, rendering, branding, polishing, and exporting publishable diagrams and visual schematics as self-contained HTML/SVG/PNG. Use for a branded sequence diagram of an API interaction to publish in docs, a polished Mermaid flowchart redraw for a presentation, architecture diagrams, state diagrams, ER/data models, timelines, swimlanes, dependency/deployment diagrams, service blueprints, journeys, charts, maps, and redraws of draw.io/Excalidraw when the requested deliverable is a polished visual artifact.",
+      "tags": [
+        "diagram",
+        "design"
+      ],
+      "triggers": [
+        "Canonical owner for drawing",
+        "rendering",
+        "branding",
+        "polishing",
+        "and exporting publishable diagrams and visual schematics as self-contained HTML/SVG/PNG.",
+        "a branded sequence diagram of an API interaction to publish in docs",
+        "a polished Mermaid flowchart redraw for a presentation",
+        "architecture diagrams"
+      ],
+      "status": "active",
+      "canonicalId": null,
+      "contentHash": "f4978418e968cb7038776b994f7db8d799f93104758d9b5c3e7f1c84fd284aec"
+    },
+    {
       "id": "agents/domain-modeling",
       "path": "~/.agents/skills/domain-modeling/SKILL.md",
       "type": "skill",
