@@ -2,6 +2,13 @@ const state = {
   overview: null,
   scope: null,
   claim: null,
+  graph: null,
+  graphLoading: false,
+  graphError: '',
+  graphSearch: '',
+  graphOrigin: 'all',
+  graphNodeState: 'all',
+  selectedGraphNodeId: null,
   view: 'memories',
   projectId: null,
   branch: null,
@@ -143,6 +150,16 @@ function resetActionState() {
   state.actionError = '';
 }
 
+function resetGraphState({ keepData = false } = {}) {
+  if (!keepData) state.graph = null;
+  state.graphLoading = false;
+  state.graphError = '';
+  state.graphSearch = '';
+  state.graphOrigin = 'all';
+  state.graphNodeState = 'all';
+  state.selectedGraphNodeId = null;
+}
+
 function actionsAreOpen() {
   return (
     state.claimActionMode !== null
@@ -223,6 +240,7 @@ function renderProjects() {
       state.selectedCandidateId = null;
       state.claim = null;
       resetActionState();
+      resetGraphState();
       loadScope();
     });
   });
@@ -583,12 +601,13 @@ async function reloadCurrentData({
 } = {}) {
   const claimId = preserveClaim ? state.selectedClaimId : null;
   const candidateId = preserveCandidate ? state.selectedCandidateId : null;
+  const graphNodeId = state.selectedGraphNodeId;
 
   const overview = await fetchJson('/api/overview');
   state.overview = overview;
   state.actionToken = overview.actions?.token ?? null;
 
-  let project = overview.projects.find(
+  const project = overview.projects.find(
     (item) => item.projectId === state.projectId,
   ) ?? overview.projects[0] ?? null;
 
@@ -597,8 +616,10 @@ async function reloadCurrentData({
     state.branch = null;
     state.scope = null;
     state.claim = null;
+    state.graph = null;
     state.selectedClaimId = null;
     state.selectedCandidateId = null;
+    state.selectedGraphNodeId = null;
     renderProjects();
     renderScopeHeader();
     renderView();
@@ -613,8 +634,10 @@ async function reloadCurrentData({
   if (!state.branch) {
     state.scope = null;
     state.claim = null;
+    state.graph = null;
     state.selectedClaimId = null;
     state.selectedCandidateId = null;
+    state.selectedGraphNodeId = null;
     renderView();
     return;
   }
@@ -640,6 +663,13 @@ async function reloadCurrentData({
       branch: state.branch,
       claimId: state.selectedClaimId,
     }));
+  }
+
+  if (state.view === 'graph') {
+    await loadGraph({
+      render: false,
+      preferredNodeId: graphNodeId,
+    });
   }
 
   updateUrl();
@@ -777,6 +807,414 @@ function renderMemories() {
       });
     },
   );
+}
+
+function graphFilteredNodes() {
+  const graph = state.graph;
+  if (!graph) return [];
+  const query = state.graphSearch.trim().toLowerCase();
+  return graph.nodes.filter((node) => {
+    if (
+      state.graphNodeState !== 'all'
+      && node.state !== state.graphNodeState
+    ) return false;
+    if (!query) return true;
+    return [
+      node.ref,
+      node.value,
+      node.subject,
+      node.predicate,
+      node.kind,
+      node.authority,
+      node.state,
+    ].some((value) => String(value ?? '').toLowerCase().includes(query));
+  });
+}
+
+function graphFilteredEdges(nodes) {
+  const graph = state.graph;
+  if (!graph) return [];
+  const visible = new Set(nodes.map((node) => node.id));
+  return graph.edges.filter((edge) => (
+    visible.has(edge.from)
+    && visible.has(edge.to)
+    && (state.graphOrigin === 'all' || edge.origin === state.graphOrigin)
+  ));
+}
+
+function graphPositions(nodes, edges) {
+  const width = 1000;
+  const height = 680;
+  const pad = 56;
+  const sorted = [...nodes].sort((left, right) => left.id.localeCompare(right.id, 'en'));
+  const positions = new Map();
+  if (sorted.length === 0) return positions;
+  if (sorted.length === 1) {
+    positions.set(sorted[0].id, { x: width / 2, y: height / 2 });
+    return positions;
+  }
+
+  const radius = Math.min(width, height) * 0.37;
+  sorted.forEach((node, index) => {
+    const angle = -Math.PI / 2 + (Math.PI * 2 * index) / sorted.length;
+    positions.set(node.id, {
+      x: width / 2 + Math.cos(angle) * radius,
+      y: height / 2 + Math.sin(angle) * radius,
+    });
+  });
+
+  const nodeIds = sorted.map((node) => node.id);
+  const iterations = sorted.length > 220 ? 4 : sorted.length > 100 ? 6 : 10;
+  for (let iteration = 0; iteration < iterations; iteration += 1) {
+    const delta = new Map(nodeIds.map((id) => [id, { x: 0, y: 0 }]));
+    const repel = sorted.length > 220 ? 1500 : 2600;
+    for (let leftIndex = 0; leftIndex < nodeIds.length; leftIndex += 1) {
+      for (let rightIndex = leftIndex + 1; rightIndex < nodeIds.length; rightIndex += 1) {
+        const leftId = nodeIds[leftIndex];
+        const rightId = nodeIds[rightIndex];
+        const left = positions.get(leftId);
+        const right = positions.get(rightId);
+        let dx = left.x - right.x;
+        let dy = left.y - right.y;
+        let distanceSquared = dx * dx + dy * dy;
+        if (distanceSquared < 25) {
+          dx += (leftIndex % 3) - 1;
+          dy += (rightIndex % 3) - 1;
+          distanceSquared = Math.max(25, dx * dx + dy * dy);
+        }
+        const distance = Math.sqrt(distanceSquared);
+        const force = Math.min(7, repel / distanceSquared);
+        const ux = dx / distance;
+        const uy = dy / distance;
+        delta.get(leftId).x += ux * force;
+        delta.get(leftId).y += uy * force;
+        delta.get(rightId).x -= ux * force;
+        delta.get(rightId).y -= uy * force;
+      }
+    }
+
+    for (const edge of edges) {
+      const from = positions.get(edge.from);
+      const to = positions.get(edge.to);
+      if (!from || !to) continue;
+      const dx = to.x - from.x;
+      const dy = to.y - from.y;
+      const distance = Math.max(1, Math.sqrt(dx * dx + dy * dy));
+      const desired = edge.origin === 'explicit' ? 128 : 158;
+      const strength = edge.origin === 'explicit' ? 0.026 : 0.014;
+      const force = Math.max(-5, Math.min(5, (distance - desired) * strength));
+      const ux = dx / distance;
+      const uy = dy / distance;
+      delta.get(edge.from).x += ux * force;
+      delta.get(edge.from).y += uy * force;
+      delta.get(edge.to).x -= ux * force;
+      delta.get(edge.to).y -= uy * force;
+    }
+
+    for (const id of nodeIds) {
+      const point = positions.get(id);
+      const move = delta.get(id);
+      point.x = Math.max(pad, Math.min(width - pad, point.x + move.x));
+      point.y = Math.max(pad, Math.min(height - pad, point.y + move.y));
+    }
+  }
+
+  return positions;
+}
+
+function graphEdgeProvenance(edge) {
+  const provenance = edge?.provenance ?? {};
+  if (edge?.origin === 'inferred') {
+    const model = [provenance.modelId, provenance.modelRevision]
+      .filter(Boolean)
+      .join('@');
+    const dimensions = Number.isFinite(Number(provenance.dimensions))
+      ? `${Number(provenance.dimensions)}d`
+      : null;
+    return [model, dimensions].filter(Boolean).join(' · ') || 'embedding similarity';
+  }
+  if (edge?.relation === 'conflicts_with') {
+    return provenance.state ? `conflict ${provenance.state}` : 'canonical conflict';
+  }
+  return [
+    provenance.evidenceId ? compactTechnicalId(provenance.evidenceId) : null,
+    provenance.createdAt ? dateTime(provenance.createdAt) : null,
+  ].filter(Boolean).join(' · ') || 'canonical lifecycle';
+}
+
+function graphNeighbors(node, edges) {
+  if (!node || !state.graph) return [];
+  const byId = new Map(state.graph.nodes.map((item) => [item.id, item]));
+  return edges
+    .filter((edge) => edge.from === node.id || edge.to === node.id)
+    .map((edge) => {
+      const neighborId = edge.from === node.id ? edge.to : edge.from;
+      return { edge, node: byId.get(neighborId) ?? null };
+    })
+    .filter((item) => item.node)
+    .sort((left, right) => (
+      (left.edge.origin === right.edge.origin ? 0 : left.edge.origin === 'explicit' ? -1 : 1)
+      || Number(right.edge.weight ?? 0) - Number(left.edge.weight ?? 0)
+      || left.node.ref.localeCompare(right.node.ref, 'en')
+    ));
+}
+
+function graphInspector(node, visibleEdges) {
+  if (!node) {
+    return `
+      <div class="inspector-empty">
+        Select a graph node to inspect its memory metadata and connected relations.
+      </div>
+    `;
+  }
+  const neighbors = graphNeighbors(node, visibleEdges);
+  const usage = node.usage ?? {};
+  return `
+    <div class="inspector-scroll">
+      <div class="inspector-head">
+        <div class="inspector-ref">${escapeHtml(node.ref)}</div>
+        <h2>${escapeHtml(node.value)}</h2>
+      </div>
+      <section class="inspect-section">
+        <h3>Graph node</h3>
+        ${definition([
+          ['Authority', node.authority],
+          ['State', node.state, statusClass(node.state)],
+          ['Kind', node.kind],
+          ['Subject', node.subject],
+          ['Predicate', node.predicate],
+          ['Created', dateTime(node.createdAt)],
+          ['Semantic', node.semanticIndexed ? 'indexed' : 'not indexed'],
+        ])}
+        <div class="action-row graph-open-row">
+          <button id="graph-open-memory" class="text-action" type="button">
+            Open in Memories
+          </button>
+        </div>
+      </section>
+      <section class="inspect-section">
+        <h3>Recall usage</h3>
+        ${definition([
+          ['Retrieved', number(usage.retrievalCount)],
+          ['Budget retained', number(usage.retainedCount)],
+          ['In context', number(usage.contextCount)],
+          ['Last retained', dateTime(usage.lastRetainedAt)],
+          ['Last context', dateTime(usage.lastContextAt)],
+        ])}
+      </section>
+      <section class="inspect-section">
+        <h3>Neighbors</h3>
+        <div class="graph-neighbor-list">
+          ${neighbors.length
+            ? neighbors.map(({ edge, node: neighbor }) => `
+                <button class="graph-neighbor" type="button" data-graph-node="${escapeHtml(neighbor.id)}">
+                  <span class="graph-neighbor-top">
+                    <span class="ref">${escapeHtml(neighbor.ref)}</span>
+                    <span class="graph-origin ${escapeHtml(edge.origin)}">${escapeHtml(edge.origin)}</span>
+                  </span>
+                  <span class="graph-neighbor-relation">${escapeHtml(edge.relation.replaceAll('_', ' '))}</span>
+                  <span class="graph-neighbor-meta">
+                    ${edge.origin === 'inferred' ? `weight ${Number(edge.weight ?? 0).toFixed(3)} · ` : ''}${escapeHtml(graphEdgeProvenance(edge))}
+                  </span>
+                </button>
+              `).join('')
+            : '<div class="inline-empty">No visible relations for this node.</div>'}
+        </div>
+      </section>
+    </div>
+  `;
+}
+
+function renderGraph() {
+  if (state.graphLoading && !state.graph) {
+    loading();
+    return;
+  }
+  if (state.graphError) {
+    el.view.innerHTML = `<div class="error">${escapeHtml(state.graphError)}</div>`;
+    return;
+  }
+  if (!state.graph) {
+    el.view.innerHTML = '<div class="empty">Graph data has not been loaded for this scope.</div>';
+    return;
+  }
+
+  const nodes = graphFilteredNodes();
+  const edges = graphFilteredEdges(nodes);
+  const states = [...new Set(state.graph.nodes.map((node) => node.state))].sort();
+  const positions = graphPositions(nodes, edges);
+  const selected = nodes.find((node) => node.id === state.selectedGraphNodeId)
+    ?? nodes.find((node) => node.state === 'active')
+    ?? nodes[0]
+    ?? null;
+  if (selected && selected.id !== state.selectedGraphNodeId) {
+    state.selectedGraphNodeId = selected.id;
+  }
+
+  const labelEveryNode = nodes.length <= 60;
+  const stats = state.graph.stats ?? {};
+  el.view.innerHTML = `
+    <div class="graph-layout">
+      <section class="graph-stage">
+        <div class="graph-toolbar">
+          <input
+            id="graph-search"
+            class="search"
+            type="search"
+            autocomplete="off"
+            placeholder="Search graph nodes…"
+            value="${escapeHtml(state.graphSearch)}"
+          >
+          <select id="graph-origin-filter" class="filter" aria-label="Filter graph by edge origin">
+            <option value="all" ${state.graphOrigin === 'all' ? 'selected' : ''}>All relations</option>
+            <option value="explicit" ${state.graphOrigin === 'explicit' ? 'selected' : ''}>Explicit only</option>
+            <option value="inferred" ${state.graphOrigin === 'inferred' ? 'selected' : ''}>Inferred only</option>
+          </select>
+          <select id="graph-state-filter" class="filter" aria-label="Filter graph by memory state">
+            <option value="all">All states</option>
+            ${states.map((value) => `
+              <option value="${escapeHtml(value)}" ${value === state.graphNodeState ? 'selected' : ''}>
+                ${escapeHtml(value)}
+              </option>
+            `).join('')}
+          </select>
+        </div>
+        <div class="graph-meta">
+          <div class="graph-legend" aria-label="Graph relation legend">
+            <span class="graph-legend-item"><span class="graph-legend-swatch explicit"></span>Explicit relation</span>
+            <span class="graph-legend-item"><span class="graph-legend-swatch inferred"></span>Inferred similarity</span>
+          </div>
+          <div class="graph-stats">
+            <span>${number(nodes.length)} / ${number(stats.nodeCount)} nodes</span>
+            <span>·</span>
+            <span>${number(edges.length)} / ${number(stats.edgeCount)} edges</span>
+            ${stats.truncated ? `<span>· ${number(stats.omittedClaims)} omitted by bound</span>` : ''}
+          </div>
+        </div>
+        <div class="graph-canvas-wrap">
+          ${nodes.length ? `
+            <svg class="graph-canvas" viewBox="0 0 1000 680" role="img" aria-label="Memory relation graph">
+              <g class="graph-edges">
+                ${edges.map((edge) => {
+                  const from = positions.get(edge.from);
+                  const to = positions.get(edge.to);
+                  if (!from || !to) return '';
+                  return `
+                    <line
+                      class="graph-edge ${escapeHtml(edge.origin)}"
+                      x1="${from.x.toFixed(2)}"
+                      y1="${from.y.toFixed(2)}"
+                      x2="${to.x.toFixed(2)}"
+                      y2="${to.y.toFixed(2)}"
+                    >
+                      <title>${escapeHtml(edge.relation)} · ${escapeHtml(edge.origin)}${edge.origin === 'inferred' ? ` · ${Number(edge.weight ?? 0).toFixed(3)}` : ''}</title>
+                    </line>
+                  `;
+                }).join('')}
+              </g>
+              <g class="graph-nodes">
+                ${nodes.map((node) => {
+                  const point = positions.get(node.id);
+                  const selectedClass = node.id === selected?.id ? ' is-selected' : '';
+                  const stateClass = ` state-${String(node.state ?? 'unknown').replace(/[^a-z0-9_-]/gi, '-')}`;
+                  return `
+                    <g
+                      class="graph-node${selectedClass}${stateClass}"
+                      data-graph-node="${escapeHtml(node.id)}"
+                      transform="translate(${point.x.toFixed(2)} ${point.y.toFixed(2)})"
+                      role="button"
+                      tabindex="0"
+                      aria-label="${escapeHtml(`${node.ref} ${node.value}`)}"
+                    >
+                      <circle r="10"></circle>
+                      ${(labelEveryNode || node.id === selected?.id) ? `<text x="15" y="4">${escapeHtml(node.ref)}</text>` : ''}
+                      <title>${escapeHtml(node.ref)} · ${escapeHtml(node.state)} · ${escapeHtml(node.value)}</title>
+                    </g>
+                  `;
+                }).join('')}
+              </g>
+            </svg>
+          ` : '<div class="empty">No graph nodes match the current filters.</div>'}
+        </div>
+      </section>
+      <aside class="graph-inspector">
+        ${graphInspector(selected, edges)}
+      </aside>
+    </div>
+  `;
+
+  const search = document.querySelector('#graph-search');
+  const origin = document.querySelector('#graph-origin-filter');
+  const nodeState = document.querySelector('#graph-state-filter');
+  search?.addEventListener('input', () => {
+    state.graphSearch = search.value;
+    renderGraph();
+  });
+  origin?.addEventListener('change', () => {
+    state.graphOrigin = origin.value;
+    renderGraph();
+  });
+  nodeState?.addEventListener('change', () => {
+    state.graphNodeState = nodeState.value;
+    renderGraph();
+  });
+
+  const selectGraphNode = (nodeId) => {
+    if (!state.graph?.nodes.some((node) => node.id === nodeId)) return;
+    state.selectedGraphNodeId = nodeId;
+    renderGraph();
+  };
+  el.view.querySelectorAll('[data-graph-node]').forEach((target) => {
+    target.addEventListener('click', () => selectGraphNode(target.dataset.graphNode));
+    target.addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter' && event.key !== ' ') return;
+      event.preventDefault();
+      selectGraphNode(target.dataset.graphNode);
+    });
+  });
+
+  document.querySelector('#graph-open-memory')?.addEventListener('click', async () => {
+    if (!selected) return;
+    state.view = 'memories';
+    state.selectedClaimId = null;
+    state.claim = null;
+    resetActionState();
+    updateUrl();
+    renderView();
+    await selectClaim(selected.id);
+  });
+}
+
+async function loadGraph({
+  render = true,
+  preferredNodeId = state.selectedGraphNodeId,
+} = {}) {
+  if (!state.projectId || !state.branch) return;
+  state.graphLoading = true;
+  state.graphError = '';
+  if (render) renderGraph();
+  try {
+    const graph = await fetchJson(api('/api/graph', {
+      projectId: state.projectId,
+      branch: state.branch,
+    }));
+    state.graph = graph;
+    state.selectedGraphNodeId = (
+      preferredNodeId
+      && graph.nodes.some((node) => node.id === preferredNodeId)
+    )
+      ? preferredNodeId
+      : graph.nodes.find((node) => node.state === 'active')?.id
+        ?? graph.nodes[0]?.id
+        ?? null;
+  } catch (error) {
+    state.graph = null;
+    state.selectedGraphNodeId = null;
+    state.graphError = error.message;
+  } finally {
+    state.graphLoading = false;
+  }
+  if (render) renderGraph();
 }
 
 function summaryStat(label, value) {
@@ -1250,6 +1688,7 @@ function renderView() {
     return;
   }
 
+  if (state.view === 'graph') return renderGraph();
   if (state.view === 'review') return renderReview();
   if (state.view === 'pipeline') return renderPipeline();
   if (state.view === 'health') return renderHealth();
@@ -1292,12 +1731,19 @@ async function loadScope({
 
   state.scope = null;
   state.claim = null;
+  state.graph = null;
+  state.graphError = '';
+  state.graphLoading = false;
   state.selectedClaimId = null;
   state.selectedCandidateId = null;
+  state.selectedGraphNodeId = null;
   resetActionState();
   state.search = '';
   state.authority = 'all';
   state.claimState = 'all';
+  state.graphSearch = '';
+  state.graphOrigin = 'all';
+  state.graphNodeState = 'all';
   updateUrl();
   renderProjects();
   renderScopeHeader();
@@ -1314,6 +1760,11 @@ async function loadScope({
       projectId: state.projectId,
       branch: state.branch,
     }));
+
+    if (state.view === 'graph') {
+      await loadGraph();
+      return;
+    }
 
     if (state.view === 'memories' && state.scope.memories.length > 0) {
       const preferred = state.scope.memories.find(
@@ -1366,7 +1817,7 @@ async function bootstrap() {
     )
       ? requestedBranch
       : project.defaultBranch;
-    if (['memories', 'review', 'pipeline', 'health', 'quality', 'stale'].includes(requestedView)) {
+    if (['memories', 'graph', 'review', 'pipeline', 'health', 'quality', 'stale'].includes(requestedView)) {
       state.view = requestedView;
     }
 
@@ -1410,15 +1861,19 @@ el.refreshButton?.addEventListener('click', async () => {
   }
 });
 
-el.tabs.addEventListener('click', (event) => {
+el.tabs.addEventListener('click', async (event) => {
   const button = event.target.closest('[data-view]');
-  if (!button) return;
+  if (!button || button.dataset.view === state.view) return;
   state.view = button.dataset.view;
   state.selectedClaimId = null;
   state.selectedCandidateId = null;
   state.claim = null;
   resetActionState();
   updateUrl();
+  if (state.view === 'graph') {
+    await loadGraph();
+    return;
+  }
   renderView();
 });
 
