@@ -21,6 +21,13 @@ jobs:
         with:
           node-version: 22
       - name: Design foundations contracts
+        id: foundations
+        continue-on-error: true
         run: node --test skills/design-with-ai/tests/design-foundations-refresh.test.mjs
       - name: Design guidance governance
+        id: guidance
+        continue-on-error: true
         run: node --test knowledge/design-guidance/tests/query.test.mjs
+      - name: Fail if either focused suite failed
+        if: steps.foundations.outcome != 'success' || steps.guidance.outcome != 'success'
+        run: exit 1
