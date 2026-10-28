@@ -3,10 +3,11 @@ name: diagram-design
 description: >-
   Canonical owner for drawing, rendering, branding, polishing, and exporting
   publishable diagrams and visual schematics as self-contained HTML/SVG/PNG.
-  Use for architecture diagrams, flowcharts, sequence diagrams, state diagrams,
-  ER/data models, timelines, swimlanes, dependency/deployment diagrams, service
-  blueprints, journeys, charts, maps, and redraws of Mermaid/draw.io/Excalidraw
-  when the requested deliverable is a polished visual artifact.
+  Use for a branded sequence diagram of an API interaction to publish in docs, a
+  polished Mermaid flowchart redraw for a presentation, architecture diagrams,
+  state diagrams, ER/data models, timelines, swimlanes, dependency/deployment
+  diagrams, service blueprints, journeys, charts, maps, and redraws of
+  draw.io/Excalidraw when the requested deliverable is a polished visual artifact.
 license: MIT
 ---
 
