@@ -48,6 +48,12 @@ const removedLegacyEntries = [
   'statechart.mjs',
 ];
 
+const [nodeMajor, nodeMinor] = process.versions.node.split('.').map(Number);
+const canExecuteTypeScript =
+  nodeMajor >= 24 ||
+  (nodeMajor === 23 && nodeMinor >= 6) ||
+  (nodeMajor === 22 && nodeMinor >= 18);
+
 async function fileExists(filePath) {
   try {
     await access(filePath);
@@ -96,20 +102,31 @@ test('vendored statechart compiler runtime is complete and relative imports reso
   }
 });
 
-test('statechart compiler usage is local and exposes only the current single-command interface', async () => {
-  const entry = path.join(scriptsRoot, 'statechart.ts');
-  assert.equal(await fileExists(entry), true, 'statechart TypeScript entrypoint must exist');
-
-  const result = spawnSync(process.execPath, ['--disable-warning=ExperimentalWarning', entry], {
-    cwd: skillRoot,
-    encoding: 'utf8',
-    env: { ...process.env, TLA2TOOLS: '', PATH: process.env.PATH ?? '' },
-  });
-
-  assert.equal(result.status, 2, result.stderr || result.stdout);
-  assert.match(result.stderr, /Usage: statechart SPEC\.tla/);
-  assert.match(result.stderr, /--config FILE/);
-  assert.match(result.stderr, /--view FILE/);
-  assert.match(result.stderr, /--out DIR/);
-  assert.doesNotMatch(result.stderr, /from-chart|--against|--fixed/);
+test('statechart launcher declares the supported TypeScript runtimes', async () => {
+  const launcher = await readFile(path.join(scriptsRoot, 'statechart'), 'utf8');
+  assert.match(launcher, /statechart\.ts/);
+  assert.match(launcher, /Node 22\.18 to 22\.x/);
+  assert.match(launcher, /Node 23\.6 or later/);
+  assert.match(launcher, /Bun 1\.1\.5 or later/);
+  assert.match(launcher, /Deno 2\.0 or later/);
 });
+
+test(
+  'statechart compiler usage is local and exposes only the current single-command interface',
+  { skip: canExecuteTypeScript ? false : 'requires Node 22.18+ TypeScript execution; dedicated Statechart CI runs Node 22.18' },
+  () => {
+    const entry = path.join(scriptsRoot, 'statechart.ts');
+    const result = spawnSync(process.execPath, ['--disable-warning=ExperimentalWarning', entry], {
+      cwd: skillRoot,
+      encoding: 'utf8',
+      env: { ...process.env, TLA2TOOLS: '', PATH: process.env.PATH ?? '' },
+    });
+
+    assert.equal(result.status, 2, result.stderr || result.stdout);
+    assert.match(result.stderr, /Usage: statechart SPEC\.tla/);
+    assert.match(result.stderr, /--config FILE/);
+    assert.match(result.stderr, /--view FILE/);
+    assert.match(result.stderr, /--out DIR/);
+    assert.doesNotMatch(result.stderr, /from-chart|--against|--fixed/);
+  },
+);
