@@ -22,11 +22,10 @@ jobs:
         with:
           node-version: 20
 
-      - name: Merge shared registry surfaces
+      - name: Merge README registry surface
         run: |
           node <<'NODE'
           const fs = require('fs');
-
           const readmePath = 'README.md';
           let readme = fs.readFileSync(readmePath, 'utf8');
           const diagramRow = '| <!-- skill-doc:diagram-design -->[**diagram-design**](skills/diagram-design/SKILL.md) | Draw, brand, polish, and export publishable diagrams as self-contained HTML/SVG/PNG while preserving the underlying semantic owner. | “Turn this approved architecture into a polished publishable diagram.” |';
@@ -39,21 +38,6 @@ jobs:
             if (!readme.endsWith('\n')) readme += '\n';
             fs.writeFileSync(readmePath, readme);
           }
-
-          const workflowPath = '.github/workflows/verify-skill-routing.yml';
-          let workflow = fs.readFileSync(workflowPath, 'utf8');
-          if (!workflow.includes('Validate diagram-design skill structure')) {
-            const anchor = '      - name: Validate video production skill structure';
-            const block = [
-              '      - name: Validate diagram-design skill structure',
-              '        shell: pwsh',
-              '        run: pwsh -NoProfile -ExecutionPolicy Bypass -File skills/diagram-design/tests/validate.ps1',
-              '',
-            ].join('\n');
-            if (!workflow.includes(anchor)) throw new Error('Release-governance video-production anchor not found');
-            workflow = workflow.replace(anchor, block + anchor);
-            fs.writeFileSync(workflowPath, workflow);
-          }
           NODE
 
       - name: Regenerate knowledge index
@@ -64,7 +48,6 @@ jobs:
           set -euxo pipefail
           git diff --check
           grep -q '<!-- skill-doc:diagram-design -->' README.md
-          grep -q 'Validate diagram-design skill structure' .github/workflows/verify-skill-routing.yml
           grep -q 'diagram-design' knowledge/INDEX.md
           grep -q '"name": "diagram-design"' knowledge/index.json
           grep -q 'video-production' knowledge/INDEX.md
@@ -74,7 +57,7 @@ jobs:
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add README.md .github/workflows/verify-skill-routing.yml knowledge/INDEX.md knowledge/index.json
+          git add README.md knowledge/INDEX.md knowledge/index.json
           if git diff --cached --quiet; then
             echo 'No shared-file refresh required.'
           else
