@@ -52,6 +52,12 @@ Neighboring owners keep their domains:
 - `read-github` owns read-only inspection of upstream repository implementation
   details such as a named shot recipe or current example.
 
+When one request genuinely contains authored-film work plus another owner's work,
+read the relevant neighboring skill contract once, partition the outputs before
+editing, and record the ownership split. In particular, a film that showcases a
+new in-app animation composes `video-production` with `design-with-ai`; it does
+not move the UI animation into the film workflow.
+
 ## Load order
 
 1. Load `references/renderer-selection.md` for every modifying or render-capable
