@@ -4,12 +4,12 @@ description: >-
   Canonical default owner for visible product-UI design, audit, polish,
   restyling, redesign, new surfaces, product-UI data visualization, native/mobile
   UI, motion review, and Penpot MCP product-design work including design-system
-  audits, visual-token cleanup, components, variants, and screens. Use for
-  ordinary "make this look better" work. Not for backend/server infrastructure,
-  authentication or protocol deployment, general code review, non-UI
-  chart/report generation, module/API interface design (route those to
-  codebase-design), or copy-only edits. Explicit Impeccable requests stay with
-  Impeccable.
+  audits, visual-token cleanup, screen design, components, variants, palette,
+  component style, spacing, and typography. Use for ordinary "make this look
+  better" work. Not for backend/server infrastructure, authentication or
+  protocol deployment, general code review, non-UI chart/report generation,
+  module/API interface design (route those to codebase-design), or copy-only
+  edits. Explicit Impeccable requests stay with Impeccable.
 ---
 
 # Design with AI
