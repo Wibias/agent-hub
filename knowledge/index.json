@@ -337,7 +337,7 @@
       "harness": "agents",
       "scope": "global",
       "name": "design-with-ai",
-      "description": "Canonical default owner for visible product-UI design, audit, polish, restyling, redesign, new surfaces, product-UI data visualization, native/mobile UI, and motion review. Use for ordinary \"make this look better\" work. Not for backend-only work, general code review, non-UI chart/report generation, module/API interface design (route those to codebase-design), or copy-only edits. Explicit Impeccable requests stay with Impeccable.",
+      "description": "Canonical default owner for visible product-UI design, audit, polish, restyling, redesign, new surfaces, product-UI data visualization, native/mobile UI, motion review, and Penpot MCP product-design work including design-system audits, visual-token cleanup, screen design, components, variants, palette, component style, spacing, and typography. Use for ordinary \"make this look better\" work. Not for backend/server infrastructure, authentication or protocol deployment, general code review, non-UI chart/report generation, module/API interface design (route those to codebase-design), or copy-only edits. Explicit Impeccable requests stay with Impeccable.",
       "tags": [
         "design",
         "with",
@@ -355,7 +355,7 @@
       ],
       "status": "active",
       "canonicalId": null,
-      "contentHash": "c486df4c656b382d6530dca1e50e65798a2975f6c47d1766a076e8956ae36abe"
+      "contentHash": "b226907fc366ac6bdef73bd83cdd0accc5496f65ed9c7f655ca91d51e1406587"
     },
     {
       "id": "agents/diagnose",
@@ -380,32 +380,6 @@
       "status": "active",
       "canonicalId": null,
       "contentHash": "407f92a78622a115c47023bb67fb801ef93065a05b8a86b58aa81db6df062ef0"
-    },
-    {
-      "id": "agents/diagram-design",
-      "path": "~/.agents/skills/diagram-design/SKILL.md",
-      "type": "skill",
-      "harness": "agents",
-      "scope": "global",
-      "name": "diagram-design",
-      "description": "Canonical owner for drawing, rendering, branding, polishing, and exporting publishable diagrams and visual schematics as self-contained HTML/SVG/PNG. Use for a branded sequence diagram of an API interaction to publish in docs, a polished Mermaid flowchart redraw for a presentation, architecture diagrams, state diagrams, ER/data models, timelines, swimlanes, dependency/deployment diagrams, service blueprints, journeys, charts, maps, and redraws of draw.io/Excalidraw when the requested deliverable is a polished visual artifact.",
-      "tags": [
-        "diagram",
-        "design"
-      ],
-      "triggers": [
-        "Canonical owner for drawing",
-        "rendering",
-        "branding",
-        "polishing",
-        "and exporting publishable diagrams and visual schematics as self-contained HTML/SVG/PNG.",
-        "a branded sequence diagram of an API interaction to publish in docs",
-        "a polished Mermaid flowchart redraw for a presentation",
-        "architecture diagrams"
-      ],
-      "status": "active",
-      "canonicalId": null,
-      "contentHash": "f4978418e968cb7038776b994f7db8d799f93104758d9b5c3e7f1c84fd284aec"
     },
     {
       "id": "agents/domain-modeling",
@@ -1268,6 +1242,32 @@
       "status": "active",
       "canonicalId": null,
       "contentHash": "ba32410b3a9e67d18e4fb48bbd02c2339f7341d19d5da49065dfbef3a4e36f5f"
+    },
+    {
+      "id": "agents/video-production",
+      "path": "~/.agents/skills/video-production/SKILL.md",
+      "type": "skill",
+      "harness": "agents",
+      "scope": "global",
+      "name": "video-production",
+      "description": "Canonical owner for authored video production and final video rendering. Use for requests to create or render a cinematic launch film, product promo, feature video, explainer, social clip, data video, or finished MP4 from a brief, website, real product screenshots, or an existing video project; includes captions, sound design, storyboards, renderer selection, preview, and review with HyperFrames or Remotion. Not for browser-session recording or debug capture (playwright), YouTube transcript extraction, or in-app UI/component animation.",
+      "tags": [
+        "video",
+        "production"
+      ],
+      "triggers": [
+        "Canonical owner for authored video production and final video rendering.",
+        "requests to create or render a cinematic launch film",
+        "product promo",
+        "feature video",
+        "explainer",
+        "social clip",
+        "data video",
+        "or finished MP4 from a brief"
+      ],
+      "status": "active",
+      "canonicalId": null,
+      "contentHash": "df79db63d7128e75adb62d1021c38e06d52f8d81a7730a52267f7d3ce333fb91"
     },
     {
       "id": "agents/vite",

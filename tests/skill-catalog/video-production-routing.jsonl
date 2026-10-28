@@ -1,0 +1,5 @@
+{"id":"VP1","prompt":"Turn this product website into a cinematic launch video with real screenshots, captions, sound design, and a final render","expected_skill":"video-production"}
+{"id":"VP2","prompt":"Create a 30-second authored explainer video for this feature and render the finished MP4","expected_skill":"video-production"}
+{"id":"VP3","prompt":"Use the existing Remotion project to make and render a polished product promo video","expected_skill":"video-production"}
+{"id":"VPN1","prompt":"Animate this settings drawer transition and make the interaction feel more responsive","expected_skill":null}
+{"id":"VPN2","prompt":"Record this browser checkout session as a video so I can debug the flow","expected_skill":null}
