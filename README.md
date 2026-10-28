@@ -132,6 +132,7 @@ backticks.
 
 | Skill | Use it for | Example |
 |---|---|---|
+| <!-- skill-doc:diagram-design -->[**diagram-design**](skills/diagram-design/SKILL.md) | Draw, brand, polish, and export publishable diagrams as self-contained HTML/SVG/PNG while preserving the underlying semantic owner. | “Turn this approved architecture into a polished publishable diagram.” |
 | <!-- skill-doc:playwright -->[**playwright**](skills/playwright/SKILL.md) | Drive a real browser with Playwright for navigation, interaction, screenshots, multi-tab flows, and UI verification. | “Use Playwright to reproduce this checkout bug.” |
 | <!-- skill-doc:firecrawl -->[**firecrawl**](skills/firecrawl/SKILL.md) | Search, scrape, and interact with web content through Firecrawl tooling. | “Scrape these docs with Firecrawl.” |
 | <!-- skill-doc:shadcn -->[**shadcn**](skills/shadcn/SKILL.md) | Search, add, compose, fix, style, and update shadcn/ui components and registries. | “Add the correct shadcn command-menu primitive.” |
