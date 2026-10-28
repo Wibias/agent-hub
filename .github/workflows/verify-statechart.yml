@@ -36,6 +36,19 @@ jobs:
         with:
           node-version: 22.18.0
 
+      - name: Verify pinned upstream vendor bytes
+        shell: bash
+        run: |
+          set -euo pipefail
+          pin='c742dd61706fbacc1b95f1a20b7b988cf096ce6c'
+          upstream="$RUNNER_TEMP/cursor-plugins"
+          git clone --filter=blob:none --no-checkout https://github.com/cursor/plugins.git "$upstream"
+          git -C "$upstream" fetch --depth=1 origin "$pin"
+          git -C "$upstream" checkout --detach FETCH_HEAD
+          rm -rf "$upstream/pstack/skills/statechart/scripts/test"
+          diff -qr "$upstream/pstack/skills/statechart/scripts" skills/formal-verification/statechart/scripts
+          cmp "$upstream/pstack/skills/statechart/references/render.md" skills/formal-verification/statechart/references/render.md
+
       - name: Test statechart compiler runtime
         run: node --test skills/formal-verification/tests/statechart-runtime.test.mjs
 
