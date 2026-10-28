@@ -99,6 +99,7 @@ concrete target evidence or explicit user intent:
 - React Native/Expo motion implementation/review -> `references/react-native-motion.md`; exact package/API claims remain current-source questions rather than frozen skill truth;
 - direct drag/swipe/throw/reorder/sheet manipulation -> `references/direct-manipulation.md`;
 - long-token/chip/focus/drag/interruption edge case not already resolved by project primitives -> `references/design-guidance.md`;
+- concrete hierarchy, grouping, figure/ground, or visual-salience defect that remains unresolved after inspecting the target -> `references/perceptual-hierarchy.md`; it is a diagnostic, not evidence of usability;
 - explicit reusable multi-surface design-system/design-contract request -> `references/durable-design-contract.md`.
 
 Do not load `mobile-web.md` and `native-mobile.md` merely because a target is
@@ -166,6 +167,7 @@ passed.
 - `references/reference-library.md`: curated reference reuse
 - `references/penpot-integration.md`: Penpot MCP target/session, read/write, authority, capability, and secret-handling adapter
 - `references/design-guidance.md`: bounded deterministic heuristic retrieval
+- `references/perceptual-hierarchy.md`: grouping, figure/ground, salience, and blur/thumbnail hierarchy diagnostics
 - `references/data-visualization.md`: chart and analytical visualization decisions inside product UI
 - `references/mobile-web.md`: browser/PWA-on-phone platform behavior
 - `references/utility-surfaces.md`: compact browser-extension popups and embedded utility controls
@@ -197,6 +199,7 @@ passed.
 - references/reference-library.md -- when to read: after source-evidence for standard/deep non-motion surface workflows
 - references/penpot-integration.md -- when to read: resolved target/source is a Penpot file, design system, or MCP session for product-design work
 - references/design-guidance.md -- when to read: unresolved chart/native/interaction/text-layout/accessibility guidance question
+- references/perceptual-hierarchy.md -- when to read: concrete hierarchy, grouping, figure/ground, or visual-salience question remains unresolved
 - references/data-visualization.md -- when to read: target contains charts or analytical visualizations
 - references/mobile-web.md -- when to read: browser/PWA target has material phone/tablet platform behavior
 - references/native-mobile.md -- when to read: actual native/mobile target or platform-specific native behavior

@@ -1,10 +1,14 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "source": {
     "upstream": "nextlevelbuilder/ui-ux-pro-max-skill",
-    "snapshot": "f3ac195224eac1eb0dfe1a3059c2a6add78ffbe3",
+    "snapshot": "28b3b8dee8c976df4fa3e94aed4e092ad43fcb03",
     "license": "MIT",
-    "reviewedAt": "2026-09-04"
+    "reviewedAt": "2026-10-28",
+    "freshnessPolicy": {
+      "reviewAfterDays": 90,
+      "hardExpireAfterDays": 365
+    }
   },
   "records": [
     {

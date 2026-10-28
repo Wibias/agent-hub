@@ -1,49 +1,38 @@
 # Design dials
 
-Three 1-10 dials gate layout, motion, and density. Set after Design Read.
-State values aloud: `dials: V#/M#/D#`.
+Three 1-10 dials describe layout variance, motion intensity, and visual density. Set them only after the Design Read has established enough product and visual evidence to justify the values. State values aloud as `dials: V#/M#/D#`.
 
 | Dial | 1 | 10 |
 |---|---|---|
-| `DESIGN_VARIANCE` | symmetric, calm | asymmetric, artsy |
-| `MOTION_INTENSITY` | static | cinematic / physics |
+| `DESIGN_VARIANCE` | symmetric, calm | asymmetric, compositionally adventurous |
+| `MOTION_INTENSITY` | static | cinematic / physics-heavy |
 | `VISUAL_DENSITY` | gallery air | cockpit packed |
 
-## Use-case presets
+## Calibration sources
 
-| Use case | V | M | D |
-|---|---|---|---|
-| Landing SaaS mainstream | 7 | 6 | 4 |
-| Landing agency / creative | 9 | 8 | 3 |
-| Landing premium consumer | 7 | 6 | 3 |
-| Portfolio designer / studio | 8 | 7 | 3 |
-| Portfolio developer | 6 | 5 | 4 |
-| Editorial / blog | 6 | 4 | 3 |
-| Public-sector / trust-first | 3 | 2 | 5 |
-| Product tool / dashboard | 4 | 3 | 6 |
-| Atmospheric / generative / late-night | 8 | 8 | 3 |
-| Redesign preserve | match | match+1 | match |
-| Redesign overhaul | +2 from match | +2 | match |
+Calibrate each dial from the strongest available source, in this order:
 
-## Signal inference
+1. **explicit user direction** or an explicitly approved direction;
+2. **incumbent measurements** from the real product, accepted design authority, tokens, representative renders, and established motion/density conventions;
+3. **inspected references** whose transferable principle is recorded and relevant to the current surface;
+4. task and information semantics when they directly constrain density, motion, or composition.
 
-| Signal words | Bias |
-|---|---|
-| minimalist, calm, Linear-style | V5-6 M3-4 D2-3 |
-| premium, Apple-y, luxury | V7-8 M5-7 D3-4 |
-| playful, Awwwards, experimental | V9-10 M8-10 D3-4 |
-| accessibility-critical, regulated | V3-4 M2-3 D4-5 |
+Do not derive values from a product category, industry label, trend word, or brand stereotype. `SaaS`, `AI`, `finance`, `luxury`, `playful`, `premium`, or similar labels are not dial values. They may describe context, but a numeric setting requires observable design evidence or explicit direction.
 
-Baseline marketing when unclear: **8 / 6 / 4**.
+For preserve-style redesigns, measure and match the incumbent posture unless the approved scope opens that dimension. For an overhaul, choose the values from the selected direction rather than applying a fixed offset to the old design.
+
+If a material dial remains unresolved and different values would produce meaningfully different products, expose alternatives or leave it unresolved. Do not silently insert a baseline preset.
 
 ## How dials drive output
 
-- **V <= 4:** centered / symmetric OK; fewer layout families.
-- **V > 4:** anti-center bias; asymmetric heroes; break equal card grids.
-- **M <= 3:** static or micro only; reduced-motion path trivial.
-- **M > 3:** `prefers-reduced-motion` mandatory; real motion or drop dial.
-- **M > 6:** scroll choreography / pin only if purpose-gated through `motion-opportunities` and `opportunities.md`.
-- **D <= 3:** large section gaps, max ~65ch measure, sparse chrome.
-- **D >= 7:** tight tools spacing, tabular numbers, dense tables OK.
+These ranges describe consequences after a value has been justified; they are not recommendation presets.
 
-Do not invent aliases (`LAYOUT_VARIANCE`). Use these three names only.
+- **V <= 4:** centered or symmetric structures may fit; fewer compositional families are usually needed.
+- **V > 4:** asymmetry and stronger variation are available when the selected direction supports them; do not break a stable layout merely to satisfy the number.
+- **M <= 3:** static or micro-interaction posture; decorative choreography should be absent.
+- **M > 3:** reduced-motion behavior is required for introduced motion.
+- **M > 6:** scroll choreography, pinning, or physics-heavy sequences still require purpose-gating through the normal motion workflow; the dial never authorizes them by itself.
+- **D <= 3:** spacious composition and restrained chrome are consistent with the selected posture.
+- **D >= 7:** tighter tool spacing, tabular numerals, and information-dense controls may fit, while accessibility and operability remain mandatory.
+
+Do not invent aliases such as `LAYOUT_VARIANCE`. Use these three names only.

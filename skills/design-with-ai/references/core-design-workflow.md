@@ -78,6 +78,14 @@ assess its fit. Define the selected world's typography voice, palette logic,
 materiality, imagery, density, shape language, icon logic, motion grammar,
 signature artifact, and explicit refusals.
 
+For direction-setting work, record a compact visual-intent vocabulary: desired
+terms and avoid terms, one tension statement, and the observable design choice
+or refusal attached to each term. Generic adjectives such as `modern`, `clean`,
+`premium`, or `sleek` do not become design requirements until they are
+operationalized. If visual grouping, figure/ground, or salience is an open
+question, use `perceptual-hierarchy.md` as a diagnostic rather than guessing from
+style labels.
+
 Existing tokens are evidence, not automatic proof that the current world fits.
 Explicit brand and project rules still win. For deep work, state whether a
 competitor in the same category could reuse the visual world unchanged. If yes,
