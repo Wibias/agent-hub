@@ -1,0 +1,46 @@
+name: Statechart compiler governance
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/verify-statechart.yml'
+      - 'skills/formal-verification/references/project-contract.md'
+      - 'skills/formal-verification/references/statechart.md'
+      - 'skills/formal-verification/statechart/**'
+      - 'skills/formal-verification/tests/evals/cases.jsonl'
+      - 'skills/formal-verification/tests/statechart-runtime.test.mjs'
+      - 'tests/skill-catalog/statechart-adoption.test.mjs'
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/verify-statechart.yml'
+      - 'skills/formal-verification/references/project-contract.md'
+      - 'skills/formal-verification/references/statechart.md'
+      - 'skills/formal-verification/statechart/**'
+      - 'skills/formal-verification/tests/evals/cases.jsonl'
+      - 'skills/formal-verification/tests/statechart-runtime.test.mjs'
+      - 'tests/skill-catalog/statechart-adoption.test.mjs'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.18.0
+
+      - name: Test statechart compiler runtime
+        run: node --test skills/formal-verification/tests/statechart-runtime.test.mjs
+
+      - name: Test statechart adoption contract
+        run: node --test tests/skill-catalog/statechart-adoption.test.mjs
+
+      - name: Validate formal verification skill structure
+        run: node skills/skill-ratchet/scripts/skill-ratchet.mjs validate --skill-root skills/formal-verification
