@@ -1,0 +1,38 @@
+name: Vendor diagram-design snapshot
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/vendor-diagram-design.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  vendor:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+      - name: Fetch pinned upstream
+        run: |
+          rm -rf /tmp/diagram-design-upstream
+          git clone --filter=blob:none --no-checkout https://github.com/cathrynlavery/diagram-design.git /tmp/diagram-design-upstream
+          git -C /tmp/diagram-design-upstream checkout 0cf73c3fcc56667ad91a9a04c439ac6ccfabc9d1 -- skills/diagram-design LICENSE
+      - name: Copy bounded skill snapshot
+        run: |
+          mkdir -p skills/diagram-design/references
+          rm -rf skills/diagram-design/assets skills/diagram-design/scripts
+          cp -R /tmp/diagram-design-upstream/skills/diagram-design/assets skills/diagram-design/assets
+          cp -R /tmp/diagram-design-upstream/skills/diagram-design/scripts skills/diagram-design/scripts
+          cp -R /tmp/diagram-design-upstream/skills/diagram-design/references/. skills/diagram-design/references/
+          cp /tmp/diagram-design-upstream/skills/diagram-design/SKILL.md skills/diagram-design/references/upstream-skill.md
+          cp /tmp/diagram-design-upstream/LICENSE skills/diagram-design/LICENSE.upstream
+      - name: Commit vendored snapshot only
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- skills/diagram-design/assets skills/diagram-design/scripts skills/diagram-design/references skills/diagram-design/LICENSE.upstream
+          git commit -m "vendor: add pinned diagram-design capability snapshot"
+          git push origin "HEAD:${GITHUB_HEAD_REF}"
