@@ -1,39 +1,59 @@
 # Statechart mode
 
-Use this mode when formal verification needs to make state-machine behavior readable, show a concrete TLC counterexample as a path, or turn an agreed statechart into a checkable TLA+ skeleton. `formal-verification` owns the proof claim and final verdict. A chart is not proof by itself.
+Use this mode when formal verification needs to make a TLA+/TLC state machine readable or show a concrete checker failure as a path through states. `formal-verification` owns the proof claim and final verdict. A chart is interpretation evidence, not proof by itself.
 
-Run the vendored CLI from the skill root:
+The current vendored compiler is one-way: it consumes a TLA+ specification and configuration, checks them with TLC, then produces a report and, when the graph fits the chart budget, a Mermaid statechart. The old `from-chart`, `--against`, and `--fixed` interfaces were removed upstream and are not downstream capabilities.
+
+## Run the compiler
+
+From the formal-verification skill root, use the vendored launcher on POSIX systems:
 
 ```text
-node statechart/scripts/statechart.mjs --help
+statechart/scripts/statechart SPEC.tla [--config FILE] [--view FILE] [--out DIR]
 ```
 
-## Choose the direction
+The launcher selects a TypeScript-capable runtime. On systems without a POSIX shell, invoke `statechart/scripts/statechart.ts` directly with a supported Node runtime. The vendored upstream requires Node 22.18 to 22.x, Node 23.6 or later, Bun 1.1.5 or later, or Deno 2.0 or later.
 
-- **`from-spec`:** use when a TLA+ model exists, or when code or design is concrete enough to model. Preserve the relevant invariants. Never weaken a rule merely to make the model pass. When the model describes code, bind modeled state and actions to code a reviewer can open.
-- **`from-chart`:** use when the intended behavior should be agreed first. Draw a Mermaid `stateDiagram-v2`, add `%% never ...` rules, generate the TLA+ skeleton, then add code-level guards, variables, and assumptions before making implementation claims.
-- **`render`:** use only to turn a Mermaid statechart into a PNG. Rendering is presentation, not verification, and does not produce a property verdict.
+Use `--config` when the configuration is not the default beside the spec. Use `--out` for a fresh scratch or project-owned output directory. Use `--view` for the reader-facing presentation layer.
 
-Use `--fixed` to compare a proposed implementation fix with the current model. Use `--against` to compare a model of the code with an agreed specification. Use `--cover` when the complete overview is too large; bug paths remain included while the command reports what the overview leaves out.
+## Model and rules
 
-## Interpret model-check results
+Write each agreed safety rule as an `INVARIANT`; preserve relevant `PROPERTY` rules already owned by the verification. Never weaken a rule merely to make the checker pass. Keep constants and constraints small enough that the explored state space is meaningful and bounded, and disclose those bounds in the project-local verification record.
 
-For every TLA+/TLC model-check result, use statechart as the interpretation layer before handoff. If a rule is violated, surface the shortest readable counterexample path the checker found. If the check is passing, provide a state-machine overview when it materially helps the reader understand the verified behavior.
+Write `Next` as a disjunction of named actions so TLC can report meaningful action names. When the model describes implementation code, bind modeled state and actions to code a reviewer can open and make each model action correspond to one indivisible implementation step.
 
-A chart is interpretation evidence, not proof and not a verdict. `formal-verification` remains responsible for deciding what the model establishes, whether a counterexample maps to real code, and what final status to report. Keep release-sensitive statechart commands, options, and file paths in this reference; project-local verification artifacts should reference statechart by capability instead of copying those details.
+Statechart also checks deadlock behavior. A legitimate terminal state still looks like a deadlock unless the model explicitly represents the intended terminal behavior. Do not suppress a deadlock finding without explaining why the model makes the state terminal.
+
+## Reader-facing view
+
+The optional view module is where judgment about presentation belongs. It can label states with `state(vars)`, label transitions with `step(action, from, to)`, group states into phases with `group(vars)`, assign group colors, and provide a title.
+
+Use words the reader can observe or care about, not raw TLA+ variable or action names. A flat string label creates one state; arrays can represent parent states; objects can represent parallel regions. If a hidden value materially changes behavior, split or label the state so the chart does not conceal the distinction.
+
+Keep charts small enough to read. Upstream targets roughly 20 arrows or fewer for a useful overview. A view may omit unimportant steps only when every retained chart state remains reachable, at least one outgoing transition remains for a model state that can move, and an entire visual arrow is hidden consistently rather than only some of its underlying transitions.
+
+## Interpret results
+
+For every TLA+/TLC handoff, use Statechart as an interpretation layer before reporting the result when a state-machine view materially helps.
+
+When a rule breaks, surface the shortest readable path reported for that rule. Preserve qualified TLA+ action names such as `C!Up`; the current upstream snapshot includes the fix that prevents those names from being truncated in PROPERTY traces.
+
+When the explored graph is within the compiler's chart budget, `chart.mmd` shows the reachable state-machine view and marks states that break or may break rules. Above the current 500-state chart budget, the compiler still checks the model and reports bug paths, but it may emit only the paths needed for failures or no chart for a passing run. Never invent an overview that the compiler did not produce.
+
+The durable textual evidence is the generated report plus TLC output. Depending on the result, useful files include `report.md`, `chart.mmd`, `tlc.out`, and per-rule `tlc-RULE.out` files. Retain them when they materially support the project-local verification record.
 
 ## Evidence boundary
 
-A TLC counterexample is evidence about the model. When the model describes implementation code, replay each counterexample against the current code before calling it a product bug. Drive only feasible entry points and map one model action to one indivisible implementation step. If the path cannot occur in the code, treat that as model drift or a modeling error until evidence shows otherwise.
+A TLC counterexample is evidence about the model. When the model describes implementation code, replay each reported bug path against the current implementation before calling it a product bug. Drive feasible entry points and map one model action to one real implementation step. If the path does not occur in the code, treat that as model drift or a modeling error until evidence shows otherwise.
 
-For a design with no implementation yet, the TLC trace may establish a property of that design model only. Say that explicitly. Do not upgrade a design-model result into a claim about future code.
+For a design model with no implementation yet, the result establishes only what was checked about that design model. Do not upgrade it into a claim about future code.
 
-A renderer, Java, TLC, `mise`, npm, or bootstrap failure is a tooling failure. It is never a PASS or FAIL property verdict. Mermaid and TLA+ text remain usable evidence when optional PNG rendering fails.
+A Java, TLC, `mise`, runtime, renderer, or bootstrap failure is a tooling failure. It is never a PASS or FAIL property verdict. Likewise, a chart is presentation and interpretation evidence; `formal-verification` remains responsible for the proof scope, assumptions, code binding, and final status.
 
-## Files and bootstrap
+## Bootstrap and rendering
 
-Prefer a scratch or project-owned output location for exploratory runs. Use `--out` when generated files should not sit beside canonical source files. The command replaces its own output folder as a unit and refuses folders containing foreign files.
+TLC and Java may be supplied by the environment. Otherwise the vendored compiler can use `mise` to bootstrap its toolchain on first use, which requires network access. Do not hide that download or present successful bootstrap as verification evidence.
 
-TLC can be supplied with `TLA2TOOLS` and `JAVA`. Otherwise the vendored runtime may use `mise` to install its pinned TLC and Java toolchain; that first install needs network access. PNG rendering may install pinned Pele and resvg packages into the statechart cache through npm. Do not hide these downloads or present them as proof work.
+For an image, render the generated Mermaid with the vendored upstream guidance in `statechart/references/render.md`. Pele rendering is presentation only. A render failure does not change the model-check verdict, and the Mermaid text remains usable evidence.
 
-Keep generated `chart.mmd`, bug-path charts, `stories.md`, `summary.json`, and TLC output when they materially support the verification record. The project-local formal-verification artifact defined in `project-contract.md` remains the durable owner of covered code, assumptions, commands, sync commit, and outcome.
+The project-local formal-verification artifact defined in `project-contract.md` remains the durable owner of the property, harm, covered code, command, bounds, assumptions, sync commit, failure-sensitivity evidence, and outcome.
