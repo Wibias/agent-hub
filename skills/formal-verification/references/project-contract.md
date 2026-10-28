@@ -17,17 +17,19 @@ application.
 
 ## Statechart capability
 
-For TLA+/TLC-backed state-machine visualization, concrete counterexample paths,
-or an agreed Mermaid statechart that should become a TLA+ skeleton, read
-`statechart.md`. `formal-verification` remains the proof and verdict owner; the
-nested statechart runtime is a modeling and visualization capability, not a
-second routing owner.
+For TLA+/TLC-backed state-machine visualization and concrete counterexample
+paths, read `statechart.md`. `formal-verification` remains the proof and verdict
+owner; the nested Statechart compiler is an interpretation and visualization
+capability, not a second routing owner.
 
-For every TLA+/TLC handoff result, reference `statechart.md` for the interpretation
-step: surface the shortest readable path for violations and a state-machine
-overview for passing checks when that overview materially helps the reader. Keep
-statechart CLI commands, options, and file paths in the shared reference instead
-of copying release-sensitive details into the project-local verifier.
+For a TLA+/TLC handoff, use the shared Statechart reference when a state-machine
+view materially helps the reader: surface the shortest readable path for each
+reported violation and use the generated state-machine overview when the
+compiler emits one. The current compiler consumes a TLA+ model; it does not turn
+a Mermaid chart into a TLA+ skeleton and it does not provide the removed
+`--against` or `--fixed` comparison modes. Keep release-sensitive commands,
+options, runtime requirements, and output behavior in `statechart.md` instead of
+copying them into a project-local verifier.
 
 ## Required record
 
