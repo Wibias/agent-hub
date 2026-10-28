@@ -132,6 +132,7 @@ backticks.
 
 | Skill | Use it for | Example |
 |---|---|---|
+| <!-- skill-doc:video-production -->[**video-production**](skills/video-production/SKILL.md) | Canonical authored-video owner for launch films, product promos, explainers, social/data videos, renderer selection, review, and final rendering with HyperFrames or Remotion. | “Turn this product site into a cinematic launch film and render the final video.” |
 | <!-- skill-doc:playwright -->[**playwright**](skills/playwright/SKILL.md) | Drive a real browser with Playwright for navigation, interaction, screenshots, multi-tab flows, and UI verification. | “Use Playwright to reproduce this checkout bug.” |
 | <!-- skill-doc:firecrawl -->[**firecrawl**](skills/firecrawl/SKILL.md) | Search, scrape, and interact with web content through Firecrawl tooling. | “Scrape these docs with Firecrawl.” |
 | <!-- skill-doc:shadcn -->[**shadcn**](skills/shadcn/SKILL.md) | Search, add, compose, fix, style, and update shadcn/ui components and registries. | “Add the correct shadcn command-menu primitive.” |
