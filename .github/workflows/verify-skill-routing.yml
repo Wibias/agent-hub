@@ -120,6 +120,10 @@ jobs:
       - name: Validate retrospective skill structure
         run: node skills/skill-ratchet/scripts/skill-ratchet.mjs validate --skill-root skills/retrospective
 
+      - name: Validate diagram-design skill structure
+        shell: pwsh
+        run: pwsh -NoProfile -ExecutionPolicy Bypass -File skills/diagram-design/tests/validate.ps1
+
       - name: Validate video production skill structure
         run: node skills/skill-ratchet/scripts/skill-ratchet.mjs validate --skill-root skills/video-production
 
