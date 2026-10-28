@@ -138,6 +138,9 @@ jobs:
       - name: Test bounded design guidance query
         run: node --test knowledge/design-guidance/tests/*.test.mjs
 
+      - name: Test design foundations refresh contracts
+        run: node --test skills/design-with-ai/tests/design-foundations-refresh.test.mjs
+
       - name: Test cluster-aware design taste gate
         run: node --test skills/design-with-ai/tests/taste-gate.test.mjs
 
