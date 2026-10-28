@@ -15,6 +15,9 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.head_ref }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
       - name: Fetch pinned upstream
         run: |
           rm -rf /tmp/diagram-design-upstream
@@ -29,10 +32,52 @@ jobs:
           cp -R /tmp/diagram-design-upstream/skills/diagram-design/references/. skills/diagram-design/references/
           cp /tmp/diagram-design-upstream/skills/diagram-design/SKILL.md skills/diagram-design/references/upstream-skill.md
           cp /tmp/diagram-design-upstream/LICENSE skills/diagram-design/LICENSE.upstream
-      - name: Commit vendored snapshot only
+      - name: Wire README and release governance
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          readme = Path('README.md')
+          text = readme.read_text(encoding='utf-8')
+          marker = '<!-- skill-doc:diagram-design -->'
+          if marker not in text:
+              lines = text.splitlines()
+              for i, line in enumerate(lines):
+                  if '<!-- skill-doc:playwright -->' in line:
+                      lines.insert(i, '| <!-- skill-doc:diagram-design -->[**diagram-design**](skills/diagram-design/SKILL.md) | Draw, brand, polish, and export publishable diagrams as self-contained HTML/SVG/PNG while preserving the underlying semantic owner. | “Turn this approved architecture into a polished publishable diagram.” |')
+                      break
+              else:
+                  raise SystemExit('README playwright skill anchor not found')
+              readme.write_text('\n'.join(lines) + '\n', encoding='utf-8')
+
+          workflow = Path('.github/workflows/verify-skill-routing.yml')
+          text = workflow.read_text(encoding='utf-8')
+          if 'Validate diagram design skill structure' not in text:
+              anchor = '      - name: Test bounded design guidance query\n'
+              if anchor not in text:
+                  raise SystemExit('release-governance insertion anchor not found')
+              block = '''      - name: Validate diagram design skill structure
+                run: node skills/skill-ratchet/scripts/skill-ratchet.mjs validate --skill-root skills/diagram-design
+
+              - name: Validate diagram design vendored helpers
+                run: |
+                  python3 -m py_compile skills/diagram-design/scripts/*.py
+                  python3 skills/diagram-design/scripts/self_check.py skills/diagram-design/assets/example-architecture.html
+
+              - name: Validate diagram design eval JSON
+                run: |
+                  node -e "const fs=require('fs'); JSON.parse(fs.readFileSync('skills/diagram-design/tests/evals/regression-lock.json','utf8')); for (const p of ['skills/diagram-design/tests/evals/cases.jsonl','skills/diagram-design/tests/evals/regression-cases.jsonl','tests/skill-catalog/diagram-design-routing.jsonl']) fs.readFileSync(p,'utf8').split(/\\r?\\n/).filter(Boolean).forEach(JSON.parse)"
+
+          '''
+              text = text.replace(anchor, block + anchor, 1)
+              workflow.write_text(text, encoding='utf-8')
+          PY
+      - name: Regenerate knowledge index
+        run: node knowledge/build-index.mjs
+      - name: Commit bounded integration
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -- skills/diagram-design/assets skills/diagram-design/scripts skills/diagram-design/references skills/diagram-design/LICENSE.upstream
-          git commit -m "vendor: add pinned diagram-design capability snapshot"
+          git add -- README.md .github/workflows/verify-skill-routing.yml knowledge/INDEX.md knowledge/index.json skills/diagram-design/assets skills/diagram-design/scripts skills/diagram-design/references skills/diagram-design/LICENSE.upstream
+          git commit -m "vendor: integrate pinned diagram-design capability"
           git push origin "HEAD:${GITHUB_HEAD_REF}"
