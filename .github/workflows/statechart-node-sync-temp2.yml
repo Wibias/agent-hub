@@ -1,0 +1,75 @@
+name: Temporary statechart Node gate sync 2
+
+on:
+  push:
+    branches:
+      - agent/statechart-compiler-refresh
+    paths:
+      - .github/workflows/statechart-node-sync-temp2.yml
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: agent/statechart-compiler-refresh
+
+      - name: Scope Node 22.18 to Statechart checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('.github/workflows/verify-skill-routing.yml')
+          text = path.read_text()
+          before = """      - name: Test formal verification statechart runtime
+              run: node --test skills/formal-verification/tests/statechart-runtime.test.mjs
+
+            - name: Validate formal verification skill structure
+              run: node skills/skill-ratchet/scripts/skill-ratchet.mjs validate --skill-root skills/formal-verification
+
+            - name: Test catalog discovery audit
+          """
+          after = """      - name: Use Node 22.18 for statechart compiler checks
+              uses: actions/setup-node@v4
+              with:
+                node-version: 22.18.0
+
+            - name: Test formal verification statechart runtime
+              run: node --test skills/formal-verification/tests/statechart-runtime.test.mjs
+
+            - name: Validate formal verification skill structure
+              run: node skills/skill-ratchet/scripts/skill-ratchet.mjs validate --skill-root skills/formal-verification
+
+            - name: Restore Node 20 for release governance
+              uses: actions/setup-node@v4
+              with:
+                node-version: 20
+
+            - name: Test catalog discovery audit
+          """
+          # Dedent the embedded YAML snippets back to their real six-space step indentation.
+          before = '\n'.join(line[4:] if line.startswith('    ') else line for line in before.splitlines()) + '\n'
+          after = '\n'.join(line[4:] if line.startswith('    ') else line for line in after.splitlines()) + '\n'
+          if text.count(before) != 1:
+              raise SystemExit('statechart workflow anchor changed; refusing to edit')
+          path.write_text(text.replace(before, after))
+          PY
+
+      - name: Commit workflow change and remove this temporary workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm .github/workflows/statechart-node-sync-temp2.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A .github/workflows/verify-skill-routing.yml .github/workflows/statechart-node-sync-temp2.yml
+          git diff --cached --check
+          git commit -m 'ci(statechart): run compiler checks on Node 22.18'
+          git push origin HEAD:agent/statechart-compiler-refresh
