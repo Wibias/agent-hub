@@ -7,22 +7,28 @@ on:
       - '.github/workflows/video-production-index-artifact.yml'
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   generate:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
       - uses: actions/setup-node@v4
         with:
           node-version: 20
       - name: Regenerate knowledge index
         run: node knowledge/build-index.mjs
-      - name: Upload generated index
-        uses: actions/upload-artifact@v4
-        with:
-          name: video-production-generated-index
-          path: |
-            knowledge/INDEX.md
-            knowledge/index.json
+      - name: Commit generated index only
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- knowledge/INDEX.md knowledge/index.json
+          if git diff --cached --quiet; then
+            echo "Generated index already current"
+            exit 0
+          fi
+          git commit -m "chore: regenerate knowledge index"
+          git push origin "HEAD:${GITHUB_HEAD_REF}"
