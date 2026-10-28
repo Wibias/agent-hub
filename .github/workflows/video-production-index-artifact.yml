@@ -1,0 +1,28 @@
+name: Video production index artifact
+
+on:
+  pull_request:
+    paths:
+      - 'skills/video-production/**'
+      - '.github/workflows/video-production-index-artifact.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Regenerate knowledge index
+        run: node knowledge/build-index.mjs
+      - name: Upload generated index
+        uses: actions/upload-artifact@v4
+        with:
+          name: video-production-generated-index
+          path: |
+            knowledge/INDEX.md
+            knowledge/index.json
