@@ -16,7 +16,7 @@ Apply these rules in order. Stop at the first rule that resolves ownership.
    compositions stay HyperFrames. Do not migrate merely because another backend
    is the Agent Hub default.
 3. **Remotion owns video products.** Prefer Remotion when the deliverable is a
-   video application/editor/player, a React-native video composition system, or
+   video application/editor/player, a React-based video composition system, or
    batch/server rendering infrastructure where Remotion is already the product
    architecture.
 4. **HyperFrames is the default for a new standalone authored film.** Use it for
