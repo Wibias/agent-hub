@@ -1,0 +1,859 @@
+#!/usr/bin/env node
+import { execFileSync } from 'node:child_process';
+import { existsSync, mkdirSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { dirname, join, resolve, win32 } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+import {
+  createEmbeddingIpcClient,
+  defaultEmbeddingIpcPath,
+} from '../embedding-ipc.mjs';
+import { launchEmbeddingWorker } from '../embedding-worker-launcher.mjs';
+import { launchMemoryCandidatePipeline } from '../candidate-pipeline-launcher.mjs';
+import { auditCodexState } from '../codex-state-audit.mjs';
+import { resolveGitContext } from '../git-freshness.mjs';
+import {
+  E5_DIMENSIONS,
+  E5_MODEL_ID,
+  E5_MODEL_REVISION,
+} from '../e5-embedder.mjs';
+import { HybridMemoryRetriever } from '../hybrid-retrieval.mjs';
+import { MemoryEngine } from '../index.mjs';
+import {
+  recallQueryHash,
+  recallTelemetryRunId,
+} from '../recall-observability.mjs';
+import { createRecallFastPathRuntime } from '../recall-fast-path-runtime.mjs';
+import { RecallShadowReplayStore } from '../recall-shadow-replay-store.mjs';
+import { RecallShadowCalibrationStore } from '../recall-shadow-calibration-store.mjs';
+import { RecallSelectorTelemetryStore } from '../recall-selector-telemetry-store.mjs';
+import {
+  createRecallSelectorTelemetryRecorder,
+} from '../recall-selector-telemetry-recorder.mjs';
+import { memoryRestoreLocked } from '../memory-maintenance-lock.mjs';
+import { createMemoryProtocol } from '../protocol.mjs';
+import {
+  canonicalizeGitRemote as canonicalizeRepositoryGitRemote,
+  resolveGitRepositoryIdentity,
+} from '../repository-identity.mjs';
+import {
+  createCodexMemoryHookAdapter,
+  parseExplicitMemoryPrompt,
+  resolveActiveDirectUserMemoryTarget,
+} from './codex-hooks.mjs';
+import {
+  prepareCodexMemoryRecallRuntime,
+  shouldPrepareCodexMemoryRecallRuntime,
+} from './codex-memory-recall-runtime.mjs';
+
+function nonEmpty(value) {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+function defaultExecFile(command, args) {
+  return execFileSync(command, args, {
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+}
+
+async function defaultCreateRecallJsonJudge(options) {
+  const module = await import('../../scripts/codex-isolated-memory-judge.mjs');
+  return module.createIsolatedCodexJsonJudge(options);
+}
+
+export function canonicalizeGitRemote(value) {
+  return canonicalizeRepositoryGitRemote(value);
+}
+
+export function defaultCodexEmbeddingCacheDir() {
+  return resolve(
+    dirname(fileURLToPath(import.meta.url)),
+    '..',
+    '..',
+    '.cache',
+    'memory-engine',
+    'e5',
+  );
+}
+
+export function defaultCodexMemoryDbPath({
+  env = process.env,
+  platform = process.platform,
+  homeDir = homedir(),
+} = {}) {
+  if (platform === 'win32') {
+    const localAppData = nonEmpty(env.LOCALAPPDATA)
+      ? env.LOCALAPPDATA.trim()
+      : win32.join(homeDir, 'AppData', 'Local');
+    return win32.join(localAppData, 'agent-hub', 'memory.sqlite3');
+  }
+
+  const stateHome = nonEmpty(env.XDG_STATE_HOME)
+    ? env.XDG_STATE_HOME.trim()
+    : join(homeDir, '.local', 'state');
+  return join(stateHome, 'agent-hub', 'memory.sqlite3');
+}
+
+export function parseCodexMemoryConfig(env = process.env, options = {}) {
+  const ignoreMemoryEnv = options.ignoreMemoryEnv === true;
+  const dbPath = !ignoreMemoryEnv && nonEmpty(env.AGENT_HUB_MEMORY_DB)
+    ? env.AGENT_HUB_MEMORY_DB.trim()
+    : defaultCodexMemoryDbPath({ env, ...options });
+
+  return {
+    dbPath,
+    projectId: !ignoreMemoryEnv && nonEmpty(env.AGENT_HUB_MEMORY_PROJECT_ID)
+      ? env.AGENT_HUB_MEMORY_PROJECT_ID.trim()
+      : null,
+    repoIdentity: !ignoreMemoryEnv && nonEmpty(env.AGENT_HUB_MEMORY_REPO_IDENTITY)
+      ? env.AGENT_HUB_MEMORY_REPO_IDENTITY.trim()
+      : null,
+    capturePrompts: !ignoreMemoryEnv
+      && env.AGENT_HUB_MEMORY_CAPTURE_PROMPTS === 'true',
+  };
+}
+
+export function parseCodexHookCliOptions(argv = []) {
+  if (!Array.isArray(argv)) {
+    throw new TypeError('argv must be an array');
+  }
+
+  const options = {
+    ignoreMemoryEnv: argv.includes('--ignore-memory-env'),
+    explicitMemoryRequests: argv.includes('--explicit-memory-requests'),
+    hybridRecall: argv.includes('--hybrid-recall'),
+  };
+  if (argv.includes('--recall-relevance')) {
+    options.recallRelevance = true;
+  }
+  if (argv.includes('--recall-fast-path')) {
+    options.recallFastPath = true;
+  }
+  if (argv.includes('--recall-fast-path-shadow')) {
+    options.recallFastPathShadow = true;
+  }
+  if (argv.includes('--recall-fast-path-shadow-replay')) {
+    options.recallFastPathShadowReplay = true;
+  }
+  if (argv.includes('--candidate-capture')) {
+    options.candidateCapture = true;
+  }
+  if (argv.includes('--auto-pipeline')) {
+    options.autoPipeline = true;
+  }
+  return options;
+}
+
+export function automaticMemoryCandidatePipelineReady(memory, {
+  projectId,
+  branch,
+} = {}) {
+  if (
+    !memory
+    || typeof memory.listUnevaluatedCandidates !== 'function'
+    || typeof memory.listRelationPendingCandidates !== 'function'
+    || typeof memory.listPromotionReadyCandidates !== 'function'
+  ) {
+    return false;
+  }
+
+  try {
+    const userReady = (
+      memory.listUnevaluatedCandidates({
+        projectId,
+        branch,
+        limit: 1,
+      }).length > 0
+      || memory.listRelationPendingCandidates({
+        projectId,
+        branch,
+        limit: 1,
+      }).length > 0
+      || memory.listPromotionReadyCandidates({
+        projectId,
+        branch,
+        limit: 1,
+      }).length > 0
+    );
+    if (userReady) return true;
+
+    if (
+      typeof memory.listUnevaluatedAgentCandidates !== 'function'
+      || typeof memory.listAgentRelationPendingCandidates !== 'function'
+      || typeof memory.listAgentPromotionReadyCandidates !== 'function'
+    ) {
+      return false;
+    }
+
+    return (
+      memory.listUnevaluatedAgentCandidates({
+        projectId,
+        branch,
+        limit: 1,
+      }).length > 0
+      || memory.listAgentRelationPendingCandidates({
+        projectId,
+        branch,
+        limit: 1,
+      }).length > 0
+      || memory.listAgentPromotionReadyCandidates({
+        projectId,
+        branch,
+        limit: 1,
+      }).length > 0
+    );
+  } catch {
+    return false;
+  }
+}
+
+export function resolveCodexProjectScope({
+  event,
+  config,
+  execFile = defaultExecFile,
+} = {}) {
+  if (!config || typeof config !== 'object') {
+    throw new TypeError('config must be an object');
+  }
+
+  if (nonEmpty(config.projectId)) {
+    return {
+      projectId: config.projectId.trim(),
+      repoIdentity: nonEmpty(config.repoIdentity)
+        ? config.repoIdentity.trim()
+        : config.projectId.trim(),
+      canonicalRemote: null,
+    };
+  }
+
+  if (nonEmpty(config.repoIdentity)) {
+    const repoIdentity = config.repoIdentity.trim();
+    return {
+      projectId: repoIdentity,
+      repoIdentity,
+      canonicalRemote: null,
+    };
+  }
+
+  const cwd = event?.cwd;
+  if (!nonEmpty(cwd)) {
+    throw new Error('Codex hook event has no cwd for repository identity discovery');
+  }
+  if (typeof execFile !== 'function') {
+    throw new TypeError('execFile must be a function');
+  }
+
+  const repoPath = String(
+    execFile('git', ['-C', cwd, 'rev-parse', '--show-toplevel']),
+  ).trim();
+  if (!repoPath) {
+    throw new Error('Git repository root could not be resolved');
+  }
+
+  const identity = resolveGitRepositoryIdentity({
+    repoPath,
+    execFile,
+  });
+
+  return {
+    projectId: identity.projectId,
+    repoIdentity: identity.repoIdentity,
+    canonicalRemote: identity.canonicalRemote,
+  };
+}
+
+function defaultEnsureDbDirectory(dbPath) {
+  mkdirSync(dirname(dbPath), { recursive: true });
+}
+
+function classifyCodexAuthority(channel) {
+  if (
+    channel?.sourceKind === 'session'
+    && channel?.metadata?.event_type === 'user_prompt'
+  ) {
+    return 'user_direct';
+  }
+  return 'unclassified';
+}
+
+function authorizeCodexExplicitMemoryClaim({
+  memory,
+  evidence,
+  claim,
+  lifecycle,
+}) {
+  const parsed = parseExplicitMemoryPrompt(evidence?.content_redacted);
+  if (
+    evidence?.harness !== 'codex'
+    || evidence?.source_kind !== 'session'
+    || evidence?.authority_class !== 'user_direct'
+    || evidence?.metadata?.event_type !== 'user_prompt'
+    || evidence?.metadata?.explicit_memory !== true
+    || parsed === null
+    || claim?.subject !== 'user memory'
+    || claim?.branchScope !== evidence?.branch
+    || !Array.isArray(lifecycle?.supersedes)
+    || !Array.isArray(lifecycle?.rejects)
+    || !Array.isArray(lifecycle?.conflictsWith)
+    || lifecycle.conflictsWith.length !== 0
+  ) {
+    return false;
+  }
+
+  if (parsed.mode === 'remember') {
+    return (
+      claim?.kind === 'user_direct'
+      && claim?.predicate === 'states'
+      && claim?.value === evidence.content_redacted
+      && lifecycle.supersedes.length === 0
+      && lifecycle.rejects.length === 0
+    );
+  }
+
+  if (parsed.mode === 'forget') {
+    if (
+      evidence?.metadata?.explicit_memory_mode !== 'forget'
+      || claim?.kind !== 'memory_control'
+      || claim?.predicate !== 'forgets'
+      || claim?.state !== 'expired'
+      || lifecycle.supersedes.length !== 0
+      || lifecycle.rejects.length !== 1
+    ) {
+      return false;
+    }
+
+    if (parsed.ref !== undefined) {
+      const target = resolveActiveDirectUserMemoryTarget(memory, {
+        projectId: evidence?.project_id,
+        branch: evidence?.branch,
+        ref: parsed.ref,
+      });
+      return (
+        target !== null
+        && target.id === lifecycle.rejects[0]
+        && claim?.value === target.value_text
+      );
+    }
+
+    const target = memory.getClaim(lifecycle.rejects[0]);
+    return (
+      target !== null
+      && target?.project_id === evidence?.project_id
+      && target?.branch_scope === evidence?.branch
+      && target?.state === 'active'
+      && target?.kind === 'user_direct'
+      && target?.subject === 'user memory'
+      && target?.predicate === 'states'
+      && target?.value === parsed.value
+      && claim?.value === parsed.value
+    );
+  }
+
+  if (
+    parsed.mode !== 'replace'
+    || evidence?.metadata?.explicit_memory_mode !== 'replace'
+    || claim?.kind !== 'user_direct'
+    || claim?.predicate !== 'states'
+    || claim?.value !== parsed.newValue
+    || lifecycle.supersedes.length !== 1
+    || lifecycle.rejects.length !== 0
+  ) {
+    return false;
+  }
+
+  if (parsed.oldRef !== undefined) {
+    const target = resolveActiveDirectUserMemoryTarget(memory, {
+      projectId: evidence?.project_id,
+      branch: evidence?.branch,
+      ref: parsed.oldRef,
+    });
+    return (
+      target !== null
+      && target.id === lifecycle.supersedes[0]
+    );
+  }
+
+  const target = memory.getClaim(lifecycle.supersedes[0]);
+  return (
+    target !== null
+    && target?.project_id === evidence?.project_id
+    && target?.branch_scope === evidence?.branch
+    && target?.state === 'active'
+    && target?.kind === 'user_direct'
+    && target?.subject === 'user memory'
+    && target?.predicate === 'states'
+    && target?.value === parsed.oldValue
+  );
+}
+
+export async function runCodexMemoryHook({
+  event,
+  env = process.env,
+  configOptions = {},
+  createEngine = (options) => new MemoryEngine(options),
+  createProtocol = createMemoryProtocol,
+  createAdapter = createCodexMemoryHookAdapter,
+  createEmbeddingClient = createEmbeddingIpcClient,
+  createHybridRetriever = (options) => new HybridMemoryRetriever(options),
+  createDiagnosticsRetriever = (options) => new HybridMemoryRetriever(options),
+  createRecallFastPath = createRecallFastPathRuntime,
+  createRecallShadowReplayStore = (options) => new RecallShadowReplayStore(options),
+  createRecallShadowCalibrationStore = (options) => new RecallShadowCalibrationStore(options),
+  createRecallShadowTelemetryStore = (options) => new RecallSelectorTelemetryStore(options),
+  createSelectorTelemetryRecorder = createRecallSelectorTelemetryRecorder,
+  createRecallJsonJudge = defaultCreateRecallJsonJudge,
+  resolveProjectScope = resolveCodexProjectScope,
+  ensureDbDirectory = defaultEnsureDbDirectory,
+  embeddingCacheAvailable = existsSync,
+  ensureEmbeddingWorker = launchEmbeddingWorker,
+  resolvePipelineGitContext = resolveGitContext,
+  launchCandidatePipeline = launchMemoryCandidatePipeline,
+  restoreLockExists = (dbPath) => memoryRestoreLocked({ dbPath }),
+  auditCodex = auditCodexState,
+  prepareRecallRuntime = prepareCodexMemoryRecallRuntime,
+  platform = process.platform,
+} = {}) {
+  const config = parseCodexMemoryConfig(env, configOptions);
+  const recallFastPathModeCount = [
+    configOptions.recallFastPath === true,
+    configOptions.recallFastPathShadow === true,
+    configOptions.recallFastPathShadowReplay === true,
+  ].filter(Boolean).length;
+
+  if (recallFastPathModeCount > 1) {
+    throw new TypeError(
+      'recallFastPath, recallFastPathShadow, and recallFastPathShadowReplay are mutually exclusive',
+    );
+  }
+  if (
+    configOptions.recallFastPathShadowReplay === true
+    && configOptions.recallRelevance !== true
+  ) {
+    throw new TypeError(
+      'recallFastPathShadowReplay requires recallRelevance',
+    );
+  }
+  if (restoreLockExists(config.dbPath)) return null;
+
+  let memory = null;
+  let recallRuntime = null;
+  let selectorTelemetryRecorder = null;
+  let recallShadowTelemetryStore = null;
+  let output = null;
+  let pipelineLaunch = null;
+  try {
+    const scope = resolveProjectScope({ event, config });
+    if (
+      configOptions.ignoreMemoryEnv === true
+      || !nonEmpty(env.AGENT_HUB_MEMORY_DB)
+    ) {
+      ensureDbDirectory(config.dbPath);
+    }
+    memory = createEngine({ dbPath: config.dbPath });
+
+    if (!memory.getProject(scope.projectId)) {
+      const registration = {
+        projectId: scope.projectId,
+        repoIdentity: scope.repoIdentity,
+      };
+      if (scope.canonicalRemote !== null) {
+        registration.canonicalRemote = scope.canonicalRemote;
+      }
+      memory.registerProject(registration);
+    }
+
+    if (shouldPrepareCodexMemoryRecallRuntime(memory, {
+      explicitMemoryMode: parseExplicitMemoryPrompt(event?.prompt)?.mode ?? null,
+    })) {
+      recallRuntime = prepareRecallRuntime({
+        memory,
+        dbPath: config.dbPath,
+        projectId: scope.projectId,
+        cwd: event.cwd,
+        resolveGit: resolvePipelineGitContext,
+        // Relevance selection remains opt-in. Fast-path selection is a
+        // second opt-in and only runs when relevance selection is enabled.
+        relevanceSelectorEnabled: configOptions.recallRelevance === true,
+        createJsonJudge: configOptions.recallRelevance === true
+          ? createRecallJsonJudge
+          : null,
+        relevanceTimeoutMs: Number.isInteger(
+          configOptions.recallRelevanceTimeoutMs,
+        )
+          ? configOptions.recallRelevanceTimeoutMs
+          : 12_000,
+        env,
+      });
+      memory = recallRuntime.memory;
+    }
+
+    const recallRelevanceEnabled = configOptions.recallRelevance === true;
+    const recallFastPathEnabled = (
+      recallRelevanceEnabled
+      && (
+        configOptions.recallFastPath === true
+        || configOptions.recallFastPathShadow === true
+        || configOptions.recallFastPathShadowReplay === true
+      )
+    );
+    let hybridRetriever = null;
+    let embeddingRetriever = null;
+    let recallEmbedder = null;
+    if (configOptions.hybridRecall === true || recallFastPathEnabled) {
+      const socketPath = nonEmpty(configOptions.embeddingSocketPath)
+        ? configOptions.embeddingSocketPath.trim()
+        : defaultEmbeddingIpcPath();
+      const cacheDir = nonEmpty(configOptions.embeddingCacheDir)
+        ? configOptions.embeddingCacheDir.trim()
+        : defaultCodexEmbeddingCacheDir();
+
+      if (
+        platform !== 'win32'
+        && typeof embeddingCacheAvailable === 'function'
+        && typeof ensureEmbeddingWorker === 'function'
+        && embeddingCacheAvailable(cacheDir)
+      ) {
+        try {
+          await ensureEmbeddingWorker({
+            cacheDir,
+            socketPath,
+            startupTimeoutMs: Number.isInteger(
+              configOptions.embeddingStartupTimeoutMs,
+            )
+              ? configOptions.embeddingStartupTimeoutMs
+              : 5_000,
+          });
+        } catch {
+          // SessionStart is only an optimization. If a host skips it and
+          // prompt-time recovery also fails, semantic selection remains fail-soft.
+        }
+      }
+
+      try {
+        recallEmbedder = createEmbeddingClient({
+          socketPath,
+          modelId: E5_MODEL_ID,
+          modelRevision: E5_MODEL_REVISION,
+          dimensions: E5_DIMENSIONS,
+          timeoutMs: Number.isInteger(configOptions.embeddingTimeoutMs)
+            ? configOptions.embeddingTimeoutMs
+            : 750,
+        });
+        embeddingRetriever = createHybridRetriever({
+          memory,
+          embedder: recallEmbedder,
+        });
+        if (configOptions.hybridRecall === true) {
+          hybridRetriever = embeddingRetriever;
+        }
+      } catch {
+        recallEmbedder = null;
+        embeddingRetriever = null;
+        hybridRetriever = null;
+      }
+    }
+
+    let diagnosticsRetriever = null;
+    if (
+      embeddingRetriever !== null
+      && typeof embeddingRetriever.diagnoseRecall === 'function'
+    ) {
+      diagnosticsRetriever = embeddingRetriever;
+    } else {
+      try {
+        diagnosticsRetriever = createDiagnosticsRetriever({ memory });
+      } catch {
+        diagnosticsRetriever = null;
+      }
+    }
+
+    let recallFastPath = null;
+    if (recallFastPathEnabled && recallEmbedder !== null) {
+      try {
+        const fastPathRuntime = createRecallFastPath({
+          embedder: recallEmbedder,
+        });
+        recallFastPath = (args) => fastPathRuntime.select(args);
+      } catch {
+        recallFastPath = null;
+      }
+    }
+
+    if (recallRelevanceEnabled && recallRuntime?.git?.branch) {
+      try {
+        selectorTelemetryRecorder = createSelectorTelemetryRecorder({
+          dbPath: config.dbPath,
+          projectId: scope.projectId,
+          branch: recallRuntime.git.branch,
+        });
+      } catch {
+        selectorTelemetryRecorder = null;
+      }
+    }
+
+    const protocol = createProtocol({
+      memory,
+      hybridRetriever,
+      classifyAuthority: classifyCodexAuthority,
+      authorizeClaim: (args) => authorizeCodexExplicitMemoryClaim({
+        memory,
+        ...args,
+      }),
+      onRecallTelemetry: async ({
+        requestId,
+        normalized,
+        telemetry,
+      }) => {
+        if (
+          typeof memory?.recordRecallTelemetry !== 'function'
+          || typeof requestId !== 'string'
+          || !telemetry
+        ) {
+          return;
+        }
+        memory.recordRecallTelemetry({
+          id: recallTelemetryRunId(requestId),
+          projectId: normalized.projectId,
+          branch: normalized.branch,
+          revisionSha: normalized.revisionSha,
+          queryHash: recallQueryHash(normalized.query),
+          observedAt: new Date().toISOString(),
+          retrievalMode: telemetry.retrieval_mode ?? 'unknown',
+          fallbackReason: telemetry.fallback_reason ?? null,
+          contextBytes: 0,
+          items: (telemetry.candidates ?? []).map((candidate) => ({
+            claimId: candidate.claim_id,
+            authorityClass: candidate.authority_class ?? 'unclassified',
+            finalRank: candidate.final_rank,
+            lexicalRank: candidate.lexical_rank,
+            semanticRank: candidate.semantic_rank,
+            semanticSimilarity: candidate.semantic_similarity,
+            rrfScore: candidate.rrf_score,
+            budgetRetained: candidate.budget_retained === true,
+            answerSelected: false,
+            advisoryIncluded: false,
+            blockedReason: candidate.budget_retained === true
+              ? 'awaiting_context_selection'
+              : 'budget_dropped',
+          })),
+        });
+      },
+    });
+    const recallShadowRoot = join(dirname(config.dbPath), 'shadow-replay');
+    const recallShadowReplayStore = (
+      configOptions.recallFastPathShadowReplay === true
+        ? createRecallShadowReplayStore({
+            rootDir: recallShadowRoot,
+          })
+        : null
+    );
+    let recallShadowCalibrationStore = null;
+    if (configOptions.recallFastPathShadowReplay === true) {
+      try {
+        recallShadowCalibrationStore = createRecallShadowCalibrationStore({
+          rootDir: recallShadowRoot,
+        });
+      } catch {
+        recallShadowCalibrationStore = null;
+      }
+      try {
+        recallShadowTelemetryStore = createRecallShadowTelemetryStore({
+          dbPath: config.dbPath,
+        });
+      } catch {
+        recallShadowTelemetryStore = null;
+      }
+    }
+
+    const adapter = createAdapter({
+      protocol,
+      memory,
+      projectId: scope.projectId,
+      capturePrompts: config.capturePrompts,
+      explicitMemoryRequests: configOptions.explicitMemoryRequests === true,
+      candidateCapture: configOptions.candidateCapture === true,
+      recallRelevanceJudge: recallRuntime?.relevanceJudge ?? null,
+      recallFastPathShadowMode: configOptions.recallFastPathShadow === true,
+      recallFastPathShadowReplayMode: configOptions.recallFastPathShadowReplay === true,
+      recallShadowReplayStore,
+      recallShadowCalibrationStore,
+      recallShadowTelemetryStore,
+      recallFastPath,
+      onRecallSelectorTelemetry: selectorTelemetryRecorder
+        ? (event) => selectorTelemetryRecorder.record(event)
+        : null,
+      diagnoseRecall: (
+        diagnosticsRetriever !== null
+        && typeof diagnosticsRetriever.diagnoseRecall === 'function'
+      )
+        ? (args) => diagnosticsRetriever.diagnoseRecall(args)
+        : null,
+      healthCheck: async () => {
+        let e5Worker = 'unavailable';
+        try {
+          const socketPath = nonEmpty(configOptions.embeddingSocketPath)
+            ? configOptions.embeddingSocketPath.trim()
+            : defaultEmbeddingIpcPath();
+          const client = createEmbeddingClient({
+            socketPath,
+            modelId: E5_MODEL_ID,
+            modelRevision: E5_MODEL_REVISION,
+            dimensions: E5_DIMENSIONS,
+            timeoutMs: 500,
+          });
+          const health = await client.health();
+          if (health?.ready === true) e5Worker = 'ready';
+        } catch {
+          e5Worker = 'unavailable';
+        }
+
+        let hooks = 'degraded';
+        try {
+          const codexHome = resolve(
+            env.CODEX_HOME || join(homedir(), '.codex'),
+          );
+          const audit = await auditCodex({ codexHome });
+          const hook = audit?.agentHubHook;
+          const passiveHook = audit?.passiveMemoryHook;
+          const passiveHealthy = (
+            passiveHook === undefined
+            || passiveHook?.configured === true
+          );
+          hooks = (
+            audit?.hookReadError === null
+            && hook?.configured === true
+            && hook?.userPromptSubmit === true
+            && hook?.sessionStartLauncher === true
+            && hook?.stopAgentDecisionCapture === true
+            && hook?.subagentStopAgentDecisionCapture === true
+            && hook?.flags?.ignoreMemoryEnv === true
+            && hook?.flags?.explicitMemoryRequests === true
+            && hook?.flags?.hybridRecall === true
+            && hook?.flags?.candidateCapture === true
+            && hook?.flags?.autoPipeline === true
+            && hook?.flags?.agentDecisionCapture === true
+            && passiveHealthy
+          ) ? 'healthy' : 'degraded';
+        } catch {
+          hooks = 'degraded';
+        }
+
+        return {
+          e5_worker: e5Worker,
+          hooks,
+        };
+      },
+    });
+
+    if (restoreLockExists(config.dbPath)) {
+      output = null;
+    } else {
+      output = await adapter.handle(event);
+
+      if (
+          platform !== 'win32'
+          && configOptions.autoPipeline === true
+        ) {
+        try {
+          const git = recallRuntime?.git
+            ?? resolvePipelineGitContext({ cwd: event?.cwd });
+          if (automaticMemoryCandidatePipelineReady(memory, {
+            projectId: scope.projectId,
+            branch: git.branch,
+          })) {
+            pipelineLaunch = {
+              cwd: git.repoPath,
+              dbPath: config.dbPath,
+              projectId: scope.projectId,
+              branch: git.branch,
+              revisionSha: git.revisionSha,
+            };
+          }
+        } catch {
+          pipelineLaunch = null;
+        }
+      }
+    }
+  } catch {
+    output = null;
+    pipelineLaunch = null;
+  } finally {
+    if (
+      recallShadowTelemetryStore
+      && typeof recallShadowTelemetryStore.close === 'function'
+    ) {
+      try {
+        recallShadowTelemetryStore.close();
+      } catch {
+        // Live Shadow telemetry teardown must never block the prompt.
+      }
+      recallShadowTelemetryStore = null;
+    }
+    if (selectorTelemetryRecorder) {
+      try {
+        selectorTelemetryRecorder.close();
+      } catch {
+        // Selector telemetry teardown must never block the prompt.
+      }
+      selectorTelemetryRecorder = null;
+    }
+    if (recallRuntime && typeof recallRuntime.close === 'function') {
+      try {
+        await recallRuntime.close();
+      } catch {
+        // Operational selector teardown must never block the prompt.
+      }
+    }
+    if (memory && typeof memory.close === 'function') {
+      try {
+        memory.close();
+      } catch {
+        // Hook teardown must not turn a successful prompt into a failure.
+      }
+    }
+  }
+
+  if (pipelineLaunch !== null) {
+    try {
+      launchCandidatePipeline(pipelineLaunch);
+    } catch {
+      // Automatic processing is opportunistic and must not block the prompt.
+    }
+  }
+
+  return output;
+}
+
+async function readStdin(stream = process.stdin) {
+  stream.setEncoding('utf8');
+  let raw = '';
+  for await (const chunk of stream) {
+    raw += chunk;
+  }
+  return raw;
+}
+
+async function main() {
+  try {
+    const raw = await readStdin();
+    const event = JSON.parse(raw);
+    const output = await runCodexMemoryHook({
+      event,
+      configOptions: parseCodexHookCliOptions(process.argv.slice(2)),
+    });
+    if (output !== null) {
+      process.stdout.write(`${JSON.stringify(output)}\n`);
+    }
+  } catch {
+    // Codex command hooks are fail-soft here: exit 0 with no output.
+  }
+}
+
+const isMain = process.argv[1]
+  && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+
+if (isMain) {
+  await main();
+}
