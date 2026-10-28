@@ -1,0 +1,5 @@
+{"id":"PEN1","prompt":"Use Penpot MCP to audit this product design system, find duplicate visual tokens and inconsistent components, and propose a safe cleanup","expected_skill":"design-with-ai"}
+{"id":"PEN2","prompt":"In this Penpot file, create a new settings screen from the existing product design system and keep its tokens, variants, spacing, and typography consistent","expected_skill":"design-with-ai"}
+{"id":"PEN3","prompt":"Apply the approved Penpot palette and component-style changes to this product UI and verify the visual result against the design","expected_skill":"design-with-ai"}
+{"id":"PENN1","prompt":"Deploy the Penpot MCP server behind our reverse proxy and configure OAuth discovery, PKCE, Redis state, and bearer authentication","expected_skill":null}
+{"id":"PENN2","prompt":"Debug why our self-hosted Penpot MCP OAuth token endpoint rejects this authorization code and inspect the protocol implementation","expected_skill":null}
