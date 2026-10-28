@@ -1,4 +1,5 @@
 const RUNTIME_PROJECTION = 'reference_graph_quick_runtime_projection_p10';
+const RUNTIME_TIMEOUT_MESSAGE = 'P10 runtime projection timed out';
 const CANDIDATE_COLUMNS = [
   'asset_id',
   'legacy_id',
@@ -102,28 +103,8 @@ function validateCandidates(payload, expectedDate) {
   });
 }
 
-export async function fetchP10QuickCandidatePool({
-  supabaseUrl,
-  publishableKey,
-  fetchImpl = fetch,
-  timeoutMs = 1500,
-  expectedDate = new Date().toISOString().slice(0, 10),
-} = {}) {
-  const baseUrl = requireNonEmptyString(supabaseUrl, 'supabaseUrl').replace(/\/+$/, '');
-  const key = requireNonEmptyString(publishableKey, 'publishableKey');
-  const referenceDate = requireReferenceDate(expectedDate);
-  requireTimeout(timeoutMs);
-  if (typeof fetchImpl !== 'function') {
-    throw new P10RuntimeTransportError('fetchImpl must be a function');
-  }
-
-  const url = new URL(`${baseUrl}/rest/v1/${RUNTIME_PROJECTION}`);
-  url.searchParams.set('select', CANDIDATE_COLUMNS.join(','));
-  url.searchParams.set('snapshot_date', `eq.${referenceDate}`);
-  url.searchParams.set('order', 'asset_id.asc');
-
+async function fetchProjectionAttempt({ url, key, fetchImpl, timeoutMs, referenceDate }) {
   const controller = new AbortController();
-  const startedAt = performance.now();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
@@ -146,24 +127,70 @@ export async function fetchP10QuickCandidatePool({
       throw new P10RuntimeTransportError('P10 runtime projection returned invalid JSON');
     }
 
-    const candidates = validateCandidates(payload, referenceDate);
-    return {
-      candidates,
-      transport: {
-        status: 'available',
-        latency_ms: Math.max(0, performance.now() - startedAt),
-        candidate_count: candidates.length,
-        snapshot_date: referenceDate,
-        refreshed_at: candidates[0].refreshed_at,
-      },
-    };
+    return validateCandidates(payload, referenceDate);
   } catch (error) {
     if (error instanceof P10RuntimeTransportError) throw error;
     if (controller.signal.aborted) {
-      throw new P10RuntimeTransportError('P10 runtime projection timed out');
+      throw new P10RuntimeTransportError(RUNTIME_TIMEOUT_MESSAGE);
     }
     throw new P10RuntimeTransportError('P10 runtime projection request failed');
   } finally {
     clearTimeout(timeout);
   }
+}
+
+export async function fetchP10QuickCandidatePool({
+  supabaseUrl,
+  publishableKey,
+  fetchImpl = fetch,
+  timeoutMs = 1500,
+  expectedDate = new Date().toISOString().slice(0, 10),
+} = {}) {
+  const baseUrl = requireNonEmptyString(supabaseUrl, 'supabaseUrl').replace(/\/+$/, '');
+  const key = requireNonEmptyString(publishableKey, 'publishableKey');
+  const referenceDate = requireReferenceDate(expectedDate);
+  requireTimeout(timeoutMs);
+  if (typeof fetchImpl !== 'function') {
+    throw new P10RuntimeTransportError('fetchImpl must be a function');
+  }
+
+  const url = new URL(`${baseUrl}/rest/v1/${RUNTIME_PROJECTION}`);
+  url.searchParams.set('select', CANDIDATE_COLUMNS.join(','));
+  url.searchParams.set('snapshot_date', `eq.${referenceDate}`);
+  url.searchParams.set('order', 'asset_id.asc');
+
+  const startedAt = performance.now();
+  let candidates;
+
+  try {
+    candidates = await fetchProjectionAttempt({
+      url,
+      key,
+      fetchImpl,
+      timeoutMs,
+      referenceDate,
+    });
+  } catch (error) {
+    if (!(error instanceof P10RuntimeTransportError) || error.message !== RUNTIME_TIMEOUT_MESSAGE) {
+      throw error;
+    }
+    candidates = await fetchProjectionAttempt({
+      url,
+      key,
+      fetchImpl,
+      timeoutMs,
+      referenceDate,
+    });
+  }
+
+  return {
+    candidates,
+    transport: {
+      status: 'available',
+      latency_ms: Math.max(0, performance.now() - startedAt),
+      candidate_count: candidates.length,
+      snapshot_date: referenceDate,
+      refreshed_at: candidates[0].refreshed_at,
+    },
+  };
 }
