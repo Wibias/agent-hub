@@ -11,7 +11,7 @@ const relevancePath = resolve('knowledge/design-guidance/tests/relevance-cases.j
 function run(args, env = {}) {
   const result = spawnSync(process.execPath, [script, ...args], {
     encoding: 'utf8',
-    env: { ...process.env, ...env },
+    env: { ...process.env, DESIGN_GUIDANCE_NOW: '2026-10-28', ...env },
   });
   return { ...result, json: result.stdout ? JSON.parse(result.stdout) : null };
 }
@@ -61,14 +61,22 @@ test('catalog provenance is refreshed and governed by explicit freshness windows
 });
 
 test('query output exposes current freshness status deterministically', () => {
-  const result = run(
-    ['--domain', 'chart', '--query', 'time series trend line', '--json'],
-    { DESIGN_GUIDANCE_NOW: '2026-10-28' },
-  );
+  const result = run(['--domain', 'chart', '--query', 'time series trend line', '--json']);
   assert.equal(result.status, 0, result.stderr);
   assert.equal(result.json.freshness.status, 'current');
   assert.equal(result.json.freshness.ageDays, 0);
   assert.equal(result.json.results[0].provenance.freshness.status, 'current');
+});
+
+test('review-due catalog remains usable but exposes its age', () => {
+  const result = run(
+    ['--domain', 'chart', '--query', 'time series trend line', '--json'],
+    { DESIGN_GUIDANCE_NOW: '2027-02-01' },
+  );
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.json.freshness.status, 'review-due');
+  assert.ok(result.json.freshness.ageDays > 90);
+  assert.equal(result.json.results[0].provenance.freshness.status, 'review-due');
 });
 
 test('hard-expired catalog fails closed before returning guidance', () => {
@@ -87,10 +95,7 @@ test('relevance regression cases keep the intended record on top', () => {
   const cases = JSON.parse(readFileSync(relevancePath, 'utf8'));
   assert.ok(cases.length >= 5);
   for (const row of cases) {
-    const result = run(
-      ['--domain', row.domain, '--query', row.query, '--max-results', '1', '--json'],
-      { DESIGN_GUIDANCE_NOW: '2026-10-28' },
-    );
+    const result = run(['--domain', row.domain, '--query', row.query, '--max-results', '1', '--json']);
     assert.equal(result.status, 0, `${row.id}: ${result.stderr}`);
     assert.equal(result.json.results[0].id, row.expectedTopId, row.id);
   }
