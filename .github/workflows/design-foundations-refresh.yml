@@ -1,0 +1,26 @@
+name: Design Foundations Refresh TDD
+
+on:
+  push:
+    branches:
+      - agent/design-foundations-refresh
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'skills/design-with-ai/**'
+      - 'knowledge/design-guidance/**'
+      - '.github/workflows/design-foundations-refresh.yml'
+
+jobs:
+  focused:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Design foundations contracts
+        run: node --test skills/design-with-ai/tests/design-foundations-refresh.test.mjs
+      - name: Design guidance governance
+        run: node --test knowledge/design-guidance/tests/query.test.mjs
