@@ -38,6 +38,45 @@ function score(queryTokens, row) {
   return total;
 }
 
+function parseUtcDate(text, label) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(text))) {
+    throw new Error(`${label} must use YYYY-MM-DD`);
+  }
+  const value = Date.parse(`${text}T00:00:00Z`);
+  if (!Number.isFinite(value)) throw new Error(`${label} is not a valid date`);
+  return value;
+}
+
+function freshnessFor(source) {
+  const policy = source?.freshnessPolicy;
+  if (!policy || !Number.isInteger(policy.reviewAfterDays) || !Number.isInteger(policy.hardExpireAfterDays)) {
+    throw new Error('catalog source freshnessPolicy is missing or invalid');
+  }
+  if (policy.reviewAfterDays < 0 || policy.hardExpireAfterDays <= policy.reviewAfterDays) {
+    throw new Error('catalog freshness windows are invalid');
+  }
+
+  const reviewedAtMs = parseUtcDate(source.reviewedAt, 'catalog source reviewedAt');
+  const nowText = process.env.DESIGN_GUIDANCE_NOW || new Date().toISOString().slice(0, 10);
+  const nowMs = parseUtcDate(nowText, 'DESIGN_GUIDANCE_NOW');
+  const ageDays = Math.floor((nowMs - reviewedAtMs) / 86400000);
+  if (ageDays < 0) throw new Error('catalog reviewedAt cannot be in the future');
+
+  const status = ageDays > policy.hardExpireAfterDays
+    ? 'expired'
+    : ageDays > policy.reviewAfterDays
+      ? 'review-due'
+      : 'current';
+
+  return {
+    status,
+    ageDays,
+    reviewedAt: source.reviewedAt,
+    reviewAfterDays: policy.reviewAfterDays,
+    hardExpireAfterDays: policy.hardExpireAfterDays,
+  };
+}
+
 function emit(payload, asJson) {
   if (asJson) {
     process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
@@ -48,6 +87,9 @@ function emit(payload, asJson) {
     return;
   }
   process.stdout.write(`design-guidance: ${payload.domain} | ${payload.query}\n`);
+  if (payload.freshness) {
+    process.stdout.write(`freshness: ${payload.freshness.status} (${payload.freshness.ageDays}d since review)\n`);
+  }
   if (payload.count === 0) {
     process.stdout.write(`${payload.message}\n`);
     return;
@@ -81,6 +123,27 @@ if (!Number.isInteger(maxResults) || maxResults < 1 || maxResults > 5) {
   process.exit(64);
 }
 
+let freshness;
+try {
+  freshness = freshnessFor(catalog.source);
+} catch (error) {
+  process.stderr.write(`design-guidance: ${error.message}\n`);
+  process.exit(65);
+}
+
+if (freshness.status === 'expired') {
+  emit({
+    domain,
+    query,
+    count: 0,
+    match: 'stale-catalog',
+    message: 'Design guidance catalog is hard-expired. Refresh/review its upstream provenance before treating any result as verified guidance.',
+    freshness,
+    results: [],
+  }, asJson);
+  process.exit(3);
+}
+
 const queryTokens = tokenize(query);
 const ranked = catalog.records
   .filter((row) => row.domain === domain)
@@ -93,8 +156,9 @@ const ranked = catalog.records
     score,
     provenance: {
       ...catalog.source,
-      sourceType: 'heuristic-guidance'
-    }
+      freshness,
+      sourceType: 'heuristic-guidance',
+    },
   }));
 
 if (ranked.length === 0) {
@@ -104,9 +168,10 @@ if (ranked.length === 0) {
     count: 0,
     match: 'none',
     message: 'No verified guidance match. Retry once with a narrower semantic query, then fall back explicitly without claiming a catalog match.',
-    results: []
+    freshness,
+    results: [],
   }, asJson);
   process.exit(2);
 }
 
-emit({ domain, query, count: ranked.length, match: 'catalog', results: ranked }, asJson);
+emit({ domain, query, count: ranked.length, match: 'catalog', freshness, results: ranked }, asJson);
