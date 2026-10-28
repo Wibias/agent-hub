@@ -44,12 +44,12 @@ test('formal verification owns the nested statechart compiler capability', async
 
   assert.match(formal, /state machines|state-machine/i);
   assert.match(contract, /statechart\.md/i);
-  assert.match(contract, /formal-verification.*(?:owns|owner)|(?:owns|owner).*formal-verification/i);
+  assert.match(contract, /formal-verification[\s\S]*?owner/i);
   assert.match(reference, /statechart\/scripts\/statechart(?:\.ts)?\s+SPEC\.tla/i);
   assert.match(reference, /from-chart.*removed|removed.*from-chart/i);
   assert.match(reference, /--against.*removed|removed.*--against/i);
   assert.match(reference, /--fixed.*removed|removed.*--fixed/i);
-  assert.match(reference, /formal-verification.*(?:owns|owner)|(?:owns|owner).*formal-verification/i);
+  assert.match(reference, /formal-verification[\s\S]*?(?:owns|owner)/i);
   assert.match(reference, /chart.*(?:not proof|not.*proof)|not.*proof.*chart/i);
   assert.match(reference, /replay.*(?:bug path|counterexample).*implementation|(?:bug path|counterexample).*replay.*implementation/i);
 });
@@ -105,7 +105,7 @@ test('statechart vendor pin, compiler lineage, render reference, and MIT attribu
   assert.match(upstream, /pstack\/skills\/statechart\/scripts/);
   assert.match(upstream, /pstack\/skills\/statechart\/references\/render\.md/);
   assert.match(upstream, /byte-identical|byte-for-byte/i);
-  assert.match(upstream, /excludes.*scripts\/test|scripts\/test.*excludes/i);
+  assert.match(upstream, /intentionally excludes[\s\S]*?scripts\/test/i);
   assert.match(license, /MIT License/);
   assert.match(license, /Copyright \(c\) 2026 Lauren Tan/);
 });
