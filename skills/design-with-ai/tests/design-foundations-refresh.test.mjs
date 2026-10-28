@@ -58,3 +58,30 @@ test('skill loads perceptual hierarchy progressively rather than as a new route'
   assert.match(skill, /hierarchy|grouping|salience/i);
   assert.doesNotMatch(skill, /\| `perceptual-hierarchy` \|/i);
 });
+
+test('motion audit checks removal hazards and cleanup before deleting animation code', () => {
+  const text = read('skills/design-with-ai/references/audit-playbook.md');
+  for (const pattern of [
+    /removal safety/i,
+    /hidden start states/i,
+    /onAnimationEnd|transitionend|onExitComplete|setTimeout/i,
+    /exit.*unmount|unmount.*exit/i,
+    /layout.*(?:jump|shift)/i,
+    /focus.*(?:callback|timing|immediate)/i,
+    /tests?.*selectors?|selectors?.*tests?/i,
+    /orphaned/i,
+    /keyframes/i,
+    /motion.*imports?|AnimatePresence/i,
+    /(?:ask|approval|confirm).*dependency|dependency.*(?:ask|approval|confirm)/i,
+  ]) {
+    assert.match(text, pattern);
+  }
+});
+
+test('Emil provenance pins the remove-animations safety delta without a new route', () => {
+  const text = read('skills/design-with-ai/UPSTREAM.md');
+  assert.match(text, /emilkowalski\/skills[^\n]*a81dbca07f2217b7103e510c0f13f8d5b017afc9/i);
+  assert.match(text, /remove-animations/i);
+  assert.match(text, /removal.*(?:hazard|safety)/i);
+  assert.match(text, /no new.*(?:route|discovery surface)|not a new discovery surface/i);
+});
