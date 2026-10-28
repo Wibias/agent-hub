@@ -3,8 +3,8 @@ name: design-with-ai
 description: >-
   Canonical default owner for visible product-UI design, audit, polish,
   restyling, redesign, new surfaces, product-UI data visualization, native/mobile
-  UI, motion review, and Penpot product-design work including design files,
-  design systems, visual tokens, components, variants, and screens. Use for
+  UI, motion review, and Penpot MCP product-design work including design-system
+  audits, visual-token cleanup, components, variants, and screens. Use for
   ordinary "make this look better" work. Not for backend/server infrastructure,
   authentication or protocol deployment, general code review, non-UI
   chart/report generation, module/API interface design (route those to
@@ -217,6 +217,7 @@ passed.
 - references/motion-vocabulary.md -- when to read: motion-name
 - references/verification-contract.md -- when to read: modifying workflows before completion
 - tests/evals/cases.jsonl -- when to read: before skill evaluation
+- tests/evals/penpot-cases.jsonl -- when to read: Penpot adapter acceptance and ownership boundaries
 - tests/evals/regression-cases.jsonl -- when to read: retained regressions
 - tests/evals/regression-lock.json -- when to read: regression integrity
 <!-- /eval:references -->
