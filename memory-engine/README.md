@@ -24,6 +24,8 @@ The reference implementation currently owns:
 - mandatory secret redaction before canonical storage or indexing;
 - Git path/blob freshness checks for repository-grounded evidence;
 - explicit claim-conflict edges;
+- a bounded read-only Memory Graph projection over canonical Claims, explicit lifecycle/conflict relations, and compatible-profile semantic similarity edges;
+- deterministic bounded graph expansion reserved for diagnostic and evaluation work;
 - explicit source-authority classes;
 - retrieval separated from use-specific reliance;
 - structured, scoped action approval capabilities;
@@ -1272,12 +1274,17 @@ Views:
 
 - **Projects / branches** — registered memory projects and durable Claim counts per branch;
 - **Memories** — divider-first list of active and historical Claims with stable refs, authority, provenance, semantic-index state, recall use, plus Replace/Forget for active `user_direct` memories;
+- **Graph** — bounded read-only visualization of canonical Claims, explicit lifecycle/conflict relations, and compatible-profile inferred semantic similarity, with search, state/origin filters, neighbor details, and a link back to the existing Memories inspector;
 - **Inspect** — Evidence, root/subagent provenance, Candidate importance/relation state, lifecycle, conflicts, and recall telemetry for one Claim;
 - **Review** — only `needs_confirmation` and evaluated `keep_candidate` items, with explicit `same / update / contradict / unrelated` confirmation and Reject;
 - **Pipeline** — recent run refs, triggers, outcomes, duration, promoted counts, and recorded failures;
 - **Health** — scoped database/semantic status plus host-level E5 worker and Codex-hook status;
 - **Quality** — user/agent judge distributions, recall funnel, deterministic near-duplicate count, and stale count;
 - **Stale** — advisory-only lower-authority cleanup candidates.
+
+The Graph view is diagnostic evidence only. It is scoped to exactly one project and branch, never serializes raw embedding vectors, and only compares semantic rows with compatible model ID, model revision, and dimensions. Explicit lifecycle/conflict edges remain visually distinct from inferred similarity edges. The graph builder is bounded to at most 500 nodes by default, with semantic similarity threshold `0.82` and at most three inferred neighbors per node.
+
+The graph and `expandMemoryGraph(...)` traversal helper do **not** participate in production Recall/Judge selection or change memory authority. Graph Recall Shadow Mode is intentionally deferred to separate follow-up work after the Inspector contract is proven.
 
 Action safety:
 
