@@ -12,6 +12,7 @@ are maintained here.
 | ibelick/ui-skills `baseline-ui` | local adapted snapshot | baseline UI floor | MIT |
 | jakubkrehel/make-interfaces-feel-better | local adapted snapshot | micro craft | MIT |
 | nextlevelbuilder/ui-ux-pro-max-skill | commit `f3ac195224eac1eb0dfe1a3059c2a6add78ffbe3` reviewed 2026-09-04 | bounded guidance retrieval, chart semantics, native/mobile edge cases, master/override persistence concept | MIT; selectively adapted, no wholesale corpus import |
+| penpot/penpot | develop commit `e20a0d748eb9ae431c27a4a201ee9f7067d955e8` reviewed 2026-10-28 | Penpot MCP design-file/session adapter, remote/local capability boundary, read/write safety, current OAuth plus legacy token compatibility | MPL-2.0 source; no Penpot source vendored |
 | JCarterJohnson/vibecoded-design-tells | accessed 2026-09-21 | relative evidence ranking for UI default tells, cluster-scanner concepts, and emerging replacement-default warning | MIT for repository code; harvested Reddit text is explicitly excluded by upstream and is not copied here |
 | febbhav/signs-of-ai-design | accessed 2026-09-21 | secondary compositional taxonomy including numbered meta, repeated kickers, and default chrome | CC BY-SA 4.0; concepts are attributed and locally re-expressed rather than copied wholesale |
 | LeoStehlik/no-slop-ui | accessed 2026-09-21 | guardrail workflow, product-vs-marketing mismatch, and contextual review semantics | MIT; fixed universal dimensions and style prescriptions were not adopted |
@@ -49,6 +50,14 @@ as the dedicated `fortify worst-case` workflow, including schema-backed realisti
 stress data, real-boundary injection, environment pressure, report-before-fix,
 and regression-fixture guidance. No duplicate design-with-ai route is added.
 
+The 2026-10-28 Penpot review also classifies as `EXTEND`. Penpot is a design
+source/editing surface, not an independent design owner. Agent Hub therefore adds
+one progressive Penpot integration reference instead of `skills/penpot/`. The
+integration pins upstream capability/provenance only: Penpot source, MCP server
+code, client configuration, credentials, and session state are not vendored into
+this skill. Current upstream OAuth support and legacy query-token compatibility
+are treated as current-source facts, not a permanent universal client contract.
+
 `impeccable` is intentionally not vendored or modified by `design-with-ai`. It
 remains an independently managed explicit/delegated specialist and may update on
 its own cadence.
@@ -75,6 +84,7 @@ Wibias-specific behaviour includes:
 - one visible-UI owner and natural-language router;
 - Direction -> Baseline -> Craft -> Gate quality stack;
 - command/profile contracts and progressive resource loading;
+- Penpot as a progressive design-file/session adapter with read-only-first inspection, bounded reversible writes, read-back verification, project-design-authority precedence, and host-local secret/config handling;
 - motion craft vs live runtime performance evidence boundary;
 - source-evidence and design-reference-library policy;
 - bounded heuristic design-guidance retrieval separated from evidence;
