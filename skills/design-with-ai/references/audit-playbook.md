@@ -73,7 +73,47 @@ Motion must match product personality and shared duration/easing tokens. Flag:
 - group entrances that need a restrained stagger;
 - motion that contradicts established component behaviour.
 
-## 8. Missed opportunities
+## 8. Removal safety and cleanup
+
+A `remove motion` verdict is not permission for a blind deletion. Preserve any
+documented intentional motion decision and check the behaviour coupled to the
+animation before editing it.
+
+Removal hazards:
+
+- **Hidden start states:** remove `opacity: 0`, hidden transforms, Motion
+  `initial` values, reveal classes, or equivalent start state together with the
+  animation that made the element visible.
+- **Completion callbacks and waits:** inspect `onAnimationEnd`, `transitionend`,
+  `onExitComplete`, duration-sized `setTimeout` calls, and similar waits. Move
+  required behaviour to the actual state change and remove obsolete waiting.
+- **Exit and unmount timing:** an exit animation or `AnimatePresence` may delay
+  unmount. If the exit goes away, make cleanup/state transitions correct for an
+  immediate unmount instead of leaving logic dependent on the old delay.
+- **Layout motion masking a jump:** `layout`, FLIP, or similar motion can hide a
+  real layout shift. If removal exposes a layout jump, keep the motion and report
+  the underlying layout defect rather than claiming the animation itself is the
+  problem.
+- **Focus timing:** focus scheduled from an animation callback must move at the
+  correct immediate state boundary when that callback disappears.
+- **Tests and selectors:** update tests, waits, assertions, classes, or selectors
+  coupled to animation names, durations, intermediate states, or completion
+  events in the same change.
+
+After an approved removal, clean up only what that removal orphaned:
+
+- unused `@keyframes`, animation utilities, variants, duration/easing tokens, and
+  configuration entries;
+- unused Motion imports, `motion.*` wrappers, variants objects, and empty
+  `AnimatePresence` wrappers;
+- callbacks, timers, observers, or helper code that existed solely for the
+  removed animation.
+
+If a motion dependency appears unused after cleanup, ask for explicit approval
+before removing the dependency or changing the lockfile. Do not turn a scoped
+motion cleanup into an unsolicited dependency migration.
+
+## 9. Missed opportunities
 
 Report only grounded seams where motion would explain state, orientation, or
 continuity. Cap incidental missed opportunities at four. A dedicated missing-
