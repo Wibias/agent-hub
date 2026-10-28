@@ -22,6 +22,7 @@ import {
 } from '../memory-engine/memory-doctor.mjs';
 import {
   memoryUiClaim,
+  memoryUiGraph,
   memoryUiOverview,
   memoryUiScope,
 } from '../memory-engine/memory-ui-model.mjs';
@@ -473,6 +474,32 @@ export function createMemoryUiServer({
         return;
       }
 
+      if (url.pathname === '/api/graph') {
+        const projectId = queryValue(url, 'projectId');
+        const branch = queryValue(url, 'branch');
+        if (projectId === null || branch === null) {
+          json(res, 400, {
+            error: 'invalid_graph_scope',
+            message: 'projectId and branch are required',
+          });
+          return;
+        }
+
+        try {
+          json(res, 200, memoryUiGraph(engine, { projectId, branch }));
+        } catch (error) {
+          if (/^unknown project(?: branch)?$/i.test(String(error?.message ?? ''))) {
+            json(res, 404, {
+              error: 'graph_scope_not_found',
+              message: 'project or branch was not found',
+            });
+            return;
+          }
+          throw error;
+        }
+        return;
+      }
+
       if (url.pathname === '/api/claim') {
         const projectId = queryValue(url, 'projectId');
         const branch = queryValue(url, 'branch');
@@ -578,6 +605,7 @@ async function main() {
       process.exitCode = 0;
     });
   };
+
   process.once('SIGINT', shutdown);
   process.once('SIGTERM', shutdown);
 }
