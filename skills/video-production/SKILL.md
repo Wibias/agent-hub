@@ -1,14 +1,14 @@
 ---
 name: video-production
 description: >-
-  Canonical owner for authored video production: product launch films, product
-  promos, explainers, social clips, data videos, storyboards, captions, sound
-  design, renderer selection, preview/review, and final rendering with
-  HyperFrames or Remotion. Use for creating, editing, reviewing, or rendering a
-  deliberate video artifact from a brief, website, product, or existing video
-  project. Not for browser-session recording or debug capture (playwright),
-  YouTube transcript extraction (youtube-transcript), or UI/component motion
-  inside a product surface (design-with-ai).
+  Canonical owner for authored video production and final video rendering. Use
+  for requests to create or render a cinematic launch film, product promo,
+  feature video, explainer, social clip, data video, or finished MP4 from a
+  brief, website, real product screenshots, or an existing video project;
+  includes captions, sound design, storyboards, renderer selection, preview, and
+  review with HyperFrames or Remotion. Not for browser-session recording or
+  debug capture (playwright), YouTube transcript extraction, or in-app
+  UI/component animation.
 ---
 
 # Video Production
