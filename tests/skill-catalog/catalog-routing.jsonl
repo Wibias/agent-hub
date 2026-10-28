@@ -23,6 +23,11 @@
 {"id":"D23","prompt":"The patch tool reports success but the file is still unchanged after two attempts; diagnose the false-success write path","expected_skill":"diagnose"}
 {"id":"D24","prompt":"Model-check this concurrency state machine, prove the invalid state is unreachable within explicit bounds, and keep the verification tied to the code as it changes","expected_skill":"formal-verification"}
 {"id":"D25","prompt":"Refine this vague product idea, explore genuinely different directions, then help me converge without implementing it","expected_skill":"grilling"}
+{"id":"D26","prompt":"Turn this product website into a cinematic launch video with real screenshots, captions, sound design, and a final render","expected_skill":"video-production"}
+{"id":"D27","prompt":"Create a 30-second authored explainer video for this feature and render the finished MP4","expected_skill":"video-production"}
+{"id":"D28","prompt":"Use the existing Remotion project to make and render a polished product promo video","expected_skill":"video-production"}
+{"id":"D29","prompt":"Animate this settings drawer transition and make the interaction feel more responsive","expected_skill":"design-with-ai"}
+{"id":"D30","prompt":"Record this browser checkout session as a video so I can debug the flow","expected_skill":"playwright"}
 {"id":"N1","prompt":"Write tests for this Python parser","expected_skill":null}
 {"id":"N2","prompt":"What is the capital of France?","expected_skill":null}
 {"id":"N3","prompt":"Summarise this paragraph in two sentences","expected_skill":null}
