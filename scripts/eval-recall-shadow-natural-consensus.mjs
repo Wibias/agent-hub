@@ -177,7 +177,7 @@ export function evaluateNaturalConsensusRecords(records) {
     evidence: {
       exact_runtime_sample_count: exact.length,
       required_sample_target: REQUIRED_SAMPLE_TARGET,
-      promotion_evidence_sufficient: exact.length >= REQUIRED_SAMPLE_TARGET && best !== null && best.fast_errors === 0,
+      promotion_evidence_sufficient: exact.length >= REQUIRED_SAMPLE_TARGET && best !== null && best.fast_cases > 0 && best.fast_errors === 0,
       observed_fast_errors: Object.fromEntries(gates.map((entry) => [entry.gate, entry.fast_errors])),
     },
     gates,
