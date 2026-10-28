@@ -337,7 +337,7 @@
       "harness": "agents",
       "scope": "global",
       "name": "design-with-ai",
-      "description": "Canonical default owner for visible product-UI design, audit, polish, restyling, redesign, new surfaces, product-UI data visualization, native/mobile UI, and motion review. Use for ordinary \"make this look better\" work. Not for backend-only work, general code review, non-UI chart/report generation, module/API interface design (route those to codebase-design), or copy-only edits. Explicit Impeccable requests stay with Impeccable.",
+      "description": "Canonical default owner for visible product-UI design, audit, polish, restyling, redesign, new surfaces, product-UI data visualization, native/mobile UI, motion review, and Penpot MCP product-design work including design-system audits, visual-token cleanup, screen design, components, variants, palette, component style, spacing, and typography. Use for ordinary \"make this look better\" work. Not for backend/server infrastructure, authentication or protocol deployment, general code review, non-UI chart/report generation, module/API interface design (route those to codebase-design), or copy-only edits. Explicit Impeccable requests stay with Impeccable.",
       "tags": [
         "design",
         "with",
@@ -355,7 +355,7 @@
       ],
       "status": "active",
       "canonicalId": null,
-      "contentHash": "c486df4c656b382d6530dca1e50e65798a2975f6c47d1766a076e8956ae36abe"
+      "contentHash": "b226907fc366ac6bdef73bd83cdd0accc5496f65ed9c7f655ca91d51e1406587"
     },
     {
       "id": "agents/diagnose",
