@@ -388,7 +388,7 @@
       "harness": "agents",
       "scope": "global",
       "name": "diagram-design",
-      "description": "Canonical owner for drawing, rendering, branding, polishing, and exporting publishable diagrams and visual schematics as self-contained HTML/SVG/PNG. Use for architecture diagrams, flowcharts, sequence diagrams, state diagrams, ER/data models, timelines, swimlanes, dependency/deployment diagrams, service blueprints, journeys, charts, maps, and redraws of Mermaid/draw.io/Excalidraw when the requested deliverable is a polished visual artifact.",
+      "description": "Canonical owner for drawing, rendering, branding, polishing, and exporting publishable diagrams and visual schematics as self-contained HTML/SVG/PNG. Use for a branded sequence diagram of an API interaction to publish in docs, a polished Mermaid flowchart redraw for a presentation, architecture diagrams, state diagrams, ER/data models, timelines, swimlanes, dependency/deployment diagrams, service blueprints, journeys, charts, maps, and redraws of draw.io/Excalidraw when the requested deliverable is a polished visual artifact.",
       "tags": [
         "diagram",
         "design"
@@ -399,13 +399,13 @@
         "branding",
         "polishing",
         "and exporting publishable diagrams and visual schematics as self-contained HTML/SVG/PNG.",
-        "architecture diagrams",
-        "flowcharts",
-        "sequence diagrams"
+        "a branded sequence diagram of an API interaction to publish in docs",
+        "a polished Mermaid flowchart redraw for a presentation",
+        "architecture diagrams"
       ],
       "status": "active",
       "canonicalId": null,
-      "contentHash": "f6929a260e59c0e69f7ffbbe0f182692af7669e7d94ed4528fb445a660701880"
+      "contentHash": "f4978418e968cb7038776b994f7db8d799f93104758d9b5c3e7f1c84fd284aec"
     },
     {
       "id": "agents/domain-modeling",
