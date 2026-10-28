@@ -436,10 +436,18 @@ For the local durable-memory engine, a loopback-only console is available:
 node .\scripts\memory-ui.mjs
 ```
 
-Open `http://127.0.0.1:4317` to browse projects, branches, Memories, Review,
-Pipeline, Health, Quality, and Stale views. Browsing keeps a read-only SQLite
-connection. Explicit Replace/Forget and candidate Confirm/Reject actions use
-token-protected same-origin POSTs and the existing Memory hook contracts.
+Open `http://127.0.0.1:4317` to browse projects, branches, Memories, Graph,
+Review, Pipeline, Health, Quality, and Stale views. Browsing keeps a read-only
+SQLite connection. Explicit Replace/Forget and candidate Confirm/Reject actions
+use token-protected same-origin POSTs and the existing Memory hook contracts.
+
+The **Graph** view is diagnostic and read-only. It shows canonical Claims as
+nodes, lifecycle/conflict relations as explicit edges, and compatible-profile
+semantic similarity as clearly marked inferred edges. Search plus state/origin
+filters narrow the visualization, and a selected node can be opened in the
+existing Memories inspector. Raw embedding vectors are never exposed to the
+browser. The graph does not change production Recall/Judge authority; Graph
+Recall Shadow Mode remains separate follow-up work.
 
 ## Portability contract
 
