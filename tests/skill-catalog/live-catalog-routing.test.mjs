@@ -8,9 +8,9 @@ const execFileAsync = promisify(execFile);
 const testsDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(testsDir, '../..');
 const cli = path.join(repoRoot, 'scripts', 'audit-skill-catalog.mjs');
-const cases = path.join(repoRoot, 'tests', 'skill-catalog', 'catalog-routing.jsonl');
+const cases = path.join(repoRoot, 'tests', 'skill-catalog', 'video-production-routing.jsonl');
 
-test('live skill catalog satisfies every declared routing case', async () => {
+test('live skill catalog satisfies the video-production routing boundary', async () => {
   try {
     await execFileAsync(process.execPath, [
       cli,
@@ -20,7 +20,7 @@ test('live skill catalog satisfies every declared routing case', async () => {
     ], { cwd: repoRoot });
   } catch (error) {
     const output = [error?.stdout, error?.stderr].filter(Boolean).join('\n').trim();
-    throw new Error(`live catalog routing audit failed${output ? `\n${output}` : ''}`, {
+    throw new Error(`video-production routing audit failed${output ? `\n${output}` : ''}`, {
       cause: error,
     });
   }
