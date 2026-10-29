@@ -2,6 +2,7 @@ import {
   memoryCandidateRef,
   memoryClaimRef,
 } from './adapters/codex-hooks.mjs';
+import { buildMemoryGraph } from './memory-graph.mjs';
 import { pipelineRunRef } from './pipeline-observability.mjs';
 
 function text(value) {
@@ -173,6 +174,21 @@ export function memoryUiOverview(memory) {
     format: exported.format,
     version: exported.version,
     projects,
+  };
+}
+
+export function memoryUiGraph(memory, {
+  projectId,
+  branch,
+} = {}) {
+  const graph = buildMemoryGraph(memory, { projectId, branch });
+  return {
+    ...graph,
+    nodes: graph.nodes.map((node) => ({
+      ...node,
+      ref: memoryClaimRef(node.id),
+      authority: node.provenance?.authorityClass ?? 'unknown',
+    })),
   };
 }
 
