@@ -7,11 +7,13 @@ are maintained here.
 | Source | Snapshot / access | Role | Licence / provenance |
 |---|---|---|---|
 | LexnLin design-with-AI thread | accessed 2026-07-12; URL recorded historically | Methods 1-3 and component-by-component framing | public thread, historical local note |
-| emilkowalski/skills | commit `2d228630ba1446365f614a108cb8252f1feda202` reviewed 2026-10-13 | motion craft, animation review standards, vocabulary, runtime animation performance; `break-ui` remains owned by `fortify worst-case` | MIT |
+| emilkowalski/skills | commit `a81dbca07f2217b7103e510c0f13f8d5b017afc9` reviewed 2026-10-28 | motion craft, animation review standards, vocabulary, runtime animation performance, and `remove-animations` removal-safety/cleanup delta; `break-ui` remains owned by `fortify worst-case` | MIT |
 | MengTo/Skills | commit `321c769739b823de5eb94eb3a52aa1974fe783a2` reviewed 2026-09-04 | design-first prompting and runtime animation profiling | MIT |
 | ibelick/ui-skills `baseline-ui` | local adapted snapshot | baseline UI floor | MIT |
 | jakubkrehel/make-interfaces-feel-better | local adapted snapshot | micro craft | MIT |
-| nextlevelbuilder/ui-ux-pro-max-skill | commit `f3ac195224eac1eb0dfe1a3059c2a6add78ffbe3` reviewed 2026-09-04 | bounded guidance retrieval, chart semantics, native/mobile edge cases, master/override persistence concept | MIT; selectively adapted, no wholesale corpus import |
+| nextlevelbuilder/ui-ux-pro-max-skill | commit `28b3b8dee8c976df4fa3e94aed4e092ad43fcb03` reviewed 2026-10-28 | bounded guidance retrieval, chart/native interaction guidance, master/override persistence, provenance/freshness and relevance-regression concepts | MIT; selectively adapted, no wholesale corpus import |
+| Webdesign Journal design fundamentals / visual hierarchy / design language / styleguide material | accessed 2026-10-28 | perceptual hierarchy/Gestalt diagnostics, operational visual-intent vocabulary, imagery/styleguide completeness including AI-image rules | external practitioner guidance; selectively re-expressed, not mirrored and not treated as tested usability evidence |
+| penpot/penpot | develop commit `e20a0d748eb9ae431c27a4a201ee9f7067d955e8` reviewed 2026-10-28 | Penpot MCP design-file/session adapter, remote/local capability boundary, read/write safety, current OAuth plus legacy token compatibility | MPL-2.0 source; no Penpot source vendored |
 | JCarterJohnson/vibecoded-design-tells | accessed 2026-09-21 | relative evidence ranking for UI default tells, cluster-scanner concepts, and emerging replacement-default warning | MIT for repository code; harvested Reddit text is explicitly excluded by upstream and is not copied here |
 | febbhav/signs-of-ai-design | accessed 2026-09-21 | secondary compositional taxonomy including numbered meta, repeated kickers, and default chrome | CC BY-SA 4.0; concepts are attributed and locally re-expressed rather than copied wholesale |
 | LeoStehlik/no-slop-ui | accessed 2026-09-21 | guardrail workflow, product-vs-marketing mismatch, and contextual review semantics | MIT; fixed universal dimensions and style prescriptions were not adopted |
@@ -42,12 +44,40 @@ landing-pattern, generic stack, and GSAP-preset datasets were intentionally not
 adopted because they overlap current owners or would weaken the evidence/taste
 model through category-driven defaults.
 
-The 2026-10-13 Emil refresh again classifies as `EXTEND`, not a new discovery
+The 2026-10-28 UI UX Pro Max refresh remains `EXTEND + CLEANUP`. The upstream is
+38 commits ahead of the September snapshot. Agent Hub refreshes provenance and
+adopts freshness/relevance-governance and token/persistence concepts only where
+they fit the local evidence model. It still does not import the style, palette,
+font-pairing, landing-pattern, motion-preset, or generic stack corpora. The old
+category/signal presets in local `dials.md` are removed because dial values now
+come from explicit direction, incumbent measurements, inspected references, or
+an explicitly selected visual direction rather than product stereotypes.
+
+The same 2026-10-28 refresh classifies the Webdesign Journal material as
+`EXTEND`, not a new discovery surface. Perceptual/Gestalt ideas are a bounded
+diagnostic and practitioner interpretation, not usability proof. Styleguide and
+imagery concepts extend the existing durable design truth rather than creating a
+second styleguide owner or mirroring article content.
+
+The 2026-10-28 Emil refresh again classifies as `EXTEND`, not a new discovery
 surface. `animation-performance` strengthens the existing runtime-motion owner.
 `break-ui` has no post-adoption delta: Agent Hub already adopted it on 2026-10-04
 as the dedicated `fortify worst-case` workflow, including schema-backed realistic
 stress data, real-boundary injection, environment pressure, report-before-fix,
-and regression-fixture guidance. No duplicate design-with-ai route is added.
+and regression-fixture guidance. The new `remove-animations` skill mostly
+overlaps Agent Hub's existing purpose/frequency motion gate, so no new route or
+standalone skill is added. Only its removal-safety delta is adopted: check hidden
+start states, completion/unmount/focus coupling, layout-motion masking, and
+motion-coupled tests before deletion, then clean only artifacts orphaned by the
+approved removal and require explicit approval before removing a dependency.
+
+The 2026-10-28 Penpot review also classifies as `EXTEND`. Penpot is a design
+source/editing surface, not an independent design owner. Agent Hub therefore adds
+one progressive Penpot integration reference instead of `skills/penpot/`. The
+integration pins upstream capability/provenance only: Penpot source, MCP server
+code, client configuration, credentials, and session state are not vendored into
+this skill. Current upstream OAuth support and legacy query-token compatibility
+are treated as current-source facts, not a permanent universal client contract.
 
 `impeccable` is intentionally not vendored or modified by `design-with-ai`. It
 remains an independently managed explicit/delegated specialist and may update on
@@ -75,9 +105,11 @@ Wibias-specific behaviour includes:
 - one visible-UI owner and natural-language router;
 - Direction -> Baseline -> Craft -> Gate quality stack;
 - command/profile contracts and progressive resource loading;
+- Penpot as a progressive design-file/session adapter with read-only-first inspection, bounded reversible writes, read-back verification, project-design-authority precedence, and host-local secret/config handling;
 - motion craft vs live runtime performance evidence boundary;
 - source-evidence and design-reference-library policy;
-- bounded heuristic design-guidance retrieval separated from evidence;
+- bounded heuristic design-guidance retrieval separated from evidence, with freshness and relevance-regression governance;
+- bounded perceptual hierarchy/grouping diagnostics that never become standalone usability evidence;
 - evidence-ranked anti-slop signal registry with closed source provenance,
   semantic-family cluster scoring, reasoned contextual intent exceptions that
   never suppress hard safety gates, and positive/boundary-negative source

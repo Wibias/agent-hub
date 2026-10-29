@@ -20,13 +20,18 @@ Domains are intentionally limited to:
 - `text-layout`
 - `accessibility`
 
-Use 2-6 meaningful terms around one observable question. Prefer an explicit domain. Read the returned record identity, guidance, avoid condition, accessibility note, and provenance before applying it.
+Use 2-6 meaningful terms around one observable question. Prefer an explicit domain. Read the returned record identity, guidance, avoid condition, accessibility note, provenance, and freshness status before applying it.
 
-- exit `0`: at least one catalog match;
+- exit `0`: at least one catalog match; inspect `freshness.status` (`current` or `review-due`);
 - exit `2`: no verified catalog match;
-- other non-zero: tool/argument failure.
+- exit `3`: the catalog is hard-expired and must be refreshed/reviewed before results may be treated as verified guidance;
+- other non-zero: tool, argument, or catalog-configuration failure.
 
 When exit `2` occurs, retry **once** with a narrower semantic rewrite. If that still returns no match, stop querying and continue from project evidence, current standards, or clearly labelled general reasoning. Never present a fallback as a catalog match.
+
+When freshness is `review-due`, the record remains bounded heuristic guidance but its age is part of the decision. Prefer current official platform/accessibility material for time-sensitive details and schedule an upstream review rather than silently treating the snapshot as fresh. When exit `3` occurs, do not use the stale catalog result at all; refresh the source or fall back explicitly to project evidence/current standards.
+
+`DESIGN_GUIDANCE_NOW=YYYY-MM-DD` exists only to make tests/reproducible evaluation deterministic. Normal runs use the current UTC date.
 
 ## Authority order
 
@@ -51,4 +56,4 @@ Guidance records use `sourceType: heuristic-guidance`. They do not count toward 
 
 Map every used result to one decision or open question. If the result conflicts with the real render or source-backed evidence, the result loses.
 
-Source lineage: adapted from the bounded-search mechanics of `nextlevelbuilder/ui-ux-pro-max-skill` (MIT), narrowed to the local `design-with-ai` ownership and evidence model.
+Source lineage: adapted from the bounded-search and provenance/relevance-governance mechanics of `nextlevelbuilder/ui-ux-pro-max-skill` (MIT), reviewed at commit `28b3b8dee8c976df4fa3e94aed4e092ad43fcb03` on 2026-10-28 and narrowed to the local `design-with-ai` ownership and evidence model.

@@ -62,7 +62,7 @@ Use a selected motion workflow when motion itself is the task.
 - Let URLs, identifiers, and long user content wrap safely without applying destructive `break-all` behavior to normal prose.
 - Chip/tag collections should wrap before essential labels are compressed; a `+n` summary must be an operable disclosure when it hides values.
 
-## Layout and performance
+## Layout, hierarchy, and performance
 
 - Use a deliberate z-index scale; do not solve stacking with arbitrary giant
   values.
@@ -72,6 +72,7 @@ Use a selected motion workflow when motion itself is the task.
 - Check responsive transposition rather than merely shrinking desktop geometry.
 - Validate clipping/overflow and fixed/sticky elements at representative mobile
   and desktop widths.
+- When the defect is grouping, figure/ground, competing accents, or visual weight that disagrees with semantic priority, load `perceptual-hierarchy.md` before adding decoration. Its blur/thumbnail check is an optional rendered diagnostic, not evidence of usability.
 
 ## Anti-slop floor
 
@@ -94,11 +95,13 @@ Before handing off to Craft, check:
 - text overflow/wrapping and compact chip/tag collections;
 - loading/error/empty states touched by the change;
 - interrupted/repeated interaction settles on the correct semantic state;
-- visible hierarchy and primary action;
+- visible hierarchy and primary action, including perceptual grouping when that was an identified defect;
 - no baseline rule accidentally changed product semantics or routes.
 
 When the target is native/mobile, load `native-mobile.md` for platform-specific units, safe areas, text scaling, gestures, and runtime verification.
 
 Source lineage: ibelick/ui-skills `baseline-ui` (MIT), adapted into the unified
 `design-with-ai` quality stack; selected resilient interaction/text rules also
-adapted from `nextlevelbuilder/ui-ux-pro-max-skill` (MIT).
+adapted from `nextlevelbuilder/ui-ux-pro-max-skill` (MIT). Perceptual hierarchy
+checks are selectively re-expressed from Webdesign Journal practitioner material
+reviewed 2026-10-28 and remain diagnostics rather than tested usability evidence.

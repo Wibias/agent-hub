@@ -1,0 +1,32 @@
+[
+  {
+    "id": "RG1",
+    "domain": "chart",
+    "query": "forecast uncertainty confidence interval",
+    "expectedTopId": "chart-forecast-uncertainty"
+  },
+  {
+    "id": "RG2",
+    "domain": "native",
+    "query": "safe area notch bottom inset",
+    "expectedTopId": "native-safe-area"
+  },
+  {
+    "id": "RG3",
+    "domain": "interaction",
+    "query": "rapid animation state interruption",
+    "expectedTopId": "interaction-interruptible-state"
+  },
+  {
+    "id": "RG4",
+    "domain": "text-layout",
+    "query": "chip tags overflow wrap collection",
+    "expectedTopId": "text-layout-chip-collection"
+  },
+  {
+    "id": "RG5",
+    "domain": "accessibility",
+    "query": "focus obscured sticky overlay keyboard",
+    "expectedTopId": "accessibility-focus-not-obscured"
+  }
+]

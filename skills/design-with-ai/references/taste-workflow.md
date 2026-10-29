@@ -23,13 +23,14 @@ State the interpretation in one line. Use `dials.md`, `genres.md`, and
 `color-strategy.md` only when the decision needs them. Pick a real direction,
 not a colour-swap variant.
 
+Record a compact visual-intent vocabulary before using generic adjectives as design rationale: put the **desired** terms and **avoid** terms on one line, add one **tension statement** such as `precise but not sterile`, and map each term to at least one **observable design choice** or explicit refusal. Words such as `modern`, `clean`, `premium`, and `sleek` are insufficient by themselves; operationalize them into structure, type, palette, density, materiality, imagery, motion, or a concrete refusal.
+
 Before filling a high-impact design choice from generic model priors, classify
 its source as one of: incumbent project truth, explicit user/reference
 direction, task or information semantics, a deliberate new direction, or
 unresolved. Apply this to macrostructure, palette source, typography source,
 density/radius posture, component language, motion posture, and trust/status
-content. "Modern", "clean", "premium", "sleek", or avoiding a known slop tell
-is not sufficient rationale by itself.
+content. The visual-intent vocabulary describes an approved or proposed direction; it does not convert product-category labels into style defaults.
 
 If a material choice remains unresolved and different choices would produce
 meaningfully different products, expose distinct directions instead of silently
@@ -54,6 +55,7 @@ Lock tokens before broad generation. Load only relevant references:
 |---|---|
 | Colour strategy | `color-strategy.md` |
 | Genre/dials | `genres.md`, `dials.md` |
+| Perceptual hierarchy/grouping | `perceptual-hierarchy.md` |
 | Design systems/icons | `design-systems.md` |
 | Motion system craft | `motion-systems.md`, `standards.md` |
 | Spring vs easing | `spring-decision.md` |
@@ -68,7 +70,7 @@ Baseline and micro craft are separate internal phases owned by `quality-stack.md
 
 ## 5. Critique
 
-Use `critique-protocol.md`. Review Philosophy, Hierarchy, Execution, Specificity, Restraint, and Variety. Revise weak axes before the gate.
+Use `critique-protocol.md`. Review Philosophy, Hierarchy, Execution, Specificity, Restraint, and Variety. When hierarchy/grouping/salience is the defect rather than art direction itself, load `perceptual-hierarchy.md`. Revise weak axes before the gate.
 
 ## 6. Gate
 
@@ -88,4 +90,4 @@ lead; rendered UI is ground truth.
 
 ## 7. Verify
 
-Check representative desktop/mobile sizes, focus, contrast, state changes, reduced motion, clipping, and interaction. Missing motion is `motion-opportunities`; runtime cost is `motion-optimize`.
+Check representative desktop/mobile sizes, focus, contrast, state changes, reduced motion, clipping, and interaction. Use the blur/thumbnail diagnostic from `perceptual-hierarchy.md` only when visual focal order is materially in question; it is not a usability verdict. Missing motion is `motion-opportunities`; runtime cost is `motion-optimize`.
