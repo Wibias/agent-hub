@@ -15,6 +15,8 @@ export async function selectCodexAuthoritativeRecall({
   recallFastPathShadow = null,
   recallFastPathObserver = null,
   onRecallFastPathObservation = null,
+  graphRecallObserver = null,
+  onGraphRecallObservation = null,
   fastPathContext = null,
   maxSelected = 8,
 } = {}) {
@@ -41,6 +43,15 @@ export async function selectCodexAuthoritativeRecall({
     && typeof onRecallFastPathObservation !== 'function'
   ) {
     throw new TypeError('onRecallFastPathObservation must be a function or null');
+  }
+  if (graphRecallObserver !== null && typeof graphRecallObserver !== 'function') {
+    throw new TypeError('graphRecallObserver must be a function or null');
+  }
+  if (
+    onGraphRecallObservation !== null
+    && typeof onGraphRecallObservation !== 'function'
+  ) {
+    throw new TypeError('onGraphRecallObservation must be a function or null');
   }
   if (
     recallFastPathObserver !== null
@@ -77,7 +88,7 @@ export async function selectCodexAuthoritativeRecall({
     }
   }
 
-  return filterRecallRelianceForContext({
+  const authoritative = await filterRecallRelianceForContext({
     query,
     reliance,
     judge: relevanceJudge,
@@ -87,4 +98,41 @@ export async function selectCodexAuthoritativeRecall({
     shadowFastPathContext: fastPathContext,
     maxSelected,
   });
+
+  if (graphRecallObserver !== null) {
+    const authoritativeSelectedIds = Array.isArray(authoritative?.selector?.selected_ids)
+      ? [...authoritative.selector.selected_ids]
+      : [];
+    const judgeCalled = authoritative?.selector?.telemetry?.judge_called === true;
+    const judgeAvailable = judgeCalled && authoritative?.selector?.failed !== true;
+
+    try {
+      const graphResult = await graphRecallObserver({
+        query,
+        candidates: reliance.selected,
+        authoritativeSelectedIds,
+        judgeCalled,
+        judgeAvailable,
+      });
+
+      if (onGraphRecallObservation !== null) {
+        try {
+          await onGraphRecallObservation({
+            query,
+            candidates: reliance.selected,
+            authoritativeSelectedIds,
+            judgeCalled,
+            judgeAvailable,
+            graphResult,
+          });
+        } catch {
+          // Graph shadow persistence is observational and must never affect authority.
+        }
+      }
+    } catch {
+      // Graph recall shadow is observational and must never affect authority.
+    }
+  }
+
+  return authoritative;
 }
