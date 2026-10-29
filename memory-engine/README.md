@@ -380,6 +380,56 @@ Promoted agent decisions are the one deliberate exception to the normal exclusio
 
 Missing configuration, Git-context failure, unavailable memory, recall failure, or an empty recall/capture result does not block the user turn.
 
+### Graph Recall Shadow Mode
+
+Graph Recall Shadow Mode is an observational, read-only evaluation path for bounded Memory Graph expansion. It is disabled by default and never replaces, reorders, or otherwise changes the authoritative Recall/Judge result.
+
+It may be enabled explicitly for the Codex memory hook with either:
+
+~~~text
+--graph-recall-shadow
+~~~
+
+or:
+
+~~~text
+AGENT_HUB_MEMORY_GRAPH_RECALL_SHADOW=true
+~~~
+
+Enabling the mode changes evidence collection only:
+
+- the existing reliance-approved candidate set remains authoritative;
+- no second Judge call is made;
+- graph candidates never become production selections;
+- observer/store failures fail open and do not suppress authoritative recall;
+- no canonical Memory SQLite schema or Claim state is modified.
+
+Durable observations are privacy-safe and stored separately from canonical Memory under:
+
+~~~text
+<directory-containing-memory.sqlite3>/shadow-replay/graph-calibration/
+~~~
+
+Records contain hashed candidate identities rather than prompt text, Claim text, raw Claim IDs, or vectors.
+
+Evaluate the collected natural-runtime evidence with:
+
+~~~powershell
+node .\scripts\eval-graph-recall-shadow.mjs
+~~~
+
+When evaluating another evidence root explicitly:
+
+~~~powershell
+node .\scripts\eval-graph-recall-shadow.mjs --root-dir <shadow-replay-root>
+~~~
+
+The evaluator is read-only. It reports candidate-shape, estimated token cost, latency, false-negative, final-selection-recall, and exact-preservation aggregates.
+
+At least **100 quality-eligible natural runtime observations** are required before any later promotion discussion. A sample is quality-eligible only when the authoritative path naturally called the Judge and that Judge completed successfully.
+
+This phase never emits an automatic production recommendation; `production_recommendation` remains `null`.
+
 ### Configuration
 
 The adapter requires explicit shared memory configuration in the Codex process environment:
