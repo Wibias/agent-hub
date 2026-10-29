@@ -169,3 +169,102 @@ test('empty input has deterministic zero/null aggregates', () => {
   });
   assert.equal(report.production_recommendation, null);
 });
+
+test('CLI reads durable graph shadow evidence and emits read-only JSON', async () => {
+  const {
+    mkdirSync,
+    mkdtempSync,
+    readFileSync,
+    rmSync,
+    writeFileSync,
+  } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const { fileURLToPath } = await import('node:url');
+  const { spawnSync } = await import('node:child_process');
+
+  const root = mkdtempSync(
+    join(tmpdir(), 'agent-hub-graph-shadow-eval-'),
+  );
+
+  try {
+    const dbPath = join(root, 'memory.sqlite3');
+    const calibrationDir = join(
+      root,
+      'shadow-replay',
+      'graph-calibration',
+    );
+
+    mkdirSync(calibrationDir, { recursive: true });
+
+    const evidencePath = join(
+      calibrationDir,
+      `${'a'.repeat(64)}.json`,
+    );
+
+    writeFileSync(
+      evidencePath,
+      `${JSON.stringify(record({
+        localDurationMs: 12,
+        sourceCandidateCount: 4,
+        graphCandidateCount: 3,
+        sourcePrunedCount: 1,
+        novelGraphCount: 1,
+        falseNegativeCount: 0,
+        finalSelectionRecall: 1,
+        exactPreservation: true,
+        estimatedSourceCandidateTokens: 40,
+        estimatedGraphCandidateTokens: 24,
+      }), null, 2)}\n`,
+      'utf8',
+    );
+
+    const before = readFileSync(evidencePath, 'utf8');
+
+    const script = fileURLToPath(
+      new URL(
+        '../../scripts/eval-graph-recall-shadow.mjs',
+        import.meta.url,
+      ),
+    );
+
+    const result = spawnSync(
+      process.execPath,
+      [script],
+      {
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          AGENT_HUB_MEMORY_DB: dbPath,
+        },
+      },
+    );
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.notEqual(
+      result.stdout.trim(),
+      '',
+      'CLI must emit a JSON report',
+    );
+
+    const report = JSON.parse(result.stdout);
+
+    assert.equal(report.type, 'agent_hub_graph_recall_shadow');
+    assert.equal(report.schemaVersion, 1);
+    assert.equal(report.readOnly, true);
+    assert.equal(report.evidence.total_observation_count, 1);
+    assert.equal(
+      report.evidence.quality_eligible_observation_count,
+      1,
+    );
+    assert.equal(report.production_recommendation, null);
+
+    assert.equal(
+      readFileSync(evidencePath, 'utf8'),
+      before,
+      'evaluation must not mutate durable evidence',
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
