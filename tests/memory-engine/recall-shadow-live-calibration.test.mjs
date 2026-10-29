@@ -280,10 +280,16 @@ test('telemetry collision is detected after the durable calibration write', () =
 });
 
 test('wiring keeps normal Judge authority and lets the existing drain dedupe before Judge creation', async () => {
-  const hooks = await readFile(
-    new URL('../../memory-engine/adapters/codex-hooks.mjs', import.meta.url),
-    'utf8',
-  );
+  const hooks = [
+    await readFile(
+      new URL('../../memory-engine/adapters/codex-hooks.mjs', import.meta.url),
+      'utf8',
+    ),
+    await readFile(
+      new URL('../../memory-engine/adapters/codex-hooks-core.mjs', import.meta.url),
+      'utf8',
+    ),
+  ].join('\n');
   const cli = await readFile(
     new URL('../../memory-engine/adapters/codex-hook-cli.mjs', import.meta.url),
     'utf8',
