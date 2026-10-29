@@ -290,10 +290,16 @@ test('wiring keeps normal Judge authority and lets the existing drain dedupe bef
       'utf8',
     ),
   ].join('\n');
-  const cli = await readFile(
-    new URL('../../memory-engine/adapters/codex-hook-cli.mjs', import.meta.url),
-    'utf8',
-  );
+  const cli = [
+    await readFile(
+      new URL('../../memory-engine/adapters/codex-hook-cli.mjs', import.meta.url),
+      'utf8',
+    ),
+    await readFile(
+      new URL('../../memory-engine/adapters/codex-hook-cli-core.mjs', import.meta.url),
+      'utf8',
+    ),
+  ].join('\n');
   const drain = await readFile(
     new URL('../../scripts/eval-recall-shadow-replay.mjs', import.meta.url),
     'utf8',
