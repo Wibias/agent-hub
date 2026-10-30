@@ -9,6 +9,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(here, '..');
 const registryPath = resolve(repoRoot, 'upstream-sources.json');
 const offline = process.argv.includes('--offline');
+const decisions = new Set(['current', 'not-applicable', 'separate-pr', 'update-pending']);
 
 function fail(message, code = 2) {
   console.error(`ERROR ${message}`);
@@ -16,14 +17,14 @@ function fail(message, code = 2) {
 }
 
 function validate(registry) {
-  if (registry?.schemaVersion !== 1 || !Array.isArray(registry.sources)) {
+  if (registry?.schemaVersion !== 2 || !Array.isArray(registry.sources)) {
     fail('invalid upstream-sources.json schema');
   }
 
   const ids = new Set();
   for (const source of registry.sources) {
     if (!source || typeof source !== 'object') fail('source entry must be an object');
-    for (const field of ['id', 'repository', 'reviewedCommit', 'scope']) {
+    for (const field of ['id', 'repository', 'reviewedCommit', 'scope', 'decision']) {
       if (typeof source[field] !== 'string' || source[field].trim() === '') {
         fail(`${source.id ?? '<unknown>'}: missing ${field}`);
       }
@@ -35,6 +36,13 @@ function validate(registry) {
     }
     if (!/^[^/\s]+\/[^/\s]+$/.test(source.repository)) {
       fail(`${source.id}: repository must be owner/name`);
+    }
+    if (!decisions.has(source.decision)) fail(`${source.id}: unsupported decision ${source.decision}`);
+    if (source.localPin != null && !/^[0-9a-f]{40}$/.test(source.localPin)) {
+      fail(`${source.id}: localPin must be a full 40-character SHA`);
+    }
+    if (source.decision === 'update-pending' && !source.localPin) {
+      fail(`${source.id}: update-pending requires localPin`);
     }
   }
   return registry;
@@ -49,14 +57,19 @@ try {
   throw error;
 }
 
-if (offline) {
-  for (const source of registry.sources) {
-    console.log(`RECORDED ${source.id} ${source.reviewedCommit} scope=${source.scope}`);
+function adoptionStatus(source) {
+  if (source.decision === 'update-pending') {
+    return `PENDING ${source.id} reviewed=${source.reviewedCommit} local=${source.localPin} scope=${source.scope}`;
   }
+  return `RECORDED ${source.id} ${source.reviewedCommit} decision=${source.decision} scope=${source.scope}`;
+}
+
+if (offline) {
+  for (const source of registry.sources) console.log(adoptionStatus(source));
   process.exit(0);
 }
 
-let updates = 0;
+let findings = 0;
 for (const source of registry.sources) {
   const remote = `https://github.com/${source.repository}.git`;
   const result = spawnSync('git', ['ls-remote', remote, 'HEAD'], {
@@ -72,14 +85,22 @@ for (const source of registry.sources) {
   const head = result.stdout.trim().split(/\s+/)[0];
   if (!/^[0-9a-f]{40}$/.test(head)) fail(`${source.id}: could not parse remote HEAD`);
 
-  if (head === source.reviewedCommit) {
-    console.log(`CURRENT ${source.id} ${source.repository} ${head} scope=${source.scope}`);
-  } else {
-    updates += 1;
+  if (head !== source.reviewedCommit) {
+    findings += 1;
     console.log(
       `UPDATE ${source.id} ${source.repository} reviewed=${source.reviewedCommit} head=${head} scope=${source.scope}`,
+    );
+    continue;
+  }
+
+  if (source.decision === 'update-pending') {
+    findings += 1;
+    console.log(adoptionStatus(source));
+  } else {
+    console.log(
+      `CURRENT ${source.id} ${source.repository} ${head} decision=${source.decision} scope=${source.scope}`,
     );
   }
 }
 
-process.exit(updates === 0 ? 0 : 1);
+process.exit(findings === 0 ? 0 : 1);
