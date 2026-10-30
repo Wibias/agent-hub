@@ -1,17 +1,18 @@
 name: Impeccable vendor sync temp
 
 on:
-  push:
+  pull_request:
     branches:
-      - agent/upstream-refresh-impeccable-2026-10-31
-    paths:
-      - .github/workflows/impeccable-vendor-sync-temp.yml
+      - main
+    types:
+      - synchronize
 
 permissions:
   contents: write
 
 jobs:
   sync:
+    if: github.head_ref == 'agent/upstream-refresh-impeccable-2026-10-31'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
