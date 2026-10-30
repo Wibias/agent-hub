@@ -8,7 +8,7 @@ description: >-
   audit, motion, or generic frontend design requests; use design-with-ai
   instead. Not for backend-only or non-UI tasks.
 metadata:
-  version: 4.8.0
+  version: 4.6.0
 ---
 
 This skill gives you the tools and permission to make design that earns the name out-of-distribution craft. Work as an award-winning design director would: production-grade code, a clear POV, a deep grasp of what the client and its users need, and exceptional craft.
@@ -25,7 +25,7 @@ Core principles:
 2. Load the request's playbook: its Commands-table reference for an explicit/implied sub-command, or [reference/new-work.md](reference/new-work.md) for a new surface or replacement visual world. Inspect target and incumbent visual truth before editing. When the app cannot run, start with committed visual-regression goldens or screenshot fixtures; verify target and freshness against current tokens, CSS, components, or assets, resolve conflicts, and compare theme/variant captures.
 3. After resolving analysis and direction, read [reference/craft-floor.md](reference/craft-floor.md) immediately before any UI edit, including small refinements. It carries the quality floor, the absolute bans, and the reflexes no detector catches. Do not load it for planning-only work.
 
-**Launcher unavailable:** On refusal or failure, surface the observed failure first. For a non-zero exit, include the exit code and relevant stderr; never claim context loading succeeded. Then send a separate message **before the next tool call**: “Context loading did not run; I’ll read the existing project context directly.” Read existing PRODUCT.md and DESIGN.md without inventing missing context, follow applicable steps 2–3, including reading [reference/craft-floor.md](reference/craft-floor.md) immediately before any UI edit, and continue through permitted tools. This applies to planning and editing; launcher failure alone does not block either.
+**Launcher unavailable:** On refusal or failure, surface the observed failure first. For a non-zero exit, include the exit code and relevant stderr; never claim context loading succeeded. Then send a separate message **before the next tool call**: “Context loading did not run; I’ll read the existing project context directly.” Read existing PRODUCT.md and DESIGN.md without inventing missing context, follow applicable steps 2–3, and continue through permitted tools. This applies to planning and editing; launcher failure alone does not block either.
 
 <!-- assertion: nonzero-exit-surfaced -->
 <!-- assertion: stderr-or-error-shown -->
