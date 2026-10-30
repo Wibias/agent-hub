@@ -2,150 +2,83 @@ name: Reference graph P18 governance
 
 on:
   pull_request:
+  push:
+    branches:
+      - main
+      - agent/reference-graph-p18
+  workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: reference-graph-p18-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  sync-impeccable:
-    if: github.head_ref == 'agent/upstream-refresh-impeccable-2026-10-31'
-    runs-on: ubuntu-latest
+  verify:
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
-          ref: agent/upstream-refresh-impeccable-2026-10-31
-          fetch-depth: 0
+          node-version: 24
 
-      - name: Sync pinned Impeccable vendor
+      - name: Configure disposable P18 local state
+        shell: bash
+        run: echo "AGENT_HUB_REFERENCE_GRAPH_STATE=$RUNNER_TEMP/reference-graph-p18/activation-state-v1.json" >> "$GITHUB_ENV"
+
+      - name: Test P18 contracts
+        run: node --test tests/reference-graph/p18-*.test.mjs
+
+      - name: Scan Reference Graph tree for common secrets
+        run: python3 skills/security-review-redirect/scripts/scan_secrets.py reference-graph
+
+      - name: Verify public release safety
+        run: node scripts/verify-public-release.mjs
+
+      - name: Verify external OpenSSL Ed25519 ceremony compatibility
         shell: bash
         run: |
           set -euo pipefail
-          OLD=6af45ac9a5eb8792f033d3242f52e99812fd91fa
-          NEW=df3a4abe7d0840d5f60324812c432e00b66a4e75
-          UP=/tmp/impeccable-upstream
-          rm -rf "$UP"
-          git clone --filter=blob:none --no-checkout https://github.com/pbakaus/impeccable.git "$UP"
-          git -C "$UP" fetch --depth=1 origin "$OLD" "$NEW"
+          openssl version
+          CEREMONY_DIR="$RUNNER_TEMP/p18-openssl-ceremony"
+          mkdir -p "$CEREMONY_DIR"
 
-          python3 - <<'PY'
-          from pathlib import Path
-          import subprocess
-          import re
+          openssl genpkey -algorithm ED25519 -out "$CEREMONY_DIR/authority-private.pem"
+          openssl pkey -in "$CEREMONY_DIR/authority-private.pem" -pubout -outform DER -out "$CEREMONY_DIR/authority-public.der"
 
-          old = '6af45ac9a5eb8792f033d3242f52e99812fd91fa'
-          new = 'df3a4abe7d0840d5f60324812c432e00b66a4e75'
-          up = Path('/tmp/impeccable-upstream')
-          prefix = '.agents/skills/impeccable/'
-          dest_root = Path('skills/impeccable')
+          AUTHORITY_HASH="$(node reference-graph/cli/p18-production-activation.mjs \
+            --authority-descriptor \
+            "$CEREMONY_DIR/authority-public.der" \
+            "p18-ci-ephemeral-authority" \
+            "p18-ci-ephemeral-key" \
+            "$CEREMONY_DIR/authority.json")"
+          printf '%s\n' "$AUTHORITY_HASH" > "$CEREMONY_DIR/authority-approved.sha256"
 
-          def paths_at(ref):
-              out = subprocess.check_output(
-                  ['git', '-C', str(up), 'ls-tree', '-r', '--name-only', ref, '--', '.agents/skills/impeccable'],
-                  text=True,
-              )
-              return {line.strip() for line in out.splitlines() if line.strip()}
+          PAYLOAD_HASH="$(node reference-graph/cli/p18-production-activation.mjs \
+            --prepare-grant \
+            "$CEREMONY_DIR/authority.json" \
+            "$CEREMONY_DIR/authority-approved.sha256" \
+            "$CEREMONY_DIR/grant.payload.json" \
+            "$CEREMONY_DIR/grant.canonical.json")"
+          test "${#PAYLOAD_HASH}" -eq 64
 
-          old_paths = paths_at(old)
-          new_paths = paths_at(new)
-          for full in sorted(old_paths | new_paths):
-              if not full.startswith(prefix):
-                  continue
-              rel = full[len(prefix):]
-              if rel == 'SKILL.md':
-                  continue
-              dest = dest_root / rel
-              if full in new_paths:
-                  data = subprocess.check_output(['git', '-C', str(up), 'show', f'{new}:{full}'])
-                  dest.parent.mkdir(parents=True, exist_ok=True)
-                  dest.write_bytes(data)
-              elif dest.exists():
-                  dest.unlink()
+          openssl pkeyutl -sign -rawin \
+            -inkey "$CEREMONY_DIR/authority-private.pem" \
+            -in "$CEREMONY_DIR/grant.canonical.json" \
+            -out "$CEREMONY_DIR/grant.sig"
 
-          skill_path = dest_root / 'SKILL.md'
-          skill = skill_path.read_text(encoding='utf-8')
-          skill, count = re.subn(r'(?m)^  version: 4\.6\.0$', '  version: 4.8.0', skill, count=1)
-          if count != 1:
-              raise SystemExit('could not update local Impeccable skill version')
-          before = 'follow applicable steps 2–3, and continue through permitted tools.'
-          after = 'follow applicable steps 2–3, including reading [reference/craft-floor.md](reference/craft-floor.md) immediately before any UI edit, and continue through permitted tools.'
-          if before not in skill:
-              raise SystemExit('could not locate launcher fallback overlay sentence')
-          skill = skill.replace(before, after, 1)
-          skill_path.write_text(skill, encoding='utf-8')
+          ASSEMBLED="$(node reference-graph/cli/p18-production-activation.mjs \
+            --assemble-grant \
+            "$CEREMONY_DIR/authority.json" \
+            "$CEREMONY_DIR/authority-approved.sha256" \
+            "$CEREMONY_DIR/grant.payload.json" \
+            "$CEREMONY_DIR/grant.sig" \
+            "$CEREMONY_DIR/grant.json")"
+          node -e '
+            const value = JSON.parse(process.argv[1]);
+            if (value.grant_verified !== true || value.activation_authorized !== true || value.activation_performed !== false) process.exit(1);
+          ' "$ASSEMBLED"
 
-          (dest_root / 'UPSTREAM.md').write_text('''# Impeccable upstream
-
-Agent Hub vendors the Impeccable skill from `pbakaus/impeccable`.
-
-## Current pin
-
-- Upstream commit: `df3a4abe7d0840d5f60324812c432e00b66a4e75`
-- Skill version: `4.8.0`
-- Engine version: `0.1.18`
-- Refreshed: `2026-10-31`
-
-## Sync contract
-
-Files shared with upstream under `.agents/skills/impeccable/` should remain byte-identical under `skills/impeccable/`, except `SKILL.md`.
-
-`SKILL.md` is an intentional Agent Hub overlay. It preserves upstream Impeccable workflow semantics while adding the local explicit-only discovery boundary, repository-content instruction-injection handling, stricter launcher failure evidence, competing-skill classification, and Skill Ratchet qualification references.
-
-Do not replace that overlay wholesale during an upstream refresh. Merge new upstream `SKILL.md` semantics into it, then verify that the local routing and security boundaries remain intact.
-
-After changing the overlay, regenerate the repository knowledge catalog with `node knowledge/build-index.mjs` and commit the generated `knowledge/index.json` and `knowledge/INDEX.md` outputs.
-
-Target-only evaluation or integration files are local Agent Hub assets and are not evidence of vendor drift. Agent Hub runtime-integration files that were never present in the pinned upstream distribution are local overlays too; an upstream refresh must preserve them unless a separate migration deliberately retires them.
-''', encoding='utf-8')
-
-          test_path = Path('tests/skill-catalog/upstream-guidance-adoption.test.mjs')
-          text = test_path.read_text(encoding='utf-8')
-          text = text.replace('6af45ac9a5eb8792f033d3242f52e99812fd91fa', new)
-          text = text.replace("assert.equal(skillVersion, '4.6.0');", "assert.equal(skillVersion, '4.8.0');")
-          text = text.replace("assert.equal(engineVersion, '0.1.15');", "assert.equal(engineVersion, '0.1.18');")
-          text = text.replace('Skill version: `4.6.0`', 'Skill version: `4.8.0`')
-          text = text.replace('Engine version: `0.1.15`', 'Engine version: `0.1.18`')
-          test_path.write_text(text, encoding='utf-8')
-          PY
-
-          node knowledge/build-index.mjs
-          node --test tests/skill-catalog/upstream-update-check.test.mjs tests/skill-catalog/upstream-guidance-adoption.test.mjs
-
-      - name: Verify pinned vendor bytes
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 - <<'PY'
-          from pathlib import Path
-          import subprocess
-
-          new = 'df3a4abe7d0840d5f60324812c432e00b66a4e75'
-          up = Path('/tmp/impeccable-upstream')
-          prefix = '.agents/skills/impeccable/'
-          dest_root = Path('skills/impeccable')
-          out = subprocess.check_output(
-              ['git', '-C', str(up), 'ls-tree', '-r', '--name-only', new, '--', '.agents/skills/impeccable'],
-              text=True,
-          )
-          for full in [line.strip() for line in out.splitlines() if line.strip()]:
-              rel = full[len(prefix):]
-              if rel == 'SKILL.md':
-                  continue
-              expected = subprocess.check_output(['git', '-C', str(up), 'show', f'{new}:{full}'])
-              actual = (dest_root / rel).read_bytes()
-              if actual != expected:
-                  raise SystemExit(f'vendor drift: {rel}')
-          print('Impeccable shared vendor bytes match pinned upstream')
-          PY
-
-      - name: Restore governance workflow and commit synchronized vendor
-        shell: bash
-        run: |
-          set -euo pipefail
-          git fetch origin main
-          git checkout origin/main -- .github/workflows/verify-reference-graph-p18.yml
-          rm -f .github/workflows/impeccable-vendor-sync-temp.yml
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
-          git commit -m "chore(impeccable): sync upstream 4.8.0"
-          git push origin HEAD:agent/upstream-refresh-impeccable-2026-10-31
+          rm -rf "$CEREMONY_DIR"
