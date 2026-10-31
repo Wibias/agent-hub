@@ -542,7 +542,7 @@ test('memory console HTTP surface keeps reads loopback-only and protects explici
       branch: 'main',
     });
     const replacement = replacedScope.memories.find(
-      (item) => item.value === 'memory: production database is CockroachDB',
+      (item) => item.value === 'production database is CockroachDB',
     );
     assert.ok(replacement);
     assert.equal(replacement.state, 'active');

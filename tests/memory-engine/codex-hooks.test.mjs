@@ -1131,7 +1131,7 @@ test('explicit memory: prompt captures, commits, and consumes the command', asyn
     kind: 'user_direct',
     subject: 'user memory',
     predicate: 'states',
-    value: prompt,
+    value: 'Use Postgres for concurrent writers.',
     branch_scope: 'main',
     created_at: '2026-09-30T08:30:00.000Z',
   });
@@ -1292,7 +1292,7 @@ test('runCodexMemoryHook wires explicit memory mode and exact-text claim authori
       kind: 'user_direct',
       subject: 'user memory',
       predicate: 'states',
-      value: 'memory: Keep this.',
+      value: 'Keep this.',
       branchScope: 'main',
     },
     lifecycle: {
@@ -1410,7 +1410,7 @@ test('Codex CLI explicit-memory flag persists only memory: prompts in a real Git
       assert.equal(exported.claims[0].predicate, 'states');
       assert.equal(
         exported.claims[0].value_text,
-        'memory: The production database is Postgres.',
+        'The production database is Postgres.',
       );
       assert.equal(exported.claims[0].branch_scope, 'main');
     } finally {
@@ -1460,7 +1460,7 @@ test('explicit memory replacement supersedes exactly one active same-scope Claim
     kind: 'user_direct',
     subject: 'user memory',
     predicate: 'states',
-    value_text: 'memory: database is SQLite',
+    value_text: 'database is SQLite',
     state: 'active',
     branch_scope: 'main',
   };
@@ -1559,7 +1559,7 @@ test('explicit memory replacement supersedes exactly one active same-scope Claim
 
   assert.equal(
     calls[1].payload.claim.value,
-    'memory: database is Postgres',
+    'database is Postgres',
   );
   assert.deepEqual(calls[1].payload.lifecycle, {
     supersedes: ['claim-old'],
@@ -1715,7 +1715,7 @@ test('explicit replacement authorizer binds exact parsed values and lifecycle ta
       kind: 'user_direct',
       subject: 'user memory',
       predicate: 'states',
-      value: 'memory: database is Postgres',
+      value: 'database is Postgres',
       branchScope: 'main',
     },
     lifecycle,
@@ -1739,7 +1739,7 @@ test('explicit replacement authorizer binds exact parsed values and lifecycle ta
       kind: 'user_direct',
       subject: 'user memory',
       predicate: 'states',
-      value: 'memory: database is Postgres',
+      value: 'database is Postgres',
       branchScope: 'main',
     },
     lifecycle: {
@@ -1823,10 +1823,10 @@ test('real Codex hook replacement keeps only the new memory current and old memo
       const state = memory.exportCanonical();
       const projectId = 'github.com/example/replacement-memory';
       const oldClaim = state.claims.find(
-        (claim) => claim.value_text === 'memory: database is SQLite',
+        (claim) => claim.value_text === 'database is SQLite',
       );
       const newClaim = state.claims.find(
-        (claim) => claim.value_text === 'memory: database is Postgres',
+        (claim) => claim.value_text === 'database is Postgres',
       );
 
       assert.ok(oldClaim);

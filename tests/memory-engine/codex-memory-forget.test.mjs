@@ -10,6 +10,7 @@ import { MemoryEngine } from '../../memory-engine/index.mjs';
 import {
   createCodexMemoryHookAdapter,
   parseExplicitMemoryPrompt,
+  resolveActiveDirectUserMemoryTarget,
 } from '../../memory-engine/adapters/codex-hooks.mjs';
 import {
   runCodexMemoryHook,
@@ -417,7 +418,7 @@ test('real Codex forget marks old memory rejected and leaves no new current memo
     try {
       const state = memory.exportCanonical();
       const remembered = state.claims.find(
-        (claim) => claim.value_text === 'memory: database is Postgres'
+        (claim) => claim.value_text === 'database is Postgres'
           && claim.kind === 'user_direct',
       );
       const control = state.claims.find(
@@ -431,7 +432,7 @@ test('real Codex forget marks old memory rejected and leaves no new current memo
       assert.ok(control);
       assert.equal(control.state, 'expired');
       assert.equal(control.predicate, 'forgets');
-      assert.equal(control.value_text, 'memory: database is Postgres');
+      assert.equal(control.value_text, 'database is Postgres');
 
       const projectId = 'github.com/example/memory-forget';
       const current = memory.recall({
@@ -462,4 +463,52 @@ test('real Codex forget marks old memory rejected and leaves no new current memo
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+test('legacy memory command value resolves a canonical unprefixed direct memory', () => {
+  const target = activeClaim({
+    value_text: 'database is Postgres',
+    value: 'database is Postgres',
+  });
+
+  const resolved = resolveActiveDirectUserMemoryTarget({
+    exportCanonical() {
+      return {
+        claims: [target],
+      };
+    },
+  }, {
+    projectId: 'project-a',
+    branch: 'main',
+    value: 'memory: database is Postgres',
+  });
+
+  assert.equal(resolved?.id, 'claim-old');
+});
+
+test('canonical and legacy direct-memory forms are ambiguous when both are active', () => {
+  const legacy = activeClaim({
+    id: 'claim-legacy',
+    value_text: 'memory: database is Postgres',
+    value: 'memory: database is Postgres',
+  });
+  const canonical = activeClaim({
+    id: 'claim-canonical',
+    value_text: 'database is Postgres',
+    value: 'database is Postgres',
+  });
+
+  const resolved = resolveActiveDirectUserMemoryTarget({
+    exportCanonical() {
+      return {
+        claims: [legacy, canonical],
+      };
+    },
+  }, {
+    projectId: 'project-a',
+    branch: 'main',
+    value: 'memory: database is Postgres',
+  });
+
+  assert.equal(resolved, null);
 });

@@ -254,10 +254,17 @@ export function buildMemoryGraph(memory, {
     ))
     .sort(compareClaims);
   if (scopedClaims.length === 0) {
-    const projectHasClaims = (exported.claims ?? []).some(
-      (claim) => claim.project_id === normalizedProjectId,
+    const branchExists = (
+      (exported.claims ?? []).some((claim) => (
+        claim.project_id === normalizedProjectId
+        && claim.branch_scope === normalizedBranch
+      ))
+      || (exported.evidence ?? []).some((evidence) => (
+        evidence.project_id === normalizedProjectId
+        && evidence.branch === normalizedBranch
+      ))
     );
-    if (projectHasClaims) throw new Error('unknown project branch');
+    if (!branchExists) throw new Error('unknown project branch');
   }
 
   const selectedClaims = scopedClaims.slice(0, nodeLimit);

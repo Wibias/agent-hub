@@ -339,7 +339,7 @@ test('real Codex CLI supports list, replace, and forget by stable ref', () => {
       const oldDb = state.claims.find((claim) => claim.id === 'c-db');
       const oldCamera = state.claims.find((claim) => claim.id === 'c-camera');
       const newDb = state.claims.find(
-        (claim) => claim.value_text === 'memory: database is CockroachDB',
+        (claim) => claim.value_text === 'database is CockroachDB',
       );
 
       assert.equal(oldDb.state, 'superseded');

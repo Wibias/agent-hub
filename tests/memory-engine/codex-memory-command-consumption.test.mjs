@@ -227,3 +227,86 @@ test('ordinary prompts still continue with recalled additionalContext', async ()
   assert.equal(output.decision, undefined);
   assert.match(output.hookSpecificOutput.additionalContext, /Postgres/);
 });
+
+test('memory remember stores canonical Claim text while preserving raw command Evidence', async () => {
+  const requests = [];
+  const protocol = {
+    async handle(request) {
+      requests.push(request);
+
+      if (request.operation === 'capture_evidence') {
+        return {
+          protocol: 'memory.protocol.v1',
+          request_id: request.request_id,
+          ok: true,
+          result: {
+            evidence: {
+              id: request.payload.id,
+              project_id: request.payload.project_id,
+              harness: 'codex',
+              source_kind: 'session',
+              branch: request.payload.branch,
+              captured_at: request.payload.captured_at,
+              content_redacted: request.payload.content,
+              authority_class: 'user_direct',
+              metadata: request.payload.metadata,
+            },
+          },
+        };
+      }
+
+      if (request.operation === 'assert_claim') {
+        return {
+          protocol: 'memory.protocol.v1',
+          request_id: request.request_id,
+          ok: true,
+          result: {
+            claim: {
+              id: request.payload.claim.id,
+              state: 'active',
+            },
+          },
+        };
+      }
+
+      throw new Error('memory remember must be terminal');
+    },
+  };
+
+  const adapter = createCodexMemoryHookAdapter({
+    protocol,
+    memory: {
+      getEvidence() { return null; },
+      getClaim() { return null; },
+    },
+    projectId: 'project-a',
+    explicitMemoryRequests: true,
+    clock: () => '2026-10-31T00:00:00.000Z',
+    git: fakeGit(),
+  });
+
+  const output = await adapter.handle(
+    event('memory: database is Postgres'),
+  );
+
+  assert.deepEqual(output, {
+    decision: 'block',
+    reason: 'Memory stored for the current project and branch.',
+  });
+
+  const captured = requests.find(
+    (request) => request.operation === 'capture_evidence',
+  );
+  const asserted = requests.find(
+    (request) => request.operation === 'assert_claim',
+  );
+
+  assert.equal(
+    captured.payload.content,
+    'memory: database is Postgres',
+  );
+  assert.equal(
+    asserted.payload.claim.value,
+    'database is Postgres',
+  );
+});
