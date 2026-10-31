@@ -12,7 +12,7 @@ function freezeCase(value) {
   });
 }
 
-export const MEMORY_REPLAY_FIXTURE_VERSION = 'replay-v1';
+export const MEMORY_REPLAY_FIXTURE_VERSION = 'replay-v2';
 
 export const USER_MEMORY_REPLAY_CASES = Object.freeze([
   freezeCase({
@@ -108,6 +108,20 @@ export const AGENT_MEMORY_REPLAY_CASES = Object.freeze([
     expected_capture: true,
     expected_importance: 'ignore',
     tags: ['reconstructible_from_repo', 'false_promotion_guard'],
+  }),
+  freezeCase({
+    id: 'agent-operational-doctor-memory',
+    input: 'Decision: after changing Agent Hub memory runtime, run doctor-memory before continuing.',
+    expected_capture: true,
+    expected_importance: 'ignore',
+    tags: ['operational_instruction', 'false_promotion_guard'],
+  }),
+  freezeCase({
+    id: 'agent-completed-pr-status',
+    input: 'Decision: PR #142 is merged and all checks are green now.',
+    expected_capture: true,
+    expected_importance: 'ignore',
+    tags: ['current_run_status', 'false_promotion_guard'],
   }),
 ]);
 

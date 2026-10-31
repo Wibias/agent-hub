@@ -304,3 +304,196 @@ test('agent relation evaluator skips model call for deterministic near duplicate
   assert.equal(summary.results[0].target_ref.length, 11);
   assert.equal(applied.relation.relation, 'same');
 });
+
+test('agent importance deterministically ignores clear low-value decisions before model judgment', async () => {
+  let judgeCalls = 0;
+  const applied = [];
+
+  const candidates = [
+    agentCandidate({
+      id: 'candidate-test-status',
+      proposed_value: 'Decision: tests are green now.',
+      evaluation_json: null,
+    }),
+    agentCandidate({
+      id: 'candidate-pr-status',
+      proposed_value: 'Decision: PR #142 is merged and all checks are green now.',
+      evaluation_json: null,
+    }),
+    agentCandidate({
+      id: 'candidate-operational',
+      proposed_value:
+        'Decision: after changing Agent Hub memory runtime, run doctor-memory before continuing.',
+      evaluation_json: null,
+    }),
+    agentCandidate({
+      id: 'candidate-reconstructible',
+      proposed_value:
+        'Decision: keep using the package version currently recorded in package.json.',
+      evaluation_json: null,
+    }),
+    agentCandidate({
+      id: 'candidate-temporary',
+      proposed_value:
+        'Decision: use JSON Lines for this temporary smoke test only.',
+      evaluation_json: null,
+    }),
+  ];
+
+  const summary = await evaluatePendingAgentDecisionCandidates({
+    memory: {
+      listUnevaluatedAgentCandidates() {
+        return candidates;
+      },
+      evaluateAgentCandidate(args) {
+        applied.push(args);
+      },
+    },
+    projectId: 'project',
+    branch: 'main',
+    evaluatorId: 'codex:test:agent-quality-ratchet',
+    apply: true,
+    judge: async (candidate) => {
+      judgeCalls += 1;
+      return {
+        decision: 'promote',
+        suggested_type: 'decision',
+        durability: 'long',
+        future_utility: 'high',
+        specificity: 'high',
+        confidence: 'high',
+        meaning_preserved: true,
+        canonical_fact:
+          'Agent decision: '
+          + candidate.proposed_value.replace(/^Decision:\s*/u, ''),
+        reason: 'Fixture model would promote this candidate.',
+        risk_flags: [],
+      };
+    },
+  });
+
+  assert.equal(judgeCalls, 0);
+  assert.equal(summary.failed, 0);
+  assert.equal(summary.applied, 5);
+
+  assert.deepEqual(
+    summary.results.map((item) => item.decision),
+    ['ignore', 'ignore', 'ignore', 'ignore', 'ignore'],
+  );
+
+  assert.deepEqual(
+    applied.map((item) => item.evaluation.risk_flags),
+    [
+      ['transient'],
+      ['transient'],
+      ['possible_instruction'],
+      ['reconstructible_from_repo'],
+      ['transient'],
+    ],
+  );
+});
+
+test('agent quality ratchet still sends durable technical decisions to the model judge', async () => {
+  let judgeCalls = 0;
+  const applied = [];
+
+  const summary = await evaluatePendingAgentDecisionCandidates({
+    memory: {
+      listUnevaluatedAgentCandidates() {
+        return [
+          agentCandidate({
+            id: 'candidate-durable',
+            proposed_value:
+              'Decision: use Postgres for concurrent writers across future sessions.',
+            evaluation_json: null,
+          }),
+        ];
+      },
+      evaluateAgentCandidate(args) {
+        applied.push(args);
+      },
+    },
+    projectId: 'project',
+    branch: 'main',
+    evaluatorId: 'codex:test:agent-quality-ratchet',
+    apply: true,
+    judge: async () => {
+      judgeCalls += 1;
+      return {
+        decision: 'promote',
+        suggested_type: 'decision',
+        durability: 'long',
+        future_utility: 'high',
+        specificity: 'high',
+        confidence: 'high',
+        meaning_preserved: true,
+        canonical_fact:
+          'Agent decision: use Postgres for concurrent writers across future sessions.',
+        reason: 'Durable cross-session architecture choice.',
+        risk_flags: [],
+      };
+    },
+  });
+
+  assert.equal(judgeCalls, 1);
+  assert.equal(summary.failed, 0);
+  assert.equal(summary.applied, 1);
+  assert.equal(summary.results[0].decision, 'promote');
+  assert.equal(applied[0].evaluation.decision, 'promote');
+});
+
+test('agent quality ratchet does not treat durable scope words as transient state', async () => {
+  let judgeCalls = 0;
+
+  const candidates = [
+    agentCandidate({
+      id: 'candidate-ci-durable',
+      proposed_value:
+        'Decision: CI now uses Node 24 across future sessions.',
+      evaluation_json: null,
+    }),
+    agentCandidate({
+      id: 'candidate-temporary-environment-durable',
+      proposed_value:
+        'Decision: temporary staging environments use SQLite across future sessions.',
+      evaluation_json: null,
+    }),
+  ];
+
+  const summary = await evaluatePendingAgentDecisionCandidates({
+    memory: {
+      listUnevaluatedAgentCandidates() {
+        return candidates;
+      },
+      evaluateAgentCandidate() {},
+    },
+    projectId: 'project',
+    branch: 'main',
+    evaluatorId: 'codex:test:agent-quality-ratchet',
+    apply: false,
+    judge: async (candidate) => {
+      judgeCalls += 1;
+      return {
+        decision: 'promote',
+        suggested_type: 'decision',
+        durability: 'long',
+        future_utility: 'high',
+        specificity: 'high',
+        confidence: 'high',
+        meaning_preserved: true,
+        canonical_fact:
+          'Agent decision: '
+          + candidate.proposed_value.replace(/^Decision:\s*/u, ''),
+        reason: 'Durable future-session project choice.',
+        risk_flags: [],
+      };
+    },
+  });
+
+  assert.equal(judgeCalls, 2);
+  assert.equal(summary.failed, 0);
+  assert.deepEqual(
+    summary.results.map((item) => item.decision),
+    ['promote', 'promote'],
+  );
+});

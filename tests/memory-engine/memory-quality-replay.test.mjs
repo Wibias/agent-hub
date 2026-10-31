@@ -141,7 +141,7 @@ test('anonymized replay fixture preserves historical false-positive guards', () 
   const result = replayCaptureReachability();
 
   assert.equal(result.version, MEMORY_REPLAY_FIXTURE_VERSION);
-  assert.equal(result.total, 13);
+  assert.equal(result.total, 15);
   assert.equal(result.pass, true);
   assert.deepEqual(result.failures, []);
 
@@ -157,6 +157,14 @@ test('anonymized replay fixture preserves historical false-positive guards', () 
   assert.equal(
     byId.get('user-current-ci-status').observed_capture,
     false,
+  );
+  assert.equal(
+    byId.get('agent-operational-doctor-memory').observed_capture,
+    true,
+  );
+  assert.equal(
+    byId.get('agent-completed-pr-status').observed_capture,
+    true,
   );
 });
 

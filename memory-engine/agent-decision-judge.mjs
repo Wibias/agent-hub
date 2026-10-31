@@ -9,6 +9,108 @@ function nonEmpty(value) {
   return typeof value === 'string' && value.trim().length > 0;
 }
 
+const EXPLICIT_DURABLE_SCOPE_PATTERNS = [
+  /\bacross future sessions\b/iu,
+  /\bfor future sessions\b/iu,
+  /\bacross future releases\b/iu,
+  /\blong[- ]term\b/iu,
+];
+
+const TRANSIENT_AGENT_DECISION_PATTERNS = [
+  /\b(?:temporary|temporarily|one[- ]off|one[- ]time)\b/iu,
+  /\bthis\s+(?:smoke\s+)?(?:test|run|session|task|branch)\s+only\b/iu,
+  /\b(?:tests?|checks?|ci|build|pr|pull request)\b[^.!?]{0,160}\b(?:now|currently|today|this\s+(?:run|session|task|branch))\b/iu,
+];
+
+const RECONSTRUCTIBLE_AGENT_DECISION_PATTERNS = [
+  /\b(?:currently|current)\b[^.!?]{0,120}\b(?:recorded|declared|listed|specified|set)\b[^.!?]{0,120}\b(?:package\.json|package-lock\.json|pnpm-lock\.yaml|yarn\.lock|pyproject\.toml|cargo\.toml|go\.mod|composer\.json|lockfile|manifest)\b/iu,
+  /\b(?:package\.json|package-lock\.json|pnpm-lock\.yaml|yarn\.lock|pyproject\.toml|cargo\.toml|go\.mod|composer\.json|lockfile|manifest)\b[^.!?]{0,120}\b(?:currently|current)\b/iu,
+];
+
+const OPERATIONAL_AGENT_DECISION_PATTERNS = [
+  /\b(?:after|before|when|whenever)\b[^.!?]{0,180}\b(?:run|rerun|re-run|execute|invoke|check|verify)\b[^.!?]{0,180}\b(?:before|after|then|next|continu(?:e|ing))\b/iu,
+  /\b(?:nach|bevor|wenn|sobald)\b[^.!?]{0,180}\b(?:ausführen|ausfuehren|starten|prüfen|pruefen|verifizieren)\b/iu,
+];
+
+function deterministicIgnoreJudgment({
+  reason,
+  riskFlag,
+}) {
+  return validateMemoryCandidateJudgment({
+    decision: 'ignore',
+    suggested_type: 'decision',
+    durability: 'short',
+    future_utility: 'low',
+    specificity: 'high',
+    confidence: 'high',
+    meaning_preserved: true,
+    canonical_fact: null,
+    reason,
+    risk_flags: [riskFlag],
+  });
+}
+
+export function deterministicAgentDecisionImportanceJudgment(candidate) {
+  if (
+    !candidate
+    || typeof candidate !== 'object'
+    || Array.isArray(candidate)
+    || candidate.proposed_type !== 'decision'
+    || candidate.source_authority !== 'agent_inference'
+    || !nonEmpty(candidate.proposed_value)
+  ) {
+    return null;
+  }
+
+  const value = candidate.proposed_value
+    .normalize('NFKC')
+    .replace(/\s+/gu, ' ')
+    .trim();
+
+  const explicitlyDurable = EXPLICIT_DURABLE_SCOPE_PATTERNS.some(
+    (pattern) => pattern.test(value),
+  );
+
+  if (
+    !explicitlyDurable
+    && TRANSIENT_AGENT_DECISION_PATTERNS.some(
+      (pattern) => pattern.test(value),
+    )
+  ) {
+    return deterministicIgnoreJudgment({
+      reason:
+        'Current or temporary execution state is not durable agent memory.',
+      riskFlag: 'transient',
+    });
+  }
+
+  if (
+    RECONSTRUCTIBLE_AGENT_DECISION_PATTERNS.some(
+      (pattern) => pattern.test(value),
+    )
+  ) {
+    return deterministicIgnoreJudgment({
+      reason:
+        'Repository-reconstructible state should be read from source.',
+      riskFlag: 'reconstructible_from_repo',
+    });
+  }
+
+  if (
+    OPERATIONAL_AGENT_DECISION_PATTERNS.some(
+      (pattern) => pattern.test(value),
+    )
+  ) {
+    return deterministicIgnoreJudgment({
+      reason:
+        'Operational runbook steps are not durable agent decisions.',
+      riskFlag: 'possible_instruction',
+    });
+  }
+
+  return null;
+}
+
 export function buildAgentDecisionImportancePrompt(candidate) {
   if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
     throw new TypeError('candidate must be an object');
@@ -99,10 +201,14 @@ export async function evaluatePendingAgentDecisionCandidates({
 
   for (const candidate of candidates) {
     try {
-      const raw = await judge(candidate);
-      const judgment = typeof raw === 'string'
-        ? parseMemoryCandidateJudgment(raw)
-        : validateMemoryCandidateJudgment(raw);
+      let judgment = deterministicAgentDecisionImportanceJudgment(candidate);
+
+      if (judgment === null) {
+        const raw = await judge(candidate);
+        judgment = typeof raw === 'string'
+          ? parseMemoryCandidateJudgment(raw)
+          : validateMemoryCandidateJudgment(raw);
+      }
 
       if (
         judgment.decision === 'promote'

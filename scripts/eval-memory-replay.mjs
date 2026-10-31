@@ -6,6 +6,7 @@ import { pathToFileURL } from 'node:url';
 import {
   AGENT_DECISION_IMPORTANCE_POLICY_VERSION,
   buildAgentDecisionImportancePrompt,
+  deterministicAgentDecisionImportanceJudgment,
 } from '../memory-engine/agent-decision-judge.mjs';
 import {
   classifyAgentDecisionMessage,
@@ -176,11 +177,16 @@ export async function runMemoryReplay({
         if (candidate === null) {
           throw new Error('expected agent replay candidate was not captured');
         }
-        const judgment = parseMemoryCandidateJudgment(
-          await rawAgentJudge(
-            buildAgentDecisionImportancePrompt(candidate),
-          ),
-        );
+        let judgment = deterministicAgentDecisionImportanceJudgment(candidate);
+
+        if (judgment === null) {
+          judgment = parseMemoryCandidateJudgment(
+            await rawAgentJudge(
+              buildAgentDecisionImportancePrompt(candidate),
+            ),
+          );
+        }
+
         if (
           judgment.decision === 'promote'
           && !/^Agent decision:/u.test(judgment.canonical_fact ?? '')
