@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  AGENT_DECISION_IMPORTANCE_POLICY_VERSION,
   buildAgentDecisionImportancePrompt,
   evaluatePendingAgentDecisionCandidates,
 } from '../../memory-engine/agent-decision-judge.mjs';
@@ -496,4 +497,17 @@ test('agent quality ratchet does not treat durable scope words as transient stat
     summary.results.map((item) => item.decision),
     ['promote', 'promote'],
   );
+});
+
+test('agent importance v2 documents the deterministic quality boundary', () => {
+  assert.equal(
+    AGENT_DECISION_IMPORTANCE_POLICY_VERSION,
+    'agent-importance-v2',
+  );
+
+  const prompt = buildAgentDecisionImportancePrompt(agentCandidate());
+
+  assert.match(prompt, /deterministic quality guard/i);
+  assert.match(prompt, /operational runbook/i);
+  assert.match(prompt, /repository-reconstructible/i);
 });

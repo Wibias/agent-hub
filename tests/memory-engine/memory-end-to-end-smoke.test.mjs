@@ -24,7 +24,7 @@ test('deterministic memory E2E smoke covers the full candidate lifecycle', async
     promotion: 'promotion-v1',
     confirmation: 'confirmation-v2',
     agent_capture: 'agent-capture-v1',
-    agent_importance: 'agent-importance-v1',
+    agent_importance: 'agent-importance-v2',
     agent_relation: 'agent-relation-v1',
     agent_promotion: 'agent-promotion-v1',
   });

@@ -705,14 +705,14 @@ pending agent_inference Candidate
 The agent lane then uses its own policies:
 
 ```text
-agent-importance-v1
+agent-importance-v2
         ↓
 agent-relation-v1
         ↓
 agent-promotion-v1
 ```
 
-`agent-importance-v1` runs in the same isolated auth-only Codex judge environment as the direct-user judges, but uses a stricter authority prompt. Automatic promotion is allowed only for explicit long-lived technical/project decisions with high future utility, high confidence, exact meaning preservation, and no risk flags. A promoted canonical fact must begin with:
+`agent-importance-v2` runs in the same isolated auth-only Codex judge environment as the direct-user judges, but uses a stricter authority prompt. Before the model judge runs, a deterministic quality guard converts high-confidence current or temporary status, repository-reconstructible state, and operational runbook steps to `ignore`. Explicit durable scope such as `across future sessions` prevents transient keyword matches from suppressing a real long-lived decision. Automatic promotion is allowed only for explicit long-lived technical/project decisions with high future utility, high confidence, exact meaning preservation, and no risk flags. A promoted canonical fact must begin with:
 
 ```text
 Agent decision:
@@ -1105,7 +1105,7 @@ user_direct:
   promotion-v1
 
 agent_inference:
-  agent-importance-v1
+  agent-importance-v2
       ↓
   agent-relation-v1
       ↓

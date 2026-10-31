@@ -454,7 +454,7 @@ function createStageRunners({
           async createJudge(options) {
             if (!providerBacked) {
               return {
-                evaluatorId: 'e2e-smoke:agent-importance-v1',
+                evaluatorId: 'e2e-smoke:agent-importance-v2',
                 isolation: { deterministicFixture: true },
                 async judge(prompt) {
                   agentImportanceJudgeCalls += 1;
@@ -1174,7 +1174,7 @@ export async function runMemoryEndToEndSmoke({
         promotion: 'promotion-v1',
         confirmation: 'confirmation-v2',
         agent_capture: 'agent-capture-v1',
-        agent_importance: 'agent-importance-v1',
+        agent_importance: 'agent-importance-v2',
         agent_relation: 'agent-relation-v1',
         agent_promotion: 'agent-promotion-v1',
       },

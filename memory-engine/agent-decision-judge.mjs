@@ -1,4 +1,4 @@
-export const AGENT_DECISION_IMPORTANCE_POLICY_VERSION = 'agent-importance-v1';
+export const AGENT_DECISION_IMPORTANCE_POLICY_VERSION = 'agent-importance-v2';
 
 import {
   parseMemoryCandidateJudgment,
@@ -144,6 +144,8 @@ export function buildAgentDecisionImportancePrompt(candidate) {
     '- the exact decision and scope are specific enough to preserve without invention.',
     '',
     'Use ignore for one-off implementation narration, test results, current-run status, temporary choices, summaries of completed work, or low future utility.',
+    'A deterministic quality guard already removes high-confidence transient/current status, repository-reconstructible state, and operational runbook steps before this model is called.',
+    'For any remaining procedure-like or next-action wording, use ignore unless it expresses a durable technical/project decision with explicit future-session utility.',
     'Use keep_candidate for a useful bounded multi-session agent decision that should remain reviewable but is not durable enough for automatic promotion.',
     'Use needs_confirmation if scope is ambiguous, the statement claims user intent/preferences, or it is unsafe to retain without user confirmation.',
     '',
