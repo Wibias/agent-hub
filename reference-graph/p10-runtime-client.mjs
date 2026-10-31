@@ -105,35 +105,50 @@ function validateCandidates(payload, expectedDate) {
 
 async function fetchProjectionAttempt({ url, key, fetchImpl, timeoutMs, referenceDate }) {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  let timeout;
+  const deadline = new Promise((_resolve, reject) => {
+    timeout = setTimeout(() => {
+      controller.abort();
+      reject(new P10RuntimeTransportError(RUNTIME_TIMEOUT_MESSAGE));
+    }, timeoutMs);
+  });
+
+  const attempt = (async () => {
+    try {
+      const response = await fetchImpl(url.toString(), {
+        method: 'GET',
+        headers: { apikey: key },
+        signal: controller.signal,
+      });
+
+      if (!response?.ok) {
+        throw new P10RuntimeTransportError(
+          `P10 runtime projection failed with HTTP ${response?.status ?? 'unknown'}`,
+        );
+      }
+
+      let payload;
+      try {
+        payload = await response.json();
+      } catch {
+        if (controller.signal.aborted) {
+          throw new P10RuntimeTransportError(RUNTIME_TIMEOUT_MESSAGE);
+        }
+        throw new P10RuntimeTransportError('P10 runtime projection returned invalid JSON');
+      }
+
+      return validateCandidates(payload, referenceDate);
+    } catch (error) {
+      if (error instanceof P10RuntimeTransportError) throw error;
+      if (controller.signal.aborted) {
+        throw new P10RuntimeTransportError(RUNTIME_TIMEOUT_MESSAGE);
+      }
+      throw new P10RuntimeTransportError('P10 runtime projection request failed');
+    }
+  })();
 
   try {
-    const response = await fetchImpl(url.toString(), {
-      method: 'GET',
-      headers: { apikey: key },
-      signal: controller.signal,
-    });
-
-    if (!response?.ok) {
-      throw new P10RuntimeTransportError(
-        `P10 runtime projection failed with HTTP ${response?.status ?? 'unknown'}`,
-      );
-    }
-
-    let payload;
-    try {
-      payload = await response.json();
-    } catch {
-      throw new P10RuntimeTransportError('P10 runtime projection returned invalid JSON');
-    }
-
-    return validateCandidates(payload, referenceDate);
-  } catch (error) {
-    if (error instanceof P10RuntimeTransportError) throw error;
-    if (controller.signal.aborted) {
-      throw new P10RuntimeTransportError(RUNTIME_TIMEOUT_MESSAGE);
-    }
-    throw new P10RuntimeTransportError('P10 runtime projection request failed');
+    return await Promise.race([attempt, deadline]);
   } finally {
     clearTimeout(timeout);
   }
