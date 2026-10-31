@@ -1870,6 +1870,7 @@ el.tabs.addEventListener('click', async (event) => {
   state.claim = null;
   resetActionState();
   updateUrl();
+  renderTabs();
   if (state.view === 'graph') {
     await loadGraph();
     return;

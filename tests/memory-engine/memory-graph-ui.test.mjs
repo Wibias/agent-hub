@@ -161,3 +161,101 @@ test('Memory Console exposes an interactive Graph tab with safe graph affordance
   assert.match(css, /\.graph-edge\.inferred\b/);
   assert.match(css, /\.graph-node\b/);
 });
+
+test('memoryUiGraph treats an evidence-only branch as an empty valid graph', () => {
+  const projectId = 'github.com/example/evidence-only';
+  const graph = memoryUiModel.memoryUiGraph({
+    exportCanonical() {
+      return {
+        projects: [{
+          project_id: projectId,
+          repo_identity: projectId,
+          canonical_remote: projectId,
+          created_at: '2026-10-31T00:00:00.000Z',
+        }],
+        evidence: [{
+          id: 'e-evidence-only',
+          project_id: projectId,
+          branch: 'main',
+        }],
+        claims: [],
+        lifecycle_events: [],
+        conflicts: [],
+      };
+    },
+  }, {
+    projectId,
+    branch: 'main',
+  });
+
+  assert.equal(graph.projectId, projectId);
+  assert.equal(graph.branch, 'main');
+  assert.deepEqual(graph.nodes, []);
+  assert.deepEqual(graph.edges, []);
+});
+
+test('Graph tab click synchronizes active tab state before Graph rendering', async () => {
+  const app = await readFile(
+    new URL('../../memory-ui/app.js', import.meta.url),
+    'utf8',
+  );
+
+  assert.match(
+    app,
+    /state\.view = button\.dataset\.view;[\s\S]{0,700}renderTabs\(\);[\s\S]{0,300}if \(state\.view === 'graph'\)/,
+  );
+});
+
+test('memoryUiGraph keeps an evidence-only branch valid when the project has claims elsewhere', () => {
+  const projectId = 'github.com/example/mixed-branches';
+
+  const memory = {
+    exportCanonical() {
+      return {
+        projects: [{
+          project_id: projectId,
+          repo_identity: projectId,
+          canonical_remote: projectId,
+          created_at: '2026-10-31T00:00:00.000Z',
+        }],
+        evidence: [{
+          id: 'e-main-only',
+          project_id: projectId,
+          branch: 'main',
+        }],
+        claims: [{
+          id: 'claim-feature',
+          project_id: projectId,
+          kind: 'user_direct',
+          subject: 'user memory',
+          predicate: 'states',
+          value_text: 'Feature branch memory',
+          state: 'active',
+          branch_scope: 'feature',
+          created_from_evidence_id: 'e-feature',
+          created_at: '2026-10-31T00:01:00.000Z',
+        }],
+        lifecycle_events: [],
+        conflicts: [],
+      };
+    },
+  };
+
+  const graph = memoryUiModel.memoryUiGraph(memory, {
+    projectId,
+    branch: 'main',
+  });
+
+  assert.equal(graph.projectId, projectId);
+  assert.equal(graph.branch, 'main');
+  assert.deepEqual(graph.nodes, []);
+  assert.deepEqual(graph.edges, []);
+
+  assert.throws(
+    () => memoryUiModel.memoryUiGraph(memory, {
+      projectId,
+      branch: 'missing',
+    }),
+    /unknown project branch/,
+  );
+});
