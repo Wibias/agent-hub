@@ -37,8 +37,8 @@
       "repository": "pbakaus/impeccable",
       "reviewedCommit": "df3a4abe7d0840d5f60324812c432e00b66a4e75",
       "scope": ".agents/skills/impeccable/",
-      "decision": "update-pending",
-      "localPin": "6af45ac9a5eb8792f033d3242f52e99812fd91fa"
+      "decision": "current",
+      "localPin": "df3a4abe7d0840d5f60324812c432e00b66a4e75"
     }
   ]
 }
