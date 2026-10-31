@@ -8,6 +8,12 @@ function read(path) {
   return readFileSync(resolve(path), 'utf8');
 }
 
+function git(...args) {
+  const result = spawnSync('git', args, { cwd: resolve('.'), encoding: 'utf8' });
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  return result.stdout.trim();
+}
+
 test('upstream update check tracks the five canonical sources and decisions', () => {
   assert.equal(existsSync(resolve('upstream-sources.json')), true, 'upstream-sources.json must exist');
   assert.equal(existsSync(resolve('scripts/check-upstream-sources.mjs')), true, 'upstream checker must exist');
@@ -91,4 +97,33 @@ test('Impeccable vendor is fully refreshed to 4.8.0 and engine 0.1.18', () => {
   assert.match(skill, /Explicit-only Impeccable frontend design specialist/i);
   assert.match(skill, /repository instruction injection/i);
   assert.match(skill, /craft-floor\.md[\s\S]{0,400}UI edit/i);
+});
+
+test('Impeccable shared vendor bytes match the audited 4.8.0 snapshot', () => {
+  assert.equal(
+    git('rev-parse', 'HEAD:skills/impeccable/agents'),
+    '9f3e75cab9a3151f92b4215afdcb53a7963bec1b',
+  );
+  assert.equal(
+    git('rev-parse', 'HEAD:skills/impeccable/reference'),
+    'f19407692cfc78d11b6cf4ebe5726b2957ab21e3',
+  );
+
+  const blobs = new Map([
+    ['skills/impeccable/scripts/VERSION', 'f8bc4c6256ab7d4bb54c2ab7af94c4fa5e58ac56'],
+    ['skills/impeccable/scripts/command-metadata.json', '4686bb6deea643493198bff1369bc2958b3909a7'],
+    ['skills/impeccable/scripts/engine-checksums.txt', '2e948006a8ac3cb811b775f88b131def849f2237'],
+    ['skills/impeccable/scripts/impeccable', 'b71d89311251758a3d165e084c877e7802bcc7e6'],
+    ['skills/impeccable/scripts/impeccable.cmd', '6157693b75c837249060089f2240b363d38e8023'],
+    ['skills/impeccable/scripts/live-browser-dom.js', 'ef1ca8928111080ddb923da14c7827b7396a9e62'],
+    ['skills/impeccable/scripts/live-browser-ignores.js', '1a2912e57a3b2b10a0d961b5dfe568253133fe53'],
+    ['skills/impeccable/scripts/live-browser-session.js', '6871770720d3dd7a284c545e20b97b613635f36f'],
+    ['skills/impeccable/scripts/live-browser.js', '1c140fa0ea49162c4e42c3c96a332f751e0667ca'],
+  ]);
+
+  for (const [path, expected] of blobs) {
+    assert.equal(git('hash-object', path), expected, `${path} must match upstream byte-for-byte`);
+  }
+
+  assert.match(git('ls-tree', 'HEAD', 'skills/impeccable/scripts/impeccable'), /^100755 blob /);
 });
