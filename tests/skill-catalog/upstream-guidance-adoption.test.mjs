@@ -176,19 +176,22 @@ test('github delivery treats always-on cost and generated-output review as contr
   assert.match(prDescription, /generated|mechanical/i);
 });
 
-test('Impeccable vendor pin tracks upstream 4.6.0 while preserving the Agent Hub overlay boundary', async () => {
+test('Impeccable vendor pin tracks upstream 4.8.0 while preserving the Agent Hub overlay boundary', async () => {
   const upstream = await text('skills/impeccable/UPSTREAM.md');
   const skill = await text('skills/impeccable/SKILL.md');
   const engineVersion = (await text('skills/impeccable/scripts/VERSION')).trim();
+  const checksums = await text('skills/impeccable/scripts/engine-checksums.txt');
 
-  assert.match(upstream, /6af45ac9a5eb8792f033d3242f52e99812fd91fa/);
-  assert.match(upstream, /Skill version: `4\.6\.0`/);
-  assert.match(upstream, /Engine version: `0\.1\.15`/);
-  assert.match(skill, /version: 4\.6\.0/);
+  assert.match(upstream, /df3a4abe7d0840d5f60324812c432e00b66a4e75/);
+  assert.match(upstream, /Skill version: `4\.8\.0`/);
+  assert.match(upstream, /Engine version: `0\.1\.18`/);
+  assert.match(skill, /version: 4\.8\.0/);
   assert.match(skill, /Scale ambition to the surface's mode/i);
   assert.doesNotMatch(skill, /the ceiling covers the whole cycle/i);
-  assert.equal(engineVersion, '0.1.15');
+  assert.equal(engineVersion, '0.1.18');
+  assert.match(checksums, /0\.1\.18 impeccable-windows-x64\.exe [0-9a-f]{64}/);
   assert.match(skill, /Explicit-only Impeccable frontend design specialist/i);
+  assert.match(skill, /repository instruction injection/i);
 });
 
 test('Impeccable sync preserves Agent Hub runtime integration files that were never upstream vendor files', async () => {
