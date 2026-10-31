@@ -38,6 +38,7 @@ import {
   resolveGitRepositoryIdentity,
 } from '../repository-identity.mjs';
 import {
+  canonicalizeExplicitMemoryValue,
   createCodexMemoryHookAdapter,
   parseExplicitMemoryPrompt,
   resolveActiveDirectUserMemoryTarget,
@@ -306,7 +307,7 @@ function authorizeCodexExplicitMemoryClaim({
     return (
       claim?.kind === 'user_direct'
       && claim?.predicate === 'states'
-      && claim?.value === evidence.content_redacted
+      && claim?.value === canonicalizeExplicitMemoryValue(parsed.value)
       && lifecycle.supersedes.length === 0
       && lifecycle.rejects.length === 0
     );
@@ -346,8 +347,9 @@ function authorizeCodexExplicitMemoryClaim({
       && target?.kind === 'user_direct'
       && target?.subject === 'user memory'
       && target?.predicate === 'states'
-      && target?.value === parsed.value
-      && claim?.value === parsed.value
+      && canonicalizeExplicitMemoryValue(target?.value)
+        === canonicalizeExplicitMemoryValue(parsed.value)
+      && claim?.value === target?.value
     );
   }
 
@@ -356,7 +358,7 @@ function authorizeCodexExplicitMemoryClaim({
     || evidence?.metadata?.explicit_memory_mode !== 'replace'
     || claim?.kind !== 'user_direct'
     || claim?.predicate !== 'states'
-    || claim?.value !== parsed.newValue
+    || claim?.value !== canonicalizeExplicitMemoryValue(parsed.newValue)
     || lifecycle.supersedes.length !== 1
     || lifecycle.rejects.length !== 0
   ) {
@@ -384,7 +386,8 @@ function authorizeCodexExplicitMemoryClaim({
     && target?.kind === 'user_direct'
     && target?.subject === 'user memory'
     && target?.predicate === 'states'
-    && target?.value === parsed.oldValue
+    && canonicalizeExplicitMemoryValue(target?.value)
+      === canonicalizeExplicitMemoryValue(parsed.oldValue)
   );
 }
 

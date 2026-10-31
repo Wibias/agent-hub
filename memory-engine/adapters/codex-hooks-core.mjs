@@ -27,6 +27,18 @@ function nonEmptyString(value) {
   return typeof value === 'string' && value.trim().length > 0;
 }
 
+export function canonicalizeExplicitMemoryValue(value) {
+  if (typeof value !== 'string') return null;
+
+  const normalized = value.trim();
+  const prefix = normalized.match(/^memory:\s*/i);
+  const canonical = prefix === null
+    ? normalized
+    : normalized.slice(prefix[0].length).trim();
+
+  return nonEmptyString(canonical) ? canonical : null;
+}
+
 function compactText(value, maxChars = 500) {
   const normalized = String(value ?? '')
     .replace(/\s+/g, ' ')
@@ -1030,14 +1042,20 @@ export function resolveActiveDirectUserMemoryTarget(memory, {
 
   if (value !== null) {
     if (typeof memory?.exportCanonical !== 'function') return null;
+
+    const canonicalValue = canonicalizeExplicitMemoryValue(value);
+    if (canonicalValue === null) return null;
+
     const exported = memory.exportCanonical();
     if (!exported || !Array.isArray(exported.claims)) return null;
+
     const matches = exported.claims.filter((claim) => (
       claim?.project_id === projectId
       && claim?.branch_scope === branch
       && claim?.state === 'active'
-      && claim?.value_text === value
+      && canonicalizeExplicitMemoryValue(claim?.value_text) === canonicalValue
     ));
+
     return matches.length === 1 ? matches[0] : null;
   }
 
@@ -1732,7 +1750,9 @@ export function createCodexMemoryHookAdapter({
                 && parsedMemory.mode !== 'candidate_confirm'
                 && parsedMemory.mode !== 'candidate_reject'
               ) {
-                let value = capturedEvidence.content_redacted;
+                let value = parsedMemory.mode === 'remember'
+                  ? canonicalizeExplicitMemoryValue(parsedMemory.value)
+                  : capturedEvidence.content_redacted;
                 let kind = 'user_direct';
                 let predicate = 'states';
                 let state = null;
@@ -1750,7 +1770,7 @@ export function createCodexMemoryHookAdapter({
                     value = null;
                     explicitCommandResult.targetMissing = true;
                   } else {
-                    value = parsedMemory.newValue;
+                    value = canonicalizeExplicitMemoryValue(parsedMemory.newValue);
                     supersedes = [target.id];
                   }
                 } else if (parsedMemory.mode === 'forget') {
