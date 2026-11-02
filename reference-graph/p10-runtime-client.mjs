@@ -34,9 +34,9 @@ function requireNonEmptyString(value, name) {
   return value.trim();
 }
 
-function requireTimeout(value) {
+function requireTimeout(value, name) {
   if (!Number.isInteger(value) || value < 1) {
-    throw new P10RuntimeTransportError('timeoutMs must be a positive integer');
+    throw new P10RuntimeTransportError(`${name} must be a positive integer`);
   }
   return value;
 }
@@ -159,12 +159,14 @@ export async function fetchP10QuickCandidatePool({
   publishableKey,
   fetchImpl = fetch,
   timeoutMs = 1500,
+  retryTimeoutMs = timeoutMs,
   expectedDate = new Date().toISOString().slice(0, 10),
 } = {}) {
   const baseUrl = requireNonEmptyString(supabaseUrl, 'supabaseUrl').replace(/\/+$/, '');
   const key = requireNonEmptyString(publishableKey, 'publishableKey');
   const referenceDate = requireReferenceDate(expectedDate);
-  requireTimeout(timeoutMs);
+  requireTimeout(timeoutMs, 'timeoutMs');
+  requireTimeout(retryTimeoutMs, 'retryTimeoutMs');
   if (typeof fetchImpl !== 'function') {
     throw new P10RuntimeTransportError('fetchImpl must be a function');
   }
@@ -193,7 +195,7 @@ export async function fetchP10QuickCandidatePool({
       url,
       key,
       fetchImpl,
-      timeoutMs,
+      timeoutMs: retryTimeoutMs,
       referenceDate,
     });
   }
