@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { performance } from 'node:perf_hooks';
 
@@ -86,4 +87,20 @@ test('P10 hard-stops after primary plus retry budgets', { timeout: 500 }, async 
   assert.equal(calls, 2);
   assert.ok(elapsed >= 90, `second attempt did not receive retry budget: ${elapsed}ms`);
   assert.ok(elapsed < 200, `combined hard budget exceeded: ${elapsed}ms`);
+});
+
+test('P24 production Quick callers use 1500ms primary and 5000ms retry budgets', () => {
+  const querySource = readFileSync(
+    new URL('../../knowledge/design-references/scripts/query.mjs', import.meta.url),
+    'utf8',
+  );
+  const probeSource = readFileSync(
+    new URL('../../reference-graph/p17-activation-runner.mjs', import.meta.url),
+    'utf8',
+  );
+
+  for (const source of [querySource, probeSource]) {
+    assert.match(source, /timeoutMs:\s*1500/);
+    assert.match(source, /retryTimeoutMs:\s*5000/);
+  }
 });
