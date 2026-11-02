@@ -59,6 +59,7 @@ if (
       supabaseUrl,
       publishableKey,
       timeoutMs: 1500,
+      retryTimeoutMs: 5000,
       expectedDate,
     });
 }
