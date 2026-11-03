@@ -6,7 +6,7 @@
  *
  * Usage:
  *   node scripts/verify-pr-head.mjs OWNER/REPO PR_NUMBER
- *     [--clone-root DIR] [--worktree-root DIR]
+ *     [--worktree-root D:\codex-worktrees]
  *     [--install-cmd "bun install"] [--typecheck-cmd "bun run typecheck"]
  *     [--gui-typecheck-cmd "cd gui && bun x tsc --noEmit -p tsconfig.app.json"]
  *     [--test-cmd "bun run test"] [--test-filter "claude-messages"]
@@ -17,15 +17,13 @@ import { existsSync, mkdirSync, realpathSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { boundedSpawnSync } from "./lib/subprocess-policy.mjs";
-import { resolveCloneRootCandidates, resolveWorktreeRoot } from "./lib/worktree-locations.mjs";
 
 const USAGE =
-  "Usage: node scripts/verify-pr-head.mjs OWNER/REPO PR_NUMBER [--clone-root DIR] [--worktree-root DIR] [--install-cmd CMD] [--typecheck-cmd CMD] [--gui-typecheck-cmd CMD] [--test-cmd CMD] [--test-filter TEXT] [--lint-cmd CMD] [--privacy-cmd CMD] [--keep-worktree] [--timeout-ms N] [--json]";
+  "Usage: node scripts/verify-pr-head.mjs OWNER/REPO PR_NUMBER [--worktree-root DIR] [--install-cmd CMD] [--typecheck-cmd CMD] [--gui-typecheck-cmd CMD] [--test-cmd CMD] [--test-filter TEXT] [--lint-cmd CMD] [--privacy-cmd CMD] [--keep-worktree] [--timeout-ms N] [--json]";
 
 export function parseArgs(argv) {
   const positional = [];
   const options = {
-    cloneRoot: null,
     worktreeRoot: null,
     installCmd: "bun install",
     typecheckCmd: "bun run typecheck",
@@ -40,10 +38,7 @@ export function parseArgs(argv) {
   };
   for (let index = 0; index < argv.length; index += 1) {
     const value = argv[index];
-    if (value === "--clone-root") {
-      options.cloneRoot = argv[++index];
-      if (!options.cloneRoot) throw new Error("--clone-root requires a path");
-    } else if (value === "--worktree-root") {
+    if (value === "--worktree-root") {
       options.worktreeRoot = argv[++index];
       if (!options.worktreeRoot) throw new Error("--worktree-root requires a path");
     } else if (value === "--install-cmd") {
@@ -181,6 +176,7 @@ function guiTypecheckCommand(config) {
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
+  const [owner, name] = args.repo.split("/");
 
   // Resolve PR head SHA.
   const head = run(
@@ -195,11 +191,11 @@ async function main() {
   }
   const headSha = head.tail.trim().split(/\r?\n/)[0].trim();
 
-  // Find a local clone to create the worktree from. Use an explicit clone
-  // root when supplied; otherwise use the current repository. Do not guess a
-  // maintainer-specific filesystem location.
+  // Find a local clone to create the worktree from. Prefer a repo root the
+  // user already has; else the current directory if it's a git repo.
+  const candidateRoots = [join("C:", "Users", "ws", "Desktop", "Anderes", "GitHub", name)];
   let cloneRoot = null;
-  for (const root of resolveCloneRootCandidates({ cloneRoot: args.cloneRoot, cwd: process.cwd() })) {
+  for (const root of candidateRoots) {
     const probe = run(["git", "rev-parse", "--is-inside-work-tree"], { cwd: root, timeoutMs: 10_000 });
     if (probe.ok) {
       cloneRoot = root;
@@ -207,15 +203,17 @@ async function main() {
     }
   }
   if (!cloneRoot) {
-    throw new Error("no local git clone found; run from a checkout or pass --clone-root DIR");
+    const probe = run(["git", "rev-parse", "--is-inside-work-tree"], { cwd: process.cwd(), timeoutMs: 10_000 });
+    if (probe.ok) cloneRoot = process.cwd();
   }
+  if (!cloneRoot) throw new Error("no local git clone found to create the verification worktree from");
 
   // Ensure the PR head commit is present.
   run(["git", "fetch", args.repo, headSha], { cwd: cloneRoot, timeoutMs: 120_000 });
   const base = run(["git", "rev-parse", "--is-inside-work-tree"], { cwd: cloneRoot, timeoutMs: 10_000 });
   if (!base.ok) throw new Error(`clone root ${cloneRoot} is not a git work tree`);
 
-  const worktreeRoot = resolveWorktreeRoot({ configured: args.worktreeRoot });
+  const worktreeRoot = args.worktreeRoot || join("D:", "codex-worktrees");
   const worktreeName = `verify-pr-${args.pr}-${Date.now().toString(36)}`;
   const worktreePath = join(worktreeRoot, worktreeName);
   mkdirSync(worktreeRoot, { recursive: true });

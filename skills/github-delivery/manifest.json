@@ -2,14 +2,14 @@
   "schemaVersion": 1,
   "kind": "github-delivery/distribution-manifest",
   "name": "github-delivery",
-  "version": "1.7.1",
-  "sourceCommit": "3a39682c70f2588190eec5b658e96221554d8346",
+  "version": "1.8.0",
+  "sourceCommit": "315c20443c623ff3eb33e145c5ce7077288f11f2",
   "files": [
     {
       "path": "CHANGELOG.md",
-      "bytes": 93644,
+      "bytes": 95365,
       "mode": "0644",
-      "sha256": "0331bd0a9bbb0056fc301476e44c3ae7dd845d22f8cca994df05a08cd8bbe081"
+      "sha256": "b987fe50bf6c1487b25ccb874b119783034d72c4fd40c2847fbb37dae6332ddf"
     },
     {
       "path": "INSTALL.md",
@@ -39,7 +39,7 @@
       "path": "SKILL.md",
       "bytes": 13391,
       "mode": "0644",
-      "sha256": "c997fb2515efde0caf12bc2234c0720b630a1eac5543c2de9198c3925625e464"
+      "sha256": "78a8872ba2c7e1bf403d882b874ca34e41fb824f566cdac3abb5b3e89c9d5933"
     },
     {
       "path": "agents/comment-inspector.md",
@@ -349,9 +349,9 @@
     },
     {
       "path": "package.json",
-      "bytes": 3452,
+      "bytes": 3501,
       "mode": "0644",
-      "sha256": "c7d1c8ba0a5ef7c56537c2d01ab34ebdd1e462fbd87f904ee7848574d6647b02"
+      "sha256": "91e49c0cea60dc8f001bb46a6f5a920e64dc4824bcdb0fb10401930f9d4854da"
     },
     {
       "path": "references/agent-brief.md",
@@ -421,9 +421,9 @@
     },
     {
       "path": "references/change-execution.md",
-      "bytes": 9266,
+      "bytes": 11275,
       "mode": "0644",
-      "sha256": "836e669a72c513bfd8edd0833ea35c60f26ee75d66961ee6f514eb6537b59961"
+      "sha256": "3e30d6ac192b02faca0d7941006fb79178abcccb2c13bda889cef18999a35a60"
     },
     {
       "path": "references/code-smells.md",
@@ -499,9 +499,9 @@
     },
     {
       "path": "references/git-workflow.md",
-      "bytes": 7842,
+      "bytes": 8368,
       "mode": "0644",
-      "sha256": "74b57adace33762df4da43ba5317db6ddf28dbac19fff8ff414bf33c8bb288f5"
+      "sha256": "09780facf9b90e5a0fb7c4d60b6cd5a3c250dde8f77093495191184950346fbc"
     },
     {
       "path": "references/github-mutation-broker.md",
@@ -511,9 +511,9 @@
     },
     {
       "path": "references/issue-workflows.md",
-      "bytes": 10019,
+      "bytes": 10653,
       "mode": "0644",
-      "sha256": "0eba42f1b3dc63e2830084b73f74c634d9afc8c6d4767151ae74f20a6aff4ef7"
+      "sha256": "8972c404a3d50cac5478ff942519c90f477ffde697a32c09527a01274776ebe6"
     },
     {
       "path": "references/merge-pr.md",
@@ -625,9 +625,9 @@
     },
     {
       "path": "references/policy/reviews.md",
-      "bytes": 4689,
+      "bytes": 4333,
       "mode": "0644",
-      "sha256": "d45b42f7918e3b34e6b137c139b4353c026a9423b10da64712eb4c32caba5a28"
+      "sha256": "cf88efd5a55e70585f45b7ae82c1d452ea57fb442c6fcab7d1ba8269713c601f"
     },
     {
       "path": "references/policy/runtime-verification.md",
@@ -643,9 +643,9 @@
     },
     {
       "path": "references/pr-description.md",
-      "bytes": 8973,
+      "bytes": 9923,
       "mode": "0644",
-      "sha256": "ce82f4c0c2ea8b9e6e39894eb439d9be146681d3656a42f083f3716952056bec"
+      "sha256": "ba8f845fd1a846ac3a89d121f90db7a45aa9af5490b7f61098d92d30674fc984"
     },
     {
       "path": "references/prepare-and-merge-pr.md",
@@ -655,9 +655,9 @@
     },
     {
       "path": "references/prose-quality.md",
-      "bytes": 5911,
+      "bytes": 6381,
       "mode": "0644",
-      "sha256": "59f445dd656f12986f9dbc03884392f8141958ca1b872c63fd5a3a192e24e7c3"
+      "sha256": "c80a29dbe6cc9a1f0957842a27d36de52f1a414ff9ac7ad0b4ec47fbabbd0301"
     },
     {
       "path": "references/re-review-pr.md",
@@ -673,9 +673,9 @@
     },
     {
       "path": "references/regression-first.md",
-      "bytes": 5122,
+      "bytes": 6711,
       "mode": "0644",
-      "sha256": "0a135e669f3b3f9dc6720a10f50406eff9fafcf19de2bb840951d25d205b9fcc"
+      "sha256": "a1e5b345fe392825cfe5b626dc8c8f1eb7eb2342dd0d8ab360aa582cbf460724"
     },
     {
       "path": "references/relational-invariant-testing.md",
@@ -793,9 +793,9 @@
     },
     {
       "path": "references/semantic-propagation-review.md",
-      "bytes": 8037,
+      "bytes": 8926,
       "mode": "0644",
-      "sha256": "7ea9ab158411f88ecee87dee200d6700ea4cb2c6eff5b6dea68c1968e247f5a5"
+      "sha256": "fdb494eee93e19e1ea505b92da96c7ed7c7effa1b9a8f7ee163eaa06db442716"
     },
     {
       "path": "references/setup-prompts.md",
@@ -1063,9 +1063,9 @@
     },
     {
       "path": "scripts/github-delivery-cli.mjs",
-      "bytes": 13424,
+      "bytes": 14518,
       "mode": "0755",
-      "sha256": "877fe2e9d527a432ae45c814294def5f7d22f364fa39dc6632eea84bb578ab70"
+      "sha256": "87d10f8faea24d6c41c6e1fe864b760203b1b75e01cce2216cbbc0e482eddee9"
     },
     {
       "path": "scripts/github-delivery-config.mjs",
@@ -1255,9 +1255,9 @@
     },
     {
       "path": "scripts/lib/bootstrap-maintenance.mjs",
-      "bytes": 14502,
+      "bytes": 16260,
       "mode": "0755",
-      "sha256": "be954f18b2d072400f0421a256ee7491161e364a30e16bfdeb40b019aebf3fc3"
+      "sha256": "cfa666530d3be5c421aba28579ef3e73bca398152c3ba8ad1041980b55a91015"
     },
     {
       "path": "scripts/lib/branch-review-input.mjs",
@@ -1302,6 +1302,12 @@
       "sha256": "1671da3f58ecffb7e2c71d9388a8aa38f04d1356b6c208e59581cf6fd5449d73"
     },
     {
+      "path": "scripts/lib/codex-native-memory-drift.mjs",
+      "bytes": 6117,
+      "mode": "0755",
+      "sha256": "6c1f0f0c3ff4640f7151ccaa62ac1d6a76fb6dcfd3ac4b4c3919bed5ffa8cafb"
+    },
+    {
       "path": "scripts/lib/codex-progress-watchdog.mjs",
       "bytes": 9813,
       "mode": "0755",
@@ -1309,9 +1315,9 @@
     },
     {
       "path": "scripts/lib/codex-watchdog-hook.mjs",
-      "bytes": 15665,
+      "bytes": 15666,
       "mode": "0755",
-      "sha256": "2f8634d4411048fa0737b2f1b836f4cb819d2422abea0ea2e674e1e1f2e6cdd4"
+      "sha256": "2d0b145f965e8e0719ec943ae8a3cc675ba61c5ad4085d0855163c7c1b07c25a"
     },
     {
       "path": "scripts/lib/codex-watchdog-remote-bridge.mjs",
@@ -1885,9 +1891,9 @@
     },
     {
       "path": "scripts/lib/skill-router.mjs",
-      "bytes": 20821,
+      "bytes": 20824,
       "mode": "0755",
-      "sha256": "5f2290cbe40a0228ffbfb5f51c14f843219e5915bfedb62954db3ed07d150e3a"
+      "sha256": "9fdff427f67861281ece20515f755df943fa974e1514b9a83740a3f1757c6fd1"
     },
     {
       "path": "scripts/lib/snapshot-capture-payload.mjs",
@@ -2233,9 +2239,9 @@
     },
     {
       "path": "scripts/validate-npm-package.mjs",
-      "bytes": 4614,
+      "bytes": 4661,
       "mode": "0755",
-      "sha256": "80b6f3fd864d694b6b851089a3540da5b2b55b8eb8ba24392ecbb097f0b311b2"
+      "sha256": "e59a8e0dafdeb74fcde0ea730110f3548a0a4900aefb248e877c70613c6eba19"
     },
     {
       "path": "scripts/validate-repository-security.mjs",
@@ -2335,9 +2341,9 @@
     },
     {
       "path": "tests/evals/cases.jsonl",
-      "bytes": 11772,
+      "bytes": 13762,
       "mode": "0644",
-      "sha256": "16d1a4106db15cc3e460b799b8946e7268fb00895205b0e136d876e5a3d8a62b"
+      "sha256": "e31790fe26468bfc33fd1727062ea00ea954fb2b99b3f26c6d368774f99fffd7"
     },
     {
       "path": "tests/evals/mention-cases.jsonl",
