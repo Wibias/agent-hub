@@ -46,6 +46,9 @@ export function runGate({ receipt, baseline = null, ledger = null, proof, worksp
   if (!populated(proof)) throw new Error("--proof output path is required");
   const discovered = discoverProjectLedger(workspaceCwd);
   if (discovered && ledger === null) throw new Error("Project findings ledger exists; pass --ledger for durable coverage");
+  if (discovered && ledger !== null && resolve(discovered) !== resolve(ledger)) {
+    throw new Error("--ledger must select the canonical project findings ledger");
+  }
   if (ledger !== null && baseline === null) throw new Error("Durable findings ledger requires --baseline");
   const outputPath = resolve(proof);
   const protectedPaths = [receipt, baseline, ledger, validator, ledgerValidator].filter(Boolean).map((item) => resolve(item));
@@ -94,6 +97,9 @@ export function checkProof({ receipt, baseline = null, ledger = null, checkProof
   const fail = (x) => issues.push(x);
   const discovered = discoverProjectLedger(workspaceCwd);
   if (discovered && ledger === null) fail("Project findings ledger present but not selected for proof verification");
+  if (discovered && ledger !== null && resolve(discovered) !== resolve(ledger)) {
+    fail("Proof selected a noncanonical findings ledger for the current project");
+  }
   let evidence;
   try { evidence = JSON.parse(readFileSync(resolve(proofPath), "utf8")); }
   catch { return { valid: false, completionEligible: false, issues: ["Proof is missing or invalid JSON"] }; }
