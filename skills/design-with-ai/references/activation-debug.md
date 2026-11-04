@@ -86,6 +86,30 @@ A script mentioned in the final message is **not** proof it was executed.
 If the trace is unavailable, label invocation and execution `NOT_VERIFIED`,
 not `PASS`. Never fabricate a trace from the assistant's narrative.
 
+### Read-only Codex tool trace summary
+
+When a Codex rollout JSONL is available, classify actual tool-call objects
+instead of grepping the transcript or relying on an agent's self-report:
+
+```shell
+node "<hub-checkout>/skills/design-with-ai/scripts/inspect-codex-rollout.mjs" --log "<rollout.jsonl>"
+```
+
+The read-only command reports the project, tool calls, skill references,
+gate mentions, executable gate **candidates**, and tool exit-code markers
+correlated by call ID. It does **not** dump raw prompts, commands, tool
+outputs, or secrets. A path inside tool arguments does not prove successful
+skill loading. A gate name in grep/echo text is not a gate invocation.
+`CANDIDATE_WITH_EXIT_ZERO` is stronger evidence than a mention, but still
+needs a process proof and actual application acceptance tests.
+`NOT_OBSERVED_IN_THIS_LOG` means only that this log/parser did not find
+a matching candidate; it is not proof the gate never ran.
+
+For new iterations, run `run-iteration-gate.mjs --proof ...` and verify
+its output with `--check-proof ...` as specified in
+`verification-contract.md`. The host trace documents the attempted action;
+the proof records the observed validator result.
+
 ## 3. Prove the three observed product failures, not only taste
 
 For a contact-sheet video pipeline with the reported problems, use the target

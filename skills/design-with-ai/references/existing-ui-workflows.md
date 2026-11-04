@@ -71,7 +71,10 @@ changing the structure or declaring it correct. Preserve locked transitions
 and permissions; an audit is read-only.
 
 For modifying work, report changed files and one-sentence rationale per file,
-commands/gates run, and rendered/browser evidence per affected viewport. If the
+commands/gates run, and rendered/browser evidence per affected viewport.
+For standard/deep iterations, include the executed validator proof path,
+observed exit code, and independent `--check-proof` result. A declared or
+assumed gate run is not evidence of execution. If the
 real surface cannot be inspected, mark visual claims `not verified` and do not
 present them as observed facts.
 

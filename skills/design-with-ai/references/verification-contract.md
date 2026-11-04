@@ -150,6 +150,42 @@ artifact means no comparative improvement claim. Baseline screenshots
 cannot prove runtime behavior; verify interaction and status contracts
 separately when they determine acceptance.
 
+### Executed gate evidence (standard/deep modifying work)
+
+The final agent-written receipt is a **claim**, not evidence that its validator
+ran. After the receipt and, when applicable, frozen prior-findings baseline
+are prepared, run the validator through the Node runner and write a fresh
+per-run proof in authorized task/temp storage outside the skill repository:
+
+```shell
+node <skill-base-dir>/scripts/run-iteration-gate.mjs --receipt "<iteration-receipt.json>" --baseline "<prior-findings.json>" --proof "<new-gate-proof.json>"
+node <skill-base-dir>/scripts/run-iteration-gate.mjs --receipt "<iteration-receipt.json>" --baseline "<prior-findings.json>" --check-proof "<new-gate-proof.json>"
+```
+
+Omit both `--baseline` flags only when an independent pre-edit manifest is
+not applicable. An iterative receipt with `requiresPriorBaseline: true`
+still fails without its baseline. The runner invokes
+`verify-iteration-receipt.mjs` as a real child process (no shell),
+and captures its observed exit code, validator verdict, argument vector,
+and SHA-256 of the receipt, baseline when present, and validator script.
+An existing proof file cannot be overwritten. The checker compares the
+recorded hashes to current inputs. It exits nonzero unless the proof is
+current and the validator produced a valid `COMPLETE` verdict.
+
+**Required complete handoff:** exact runner command, observed exit code,
+proof path, receipt path, baseline path or `not applicable`, and
+`--check-proof` result. A screenshot, narrative assertion, green Hub CI,
+or hand-authored `Gate: PASS` cannot replace this evidence. If execution
+or checking is missing or fails, report `PARTIAL` or `NOT_VERIFIED` and
+carry unresolved finding IDs forward. A valid `PARTIAL` receipt remains
+partial even when the validator exits zero.
+
+The proof is **not a signed attestation**. A malicious actor can forge
+JSON; the shared skill also cannot force a separate host to invoke it.
+Project CI checking this evidence or an independently recorded host tool
+trace provides stronger enforcement. Runtime browser/product checks
+remain separate and mandatory where applicable.
+
 ### Machine-checkable iteration closure (standard/deep modifying work)
 
 **Iterative known-issue review:** Before any edit, freeze a separate
@@ -247,8 +283,8 @@ semantics. `PASS` workflow semantics requires a product contract, evidence
 for phase/filter/count/readiness/action checks, and representative states.
 Screen captures alone do not prove filter or action behavior.
 
-An invalid receipt, missing receipt, or failing command **blocks a complete
-claim**. A valid `PARTIAL` receipt remains partial; it is not a pass for
+An invalid receipt, missing receipt, missing executed-gate proof for applicable
+standard/deep work, or failing command **blocks a complete claim**. A valid `PARTIAL` receipt remains partial; it is not a pass for
 unresolved functional defects. For quick, read-only, or narrowly cosmetic
 work, the narrative ledger and truthful evidence labels may suffice unless
 the request includes a consequential stateful action.
