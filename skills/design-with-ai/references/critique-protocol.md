@@ -8,6 +8,73 @@ Read brief -> Build -> Critique with fresh eyes -> Revise -> Gate -> Ship
 
 The first version is evidence to judge, not proof that the design is finished.
 
+## Evidence-linked iteration loop
+
+For modifying non-motion product UI, establish a **finding-to-outcome ledger**
+before the first edit and reconcile it after each rendered iteration. Work at
+the requested surface/route scope; the ledger tracks quality, not the number
+of changed files. Use existing user feedback and prior findings when available.
+Do not invent a past review or treat an assistant's suggestion as verified.
+
+1. **Scope and baseline:** List the routes, flows, or material components
+   actually in scope and their first-screen task. Capture the incumbent
+   state (or the first rendered candidate for a new surface), viewport,
+   representative data, and any relevant permission/interaction state.
+   An untouched, out-of-scope route is not an unverified in-scope success.
+2. **Findings before edits:** Assign stable IDs to material issues. Record
+   severity, observed symptom with evidence, user impact, and the intended
+   **observable acceptance condition**. Separate observation from inference
+   or suspected product-model problems.
+3. **Decision per finding:** Propose the smallest authorized change, or
+   mark `KEEP` with evidence that the current behavior already serves the
+   task. `DEFER` needs a reason, owner, and next verification step. A user
+   request to preserve the UI is a valid constraint, not an excuse to ignore
+   accessibility or functional defects.
+4. **Paired review:** After implementation, compare *the same route,
+   viewport band, meaningful state, and task* where possible. Record the
+   actual delta, not just the intended code change. Inspect normal-zoom
+   reading order, first-screen action, responsiveness, state/permission
+   behavior, and potential regressions. An aesthetic shift or green CI
+   alone is not proof the original issue was resolved.
+5. **Disposition:** Mark each finding `RESOLVED`, `IMPROVED_BUT_OPEN`,
+   `PERSISTS`, `REGRESSED`, `KEEP_JUSTIFIED`, `DEFERRED`, or `UNVERIFIED`.
+   `RESOLVED` requires supporting evidence for the stated acceptance
+   condition; partial improvement must stay open. Track newly introduced
+   regressions as new findings, not footnotes.
+6. **Carry forward:** Keep open, regressed, deferred, and unverified finding
+   IDs visible in the next iteration's input. Do not silently drop an issue
+   because the page looks cleaner or another screen improved. Prefer
+   high-impact unresolved issues over another palette/radius pass.
+
+For work spanning separate sessions or agents, keep the non-sensitive ledger in
+the authorized task/PR record or existing design handoff, if one is available;
+otherwise include it in the completion report so the next iteration can reuse
+it. Do not create a new repository file or tracking system solely for this
+record without scope/authority, and do not record credentials or private data.
+
+Compact example (replace with real findings and evidence):
+
+| ID / route | Problem and user impact | Acceptance condition | Decision / change | Paired evidence | Disposition |
+|---|---|---|---|---|---|
+| UX-01 / jobs | Queue buried below passive KPIs | Primary queue visible before secondary reporting | Promote queue | Before/after at matched desktop state | IMPROVED_BUT_OPEN |
+| UX-02 / setup | Next setup step not clear | Current blocker and next action obvious | No verified repair yet | Before captured; after unchanged | PERSISTS |
+| UX-03 / settings | Comparable fields are already readable | Preserve accurate form grouping | KEEP | Matched normal-zoom inspection | KEEP_JUSTIFIED |
+
+**Comparison integrity:** When the baseline is missing, stale, or not paired
+with the after candidate, mark comparative claims `UNVERIFIED`; review the
+current state on its own. Never manufacture a screenshot or claim a route
+improved because its source changed. If screenshot evidence cannot prove
+interaction or publishing behavior, distinguish visual observation from
+runtime/contract verification. For first-build work, the first rendered
+candidate can seed the next iteration; do not invent a pre-existing UI.
+
+**Scope integrity:** A route intentionally left unchanged can be
+`KEEP_JUSTIFIED` only after relevant inspection, or `DEFERRED` when known
+issues remain with a documented reason. `NOT_INSPECTED` is a coverage gap,
+not a pass or a failure of that route's design. If a requested multi-route
+pass changes one screen and leaves other known issues open, the correct
+verdict is *partial progress*, not product-wide completion.
+
 ## Pre-emit self-critique
 
 Score the planned or completed output **1-5** on each axis. Any axis below 3

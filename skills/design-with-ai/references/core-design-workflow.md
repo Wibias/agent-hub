@@ -128,6 +128,14 @@ purpose, critique concrete defects, revise, and only then polish. Verification
 must distinguish four claims: functional contracts preserved, purpose/IA fit,
 visual-world specificity, and rendered implementation quality.
 
+For iterative work, use the issue-to-outcome method in `critique-protocol.md`:
+record baseline findings and observable acceptance conditions, then compare
+matched current renders and states after implementation. Retain stable issue
+IDs for partially improved, persistent, deferred, or unverifiable problems.
+Do not infer product-wide improvement from one changed route; include a
+coverage verdict for each in-scope route. For a new product, use its first
+rendered candidate as the initial baseline rather than fabricating an old UI.
+
 ### 9. Generation brief
 
 For standard and deep work, load `source-evidence.md` and translate the selected

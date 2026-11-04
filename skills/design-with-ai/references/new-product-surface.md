@@ -23,6 +23,7 @@
 - Internal taste guidance and `verification-contract.md` loaded; motion candidates handed to `motion-opportunities`.
 - Conditional data-viz/native/durable-contract references loaded only when the concrete surface requires them.
 - Screenshot or live-route evidence per affected viewport and meaningful state; labeled "not verified" if unavailable.
+- First representative render used as the baseline for finding-to-outcome review; later candidates reconcile all material open issues without inventing a pre-existing UI.
 
 **Failure / stop handling**
 - Target surface cannot be scoped from the request → stop; ask for audience, job, and product constraints.
@@ -77,6 +78,9 @@ before conditional intelligence, taste, or external reference work.
    type voice, palette logic, materiality, or signature before implementation.
 10. For deep work, render a representative high-consequence slice and narrow
    state. Reject generic or purpose-ambiguous work before building the whole.
+   Use the first real candidate as the baseline, record material findings with
+   acceptance conditions, and keep IDs through subsequent iterations per
+   `critique-protocol.md`. Do not invent a historical before screenshot.
 11. Build component by component in dependency order. Never request or emit a
    one-shot full product surface.
 12. Keep content and controls visible by default. Add motion only after static
@@ -87,6 +91,8 @@ before conditional intelligence, taste, or external reference work.
     functional-quality, visual-direction-fit, and style-allocation verdicts.
 14. Run the mandatory polish chain on the integrated surface, then any explicitly
    selected bounded specialist critique, revision, and applicable audit.
+   Reconcile each material first-candidate issue against the final render;
+   distinguish genuine resolutions from partial improvement and missing proof.
 15. Apply `references/verification-contract.md` to every affected route and
    meaningful state.
 

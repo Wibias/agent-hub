@@ -3,6 +3,16 @@
 Use this for `improve-existing` and for final polish inside redesign/new-surface
 work. It replaces the retired cross-skill polish chain.
 
+## Iteration acceptance
+
+On modifying non-motion work, run the finding-to-outcome ledger from
+`critique-protocol.md`. Record the in-scope routes, baseline evidence,
+priority findings, and acceptance conditions **before changing the UI**.
+After the rendered candidate, reconcile every carried-forward finding
+against matched evidence. An unchanged screen may be correct, but it
+requires an explicit `KEEP_JUSTIFIED` determination; unresolved or
+uninspected screens cannot be silently counted as improved.
+
 ## 1. Direction
 
 Load `taste-workflow.md`. Set purpose, genre, macrostructure, visual posture,
@@ -63,6 +73,15 @@ hit areas, dynamic numerals, text wrapping, press feedback, and other small
 interaction details. Motion details here refine already-approved motion; they do
 not create a new motion language by default.
 
+### Post-render iteration reconciliation
+
+Before final polish claims, review the ledger after implementation:
+which issues are `RESOLVED`, `IMPROVED_BUT_OPEN`, `PERSISTS`, `REGRESSED`,
+`KEEP_JUSTIFIED`, `DEFERRED`, or `UNVERIFIED`? Call out uncovered routes
+and newly introduced regressions. Prefer the smallest next iteration that
+addresses the highest-impact open issue rather than repainting the surface.
+Do not add a numerical improvement score from subjective taste alone.
+
 ## 4. Gate
 
 Run `scripts/taste-gate.ps1` on touched UI files when applicable, then inspect
@@ -111,6 +130,7 @@ blocking. Load `verification-contract.md` before claiming completion.
 - Fix structure before decorative styling when the surface looks generic.
 - Browser/rendered evidence is the visual completion gate when available.
 - A passing pattern scan does not replace independent functional-quality and style-distribution review.
+- Every resolved iteration finding needs matched evidence; carry unresolved findings forward instead of silently declaring success.
 
 ## Motion opt-in
 
