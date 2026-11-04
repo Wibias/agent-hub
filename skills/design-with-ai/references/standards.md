@@ -104,7 +104,8 @@ Measure the real candidate when performance matters.
 
 - CSS and Web Animations API animations can run on the compositor for eligible properties and browser conditions. Do not claim that all CSS or WAAPI motion is off the main thread or GPU accelerated.
 - `requestAnimationFrame` callbacks execute on the JavaScript main thread. Rendering cost still depends on what the callback changes.
-- Motion can use WAAPI and can hardware-accelerate eligible animations. Its current performance guidance notes that independent transform values such as `x`/`scale` use CSS-variable composition and are not the same acceleration path as animating the full `transform` property directly.
+- Motion 14.2+ can hardware-accelerate independent HTML transform shorthands such as `x`, `y`, `scale`, and `rotate` via WAAPI when the browser supports that path. On versions before 14.2, those shorthands use main-thread animation; prefer upgrading or the full `transform` string when a measured bottleneck warrants it.
+- Motion layout animations (`layout`, `layoutId`), drag/inertia, and animations requiring per-frame JavaScript callbacks can still run on the main thread even on 14.2+. Do not infer compositor execution from a library name or version alone; profile the actual interaction and browser.
 - If main-thread contention is a measured problem and hardware acceleration is important, prefer direct `transform`/`opacity` animation where it preserves the intended behaviour, then profile the actual browser/device.
 - Do not add `will-change` everywhere. Use it narrowly when profiling or a known first-frame issue justifies the extra compositing layer and memory cost.
 
