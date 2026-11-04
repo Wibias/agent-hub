@@ -1075,6 +1075,7 @@ function renderGraph() {
 
   const labelEveryNode = nodes.length <= 60;
   const stats = state.graph.stats ?? {};
+  const gitContext = state.graph.gitContext ?? { status: 'unconfigured', revisionSha: null };
   el.view.innerHTML = `
     <div class="graph-layout">
       <section class="graph-stage">
@@ -1121,6 +1122,7 @@ function renderGraph() {
             <span>·</span>
             <span>${number(edges.length)} / ${number(stats.edgeCount)} edges</span>
             <span>· ${number(stats.typedRelations)} typed</span>
+            <span>· Git: ${escapeHtml(gitContext.status)}${gitContext.status === 'verified' && gitContext.revisionSha ? `<code>${escapeHtml(gitContext.revisionSha.slice(0, 12))}</code>` : ''}</span>
             ${stats.typedRelationsOmittedByBound > 0 ? `<span>· ${number(stats.typedRelationsOmittedByBound)} typed omitted by limit</span>` : ''}
             ${stats.repositoryNodesUnchecked ? `<span>· ${number(stats.repositoryNodesUnchecked)} Git-unchecked</span>` : ''}
             ${stats.truncated ? `<span>· ${number(stats.omittedClaims)} omitted by bound</span>` : ''}
