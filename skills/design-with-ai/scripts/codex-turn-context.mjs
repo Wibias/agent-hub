@@ -134,7 +134,7 @@ export function readTurnContext(event, {
     const gateCommands = parsed.filter(x => x.kind === "gate" && obj(x.options))
       .slice(-8).map(x => x.options);
     return {
-      userBoundary: true, userPrompt: "", modifying: parsed[0].modifying,
+      userBoundary: true, userPrompt: "", promptAt: parsed[0].at, modifying: parsed[0].modifying,
       explicit: parsed[0].explicit,
       readsSkill: parsed.some(x => x.kind === "skill"),
       gateCommands, confidence: "NATIVE_TURN_EVENTS",
