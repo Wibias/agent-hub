@@ -66,3 +66,28 @@ test('D4 Memory Console projection is v2 with reference labels and optional simi
   assert.deepEqual(graph.groups.map((group) => group.id).sort(), ['agent_inference', 'user_direct']);
   assert.equal(graph.nodes.every((node) => /^@[a-f0-9]{10}$/.test(node.ref)), true);
 });
+
+test('D4 real bounded SQLite relation query filters before LIMIT and reports exact count', async (t) => {
+  const memory = await fixture(t);
+  for (const relation of ['supports', 'depends_on']) {
+    memory.proposeTypedRelation({
+      projectId: PROJECT, branch: 'main', sourceClaimId: 'one', targetClaimId: 'two',
+      relation, confidence: 'high', reason: 'Both claims describe D4.',
+    }, { evaluatorId: 'd4-bound', policyVersion: 'semantic-relation-v1',
+      at: '2026-11-04T18:00:00.000Z' });
+  }
+  const options = {
+    projectId: PROJECT, branch: 'main', activeOnly: true, at: AT,
+    claimIds: ['one', 'two'], limit: 1, withCount: true, auditedAtOrBefore: true,
+  };
+  const bounded = memory.listTypedRelations(options);
+  assert.equal(bounded.relations.length, 1);
+  assert.equal(bounded.total, 2);
+  assert.equal(memory.listTypedRelations({ projectId: PROJECT, branch: 'main' }).length, 2);
+  assert.deepEqual(memory.listTypedRelations({ ...options, claimIds: ['one'] }), {
+    relations: [], total: 0,
+  });
+  assert.deepEqual(memory.listTypedRelations({
+    ...options, at: '2026-11-04T17:00:00.000Z',
+  }), { relations: [], total: 0 });
+});

@@ -157,6 +157,7 @@ function resetGraphState({ keepData = false } = {}) {
   state.graphError = '';
   state.graphSearch = '';
   state.graphOrigin = 'all';
+  state.graphGroup = 'all';
   state.graphNodeState = 'all';
   state.selectedGraphNodeId = null;
 }
@@ -810,6 +811,7 @@ function renderMemories() {
   );
 }
 
+/** Apply project-local search, lifecycle and authority filters to displayed nodes. */
 function graphFilteredNodes() {
   const graph = state.graph;
   if (!graph) return [];
@@ -833,6 +835,7 @@ function graphFilteredNodes() {
   });
 }
 
+/** Keep only displayed edges and apply the selected relation-origin filter. */
 function graphFilteredEdges(nodes) {
   const graph = state.graph;
   if (!graph) return [];
@@ -924,6 +927,7 @@ function graphPositions(nodes, edges) {
   return positions;
 }
 
+/** Format distinct canonical, typed and embedding-provenance descriptions. */
 function graphEdgeProvenance(edge) {
   const provenance = edge?.provenance ?? {};
   if (edge?.source === 'typed_relation') {
@@ -1041,6 +1045,7 @@ function graphInspector(node, visibleEdges) {
   `;
 }
 
+/** Render a bounded read-only graph without implying advisory authority. */
 function renderGraph() {
   if (state.graphLoading && !state.graph) {
     loading();
@@ -1116,6 +1121,7 @@ function renderGraph() {
             <span>·</span>
             <span>${number(edges.length)} / ${number(stats.edgeCount)} edges</span>
             <span>· ${number(stats.typedRelations)} typed</span>
+            ${stats.typedRelationsOmittedByBound > 0 ? `<span>· ${number(stats.typedRelationsOmittedByBound)} typed omitted by limit</span>` : ''}
             ${stats.repositoryNodesUnchecked ? `<span>· ${number(stats.repositoryNodesUnchecked)} Git-unchecked</span>` : ''}
             ${stats.truncated ? `<span>· ${number(stats.omittedClaims)} omitted by bound</span>` : ''}
           </div>
@@ -1763,6 +1769,7 @@ async function selectClaim(claimId) {
   renderMemories();
 }
 
+/** Clear scope-specific state before loading another project or branch. */
 async function loadScope({
   preferredClaimId = null,
 } = {}) {
@@ -1782,6 +1789,7 @@ async function loadScope({
   state.claimState = 'all';
   state.graphSearch = '';
   state.graphOrigin = 'all';
+  state.graphGroup = 'all';
   state.graphNodeState = 'all';
   updateUrl();
   renderProjects();

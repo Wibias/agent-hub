@@ -62,7 +62,7 @@ function build(options = {}, data = {}) {
 }
 
 test('D4 graph v2 defaults to no embedding similarity, keeps canonical explicit history', () => {
-  const canonical = { id: 'explicit:a:b', from: 'a', to: 'b', origin: 'explicit', relation: 'supersedes', weight: 1 };
+  const canonical = { id: 'explicit:a:b', from: 'a', to: 'b', origin: 'explicit', relation: 'supersedes', weight: 1, provenance: { createdAt: '2026-11-01T00:00:00.000Z' } };
   const sim = { id: 'sim:a:b', from: 'a', to: 'b', origin: 'inferred', relation: 'semantic_similarity', weight: 0.99 };
   const { graph } = build({}, { otherEdges: [canonical, sim] });
   assert.equal(graph.schemaVersion, 2);
@@ -132,7 +132,7 @@ test('D4 historical states remain inspectable, never support current inferred re
   const data = {
     nodes: [node('a', 'agent_inference', { state: 'superseded' }), node('b', 'user_direct')],
     typed: [relation()], otherEdges: [
-      { id: 'history', from: 'a', to: 'b', origin: 'explicit', relation: 'supersedes', weight: 1 },
+      { id: 'history', from: 'a', to: 'b', origin: 'explicit', relation: 'supersedes', weight: 1, provenance: { createdAt: '2026-11-01T00:00:00.000Z' } },
     ],
   };
   const { graph } = build({}, data);
@@ -192,4 +192,24 @@ test('D4 treats repo-trusted claims with missing path as unverifiable', () => {
   const { graph } = build({}, { nodes: [repo, node('b', 'user_direct')], typed: [relation()] });
   assert.equal(graph.nodes[0].freshness.status, 'unchecked');
   assert.equal(graph.edges.length, 0);
+});
+
+test('D4 historical projection rejects future or undated explicit events but retains older history', () => {
+  const old = { id: 'old', from: 'a', to: 'b', origin: 'explicit', relation: 'supersedes',
+    provenance: { createdAt: '2026-11-03T11:00:00.000Z' } };
+  const future = { id: 'future', from: 'a', to: 'b', origin: 'explicit', relation: 'supersedes',
+    provenance: { createdAt: '2026-11-05T11:00:00.000Z' } };
+  const undated = { id: 'undated', from: 'a', to: 'b', origin: 'explicit', relation: 'supersedes',
+    provenance: { createdAt: null } };
+  const { graph } = build({}, { otherEdges: [old, future, undated] });
+  assert.deepEqual(graph.edges.map((edge) => edge.id), ['old']);
+});
+
+test('D4 bounded query requests eligible scoped IDs and reports counts', () => {
+  const { graph, calls } = build({}, { typed: [relation()] });
+  assert.deepEqual(calls.list[0].claimIds, ['a', 'b']);
+  assert.equal(calls.list[0].limit, 5000);
+  assert.equal(calls.list[0].withCount, true);
+  assert.equal(calls.list[0].auditedAtOrBefore, true);
+  assert.equal(graph.stats.typedRelationsOmittedByBound, 0);
 });

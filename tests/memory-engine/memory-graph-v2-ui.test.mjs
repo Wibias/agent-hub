@@ -30,3 +30,15 @@ test('D4 typed edges never display fabricated similarity weights', async () => {
   assert.match(js, /edge\.relation === 'semantic_similarity' && Number\.isFinite\(edge\.weight\)/);
   assert.doesNotMatch(js, /edge\.origin === 'inferred' \? ` ·/);
 });
+
+test('D4 resets authority group on both graph reset and project/branch switch', async () => {
+  const js = await readFile(new URL('../../memory-ui/app.js', import.meta.url), 'utf8');
+  const resets = js.match(/state\.graphOrigin = 'all';\s*state\.graphGroup = 'all';\s*state\.graphNodeState = 'all';/g) ?? [];
+  assert.equal(resets.length, 2);
+});
+
+test('D4 displays typed truncation independently of omitted claims', async () => {
+  const js = await readFile(new URL('../../memory-ui/app.js', import.meta.url), 'utf8');
+  assert.match(js, /stats\.typedRelationsOmittedByBound > 0/);
+  assert.match(js, /typed omitted by limit/);
+});

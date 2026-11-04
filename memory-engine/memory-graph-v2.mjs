@@ -21,11 +21,13 @@ const MAX_NODES = 500;
 const MAX_TYPED_CANDIDATES = 5000;
 const MAX_TYPED_EDGES = 1500;
 
+/** Validate a required scope token. */
 function requiredText(value, name) {
   if (typeof value !== 'string' || !value.trim()) throw new TypeError(`${name} is required`);
   return value.trim();
 }
 
+/** Parse a timestamp for a deterministic historical graph projection. */
 function validTime(value, label) {
   if (typeof value !== 'string'
       || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?(?:Z|[+-]\d{2}:\d{2})$/.test(value)
@@ -35,6 +37,7 @@ function validTime(value, label) {
   return Date.parse(value);
 }
 
+/** Treat any repository-derived primary Evidence as requiring Git freshness. */
 function isRepositoryEvidence(provenance) {
   if (!provenance) return false;
   if (provenance.path != null || provenance.blobOid != null
@@ -42,6 +45,7 @@ function isRepositoryEvidence(provenance) {
   return /^(?:repo|repository|git)(?:$|[_/-])/.test(String(provenance.sourceKind ?? '').toLowerCase());
 }
 
+/** Check the half-open validity window of a canonical claim. */
 function isTemporallyCurrent(node, asOfMs) {
   const from = node.validFrom == null ? null : Date.parse(node.validFrom);
   const until = node.validUntil == null ? null : Date.parse(node.validUntil);
@@ -53,11 +57,13 @@ function isTemporallyCurrent(node, asOfMs) {
     && (until === null || asOfMs < until);
 }
 
+/** Derive authority from Evidence, never the descriptive claim kind. */
 function projectionAuthority(node) {
   const authority = node.provenance?.authorityClass;
   return AUTHORITIES.has(authority) ? authority : 'unknown';
 }
 
+/** Verify repository endpoints using the existing read-only Recall eligibility gate. */
 function freshnessEligible(memory, projectId, branch, revisionSha, claimIds) {
   if (!revisionSha || claimIds.length === 0 || typeof memory.materializeRecall !== 'function') {
     return new Set();
@@ -81,6 +87,7 @@ function freshnessEligible(memory, projectId, branch, revisionSha, claimIds) {
   }
 }
 
+/** Group bounded claim nodes by their primary Evidence authority. */
 function namedGroups(nodes) {
   const counts = new Map();
   for (const node of nodes) {
@@ -93,6 +100,7 @@ function namedGroups(nodes) {
   })).sort((left, right) => right.count - left.count || left.id.localeCompare(right.id, 'en'));
 }
 
+/** Sort canonical edges ahead of typed advisory and similarity edges. */
 function edgeOrder(a, b) {
   const rank = (edge) => edge.origin === 'explicit' ? 0 : edge.source === 'typed_relation' ? 1 : 2;
   return rank(a) - rank(b)
@@ -100,6 +108,13 @@ function edgeOrder(a, b) {
     || a.to.localeCompare(b.to, 'en')
     || a.relation.localeCompare(b.relation, 'en')
     || a.id.localeCompare(b.id, 'en');
+}
+
+/** True only when an audited edge existed at the projection timestamp. */
+function existedAt(value, asOfMs) {
+  if (typeof value !== 'string') return false;
+  const instant = Date.parse(value);
+  return Number.isFinite(instant) && instant <= asOfMs;
 }
 
 /**
@@ -188,8 +203,8 @@ export function projectMemoryGraphV2(memory, graph, {
       if (edge.relation === 'semantic_similarity') {
         return includeSimilarity && endpointEligible(byId.get(edge.from)) && endpointEligible(byId.get(edge.to));
       }
-      // Explicit history is retained, but cannot be confused with current facts.
-      return edge.origin === 'explicit';
+      // Retain only canonical events that already existed at the requested time.
+      return edge.origin === 'explicit' && existedAt(edge.provenance?.createdAt, asOfMs);
     })
     .map((edge) => ({
       ...edge,
@@ -204,10 +219,21 @@ export function projectMemoryGraphV2(memory, graph, {
   if (typeof memory.listTypedRelations === 'function') {
     // Read-only projection; the source ledger's own SQL enforces scope,
     // active temporal validity, Evidence authority and primary provenance.
-    const typed = memory.listTypedRelations({ projectId: project, branch: scopedBranch, activeOnly: true, at });
-    if (!Array.isArray(typed)) throw new TypeError('typed relations must be an array');
+    // The real ledger applies endpoint/time filters and LIMIT in SQLite.
+    // Accept legacy array-only mocks without weakening the production path.
+    const eligibleClaimIds = nodes.filter(endpointEligible).map((node) => node.id);
+    const queried = memory.listTypedRelations({
+      projectId: project, branch: scopedBranch, activeOnly: true, at,
+      claimIds: eligibleClaimIds, limit: MAX_TYPED_CANDIDATES,
+      withCount: true, auditedAtOrBefore: true,
+    });
+    const typed = Array.isArray(queried) ? queried : queried?.relations;
+    const total = Array.isArray(queried) ? queried.length : queried?.total;
+    if (!Array.isArray(typed) || !Number.isSafeInteger(total) || total < typed.length) {
+      throw new TypeError('typed relation bounded query must return rows and a valid count');
+    }
     const bounded = typed.slice(0, MAX_TYPED_CANDIDATES);
-    counters.truncated = typed.length - bounded.length;
+    counters.truncated = total - bounded.length;
     for (let index = 0; index < bounded.length; index++) {
       if (counters.shown >= MAX_TYPED_EDGES) {
         counters.truncated += bounded.length - index;
@@ -221,8 +247,8 @@ export function projectMemoryGraphV2(memory, graph, {
           || row.origin !== 'inferred' || row.confidence !== 'high'
           || source.provenance?.evidenceId !== row.source_evidence_id
           || target.provenance?.evidenceId !== row.target_evidence_id
-          || (row.created_at && Date.parse(row.created_at) > asOfMs)
-          || (row.validated_at && Date.parse(row.validated_at) > asOfMs)) {
+          || !existedAt(row.created_at, asOfMs)
+          || !existedAt(row.validated_at, asOfMs)) {
         counters.suppressedOther++;
         continue;
       }
