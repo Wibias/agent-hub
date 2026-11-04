@@ -128,6 +128,16 @@ test("a passing proof with an old executedAt cannot certify a later turn", () =>
   assert.equal(result.proofStatus, "PROOF_INVALID_OR_STALE");
 }));
 
+test("relative gate paths are resolved against the project working directory", () => fixture(async (f) => {
+  recordTurnHook(f.prompt("Verbessere die UI mit design-with-ai."), { root: f.stateRoot });
+  recordTurnHook(f.tool('node run-iteration-gate.mjs --receipt receipt.json --proof proof.json'),
+    { root: f.stateRoot });
+  const report = readTurnContext(f.event, { root: f.stateRoot });
+  assert.equal(report.gateCommands.length, 1);
+  assert.equal(report.gateCommands[0].receipt, join(f.root, "receipt.json"));
+  assert.equal(report.gateCommands[0].proof, join(f.root, "proof.json"));
+}));
+
 test("new turn cannot inherit old gate candidate", () => fixture(async (f) => {
   recordTurnHook(f.prompt("Verbessere UI mit design-with-ai"), { root: f.stateRoot });
   recordTurnHook(f.tool('node run-iteration-gate.mjs --receipt "/old.json" --proof "/old-proof.json"'),
