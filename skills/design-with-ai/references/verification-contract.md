@@ -137,12 +137,52 @@ separately when they determine acceptance.
 
 ### Machine-checkable iteration closure (standard/deep modifying work)
 
+**Iterative known-issue review:** Before any edit, freeze a separate
+`prior-findings.json` from the user's request, previous review/handoff, and
+observed incumbent screens. The list defines the authorized in-scope routes,
+the user intent (`IMPROVE`, `RESTYLE`, or `SCOPED_COSMETIC`), and all known
+findings with stable `id`, `route`, `kind` (`NAVIGATION`, `WORKFLOW`,
+`DETAIL`, `VISUAL`, or `OTHER`), `priority` (`HIGH`, `MEDIUM`, `LOW`),
+`symptom`, `acceptance`, and pre-edit `evidenceRef`. The after-change
+agent must not regenerate this baseline from its own final report. An empty
+findings list is valid only when an actual pre-edit inspection found no
+known defects; it is not a way to discard earlier findings.
+
+For iterative `improve-existing` and other multi-screen modification requests
+that include known issues, write `requiresPriorBaseline: true` in the
+iteration receipt, include a `changeSummary`, and run the independent
+comparison:
+
+```shell
+node <skill-base-dir>/scripts/verify-iteration-receipt.mjs --receipt "<iteration-receipt.json>" --baseline "<prior-findings.json>"
+```
+
+The baseline is independently matched by ID, route, and acceptance condition.
+Missing known findings or routes, unsupported `KEEP_JUSTIFIED` downgrades, and
+cosmetic-only work presented as a remedy for unresolved HIGH-priority
+`IMPROVE` findings fail the gate. Verified resolution of prior navigation or
+workflow defects needs `verification.method: TEST | RUNTIME`; screenshots
+alone cannot prove action or route behavior. A strictly requested `RESTYLE`
+may proceed while documenting unrelated open issues in a truthful `PARTIAL`
+receipt. `TASK_REPAIR` lists addressed known IDs plus implementation/test
+evidence; `COSMETIC_ONLY` and `NO_CHANGE` do not claim repaired IDs.
+`KEEP_JUSTIFIED` for a prior defect requires a `reassessment` with reason
+and new evidence of why the original finding was incorrect or no longer
+applies. New findings can be appended to the receipt without rewriting the
+frozen baseline.
+
+This check cannot read the user's mind or authenticate its evidence paths.
+If the pre-edit review is unavailable, do not invent a baseline or assert
+product-wide completion: report that verification is missing and preserve
+known concerns in the handoff.
+
 The narrative ledger above is still necessary, but prose alone is not a
 closure gate. After the final render and relevant functional checks, write
 a temporary JSON iteration receipt and run:
 
 ```shell
 node <skill-base-dir>/scripts/verify-iteration-receipt.mjs --receipt "<iteration-receipt.json>"
+# For iterative work with known prior issues, use the --baseline variant above.
 ```
 
 The minimal structure is:
@@ -150,6 +190,12 @@ The minimal structure is:
 ```json
 {
   "schemaVersion": 1,
+  "requiresPriorBaseline": true,
+  "changeSummary": {
+    "kind": "NO_CHANGE",
+    "addressedFindingIds": [],
+    "rationale": "Awaiting behavioral verification; no cosmetic substitution"
+  },
   "scope": [{
     "route": "/jobs",
     "task": "Inspect and publish a completed video",
