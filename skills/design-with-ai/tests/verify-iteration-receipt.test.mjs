@@ -275,10 +275,26 @@ test("prior defect can be kept if independent evidence documents why the origina
   receipt.findings[0].reassessment = {
     reason: "Toolbar opens job-specific settings, not /settings",
     evidenceRef: "tests/navigation.test.ts#route-targets",
+    method: "TEST",
   };
   receipt.changeSummary = { kind: "NO_CHANGE", addressedFindingIds: [], rationale: "Original duplicate finding disproved by router tests" };
   const result = validateIterationReceipt(receipt, trackedBaseline());
   assert.equal(result.valid, true, result.problems.join("\n"));
+});
+
+test("a previous navigation duplicate cannot be dismissed with screenshot-only reassessment", () => {
+  const receipt = trackedReceipt();
+  receipt.findings[0].disposition = "KEEP_JUSTIFIED";
+  receipt.findings[0].justification = "The links seem distinct";
+  receipt.findings[0].reassessment = {
+    reason: "May target distinct views",
+    evidenceRef: "screens/settings-links.png",
+    method: "SCREENSHOT",
+  };
+  receipt.changeSummary = { kind: "NO_CHANGE", addressedFindingIds: [],
+    rationale: "Potentially different destinations" };
+  const result = validateIterationReceipt(receipt, trackedBaseline());
+  assert.match(result.problems.join(" "), /KEEP_JUSTIFIED needs TEST or RUNTIME reassessment/);
 });
 
 test("a screenshot alone cannot close a prior navigation defect", () => {

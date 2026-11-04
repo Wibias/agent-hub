@@ -33,6 +33,13 @@ Before editing:
 
 For a modifying multi-route or iterative request, prepare the scope and
 finding-to-outcome ledger in `critique-protocol.md` **before editing**.
+For modifying existing-UI work, first load the persistent ledger procedure
+in `durable-findings-ledger.md`. Read or initialize the project-owned
+ledger, import available historic issues, and snapshot the complete in-scope
+history before editing. A reconstructed after-only baseline is not a
+replacement for a persistent earlier finding. Previously justified false
+positives remain in history for regression inspection.
+
 Freeze that baseline separately from the final receipt, including
 high-priority issues from user feedback and earlier reviews. For standard/deep
 iterative work with known issues, validate against this independent baseline
