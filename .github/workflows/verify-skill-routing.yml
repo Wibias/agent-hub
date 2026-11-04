@@ -168,6 +168,9 @@ jobs:
       - name: Test Codex design Stop completion hook
         run: node --test skills/design-with-ai/tests/codex-stop-gate.test.mjs
 
+      - name: Test privacy-safe local Stop event diagnostics
+        run: node --test skills/design-with-ai/tests/stop-diagnostic-journal.test.mjs
+
       - name: Test Codex design Stop hook installer
         run: node --test skills/design-with-ai/tests/install-codex-stop-gate.test.mjs
 

@@ -62,6 +62,57 @@ Example ordinary prompt:
 
 The operator should not need to specify a gate command each time.
 
+## Local Stop runtime diagnostics
+
+Once this hook is installed and trusted, **the hook process itself** writes
+a small, local JSONL entry for each Stop check to:
+
+```text
+~/.codex/design-with-ai/stop-events.jsonl
+```
+
+On Windows PowerShell, inspect the latest entries after a normal design task:
+
+```powershell
+$log = Join-Path $HOME ".codex/design-with-ai/stop-events.jsonl"
+Get-Content $log -Tail 15 | ForEach-Object { $_ | ConvertFrom-Json } |
+    Format-Table at, decision, cause, proof, retry, transcript -AutoSize
+```
+
+Each record contains only timestamp, decision, an allowlisted cause, retry
+flag, transcript scan state, presence of a user-turn boundary and skill file
+reference, number of candidate gate commands, and a coarse proof outcome.
+**No prompts, tool commands, tool outputs, paths, session IDs, tokens, or
+full receipt contents** are written. The event timestamp helps correlate
+with the local Codex session, but does not authenticate that an event was
+triggered by Codex rather than a manual simulation.
+
+Key outcomes:
+
+- `BLOCK` / `MISSING_VERIFIED_GATE_PROOF`: current modifying design turn
+  lacks a verified gate proof; Codex should request one continuation.
+- `ALLOW` / `VERIFIED_COMPLETE` or `VERIFIED_INCOMPLETE`: gate proof was
+  valid and matched the declared verdict.
+- `ALLOW` / `RETRY_LIMIT_NOT_VERIFIED`: the one permitted correction was
+  used, but no passing proof was found.
+- `ALLOW` / `NO_TURN_BOUNDARY`, `READ_ONLY_OR_OUT_OF_SCOPE`, or
+  `SKILL_NOT_OBSERVED`: the hook ran but did not classify this as a
+  modifying design-with-ai turn.
+- `TRANSCRIPT_UNAVAILABLE` or `TRANSCRIPT_SCAN_ERROR`: inspection
+  could not establish the current turn; the hook fails open.
+- `proof=PROOF_MISSING`, `PROOF_INVALID_OR_STALE`,
+  `VALIDATOR_NONZERO`, or `PATH_REJECTED`: why a candidate proof failed.
+
+Journal size is bounded to 256 KiB plus one 256 KiB predecessor
+(`stop-events.previous.jsonl`). Logging failures never change Stop
+decisions. To disable local journaling, start Codex with
+`DESIGN_WITH_AI_STOP_DIAGNOSTICS=0` in its environment. Removing the
+journal files deletes their local history.
+
+A missing journal is **not conclusive**: the hook may be untrusted, disabled,
+not invoked, unable to write, or running an outdated installed copy.
+Check `/hooks` and the installed script version before drawing a conclusion.
+
 ## Verification
 
 Run the deterministic Node regression tests:
@@ -69,6 +120,7 @@ Run the deterministic Node regression tests:
 ```shell
 node --test skills/design-with-ai/tests/codex-stop-gate.test.mjs
 node --test skills/design-with-ai/tests/install-codex-stop-gate.test.mjs
+node --test skills/design-with-ai/tests/stop-diagnostic-journal.test.mjs
 ```
 
 In Codex, `/hooks` shows whether the hook is loaded and trusted. A

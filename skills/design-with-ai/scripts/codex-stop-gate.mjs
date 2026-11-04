@@ -8,6 +8,7 @@ import { homedir, tmpdir } from "node:os";
 import { isAbsolute, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { checkProof } from "./run-iteration-gate.mjs";
+import { appendStopDiagnostic } from "./stop-diagnostic-journal.mjs";
 
 const SKILL_PATH = /(?:^|[\\/])design-with-ai[\\/]SKILL\.md/i;
 const GATE_RUN = /(?:^|[\s;"'\\/])run-iteration-gate\.mjs/i;
@@ -110,7 +111,7 @@ export async function inspectTurnTranscript(file) {
 }
 
 export function decideStop(event, report, { home = homedir() } = {}) {
-  const allow = (reason) => ({ continue: true, status: reason });
+  const allow = (reason, proofStatus = "NOT_CHECKED") => ({ continue: true, status: reason, proofStatus });
   if (!obj(event) || event.hook_event_name !== "Stop" ||
       typeof event.cwd !== "string" || typeof event.turn_id !== "string") return allow("INVALID_EVENT");
   if (!report.userBoundary) return allow("NO_TURN_BOUNDARY");
@@ -119,34 +120,53 @@ export function decideStop(event, report, { home = homedir() } = {}) {
   if (!modifying) return allow("READ_ONLY_OR_OUT_OF_SCOPE");
   if (!EXPLICIT.test(prompt) && !report.readsSkill) return allow("SKILL_NOT_OBSERVED");
   const cwd = resolve(event.cwd);
+  let proofStatus = report.gateCommands.length ? "NO_VALID_PROOF" : "NO_GATE_COMMAND";
   for (const options of [...report.gateCommands].reverse()) {
     const raw = [options.receipt, options.baseline, options.proof].filter(Boolean);
-    if (!raw.every((path) => localAllowed(path, cwd, home))) continue;
-    if (!isValidArtifact(options.proof)) continue;
+    if (!raw.every((path) => localAllowed(path, cwd, home))) {
+      proofStatus = "PATH_REJECTED";
+      continue;
+    }
+    if (!isValidArtifact(options.proof)) {
+      proofStatus = "PROOF_MISSING";
+      continue;
+    }
     let checked;
     try {
       checked = checkProof({
         receipt: options.receipt, baseline: options.baseline ?? null, checkProof: options.proof,
       });
-    } catch { continue; }
-    // A structurally coherent proof of a validator failure is not a passing
-    // PARTIAL gate. Require the actual validator process to have exited 0.
-    if (!checked.valid || checked.processExitCode !== 0) continue;
-    if (checked.completionEligible) return allow("VERIFIED_COMPLETE");
+    } catch {
+      proofStatus = "PROOF_INVALID_OR_STALE";
+      continue;
+    }
+    if (!checked.valid) {
+      proofStatus = "PROOF_INVALID_OR_STALE";
+      continue;
+    }
+    if (checked.processExitCode !== 0) {
+      proofStatus = "VALIDATOR_NONZERO";
+      continue;
+    }
+    if (checked.completionEligible) return allow("VERIFIED_COMPLETE", "VERIFIED_COMPLETE");
     if (["PARTIAL", "NOT_VERIFIED"].includes(checked.verdict) &&
         new RegExp("\\b" + checked.verdict + "\\b", "i").test(event.last_assistant_message ?? "")) {
-      return allow("VERIFIED_INCOMPLETE");
+      return allow("VERIFIED_INCOMPLETE", "VERIFIED_INCOMPLETE");
     }
+    proofStatus = "INCOMPLETE_NOT_DISCLOSED";
   }
   if (event.stop_hook_active === true) {
     return {
       continue: true,
       status: "RETRY_LIMIT_NOT_VERIFIED",
+      proofStatus,
       systemMessage: "design-with-ai: no valid gate proof after the single automatic retry. The result remains NOT_VERIFIED; do not treat a completion claim as tested.",
     };
   }
   return {
     decision: "block",
+    status: "MISSING_VERIFIED_GATE_PROOF",
+    proofStatus,
     reason: "The current modifying design-with-ai turn has no verified iteration-gate proof. " +
       "Before finishing, write the iteration receipt and independent pre-edit baseline (if applicable), " +
       "run scripts/run-iteration-gate.mjs with --receipt, --baseline (if applicable), and a new --proof path. " +
@@ -156,15 +176,36 @@ export function decideStop(event, report, { home = homedir() } = {}) {
   };
 }
 
-export async function handleStop(event) {
-  if (!obj(event) || event.hook_event_name !== "Stop") {
-    return { continue: true };
+export async function handleStop(event, { onDiagnostic } = {}) {
+  let report = null;
+  let result = { continue: true, status: "NOT_STOP" };
+  let transcriptState = "NOT_CHECKED";
+  try {
+    if (!obj(event) || event.hook_event_name !== "Stop") return result;
+    const path = event.transcript_path;
+    if (typeof path !== "string" || !isAbsolute(path) ||
+        !localAllowed(path, resolve(event.cwd || process.cwd()), homedir())) {
+      transcriptState = "UNAVAILABLE";
+      result = { continue: true, status: "TRANSCRIPT_UNAVAILABLE" };
+      return result;
+    }
+    try {
+      report = await inspectTurnTranscript(path);
+      transcriptState = report.userBoundary || report.confidence === "NO_USER_BOUNDARY"
+        ? "SCANNED" : "UNAVAILABLE";
+      result = decideStop(event, report);
+      return result;
+    } catch {
+      transcriptState = "SCAN_ERROR";
+      result = { continue: true, status: "TRANSCRIPT_SCAN_ERROR" };
+      return result;
+    }
+  } finally {
+    // Diagnostic failures must never change a Stop decision or leak content.
+    if (typeof onDiagnostic === "function") {
+      try { onDiagnostic({ event, report, result, transcriptState }); } catch { /* best effort */ }
+    }
   }
-  const path = event.transcript_path;
-  if (typeof path !== "string" || !isAbsolute(path) ||
-      !localAllowed(path, resolve(event.cwd || process.cwd()), homedir())) return { continue: true };
-  try { return decideStop(event, await inspectTurnTranscript(path)); }
-  catch { return { continue: true }; }
 }
 
 async function main() {
@@ -175,7 +216,7 @@ async function main() {
       if (input.length > 128 * 1024) throw new Error("Stop event input too large");
     }
     const event = JSON.parse(input);
-    const output = await handleStop(event);
+    const output = await handleStop(event, { onDiagnostic: appendStopDiagnostic });
     // Only documented Codex hook response fields are sent to stdout.
     const result = output.decision === "block"
       ? { decision: "block", reason: output.reason }
