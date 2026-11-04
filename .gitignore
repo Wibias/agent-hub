@@ -12,3 +12,4 @@ memory/notes/*
 memory-engine/node_modules/
 sync.ffs_lock
 sync.ffs_db.*.ffs_tmp
+skills/.github-delivery-backups/
