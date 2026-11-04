@@ -110,6 +110,13 @@ its output with `--check-proof ...` as specified in
 `verification-contract.md`. The host trace documents the attempted action;
 the proof records the observed validator result.
 
+For Codex installations with the optional native Stop hook, the local
+diagnostic journal documented in `codex-stop-enforcement.md` is the
+fastest way to establish whether the hook process actually ran. It records
+only categorical decisions and proof-check states. A missing entry does
+not alone prove that the runtime did not invoke a hook, and a recorded
+entry does not prove that the model obeyed the requested continuation.
+
 ## 3. Prove the three observed product failures, not only taste
 
 For a contact-sheet video pipeline with the reported problems, use the target
