@@ -33,6 +33,9 @@ export function validateIterationReceipt(input, baseline = null) {
     return { valid: false, verdict: null, problems: ["Expected schemaVersion: 1 receipt object"] };
   }
 
+  if (input.requiresPriorBaseline === true && baseline === null) {
+    fail("iterative receipt requires an independent pre-edit baseline");
+  }
   const scope = Array.isArray(input.scope) ? input.scope : [];
   const findings = Array.isArray(input.findings) ? input.findings : [];
   const carryover = Array.isArray(input.openCarryover) ? input.openCarryover : [];
@@ -155,8 +158,9 @@ export function validateIterationReceipt(input, baseline = null) {
       if (!baselineScope.includes(issue.route)) fail(issue.id + ": baseline route not in baseline scope");
       if (!["HIGH", "MEDIUM", "LOW"].includes(issue.priority) ||
           !populated(issue.symptom) || !populated(issue.acceptance) ||
-          !populated(issue.evidenceRef)) {
-        fail(issue.id + ": baseline needs priority, symptom, acceptance and evidenceRef");
+          !populated(issue.evidenceRef) ||
+          !["NAVIGATION", "WORKFLOW", "DETAIL", "VISUAL", "OTHER"].includes(issue.kind)) {
+        fail(issue.id + ": baseline needs kind, priority, symptom, acceptance and evidenceRef");
       }
       const matching = findings.filter((f) => f?.id === issue.id);
       if (matching.length !== 1) {
@@ -166,6 +170,11 @@ export function validateIterationReceipt(input, baseline = null) {
       const current = matching[0];
       if (current.route !== issue.route || current.acceptance !== issue.acceptance) {
         fail(issue.id + ": prior route/acceptance changed without an authorized baseline update");
+      }
+      if (current.disposition === "RESOLVED" &&
+          ["NAVIGATION", "WORKFLOW"].includes(issue.kind) &&
+          !reliableMethods.has(current.verification?.method)) {
+        fail(issue.id + ": navigation/workflow resolution needs TEST or RUNTIME behavior evidence");
       }
       if (current.disposition === "KEEP_JUSTIFIED") {
         if (!record(current.reassessment) ||
@@ -177,11 +186,6 @@ export function validateIterationReceipt(input, baseline = null) {
     }
     for (const route of baselineScope) {
       if (!scoped.has(route)) fail("baseline scope omitted from final receipt: " + route);
-    }
-    for (const item of scope) {
-      if (record(item) && !baselineScope.includes(item.route)) {
-        fail(item.route + ": final receipt has route outside pre-edit baseline scope");
-      }
     }
     const summary = input.changeSummary;
     if (!record(summary) ||
