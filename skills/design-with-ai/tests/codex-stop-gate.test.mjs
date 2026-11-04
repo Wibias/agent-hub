@@ -91,7 +91,7 @@ test("old skill and gate calls in earlier turn are never valid proof for the nex
 test("implicit skill path read triggers gate for an ordinary UI improvement", () => fixture(async (f) => {
   f.write([
     f.prompt("Improve the existing UI without redesigning it."),
-    f.call("exec_command", 'Get-Content "C:/Users/example/.agents/skills/design-with-ai/SKILL.md"'),
+    f.call("exec_command", 'Get-Content "/workspace/.agents/skills/design-with-ai/SKILL.md"'),
   ]);
   assert.equal((await handleStop(f.event)).decision, "block");
 }));
