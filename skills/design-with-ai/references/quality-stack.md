@@ -54,6 +54,22 @@ A visual pattern scan does not replace this check. If a substantive defect
 remains, revise the design or expose the product-model/authority gap before
 Craft. Do not use color or decoration to conceal a failed task-first verdict.
 
+### Workflow-semantics gate before Craft
+
+For a UI mixing process stages, results/status, selectable filters, and
+guarded actions, apply `baseline-ui.md`'s workflow semantics acceptance.
+Trace each label and count to its real state/predicate, distinguish current
+phase from completed milestones, and test whether selection changes only
+the list or actually invokes a transition. Check readiness and permissions
+separately from QA or completion, including blocked publish/retry cases.
+A good-looking rail or a green taste scan cannot establish these facts.
+
+If a consequential action is visually enabled while its prerequisites
+are absent, or filters/counts disagree with the underlying items, mark
+the design `REVISE` until corrected. If source/runtime evidence is missing,
+mark semantics `NOT_VERIFIED`, not `PASS`. Do not invent backend behavior
+or silently expand the active workflow's authority.
+
 ### Style overcorrection check before Craft
 
 Inspect the integrated render. Check that an attempt to remove slop did not
@@ -130,6 +146,7 @@ blocking. Load `verification-contract.md` before claiming completion.
 - Fix structure before decorative styling when the surface looks generic.
 - Browser/rendered evidence is the visual completion gate when available.
 - A passing pattern scan does not replace independent functional-quality and style-distribution review.
+- Workflow-state semantics and action eligibility require verified product contracts, not screenshots or design taste.
 - Every resolved iteration finding needs matched evidence; carry unresolved findings forward instead of silently declaring success.
 
 ## Motion opt-in

@@ -29,10 +29,16 @@ Do not treat only the visibly changed route as the complete requested scope.
 An intentionally unchanged surface still needs an inspected `KEEP_JUSTIFIED`
 or a documented `DEFERRED` / `NOT_INSPECTED` coverage result.
 
-When the inspected target is an operational interface, use the task-firstacceptance in `baseline-ui.md` as part of the selected workflow. Do not apply
+When the inspected target is an operational interface, use the task-first
+acceptance in `baseline-ui.md` as part of the selected workflow. Do not apply
 it merely because a prompt contains the word "dashboard": the actual surface
 and user decision must support the classification. If required product status
 semantics are inaccessible, label them unverified rather than inventing them.
+When status rails, stage filters, and permission-dependent actions coexist,
+apply the same reference's workflow semantics acceptance. Verify state
+source, filter predicate, count meaning, and action eligibility before
+changing the structure or declaring it correct. Preserve locked transitions
+and permissions; an audit is read-only.
 
 For modifying work, report changed files and one-sentence rationale per file,
 commands/gates run, and rendered/browser evidence per affected viewport. If the
@@ -53,6 +59,7 @@ Output:
   implementation;
 - visible evidence and impact for each finding;
 - for applicable operator surfaces, task-first failures in priority, readability, status semantics, or containment, with observed versus unverified evidence separated;
+- for mixed workflow/state surfaces, which controls are progress, filters, results, or guarded actions, and which semantics are verified, inconsistent, or unknown;
 - when a repeated motif is materially in question, a role-to-treatment assessment and separate functional-quality versus direction-fit conclusions;
 - for iterative audits with a prior candidate, compare matched route/viewport/state
   evidence and carry open issue IDs forward without claiming unobserved improvement;
@@ -84,6 +91,8 @@ Before the quality stack:
      or redundant;
    - task-first decision/action, information priority, legible item content,
      status semantics, and repeated-container rationale when applicable;
+   - any pipeline stage/filter/selection/count contract and action eligibility
+     mismatch against real state, marked unknown if unverified;
    - whether different component jobs received unearned identical styling,
      including a new motif that merely displaced an old default.
 3. Preserve a coherent existing icon dependency unless an approved system,

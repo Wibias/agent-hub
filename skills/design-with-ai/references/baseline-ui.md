@@ -76,7 +76,6 @@ Use a selected motion workflow when motion itself is the task.
 
 ## Task-first surface acceptance
 
-
 Use this review for inspected dashboards, queues, libraries, multi-step setup,
 settings, and other operator surfaces. The surface's actual job, not its
 category label, decides which checks apply. Run it on a real representative
@@ -113,6 +112,55 @@ A failure in task clarity, truth, or legibility must be revised before Craft.
 If correcting it changes locked purpose or IA, route through the workflow's
 authority/redesign rules rather than silently changing the product model.
 
+## Workflow semantics acceptance (conditional)
+
+Use this when a UI mixes a process/stage rail, status labels, selectable
+filters, readiness indicators, or consequential actions. This is a **product
+semantics** review, not a requirement to use a particular pipeline layout.
+Before treating a timeline or status rail as correct, trace these separate
+concepts to actual product state and the relevant UI behavior:
+
+1. **Phase:** What work is executing or where the item currently is. A
+   historical milestone such as `QA PASSED` is not necessarily its current
+   phase. Determine whether phase is exclusive, concurrent, or optional.
+2. **Outcome/status:** What has succeeded, failed, been skipped, or completed.
+   A past QA result can remain true while publishing is blocked.
+3. **Filter/selection:** Which subset of items a user is viewing. Selecting
+   a filter must not advance the item or imply a phase transition. Confirm
+   whether `All`, stage chips, and failure views are filters, navigation, or
+   progress indicators, and label/afford them accordingly.
+4. **Readiness/permission:** Which external credentials, approvals, assets,
+   or other prerequisites make an operation eligible. Eligibility is not
+   implied by `QA PASSED`, by being selected, or by an empty failure count.
+5. **Action/transition:** What a control actually attempts, its preconditions,
+   and its outcomes (disabled, explanation, recovery, and retry). Do not
+   present an actionable-looking publish path as ready if authorization
+   or publishing capability is absent, unless it clearly leads to setup.
+
+Make a small **semantics matrix** for the actual controls, with their
+source/state field, display label, filter predicate (if any), counting
+rule, possible transition, and eligibility guard. Identify whether counts
+are disjoint or overlapping: totals and stage counts need not sum when
+milestones coexist. `Failed` may be an exception filter rather than
+a chronological phase; verify before putting it on a progress path.
+Never infer backend fields or counting rules from a screenshot alone.
+
+Check at least the real or representative combinations that matter to
+the interface: a current in-progress item, QA passed but unauthorised
+to publish, a published item, and a failure/retry or empty-filter state.
+Use actual fixtures/runtime behavior where available; do not fabricate
+a live integration or claim an external action completed from UI appearance.
+Verify keyboard/selection semantics (for example selected tab or pressed
+filter state), count-to-list agreement, clear empty-state meaning, and
+responsive discoverability. Document unreachable combinations and
+missing test evidence rather than forcing every example into the product.
+
+A failed or unverified semantics check is not repaired by renaming labels
+or restyling the rail alone. Preserve locked backend state, permissions,
+and routes. When correctness requires changing the product state model
+or action contract, use the workflow's authority/redesign boundary
+instead of silently altering it.
+
 ## Anti-slop floor
 
 - No default purple/multicolour gradient, glow, or generic card wall unless the
@@ -136,6 +184,7 @@ Before handing off to Craft, check:
 - interrupted/repeated interaction settles on the correct semantic state;
 - visible hierarchy and primary action, including perceptual grouping when that was an identified defect;
 - task-first acceptance for applicable operator surfaces, including status truth, legible information, and justified containment;
+- workflow semantics for applicable stage/status/filter/action surfaces, including count predicates, independent readiness, selection behavior, and guarded transitions;
 - no baseline rule accidentally changed product semantics or routes.
 
 When the target is native/mobile, load `native-mobile.md` for platform-specific units, safe areas, text scaling, gestures, and runtime verification.

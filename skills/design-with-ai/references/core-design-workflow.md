@@ -71,6 +71,18 @@ Map entry points, primary task path, browse/search strategy, secondary
 surfaces, return path, state continuity, and responsive context changes. Load
 `intent` plus `references/information-architecture.md` when taxonomy, navigation, or content ownership is an open problem; load `intent` plus `references/interaction-patterns.md` when sequence, branching, recovery, or cross-surface flow is open; stay on `intent` when a new device or context needs more than responsive reflow. `organize`, `journey`, and `transpose` are not installed.
 
+### Workflow-state semantics before visual composition
+
+When the product exposes a stage rail, progress timeline, selectable status
+filters, or actions whose eligibility depends on workflow state, use the
+workflow semantics acceptance in `baseline-ui.md` before choosing the
+visual navigation pattern. Model current phase, historical outcome, UI
+selection, permissions/readiness, and allowed transitions separately.
+Document count and filter predicates against known product contracts.
+If state semantics are unknown, record the gap; an attractive rail is
+not evidence that the state model is correct. Do not use this step to
+invent backend states or reassign locked behavior.
+
 ### 5. Visual-world brief
 
 Declare the current visual language `CHOSEN`, `INHERITED`, or `UNKNOWN`, then
