@@ -9,6 +9,7 @@ import { isAbsolute, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { checkProof } from "./run-iteration-gate.mjs";
 import { appendStopDiagnostic } from "./stop-diagnostic-journal.mjs";
+import { isGitProject, discoverProjectLedger } from "./findings-ledger.mjs";
 import { readTurnContext } from "./codex-turn-context.mjs";
 
 const SKILL_PATH = /(?:^|[\\/])design-with-ai[\\/]SKILL\.md/i;
@@ -121,8 +122,15 @@ export function decideStop(event, report, { home = homedir() } = {}) {
   if (!modifying) return allow("READ_ONLY_OR_OUT_OF_SCOPE");
   if (!report.explicit && !EXPLICIT.test(prompt) && !report.readsSkill) return allow("SKILL_NOT_OBSERVED");
   const cwd = resolve(event.cwd);
+  const needsLedger = isGitProject(cwd);
+  const canonicalLedger = discoverProjectLedger(cwd);
   let proofStatus = report.gateCommands.length ? "NO_VALID_PROOF" : "NO_GATE_COMMAND";
   for (const options of [...report.gateCommands].reverse()) {
+    if (needsLedger && (!canonicalLedger || !options.ledger ||
+        resolve(options.ledger) !== resolve(canonicalLedger))) {
+      proofStatus = "NO_VALID_PROOF";
+      continue;
+    }
     const raw = [options.receipt, options.baseline, options.ledger, options.proof].filter(Boolean);
     if (!raw.every((path) => localAllowed(path, cwd, home))) {
       proofStatus = "PATH_REJECTED";
@@ -187,7 +195,8 @@ export function decideStop(event, report, { home = homedir() } = {}) {
     proofStatus,
     reason: "The current modifying design-with-ai turn has no verified iteration-gate proof. " +
       "Before finishing, write the iteration receipt and independent pre-edit baseline (if applicable), " +
-      "reconcile the persistent .design-with-ai/findings-ledger.json against the current scope and receipt. " +
+      "initialize or locate the canonical .design-with-ai/findings-ledger.json in this project, import available earlier findings, then freeze a pre-edit snapshot. " +
+      "Reconcile all old in-scope findings against the current receipt. " +
       "Run scripts/run-iteration-gate.mjs with --receipt, --baseline, --ledger, and a new --proof path. " +
       "Check the proof with --check-proof and report the actual exit code. Do not invent a missing baseline. " +
       "If the work cannot be fully verified, use a truthful PARTIAL or NOT_VERIFIED receipt and final verdict. " +
