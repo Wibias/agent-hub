@@ -2,6 +2,21 @@
 
 Use before claiming a modifying `design-with-ai` workflow complete.
 
+## Execution provenance when a repeated fix has not landed
+
+When prior design issues recur despite a claimed successful iteration,
+use `references/activation-debug.md` to check the installed skill copy and
+host trace before diagnosing the UI result. Distinguish:
+
+- `DISCOVERABLE_MATCH`: equivalent installed files, **not** proven activation;
+- observed host skill/reference reads and gate commands with exit status;
+- product/browser assertion results and current matched renders.
+
+Hub CI alone cannot certify which skill another agent loaded, or whether
+a target app's publish/route behavior was tested. Record missing runtime
+evidence as `NOT_VERIFIED`. Do not turn another cosmetic refinement into
+a false resolution of a known functional finding.
+
 ## Mechanical checks
 
 Run repository-native format/lint/type/build/test gates that cover the changed

@@ -10,6 +10,15 @@ or specialist references. For standard/deep work, then load
 pre-edit assessment may defer `verification-contract.md`; modifying work loads
 it before completion.
 
+## Diagnosing repeated ineffective iterations
+
+If the same material issues survive multiple reported design passes, first
+use `references/activation-debug.md` to separate stale/discoverable skill
+copies, actual host invocation, gate execution, and real UI behavior.
+Do not infer that the current instructions were used merely because Hub CI
+is green, and do not add another taste rule until the failure layer is known.
+This diagnostic is conditional; routine UI edits do not need it.
+
 ## Shared execution contract
 
 Before editing:
