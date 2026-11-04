@@ -20,7 +20,7 @@ const PROOFS = new Set([
   "VERIFIED_INCOMPLETE", "INCOMPLETE_NOT_DISCLOSED", "NO_VALID_PROOF",
 ]);
 const TRANSCRIPTS = new Set([
-  "NOT_CHECKED", "UNAVAILABLE", "SCANNED", "SCAN_ERROR",
+  "NOT_CHECKED", "UNAVAILABLE", "SCANNED", "SCAN_ERROR", "NATIVE_TURN_EVENTS",
 ]);
 const boundedCount = (value) => Number.isSafeInteger(value) && value >= 0
   ? Math.min(value, 100000) : 0;
