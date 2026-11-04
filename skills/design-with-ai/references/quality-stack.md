@@ -97,6 +97,12 @@ which issues are `RESOLVED`, `IMPROVED_BUT_OPEN`, `PERSISTS`, `REGRESSED`,
 and newly introduced regressions. Prefer the smallest next iteration that
 addresses the highest-impact open issue rather than repainting the surface.
 Do not add a numerical improvement score from subjective taste alone.
+For standard/deep modifying work, compile and validate the iteration
+receipt with `scripts/verify-iteration-receipt.mjs` as specified in
+`verification-contract.md`. A missing, invalid, or contradictory
+receipt blocks `COMPLETE`, even if the taste gate and code tests pass.
+The validator supplements real render and runtime evaluation; it does
+not independently prove the cited evidence.
 
 ## 4. Gate
 

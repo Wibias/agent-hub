@@ -203,6 +203,12 @@ to old tokens merely to satisfy a detector.
 
 ## Completion
 
+For standard/deep modifying work, use the machine-checkable iteration receipt
+in `verification-contract.md` after comparing the actual candidate against
+carried findings. An invalid or missing receipt means the final verdict cannot
+be `COMPLETE`. Do not mark a state-dependent action verified from a screenshot
+or a green source taste scan.
+
 Modifying work is incomplete until applicable quality gates and rendered
 verification pass, or a concrete tooling/environment limitation is recorded as
 blocked. Report partial progress when critical findings remain open, even if
