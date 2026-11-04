@@ -1,0 +1,284 @@
+{
+  "format": "agent-hub-semantic-relation-shadow-fixture",
+  "version": 1,
+  "cases": [
+    {
+      "id": "supported-dependency",
+      "projectId": "sample-project",
+      "branch": "main",
+      "sourceClaimId": "hook-rule",
+      "targetClaimIds": [
+        "hook-implementation",
+        "runtime"
+      ],
+      "at": "2026-11-04T00:00:00.000Z",
+      "canonical": {
+        "claims": [
+          {
+            "id": "hook-rule",
+            "project_id": "sample-project",
+            "branch_scope": "main",
+            "state": "active",
+            "kind": "decision",
+            "value_text": "Use PowerShell EncodedCommand for Windows hook dispatch.",
+            "created_from_evidence_id": "ev-hook"
+          },
+          {
+            "id": "hook-implementation",
+            "project_id": "sample-project",
+            "branch_scope": "main",
+            "state": "active",
+            "kind": "implementation",
+            "value_text": "Windows hook launcher encodes command bytes as UTF-16LE base64 for PowerShell.",
+            "created_from_evidence_id": "ev-impl"
+          },
+          {
+            "id": "runtime",
+            "project_id": "sample-project",
+            "branch_scope": "main",
+            "state": "active",
+            "kind": "fact",
+            "value_text": "Node 24 runs the agent memory test harness.",
+            "created_from_evidence_id": "ev-runtime"
+          }
+        ],
+        "evidence": [
+          {
+            "id": "ev-hook",
+            "project_id": "sample-project",
+            "branch": "main",
+            "authority_class": "agent_inference"
+          },
+          {
+            "id": "ev-impl",
+            "project_id": "sample-project",
+            "branch": "main",
+            "authority_class": "agent_inference"
+          },
+          {
+            "id": "ev-runtime",
+            "project_id": "sample-project",
+            "branch": "main",
+            "authority_class": "agent_inference"
+          }
+        ]
+      },
+      "expectedRelations": [
+        {
+          "relation": "depends_on",
+          "targetClaimId": "hook-implementation"
+        }
+      ],
+      "mockRelations": [
+        {
+          "relation": "depends_on",
+          "targetClaimId": "hook-implementation",
+          "reason": "Hook command delivery relies on the encoded PowerShell command payload."
+        }
+      ]
+    },
+    {
+      "id": "same-context-no-edge",
+      "projectId": "sample-project",
+      "branch": "main",
+      "sourceClaimId": "hook-rule",
+      "targetClaimIds": [
+        "hook-implementation",
+        "runtime"
+      ],
+      "at": "2026-11-04T00:00:00.000Z",
+      "canonical": {
+        "claims": [
+          {
+            "id": "hook-rule",
+            "project_id": "sample-project",
+            "branch_scope": "main",
+            "state": "active",
+            "kind": "decision",
+            "value_text": "Use PowerShell EncodedCommand for Windows hook dispatch.",
+            "created_from_evidence_id": "ev-hook"
+          },
+          {
+            "id": "hook-implementation",
+            "project_id": "sample-project",
+            "branch_scope": "main",
+            "state": "active",
+            "kind": "implementation",
+            "value_text": "Windows hook launcher encodes command bytes as UTF-16LE base64 for PowerShell.",
+            "created_from_evidence_id": "ev-impl"
+          },
+          {
+            "id": "runtime",
+            "project_id": "sample-project",
+            "branch_scope": "main",
+            "state": "active",
+            "kind": "fact",
+            "value_text": "Node 24 runs the agent memory test harness.",
+            "created_from_evidence_id": "ev-runtime"
+          }
+        ],
+        "evidence": [
+          {
+            "id": "ev-hook",
+            "project_id": "sample-project",
+            "branch": "main",
+            "authority_class": "agent_inference"
+          },
+          {
+            "id": "ev-impl",
+            "project_id": "sample-project",
+            "branch": "main",
+            "authority_class": "agent_inference"
+          },
+          {
+            "id": "ev-runtime",
+            "project_id": "sample-project",
+            "branch": "main",
+            "authority_class": "agent_inference"
+          }
+        ]
+      },
+      "expectedRelations": [],
+      "mockRelations": []
+    },
+    {
+      "id": "hard-negative-false-edge",
+      "projectId": "sample-project",
+      "branch": "main",
+      "sourceClaimId": "hook-rule",
+      "targetClaimIds": [
+        "hook-implementation",
+        "runtime"
+      ],
+      "at": "2026-11-04T00:00:00.000Z",
+      "canonical": {
+        "claims": [
+          {
+            "id": "hook-rule",
+            "project_id": "sample-project",
+            "branch_scope": "main",
+            "state": "active",
+            "kind": "decision",
+            "value_text": "Use PowerShell EncodedCommand for Windows hook dispatch.",
+            "created_from_evidence_id": "ev-hook"
+          },
+          {
+            "id": "hook-implementation",
+            "project_id": "sample-project",
+            "branch_scope": "main",
+            "state": "active",
+            "kind": "implementation",
+            "value_text": "Windows hook launcher encodes command bytes as UTF-16LE base64 for PowerShell.",
+            "created_from_evidence_id": "ev-impl"
+          },
+          {
+            "id": "runtime",
+            "project_id": "sample-project",
+            "branch_scope": "main",
+            "state": "active",
+            "kind": "fact",
+            "value_text": "Node 24 runs the agent memory test harness.",
+            "created_from_evidence_id": "ev-runtime"
+          }
+        ],
+        "evidence": [
+          {
+            "id": "ev-hook",
+            "project_id": "sample-project",
+            "branch": "main",
+            "authority_class": "agent_inference"
+          },
+          {
+            "id": "ev-impl",
+            "project_id": "sample-project",
+            "branch": "main",
+            "authority_class": "agent_inference"
+          },
+          {
+            "id": "ev-runtime",
+            "project_id": "sample-project",
+            "branch": "main",
+            "authority_class": "agent_inference"
+          }
+        ]
+      },
+      "expectedRelations": [],
+      "mockRelations": [
+        {
+          "relation": "related_to",
+          "targetClaimId": "runtime",
+          "reason": "Both claims mention an agent runtime but this is too loose."
+        }
+      ]
+    },
+    {
+      "id": "missing-dependency",
+      "projectId": "sample-project",
+      "branch": "main",
+      "sourceClaimId": "hook-rule",
+      "targetClaimIds": [
+        "hook-implementation",
+        "runtime"
+      ],
+      "at": "2026-11-04T00:00:00.000Z",
+      "canonical": {
+        "claims": [
+          {
+            "id": "hook-rule",
+            "project_id": "sample-project",
+            "branch_scope": "main",
+            "state": "active",
+            "kind": "decision",
+            "value_text": "Use PowerShell EncodedCommand for Windows hook dispatch.",
+            "created_from_evidence_id": "ev-hook"
+          },
+          {
+            "id": "hook-implementation",
+            "project_id": "sample-project",
+            "branch_scope": "main",
+            "state": "active",
+            "kind": "implementation",
+            "value_text": "Windows hook launcher encodes command bytes as UTF-16LE base64 for PowerShell.",
+            "created_from_evidence_id": "ev-impl"
+          },
+          {
+            "id": "runtime",
+            "project_id": "sample-project",
+            "branch_scope": "main",
+            "state": "active",
+            "kind": "fact",
+            "value_text": "Node 24 runs the agent memory test harness.",
+            "created_from_evidence_id": "ev-runtime"
+          }
+        ],
+        "evidence": [
+          {
+            "id": "ev-hook",
+            "project_id": "sample-project",
+            "branch": "main",
+            "authority_class": "agent_inference"
+          },
+          {
+            "id": "ev-impl",
+            "project_id": "sample-project",
+            "branch": "main",
+            "authority_class": "agent_inference"
+          },
+          {
+            "id": "ev-runtime",
+            "project_id": "sample-project",
+            "branch": "main",
+            "authority_class": "agent_inference"
+          }
+        ]
+      },
+      "expectedRelations": [
+        {
+          "relation": "depends_on",
+          "targetClaimId": "hook-implementation"
+        }
+      ],
+      "mockRelations": []
+    }
+  ]
+}
