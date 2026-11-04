@@ -165,6 +165,12 @@ jobs:
       - name: Test Codex rollout execution trace inspector
         run: node --test skills/design-with-ai/tests/inspect-codex-rollout.test.mjs
 
+      - name: Test Codex design Stop completion hook
+        run: node --test skills/design-with-ai/tests/codex-stop-gate.test.mjs
+
+      - name: Test Codex design Stop hook installer
+        run: node --test skills/design-with-ai/tests/install-codex-stop-gate.test.mjs
+
       - name: Test local design skill activation diagnostic
         run: node --test skills/design-with-ai/tests/check-activation.test.mjs
 
