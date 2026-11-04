@@ -207,7 +207,7 @@ export function validateIterationReceipt(input, baseline = null) {
       if (summary.kind === "TASK_REPAIR" && !populated(summary.evidenceRef)) {
         fail("TASK_REPAIR needs actual implementation or runtime evidence");
       }
-      const highOpen = baselineIssues.some((issue) => issue.priority === "HIGH" &&
+      const highOpen = baselineIssues.some((issue) => record(issue) && issue.priority === "HIGH" &&
         findings.some((f) => f?.id === issue.id && !closed.has(f.disposition)));
       if (intent === "IMPROVE" && summary.kind === "COSMETIC_ONLY" && highOpen) {
         fail("IMPROVE cannot substitute cosmetic-only changes for unresolved HIGH prior findings");
