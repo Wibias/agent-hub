@@ -16,10 +16,10 @@ import {
 } from '../memory-engine/adapters/codex-hooks.mjs';
 import { MemoryEngine } from '../memory-engine/index.mjs';
 import {
-  createReadOnlyGitGraphView,
+  createAsyncGitGraphView,
   normalizeRepositoryRoots,
   publicMemoryConsoleGitScope,
-  resolveMemoryConsoleGitScope,
+  resolveMemoryConsoleGitScopeAsync,
 } from '../memory-engine/memory-console-git-context.mjs';
 import {
   inspectCodexIntegration,
@@ -329,13 +329,14 @@ export function createMemoryUiServer({
     throw new Error('memory database not found: ' + resolvedDbPath);
   }
 
+  // Validate operator roots before opening an owned SQLite database handle.
+  const approvedGitRoots = normalizeRepositoryRoots(repositoryRoots);
   const ownedMemory = memory === null;
   const engine = memory ?? new MemoryEngine({
     dbPath: resolvedDbPath,
     readOnly: true,
   });
   const actionToken = randomBytes(24).toString('hex');
-  const approvedGitRoots = normalizeRepositoryRoots(repositoryRoots);
 
   async function runAction(pathname, payload) {
     const command = actionCommand(pathname, payload);
@@ -503,11 +504,11 @@ export function createMemoryUiServer({
 
         try {
           // No HTTP query parameter supplies a trusted root, identity, or SHA.
-          const gitScope = resolveMemoryConsoleGitScope({
+          const gitScope = await resolveMemoryConsoleGitScopeAsync({
             memory: engine, projectId, branch, repositoryRoots: approvedGitRoots,
           });
           const graphMemory = gitScope.status === 'verified'
-            ? createReadOnlyGitGraphView(engine, { projectId, branch, scope: gitScope })
+            ? await createAsyncGitGraphView(engine, { projectId, branch, scope: gitScope })
             : engine;
           const graph = memoryUiGraph(graphMemory, {
             projectId, branch, revisionSha: gitScope.revisionSha,

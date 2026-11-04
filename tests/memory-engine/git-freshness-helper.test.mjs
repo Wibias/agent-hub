@@ -122,3 +122,13 @@ test('refreshRepositoryFreshness records current blob state for every claimed re
     },
   ]);
 });
+
+test('gitBlobOid rejects symlink blobs even if their oid matches', () => {
+  const sha = 'a'.repeat(40);
+  const oid = 'b'.repeat(40);
+  const result = gitBlobOid({
+    repoPath: '/repo', revisionSha: sha, path: 'docs/link.md',
+    execFile: () => `120000 blob ${oid}\tdocs/link.md\0`,
+  });
+  assert.equal(result, null);
+});

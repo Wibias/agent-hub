@@ -25,6 +25,7 @@ test('D4 HTTP route does not take user query revisionSha as trusted Git evidence
   assert.match(scopeRoute, /memoryUiGraph\(graphMemory,\s*\{/);
   assert.match(scopeRoute, /revisionSha:\s*gitScope\.revisionSha/);
   assert.doesNotMatch(scopeRoute, /queryValue\(url,\s*['"](?:revisionSha|repoRoot|repoPath)['"]\)/);
+  assert.doesNotMatch(scopeRoute, /searchParams\.get\(\s*['"](?:revisionSha|repoRoot|repoPath)['"]\s*\)/);
   assert.equal(scopeRoute.includes("queryValue(url, 'revisionSha')"), false);
 });
 

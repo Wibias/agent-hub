@@ -78,7 +78,7 @@ export function gitBlobOid({
   if (!mode || !type || !oid || returnedPath !== path) {
     throw new Error(`unexpected git ls-tree record for ${path}`);
   }
-  if (type !== 'blob') return null;
+  if (type !== 'blob' || !['100644', '100755'].includes(mode)) return null;
   if (!/^[0-9a-f]{40,64}$/i.test(oid)) {
     throw new Error(`unexpected git blob object id for ${path}`);
   }

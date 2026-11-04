@@ -2,6 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { resolve } from 'node:path';
 import {
+  createAsyncGitGraphView,
+  resolveMemoryConsoleGitScopeAsync,
   createReadOnlyGitGraphView,
   normalizeRepositoryRoots,
   publicMemoryConsoleGitScope,
@@ -157,4 +159,93 @@ test('D5 never copies repository paths into browser-visible Git context', () => 
   assert.throws(() => createReadOnlyGitGraphView(mockMemory().memory, {
     projectId: PROJECT, branch: 'main', scope: { status: 'unchecked', revisionSha: SHA, repoPath: ROOT },
   }), /verified/);
+});
+
+test('D5 snapshot view stays pinned after the backing engine export changes', () => {
+  const { memory } = mockMemory();
+  const verified = scope(memory).result;
+  const initial = memory.exportCanonical();
+  const view = createReadOnlyGitGraphView(memory, {
+    projectId: PROJECT, branch: 'main', scope: verified,
+    canonicalSnapshot: initial, blobOids: new Map([['docs/guide.md', BLOB]]),
+  });
+  memory.exportCanonical = () => ({ claims: [], evidence: [] });
+  assert.equal(view.exportCanonical(), initial);
+  assert.deepEqual(view.materializeRecall({
+    projectId: PROJECT, branch: 'main', revisionSha: SHA,
+    mode: 'current', claimIds: ['repo'],
+  }), { items: [{ claim: { id: 'repo' } }] });
+});
+
+test('D5 case-insensitive evidence blob OIDs remain fresh', () => {
+  const mixed = 'ABCDEF' + 'b'.repeat(34);
+  const { memory } = mockMemory({ blob: mixed.toUpperCase() });
+  const view = createReadOnlyGitGraphView(memory, {
+    projectId: PROJECT, branch: 'main', scope: scope(memory).result,
+    blobOids: new Map([['docs/guide.md', mixed.toLowerCase()]]),
+  });
+  assert.equal(view.materializeRecall({
+    projectId: PROJECT, branch: 'main', revisionSha: SHA,
+    mode: 'current', claimIds: ['repo'],
+  }).items.length, 1);
+});
+
+test('D5 sync checkout scanner fails closed when branch changes after HEAD', () => {
+  const { memory } = mockMemory();
+  const git = gitRunner();
+  let branchCalls = 0;
+  const execFile = (command, args) => {
+    if (args.includes('--show-current')) {
+      branchCalls++;
+      return branchCalls === 1 ? 'main\n' : 'other\n';
+    }
+    return git.execFile(command, args);
+  };
+  assert.equal(resolveMemoryConsoleGitScope({
+    memory, projectId: PROJECT, branch: 'main', repositoryRoots: [ROOT],
+    execFile, realpath: (p) => p,
+  }).status, 'branch_mismatch');
+});
+
+test('D5 async root scanner deduplicates two aliases for the same checkout', async () => {
+  const { memory } = mockMemory();
+  const second = resolve('d5-test-checkout-alias');
+  const git = gitRunner();
+  const execGit = async (_command, args) => {
+    if (args.includes('--show-toplevel')) return ROOT + '\n';
+    return git.execFile('git', args);
+  };
+  const result = await resolveMemoryConsoleGitScopeAsync({
+    memory, projectId: PROJECT, branch: 'main',
+    repositoryRoots: [ROOT, second], execGit,
+    realpath: async () => ROOT,
+  });
+  assert.equal(result.status, 'verified');
+});
+
+test('D5 async batch Git lookup verifies regular files and rejects symlinks', async () => {
+  const { memory } = mockMemory();
+  const gitScope = scope(memory).result;
+  const calls = [];
+  const read = async (_command, args) => {
+    calls.push(args);
+    const path = args.at(-1);
+    return `100644 blob ${BLOB}\t${path}\0`;
+  };
+  const view = await createAsyncGitGraphView(memory, {
+    projectId: PROJECT, branch: 'main', scope: gitScope, execGit: read,
+  });
+  assert.equal(calls.length, 1);
+  assert.equal(view.materializeRecall({
+    projectId: PROJECT, branch: 'main', revisionSha: SHA,
+    mode: 'current', claimIds: ['repo'],
+  }).items.length, 1);
+  const symlink = await createAsyncGitGraphView(memory, {
+    projectId: PROJECT, branch: 'main', scope: gitScope,
+    execGit: async (_command, args) => `120000 blob ${BLOB}\t${args.at(-1)}\0`,
+  });
+  assert.equal(symlink.materializeRecall({
+    projectId: PROJECT, branch: 'main', revisionSha: SHA,
+    mode: 'current', claimIds: ['repo'],
+  }).items.length, 0);
 });

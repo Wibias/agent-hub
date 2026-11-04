@@ -29,6 +29,7 @@ async function fixture(t) {
   git(repoRoot, 'init', '-b', BRANCH);
   git(repoRoot, 'config', 'user.email', 'd5@example.invalid');
   git(repoRoot, 'config', 'user.name', 'D5 Test');
+  git(repoRoot, 'config', 'commit.gpgsign', 'false');
   git(repoRoot, 'remote', 'add', 'origin', `https://${PROJECT}.git`);
   const path = join(repoRoot, 'docs', 'guide.md');
   await writeFile(path, 'Repository evidence at revision one.\n', 'utf8');
@@ -129,4 +130,22 @@ test('D5 explicit CLI roots are opt-in; unexpected options fail closed', () => {
   assert.equal(options.repositoryRoots.length, 2);
   assert.throws(() => parseMemoryUiArgs(['--repo-root']), /requires/);
   assert.throws(() => parseMemoryUiArgs(['--revisionSha', 'f'.repeat(40)]), /unknown argument/);
+});
+
+test('D5 HTTP graph continues serving concurrent requests during a delayed Git subprocess', async (t) => {
+  const { repoRoot, memory, dbPath } = await fixture(t);
+  const runtime = createMemoryUiServer({
+    dbPath, memory, includeRuntimeHealth: false, repositoryRoots: [repoRoot],
+  });
+  t.after(() => new Promise((done) => runtime.server.close(done)));
+  await new Promise((done, reject) => {
+    runtime.server.once('error', reject);
+    runtime.server.listen(0, runtime.host, done);
+  });
+  const base = `http://127.0.0.1:${runtime.server.address().port}`;
+  const graph = fetch(base + '/api/graph?projectId=' + encodeURIComponent(PROJECT) + '&branch=main');
+  const health = await fetch(base + '/api/overview');
+  assert.equal(health.status, 200);
+  const response = await graph;
+  assert.equal(response.status, 200);
 });
