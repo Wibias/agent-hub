@@ -2,7 +2,7 @@
 // Read-only Codex Stop guard: one continuation for a modifying design-with-ai
 // turn missing independently checked iteration-gate evidence.
 // The hook cannot authenticate a host transcript or force other hooks to comply.
-import { createReadStream, existsSync, statSync } from "node:fs";
+import { createReadStream, existsSync, readFileSync, statSync } from "node:fs";
 import { createInterface } from "node:readline";
 import { homedir, tmpdir } from "node:os";
 import { isAbsolute, resolve, sep } from "node:path";
@@ -148,6 +148,22 @@ export function decideStop(event, report, { home = homedir() } = {}) {
     if (checked.processExitCode !== 0) {
       proofStatus = "VALIDATOR_NONZERO";
       continue;
+    }
+    // Native turn context prevents an older valid proof from being replayed
+    // against a later design task. Legacy transcript-only runs lack this
+    // timestamp and retain their previous conservative behavior.
+    if (report.promptAt) {
+      let finished;
+      try {
+        const proof = JSON.parse(readFileSync(options.proof, "utf8"));
+        finished = Date.parse(proof.executedAt);
+      } catch { finished = NaN; }
+      const started = Date.parse(report.promptAt);
+      if (!Number.isFinite(started) || !Number.isFinite(finished) ||
+          finished < started - 1000) {
+        proofStatus = "PROOF_INVALID_OR_STALE";
+        continue;
+      }
     }
     if (checked.completionEligible) return allow("VERIFIED_COMPLETE", "VERIFIED_COMPLETE");
     if (["PARTIAL", "NOT_VERIFIED"].includes(checked.verdict) &&
