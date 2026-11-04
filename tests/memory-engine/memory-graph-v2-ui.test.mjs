@@ -1,0 +1,26 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { readFile } from 'node:fs/promises';
+
+test('D4 graph UI has grouped authority, explicit advisory and optional similarity labels', async () => {
+  const [js, css, model] = await Promise.all([
+    readFile(new URL('../../memory-ui/app.js', import.meta.url), 'utf8'),
+    readFile(new URL('../../memory-ui/styles.css', import.meta.url), 'utf8'),
+    readFile(new URL('../../memory-engine/memory-ui-model.mjs', import.meta.url), 'utf8'),
+  ]);
+  assert.match(js, /id="graph-group-filter"/);
+  assert.match(js, /Advisory typed/);
+  assert.match(js, /Inferred similarity \(optional\)/);
+  assert.match(js, /Git freshness/);
+  assert.match(js, /source === 'typed_relation'/);
+  assert.match(css, /\.graph-edge\.typed_relation/);
+  assert.match(css, /\.graph-node\.freshness-unchecked/);
+  assert.match(model, /buildMemoryGraphV2\(memory/);
+});
+
+test('D4 HTTP route does not take user query revisionSha as trusted Git evidence', async () => {
+  const server = await readFile(new URL('../../scripts/memory-ui.mjs', import.meta.url), 'utf8');
+  const scopeRoute = server.slice(server.indexOf("if (url.pathname === '/api/graph')"), server.indexOf("if (url.pathname === '/api/claim')"));
+  assert.ok(scopeRoute.includes('memoryUiGraph(engine, { projectId, branch })'));
+  assert.equal(scopeRoute.includes("queryValue(url, 'revisionSha')"), false);
+});

@@ -2,7 +2,7 @@ import {
   memoryCandidateRef,
   memoryClaimRef,
 } from './adapters/codex-hooks.mjs';
-import { buildMemoryGraph } from './memory-graph.mjs';
+import { buildMemoryGraphV2 } from './memory-graph-v2.mjs';
 import { pipelineRunRef } from './pipeline-observability.mjs';
 
 function text(value) {
@@ -180,14 +180,15 @@ export function memoryUiOverview(memory) {
 export function memoryUiGraph(memory, {
   projectId,
   branch,
+  revisionSha = null,
 } = {}) {
-  const graph = buildMemoryGraph(memory, { projectId, branch });
+  const graph = buildMemoryGraphV2(memory, { projectId, branch, revisionSha });
   return {
     ...graph,
     nodes: graph.nodes.map((node) => ({
       ...node,
       ref: memoryClaimRef(node.id),
-      authority: node.provenance?.authorityClass ?? 'unknown',
+      authority: node.authority,
     })),
   };
 }

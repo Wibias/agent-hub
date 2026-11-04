@@ -1176,3 +1176,19 @@ button {
     border-right: 0;
   }
 }
+
+/* graph-quality-v2-ui: advisory meaning and Git freshness must be visually distinct. */
+.graph-legend-swatch.typed { border-top-color: #90b7a8; border-top-style: dotted; }
+.graph-edge.typed_relation { stroke: #90b7a8; stroke-dasharray: 2 5; stroke-width: 1.3; opacity: .8; }
+.graph-edge.explicit.is-historical { opacity: .3; stroke-dasharray: 2 4; }
+.graph-node.freshness-unchecked circle,
+.graph-node.freshness-stale circle { stroke-dasharray: 2 3; opacity: .72; }
+.graph-node.group-agent_inference circle { fill: #17191b; }
+.graph-node.group-user_direct circle { fill: #112019; }
+.graph-origin.inferred { color: #90b7a8; }
+.graph-toolbar { flex-wrap: wrap; }
+.graph-toolbar .filter { max-width: 170px; }
+@media (max-width: 760px) {
+  .graph-toolbar { gap: 6px; padding: 8px 10px; }
+  .graph-toolbar .filter { max-width: 142px; }
+}
