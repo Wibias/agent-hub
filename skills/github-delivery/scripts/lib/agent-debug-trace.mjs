@@ -26,8 +26,16 @@ const ALLOWED_EVENT_TYPES = new Set([
   "turn_completed",
 ]);
 const ALLOWED_OUTCOMES = new Set(["succeeded", "failed", "cancelled"]);
+const TOOL_EFFECTS = new Set(["state-change"]);
+const PUBLICATION_ACTIONS = new Set(["pr_create"]);
 const ERROR_KIND_RE = /^[a-z0-9][a-z0-9_.-]{0,63}$/i;
+const FINGERPRINT_RE = /^fp:[a-f0-9]{32}$/;
 const ATTRIBUTION_KEYS = ["threadId", "turnId", "itemId", "parentItemId"];
+const DIAGNOSTIC_FINGERPRINT_KEYS = [
+  "argumentFingerprint",
+  "targetFingerprint",
+  "resultFingerprint",
+];
 const USAGE_KEYS = [
   "inputTokens",
   "cachedInputTokens",
@@ -35,6 +43,20 @@ const USAGE_KEYS = [
   "outputTokens",
   "reasoningTokens",
   "totalTokens",
+];
+const TARGET_KEYS = [
+  "path",
+  "file",
+  "filePath",
+  "filepath",
+  "target",
+  "target_file",
+  "target_directory",
+  "cwd",
+  "root",
+  "directory",
+  "workspace",
+  "url",
 ];
 
 function packageVersion() {
@@ -76,6 +98,15 @@ function safeTokenCount(value) {
   return Number.isFinite(value) && value >= 0 ? Math.round(value) : null;
 }
 
+function safePositiveInteger(value) {
+  return Number.isInteger(value) && value > 0 ? value : null;
+}
+
+function safeFingerprint(value) {
+  const fingerprint = cleanString(value);
+  return fingerprint && FINGERPRINT_RE.test(fingerprint) ? fingerprint : null;
+}
+
 function safeUsage(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const usage = {};
@@ -96,6 +127,11 @@ function safeErrorKind(value) {
   return ERROR_KIND_RE.test(kind) ? kind : null;
 }
 
+function safeBoundedEnum(value, allowed) {
+  const normalized = String(value || "").trim();
+  return allowed.has(normalized) ? normalized : null;
+}
+
 function createIdPseudonymizer(salt) {
   const key = Buffer.isBuffer(salt) ? salt : Buffer.from(String(salt || ""), "utf8");
   return (value) => {
@@ -108,6 +144,120 @@ function createIdPseudonymizer(salt) {
       .digest("hex")
       .slice(0, 24);
     return `id:${digest}`;
+  };
+}
+
+function canonicalDiagnosticValue(value, seen = new WeakSet()) {
+  if (value === null) return "null";
+  if (typeof value === "string" || typeof value === "boolean") return JSON.stringify(value);
+  if (typeof value === "number") return Number.isFinite(value) ? JSON.stringify(value) : JSON.stringify(String(value));
+  if (typeof value === "bigint") return JSON.stringify(String(value));
+  if (value === undefined) return "undefined";
+  if (Array.isArray(value)) {
+    return `[${value.map((entry) => canonicalDiagnosticValue(entry, seen)).join(",")}]`;
+  }
+  if (typeof value !== "object") return JSON.stringify(String(value));
+  if (seen.has(value)) return "[circular]";
+  seen.add(value);
+  const entries = Object.keys(value)
+    .sort()
+    .map((key) => `${JSON.stringify(key)}:${canonicalDiagnosticValue(value[key], seen)}`);
+  seen.delete(value);
+  return `{${entries.join(",")}}`;
+}
+
+function createDiagnosticFingerprinter(salt) {
+  const key = Buffer.isBuffer(salt) ? salt : Buffer.from(String(salt || ""), "utf8");
+  return (value) => {
+    let canonical;
+    try {
+      canonical = canonicalDiagnosticValue(value);
+    } catch {
+      return null;
+    }
+    const digest = createHash("sha256")
+      .update(key)
+      .update("\0trace-diagnostic\0")
+      .update(canonical, "utf8")
+      .digest("hex")
+      .slice(0, 32);
+    return `fp:${digest}`;
+  };
+}
+
+function diagnosticTarget(input) {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return null;
+  const target = {};
+  for (const key of TARGET_KEYS) {
+    if (Object.prototype.hasOwnProperty.call(input, key) && input[key] !== undefined) {
+      target[key] = input[key];
+    }
+  }
+  return Object.keys(target).length > 0 ? target : null;
+}
+
+function terminalActionDiagnostics(itemType, input) {
+  if (itemType !== "run_terminal_command") return {};
+  if (!input || typeof input !== "object" || Array.isArray(input)) return {};
+  const command = cleanString(input.command);
+  if (!command) return {};
+
+  if (/\bgh\s+pr\s+create(?:\s|$)/i.test(command)) {
+    return { toolEffect: "state-change", publicationAction: "pr_create" };
+  }
+  if (/\bgit\s+(?:add|commit|push|merge|rebase|reset|checkout|switch|branch|tag|rm|mv|cherry-pick|revert)\b/i.test(command)) {
+    return { toolEffect: "state-change" };
+  }
+  if (/\bgh\s+(?:pr\s+(?:merge|close|reopen|edit|ready)|issue\s+(?:create|close|reopen|edit))\b/i.test(command)) {
+    return { toolEffect: "state-change" };
+  }
+  return {};
+}
+
+function createTraceDiagnostics(salt) {
+  const fingerprint = createDiagnosticFingerprinter(salt);
+  const turnSequences = new Map();
+  let nextTurnSequence = 1;
+
+  function sequenceFor(turnId) {
+    const key = cleanString(turnId);
+    if (!key) return null;
+    if (!turnSequences.has(key)) turnSequences.set(key, nextTurnSequence++);
+    return turnSequences.get(key);
+  }
+
+  return {
+    toolInput({ itemType, input, turnId } = {}) {
+      const argumentFingerprint = fingerprint(input);
+      const target = diagnosticTarget(input);
+      const targetFingerprint = target ? fingerprint(target) : null;
+      const turnSequence = sequenceFor(turnId);
+      const action = terminalActionDiagnostics(itemType, input);
+      return {
+        ...(argumentFingerprint ? { argumentFingerprint } : {}),
+        ...(targetFingerprint ? { targetFingerprint } : {}),
+        ...(turnSequence !== null ? { turnSequence } : {}),
+        ...action,
+      };
+    },
+    toolResult({ result } = {}) {
+      if (result === undefined) return {};
+      const resultFingerprint = fingerprint(result);
+      let encoded;
+      try {
+        encoded = JSON.stringify(result);
+      } catch {
+        encoded = null;
+      }
+      const resultBytes = typeof encoded === "string" ? Buffer.byteLength(encoded) : null;
+      return {
+        ...(resultFingerprint ? { resultFingerprint } : {}),
+        ...(resultBytes !== null ? {
+          resultBytes,
+          resultTokenEstimate: Math.ceil(resultBytes / 4),
+        } : {}),
+      };
+    },
   };
 }
 
@@ -170,6 +320,21 @@ function sanitizeEvent(
   const itemType = cleanString(event.itemType);
   if (itemType) sanitized.itemType = itemType;
 
+  for (const key of DIAGNOSTIC_FINGERPRINT_KEYS) {
+    const value = safeFingerprint(event[key]);
+    if (value) sanitized[key] = value;
+  }
+  const resultBytes = safeTokenCount(event.resultBytes);
+  if (resultBytes !== null) sanitized.resultBytes = resultBytes;
+  const resultTokenEstimate = safeTokenCount(event.resultTokenEstimate);
+  if (resultTokenEstimate !== null) sanitized.resultTokenEstimate = resultTokenEstimate;
+  const turnSequence = safePositiveInteger(event.turnSequence);
+  if (turnSequence !== null) sanitized.turnSequence = turnSequence;
+  const toolEffect = safeBoundedEnum(event.toolEffect, TOOL_EFFECTS);
+  if (toolEffect) sanitized.toolEffect = toolEffect;
+  const publicationAction = safeBoundedEnum(event.publicationAction, PUBLICATION_ACTIONS);
+  if (publicationAction) sanitized.publicationAction = publicationAction;
+
   if (type === "reasoning_summary_delta") {
     sanitized.text = typeof event.text === "string" ? event.text : "";
   }
@@ -186,6 +351,7 @@ function sanitizeEvent(
   if (type === "turn_completed") {
     const usage = safeUsage(event.usage);
     if (usage) sanitized.usage = usage;
+    if (["turn", "invocation"].includes(event.usageScope)) sanitized.usageScope = event.usageScope;
   }
 
   const decision = cleanString(event.watchdogDecision);
@@ -265,6 +431,7 @@ function disabledRecorder() {
   return {
     enabled: false,
     path: null,
+    diagnostics: null,
     record() {},
     close() {},
   };
@@ -303,6 +470,7 @@ export function createAgentDebugTraceRecorder({
   let bytesWritten = 0;
   let pendingReasoning = null;
   const pseudonymizeId = createIdPseudonymizer(idSalt);
+  const diagnostics = createTraceDiagnostics(idSalt);
 
   function writeSanitized(sanitized) {
     if (fd === null) return false;
@@ -366,6 +534,7 @@ export function createAgentDebugTraceRecorder({
   return {
     enabled: true,
     path: opened.path,
+    diagnostics,
     record,
     close,
   };
@@ -382,6 +551,7 @@ export function appendAgentDebugTraceEvent({
   traceKind = TRACE_KIND,
 } = {}) {
   if (!debugTraceEnabled(env)) return { recorded: false, path: null };
+
   const normalizedProvider = checkedProvider(provider);
   const scope = cleanString(scopeId);
   if (!scope) return { recorded: false, path: null };

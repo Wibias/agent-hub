@@ -79,11 +79,9 @@ each gate:
 
 ```bash
 node "<github-delivery>/scripts/verify-pr-head.mjs" OWNER/REPO N \
-  --test-filter "<changed-subsystem>" \
+  --test-filter "<changed-subsystem>" --worktree-root "D:\codex-worktrees" \
   --keep-worktree
 ```
-
-By default, the temporary worktree root comes from `GITHUB_DELIVERY_WORKTREE_ROOT` when set, otherwise the operating-system temp directory. Pass `--worktree-root` only when a specific location is required.
 
 It checks out the exact PR head in a temp worktree, runs install/typecheck/
 **GUI typecheck included** (auto-detected from `gui/tsconfig*.json` — the root

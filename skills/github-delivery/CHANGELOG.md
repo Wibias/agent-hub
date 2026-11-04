@@ -4,6 +4,38 @@ All notable changes to `github-delivery` are documented here.
 
 ## [Unreleased]
 
+## [1.8.3] - 2026-11-04
+
+### Changed
+
+- Bumped the package version from `1.8.2` to `1.8.3`.
+
+### Fixed
+
+- Stable-release metadata and tag requests can use `GH_TOKEN` or `GITHUB_TOKEN` for authenticated GitHub API limits; exhausted primary/secondary limits now return actionable, bounded reset/retry guidance without exposing credentials or weakening asset verification (PR #489).
+- PR-head verification now uses a private, platform-native temporary worktree by default instead of a fixed operator drive, keeps explicit `--worktree-root` overrides, and supports `--clone-root` when invoked outside a Git checkout. Review documentation no longer embeds a maintainer-specific path, and the formerly missing worktree portability governance test is shipped and run in the canonical test suite (PR #490).
+
+## [1.8.2] - 2026-11-03
+
+### Changed
+
+- Bumped the package version from `1.8.1` to `1.8.2`.
+
+### Fixed
+
+- Hardened Grok trace diagnostics to fingerprint `target_file` and `target_directory`, persist only bounded terminal state/publication metadata instead of raw commands, report unavailable target-fingerprint evidence explicitly, and include recognized terminal state changes in final-mutation analysis (PR #487).
+- `grok-trace` now treats explicit PR-publication requests as a delivery contract: after a successful Grok exit it verifies an open PR for the current branch whose `headRefOid` matches local `HEAD`, while direct negations such as `do not open a PR` remain opt-outs and unrelated instructions such as `do not merge; open a PR` still require PR delivery (PR #487).
+
+## [1.8.1] - 2026-11-02
+
+### Added
+
+- Added privacy-preserving trace efficiency diagnostics and `github-delivery trace-analyze <trace.jsonl>` for detecting repeated tool arguments, targets, and results; serial discovery; polling; context churn; and post-final-edit verification tails while persisting only per-trace salted fingerprints and bounded size/token metadata (PR #484).
+
+### Changed
+
+- Bumped the package version from `1.8.0` to `1.8.1`.
+
 ## [1.8.0] - 2026-11-01
 
 ### Added

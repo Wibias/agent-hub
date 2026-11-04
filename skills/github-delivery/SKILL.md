@@ -11,7 +11,7 @@ license: MIT
 compatibility: Requires Node.js 22, 24, or 26, git, GitHub network access, and an authenticated gh or brokered connector for writes.
 metadata:
   author: Wibias
-  version: "1.8.0"
+  version: "1.8.3"
   repository: "https://github.com/Wibias/github-delivery"
 ---
 
