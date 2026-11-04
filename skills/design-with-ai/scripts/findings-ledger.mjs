@@ -241,6 +241,16 @@ export function syncLedger(path, baseline, receipt) {
   return { added, assessed: receipt.findings.length, idempotent: false };
 }
 
+export function isGitProject(start = process.cwd()) {
+  let current = resolve(start);
+  while (true) {
+    if (existsSync(join(current, ".git"))) return true;
+    const parent = dirname(current);
+    if (parent === current) return false;
+    current = parent;
+  }
+}
+
 export function discoverProjectLedger(start = process.cwd()) {
   let current = resolve(start);
   while (true) {
