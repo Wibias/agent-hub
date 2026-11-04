@@ -85,8 +85,8 @@ test("valid gate proof is checked at Stop without transcript", () => fixture(asy
   writeFileSync(baseline, JSON.stringify({
     schemaVersion: 1, intent: "IMPROVE", scope: ["/settings"], findings: [],
   }));
-  assert.equal(runGate({ receipt, baseline, proof }).exitCode, 0);
   recordTurnHook(f.prompt("Verbessere die UI mit design-with-ai."), { root: f.stateRoot });
+  assert.equal(runGate({ receipt, baseline, proof }).exitCode, 0);
   const cmd = 'node "skills/design-with-ai/scripts/run-iteration-gate.mjs" --receipt "' +
     receipt + '" --baseline "' + baseline + '" --proof "' + proof + '"';
   const result = recordTurnHook(f.tool(cmd), { root: f.stateRoot });
@@ -94,6 +94,27 @@ test("valid gate proof is checked at Stop without transcript", () => fixture(asy
   const d = await handleStop(f.stop, { turnRoot: f.stateRoot });
   assert.equal(d.continue, true);
   assert.equal(d.status, "VERIFIED_COMPLETE");
+}));
+
+test("a valid old proof cannot be replayed against a new native turn", () => fixture(async (f) => {
+  const receipt = join(f.root, "receipt.json");
+  const proof = join(f.root, "proof.json");
+  // Minimal old proof is intentionally marked earlier than the current prompt.
+  // checkProof validation is independently tested by the complete-proof case;
+  // this case verifies the extra captured-turn freshness boundary.
+  recordTurnHook(f.prompt("Verbessere die UI mit design-with-ai."),
+    { root: f.stateRoot });
+  const current = readTurnContext(f.event, { root: f.stateRoot });
+  assert.ok(current.promptAt);
+  const old = { schemaVersion: 1, executedAt: "2026-01-01T00:00:00.000Z" };
+  writeFileSync(proof, JSON.stringify(old));
+  writeFileSync(receipt, "{}");
+  const command = 'node run-iteration-gate.mjs --receipt "' +
+    receipt + '" --proof "' + proof + '"';
+  recordTurnHook(f.tool(command), { root: f.stateRoot });
+  const result = await handleStop(f.stop, { turnRoot: f.stateRoot });
+  assert.equal(result.decision, "block");
+  assert.notEqual(result.status, "VERIFIED_COMPLETE");
 }));
 
 test("new turn cannot inherit old gate candidate", () => fixture(async (f) => {
