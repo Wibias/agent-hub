@@ -151,6 +151,7 @@ async function main() {
     }
     recordTurnHook(JSON.parse(raw));
   } catch { /* fail open; never report a tool hook failure for diagnostic state */ }
-  process.stdout.write('{"continue":true}\n');
+  // Successful empty stdout is supported by both UserPromptSubmit and
+  // PostToolUse. Do not send unsupported continuation fields to tool hooks.
 }
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main();
