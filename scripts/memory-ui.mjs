@@ -16,6 +16,12 @@ import {
 } from '../memory-engine/adapters/codex-hooks.mjs';
 import { MemoryEngine } from '../memory-engine/index.mjs';
 import {
+  createAsyncGitGraphView,
+  normalizeRepositoryRoots,
+  publicMemoryConsoleGitScope,
+  resolveMemoryConsoleGitScopeAsync,
+} from '../memory-engine/memory-console-git-context.mjs';
+import {
   inspectCodexIntegration,
   inspectEmbeddingWorker,
   inspectMemoryDatabase,
@@ -57,6 +63,7 @@ export function parseMemoryUiArgs(argv = []) {
   const result = {
     port: DEFAULT_PORT,
     dbPath: defaultCodexMemoryDbPath(),
+    repositoryRoots: [],
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -72,6 +79,13 @@ export function parseMemoryUiArgs(argv = []) {
       const value = argv[index + 1];
       if (!nonEmpty(value)) throw new Error('--db-path requires a value');
       result.dbPath = resolve(value);
+      index += 1;
+      continue;
+    }
+    if (arg === '--repo-root') {
+      const value = argv[index + 1];
+      if (!nonEmpty(value)) throw new Error('--repo-root requires a path');
+      result.repositoryRoots.push(resolve(value));
       index += 1;
       continue;
     }
@@ -307,6 +321,7 @@ export function createMemoryUiServer({
   memory = null,
   codexHome = resolve(process.env.CODEX_HOME || join(homedir(), '.codex')),
   includeRuntimeHealth = true,
+  repositoryRoots = [],
 } = {}) {
   if (!nonEmpty(dbPath)) throw new TypeError('dbPath must be non-empty');
   const resolvedDbPath = resolve(dbPath);
@@ -314,6 +329,8 @@ export function createMemoryUiServer({
     throw new Error('memory database not found: ' + resolvedDbPath);
   }
 
+  // Validate operator roots before opening an owned SQLite database handle.
+  const approvedGitRoots = normalizeRepositoryRoots(repositoryRoots);
   const ownedMemory = memory === null;
   const engine = memory ?? new MemoryEngine({
     dbPath: resolvedDbPath,
@@ -486,7 +503,18 @@ export function createMemoryUiServer({
         }
 
         try {
-          json(res, 200, memoryUiGraph(engine, { projectId, branch }));
+          // No HTTP query parameter supplies a trusted root, identity, or SHA.
+          const gitScope = await resolveMemoryConsoleGitScopeAsync({
+            memory: engine, projectId, branch, repositoryRoots: approvedGitRoots,
+          });
+          const graphMemory = gitScope.status === 'verified'
+            ? await createAsyncGitGraphView(engine, { projectId, branch, scope: gitScope })
+            : engine;
+          const graph = memoryUiGraph(graphMemory, {
+            projectId, branch, revisionSha: gitScope.revisionSha,
+          });
+          graph.gitContext = publicMemoryConsoleGitScope(gitScope);
+          json(res, 200, graph);
         } catch (error) {
           if (/^unknown project(?: branch)?$/i.test(String(error?.message ?? ''))) {
             json(res, 404, {
@@ -589,6 +617,9 @@ export async function runMemoryUi({
   log(`Memory Console: ${url}`);
   log(`Database: ${runtime.dbPath}`);
   log('Mode: read-only browsing · explicit local actions · loopback only');
+  if (options.repositoryRoots.length) {
+    log('Trusted Git roots configured: ' + options.repositoryRoots.length);
+  }
 
   return {
     ...runtime,

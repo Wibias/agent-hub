@@ -21,7 +21,11 @@ test('D4 graph UI has grouped authority, explicit advisory and optional similari
 test('D4 HTTP route does not take user query revisionSha as trusted Git evidence', async () => {
   const server = await readFile(new URL('../../scripts/memory-ui.mjs', import.meta.url), 'utf8');
   const scopeRoute = server.slice(server.indexOf("if (url.pathname === '/api/graph')"), server.indexOf("if (url.pathname === '/api/claim')"));
-  assert.ok(scopeRoute.includes('memoryUiGraph(engine, { projectId, branch })'));
+  assert.match(scopeRoute, /await resolveMemoryConsoleGitScopeAsync\(\{/);
+  assert.match(scopeRoute, /memoryUiGraph\(graphMemory,\s*\{/);
+  assert.match(scopeRoute, /revisionSha:\s*gitScope\.revisionSha/);
+  assert.doesNotMatch(scopeRoute, /queryValue\(url,\s*['"](?:revisionSha|repoRoot|repoPath)['"]\)/);
+  assert.doesNotMatch(scopeRoute, /searchParams\.get\(\s*['"](?:revisionSha|repoRoot|repoPath)['"]\s*\)/);
   assert.equal(scopeRoute.includes("queryValue(url, 'revisionSha')"), false);
 });
 
