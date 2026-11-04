@@ -28,7 +28,8 @@ it merely because a prompt contains the word "dashboard": the actual surface
 and user decision must support the classification. If required product status
 semantics are inaccessible, label them unverified rather than inventing them.
 
-For modifying work, report changed files and one-sentence rationale per file,commands/gates run, and rendered/browser evidence per affected viewport. If the
+For modifying work, report changed files and one-sentence rationale per file,
+commands/gates run, and rendered/browser evidence per affected viewport. If the
 real surface cannot be inspected, mark visual claims `not verified` and do not
 present them as observed facts.
 
@@ -46,11 +47,16 @@ Output:
   implementation;
 - visible evidence and impact for each finding;
 - for applicable operator surfaces, task-first failures in priority, readability, status semantics, or containment, with observed versus unverified evidence separated;
+- when a repeated motif is materially in question, a role-to-treatment assessment and separate functional-quality versus direction-fit conclusions;
 - correct next workflow/profile for each material fix.
 
-Standard/deep audits inspect the real route when available. Deep adds annotated
-usability, domain, adjacent-domain, and outside-domain references. Do not edit or
-claim a recommendation is fixed.
+Standard/deep audits inspect the real route when available. When style
+uniformity or an overcorrection is part of the audit, use `critique-protocol.md`
+and `anti-slop-gates.md` to check whether different tasks inherit the same
+visual grammar without a semantic reason. Compare available before/after
+screenshots; do not claim observed changes from only one version. Deep adds
+annotated usability, domain, adjacent-domain, and outside-domain references.
+Do not edit or claim a recommendation is fixed.
 
 ## `improve-existing`
 
@@ -68,7 +74,9 @@ Before the quality stack:
    - established icon family and repeated icon patterns classified as functional
      or redundant;
    - task-first decision/action, information priority, legible item content,
-     status semantics, and repeated-container rationale when applicable.
+     status semantics, and repeated-container rationale when applicable;
+   - whether different component jobs received unearned identical styling,
+     including a new motif that merely displaced an old default.
 3. Preserve a coherent existing icon dependency unless an approved system,
    coverage, accessibility, or licensing reason requires migration.
 4. Load `quality-stack.md` and run
@@ -97,6 +105,8 @@ fixed. The visual world may change deliberately.
 3. Load `taste-workflow.md` and define the replacement world's typography,
    palette logic, materiality, imagery, density, shape language, icon logic,
    motion grammar, signature artifact, and refusals.
+   Map the selected style to the different content/component roles rather than
+   applying every signature treatment to every section.
 4. Deep compares at least two genuinely different visual worlds while keeping
    the same product model and topology.
 5. Build the selected world, then finish the Baseline, Craft, and Gate phases of
@@ -139,7 +149,11 @@ Before production edits:
 11. Build the high-consequence representative slice first. The first desktop and
     mobile renders are a kill gate. A direction that still reads as the old
     concept or a generic category template is discarded before polish.
-12. After the direction survives, complete the quality stack and verification.
+12. After the direction survives, inspect a representative integrated render
+    for style overcorrection: do distinct tasks retain distinct visual grammar,
+    or has one all-over motif simply replaced another?
+13. Complete the quality stack and verification. Keep functional quality,
+    direction fit, and style allocation separate in the final verdict.
 
 No sunk-cost exception exists. Green builds, tests, or time spent cannot upgrade
 a restyle into a redesign. When the approved direction requires new design-system

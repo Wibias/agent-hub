@@ -86,6 +86,14 @@ operationalized. If visual grouping, figure/ground, or salience is an open
 question, use `perceptual-hierarchy.md` as a diagnostic rather than guessing from
 style labels.
 
+The visual-world brief also defines a bounded **role-to-treatment map** for
+materially different content jobs. Specify where the shared visual language is
+reused and where different interaction, content density, or priority warrants
+different component grammar. A consistent palette is not evidence that every
+section should use the same borders, tiny labels, or surface treatment. Judge
+functional quality independently from aesthetic direction. See the role-specific
+allocation procedure in `taste-workflow.md` when that reference is loaded.
+
 Existing tokens are evidence, not automatic proof that the current world fits.
 Explicit brand and project rules still win. For deep work, state whether a
 competitor in the same category could reuse the visual world unchanged. If yes,

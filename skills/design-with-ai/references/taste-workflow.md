@@ -6,7 +6,7 @@ Use this when direction, genre, macrostructure, visual identity, or anti-slop ju
 
 - [ ] 0 Preflight incumbent product/design truth
 - [ ] 1 Design read: audience, surface kind, vibe, genre, colour/type posture
-- [ ] 2 Macrostructure and navigation/footer treatment when applicable
+- [ ] 2 Macrostructure, role-specific style allocation, and navigation/footer treatment when applicable
 - [ ] 3 Signature move, signature artifact, and explicit refusals
 - [ ] 4 Build with tokens/direction locked
 - [ ] 5 Pre-emit critique
@@ -40,6 +40,52 @@ with another anti-slop house style.
 ## 2. Macrostructure
 
 For page/surface work use `macrostructures.md` and `pattern-vocabulary.md`. Component-only work may skip macrostructure and use `states-interaction.md`. Avoid generic SaaS scaffolds when the product does not demand them.
+
+## 2a. Allocate the visual language by job, not by page
+
+A coherent visual world is a shared grammar, not a requirement to apply the
+same treatment to every component. Before generating a full surface or restyle,
+make a short **role-to-treatment map** for the materially different content
+roles in scope. Use actual product semantics rather than a generic component
+catalog. For each role, name:
+
+- the information or action the user needs from it;
+- its scanning/interaction priority and relevant state;
+- the chosen typography, spacing, containment, separators, and color roles;
+- why its treatment should match or differ from neighboring roles.
+
+Distinguish at least the roles actually present, such as overview/comparison,
+primary work object, actionable queue, sequential onboarding, detailed
+configuration, preview, and supporting reference content. These examples are
+not mandatory components or a prescribed arrangement. Comparable items can
+share geometry; different jobs should not inherit identical visual weight
+merely because a style preset made it convenient.
+
+### Overcorrection check
+
+Compare the inherited/default style with the proposed one and ask whether
+the change merely **replaces a dominant motif** (e.g., a wall of dark cards
+becomes a wall of hairline dividers, or colored pills become monospace labels).
+Inspect a representative viewport for unnecessary uniform use of separators,
+box edges, backgrounds, tracked micro-labels, or accent. A deliberate ledger
+or high-density data table may validly repeat rules; a wizard, editor, preview,
+and comparison view should not all look like the same ledger by reflex.
+
+Do not prohibit beige, dark UIs, monospace, blue accents, cards, or dividers.
+Judge repetition by purpose, not by raw counts. If the new motif treats
+semantically unrelated regions alike, redistribute visual emphasis and
+component grammar before selecting another palette or visual preset.
+Preserve accepted brand tokens and locked constraints; this is not an
+authorization to redesign purpose or information architecture.
+
+### Style-independent check
+
+Temporarily disregard the palette and decorative materiality while judging
+task clarity, priority, readability, navigation, action discoverability,
+status meaning, and responsive behavior. If those fail, visual consistency
+cannot rescue the design. Then judge whether the selected art direction
+expresses this product specifically. These are separate decisions:
+`FUNCTIONAL_QUALITY` and `VISUAL_DIRECTION_FIT` may disagree.
 
 ## 3. Signature and refusals
 

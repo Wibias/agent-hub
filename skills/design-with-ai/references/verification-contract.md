@@ -127,6 +127,34 @@ Do not claim status correctness from screenshots alone; confirm state sources
 or explicitly mark this part unknown. Keep read-only audit findings separate
 from claims of implemented fixes.
 
+## Style allocation and independent quality receipt
+
+For a surface where the selected visual language or a repeated motif is
+material to the work, record a small render-grounded human review after
+the independent functional checks. Do not add its results to the mechanical
+slop score:
+
+```text
+role-to-treatment: <key role -> dominant treatment and task rationale>
+motif-displacement: <before -> after; repeated motif; justified or revised>
+functional-quality: PASS | REVISE | NOT_VERIFIED
+visual-direction-fit: PASS | REVISE | NOT_VERIFIED
+style-allocation: PASS | REVISE | NOT_VERIFIED
+evidence: <current viewport/state screenshot and relevant product constraints>
+```
+
+Functional quality addresses task discoverability, legibility, state meaning,
+action/recovery clarity, and responsiveness. Direction fit addresses
+product/brand specificity. Style allocation addresses the distribution of
+repeated treatments across materially different component jobs. Do not
+collapse the three into one aesthetic score or assume their verdicts agree.
+
+A `REVISE` in applicable functional quality or style allocation blocks a
+polished/production-grade claim. `NOT_VERIFIED` must identify missing
+rendered/product evidence and cannot be reported as a pass. Preserve
+legitimately repeated rules, cards, and form controls with a concise task
+rationale; do not create arbitrary variation to make a receipt look better.
+
 ## Motion verification
 
 Craft changes must satisfy the active motion standards. Runtime-performance

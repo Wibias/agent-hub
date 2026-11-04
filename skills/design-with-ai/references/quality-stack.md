@@ -9,6 +9,16 @@ Load `taste-workflow.md`. Set purpose, genre, macrostructure, visual posture,
 colour/type strategy, signature move, and explicit refusals. Preserve incumbent
 brand/product truth unless the active workflow authorizes replacement.
 
+### Role allocation check
+
+Before applying a visual preset across the screen, use the role-to-treatment
+map from `taste-workflow.md`. Compare the primary work object, supporting
+information, configuration, and any sequential/actionable region actually
+present. Record where visual grammar should be shared and where the
+different task warrants distinct layout, typography, density, or containment.
+Do not force components into novel shapes when the original repetition serves
+real comparison or scanning.
+
 ## 2. Baseline
 
 Load `baseline-ui.md`. Correct hierarchy, spacing, typography, primitives,
@@ -33,6 +43,18 @@ Report the following as observed, failed, or unverified:
 A visual pattern scan does not replace this check. If a substantive defect
 remains, revise the design or expose the product-model/authority gap before
 Craft. Do not use color or decoration to conceal a failed task-first verdict.
+
+### Style overcorrection check before Craft
+
+Inspect the integrated render. Check that an attempt to remove slop did not
+replace one all-over motif with another. If semantically different regions
+look interchangeable (e.g. every section is a thin-lined ledger), revise
+the role-to-treatment distribution first. A chosen brand system may justify
+repetition; the issue is unearned sameness, not a particular aesthetic.
+
+Record independent `FUNCTIONAL_QUALITY` and `VISUAL_DIRECTION_FIT` judgments
+using `critique-protocol.md`. Do not promote a failed functional verdict
+because the art direction is consistent or fashionable.
 
 ## 3. Craft
 
@@ -88,6 +110,7 @@ blocking. Load `verification-contract.md` before claiming completion.
 - Hit targets must fit the product density while remaining accessible.
 - Fix structure before decorative styling when the surface looks generic.
 - Browser/rendered evidence is the visual completion gate when available.
+- A passing pattern scan does not replace independent functional-quality and style-distribution review.
 
 ## Motion opt-in
 

@@ -18,6 +18,7 @@
 - Structural approach documented; for `deep`, 2–3 approaches compared and one chosen with evidence.
 - Visual-world specificity verdict recorded; deep compares at least two
   distinct visual worlds separately from structural approaches.
+- Role-to-treatment map recorded for materially different content jobs; shared visual language does not imply identical component treatment.
 - Changed files listed in dependency order; polish chain and critique/revision passes evidenced.
 - Internal taste guidance and `verification-contract.md` loaded; motion candidates handed to `motion-opportunities`.
 - Conditional data-viz/native/durable-contract references loaded only when the concrete surface requires them.
@@ -58,7 +59,8 @@ before conditional intelligence, taste, or external reference work.
    - explicit reusable multi-surface design truth -> `durable-design-contract.md`.
 6. Load `taste-workflow.md`; choose genre, density, palette logic, typography,
    materiality, icon language, one signature move, and explicit anti-slop
-   refusals. Use `dials.md` and `color-strategy.md` only when those dimensions
+   refusals. Allocate those choices by component role instead of repeating an
+   all-over signature motif. Use `dials.md` and `color-strategy.md` only when those dimensions
    are open.
 7. Before implementation, record the anti-slop inventory:
    - one intended dominant page title or focal in the initial viewport;
@@ -80,9 +82,12 @@ before conditional intelligence, taste, or external reference work.
 12. Keep content and controls visible by default. Add motion only after static
    hierarchy and interaction are correct; route candidates through
    `motion-opportunities`.
-13. Run the mandatory polish chain on the integrated surface, then any explicitly
+13. On the integrated render, reject unearned repetition of one style device
+    across unlike work, setup, preview, and reference roles. Record independent
+    functional-quality, visual-direction-fit, and style-allocation verdicts.
+14. Run the mandatory polish chain on the integrated surface, then any explicitly
    selected bounded specialist critique, revision, and applicable audit.
-14. Apply `references/verification-contract.md` to every affected route and
+15. Apply `references/verification-contract.md` to every affected route and
    meaningful state.
 
 The standard profile may choose one structure and visual world after a brief
