@@ -10,11 +10,24 @@ const skill = /design-with-ai/i;
 const gate = /verify-iteration-receipt\.mjs/i;
 const skillDoc = /design-with-ai[\\/]+SKILL\.md/i;
 const executionTool = /exec|shell|command|terminal|powershell|run/i;
-const gateProcess = /\b(?:node(?:\.exe)?|bun|deno)\b[^\n]{0,450}verify-iteration-receipt\.mjs/i;
+const gateProcess = /(?:^|[\n;&|])\s*(?:&\s*)?(?:node(?:\.exe)?|bun|deno)\b[^\n;]{0,450}verify-iteration-receipt\.mjs/i;
 
 function toolArgumentText(p) {
   const fields = [p.arguments, p.input, p.command];
   return fields.map((v) => typeof v === "string" ? v : v == null ? "" : JSON.stringify(v)).join("\n");
+}
+function actualCommand(p) {
+  const value = p.command ?? p.arguments ?? p.input;
+  if (typeof value !== "string") {
+    return typeof value?.cmd === "string" ? value.cmd
+      : typeof value?.command === "string" ? value.command : "";
+  }
+  try {
+    const parsed = JSON.parse(value);
+    return typeof parsed?.cmd === "string" ? parsed.cmd
+      : typeof parsed?.command === "string" ? parsed.command
+      : typeof parsed?.script === "string" ? parsed.script : value;
+  } catch { return value; }
 }
 function processCode(output) {
   if (typeof output !== "string") return null;
@@ -65,7 +78,7 @@ export async function inspectRollout(file) {
       const mentionsSkill = skill.test(args);
       const mentionsFile = skillDoc.test(args);
       const mentionsGate = gate.test(args);
-      const gateCandidate = mentionsGate && executionTool.test(name) && gateProcess.test(args);
+      const gateCandidate = mentionsGate && executionTool.test(name) && gateProcess.test(actualCommand(p));
       if (mentionsSkill) summary.skillReferencedToolCalls++;
       if (mentionsFile) summary.skillFileArgumentCalls++;
       if (mentionsGate) summary.gateMentionToolCalls++;
