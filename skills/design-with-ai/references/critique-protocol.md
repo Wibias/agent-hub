@@ -27,6 +27,34 @@ Receipt example: `critique: P5 H4 E5 S4 R5 V5`.
 Repeated critique is normal. If revisions keep adding decoration without fixing a
 weak axis, re-read the brief and structural contract instead.
 
+## Independent quality and style-distribution critique
+
+Do not let visual novelty, consistent tokens, or the absence of known slop
+signals raise the rating of an unclear interface. Record two separate
+verdicts against rendered, representative states:
+
+1. **FUNCTIONAL_QUALITY:** Can users identify the first-screen job, read
+   essential content, find the next action, understand states, and recover
+   from errors? Judge this without giving a style bonus for dark, light,
+   editorial, brutalist, or any other visual genre.
+2. **VISUAL_DIRECTION_FIT:** Does the chosen art direction serve the product
+   and accepted brand? Is its vocabulary applied selectively enough that
+   components with different jobs retain meaningful differences?
+
+Then run the **motif-displacement challenge**: identify the two most repeated
+styling devices (for example boxed cards, hairline dividers, tiny tracked
+labels, gradient panels, or badges). For each, name what it communicates.
+Compare a representative actionable area with a reference-only area. If
+both use the same visual grammar despite different user tasks, revise the
+distribution before repainting the UI. Conversely, do not introduce
+variation into genuinely comparable rows or measurements merely to appear
+less generic.
+
+A different palette, a signature accent, or replacing cards with rules is
+not a structural UX improvement by itself. A user-approved design system
+may intentionally repeat its visual language; require concrete evidence
+of harm or a mismatch before challenging that repetition.
+
 ## Senior designer filter
 
 Check the applicable questions:
@@ -101,7 +129,9 @@ Use a Before / After / Why table:
 3. **Verbal**: copy clichés, unsupported claims, fake metrics.
 
 When the skeleton is generic, at least one repair must address structure. Surface
-polish alone does not fix a template problem.
+polish alone does not fix a template problem. If the original was fixed by
+applying a new motif everywhere, test for **style overcorrection** and repair
+component-role allocation rather than swinging to another full-page preset.
 
 ## Pushback protocol
 
