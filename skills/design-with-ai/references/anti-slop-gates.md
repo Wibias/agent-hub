@@ -75,7 +75,7 @@ Any score below 3 requires revision before the gate. See `critique-protocol.md`.
 | G01 | Template skeleton | Hero -> 3 equal features -> CTA -> footer is used as an unearned default with no structural identity | Change macrostructure; break equal cards |
 | G02 | Macro reuse | Same macro stamp as the last build is reused without a product or user reason | Pick a different structure |
 | G03 | Centered mega-hero | `100vh` centered eyebrow + title + lede + CTA stack is used by reflex and the selected direction does not call for it | Use content-height hierarchy, asymmetry, or a justified genre-specific treatment |
-| G04 | 3-equal cards | Icon/title/blurb x3 appears as generic equal cards without a product reason | Zig-zag, bento spans, stack, asymmetric grouping, or another justified structure |
+| G04 | Unearned equal cards | Three or more equally weighted cards (including KPI tiles and admin panels) mask materially different task priority without a comparison, grouping, or product reason | Match the structure to the decision; preserve equal cards when equal comparison is the real job |
 | G05 | Nested cards | Card-inside-card containment is decorative rather than structural | Use one containment layer |
 | G06 | Side-stripe | Thick accent side border is generic decoration rather than an intentional system motif | Use hairline, tint, number, or a justified motif |
 | G07 | AI nav | Generic wordmark + 4-5 links + right CTA + hairline is used without product/navigation reasoning | Pick a navigation model that follows the product |
@@ -140,6 +140,31 @@ them. Generic model defaults cannot.
 | G71 | Competing titles | Two or more headings in the initial viewport compete as the page title through similar size, weight, contrast, or spacing | Keep one dominant page focal and subordinate section headings |
 | G72 | Icon wallpaper | Icons repeat across most content blocks, duplicate adjacent labels, or exist only to fill space | Keep icons that earn navigation, action recognition, status, or product identity |
 | G73 | Palette role sprawl | Visible colours cannot be mapped to declared surface, text, border, accent, status, or data-viz roles | Inventory roles and reuse project tokens; do not impose a raw colour-count cap |
+
+## Task-first interpretation of structural gates
+
+For operational dashboards and workflow tools, do not limit G04 to a
+marketing-style three-card row. Inspect the full rendered viewport for
+repeated same-weight KPI tiles, boxed sections, nested panels, and tiny
+metadata labels. Review G04, G05, G26, G55, and G56 together against the
+actual user task rather than treating any container count as a failure.
+
+- If the primary work object or next consequential action is less prominent
+  than generic metrics/chrome, revise hierarchy before adjusting surfaces.
+- If small typography and excessive empty canvas coexist, test content
+  density and legibility at normal zoom. More space is not automatically
+  better hierarchy.
+- If statuses or counts imply contradictory operational states, verify
+  source semantics and record the defect. Neither a green taste scan nor
+  a prettier badge can establish factual correctness; G09 covers invented
+  data, and the baseline task-first acceptance covers mismatched real states.
+- A grid of genuinely comparable metrics, dense settings, or a shared app
+  shell can be entirely appropriate. Record the comparison/task rationale
+  instead of introducing arbitrary asymmetry.
+
+These are human/rendered adjudications, not new mechanically detected
+rules. Do not claim the source scanner detects dashboard usability or
+factual state inconsistencies.
 
 ## P1 - Copy authenticity
 

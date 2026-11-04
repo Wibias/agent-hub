@@ -106,6 +106,27 @@ same viewport band. `REVIEW_CROSS_SURFACE` is a contextual G02 lead, not a
 mechanical failure: shared shells and related workflow families can justify
 macro similarity. Do not load or run this comparison for a single-route task.
 
+## Task-first visual receipt
+
+For applicable operator surfaces, the handoff must include a concise
+render-grounded verdict in addition to source/render taste-signal reports:
+
+```text
+first-screen job: <task or scanning question>
+priority: <dominant action, record, or blocker; observed verdict>
+legibility/density: <normal-zoom viewport evidence or not verified>
+content/containment: <subject representation and repeated-panel rationale>
+status semantics: <verified against product contracts | inconsistent | unknown>
+task-first verdict: PASS | REVISE | NOT_VERIFIED
+```
+
+`REVISE` blocks a polished/production-grade quality claim until corrected.
+`NOT_VERIFIED` is not a pass and must name the missing evidence. A passing
+mechanical taste scan cannot override a failed task-first verdict.
+Do not claim status correctness from screenshots alone; confirm state sources
+or explicitly mark this part unknown. Keep read-only audit findings separate
+from claims of implemented fixes.
+
 ## Motion verification
 
 Craft changes must satisfy the active motion standards. Runtime-performance

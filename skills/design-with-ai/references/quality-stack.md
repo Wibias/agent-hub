@@ -17,6 +17,23 @@ behaviour, and obvious performance footguns.
 
 Do not add decorative motion in this phase.
 
+### Task-first acceptance before Craft
+
+For an operator surface found in the inspected target, apply the task-first
+check in `baseline-ui.md` to a real render before spending time on micro-craft.
+Report the following as observed, failed, or unverified:
+
+- first-screen task and the action/record that should dominate;
+- whether the highest-consequence state, blocker, or next step is discoverable;
+- whether real item content is represented more meaningfully than raw system metadata;
+- whether essential labels and controls remain readable at normal zoom;
+- whether repeated same-weight containers represent genuinely comparable items;
+- whether status/readiness claims agree with known product semantics.
+
+A visual pattern scan does not replace this check. If a substantive defect
+remains, revise the design or expose the product-model/authority gap before
+Craft. Do not use color or decoration to conceal a failed task-first verdict.
+
 ## 3. Craft
 
 Load `micro-craft.md`. Refine optical alignment, concentric radius, surface depth,

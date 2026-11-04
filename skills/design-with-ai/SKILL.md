@@ -67,6 +67,12 @@ For `audit-surface`, `improve-existing`, `restyle-existing`,
 6. for modifying work, load `references/verification-contract.md` before
    completion.
 
+For an inspected operational surface, including dashboards, queues, setup flows,
+or dense settings, apply the task-first acceptance in `references/baseline-ui.md`.
+`audit-surface` loads that reference for an applicable read-only review; modifying
+quality-stack flows reuse it in Baseline. This is a separate render-grounded
+product/usability verdict, never inferred from a passing mechanical slop scan.
+
 `design-spec` is a bounded spec/prompt route after direction is known; it does
 not automatically reopen the full design workflow.
 
@@ -180,7 +186,7 @@ passed.
 - `references/anti-slop-gates.md`: contextual anti-default gates, evidence clusters, and hard blockers
 - `references/rendered-slop-review.md`: optional browser DOM/geometry evidence for structural anti-slop review
 - `references/cross-surface-slop-review.md`: optional multi-route macro-reuse evidence for G02
-- `references/baseline-ui.md`: baseline interaction/layout/typography floor
+- `references/baseline-ui.md`: baseline interaction/layout/typography floor plus task-first operator acceptance
 - `references/micro-craft.md`: optical and component-level finish
 - `references/design-first-prompting.md`: locked UI generation/spec prompt
 - `references/motion-build.md`: motion construction gate and implementation sequence
@@ -211,7 +217,7 @@ passed.
 - references/anti-slop-gates.md -- when to read: anti-slop gate, contextual-default cluster review, or audit verdict
 - references/rendered-slop-review.md -- when to read: rendered web target plus browser JavaScript evaluation available for structural anti-slop evidence
 - references/cross-surface-slop-review.md -- when to read: task spans two or more distinct rendered web surfaces and asks for systemic consistency, redesign, or macro-reuse review
-- references/baseline-ui.md -- when to read: baseline quality pass
+- references/baseline-ui.md -- when to read: baseline quality pass; also applicable read-only operator-surface audit for task-first acceptance
 - references/micro-craft.md -- when to read: craft quality pass
 - references/design-first-prompting.md -- when to read: design-spec
 - references/motion-build.md -- when to read: motion-build

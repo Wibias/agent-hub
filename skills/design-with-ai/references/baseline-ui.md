@@ -74,6 +74,45 @@ Use a selected motion workflow when motion itself is the task.
   and desktop widths.
 - When the defect is grouping, figure/ground, competing accents, or visual weight that disagrees with semantic priority, load `perceptual-hierarchy.md` before adding decoration. Its blur/thumbnail check is an optional rendered diagnostic, not evidence of usability.
 
+## Task-first surface acceptance
+
+
+Use this review for inspected dashboards, queues, libraries, multi-step setup,
+settings, and other operator surfaces. The surface's actual job, not its
+category label, decides which checks apply. Run it on a real representative
+viewport and state before adding decorative polish:
+
+1. **Task and next action:** Name the user's first-screen decision or action.
+   For read-only views, name the question the user must answer. Can they find
+   the relevant record, action, and blocker without parsing every panel?
+2. **Information priority:** Separate immediate work, next steps, exceptions,
+   and reference/configuration data. Compare visual prominence with actual
+   consequence. Four equal KPI tiles may be correct for four comparable
+   measures, but not when one is operationally urgent and three are background.
+3. **Content representation:** Put the product's real subject first: meaningful
+   item labels and useful previews/attributes when they exist and help a
+   decision. Raw IDs, timestamps, and technical metadata are secondary unless
+   they are the actual object of work. Do not fabricate names, media, or metrics.
+4. **State and truth:** Trace displayed totals, status labels, readiness,
+   permissions, and next-step affordances to available product contracts.
+   Distinguish work complete, QA passed, authorized, publishable, and published
+   when those are different states. Ambiguous or conflicting truth is a product
+   defect, not something colour or badge styling can fix. Mark unverified
+   claims as unknown instead of guessing.
+5. **Density and legibility:** Inspect at normal browser zoom and realistic
+   desktop/mobile viewport sizes. Essential text, actions, and explanatory
+   labels must be readable without relying on the screenshot being enlarged.
+   Check whether large empty regions coexist with cramped controls or tiny
+   labels. Rebalance width, grouping, and text hierarchy when they do.
+6. **Containment budget:** Inventory repeated cards, borders, and separators.
+   Each must earn its place through comparison, grouping, interaction, or
+   scanning. Replace unearned equal-weight boxes with task-appropriate rows,
+   sections, tables, or open layout; do not ban cards or force asymmetry.
+
+A failure in task clarity, truth, or legibility must be revised before Craft.
+If correcting it changes locked purpose or IA, route through the workflow's
+authority/redesign rules rather than silently changing the product model.
+
 ## Anti-slop floor
 
 - No default purple/multicolour gradient, glow, or generic card wall unless the
@@ -96,6 +135,7 @@ Before handing off to Craft, check:
 - loading/error/empty states touched by the change;
 - interrupted/repeated interaction settles on the correct semantic state;
 - visible hierarchy and primary action, including perceptual grouping when that was an identified defect;
+- task-first acceptance for applicable operator surfaces, including status truth, legible information, and justified containment;
 - no baseline rule accidentally changed product semantics or routes.
 
 When the target is native/mobile, load `native-mobile.md` for platform-specific units, safe areas, text scaling, gestures, and runtime verification.
