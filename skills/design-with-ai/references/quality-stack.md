@@ -8,6 +8,12 @@ work. It replaces the retired cross-skill polish chain.
 On modifying non-motion work, run the finding-to-outcome ledger from
 `critique-protocol.md`. Record the in-scope routes, baseline evidence,
 priority findings, and acceptance conditions **before changing the UI**.
+Freeze the pre-edit review as a separate evidence source for iterative
+standard/deep work; the final report cannot define what previously existed.
+Prioritize confirmed task/navigation/action defects ahead of optional
+color or decoration adjustments when the task is `IMPROVE`. If a high-impact
+fix needs authority or runtime access, mark it blocked or partial and keep
+it visible. A specifically requested restyle is a separate legitimate scope.
 After the rendered candidate, reconcile every carried-forward finding
 against matched evidence. An unchanged screen may be correct, but it
 requires an explicit `KEEP_JUSTIFIED` determination; unresolved or
@@ -114,7 +120,9 @@ addresses the highest-impact open issue rather than repainting the surface.
 Do not add a numerical improvement score from subjective taste alone.
 For standard/deep modifying work, compile and validate the iteration
 receipt with `scripts/verify-iteration-receipt.mjs` as specified in
-`verification-contract.md`. A missing, invalid, or contradictory
+`verification-contract.md`. For known-issue iterations, supply the
+independent `--baseline` source and require comparison against those
+prior IDs. A missing, invalid, or contradictory
 receipt blocks `COMPLETE`, even if the taste gate and code tests pass.
 The validator supplements real render and runtime evaluation; it does
 not independently prove the cited evidence.
