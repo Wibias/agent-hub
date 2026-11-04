@@ -106,6 +106,42 @@ same viewport band. `REVIEW_CROSS_SURFACE` is a contextual G02 lead, not a
 mechanical failure: shared shells and related workflow families can justify
 macro similarity. Do not load or run this comparison for a single-route task.
 
+## Before/after iteration evidence
+
+For modifying non-motion product UI, include an issue-to-outcome ledger
+as defined in `critique-protocol.md`. A release receipt must account for
+each in-scope route or material component and each carried-forward issue.
+
+```text
+scope: <routes/components and priority user tasks>
+baseline: <artifact/route/viewport/state or MISSING>
+candidate: <artifact/route/viewport/state>
+finding: <stable ID, severity, observed defect, acceptance condition>
+decision: <change | KEEP | DEFER and rationale>
+result: <actual visual/runtime delta with matched evidence>
+disposition: RESOLVED | IMPROVED_BUT_OPEN | PERSISTS | REGRESSED | KEEP_JUSTIFIED | DEFERRED | UNVERIFIED
+coverage: <inspected unchanged screens; deferred and not-inspected routes>
+open carryover: <IDs, impact, next evidence/action>
+iteration verdict: COMPLETE | PARTIAL | NOT_VERIFIED
+```
+
+`COMPLETE` is allowed only when required functional/visual gates pass,
+material in-scope findings have evidenced resolution or a justified
+no-change result, and there are no unapproved critical open issues.
+`PARTIAL` acknowledges implemented progress but cannot be marketed as
+a fully resolved multi-screen redesign. `NOT_VERIFIED` means required
+evidence is missing; it is never a visual pass. No matched before/after
+artifact means no comparative improvement claim. Baseline screenshots
+cannot prove runtime behavior; verify interaction and status contracts
+separately when they determine acceptance.
+
+Keep the same route, viewport band, meaningful state, and data where
+possible; when conditions differ, document the limitation. Preserve
+unresolved IDs for the next iteration. A screen that did not need editing
+may pass `KEEP_JUSTIFIED` after inspection; a skipped screen is not
+automatically correct. This is a contextual human review, not a new
+mechanical anti-slop score.
+
 ## Task-first visual receipt
 
 For applicable operator surfaces, the handoff must include a concise
