@@ -11,7 +11,7 @@ import { checkProof } from "./run-iteration-gate.mjs";
 
 const SKILL_PATH = /(?:^|[\\/])design-with-ai[\\/]SKILL\.md/i;
 const GATE_RUN = /(?:^|[\s;"'\\/])run-iteration-gate\.mjs/i;
-const MODIFY = /\b(?:improve-existing|restyle-existing|redesign-existing|build-product-surface|verbessern?|überarbeit(?:e|en)|optimier(?:e|en)|redesign|rework|restyle|polish|implement|make .{0,35}better|fix .{0,35}(?:ui|design)|update .{0,35}(?:ui|design)|improve .{0,35}(?:ui|design))\b/i;
+const MODIFY = /\b(?:improve-existing|restyle-existing|redesign-existing|build-product-surface|verbesser(?:e|n|ung|t)?|überarbeit(?:e|en|ung)|optimier(?:e|en|ung)|redesign|rework|restyle|polish|implement|make .{0,35}better|fix .{0,35}(?:ui|design)|update .{0,35}(?:ui|design)|improve .{0,35}(?:ui|design))\b/i;
 const READ_ONLY = /^\s*(?:audit-surface|motion-audit|motion-review|bewerte|analysiere|prüfe|review|critique|evaluate|audit)\b/i;
 const EXPLICIT = /design-with-ai|design with ai/i;
 const EXEC_TOOL = /exec|shell|command|terminal|powershell|bash|functions\.exec/i;
@@ -112,7 +112,7 @@ export function decideStop(event, report, { home = homedir() } = {}) {
   if (event.stop_hook_active === true) return allow("RETRY_LIMIT");
   if (!report.userBoundary) return allow("NO_TURN_BOUNDARY");
   const prompt = report.userPrompt || "";
-  const modifying = MODIFY.test(prompt) && !READ_ONLY.test(prompt);
+  const modifying = MODIFY.test(prompt) && !/^\s*(?:audit-surface|motion-audit|motion-review)\b/i.test(prompt);
   if (!modifying) return allow("READ_ONLY_OR_OUT_OF_SCOPE");
   if (!EXPLICIT.test(prompt) && !report.readsSkill) return allow("SKILL_NOT_OBSERVED");
   const cwd = resolve(event.cwd);
