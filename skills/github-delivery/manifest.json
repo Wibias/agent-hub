@@ -2,20 +2,20 @@
   "schemaVersion": 1,
   "kind": "github-delivery/distribution-manifest",
   "name": "github-delivery",
-  "version": "1.8.0",
-  "sourceCommit": "315c20443c623ff3eb33e145c5ce7077288f11f2",
+  "version": "1.8.3",
+  "sourceCommit": "36ecc0b0db9b5e60383d0a140574c68d5e4c5afc",
   "files": [
     {
       "path": "CHANGELOG.md",
-      "bytes": 95365,
+      "bytes": 97392,
       "mode": "0644",
-      "sha256": "b987fe50bf6c1487b25ccb874b119783034d72c4fd40c2847fbb37dae6332ddf"
+      "sha256": "16a86dbade906ed4947246665d9c702c76898d62aaafe2f7c00242ea6fa48617"
     },
     {
       "path": "INSTALL.md",
-      "bytes": 19343,
+      "bytes": 20051,
       "mode": "0644",
-      "sha256": "2841c8c1695faebd252c7d16a60df314f8ea9baea570e0942e91cd02d8d50fd2"
+      "sha256": "6b01a3589fbd3e2d82b70e52ddc961f808e41594954512df67b0f0dbc8f176c1"
     },
     {
       "path": "LICENSE",
@@ -25,9 +25,9 @@
     },
     {
       "path": "README.md",
-      "bytes": 40038,
+      "bytes": 41017,
       "mode": "0644",
-      "sha256": "708e5f6163ad9cc35d71dca68f145c77fe0dd0a0208ce8208378c6e15bc3b47f"
+      "sha256": "a1c12aa61e83278d9d5cd2724f82811ceb619a327eca5affb5a9eb6b0b529a1d"
     },
     {
       "path": "SECURITY.md",
@@ -39,7 +39,7 @@
       "path": "SKILL.md",
       "bytes": 13391,
       "mode": "0644",
-      "sha256": "78a8872ba2c7e1bf403d882b874ca34e41fb824f566cdac3abb5b3e89c9d5933"
+      "sha256": "a8ac90715ce913bed260241504005f57ca9fe28c4d5c75e83636a64158168189"
     },
     {
       "path": "agents/comment-inspector.md",
@@ -349,9 +349,9 @@
     },
     {
       "path": "package.json",
-      "bytes": 3501,
+      "bytes": 3572,
       "mode": "0644",
-      "sha256": "91e49c0cea60dc8f001bb46a6f5a920e64dc4824bcdb0fb10401930f9d4854da"
+      "sha256": "21cefb77908a44803f4b158a74e7b5182c8e29305ce90a6bfbad9721c5a220bd"
     },
     {
       "path": "references/agent-brief.md",
@@ -361,9 +361,9 @@
     },
     {
       "path": "references/agent-debug-trace.md",
-      "bytes": 6586,
+      "bytes": 11467,
       "mode": "0644",
-      "sha256": "082784d58fd40d8a08312870b609e19e2a9bdf641c3037d95012985f1351050c"
+      "sha256": "fac2a97af5ea06c3de946506cf7e9bb71811dd116973091405cd4353288322df"
     },
     {
       "path": "references/agent-progress-watchdog.md",
@@ -487,9 +487,9 @@
     },
     {
       "path": "references/full-review-pr.md",
-      "bytes": 28396,
+      "bytes": 28688,
       "mode": "0644",
-      "sha256": "b11367d7c323f55dd658ca700cc2456459f487cf9bf973e22f0b6a2cdd6ccb3a"
+      "sha256": "f0c37fa77f585cd89305ab4b1072e6b1c01e5a7bb3eef7c7a91cf21d5239dc2d"
     },
     {
       "path": "references/gate-helpers.md",
@@ -955,9 +955,9 @@
     },
     {
       "path": "scripts/cleanup-orphaned-workflows.mjs",
-      "bytes": 10325,
+      "bytes": 10837,
       "mode": "0755",
-      "sha256": "a413e7b55bb5add1fbb372b21bb2a6545cafeb214c499b2a6f9bc23881fe8aa4"
+      "sha256": "1cab39380fe25fa236095b24d1d511335a6def30ce88a15b1bb336e6ef4877fb"
     },
     {
       "path": "scripts/codeowners-for-pr.mjs",
@@ -1063,9 +1063,9 @@
     },
     {
       "path": "scripts/github-delivery-cli.mjs",
-      "bytes": 14518,
+      "bytes": 18837,
       "mode": "0755",
-      "sha256": "87d10f8faea24d6c41c6e1fe864b760203b1b75e01cce2216cbbc0e482eddee9"
+      "sha256": "c4cc5a21075b14c1bfe9ea1bfc7c4bc5151be9e0ebb0bf1152a80208104c1778"
     },
     {
       "path": "scripts/github-delivery-config.mjs",
@@ -1081,9 +1081,9 @@
     },
     {
       "path": "scripts/grok-trace.mjs",
-      "bytes": 711,
+      "bytes": 1818,
       "mode": "0755",
-      "sha256": "fd1262c7147202c8ed1b1fdc5873b3c2cbdf46891cf6a6e461971b89bf7a1d0c"
+      "sha256": "3b71d6d16e762fdb61abe5ca9bd329c0c78f059a8617c5cbe9771bb306f526e9"
     },
     {
       "path": "scripts/grok-with-debug-trace.mjs",
@@ -1135,9 +1135,9 @@
     },
     {
       "path": "scripts/lib/agent-debug-trace.mjs",
-      "bytes": 13012,
+      "bytes": 18911,
       "mode": "0755",
-      "sha256": "c2010541348e6832fe8ea0bf4b855d997ecf11df978cf3c84e08bfa0a4f6b0a8"
+      "sha256": "126789fa7f90945399fd16bec162db5641d507491225e789ad5c7ec912bb4c54"
     },
     {
       "path": "scripts/lib/agent-progress-watchdog.mjs",
@@ -1363,9 +1363,9 @@
     },
     {
       "path": "scripts/lib/cursor-debug-trace.mjs",
-      "bytes": 4220,
+      "bytes": 5346,
       "mode": "0755",
-      "sha256": "5922b2a6477dfe1b04218641ed8e79344bcc28ad2e08b518a6ca1c859d0631b5"
+      "sha256": "c32ce7661d303e0fad7f7bdc6ea734909411e6e8781a94c5e4674497c6ff3d55"
     },
     {
       "path": "scripts/lib/delivery-workflow-controller.mjs",
@@ -1399,9 +1399,9 @@
     },
     {
       "path": "scripts/lib/distribution.mjs",
-      "bytes": 29736,
+      "bytes": 29775,
       "mode": "0755",
-      "sha256": "e2bc7773f1302347bc64fd06c0115f50c08cf86bdf9f93623a4c20cc8387ab08"
+      "sha256": "07679a53d7e714dc446f157f955b32bde1fde784b396e7fc2f539cddd9d52734"
     },
     {
       "path": "scripts/lib/eval-contracts.mjs",
@@ -1465,15 +1465,15 @@
     },
     {
       "path": "scripts/lib/grok-debug-trace.mjs",
-      "bytes": 6758,
+      "bytes": 7817,
       "mode": "0755",
-      "sha256": "7010eec750a0d20a27cda02c47eea1e5ddca960a674dbd2cc0069989f9c19acf"
+      "sha256": "7b549197a7b5629c46fa87adede5890f6e5a1fe3cab4d36eff0bb345ae5ee65d"
     },
     {
       "path": "scripts/lib/grok-trace-launcher.mjs",
-      "bytes": 886,
+      "bytes": 4662,
       "mode": "0755",
-      "sha256": "dc38cb0c7e551449485f7c1325894f1340b996f6af8e04bcd5c55af3684713d5"
+      "sha256": "9c8d40f25951caeacf31161899dcb65737164ef7cb9e11d622e8f61b3bf061ea"
     },
     {
       "path": "scripts/lib/hygiene-passes.mjs",
@@ -1753,9 +1753,9 @@
     },
     {
       "path": "scripts/lib/release-self-update.mjs",
-      "bytes": 16536,
+      "bytes": 19075,
       "mode": "0755",
-      "sha256": "94dcc0cea0b9764c33946dacf2aebb36dfe35dc0496ef6e3f094bc98d07f32e3"
+      "sha256": "36abbc21075f6f0f87cf38133e54db81f38350b54112393867731a66a95c3f08"
     },
     {
       "path": "scripts/lib/release-zip.mjs",
@@ -1933,15 +1933,15 @@
     },
     {
       "path": "scripts/lib/stable-release-update.mjs",
-      "bytes": 11280,
+      "bytes": 12476,
       "mode": "0755",
-      "sha256": "641c0bca86c0259fd94f49dcb44815282bd46be82f7d86236cb3505bc2fff384"
+      "sha256": "c0d7b3025bd111297b80de0e5fe1c2ef1057ce52f53cd1c37fc49037a6403bf3"
     },
     {
       "path": "scripts/lib/structured-debug-cli.mjs",
-      "bytes": 2645,
+      "bytes": 2690,
       "mode": "0755",
-      "sha256": "fc712ddf8f579f60ef261b9b1ab01914da69f2a3bfc5fd677f164fd9413086ba"
+      "sha256": "080383cfabecddf91b37959874ead00697efa612e6270bbe1580b79fa243b161"
     },
     {
       "path": "scripts/lib/subprocess-policy.mjs",
@@ -1956,10 +1956,16 @@
       "sha256": "db208e1d2d3287ecf6fba5ac0c0be6ccfbc6ce5e67f2ec43df720aa21b1c0fcd"
     },
     {
-      "path": "scripts/lib/update-user-experience.mjs",
-      "bytes": 7668,
+      "path": "scripts/lib/trace-analyze.mjs",
+      "bytes": 9102,
       "mode": "0755",
-      "sha256": "dc935d10600653058c41658c36f2876851b8fe5bdf50f57ecabe3f48930e3f0b"
+      "sha256": "3f06f6907fd551b3a483920f4b606609c93fe67ac11e49dae3d1fd574ed464c3"
+    },
+    {
+      "path": "scripts/lib/update-user-experience.mjs",
+      "bytes": 7855,
+      "mode": "0755",
+      "sha256": "5a8393f4071dd487a95805b529e531ac8639dd58b622259f54a591318b6a5457"
     },
     {
       "path": "scripts/lib/user-config.mjs",
@@ -2239,9 +2245,9 @@
     },
     {
       "path": "scripts/validate-npm-package.mjs",
-      "bytes": 4661,
+      "bytes": 4696,
       "mode": "0755",
-      "sha256": "e59a8e0dafdeb74fcde0ea730110f3548a0a4900aefb248e877c70613c6eba19"
+      "sha256": "9e17db1012e372592c34fc7d8a482c567c9d377eb348aeeac5239f4c4214ee8a"
     },
     {
       "path": "scripts/validate-repository-security.mjs",
@@ -2275,9 +2281,9 @@
     },
     {
       "path": "scripts/verify-pr-head.mjs",
-      "bytes": 11203,
+      "bytes": 11995,
       "mode": "0755",
-      "sha256": "7f9ad1ddab46e17f1a61f6b3fd4f701aadafc32eb76a4bb7d853f58b2c887a90"
+      "sha256": "7c0ae8a324d5b1714f63fe590c302238ff57e394b024861fda23501d7e4f7dc1"
     },
     {
       "path": "scripts/verify-probe-coverage.mjs",
@@ -2380,6 +2386,12 @@
       "bytes": 6628,
       "mode": "0644",
       "sha256": "2010721eaa32c532a523df7f353dca8445ac24f97c0ef5e3fe2b44cda9009ffa"
+    },
+    {
+      "path": "tests/worktree-locations.test.mjs",
+      "bytes": 3319,
+      "mode": "0644",
+      "sha256": "b6279c57757f7fb462920b959fcd2a5aec5fbcc7616d141362f18723d6502de4"
     }
   ]
 }
