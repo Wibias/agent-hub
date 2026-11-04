@@ -106,7 +106,8 @@ test("valid complete proof from a real runner satisfies Stop hook", () => fixtur
   f.write([f.prompt("Verbessere mit design-with-ai die Einstellungen."), f.call("exec_command", command)]);
   const report = await inspectTurnTranscript(f.transcript);
   assert.equal(report.gateCommands.length, 1);
-  assert.equal((await handleStop(f.event)).continue, true);
+  const verdict = await handleStop(f.event);
+  assert.equal(verdict.continue, true, JSON.stringify(verdict));
   const retried = await handleStop({ ...f.event, stop_hook_active: true });
   assert.equal(retried.continue, true);
   assert.equal(retried.systemMessage, undefined);
@@ -125,7 +126,8 @@ test("Codex exec_command arrays are accepted as current-turn validator invocatio
   };
   f.write([f.prompt("Improve the current UI with design-with-ai."), arrayCall]);
   assert.equal((await inspectTurnTranscript(f.transcript)).gateCommands.length, 1);
-  assert.equal((await handleStop(f.event)).continue, true);
+  const verdict = await handleStop(f.event);
+  assert.equal(verdict.continue, true, JSON.stringify(verdict));
 }));
 
 test("Git project Stop cannot accept legacy proof before durable history is initialized", () => fixture(async (f) => {
@@ -149,7 +151,8 @@ test("current, valid PARTIAL receipt passes only with an explicit PARTIAL final 
   const command = 'node run-iteration-gate.mjs --receipt "' + f.receipt +
     '" --baseline "' + f.baseline + '" --proof "' + f.proof + '"';
   f.write([f.prompt("Verbessere mit design-with-ai die Einstellungen."), f.call("exec_command", command)]);
-  assert.equal((await handleStop({ ...f.event, last_assistant_message: "PARTIAL: noch offen." })).continue, true);
+  const verdict = await handleStop({ ...f.event, last_assistant_message: "PARTIAL: noch offen." });
+  assert.equal(verdict.continue, true, JSON.stringify(verdict));
   assert.equal((await handleStop(f.event)).decision, "block");
 }));
 
