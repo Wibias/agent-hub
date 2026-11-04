@@ -122,6 +122,23 @@ not a structural UX improvement by itself. A user-approved design system
 may intentionally repeat its visual language; require concrete evidence
 of harm or a mismatch before challenging that repetition.
 
+## Navigation purpose and adjacent-surface challenge
+
+On an inspected viewport, ask: does each repeated route/action offer a
+meaningfully different user purpose, or is generic shell navigation duplicated
+inside a nearby toolbar? Compare effective targets and actual behavior.
+Header/footer legal repetition, contextual recovery, and responsive-only
+navigation may be justified; two simultaneous generic Settings links usually
+are not. Do not demand arbitrary one-link-per-route uniqueness.
+
+For an overview with rich item previews, judge the linked detail screen
+against a *different* task: focused inspection and only the decisions/actions
+that exist in the product. A big media player plus passive metadata may be
+sufficient for a read-only final artifact; when useful supported script,
+caption, QA, or output inspection is hidden elsewhere, a purpose-built
+inspector can improve the workflow. Do not pretend speculative controls
+are working features.
+
 ## Senior designer filter
 
 Check the applicable questions:
