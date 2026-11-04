@@ -7,6 +7,7 @@ import { dirname, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { discoverProjectLedger } from "./findings-ledger.mjs";
+import { snapshotProjectSource } from "./project-source-snapshot.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const validator = resolve(here, "verify-iteration-receipt.mjs");
@@ -59,6 +60,9 @@ export function runGate({ receipt, baseline = null, ledger = null, proof, worksp
   const scriptInput = inputHash(validator);
   const ledgerInput = inputHash(ledger === null ? null : resolve(ledger));
   const ledgerScriptInput = inputHash(ledgerInput ? ledgerValidator : null);
+  const snapshotScriptInput = inputHash(resolve(here, "project-source-snapshot.mjs"));
+  const ignored = [receipt, baseline, ledger, proof].filter(Boolean);
+  const projectSource = snapshotProjectSource(workspaceCwd, { ignorePaths: ignored });
   const command = [process.execPath, validator, "--receipt", receiptInput.path,
     ...(baselineInput ? ["--baseline", baselineInput.path] : []),
     ...(ledgerInput ? ["--ledger", ledgerInput.path] : [])];
@@ -68,6 +72,10 @@ export function runGate({ receipt, baseline = null, ledger = null, proof, worksp
   let result = null;
   try { result = JSON.parse(child.stdout); } catch { /* CLI failure may not return JSON */ }
   const exitCode = Number.isInteger(child.status) ? child.status : 2;
+  const sourceAfterValidation = snapshotProjectSource(workspaceCwd, { ignorePaths: ignored });
+  if (projectSource?.sha256 !== sourceAfterValidation?.sha256) {
+    throw new Error("Project sources changed during gate execution; rerun after edits stop");
+  }
   const proofData = {
     schemaVersion: ledgerInput ? 2 : 1,
     generator: "design-with-ai/run-iteration-gate.mjs",
@@ -78,6 +86,8 @@ export function runGate({ receipt, baseline = null, ledger = null, proof, worksp
     ledger: ledgerInput,
     validator: scriptInput,
     ledgerValidator: ledgerScriptInput,
+    projectSource,
+    sourceSnapshotValidator: snapshotScriptInput,
     processExitCode: exitCode,
     result: object(result) ? {
       valid: result.valid === true,
@@ -102,7 +112,7 @@ export function checkProof({ receipt, baseline = null, ledger = null, checkProof
   }
   let evidence;
   try { evidence = JSON.parse(readFileSync(resolve(proofPath), "utf8")); }
-  catch { return { valid: false, completionEligible: false, issues: ["Proof is missing or invalid JSON"] }; }
+  catch { return { valid: false, completionEligible: false, issues: ["Proof is missing or invalid JSON"], issueCodes: ["PROOF_MISSING"] }; }
   if (!object(evidence) || ![1, 2].includes(evidence.schemaVersion) ||
       evidence.generator !== "design-with-ai/run-iteration-gate.mjs") {
     fail("Unsupported proof format");
@@ -113,6 +123,7 @@ export function checkProof({ receipt, baseline = null, ledger = null, checkProof
     ["ledger", ledger === null ? null : resolve(ledger)],
     ["validator", validator],
     ["ledgerValidator", ledger === null ? null : ledgerValidator],
+    ["sourceSnapshotValidator", resolve(here, "project-source-snapshot.mjs")],
   ];
   for (const [key, path] of expectedInputs) {
     const stored = evidence?.[key];
@@ -128,6 +139,25 @@ export function checkProof({ receipt, baseline = null, ledger = null, checkProof
     try { actualHash = hash(path); }
     catch { fail(key + " input is not readable"); continue; }
     if (stored.sha256 !== actualHash) fail(key + " changed after the recorded execution");
+  }
+  // The worktree snapshot is checked after the validator and again on every
+  // --check-proof / Stop. It captures changes after a previous green PARTIAL.
+  try {
+    const current = snapshotProjectSource(workspaceCwd, {
+      ignorePaths: [receipt, baseline, ledger, proofPath].filter(Boolean),
+    });
+    const saved = evidence?.projectSource;
+    if (current === null && saved !== null && saved !== undefined) {
+      fail("Project source fingerprint unavailable");
+    } else if (current !== null && (!object(saved) ||
+        saved.schemaVersion !== 1 || typeof saved.sha256 !== "string")) {
+      fail("Project source snapshot missing");
+    } else if (current !== null && (saved.sha256 !== current.sha256 ||
+        saved.fileCount !== current.fileCount)) {
+      fail("Project source changed after the recorded execution");
+    }
+  } catch {
+    fail("Project source fingerprint unavailable");
   }
   const cmd = evidence?.command;
   const expected = [process.execPath, validator, "--receipt", resolve(receipt),
@@ -154,9 +184,24 @@ export function checkProof({ receipt, baseline = null, ledger = null, checkProof
     evidence.processExitCode === 0 &&
     evidence.result?.valid === true &&
     evidence.result?.verdict === "COMPLETE";
+  const issueCodes = [...new Set(issues.map((message) => {
+    if (/^receipt changed after/.test(message)) return "RECEIPT_CHANGED";
+    if (/^baseline changed after/.test(message)) return "BASELINE_CHANGED";
+    if (/^ledger changed after/.test(message)) return "LEDGER_CHANGED";
+    if (/^Project source changed after/.test(message)) return "WORKTREE_CHANGED";
+    if (/^Project source snapshot missing/.test(message)) return "WORKTREE_UNBOUND";
+    if (/^Project source fingerprint unavailable/.test(message)) return "WORKTREE_UNAVAILABLE";
+    if (/^(validator|ledgerValidator|sourceSnapshotValidator) changed after/.test(message)) {
+      return "VALIDATOR_CHANGED";
+    }
+    if (/not readable/.test(message)) return "INPUT_UNREADABLE";
+    if (/path differs|does not match|noncanonical/.test(message)) return "PATH_MISMATCH";
+    return "PROOF_INVALID";
+  }))];
   return {
     valid: issues.length === 0,
     completionEligible,
+    issueCodes,
     processExitCode: evidence?.processExitCode ?? null,
     verdict: evidence?.result?.verdict ?? null,
     issues,
