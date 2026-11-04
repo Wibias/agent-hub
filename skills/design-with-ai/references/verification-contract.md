@@ -153,6 +153,7 @@ priority: <dominant action, record, or blocker; observed verdict>
 legibility/density: <normal-zoom viewport evidence or not verified>
 content/containment: <subject representation and repeated-panel rationale>
 status semantics: <verified against product contracts | inconsistent | unknown>
+workflow semantics: <not applicable | see workflow semantics receipt>
 task-first verdict: PASS | REVISE | NOT_VERIFIED
 ```
 
@@ -162,6 +163,31 @@ mechanical taste scan cannot override a failed task-first verdict.
 Do not claim status correctness from screenshots alone; confirm state sources
 or explicitly mark this part unknown. Keep read-only audit findings separate
 from claims of implemented fixes.
+
+## Workflow semantics receipt (when applicable)
+
+For workflow rails, status filters, staged queues, or permission-dependent
+actions, record a product-state review alongside rendered evidence:
+
+```text
+semantics source: <state contracts, selectors, or test fixtures inspected>
+phase vs outcome: <which values are current, historical, exclusive or overlapping>
+filter selection: <what a click changes, selected-state semantics, and route>
+counts: <predicate, scope, overlapping/disjoint rule, count-to-list check>
+readiness and actions: <prerequisites, disabled/setup/retry behavior>
+coverage: <QA passed but unauthorized; published; failed; in progress; empty filter, as applicable>
+semantics verdict: PASS | REVISE | NOT_VERIFIED
+```
+
+`PASS` requires relevant product-state evidence and representative UI
+interaction checks, not just visible labels. `REVISE` blocks a
+production-grade claim when a filter mutates status unintentionally,
+counts contradict listed items, or an action falsely appears eligible.
+`NOT_VERIFIED` means the relevant state or interaction contract could
+not be established; preserve that uncertainty in the final handoff.
+For read-only audits, describe the mismatch but do not claim a repair.
+Do not invent a canonical state machine or force a pipeline UI on products
+that use independent, concurrent, or optional workflow states.
 
 ## Style allocation and independent quality receipt
 
