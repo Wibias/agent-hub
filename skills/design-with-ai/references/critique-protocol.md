@@ -10,6 +10,16 @@ The first version is evidence to judge, not proof that the design is finished.
 
 ## Evidence-linked iteration loop
 
+Separate the **prior finding source** from the final evaluation. Known issues
+reported in user feedback and earlier reviewed screens must survive into the
+next iteration unless the user explicitly narrows the task. The candidate
+cannot rewrite the original acceptance condition to justify a cosmetic-only
+fix. Use the pre-edit baseline and comparison gate in
+`verification-contract.md` for standard/deep iterative changes. For the same
+route, a previous high-impact navigation or functional blocker takes priority
+over another palette, accent, radius, or typography pass in an improvement
+request; do not force that priority onto an explicitly requested restyle.
+
 For modifying non-motion product UI, establish a **finding-to-outcome ledger**
 before the first edit and reconcile it after each rendered iteration. Work at
 the requested surface/route scope; the ledger tracks quality, not the number

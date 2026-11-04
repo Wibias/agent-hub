@@ -24,6 +24,14 @@ Before editing:
 
 For a modifying multi-route or iterative request, prepare the scope and
 finding-to-outcome ledger in `critique-protocol.md` **before editing**.
+Freeze that baseline separately from the final receipt, including
+high-priority issues from user feedback and earlier reviews. For standard/deep
+iterative work with known issues, validate against this independent baseline
+using `verification-contract.md`'s `--baseline` gate. Do not replace
+a previously reported high-impact functional/IA defect with a palette-only
+change while claiming an `improve-existing` pass. A user-authorized
+`restyle-existing` can preserve such findings as open instead of silently
+changing the product model.
 Use stable finding IDs and user-provided/prior observations when available.
 Do not treat only the visibly changed route as the complete requested scope.
 An intentionally unchanged surface still needs an inspected `KEEP_JUSTIFIED`
@@ -97,8 +105,11 @@ Before the quality stack:
 
 1. State `PRODUCT MODEL: SOUND | UNCERTAIN | WRONG`. `UNCERTAIN` or `WRONG`
    redirects to `redesign-existing` rather than polishing the wrong model.
-2. Record a bounded anti-slop inventory and a per-route list of carried-forward
-   problems, evidence, and observable acceptance conditions before editing:
+2. Record a bounded anti-slop inventory and a **frozen pre-edit** per-route
+   list of carried-forward problems, evidence, severity and observable
+   acceptance conditions before editing. Preserve each known ID in the
+   final receipt; do not quietly downgrade a previously reported defect
+   to `KEEP_JUSTIFIED` or alter its acceptance condition without new evidence:
    - intended dominant title/focal in the first viewport;
    - semantic heading order and competing emphasis;
    - visible colour roles and unmapped one-offs, without arbitrary colour caps;

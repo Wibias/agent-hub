@@ -24,13 +24,18 @@ function matchedCandidate(before, after) {
   );
 }
 
-export function validateIterationReceipt(input) {
+// A separate pre-edit baseline is supplied by the task/previous review.
+ // It is intentionally not sourced from the post-edit receipt being judged.
+export function validateIterationReceipt(input, baseline = null) {
   const problems = [];
   const fail = (message) => problems.push(message);
   if (!record(input) || input.schemaVersion !== 1) {
     return { valid: false, verdict: null, problems: ["Expected schemaVersion: 1 receipt object"] };
   }
 
+  if (input.requiresPriorBaseline === true && baseline === null) {
+    fail("iterative receipt requires an independent pre-edit baseline");
+  }
   const scope = Array.isArray(input.scope) ? input.scope : [];
   const findings = Array.isArray(input.findings) ? input.findings : [];
   const carryover = Array.isArray(input.openCarryover) ? input.openCarryover : [];
@@ -128,6 +133,92 @@ export function validateIterationReceipt(input) {
   for (const id of open) if (!carryover.includes(id)) fail("open finding omitted from carryover: " + id);
   for (const id of carryover) if (!open.has(id)) fail("carryover references closed/unknown finding: " + id);
 
+  if (baseline !== null) {
+    const baselineIssues = Array.isArray(baseline?.findings) ? baseline.findings : [];
+    const baselineScope = Array.isArray(baseline?.scope) ? baseline.scope : [];
+    const intent = baseline?.intent;
+    if (!record(baseline) || baseline.schemaVersion !== 1 ||
+        !["IMPROVE", "RESTYLE", "SCOPED_COSMETIC"].includes(intent)) {
+      fail("baseline must declare schemaVersion: 1 and a supported intent");
+    }
+    if (baselineScope.length === 0 || baselineScope.some((route) => !populated(route)) ||
+        new Set(baselineScope).size !== baselineScope.length) {
+      fail("baseline scope must contain unique nonempty in-scope routes");
+    }
+    const priorIds = new Set();
+    const priorById = new Map();
+    for (const issue of baselineIssues) {
+      if (!record(issue) || !populated(issue.id)) {
+        fail("baseline finding requires a stable id");
+        continue;
+      }
+      if (priorIds.has(issue.id)) fail("duplicate baseline finding id: " + issue.id);
+      priorIds.add(issue.id);
+      priorById.set(issue.id, issue);
+      if (!baselineScope.includes(issue.route)) fail(issue.id + ": baseline route not in baseline scope");
+      if (!["HIGH", "MEDIUM", "LOW"].includes(issue.priority) ||
+          !populated(issue.symptom) || !populated(issue.acceptance) ||
+          !populated(issue.evidenceRef) ||
+          !["NAVIGATION", "WORKFLOW", "DETAIL", "VISUAL", "OTHER"].includes(issue.kind)) {
+        fail(issue.id + ": baseline needs kind, priority, symptom, acceptance and evidenceRef");
+      }
+      const matching = findings.filter((f) => f?.id === issue.id);
+      if (matching.length !== 1) {
+        fail("prior finding missing from final receipt: " + issue.id);
+        continue;
+      }
+      const current = matching[0];
+      if (current.route !== issue.route || current.acceptance !== issue.acceptance) {
+        fail(issue.id + ": prior route/acceptance changed without an authorized baseline update");
+      }
+      if (current.disposition === "RESOLVED" &&
+          ["NAVIGATION", "WORKFLOW"].includes(issue.kind) &&
+          !reliableMethods.has(current.verification?.method)) {
+        fail(issue.id + ": navigation/workflow resolution needs TEST or RUNTIME behavior evidence");
+      }
+      if (current.disposition === "KEEP_JUSTIFIED") {
+        if (!record(current.reassessment) ||
+            !populated(current.reassessment.reason) ||
+            !populated(current.reassessment.evidenceRef)) {
+          fail(issue.id + ": a pre-existing defect cannot become KEEP_JUSTIFIED without reassessment evidence");
+        }
+      }
+    }
+    for (const route of baselineScope) {
+      if (!scoped.has(route)) fail("baseline scope omitted from final receipt: " + route);
+    }
+    const summary = input.changeSummary;
+    if (!record(summary) ||
+        !["TASK_REPAIR", "COSMETIC_ONLY", "NO_CHANGE"].includes(summary.kind) ||
+        !populated(summary.rationale)) {
+      fail("baseline comparison requires changeSummary with kind and rationale");
+    } else {
+      const addressed = Array.isArray(summary.addressedFindingIds) ? summary.addressedFindingIds : [];
+      if (new Set(addressed).size !== addressed.length ||
+          addressed.some((id) => !populated(id) || !priorById.has(id))) {
+        fail("changeSummary addressedFindingIds must be unique known baseline IDs");
+      }
+      if (summary.kind === "TASK_REPAIR" && addressed.length === 0) {
+        fail("TASK_REPAIR must name at least one addressed prior finding");
+      }
+      if (summary.kind !== "TASK_REPAIR" && addressed.length > 0) {
+        fail("only TASK_REPAIR may claim addressed prior findings");
+      }
+      if (summary.kind === "TASK_REPAIR" && !populated(summary.evidenceRef)) {
+        fail("TASK_REPAIR needs actual implementation or runtime evidence");
+      }
+      const highOpen = baselineIssues.some((issue) => record(issue) && issue.priority === "HIGH" &&
+        findings.some((f) => f?.id === issue.id && !closed.has(f.disposition)));
+      if (intent === "IMPROVE" && summary.kind === "COSMETIC_ONLY" && highOpen) {
+        fail("IMPROVE cannot substitute cosmetic-only changes for unresolved HIGH prior findings");
+      }
+      if (input.iterationVerdict === "COMPLETE" && summary.kind === "COSMETIC_ONLY" &&
+          intent === "IMPROVE" && baselineIssues.length > 0) {
+        fail("IMPROVE cannot claim prior finding closure from cosmetic changes alone");
+      }
+    }
+  }
+
   if (input.iterationVerdict === "COMPLETE") {
     for (const item of scope) {
       if (!record(item)) continue;
@@ -155,20 +246,29 @@ export function validateIterationReceipt(input) {
     findings: findings.length,
     openCarryover: [...open],
     problems,
+    baselineChecked: baseline !== null,
     limitation: "This checks receipt consistency, not the authenticity or accuracy of cited evidence.",
   };
 }
 
 function main(argv) {
   const args = argv.slice(2);
-  if (args.length !== 2 || args[0] !== "--receipt") {
-    process.stderr.write("Usage: node verify-iteration-receipt.mjs --receipt <receipt.json>\n");
+  const hasBaseline = args.length === 4 && args[0] === "--receipt" && args[2] === "--baseline";
+  const standalone = args.length === 2 && args[0] === "--receipt";
+  if (!hasBaseline && !standalone) {
+    process.stderr.write("Usage: node verify-iteration-receipt.mjs --receipt <receipt.json> [--baseline <pre-edit-findings.json>]\n");
     process.exitCode = 2;
     return;
   }
   try {
     const data = JSON.parse(readFileSync(resolve(args[1]), "utf8"));
-    const result = validateIterationReceipt(data);
+    const baseline = hasBaseline ? JSON.parse(readFileSync(resolve(args[3]), "utf8")) : null;
+    if (data.requiresPriorBaseline === true && !hasBaseline) {
+      process.stderr.write("This iterative receipt requires --baseline from the pre-edit review\n");
+      process.exitCode = 2;
+      return;
+    }
+    const result = validateIterationReceipt(data, baseline);
     process.stdout.write(JSON.stringify(result, null, 2) + "\n");
     if (!result.valid) process.exitCode = 1;
   } catch (error) {
