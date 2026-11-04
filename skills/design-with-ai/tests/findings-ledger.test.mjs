@@ -173,6 +173,17 @@ test("proof rejects modifications to the persistent ledger after validation", ()
   assert.match(result.issues.join("; "), /ledger changed after the recorded execution/);
 }));
 
+test("changed acceptance rationale cannot reuse an earlier persisted assessment", () => fixture(f => {
+  const receipt = f.receipt();
+  syncLedger(f.ledgerPath, f.baseline, receipt);
+  receipt.findings[0].reason = "A later altered rationale";
+  const status = verifyLedgerCoverage(readLedger(f.ledgerPath), f.baseline, receipt);
+  assert.equal(status.valid, false);
+  assert.match(status.problems.join(" "), /missing matching persisted run assessment: UX-SETTINGS/);
+  assert.throws(() => syncLedger(f.ledgerPath, f.baseline, receipt),
+    /Existing run assessment differs/);
+}));
+
 test("ledger refuses to reset existing history", () => fixture(f => {
   assert.equal(existsSync(f.ledgerPath), true);
   assert.throws(() => initializeLedger(f.ledgerPath), /refusing to reset/);
