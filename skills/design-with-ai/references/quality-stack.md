@@ -118,12 +118,14 @@ which issues are `RESOLVED`, `IMPROVED_BUT_OPEN`, `PERSISTS`, `REGRESSED`,
 and newly introduced regressions. Prefer the smallest next iteration that
 addresses the highest-impact open issue rather than repainting the surface.
 Do not add a numerical improvement score from subjective taste alone.
-For standard/deep modifying work, compile and validate the iteration
-receipt with `scripts/verify-iteration-receipt.mjs` as specified in
+For standard/deep modifying work, compile the iteration receipt and run
+`scripts/verify-iteration-receipt.mjs` through proof-generating
+`scripts/run-iteration-gate.mjs`, then check the proof as specified in
 `verification-contract.md`. For known-issue iterations, supply the
 independent `--baseline` source and require comparison against those
 prior IDs. A missing, invalid, or contradictory
-receipt blocks `COMPLETE`, even if the taste gate and code tests pass.
+receipt or absent/stale execution proof blocks `COMPLETE`, even if the taste
+gate and code tests pass.
 The validator supplements real render and runtime evaluation; it does
 not independently prove the cited evidence.
 
