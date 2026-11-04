@@ -2,14 +2,14 @@
   "schemaVersion": 1,
   "kind": "github-delivery/distribution-manifest",
   "name": "github-delivery",
-  "version": "1.8.3",
-  "sourceCommit": "36ecc0b0db9b5e60383d0a140574c68d5e4c5afc",
+  "version": "1.8.4",
+  "sourceCommit": "cae77374c65e298596e375cb84210beeaa9b586b",
   "files": [
     {
       "path": "CHANGELOG.md",
-      "bytes": 97392,
+      "bytes": 97834,
       "mode": "0644",
-      "sha256": "16a86dbade906ed4947246665d9c702c76898d62aaafe2f7c00242ea6fa48617"
+      "sha256": "ca60afce2bf33c96a744540fd80ae7e33811d76a52a5381dc0d3faee61ec40ec"
     },
     {
       "path": "INSTALL.md",
@@ -39,7 +39,7 @@
       "path": "SKILL.md",
       "bytes": 13391,
       "mode": "0644",
-      "sha256": "a8ac90715ce913bed260241504005f57ca9fe28c4d5c75e83636a64158168189"
+      "sha256": "0bf0a059cafb1c8d4b82d1bea35ce82b9036e55c55f033a83f87ec513c33858e"
     },
     {
       "path": "agents/comment-inspector.md",
@@ -351,7 +351,7 @@
       "path": "package.json",
       "bytes": 3572,
       "mode": "0644",
-      "sha256": "21cefb77908a44803f4b158a74e7b5182c8e29305ce90a6bfbad9721c5a220bd"
+      "sha256": "6d1dc752066defaf81b597d80957fd79db273cfc57b984393ebeb53e19a8c090"
     },
     {
       "path": "references/agent-brief.md",
@@ -625,9 +625,9 @@
     },
     {
       "path": "references/policy/reviews.md",
-      "bytes": 4333,
+      "bytes": 4434,
       "mode": "0644",
-      "sha256": "cf88efd5a55e70585f45b7ae82c1d452ea57fb442c6fcab7d1ba8269713c601f"
+      "sha256": "9038d85947cb98e4057750590b6c175056b721442dc8fc4df4ac5aa8de1d5ef6"
     },
     {
       "path": "references/policy/runtime-verification.md",
