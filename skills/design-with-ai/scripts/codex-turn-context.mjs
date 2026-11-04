@@ -8,7 +8,7 @@ import {
   readdirSync, rmSync, statSync, writeFileSync,
 } from "node:fs";
 import { homedir } from "node:os";
-import { join, resolve } from "node:path";
+import { isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const PATH_RE = /(?:^|[\\/])design-with-ai[\\/]SKILL\.md/i;
@@ -107,7 +107,13 @@ export function recordTurnHook(event, {
     const command = commandText(event);
     if (PATH_RE.test(command)) entry = { kind: "skill" };
     const proof = event.tool_name === "Bash" ? gateOptions(command) : null;
-    if (proof) entry = { kind: "gate", options: proof };
+    if (proof) {
+      // The runner resolves relative input paths against the process cwd.
+      // Store that same absolute interpretation for the Stop-side proof check.
+      const options = Object.fromEntries(Object.entries(proof).map(([key, value]) =>
+        [key, isAbsolute(value) ? value : resolve(event.cwd, value)]));
+      entry = { kind: "gate", options };
+    }
     if (!entry || !existsSync(target)) return { recorded: false, cause: "NOT_RELEVANT" };
     if (statSync(target).size > MAX_FILE) return { recorded: false, cause: "SIZE_LIMIT" };
     appendFileSync(target, JSON.stringify(entry) + "\n", { encoding: "utf8", mode: 0o600 });
