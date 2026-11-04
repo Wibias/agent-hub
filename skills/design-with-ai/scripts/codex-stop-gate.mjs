@@ -16,7 +16,7 @@ const GATE_RUN = /(?:^|[\s;"'\\/])run-iteration-gate\.mjs/i;
 const MODIFY = /\b(?:improve-existing|restyle-existing|redesign-existing|build-product-surface|verbesser(?:e|n|ung|t)?|überarbeit(?:e|en|ung)|optimier(?:e|en|ung)|redesign|rework|restyle|polish|implement|make .{0,35}better|fix .{0,35}(?:ui|design)|update .{0,35}(?:ui|design)|improve .{0,35}(?:ui|design))\b/i;
 const EXPLICIT = /design-with-ai|design with ai/i;
 const EXEC_TOOL = /exec|shell|command|terminal|powershell|bash|functions\.exec/i;
-const ARG = /(?:^|\s)--(receipt|baseline|proof|check-proof)\s+(?:"([^"]+)"|'([^']+)'|(\S+))/g;
+const ARG = /(?:^|\s)--(receipt|baseline|ledger|proof|check-proof)\s+(?:"([^"]+)"|'([^']+)'|(\S+))/g;
 const MAX_LOG_BYTES = 80 * 1024 * 1024;
 const MAX_PROOF_BYTES = 128 * 1024;
 const MAX_PATH_LENGTH = 2048;
@@ -123,7 +123,7 @@ export function decideStop(event, report, { home = homedir() } = {}) {
   const cwd = resolve(event.cwd);
   let proofStatus = report.gateCommands.length ? "NO_VALID_PROOF" : "NO_GATE_COMMAND";
   for (const options of [...report.gateCommands].reverse()) {
-    const raw = [options.receipt, options.baseline, options.proof].filter(Boolean);
+    const raw = [options.receipt, options.baseline, options.ledger, options.proof].filter(Boolean);
     if (!raw.every((path) => localAllowed(path, cwd, home))) {
       proofStatus = "PATH_REJECTED";
       continue;
@@ -135,7 +135,8 @@ export function decideStop(event, report, { home = homedir() } = {}) {
     let checked;
     try {
       checked = checkProof({
-        receipt: options.receipt, baseline: options.baseline ?? null, checkProof: options.proof,
+        receipt: options.receipt, baseline: options.baseline ?? null,
+        ledger: options.ledger ?? null, checkProof: options.proof, workspaceCwd: event.cwd,
       });
     } catch {
       proofStatus = "PROOF_INVALID_OR_STALE";
@@ -186,7 +187,8 @@ export function decideStop(event, report, { home = homedir() } = {}) {
     proofStatus,
     reason: "The current modifying design-with-ai turn has no verified iteration-gate proof. " +
       "Before finishing, write the iteration receipt and independent pre-edit baseline (if applicable), " +
-      "run scripts/run-iteration-gate.mjs with --receipt, --baseline (if applicable), and a new --proof path. " +
+      "reconcile the persistent .design-with-ai/findings-ledger.json against the current scope and receipt. " +
+      "Run scripts/run-iteration-gate.mjs with --receipt, --baseline, --ledger, and a new --proof path. " +
       "Check the proof with --check-proof and report the actual exit code. Do not invent a missing baseline. " +
       "If the work cannot be fully verified, use a truthful PARTIAL or NOT_VERIFIED receipt and final verdict. " +
       "Do not repeat unrelated UI edits. This hook allows only one automatic continuation.",
