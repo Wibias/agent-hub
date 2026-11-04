@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, readdirSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -108,8 +108,10 @@ test("new turn cannot inherit old gate candidate", () => fixture(async (f) => {
 
 test("stale checkpoint is ignored", () => fixture(async (f) => {
   const now = Date.now();
-  recordTurnHook(f.prompt("Verbessere UI mit design-with-ai"),
-    { root: f.stateRoot, now: now - 72 * 60 * 60 * 1000 });
+  recordTurnHook(f.prompt("Verbessere UI mit design-with-ai"), { root: f.stateRoot });
+  const file = join(f.stateRoot, readdirSync(f.stateRoot)[0]);
+  const old = new Date(now - 72 * 60 * 60 * 1000);
+  utimesSync(file, old, old);
   assert.equal(readTurnContext(f.event, { root: f.stateRoot, now }), null);
 }));
 
