@@ -108,7 +108,6 @@ export function decideStop(event, report, { home = homedir() } = {}) {
   const allow = (reason) => ({ continue: true, status: reason });
   if (!obj(event) || event.hook_event_name !== "Stop" ||
       typeof event.cwd !== "string" || typeof event.turn_id !== "string") return allow("INVALID_EVENT");
-  if (event.stop_hook_active === true) return allow("RETRY_LIMIT");
   if (!report.userBoundary) return allow("NO_TURN_BOUNDARY");
   const prompt = report.userPrompt || "";
   const modifying = MODIFY.test(prompt) && !/^\s*(?:audit-surface|motion-audit|motion-review)\b/i.test(prompt);
@@ -134,6 +133,13 @@ export function decideStop(event, report, { home = homedir() } = {}) {
       return allow("VERIFIED_INCOMPLETE");
     }
   }
+  if (event.stop_hook_active === true) {
+    return {
+      continue: true,
+      status: "RETRY_LIMIT_NOT_VERIFIED",
+      systemMessage: "design-with-ai: no valid gate proof after the single automatic retry. The result remains NOT_VERIFIED; do not treat a completion claim as tested.",
+    };
+  }
   return {
     decision: "block",
     reason: "The current modifying design-with-ai turn has no verified iteration-gate proof. " +
@@ -146,7 +152,7 @@ export function decideStop(event, report, { home = homedir() } = {}) {
 }
 
 export async function handleStop(event) {
-  if (!obj(event) || event.hook_event_name !== "Stop" || event.stop_hook_active === true) {
+  if (!obj(event) || event.hook_event_name !== "Stop") {
     return { continue: true };
   }
   const path = event.transcript_path;
@@ -168,7 +174,7 @@ async function main() {
     // Only documented Codex hook response fields are sent to stdout.
     const result = output.decision === "block"
       ? { decision: "block", reason: output.reason }
-      : { continue: true };
+      : { continue: true, ...(output.systemMessage ? { systemMessage: output.systemMessage } : {}) };
     process.stdout.write(JSON.stringify(result) + "\n");
   } catch {
     // Fail open for malformed input rather than interrupting unrelated work.
