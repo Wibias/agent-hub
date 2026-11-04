@@ -42,7 +42,7 @@ function inputHash(path) {
 export function runGate({ receipt, baseline = null, proof }) {
   if (!populated(proof)) throw new Error("--proof output path is required");
   const outputPath = resolve(proof);
-  const protectedPaths = [receipt, baseline, validator].filter(Boolean).map(resolve);
+  const protectedPaths = [receipt, baseline, validator].filter(Boolean).map((item) => resolve(item));
   if (protectedPaths.includes(outputPath)) throw new Error("Proof output must not overwrite the receipt, baseline, or validator");
   if (existsSync(outputPath)) throw new Error("Proof file already exists; use a fresh path per execution");
   const receiptInput = inputHash(resolve(receipt));
