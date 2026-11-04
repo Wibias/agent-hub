@@ -11,7 +11,7 @@ Use this when direction, genre, macrostructure, visual identity, or anti-slop ju
 - [ ] 4 Build with tokens/direction locked
 - [ ] 5 Pre-emit critique
 - [ ] 6 Anti-slop mechanical gate
-- [ ] 7 Rendered verification
+- [ ] 7 Rendered verification and finding-to-outcome reconciliation
 
 ## 0. Preflight
 
@@ -116,7 +116,7 @@ Baseline and micro craft are separate internal phases owned by `quality-stack.md
 
 ## 5. Critique
 
-Use `critique-protocol.md`. Review Philosophy, Hierarchy, Execution, Specificity, Restraint, and Variety. When hierarchy/grouping/salience is the defect rather than art direction itself, load `perceptual-hierarchy.md`. Revise weak axes before the gate.
+Use `critique-protocol.md`. Review Philosophy, Hierarchy, Execution, Specificity, Restraint, and Variety. For an iterative change, use its finding-to-outcome ledger: compare the candidate against documented baseline defects, acceptance conditions, and carried-forward findings rather than treating a different visual style as a fix. When hierarchy/grouping/salience is the defect rather than art direction itself, load `perceptual-hierarchy.md`. Revise weak axes before the gate.
 
 ## 6. Gate
 
@@ -136,4 +136,4 @@ lead; rendered UI is ground truth.
 
 ## 7. Verify
 
-Check representative desktop/mobile sizes, focus, contrast, state changes, reduced motion, clipping, and interaction. Use the blur/thumbnail diagnostic from `perceptual-hierarchy.md` only when visual focal order is materially in question; it is not a usability verdict. Missing motion is `motion-opportunities`; runtime cost is `motion-optimize`.
+Check representative desktop/mobile sizes, focus, contrast, state changes, reduced motion, clipping, and interaction. Where matched before/after evidence exists, report issue disposition and in-scope route coverage. If it is missing, mark comparative improvement unverified; preserve open findings for the next iteration. Use the blur/thumbnail diagnostic from `perceptual-hierarchy.md` only when visual focal order is materially in question; it is not a usability verdict. Missing motion is `motion-opportunities`; runtime cost is `motion-optimize`.
