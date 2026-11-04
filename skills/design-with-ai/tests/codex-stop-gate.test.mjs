@@ -132,6 +132,22 @@ test("stale proof after changes to receipt cannot be reused", () => fixture(asyn
   assert.equal((await handleStop(f.event)).decision, "block");
 }));
 
+test("invalid PARTIAL receipt with nonzero validator exit does not satisfy the Stop hook", () => fixture(async (f) => {
+  f.putReceipt("PARTIAL");
+  const invalid = JSON.parse(readFileSync(f.receipt, "utf8"));
+  invalid.findings[0].disposition = "PERSISTS";
+  invalid.findings[0].reason = "Still open";
+  // Deliberately omit the required openCarryover ID so the real validator exits 1.
+  writeFileSync(f.receipt, JSON.stringify(invalid));
+  assert.equal(runGate({ receipt: f.receipt, baseline: f.baseline, proof: f.proof }).exitCode, 1);
+  const command = 'node run-iteration-gate.mjs --receipt "' + f.receipt +
+    '" --baseline "' + f.baseline + '" --proof "' + f.proof + '"';
+  f.write([f.prompt("Verbessere mit design-with-ai die Einstellungen."), f.call("exec_command", command)]);
+  assert.equal((await handleStop({
+    ...f.event, last_assistant_message: "PARTIAL: noch offen.",
+  })).decision, "block");
+}));
+
 test("gate path mentioned in prompt or echo output is not process proof", () => fixture(async (f) => {
   f.write([
     f.prompt("Verbessere mit design-with-ai die UI."),
