@@ -50,9 +50,13 @@ Output:
 - when a repeated motif is materially in question, a role-to-treatment assessment and separate functional-quality versus direction-fit conclusions;
 - correct next workflow/profile for each material fix.
 
-Standard/deep audits inspect the real route when available. Deep adds annotated
-usability, domain, adjacent-domain, and outside-domain references. Do not edit or
-claim a recommendation is fixed.
+Standard/deep audits inspect the real route when available. When style
+uniformity or an overcorrection is part of the audit, use `critique-protocol.md`
+and `anti-slop-gates.md` to check whether different tasks inherit the same
+visual grammar without a semantic reason. Compare available before/after
+screenshots; do not claim observed changes from only one version. Deep adds
+annotated usability, domain, adjacent-domain, and outside-domain references.
+Do not edit or claim a recommendation is fixed.
 
 ## `improve-existing`
 
