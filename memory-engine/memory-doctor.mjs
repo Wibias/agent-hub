@@ -52,6 +52,8 @@ function baseDatabaseResult({ dbPath, exists, status, error = null }) {
     journalMode: null,
     missingTables: [],
     candidateLedgerAvailable: null,
+    typedRelationLedgerAvailable: null,
+    typedRelationCount: null,
     pendingCandidates: null,
     projectRegistered: null,
     claims: null,
@@ -119,6 +121,7 @@ export function inspectMemoryDatabase({ dbPath, projectId = null, branch = null 
     );
     const missingTables = REQUIRED_TABLES.filter((name) => !presentTables.has(name));
     const candidateLedgerAvailable = presentTables.has('memory_candidates');
+    const typedRelationLedgerAvailable = presentTables.has('claim_relations');
     const pipelineHistoryAvailable = (
       presentTables.has('memory_pipeline_runs')
       && presentTables.has('memory_pipeline_failures')
@@ -132,6 +135,7 @@ export function inspectMemoryDatabase({ dbPath, projectId = null, branch = null 
         journalMode,
         missingTables,
         candidateLedgerAvailable,
+        typedRelationLedgerAvailable,
         pipelineHistoryAvailable,
         error: quickCheck !== 'ok'
           ? 'sqlite_quick_check_failed'
@@ -144,6 +148,7 @@ export function inspectMemoryDatabase({ dbPath, projectId = null, branch = null 
     let projectRegistered = null;
     let pendingCandidates = null;
     let claims = null;
+    let typedRelationCount = null;
     let activeClaims = null;
     let claimEvidenceRows = null;
     let provenanceCoverageComplete = null;
@@ -183,6 +188,11 @@ export function inspectMemoryDatabase({ dbPath, projectId = null, branch = null 
         'count',
       );
 
+      if (typedRelationLedgerAvailable) {
+        typedRelationCount = scalar(db.prepare(
+          'SELECT COUNT(*) AS count FROM claim_relations WHERE project_id = ? AND branch_scope = ?',
+        ).get(projectId, branch), 'count');
+      }
       claimEvidenceRows = scalar(
         db.prepare(
           'SELECT COUNT(*) AS count '
@@ -306,6 +316,8 @@ export function inspectMemoryDatabase({ dbPath, projectId = null, branch = null 
       journalMode,
       missingTables,
       candidateLedgerAvailable,
+      typedRelationLedgerAvailable,
+      typedRelationCount,
       pendingCandidates,
       projectRegistered,
       claims,
