@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync, rmSync, readFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -126,6 +126,21 @@ test("Codex exec_command arrays are accepted as current-turn validator invocatio
   f.write([f.prompt("Improve the current UI with design-with-ai."), arrayCall]);
   assert.equal((await inspectTurnTranscript(f.transcript)).gateCommands.length, 1);
   assert.equal((await handleStop(f.event)).continue, true);
+}));
+
+test("Git project Stop cannot accept legacy proof before durable history is initialized", () => fixture(async (f) => {
+  f.putReceipt();
+  const run = runGate({ receipt: f.receipt, baseline: f.baseline, proof: f.proof,
+    workspaceCwd: f.dir });
+  assert.equal(run.exitCode, 0);
+  mkdirSync(join(f.dir, ".git"));
+  const command = 'node run-iteration-gate.mjs --receipt "' + f.receipt +
+    '" --baseline "' + f.baseline + '" --proof "' + f.proof + '"';
+  f.write([f.prompt("Verbessere die UI mit design-with-ai."), f.call("exec_command", command)]);
+  const decision = await handleStop(f.event);
+  assert.equal(decision.decision, "block");
+  assert.match(decision.reason, /initialize or locate the canonical/);
+  assert.equal((await handleStop({ ...f.event, stop_hook_active: true })).continue, true);
 }));
 
 test("current, valid PARTIAL receipt passes only with an explicit PARTIAL final verdict", () => fixture(async (f) => {
