@@ -64,7 +64,10 @@ For `audit-surface`, `improve-existing`, `restyle-existing`,
    `references/reference-library.md`;
 4. load only applicable conditional intelligence references from the section below;
 5. load the workflow-specific taste/quality references;
-6. for modifying work, load `references/verification-contract.md` before
+6. for existing-UI modifying work, load `references/durable-findings-ledger.md`
+   BEFORE editing, inspect or initialize the project-owned findings ledger,
+   import any available old findings and freeze its snapshot;
+7. for modifying work, load `references/verification-contract.md` before
    completion.
 
 For an inspected operational surface, including dashboards, queues, setup flows,
@@ -204,6 +207,7 @@ host-specific guide for ordinary cross-host design work.
 - `references/motion-performance.md`: live animation profiling/repair
 - `references/motion-vocabulary.md`: effect-name reverse lookup
 - `references/verification-contract.md`: completion evidence
+- `references/durable-findings-ledger.md`: persistent project UX findings history across iterations
 - `references/codex-stop-enforcement.md`: optional Codex runtime Stop enforcement and installer
 
 <!-- eval:references -->
@@ -236,6 +240,7 @@ host-specific guide for ordinary cross-host design work.
 - references/motion-performance.md -- when to read: motion-optimize
 - references/motion-vocabulary.md -- when to read: motion-name
 - references/verification-contract.md -- when to read: modifying workflows before completion
+- references/durable-findings-ledger.md -- when to read: existing UI modifying work before editing and final ledger reconciliation
 - references/codex-stop-enforcement.md -- when to read: configuring/troubleshooting Codex Stop hooks only
 - tests/evals/cases.jsonl -- when to read: before skill evaluation
 - tests/evals/penpot-cases.jsonl -- when to read: Penpot adapter acceptance and ownership boundaries
