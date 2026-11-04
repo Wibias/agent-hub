@@ -21,29 +21,38 @@ node (Join-Path $skill "scripts/install-codex-stop-gate.mjs")
 node (Join-Path $skill "scripts/install-codex-stop-gate.mjs") --apply
 ```
 
-The installer adds **one** synchronous `Stop` command handler to
-`~/.codex/hooks.json`, preserving existing handlers and making a timestamped
-backup before changes. It is dry-run by default and idempotent. It does not
+The installer adds three cooperating command handlers to `~/.codex/hooks.json`:
+`UserPromptSubmit`, `PostToolUse` (Bash matcher), and `Stop`. It preserves
+existing handlers and makes a timestamped backup before changes. It is dry-run by default and idempotent. It does not
 edit `config.toml`, disable other hooks or bypass Codex trust decisions.
 If you already manage the same Stop event in another active configuration
 layer, inspect `/hooks` to avoid redundant registrations.
 
 Restart Codex if it does not discover the changed hook. Run `/hooks` and
-review/trust the exact command. Codex will not execute newly added unmanaged
-hooks until you explicitly approve them. Never use the broad
+review/trust **all three commands**, not only the existing Stop hook. Codex
+will not execute newly added unmanaged hooks until you explicitly approve them. Never use the broad
 `--dangerously-bypass-hook-trust` option just to enable this integration.
 
 ## Behavior
 
-The installed hook reads the current `Stop` input from standard input and
-the Codex transcript JSONL file from `transcript_path`.
+The installed hooks use Codex's documented `turn_id` fields. On
+`UserPromptSubmit`, only the modifying/explicit-skill flags are stored. On
+`PostToolUse`, recognized skill-file reads and gate-command proof paths are
+recorded. On `Stop`, the hook verifies the current turn's gate proof.
 
-1. Identify the latest **user-turn boundary**. Ignore stale earlier tool
-   calls and proofs from prior turns.
+This **does not depend on `transcript_path`**: Codex documents that field as
+nullable and warns that transcript JSONL is not a stable hook interface.
+The old transcript reader remains a fallback for older or partially installed
+configurations.
+
+1. Load the per-turn state keyed by hashed session/turn/project identity.
+   Ignore any stale earlier-turn gate commands. When that state is missing,
+   try the legacy transcript-based method if available.
 2. Scope only to modifying UI prompts that explicitly mention
    `design-with-ai` or have tool arguments indicating a read of
    `design-with-ai/SKILL.md`. Read-only audits, backend work, unrelated
-   work, missing transcripts or uncertain activation are not blocked.
+   work and uncertain activation are not blocked. Missing transcripts alone
+   no longer disable checks when the native turn hooks recorded scope.
 3. Check gate commands in the current turn for an explicit
    `run-iteration-gate.mjs --receipt ... [--baseline ...] --proof ...`
    invocation and inspect the proof with the already-shipped
@@ -103,6 +112,16 @@ Key outcomes:
 - `proof=PROOF_MISSING`, `PROOF_INVALID_OR_STALE`,
   `VALIDATOR_NONZERO`, or `PATH_REJECTED`: why a candidate proof failed.
 
+Per-turn checkpoint files are stored separately under
+`~/.codex/design-with-ai/turns/`. Filenames are hashes, and prompts,
+credentials and tool output are not stored. Candidate receipt/baseline/proof
+paths can appear in these private ephemeral checkpoint files because Stop
+must validate their contents. Entries expire after 48 hours. These private
+checkpoints are **not** part of the privacy-minimal diagnostic journal.
+
+The diagnostic log includes `transcript=NATIVE_TURN_EVENTS` when the Stop
+hook used the more reliable official turn hooks.
+
 Journal size is bounded to 256 KiB plus one 256 KiB predecessor
 (`stop-events.previous.jsonl`). Logging failures never change Stop
 decisions. To disable local journaling, start Codex with
@@ -134,9 +153,10 @@ from a green test in the Hub repository.
 - **Host dependency:** If the user has not installed/trusted this hook,
   nothing is enforced. A shared skill cannot unconditionally install hooks
   in a different workstation.
-- **Transcript dependency:** A transcript missing the current user-turn
-  boundary or inaccessible to the hook fails open. This avoids blocking
-  unrelated tasks but leaves coverage unknown.
+- **Turn-state dependency:** `UserPromptSubmit` and `PostToolUse` must also
+  be trusted and enabled. If neither native checkpoint nor usable transcript
+  is available, Stop fails open to avoid blocking unrelated tasks. A missing
+  transcript alone is not sufficient to bypass the gate.
 - **Limited correction:** Codex marks an automatic Stop continuation with
   `stop_hook_active`. It is honored as a one-retry limit. The agent can
   still end with unresolved findings and a truthful incomplete verdict.

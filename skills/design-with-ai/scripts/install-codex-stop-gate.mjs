@@ -1,5 +1,7 @@
 #!/usr/bin/env node
-// Opt-in additive installer for Codex Stop hook. Dry-run by default.
+// Opt-in additive Codex hook installer. Dry-run by default.
+// The Stop hook cannot rely only on transcript_path: Codex permits null.
+// Supporting UserPromptSubmit/PostToolUse hooks capture turn-scoped metadata.
 import {
   copyFileSync, existsSync, lstatSync, mkdirSync, readFileSync, writeFileSync,
 } from "node:fs";
@@ -10,7 +12,11 @@ import { fileURLToPath } from "node:url";
 const file = fileURLToPath(import.meta.url);
 const defaultSkill = resolve(dirname(file), "..");
 const isObject = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
-const marker = /(?:^|[\\/])codex-stop-gate\.mjs(?:"|\s|$)/i;
+const markers = {
+  Stop: /(?:^|[\\/])codex-stop-gate\.mjs(?:"|\s|$)/i,
+  UserPromptSubmit: /(?:^|[\\/])codex-turn-context\.mjs(?:"|\s|$)/i,
+  PostToolUse: /(?:^|[\\/])codex-turn-context\.mjs(?:"|\s|$)/i,
+};
 
 function readConfig(path) {
   if (!existsSync(path)) return { hooks: {} };
@@ -25,42 +31,54 @@ function readConfig(path) {
   return { ...data, hooks: { ...(data.hooks || {}) } };
 }
 
+function updateEvent(existing, marker, entry) {
+  if (!Array.isArray(existing)) throw new Error("Hook event registry must be an array");
+  const groups = [];
+  for (const group of existing) {
+    if (!isObject(group) || !Array.isArray(group.hooks)) {
+      groups.push(group);
+      continue;
+    }
+    const remaining = group.hooks.filter((item) =>
+      !marker.test(String(item?.commandWindows ?? item?.command ?? "")));
+    if (remaining.length) groups.push({ ...group, hooks: remaining });
+  }
+  groups.push(entry);
+  return groups;
+}
+
 export function planInstall({
   hooksPath = join(homedir(), ".codex", "hooks.json"),
   skillDir = defaultSkill,
 } = {}) {
   const destination = resolve(hooksPath);
   const root = resolve(skillDir);
-  const hookFile = join(root, "scripts", "codex-stop-gate.mjs");
-  if (!existsSync(hookFile)) throw new Error("Stop hook script is missing: " + hookFile);
-  if (/["\r\n]/.test(hookFile)) throw new Error("Unsafe hook script path");
-  const config = readConfig(destination);
-  const existing = config.hooks.Stop ?? [];
-  if (!Array.isArray(existing)) throw new Error("hooks.Stop must be an array");
-  const command = "node \"" + hookFile + "\"";
-  const entries = [];
-  for (const group of existing) {
-    if (!isObject(group) || !Array.isArray(group.hooks)) {
-      entries.push(group); continue;
-    }
-    const filtered = group.hooks.filter((item) => {
-      const matches = marker.test(String(item?.commandWindows ?? item?.command ?? ""));
-      if (!matches) return true;
-      return false;
-    });
-    if (filtered.length) entries.push({ ...group, hooks: filtered });
+  const stopFile = join(root, "scripts", "codex-stop-gate.mjs");
+  const contextFile = join(root, "scripts", "codex-turn-context.mjs");
+  for (const source of [stopFile, contextFile]) {
+    if (!existsSync(source)) throw new Error("Codex hook script is missing: " + source);
+    if (/["\r\n]/.test(source)) throw new Error("Unsafe hook script path");
   }
-  // Keep unrelated stop hooks unchanged. One canonical entry at the end.
-  const newEntry = {
+  const config = readConfig(destination);
+  const original = JSON.stringify(config);
+  const stopCommand = "node \"" + stopFile + "\"";
+  const contextCommand = "node \"" + contextFile + "\"";
+  const entry = (command, statusMessage, matcher) => ({
+    ...(matcher ? { matcher } : {}),
     hooks: [{ type: "command", command, commandWindows: command,
-      timeout: 15, statusMessage: "Checking design iteration proof" }],
+      timeout: 15, statusMessage }],
+  });
+  config.hooks.Stop = updateEvent(config.hooks.Stop ?? [], markers.Stop,
+    entry(stopCommand, "Checking design iteration proof"));
+  config.hooks.UserPromptSubmit = updateEvent(config.hooks.UserPromptSubmit ?? [],
+    markers.UserPromptSubmit, entry(contextCommand, "Recording design turn scope"));
+  config.hooks.PostToolUse = updateEvent(config.hooks.PostToolUse ?? [],
+    markers.PostToolUse, entry(contextCommand, "Recording design gate calls", "Bash"));
+  return {
+    hooksPath: destination, skillDir: root,
+    changed: JSON.stringify(config) !== original,
+    config, command: stopCommand, contextCommand,
   };
-  entries.push(newEntry);
-  const expected = { ...config, hooks: { ...config.hooks, Stop: entries } };
-  const unchanged = existing.length === entries.length &&
-    JSON.stringify(existing) === JSON.stringify(entries);
-  return { hooksPath: destination, skillDir: root, changed: !unchanged,
-    config: expected, command };
 }
 
 export function installCodexStopGate(options = {}) {
@@ -77,10 +95,11 @@ export function installCodexStopGate(options = {}) {
     writeFileSync(plan.hooksPath, JSON.stringify(plan.config, null, 2) + "\n");
   }
   return {
-    schemaVersion: 1, hooksPath: plan.hooksPath, skillDir: plan.skillDir,
+    schemaVersion: 2, hooksPath: plan.hooksPath, skillDir: plan.skillDir,
     wouldChange: plan.changed, applied: apply && plan.changed, backupPath,
-    nextAction: "Restart Codex if needed; run /hooks to review and trust this new Stop command.",
-    warning: "Hooks are opt-in and not an unbreakable policy. Other Stop hooks can veto continuation.",
+    hooks: ["UserPromptSubmit", "PostToolUse", "Stop"],
+    nextAction: "Restart Codex if needed; run /hooks and review/trust all three design-with-ai commands.",
+    warning: "Hooks are opt-in, may be disabled, and cannot certify actual UI correctness.",
   };
 }
 
