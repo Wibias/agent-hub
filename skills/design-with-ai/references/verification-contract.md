@@ -135,6 +135,70 @@ artifact means no comparative improvement claim. Baseline screenshots
 cannot prove runtime behavior; verify interaction and status contracts
 separately when they determine acceptance.
 
+### Machine-checkable iteration closure (standard/deep modifying work)
+
+The narrative ledger above is still necessary, but prose alone is not a
+closure gate. After the final render and relevant functional checks, write
+a temporary JSON iteration receipt and run:
+
+```shell
+node <skill-base-dir>/scripts/verify-iteration-receipt.mjs --receipt "<iteration-receipt.json>"
+```
+
+The minimal structure is:
+
+```json
+{
+  "schemaVersion": 1,
+  "scope": [{
+    "route": "/jobs",
+    "task": "Inspect and publish a completed video",
+    "coverage": "INSPECTED",
+    "semantics": {
+      "applicable": true,
+      "verdict": "NOT_VERIFIED",
+      "reason": "Publish handler and authorization state not yet exercised"
+    }
+  }],
+  "findings": [{
+    "id": "UX-01",
+    "route": "/jobs",
+    "symptom": "QA passed looks equivalent to publish-ready",
+    "acceptance": "Blocked publication visibly explains missing authorization",
+    "decision": "Verify and repair the publish affordance",
+    "disposition": "UNVERIFIED",
+    "reason": "No runtime evidence for the handler"
+  }],
+  "openCarryover": ["UX-01"],
+  "iterationVerdict": "PARTIAL",
+  "verdictReason": "Authorization-dependent interaction is not verified"
+}
+```
+
+See `tests/verify-iteration-receipt.test.mjs` for a passing `COMPLETE`
+example, matched before/after evidence, `KEEP_JUSTIFIED`, and a full
+workflow-semantics check. Each scoped route declares whether workflow
+semantics apply; an inapplicable route requires a concrete rationale.
+`COMPLETE` requires inspected route coverage, a resolved or justified
+finding for every route, matched before/after evidence for resolved changes,
+passing functional/render checks, and `PASS` for applicable workflow
+semantics. `PASS` workflow semantics requires a product contract, evidence
+for phase/filter/count/readiness/action checks, and representative states.
+Screen captures alone do not prove filter or action behavior.
+
+An invalid receipt, missing receipt, or failing command **blocks a complete
+claim**. A valid `PARTIAL` receipt remains partial; it is not a pass for
+unresolved functional defects. For quick, read-only, or narrowly cosmetic
+work, the narrative ledger and truthful evidence labels may suffice unless
+the request includes a consequential stateful action.
+
+The validator checks structural consistency and contradictory completion
+claims. It cannot authenticate screenshot links or test results, replay UI
+interactions, or establish actual usability; use real browser/runtime and
+product-state evidence for that. Keep the receipt in an authorized scratch
+or task artifact rather than committing user-specific screenshots, paths,
+or secrets to the skill repository. No new shared storage is required.
+
 Keep the same route, viewport band, meaningful state, and data where
 possible; when conditions differ, document the limitation. Preserve
 unresolved IDs for the next iteration. A screen that did not need editing
