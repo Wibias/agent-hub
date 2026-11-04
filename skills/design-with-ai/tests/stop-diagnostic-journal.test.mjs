@@ -81,7 +81,7 @@ test("untrusted result status and unexpected fields cannot enter journal", () =>
     status: "token=REDACT_ME", proofStatus: "C:/Secrets/log.json",
     decision: "block", prompt: "private", reason: "sensitive",
   } }, new Date("2026-11-04T19:00:00Z"));
-  assert.equal(v.cause, "MISSING_VERIFIED_GATE_PROOF");
+  assert.equal(v.cause, "INVALID_EVENT");
   assert.equal(v.proof, "NOT_CHECKED");
   assert.doesNotMatch(JSON.stringify(v), /REDACT_ME|Secrets|private|sensitive/);
 });
@@ -116,7 +116,7 @@ test("symbolic-link journal is rejected without changing its target", () => fixt
 }));
 
 test("diagnostic callback failure never changes the actual Stop decision", async () => {
-  const event = { hook_event_name: "Stop", cwd: tmpdir(), transcript_path: join(tmpdir(), "missing-rollout.jsonl") };
+  const event = { hook_event_name: "Stop", turn_id: "test-turn", cwd: tmpdir(), transcript_path: join(tmpdir(), "missing-rollout.jsonl") };
   const v = await handleStop(event, { onDiagnostic: () => { throw new Error("disk full"); } });
   assert.equal(v.continue, true);
   assert.equal(v.status, "NO_TURN_BOUNDARY");
