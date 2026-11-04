@@ -8,12 +8,12 @@ import test from "node:test";
 import { inspectRollout } from "../scripts/inspect-codex-rollout.mjs";
 
 const cli = resolve(dirname(fileURLToPath(import.meta.url)), "../scripts/inspect-codex-rollout.mjs");
-function fixture(events, fn) {
+async function fixture(events, fn) {
   const dir = mkdtempSync(join(tmpdir(), "design-codex-trace-"));
   const path = join(dir, "rollout.jsonl");
   try {
     writeFileSync(path, events.map(JSON.stringify).join("\n") + "\n");
-    return fn(path);
+    return await fn(path);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 }
 const meta = (cwd) => ({ type: "session_meta", payload: { cwd } });
