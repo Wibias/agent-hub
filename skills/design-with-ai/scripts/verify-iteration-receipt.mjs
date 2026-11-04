@@ -182,6 +182,10 @@ export function validateIterationReceipt(input, baseline = null) {
             !populated(current.reassessment.evidenceRef)) {
           fail(issue.id + ": a pre-existing defect cannot become KEEP_JUSTIFIED without reassessment evidence");
         }
+        if (["NAVIGATION", "WORKFLOW"].includes(issue.kind) &&
+            !reliableMethods.has(current.reassessment?.method)) {
+          fail(issue.id + ": navigation/workflow KEEP_JUSTIFIED needs TEST or RUNTIME reassessment of actual behavior");
+        }
       }
     }
     for (const route of baselineScope) {
