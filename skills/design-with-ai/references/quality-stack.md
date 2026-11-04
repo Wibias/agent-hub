@@ -5,6 +5,11 @@ work. It replaces the retired cross-skill polish chain.
 
 ## Iteration acceptance
 
+On modifying existing UI, start from the project-owned history and freeze a
+snapshot with `durable-findings-ledger.md`. Never rebuild history solely
+from the current agent's selected findings. The existing finding-to-outcome
+receipt remains a separate single-run artifact.
+
 On modifying non-motion work, run the finding-to-outcome ledger from
 `critique-protocol.md`. Record the in-scope routes, baseline evidence,
 priority findings, and acceptance conditions **before changing the UI**.
@@ -111,6 +116,11 @@ interaction details. Motion details here refine already-approved motion; they do
 not create a new motion language by default.
 
 ### Post-render iteration reconciliation
+
+Before final polish claims, reconcile the durable history with the receipt:
+run findings-ledger.mjs sync so every in-scope old and new finding receives
+a persisted verdict. Include --ledger when running the gate; failure to
+account for an old issue blocks a claimed valid gate.
 
 Before final polish claims, review the ledger after implementation:
 which issues are `RESOLVED`, `IMPROVED_BUT_OPEN`, `PERSISTS`, `REGRESSED`,
