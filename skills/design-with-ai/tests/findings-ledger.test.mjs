@@ -121,6 +121,7 @@ test("a disproven navigation duplicate can be kept, but only with reassessment e
   receipt.findings[0].reassessment = {
     reason: "Toolbar opens a job-scoped settings panel rather than /settings",
     evidenceRef: "tests/router-links.test.ts",
+    method: "TEST",
   };
   receipt.openCarryover = ["UX-PUBLISH"];
   assert.equal(syncLedger(f.ledgerPath, f.baseline, receipt).assessed, 2);
