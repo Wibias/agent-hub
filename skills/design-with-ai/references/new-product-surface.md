@@ -19,6 +19,7 @@
 - Visual-world specificity verdict recorded; deep compares at least two
   distinct visual worlds separately from structural approaches.
 - Role-to-treatment map recorded for materially different content jobs; shared visual language does not imply identical component treatment.
+- Repeated navigation destinations justified by context, and overview/detail roles separated when the new product uses both (without inventing actions or data).
 - Changed files listed in dependency order; polish chain and critique/revision passes evidenced.
 - Internal taste guidance and `verification-contract.md` loaded; motion candidates handed to `motion-opportunities`.
 - Conditional data-viz/native/durable-contract references loaded only when the concrete surface requires them.
