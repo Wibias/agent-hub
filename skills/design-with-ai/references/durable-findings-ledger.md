@@ -65,8 +65,8 @@ safe; conflicting ID meanings are rejected, not silently rewritten.
 ## Rebuttal and regression
 
 A prior navigation defect can be KEEP_JUSTIFIED only with current evidence,
-explicit reassessment.reason and reassessment.evidenceRef, and an inspected
-after.ref. The actual route targets and runtime interactions are better
+explicit reassessment.reason and reassessment.evidenceRef, an inspected
+after.ref, and reassessment.method TEST or RUNTIME confirming actual behavior. The actual route targets and runtime interactions are better
 evidence than two similar-looking buttons. It stays in history and is
 re-reviewed when the route is next in scope. If a previously resolved issue
 returns, record REGRESSED with current evidence. An external publish that
