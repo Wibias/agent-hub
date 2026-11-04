@@ -141,6 +141,33 @@ them. Generic model defaults cannot.
 | G72 | Icon wallpaper | Icons repeat across most content blocks, duplicate adjacent labels, or exist only to fill space | Keep icons that earn navigation, action recognition, status, or product identity |
 | G73 | Palette role sprawl | Visible colours cannot be mapped to declared surface, text, border, accent, status, or data-viz roles | Inventory roles and reuse project tokens; do not impose a raw colour-count cap |
 
+## Style overcorrection and component-role distribution
+
+This is a **render-grounded contextual review**, not a new numeric source
+detector. Apply existing G02, G04, G05, G26, G55, G56, and G67 when a
+selected visual world becomes a repeated full-page recipe rather than
+role-appropriate interface design.
+
+- **Displacement:** Compare the before/after renders. Did a new dominant
+  pattern merely replace the old one (card walls -> divider walls, gradient
+  sections -> monochrome section labels, chips -> tracked microcopy)?
+- **Uniform treatment:** Are workspaces, step-by-step flows, settings, previews,
+  and explanatory content rendered as interchangeable repeated units despite
+  materially different information or interaction jobs?
+- **Semantic justification:** Does each prominent separator, border, surface,
+  badge, typographic convention, and accent distinguish a grouping, comparison,
+  state, action, or brand feature? Redundancy is a lead, not a proof.
+- **Independent UX:** Would task priority, content readability, action clarity,
+  and error/state meaning still be understandable without the fashionable
+  material or palette? Evaluate the rendered content and known state contracts;
+  do not pretend a screenshot proves functional execution.
+
+Counterexamples that should **pass**: a dense audit log deliberately uses
+repeated row rules for scanning; a four-region comparison uses equal-size
+metric panels; a consistent form field style repeats across settings. No
+arbitrary motif-count threshold or demand for visual asymmetry is allowed.
+Contextual style review must not be interpreted as evidence of AI authorship.
+
 ## Task-first interpretation of structural gates
 
 For operational dashboards and workflow tools, do not limit G04 to a
@@ -189,8 +216,8 @@ factual state inconsistencies.
 | G52 | Disabled opacity-only | Disabled state relies on opacity alone and remains ambiguous | Add semantic state, cursor/interaction treatment, and accessible attributes |
 | G53 | Toast noise | Success toast repeats a result already obvious in the UI | Prefer silent or local confirmation |
 | G54 | Heavy animation asset by reflex | Lottie or similar is added where a simpler owned asset would do the job | Prefer the simplest purpose-fit implementation |
-| G55 | Section rhythm flat | Every section repeats the same spacing/divider pattern without hierarchy | Vary rhythm by content relationship |
-| G56 | Missing signature | Surface could be swapped into unrelated products with no identity loss | Add a product-specific signature move/artifact |
+| G55 | Section rhythm flat | Unrelated sections reuse the same spacing/divider pattern despite different reading or action priority | Allocate spacing and separators by content relationship; keep repeated rules for real ordered or comparable records |
+| G56 | Missing signature | Surface could be swapped into unrelated products with no identity loss | Express identity through task-appropriate content, interaction, and styling rather than a decorative stamp |
 | G57 | Token improvisation | Raw colour/font values appear mid-component without project or local-system reason | Promote to an owned token or documented local value |
 | G58 | Direction stamp missing | Full-page work lacks a recorded `design-with-ai` direction/constraint receipt when the workflow requires one | Record the selected direction and locked constraints |
 
