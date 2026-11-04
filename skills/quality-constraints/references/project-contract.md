@@ -42,3 +42,11 @@ Last reviewed: <date>
 - **Cost determines placement.** Keep the inner loop fast. Expensive mutation tests, browser audits, dependency scans or load tests belong later unless the project explicitly requires them earlier.
 - **External checks reduce circularity.** When appropriate, prefer at least one independent source of truth such as a compiler, vulnerability database, accessibility engine or real runtime measurement rather than relying only on agent-authored tests.
 - **Prototype exception.** Throwaway prototypes can use a reduced floor when their owner skill explicitly says so; do not silently apply production constraints to disposable exploration.
+
+## Optional fail-closed scanner report gate
+
+The scanner's exit code is not necessarily the security or accessibility verdict. When the project elects to use Semgrep or axe, first run the real scanner and keep the complete JSON scan report. Evaluate that report with `node skills/quality-constraints/scripts/quality-gate.mjs semgrep <report.json>` or `node skills/quality-constraints/scripts/quality-gate.mjs axe <report.json>`. Copy the gate into the consuming project if the Agent Hub skill directory is not available.
+
+This is a report evaluator, not a scanner. It **does not run** Semgrep or axe, install them, or prove that the scan occurred. Connect the scanner command and this evaluator with `&&` in the project's CI; a failed scanner must stop the job before report evaluation. Never treat a missing, malformed, incomplete, or failed scanner report as clean.
+
+Exit codes: 0 = complete scan below threshold; 1 = blocking findings (Semgrep `HIGH`, `CRITICAL`, or legacy `ERROR`; axe `serious` or `critical`); 2 = missing or unreliable report or invalid invocation. The project quality contract owns threshold selection and justified exceptions. Do not silently weaken thresholds to obtain green.

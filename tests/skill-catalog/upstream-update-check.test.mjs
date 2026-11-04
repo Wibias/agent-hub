@@ -26,11 +26,11 @@ test('upstream update check tracks the five canonical sources and decisions', ()
   );
 
   const expected = new Map([
-    ['addy', ['addyosmani/agent-skills', 'eb07f19f52c2669f2364897aaa293e2aaddd7b1c', 'not-applicable']],
-    ['emil', ['emilkowalski/skills', 'a81dbca07f2217b7103e510c0f13f8d5b017afc9', 'separate-pr']],
-    ['matt', ['mattpocock/skills', 'a496f5513d4a4cf889bc48e189e579f4b0bdf6aa', 'not-applicable']],
-    ['pstack', ['cursor/plugins', '4dd1d05818d19792e7cd6e818f1667f95f7e1dbe', 'current']],
-    ['impeccable', ['pbakaus/impeccable', 'df3a4abe7d0840d5f60324812c432e00b66a4e75', 'current']],
+    ['addy', ['addyosmani/agent-skills', '301b02b12bff98e4688e6984af6556802322bbde', 'current']],
+    ['emil', ['emilkowalski/skills', 'f1090bec277140d02ed202440185ad9d02ac1490', 'current']],
+    ['matt', ['mattpocock/skills', '4ae2317ddb22b046e26455e4f9c9b3aaaf62212d', 'not-applicable']],
+    ['pstack', ['cursor/plugins', 'fd268b808c786469e6dd8c8d9db864d0de4d669e', 'current']],
+    ['impeccable', ['pbakaus/impeccable', '9fadc41729c38fd47d7ae622b501558653f9d2e9', 'current']],
   ]);
 
   for (const source of registry.sources) {
@@ -48,7 +48,7 @@ test('upstream update check tracks the five canonical sources and decisions', ()
 
   const impeccable = registry.sources.find((source) => source.id === 'impeccable');
   assert.equal(impeccable.scope, '.agents/skills/impeccable/');
-  assert.equal(impeccable.localPin, 'df3a4abe7d0840d5f60324812c432e00b66a4e75');
+  assert.equal(impeccable.localPin, '9fadc41729c38fd47d7ae622b501558653f9d2e9');
 
   const checker = read('scripts/check-upstream-sources.mjs');
   assert.match(checker, /--offline/);
@@ -67,13 +67,13 @@ test('offline upstream check records Impeccable as fully adopted', () => {
   assert.equal(result.status, 0, result.stderr);
   const lines = result.stdout.trim().split(/\r?\n/);
   assert.equal(lines.length, 5);
-  assert.match(result.stdout, /RECORDED addy .*decision=not-applicable/);
-  assert.match(result.stdout, /RECORDED emil .*decision=separate-pr/);
+  assert.match(result.stdout, /RECORDED addy .*decision=current/);
+  assert.match(result.stdout, /RECORDED emil .*decision=current/);
   assert.match(result.stdout, /RECORDED matt .*decision=not-applicable/);
   assert.match(result.stdout, /RECORDED pstack .*decision=current/);
   assert.match(
     result.stdout,
-    /RECORDED impeccable df3a4abe7d0840d5f60324812c432e00b66a4e75 decision=current/,
+    /RECORDED impeccable 9fadc41729c38fd47d7ae622b501558653f9d2e9 decision=current/,
   );
   assert.doesNotMatch(result.stdout, /PENDING impeccable/);
 });
@@ -83,7 +83,7 @@ test('Impeccable vendor is fully refreshed to 4.8.0 and engine 0.1.18', () => {
   const skill = read('skills/impeccable/SKILL.md');
   const engineVersion = read('skills/impeccable/scripts/VERSION').trim();
 
-  assert.match(upstream, /df3a4abe7d0840d5f60324812c432e00b66a4e75/);
+  assert.match(upstream, /9fadc41729c38fd47d7ae622b501558653f9d2e9/);
   assert.match(upstream, /Skill version: `4\.8\.0`/);
   assert.match(upstream, /Engine version: `0\.1\.18`/);
   assert.match(skill, /version: 4\.8\.0/);
@@ -102,23 +102,23 @@ test('Impeccable vendor is fully refreshed to 4.8.0 and engine 0.1.18', () => {
 test('Impeccable shared vendor bytes match the audited 4.8.0 snapshot', () => {
   assert.equal(
     git('rev-parse', 'HEAD:skills/impeccable/agents'),
-    '9f3e75cab9a3151f92b4215afdcb53a7963bec1b',
+    '10097e136ce06d86dbf36f7d5cbb25953f9412e6',
   );
   assert.equal(
     git('rev-parse', 'HEAD:skills/impeccable/reference'),
-    'f19407692cfc78d11b6cf4ebe5726b2957ab21e3',
+    '67cd3f898196b6037d470c771b8425aa304c5d36',
   );
 
   const blobs = new Map([
     ['skills/impeccable/scripts/VERSION', 'f8bc4c6256ab7d4bb54c2ab7af94c4fa5e58ac56'],
     ['skills/impeccable/scripts/command-metadata.json', '4686bb6deea643493198bff1369bc2958b3909a7'],
     ['skills/impeccable/scripts/engine-checksums.txt', '2e948006a8ac3cb811b775f88b131def849f2237'],
-    ['skills/impeccable/scripts/impeccable', 'b71d89311251758a3d165e084c877e7802bcc7e6'],
+    ['skills/impeccable/scripts/impeccable', '0b31c9e1b9921cdb443aa735a06ac2707259e475'],
     ['skills/impeccable/scripts/impeccable.cmd', '6157693b75c837249060089f2240b363d38e8023'],
     ['skills/impeccable/scripts/live-browser-dom.js', 'ef1ca8928111080ddb923da14c7827b7396a9e62'],
     ['skills/impeccable/scripts/live-browser-ignores.js', '1a2912e57a3b2b10a0d961b5dfe568253133fe53'],
     ['skills/impeccable/scripts/live-browser-session.js', '6871770720d3dd7a284c545e20b97b613635f36f'],
-    ['skills/impeccable/scripts/live-browser.js', '1c140fa0ea49162c4e42c3c96a332f751e0667ca'],
+    ['skills/impeccable/scripts/live-browser.js', '255fdc4c2feeb1b61e77780ff25dc7b29683339f'],
   ]);
 
   for (const [path, expected] of blobs) {
