@@ -9,6 +9,7 @@ import { isAbsolute, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { checkProof } from "./run-iteration-gate.mjs";
 import { appendStopDiagnostic } from "./stop-diagnostic-journal.mjs";
+import { readTurnContext } from "./codex-turn-context.mjs";
 
 const SKILL_PATH = /(?:^|[\\/])design-with-ai[\\/]SKILL\.md/i;
 const GATE_RUN = /(?:^|[\s;"'\\/])run-iteration-gate\.mjs/i;
@@ -116,9 +117,9 @@ export function decideStop(event, report, { home = homedir() } = {}) {
       typeof event.cwd !== "string" || typeof event.turn_id !== "string") return allow("INVALID_EVENT");
   if (!report.userBoundary) return allow("NO_TURN_BOUNDARY");
   const prompt = report.userPrompt || "";
-  const modifying = MODIFY.test(prompt) && !/^\s*(?:audit-surface|motion-audit|motion-review)\b/i.test(prompt);
+  const modifying = report.modifying === true || (MODIFY.test(prompt) && !/^\s*(?:audit-surface|motion-audit|motion-review)\b/i.test(prompt));
   if (!modifying) return allow("READ_ONLY_OR_OUT_OF_SCOPE");
-  if (!EXPLICIT.test(prompt) && !report.readsSkill) return allow("SKILL_NOT_OBSERVED");
+  if (!report.explicit && !EXPLICIT.test(prompt) && !report.readsSkill) return allow("SKILL_NOT_OBSERVED");
   const cwd = resolve(event.cwd);
   let proofStatus = report.gateCommands.length ? "NO_VALID_PROOF" : "NO_GATE_COMMAND";
   for (const options of [...report.gateCommands].reverse()) {
@@ -182,6 +183,14 @@ export async function handleStop(event, { onDiagnostic } = {}) {
   let transcriptState = "NOT_CHECKED";
   try {
     if (!obj(event) || event.hook_event_name !== "Stop") return result;
+    // Prefer official UserPromptSubmit/PostToolUse turn records. The Codex
+    // transcript_path is explicitly nullable and its format is not stable.
+    report = readTurnContext(event);
+    if (report) {
+      transcriptState = "NATIVE_TURN_EVENTS";
+      result = decideStop(event, report);
+      return result;
+    }
     const path = event.transcript_path;
     if (typeof path !== "string" || !isAbsolute(path) ||
         !localAllowed(path, resolve(event.cwd || process.cwd()), homedir())) {
