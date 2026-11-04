@@ -40,7 +40,7 @@ $reference = Join-Path $env:TEMP ("agent-hub-ref-" + [guid]::NewGuid().ToString(
 gh repo clone Wibias/agent-hub $reference -- --depth 1
 git -C $reference rev-parse HEAD
 node (Join-Path $reference "skills/design-with-ai/scripts/check-activation.mjs") `
-  --workspace "C:\\Users\\ws\\Desktop\\Anderes\\GitHub\\TikTok-Short-Pipeline" `
+  --workspace "<product-repository-path>" `
   --canonical (Join-Path $reference "skills/design-with-ai")
 ```
 
