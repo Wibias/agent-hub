@@ -151,7 +151,10 @@ export function decideStop(event, report, { home = homedir() } = {}) {
       continue;
     }
     if (!checked.valid) {
-      proofStatus = "PROOF_INVALID_OR_STALE";
+      // The gate returns stable, privacy-safe issue codes alongside human
+      // messages. Never downgrade a changed receipt/ledger/worktree to a
+      // generic "invalid proof" diagnosis.
+      proofStatus = checked.issueCodes?.[0] ?? "PROOF_INVALID_OR_STALE";
       continue;
     }
     if (checked.processExitCode !== 0) {
@@ -170,7 +173,7 @@ export function decideStop(event, report, { home = homedir() } = {}) {
       const started = Date.parse(report.promptAt);
       if (!Number.isFinite(started) || !Number.isFinite(finished) ||
           finished < started - 1000) {
-        proofStatus = "PROOF_INVALID_OR_STALE";
+        proofStatus = "PROOF_TOO_OLD";
         continue;
       }
     }
@@ -186,19 +189,21 @@ export function decideStop(event, report, { home = homedir() } = {}) {
       continue: true,
       status: "RETRY_LIMIT_NOT_VERIFIED",
       proofStatus,
-      systemMessage: "design-with-ai: no valid gate proof after the single automatic retry. The result remains NOT_VERIFIED; do not treat a completion claim as tested.",
+      systemMessage: "design-with-ai: the one automatic correction did not produce a current verified gate proof (" + proofStatus + "). The result remains NOT_VERIFIED; do not treat a completion claim as tested.",
     };
   }
   return {
     decision: "block",
     status: "MISSING_VERIFIED_GATE_PROOF",
     proofStatus,
-    reason: "The current modifying design-with-ai turn has no verified iteration-gate proof. " +
+    reason: "The current modifying design-with-ai turn has no verified iteration-gate proof (" + proofStatus + "). " +
       "Before finishing, write the iteration receipt and independent pre-edit baseline (if applicable), " +
       "initialize or locate the canonical .design-with-ai/findings-ledger.json in this project, import available earlier findings, then freeze a pre-edit snapshot. " +
       "Reconcile all old in-scope findings against the current receipt. " +
       "Run scripts/run-iteration-gate.mjs with --receipt, --baseline, --ledger, and a new --proof path. " +
-      "Check the proof with --check-proof and report the actual exit code. Do not invent a missing baseline. " +
+      "Check the proof with --check-proof, inspect issueCodes, and report the actual exit code. " +
+      "If UI source, receipt, baseline or ledger changed after that proof, rerun the gate with a NEW proof path after the final edit. " +
+      "Do not invent a missing baseline. " +
       "If the work cannot be fully verified, use a truthful PARTIAL or NOT_VERIFIED receipt and final verdict. " +
       "Do not repeat unrelated UI edits. This hook allows only one automatic continuation.",
   };
