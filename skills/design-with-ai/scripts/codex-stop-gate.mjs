@@ -177,7 +177,7 @@ export function decideStop(event, report, { home = homedir() } = {}) {
   };
 }
 
-export async function handleStop(event, { onDiagnostic } = {}) {
+export async function handleStop(event, { onDiagnostic, turnRoot } = {}) {
   let report = null;
   let result = { continue: true, status: "NOT_STOP" };
   let transcriptState = "NOT_CHECKED";
@@ -185,7 +185,7 @@ export async function handleStop(event, { onDiagnostic } = {}) {
     if (!obj(event) || event.hook_event_name !== "Stop") return result;
     // Prefer official UserPromptSubmit/PostToolUse turn records. The Codex
     // transcript_path is explicitly nullable and its format is not stable.
-    report = readTurnContext(event);
+    report = readTurnContext(event, turnRoot === undefined ? {} : { root: turnRoot });
     if (report) {
       transcriptState = "NATIVE_TURN_EVENTS";
       result = decideStop(event, report);
