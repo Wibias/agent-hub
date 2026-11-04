@@ -94,6 +94,16 @@ export function checkActivation({ workspace, canonical, home = homedir() }) {
   }
 
   const candidates = [...seen.values()];
+  // Comparing a discovered installation to itself (including through an
+  // alias/symlink) is tautological and must never yield MATCHING_COPY_FOUND.
+  const canonicalIdentity = pathIdentity(canonical);
+  if (candidates.some((candidate) => pathIdentity(candidate.resolvedPath) === canonicalIdentity)) {
+    throw new Error(
+      "--canonical resolves to the same physical directory as a discovered " +
+      "design-with-ai installation. Use an independently checked-out, up-to-date " +
+      "Agent Hub reference (not the installed skill) as --canonical.",
+    );
+  }
   let status;
   if (candidates.length === 0) status = "NOT_DISCOVERABLE";
   else if (candidates.length > 1) status = "MULTIPLE_CANDIDATES";

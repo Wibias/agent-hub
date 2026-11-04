@@ -21,10 +21,32 @@ three claims in another checkout or on a user's desktop.
 Use an authoritative, **separately chosen** Hub checkout to run the diagnostic.
 Do not take the expected version from whichever installed skill happens to
 be found, or a stale installed copy could compare successfully with itself.
+The CLI rejects `--canonical` when it resolves to a discovered installation,
+including through symlinks/junctions, and exits nonzero. A successful match
+must instead use an independent reference checkout. An independent directory
+alone is not proof it is current; establish its intended commit and update it
+from the authoritative repository before comparing.
 
 ```shell
-node "<hub-checkout>/skills/design-with-ai/scripts/check-activation.mjs" --workspace "<product-repo>" --canonical "<hub-checkout>/skills/design-with-ai"
+node "<independent-hub-checkout>/skills/design-with-ai/scripts/check-activation.mjs" --workspace "<product-repo>" --canonical "<independent-hub-checkout>/skills/design-with-ai"
 ```
+
+For example, on Windows PowerShell with authenticated GitHub CLI, make a
+fresh reference checkout at a new temporary path (do not overwrite the
+installed skill or a working checkout):
+
+```powershell
+$reference = Join-Path $env:TEMP ("agent-hub-ref-" + [guid]::NewGuid().ToString("N"))
+gh repo clone Wibias/agent-hub $reference -- --depth 1
+git -C $reference rev-parse HEAD
+node (Join-Path $reference "skills/design-with-ai/scripts/check-activation.mjs") `
+  --workspace "<product-repository-path>" `
+  --canonical (Join-Path $reference "skills/design-with-ai")
+```
+
+Only treat the new checkout as an authoritative reference after verifying its
+repository origin and commit. Remove temporary checkouts using your normal
+cleanup process when no longer needed.
 
 The command is read-only, uses Node 20+, works on Windows/macOS/Linux, emits
 JSON, and returns nonzero for no copy, a divergent copy, or multiple distinct

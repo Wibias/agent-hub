@@ -127,3 +127,31 @@ test("CLI --help does not mutate or require a workspace", () => {
   assert.equal(r.status, 0);
   assert.match(r.stdout, /NOT proof|not proof|not prove|not proof/i);
 });
+
+test("rejects comparing a discoverable user installation to itself", () => fixture((f) => {
+  const installed = f.installUser();
+  assert.throws(
+    () => checkActivation({ workspace: f.workspace, canonical: installed, home: f.home }),
+    /--canonical resolves to the same physical directory/,
+  );
+}));
+
+test("rejects a project skill self-comparison even through a symlink alias", () => fixture((f) => {
+  const installed = f.installRepo();
+  const alias = join(f.tmp, "skill-alias");
+  symlinkSync(installed, alias, process.platform === "win32" ? "junction" : "dir");
+  assert.throws(
+    () => checkActivation({ workspace: f.deepWorkspace, canonical: alias, home: f.home }),
+    /--canonical resolves to the same physical directory/,
+  );
+}));
+
+test("CLI exits nonzero rather than reporting MATCHING_COPY_FOUND for self-comparison", () => fixture((f) => {
+  const installed = f.installUser();
+  const r = spawnSync(process.execPath, [
+    cli, "--workspace", f.workspace, "--canonical", installed, "--home", f.home,
+  ], { encoding: "utf8" });
+  assert.equal(r.status, 2);
+  assert.match(r.stderr, /independently checked-out/);
+  assert.doesNotMatch(r.stdout, /MATCHING_COPY_FOUND/);
+}));
