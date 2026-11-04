@@ -29,6 +29,19 @@ Do not treat only the visibly changed route as the complete requested scope.
 An intentionally unchanged surface still needs an inspected `KEEP_JUSTIFIED`
 or a documented `DEFERRED` / `NOT_INSPECTED` coverage result.
 
+For visible pages with multiple entry points to the same destination,
+inventory effective destinations and navigation contexts before editing.
+Apply the purpose-based exception review in `core-design-workflow.md`:
+same target and same task generally warrant one entry point, but
+legal/footer links, alternate accessible paths, and contextual blocked-state
+actions can justify repetition. Never count breakpoint-exclusive controls
+as two simultaneously visible links.
+
+For overview/detail products, compare the two jobs and use the detail
+acceptance in `baseline-ui.md`: a contact sheet optimizes choosing items;
+its corresponding detail surface may need a media-first inspector or
+supported task actions, but must not invent editability or capabilities.
+
 When the inspected target is an operational interface, use the task-first
 acceptance in `baseline-ui.md` as part of the selected workflow. Do not apply
 it merely because a prompt contains the word "dashboard": the actual surface
@@ -60,6 +73,8 @@ Output:
 - visible evidence and impact for each finding;
 - for applicable operator surfaces, task-first failures in priority, readability, status semantics, or containment, with observed versus unverified evidence separated;
 - for mixed workflow/state surfaces, which controls are progress, filters, results, or guarded actions, and which semantics are verified, inconsistent, or unknown;
+- repeated links/actions by effective destination and viewport context, distinguishing unearned duplicates from justified legal/contextual/accessibility paths;
+- for an overview/detail pair, what task the detail surface supports beyond selection, and which information/actions truly exist in the product;
 - when a repeated motif is materially in question, a role-to-treatment assessment and separate functional-quality versus direction-fit conclusions;
 - for iterative audits with a prior candidate, compare matched route/viewport/state
   evidence and carry open issue IDs forward without claiming unobserved improvement;
@@ -93,6 +108,8 @@ Before the quality stack:
      status semantics, and repeated-container rationale when applicable;
    - any pipeline stage/filter/selection/count contract and action eligibility
      mismatch against real state, marked unknown if unverified;
+   - repeated effective destinations lacking a separate user purpose, and any
+     overview/detail role mismatch (with real available data/actions noted);
    - whether different component jobs received unearned identical styling,
      including a new motif that merely displaced an old default.
 3. Preserve a coherent existing icon dependency unless an approved system,
