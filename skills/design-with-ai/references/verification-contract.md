@@ -152,6 +152,12 @@ separately when they determine acceptance.
 
 ### Executed gate evidence (standard/deep modifying work)
 
+Codex users may optionally install a Stop hook to prompt **one** additional
+self-verification attempt if this evidence is missing. See
+`codex-stop-enforcement.md` only for installation/troubleshooting; the hook
+is not enabled by loading this reference and is not a substitute for the
+final actual product/behavior review.
+
 The final agent-written receipt is a **claim**, not evidence that its validator
 ran. After the receipt and, when applicable, frozen prior-findings baseline
 are prepared, run the validator through the Node runner and write a fresh
