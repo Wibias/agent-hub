@@ -27,7 +27,7 @@ function input({
 } = {}) {
   return {
     event: { hook_event_name: "Stop", session_id: "private-session-id", stop_hook_active: false,
-      cwd: "C:/Users/private-name/super-secret-project", last_assistant_message: "secret-content" },
+      cwd: "/workspaces/private-name/super-secret-project", last_assistant_message: "secret-content" },
     report: { userPrompt: prompt, userBoundary: true, readsSkill: true,
       gateCommands: [{ receipt: "/private/receipt.json", proof: "/private/proof.json", cmd: command }] },
     result: { decision, status, proofStatus: "PROOF_MISSING",
