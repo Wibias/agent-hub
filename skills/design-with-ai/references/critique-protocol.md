@@ -46,6 +46,12 @@ Do not invent a past review or treat an assistant's suggestion as verified.
    because the page looks cleaner or another screen improved. Prefer
    high-impact unresolved issues over another palette/radius pass.
 
+For work spanning separate sessions or agents, keep the non-sensitive ledger in
+the authorized task/PR record or existing design handoff, if one is available;
+otherwise include it in the completion report so the next iteration can reuse
+it. Do not create a new repository file or tracking system solely for this
+record without scope/authority, and do not record credentials or private data.
+
 Compact example (replace with real findings and evidence):
 
 | ID / route | Problem and user impact | Acceptance condition | Decision / change | Paired evidence | Disposition |
