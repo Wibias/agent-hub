@@ -38,8 +38,6 @@ export function planInstall({
   const existing = config.hooks.Stop ?? [];
   if (!Array.isArray(existing)) throw new Error("hooks.Stop must be an array");
   const command = "node \"" + hookFile + "\"";
-  let seen = false;
-  let changed = false;
   const entries = [];
   for (const group of existing) {
     if (!isObject(group) || !Array.isArray(group.hooks)) {
@@ -48,7 +46,6 @@ export function planInstall({
     const filtered = group.hooks.filter((item) => {
       const matches = marker.test(String(item?.commandWindows ?? item?.command ?? ""));
       if (!matches) return true;
-      changed = true;
       return false;
     });
     if (filtered.length) entries.push({ ...group, hooks: filtered });
@@ -62,7 +59,7 @@ export function planInstall({
   const expected = { ...config, hooks: { ...config.hooks, Stop: entries } };
   const unchanged = existing.length === entries.length &&
     JSON.stringify(existing) === JSON.stringify(entries);
-  return { hooksPath: destination, skillDir: root, changed: changed || !unchanged,
+  return { hooksPath: destination, skillDir: root, changed: !unchanged,
     config: expected, command };
 }
 
