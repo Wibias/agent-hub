@@ -1,3 +1,10 @@
+import {
+  ensureTypedRelationSchema,
+  saveTypedRelation,
+  listTypedRelations as queryTypedRelations,
+  exportTypedRelationSidecar as exportDerivedRelationSidecar,
+  importTypedRelationSidecar as importDerivedRelationSidecar,
+} from './claim-relations-ledger.mjs';
 import { DatabaseSync } from 'node:sqlite';
 
 import { assertAuthorityClass } from './authority.mjs';
@@ -1814,6 +1821,8 @@ export class MemoryEngine {
         );
       }
 
+      // Optional, advisory D1b derived ledger. Not canonical memory.
+      ensureTypedRelationSchema(this.#db);
       this.#db.exec('COMMIT');
     } catch (error) {
       this.#db.exec('ROLLBACK');
@@ -1901,6 +1910,30 @@ export class MemoryEngine {
     return normalizeClaim(
       this.#db.prepare('SELECT * FROM claims WHERE id = ?').get(id),
     );
+  }
+
+  /** D1b manual advisory edge persistence; does not authorize lifecycle or Recall. */
+  proposeTypedRelation(proposal, {
+    evaluatorId,
+    policyVersion = 'semantic-relation-v1',
+    at = this.#clock(),
+  } = {}) {
+    return saveTypedRelation(this.#db, proposal, { evaluatorId, policyVersion, at });
+  }
+
+  /** Read-only semantic edge projection; inactive/expired edges are hidden by default. */
+  listTypedRelations(options = {}) {
+    return queryTypedRelations(this.#db, options);
+  }
+
+  /** Portable snapshot of currently valid advisory relations; canonical export unchanged. */
+  exportTypedRelationSidecar(options = {}) {
+    return exportDerivedRelationSidecar(this.#db, options);
+  }
+
+  /** Explicit rebuild of an empty derived scope using existing canonical claims. */
+  importTypedRelationSidecar(payload, options = {}) {
+    return importDerivedRelationSidecar(this.#db, payload, options);
   }
 
   getClaimEvidence(claimId) {
