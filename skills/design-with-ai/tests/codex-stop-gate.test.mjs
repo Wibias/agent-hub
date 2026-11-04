@@ -112,6 +112,22 @@ test("valid complete proof from a real runner satisfies Stop hook", () => fixtur
   assert.equal(retried.systemMessage, undefined);
 }));
 
+test("Codex exec_command arrays are accepted as current-turn validator invocations", () => fixture(async (f) => {
+  f.putReceipt();
+  assert.equal(runGate({ receipt: f.receipt, baseline: f.baseline, proof: f.proof }).exitCode, 0);
+  const command = 'node run-iteration-gate.mjs --receipt "' + f.receipt +
+    '" --baseline "' + f.baseline + '" --proof "' + f.proof + '"';
+  const arrayCall = {
+    type: "response_item", payload: {
+      type: "function_call", name: "exec_command", call_id: "cmd-array",
+      arguments: JSON.stringify({ cmd: ["bash", "-lc", command] }),
+    },
+  };
+  f.write([f.prompt("Improve the current UI with design-with-ai."), arrayCall]);
+  assert.equal((await inspectTurnTranscript(f.transcript)).gateCommands.length, 1);
+  assert.equal((await handleStop(f.event)).continue, true);
+}));
+
 test("current, valid PARTIAL receipt passes only with an explicit PARTIAL final verdict", () => fixture(async (f) => {
   f.putReceipt("PARTIAL");
   assert.equal(runGate({ receipt: f.receipt, baseline: f.baseline, proof: f.proof }).exitCode, 0);
