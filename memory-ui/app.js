@@ -7,6 +7,7 @@ const state = {
   graphError: '',
   graphSearch: '',
   graphOrigin: 'all',
+  graphGroup: 'all',
   graphNodeState: 'all',
   selectedGraphNodeId: null,
   view: 'memories',
@@ -156,6 +157,7 @@ function resetGraphState({ keepData = false } = {}) {
   state.graphError = '';
   state.graphSearch = '';
   state.graphOrigin = 'all';
+  state.graphGroup = 'all';
   state.graphNodeState = 'all';
   state.selectedGraphNodeId = null;
 }
@@ -809,6 +811,7 @@ function renderMemories() {
   );
 }
 
+/** Apply project-local search, lifecycle and authority filters to displayed nodes. */
 function graphFilteredNodes() {
   const graph = state.graph;
   if (!graph) return [];
@@ -818,6 +821,7 @@ function graphFilteredNodes() {
       state.graphNodeState !== 'all'
       && node.state !== state.graphNodeState
     ) return false;
+    if (state.graphGroup !== 'all' && node.group !== state.graphGroup) return false;
     if (!query) return true;
     return [
       node.ref,
@@ -831,6 +835,7 @@ function graphFilteredNodes() {
   });
 }
 
+/** Keep only displayed edges and apply the selected relation-origin filter. */
 function graphFilteredEdges(nodes) {
   const graph = state.graph;
   if (!graph) return [];
@@ -838,7 +843,7 @@ function graphFilteredEdges(nodes) {
   return graph.edges.filter((edge) => (
     visible.has(edge.from)
     && visible.has(edge.to)
-    && (state.graphOrigin === 'all' || edge.origin === state.graphOrigin)
+    && (state.graphOrigin === 'all' || (state.graphOrigin === 'typed' ? edge.source === 'typed_relation' : edge.origin === state.graphOrigin))
   ));
 }
 
@@ -922,8 +927,19 @@ function graphPositions(nodes, edges) {
   return positions;
 }
 
+/** Format distinct canonical, typed and embedding-provenance descriptions. */
 function graphEdgeProvenance(edge) {
   const provenance = edge?.provenance ?? {};
+  if (edge?.source === 'typed_relation') {
+    return [
+      'Advisory',
+      provenance.policyVersion,
+      provenance.sourceEvidenceId ? compactTechnicalId(provenance.sourceEvidenceId) : null,
+      provenance.targetEvidenceId ? compactTechnicalId(provenance.targetEvidenceId) : null,
+      provenance.validatedAt ? dateTime(provenance.validatedAt) : null,
+      provenance.reason ? String(provenance.reason).slice(0, 180) : null,
+    ].filter(Boolean).join(' · ');
+  }
   if (edge?.origin === 'inferred') {
     const model = [provenance.modelId, provenance.modelRevision]
       .filter(Boolean)
@@ -979,7 +995,11 @@ function graphInspector(node, visibleEdges) {
         <h3>Graph node</h3>
         ${definition([
           ['Authority', node.authority],
+          ['Group', node.groupLabel || node.group],
           ['State', node.state, statusClass(node.state)],
+          ['Lifecycle', node.lifecycleStatus],
+          ['Git freshness', node.freshness?.status || 'unknown', statusClass(node.freshness?.status)],
+          ['Freshness detail', node.freshness?.explanation],
           ['Kind', node.kind],
           ['Subject', node.subject],
           ['Predicate', node.predicate],
@@ -1014,7 +1034,7 @@ function graphInspector(node, visibleEdges) {
                   </span>
                   <span class="graph-neighbor-relation">${escapeHtml(edge.relation.replaceAll('_', ' '))}</span>
                   <span class="graph-neighbor-meta">
-                    ${edge.origin === 'inferred' ? `weight ${Number(edge.weight ?? 0).toFixed(3)} · ` : ''}${escapeHtml(graphEdgeProvenance(edge))}
+                    ${edge.relation === 'semantic_similarity' ? `weight ${Number(edge.weight ?? 0).toFixed(3)} · ` : ''}${escapeHtml(graphEdgeProvenance(edge))}
                   </span>
                 </button>
               `).join('')
@@ -1025,6 +1045,7 @@ function graphInspector(node, visibleEdges) {
   `;
 }
 
+/** Render a bounded read-only graph without implying advisory authority. */
 function renderGraph() {
   if (state.graphLoading && !state.graph) {
     loading();
@@ -1042,6 +1063,7 @@ function renderGraph() {
   const nodes = graphFilteredNodes();
   const edges = graphFilteredEdges(nodes);
   const states = [...new Set(state.graph.nodes.map((node) => node.state))].sort();
+  const groups = state.graph.groups ?? [];
   const positions = graphPositions(nodes, edges);
   const selected = nodes.find((node) => node.id === state.selectedGraphNodeId)
     ?? nodes.find((node) => node.state === 'active')
@@ -1069,6 +1091,15 @@ function renderGraph() {
             <option value="all" ${state.graphOrigin === 'all' ? 'selected' : ''}>All relations</option>
             <option value="explicit" ${state.graphOrigin === 'explicit' ? 'selected' : ''}>Explicit only</option>
             <option value="inferred" ${state.graphOrigin === 'inferred' ? 'selected' : ''}>Inferred only</option>
+            <option value="typed" ${state.graphOrigin === 'typed' ? 'selected' : ''}>Typed only</option>
+          </select>
+          <select id="graph-group-filter" class="filter" aria-label="Filter graph by Evidence authority">
+            <option value="all" ${state.graphGroup === 'all' ? 'selected' : ''}>All authorities</option>
+            ${groups.map((group) => `
+              <option value="${escapeHtml(group.id)}" ${group.id === state.graphGroup ? 'selected' : ''}>
+                ${escapeHtml(group.label)} (${number(group.count)})
+              </option>
+            `).join('') }
           </select>
           <select id="graph-state-filter" class="filter" aria-label="Filter graph by memory state">
             <option value="all">All states</option>
@@ -1082,12 +1113,16 @@ function renderGraph() {
         <div class="graph-meta">
           <div class="graph-legend" aria-label="Graph relation legend">
             <span class="graph-legend-item"><span class="graph-legend-swatch explicit"></span>Explicit relation</span>
-            <span class="graph-legend-item"><span class="graph-legend-swatch inferred"></span>Inferred similarity</span>
+            <span class="graph-legend-item"><span class="graph-legend-swatch typed"></span>Advisory typed</span>
+            <span class="graph-legend-item"><span class="graph-legend-swatch inferred"></span>Inferred similarity (optional)</span>
           </div>
           <div class="graph-stats">
             <span>${number(nodes.length)} / ${number(stats.nodeCount)} nodes</span>
             <span>·</span>
             <span>${number(edges.length)} / ${number(stats.edgeCount)} edges</span>
+            <span>· ${number(stats.typedRelations)} typed</span>
+            ${stats.typedRelationsOmittedByBound > 0 ? `<span>· ${number(stats.typedRelationsOmittedByBound)} typed omitted by limit</span>` : ''}
+            ${stats.repositoryNodesUnchecked ? `<span>· ${number(stats.repositoryNodesUnchecked)} Git-unchecked</span>` : ''}
             ${stats.truncated ? `<span>· ${number(stats.omittedClaims)} omitted by bound</span>` : ''}
           </div>
         </div>
@@ -1101,13 +1136,13 @@ function renderGraph() {
                   if (!from || !to) return '';
                   return `
                     <line
-                      class="graph-edge ${escapeHtml(edge.origin)}"
+                      class="graph-edge ${escapeHtml(edge.origin)} ${escapeHtml(edge.source || '')} ${edge.current === false ? 'is-historical' : ''}"
                       x1="${from.x.toFixed(2)}"
                       y1="${from.y.toFixed(2)}"
                       x2="${to.x.toFixed(2)}"
                       y2="${to.y.toFixed(2)}"
                     >
-                      <title>${escapeHtml(edge.relation)} · ${escapeHtml(edge.origin)}${edge.origin === 'inferred' ? ` · ${Number(edge.weight ?? 0).toFixed(3)}` : ''}</title>
+                      <title>${escapeHtml(edge.relation)} · ${escapeHtml(edge.origin)}${edge.relation === 'semantic_similarity' && Number.isFinite(edge.weight) ? ` · ${edge.weight.toFixed(3)}` : ''}</title>
                     </line>
                   `;
                 }).join('')}
@@ -1117,9 +1152,11 @@ function renderGraph() {
                   const point = positions.get(node.id);
                   const selectedClass = node.id === selected?.id ? ' is-selected' : '';
                   const stateClass = ` state-${String(node.state ?? 'unknown').replace(/[^a-z0-9_-]/gi, '-')}`;
+                  const groupClass = ` group-${String(node.group ?? 'unknown').replace(/[^a-z0-9_-]/gi, '-')}`;
+                  const freshClass = ` freshness-${String(node.freshness?.status ?? 'unknown').replace(/[^a-z0-9_-]/gi, '-')}`;
                   return `
                     <g
-                      class="graph-node${selectedClass}${stateClass}"
+                      class="graph-node${selectedClass}${stateClass}${groupClass}${freshClass}"
                       data-graph-node="${escapeHtml(node.id)}"
                       transform="translate(${point.x.toFixed(2)} ${point.y.toFixed(2)})"
                       role="button"
@@ -1145,6 +1182,7 @@ function renderGraph() {
 
   const search = document.querySelector('#graph-search');
   const origin = document.querySelector('#graph-origin-filter');
+  const group = document.querySelector('#graph-group-filter');
   const nodeState = document.querySelector('#graph-state-filter');
   search?.addEventListener('input', () => {
     state.graphSearch = search.value;
@@ -1152,6 +1190,10 @@ function renderGraph() {
   });
   origin?.addEventListener('change', () => {
     state.graphOrigin = origin.value;
+    renderGraph();
+  });
+  group?.addEventListener('change', () => {
+    state.graphGroup = group.value;
     renderGraph();
   });
   nodeState?.addEventListener('change', () => {
@@ -1199,6 +1241,9 @@ async function loadGraph({
       branch: state.branch,
     }));
     state.graph = graph;
+    if (state.graphGroup !== 'all' && !(graph.groups ?? []).some((item) => item.id === state.graphGroup)) {
+      state.graphGroup = 'all';
+    }
     state.selectedGraphNodeId = (
       preferredNodeId
       && graph.nodes.some((node) => node.id === preferredNodeId)
@@ -1724,6 +1769,7 @@ async function selectClaim(claimId) {
   renderMemories();
 }
 
+/** Clear scope-specific state before loading another project or branch. */
 async function loadScope({
   preferredClaimId = null,
 } = {}) {
@@ -1743,6 +1789,7 @@ async function loadScope({
   state.claimState = 'all';
   state.graphSearch = '';
   state.graphOrigin = 'all';
+  state.graphGroup = 'all';
   state.graphNodeState = 'all';
   updateUrl();
   renderProjects();
@@ -1894,3 +1941,5 @@ setInterval(async () => {
     // Live refresh is best-effort; explicit Refresh remains available.
   }
 }, 10_000);
+
+// graph-quality-v2-ui

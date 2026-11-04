@@ -200,20 +200,50 @@ export function saveTypedRelation(db, proposal, {
 }
 
 /** Legacy read-only DBs without the optional table remain supported. */
+/**
+ * Read valid advisory edges. Optional claimIds/limit bound graph queries in
+ * SQLite before materializing rows; withCount adds an exact count for UI
+ * truncation reporting. The historic array-only API is the default.
+ */
 export function listTypedRelations(db, {
   projectId,
   branch,
   activeOnly = true,
   at = new Date().toISOString(),
+  claimIds = null,
+  limit = null,
+  withCount = false,
+  auditedAtOrBefore = false,
 } = {}) {
   if (!db || typeof db.prepare !== 'function') throw new TypeError('SQLite DatabaseSync is required');
   const project = nonEmpty(projectId, 'projectId');
   const scopedBranch = nonEmpty(branch, 'branch');
   if (typeof activeOnly !== 'boolean') throw new TypeError('activeOnly must be boolean');
+  if (typeof withCount !== 'boolean') throw new TypeError('withCount must be boolean');
+  if (typeof auditedAtOrBefore !== 'boolean') throw new TypeError('auditedAtOrBefore must be boolean');
   const current = timestamp(at, 'at');
-  if (!exists(db)) return [];
-  return db.prepare(`
-    SELECT r.* FROM claim_relations r
+  if (limit !== null && (!Number.isInteger(limit) || limit < 1 || limit > 10000)) {
+    throw new RangeError('limit must be an integer between 1 and 10000');
+  }
+  if (claimIds !== null && (
+    !Array.isArray(claimIds) || claimIds.length > 500
+    || claimIds.some((id) => typeof id !== 'string' || !id.trim() || id.length > 512)
+    || new Set(claimIds).size !== claimIds.length
+  )) {
+    throw new TypeError('claimIds must be a unique array of at most 500 claim IDs');
+  }
+  const empty = () => withCount ? { relations: [], total: 0 } : [];
+  if (!exists(db) || (claimIds !== null && claimIds.length === 0)) return empty();
+
+  const idPlaceholders = claimIds === null ? '' : claimIds.map(() => '?').join(',');
+  const idScope = claimIds === null ? '' : `
+      AND r.source_claim_id IN (${idPlaceholders})
+      AND r.target_claim_id IN (${idPlaceholders})`;
+  const auditScope = auditedAtOrBefore ? `
+      AND julianday(r.created_at) <= julianday(?)
+      AND julianday(r.validated_at) <= julianday(?)` : '';
+  const fromAndWhere = `
+    FROM claim_relations r
     JOIN claims source ON source.id = r.source_claim_id
     JOIN claims target ON target.id = r.target_claim_id
     JOIN evidence se ON se.id = r.source_evidence_id
@@ -238,8 +268,23 @@ export function listTypedRelations(db, {
           AND (target.valid_until IS NULL OR julianday(target.valid_until) > julianday(?))
         )
       )
+      ${idScope}
+      ${auditScope}
+  `;
+  const params = [
+    project, scopedBranch, Number(activeOnly), current, current, current, current,
+    ...(claimIds ?? []), ...(claimIds ?? []),
+    ...(auditedAtOrBefore ? [current, current] : []),
+  ];
+  const limitSql = limit === null ? '' : ' LIMIT ?';
+  const rows = db.prepare(`
+    SELECT r.* ${fromAndWhere}
     ORDER BY r.relation, r.source_claim_id, r.target_claim_id, r.id
-  `).all(project, scopedBranch, Number(activeOnly), current, current, current, current).map(normalize);
+    ${limitSql}
+  `).all(...params, ...(limit === null ? [] : [limit])).map(normalize);
+  if (!withCount) return rows;
+  const total = Number(db.prepare(`SELECT COUNT(*) AS total ${fromAndWhere}`).get(...params).total);
+  return { relations: rows, total };
 }
 
 const RELATION_FIELDS = Object.freeze([
