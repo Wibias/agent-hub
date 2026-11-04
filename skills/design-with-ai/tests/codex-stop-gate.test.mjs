@@ -62,6 +62,7 @@ test("second Stop after automatic continuation is never blocked again", () => fi
   f.write([f.prompt("Verbessere mit design-with-ai die UI.")]);
   const result = await handleStop({ ...f.event, stop_hook_active: true });
   assert.equal(result.continue, true);
+  assert.match(result.systemMessage, /NOT_VERIFIED/);
 }));
 
 test("read-only UX critique and unrelated coding tasks do not require gates", () => fixture(async (f) => {
@@ -106,6 +107,9 @@ test("valid complete proof from a real runner satisfies Stop hook", () => fixtur
   const report = await inspectTurnTranscript(f.transcript);
   assert.equal(report.gateCommands.length, 1);
   assert.equal((await handleStop(f.event)).continue, true);
+  const retried = await handleStop({ ...f.event, stop_hook_active: true });
+  assert.equal(retried.continue, true);
+  assert.equal(retried.systemMessage, undefined);
 }));
 
 test("current, valid PARTIAL receipt passes only with an explicit PARTIAL final verdict", () => fixture(async (f) => {
