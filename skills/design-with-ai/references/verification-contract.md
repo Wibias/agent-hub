@@ -228,6 +228,31 @@ Do not claim status correctness from screenshots alone; confirm state sources
 or explicitly mark this part unknown. Keep read-only audit findings separate
 from claims of implemented fixes.
 
+## Navigation and detail-role receipt (when applicable)
+
+For screens that expose repeated destinations or a gallery-to-detail
+journey, include a small evidence-grounded assessment:
+
+```text
+navigation duplicates: <effective target, two placements, viewport/context>
+retained repetition: <specific legal, access, or contextual task justification>
+removed repetition: <which unearned control was consolidated and preserved route>
+navigation verdict: PASS | REVISE | NOT_VERIFIED
+overview task: <recognize, filter, choose, etc.>
+detail task: <inspect, decide, supported action, or intentionally read-only>
+detail capabilities: <verified data and operations; unavailable/immutable noted>
+detail verdict: PASS | REVISE | NOT_VERIFIED
+```
+
+Check actual route destinations and interaction behavior for the **same
+viewport and task context**. Source/render evidence must confirm whether
+two links are genuinely redundant; legal header/footer duplication or a
+direct blocked-state resolution route can be intentionally retained.
+For detail surfaces, do not rate a speculative editor or undocumented
+publishing button as an improvement. Keep existing data and permission
+contracts authoritative. `NOT_VERIFIED` is not a usability pass; link
+this receipt to any open finding in the iteration evidence ledger.
+
 ## Workflow semantics receipt (when applicable)
 
 For workflow rails, status filters, staged queues, or permission-dependent
