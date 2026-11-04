@@ -34,8 +34,14 @@ function commandText(payload) {
   if (typeof v === "string") return v;
   if (!obj(v)) return "";
   const command = v.command ?? v.cmd ?? v.script ?? "";
-  return Array.isArray(command) ? command.map(String).join(" ") :
-    typeof command === "string" ? command : "";
+  if (Array.isArray(command)) {
+    const first = String(command[0] ?? "");
+    if (/^(?:bash|sh|pwsh|powershell)(?:\.exe)?$/i.test(first)) {
+      return String(command.at(-1) ?? "");
+    }
+    return command.map(String).join(" ");
+  }
+  return typeof command === "string" ? command : "";
 }
 function gateOptions(command) {
   // Don't classify grep, echo, or arbitrary strings containing the filename
