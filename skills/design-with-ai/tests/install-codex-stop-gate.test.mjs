@@ -10,7 +10,8 @@ function fixture(run) {
   const skillDir = join(root, "skills", "design-with-ai");
   const hooksPath = join(root, "codex", "hooks.json");
   mkdirSync(join(skillDir, "scripts"), { recursive: true });
-  writeFileSync(join(skillDir, "scripts", "codex-stop-gate.mjs"), "/* test hook */\n");
+  writeFileSync(join(skillDir, "scripts", "codex-stop-gate.mjs"), "/* stop test hook */\n");
+  writeFileSync(join(skillDir, "scripts", "codex-turn-context.mjs"), "/* context test hook */\n");
   try { return run({ root, skillDir, hooksPath }); }
   finally { rmSync(root, { recursive: true, force: true }); }
 }
@@ -20,15 +21,18 @@ test("installer is dry-run by default and does not create a hooks file", () => f
   assert.equal(result.applied, false);
   assert.equal(result.wouldChange, true);
   assert.equal(existsSync(f.hooksPath), false);
+  assert.deepEqual(result.hooks, ["UserPromptSubmit", "PostToolUse", "Stop"]);
 }));
 
-test("installer preserves existing Stop hooks and other events", () => fixture((f) => {
+test("installer preserves existing Stop, prompt, tool hooks and other config", () => fixture((f) => {
   mkdirSync(join(f.root, "codex"), { recursive: true });
   const original = {
     description: "Keep other agents working",
     hooks: {
       Stop: [{ hooks: [{ type: "command", command: "node other-stop-hook.mjs" }] }],
       UserPromptSubmit: [{ hooks: [{ type: "command", command: "node user-hook.mjs" }] }],
+      PostToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: "node audit-hook.mjs" }] }],
+      SubagentStop: [{ hooks: [{ type: "command", command: "node subagent-hook.mjs" }] }],
     },
   };
   writeFileSync(f.hooksPath, JSON.stringify(original));
@@ -37,10 +41,14 @@ test("installer preserves existing Stop hooks and other events", () => fixture((
   assert.equal(result.applied, true);
   assert.ok(result.backupPath && existsSync(result.backupPath));
   assert.equal(updated.description, original.description);
-  assert.deepEqual(updated.hooks.UserPromptSubmit, original.hooks.UserPromptSubmit);
-  assert.deepEqual(updated.hooks.Stop[0], original.hooks.Stop[0]);
-  assert.match(updated.hooks.Stop[1].hooks[0].command, /codex-stop-gate\.mjs/);
-  assert.equal(updated.hooks.Stop[1].hooks[0].timeout, 15);
+  for (const event of ["Stop", "UserPromptSubmit", "PostToolUse"]) {
+    assert.deepEqual(updated.hooks[event][0], original.hooks[event][0]);
+    assert.equal(updated.hooks[event].length, 2);
+    assert.match(updated.hooks[event][1].hooks[0].command, /codex-(?:stop-gate|turn-context)\.mjs/);
+    assert.equal(updated.hooks[event][1].hooks[0].timeout, 15);
+  }
+  assert.equal(updated.hooks.PostToolUse[1].matcher, "Bash");
+  assert.deepEqual(updated.hooks.SubagentStop, original.hooks.SubagentStop);
 }));
 
 test("rerunning installer is idempotent with no extra backups", () => fixture((f) => {
@@ -60,7 +68,7 @@ test("installer rejects malformed JSON without modifying it", () => fixture((f) 
   assert.equal(readFileSync(f.hooksPath, "utf8"), "broken");
 }));
 
-test("existing custom entries survive replacement of old design hook entry", () => fixture((f) => {
+test("existing custom entries survive replacement of old design Stop hook entry", () => fixture((f) => {
   mkdirSync(join(f.root, "codex"), { recursive: true });
   writeFileSync(f.hooksPath, JSON.stringify({
     hooks: { Stop: [
@@ -71,14 +79,22 @@ test("existing custom entries survive replacement of old design hook entry", () 
     ] },
   }));
   installCodexStopGate({ ...f, apply: true });
-  const stop = JSON.parse(readFileSync(f.hooksPath, "utf8")).hooks.Stop;
-  assert.equal(stop.length, 2);
-  assert.equal(stop[0].hooks[0].command, "node other-hook.mjs");
-  assert.match(stop[1].hooks[0].command, /codex-stop-gate/);
+  const config = JSON.parse(readFileSync(f.hooksPath, "utf8"));
+  assert.equal(config.hooks.Stop.length, 2);
+  assert.equal(config.hooks.Stop[0].hooks[0].command, "node other-hook.mjs");
+  assert.match(config.hooks.Stop[1].hooks[0].command, /codex-stop-gate/);
+  assert.equal(config.hooks.UserPromptSubmit.length, 1);
+  assert.equal(config.hooks.PostToolUse.length, 1);
 }));
 
-test("installer refuses to replace malformed Stop registry", () => fixture((f) => {
+test("installer refuses malformed event registry instead of overwriting it", () => fixture((f) => {
   mkdirSync(join(f.root, "codex"), { recursive: true });
-  writeFileSync(f.hooksPath, JSON.stringify({ hooks: { Stop: "corrupt" } }));
-  assert.throws(() => installCodexStopGate({ ...f, apply: true }), /hooks.Stop must be an array/);
+  writeFileSync(f.hooksPath, JSON.stringify({ hooks: { PostToolUse: "corrupt" } }));
+  assert.throws(() => installCodexStopGate({ ...f, apply: true }), /Hook event registry must be an array/);
+}));
+
+test("installer fails safely when supporting native context script is missing", () => fixture((f) => {
+  rmSync(join(f.skillDir, "scripts", "codex-turn-context.mjs"));
+  assert.throws(() => installCodexStopGate({ ...f, apply: true }), /Codex hook script is missing/);
+  assert.equal(existsSync(f.hooksPath), false);
 }));
