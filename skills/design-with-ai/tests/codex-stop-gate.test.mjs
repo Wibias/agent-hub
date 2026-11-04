@@ -99,7 +99,7 @@ test("implicit skill path read triggers gate for an ordinary UI improvement", ()
 
 test("valid complete proof from a real runner satisfies Stop hook", () => fixture(async (f) => {
   f.putReceipt();
-  const result = runGate({ receipt: f.receipt, baseline: f.baseline, proof: f.proof });
+  const result = runGate({ receipt: f.receipt, baseline: f.baseline, proof: f.proof, workspaceCwd: f.dir });
   assert.equal(result.exitCode, 0);
   const command = 'node "skills/design-with-ai/scripts/run-iteration-gate.mjs" --receipt "' +
     f.receipt + '" --baseline "' + f.baseline + '" --proof "' + f.proof + '"';
@@ -115,7 +115,7 @@ test("valid complete proof from a real runner satisfies Stop hook", () => fixtur
 
 test("Codex exec_command arrays are accepted as current-turn validator invocations", () => fixture(async (f) => {
   f.putReceipt();
-  assert.equal(runGate({ receipt: f.receipt, baseline: f.baseline, proof: f.proof }).exitCode, 0);
+  assert.equal(runGate({ receipt: f.receipt, baseline: f.baseline, proof: f.proof, workspaceCwd: f.dir }).exitCode, 0);
   const command = 'node run-iteration-gate.mjs --receipt "' + f.receipt +
     '" --baseline "' + f.baseline + '" --proof "' + f.proof + '"';
   const arrayCall = {
@@ -147,7 +147,7 @@ test("Git project Stop cannot accept legacy proof before durable history is init
 
 test("current, valid PARTIAL receipt passes only with an explicit PARTIAL final verdict", () => fixture(async (f) => {
   f.putReceipt("PARTIAL");
-  assert.equal(runGate({ receipt: f.receipt, baseline: f.baseline, proof: f.proof }).exitCode, 0);
+  assert.equal(runGate({ receipt: f.receipt, baseline: f.baseline, proof: f.proof, workspaceCwd: f.dir }).exitCode, 0);
   const command = 'node run-iteration-gate.mjs --receipt "' + f.receipt +
     '" --baseline "' + f.baseline + '" --proof "' + f.proof + '"';
   f.write([f.prompt("Verbessere mit design-with-ai die Einstellungen."), f.call("exec_command", command)]);
@@ -158,7 +158,7 @@ test("current, valid PARTIAL receipt passes only with an explicit PARTIAL final 
 
 test("stale proof after changes to receipt cannot be reused", () => fixture(async (f) => {
   f.putReceipt();
-  runGate({ receipt: f.receipt, baseline: f.baseline, proof: f.proof });
+  runGate({ receipt: f.receipt, baseline: f.baseline, proof: f.proof, workspaceCwd: f.dir });
   const receiptObject = JSON.parse(readFileSync(f.receipt, "utf8"));
   receiptObject.findings[0].acceptance = "New value";
   writeFileSync(f.receipt, JSON.stringify(receiptObject));
@@ -177,7 +177,7 @@ test("invalid PARTIAL receipt with nonzero validator exit does not satisfy the S
   invalid.findings[0].reason = "Still open";
   // Deliberately omit the required openCarryover ID so the real validator exits 1.
   writeFileSync(f.receipt, JSON.stringify(invalid));
-  assert.equal(runGate({ receipt: f.receipt, baseline: f.baseline, proof: f.proof }).exitCode, 1);
+  assert.equal(runGate({ receipt: f.receipt, baseline: f.baseline, proof: f.proof, workspaceCwd: f.dir }).exitCode, 1);
   const command = 'node run-iteration-gate.mjs --receipt "' + f.receipt +
     '" --baseline "' + f.baseline + '" --proof "' + f.proof + '"';
   f.write([f.prompt("Verbessere mit design-with-ai die Einstellungen."), f.call("exec_command", command)]);
