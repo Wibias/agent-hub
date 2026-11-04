@@ -18,6 +18,17 @@ const statuses = new Set([
 const hashEvents = (events) => createHash("sha256").update(JSON.stringify(events)).digest("hex");
 const fields = ["id", "route", "kind", "priority", "symptom", "acceptance", "evidenceRef"];
 const findingOf = (event) => Object.fromEntries(fields.map(k => [k, event[k]]));
+function reviewOf(item, runId) {
+  const reason = item.reassessment?.reason ?? item.reason ??
+    item.justification ?? item.decision ?? "Reviewed current state";
+  const evidenceRef = item.verification?.evidenceRef ??
+    item.reassessment?.evidenceRef ?? item.after?.ref ?? item.evidenceRef;
+  if (!filled(reason) || !filled(evidenceRef)) {
+    throw new Error(item.id + ": review needs a reason and evidence reference");
+  }
+  return { type: "REVIEWED", runId, id: item.id,
+    disposition: item.disposition, reason, evidenceRef };
+}
 
 function ensureSafeFile(path) {
   if (!existsSync(path)) throw new Error("Ledger missing; initialize or import findings before editing");
@@ -180,7 +191,9 @@ export function verifyLedgerCoverage(ledger, baseline, receipt, { requireSynced 
     }
     if (requireSynced) {
       const evt = runEvents.find(x => x.id === item.id);
-      if (!evt || evt.disposition !== item.disposition) {
+      const expected = reviewOf(item, snapshot.runId);
+      if (!evt || evt.disposition !== expected.disposition ||
+          evt.reason !== expected.reason || evt.evidenceRef !== expected.evidenceRef) {
         fail("Final finding missing matching persisted run assessment: " + item.id);
       }
     }
@@ -223,17 +236,7 @@ export function syncLedger(path, baseline, receipt) {
       known.add(f.id);
       added++;
     }
-    const reason = f.reassessment?.reason ?? f.reason ?? f.justification ??
-      f.decision ?? "Reviewed current state";
-    const evidenceRef = f.verification?.evidenceRef ?? f.reassessment?.evidenceRef ??
-      f.after?.ref ?? f.evidenceRef;
-    if (!filled(reason) || !filled(evidenceRef)) {
-      throw new Error(f.id + ": review needs a reason and evidence reference");
-    }
-    ledger.events.push({
-      type: "REVIEWED", runId, id: f.id, disposition: f.disposition,
-      reason, evidenceRef,
-    });
+    ledger.events.push(reviewOf(f, runId));
   }
   const verified = verifyLedgerCoverage(ledger, baseline, receipt);
   if (!verified.valid) throw new Error(verified.problems.join("; "));
