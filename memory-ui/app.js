@@ -1136,7 +1136,7 @@ function renderGraph() {
                       x2="${to.x.toFixed(2)}"
                       y2="${to.y.toFixed(2)}"
                     >
-                      <title>${escapeHtml(edge.relation)} · ${escapeHtml(edge.origin)}${edge.origin === 'inferred' ? ` · ${Number(edge.weight ?? 0).toFixed(3)}` : ''}</title>
+                      <title>${escapeHtml(edge.relation)} · ${escapeHtml(edge.origin)}${edge.relation === 'semantic_similarity' && Number.isFinite(edge.weight) ? ` · ${edge.weight.toFixed(3)}` : ''}</title>
                     </line>
                   `;
                 }).join('')}

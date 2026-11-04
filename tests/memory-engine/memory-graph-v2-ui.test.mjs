@@ -24,3 +24,9 @@ test('D4 HTTP route does not take user query revisionSha as trusted Git evidence
   assert.ok(scopeRoute.includes('memoryUiGraph(engine, { projectId, branch })'));
   assert.equal(scopeRoute.includes("queryValue(url, 'revisionSha')"), false);
 });
+
+test('D4 typed edges never display fabricated similarity weights', async () => {
+  const js = await readFile(new URL('../../memory-ui/app.js', import.meta.url), 'utf8');
+  assert.match(js, /edge\.relation === 'semantic_similarity' && Number\.isFinite\(edge\.weight\)/);
+  assert.doesNotMatch(js, /edge\.origin === 'inferred' \? ` ·/);
+});
