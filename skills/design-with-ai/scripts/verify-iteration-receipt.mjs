@@ -251,24 +251,48 @@ export function validateIterationReceipt(input, baseline = null) {
   };
 }
 
-function main(argv) {
+async function main(argv) {
   const args = argv.slice(2);
-  const hasBaseline = args.length === 4 && args[0] === "--receipt" && args[2] === "--baseline";
-  const standalone = args.length === 2 && args[0] === "--receipt";
-  if (!hasBaseline && !standalone) {
-    process.stderr.write("Usage: node verify-iteration-receipt.mjs --receipt <receipt.json> [--baseline <pre-edit-findings.json>]\n");
+  const options = new Map();
+  for (let i = 0; i < args.length; i += 2) {
+    if (!["--receipt", "--baseline", "--ledger"].includes(args[i]) ||
+        typeof args[i + 1] !== "string" || args[i + 1].startsWith("--") ||
+        options.has(args[i])) {
+      process.stderr.write("Usage: node verify-iteration-receipt.mjs --receipt <json> [--baseline <json>] [--ledger <json>]\n");
+      process.exitCode = 2;
+      return;
+    }
+    options.set(args[i], resolve(args[i + 1]));
+  }
+  if (!options.has("--receipt") || (options.has("--ledger") && !options.has("--baseline"))) {
+    process.stderr.write("Receipt path required; --ledger also requires --baseline\n");
     process.exitCode = 2;
     return;
   }
   try {
-    const data = JSON.parse(readFileSync(resolve(args[1]), "utf8"));
-    const baseline = hasBaseline ? JSON.parse(readFileSync(resolve(args[3]), "utf8")) : null;
-    if (data.requiresPriorBaseline === true && !hasBaseline) {
+    const data = JSON.parse(readFileSync(options.get("--receipt"), "utf8"));
+    const baseline = options.has("--baseline")
+      ? JSON.parse(readFileSync(options.get("--baseline"), "utf8")) : null;
+    if (data.requiresPriorBaseline === true && baseline === null) {
       process.stderr.write("This iterative receipt requires --baseline from the pre-edit review\n");
       process.exitCode = 2;
       return;
     }
     const result = validateIterationReceipt(data, baseline);
+    if (options.has("--ledger")) {
+      const { readLedger, verifyLedgerCoverage } = await import("./findings-ledger.mjs");
+      const ledger = readLedger(options.get("--ledger"));
+      const coverage = verifyLedgerCoverage(ledger, baseline, data);
+      result.ledgerChecked = true;
+      result.ledgerRunId = coverage.runId ?? null;
+      if (!coverage.valid) {
+        result.valid = false;
+        result.problems.push(...coverage.problems);
+      }
+    } else if (data.requiresFindingsLedger === true) {
+      result.valid = false;
+      result.problems.push("Receipt requires an independent durable findings ledger");
+    }
     process.stdout.write(JSON.stringify(result, null, 2) + "\n");
     if (!result.valid) process.exitCode = 1;
   } catch (error) {
