@@ -33,7 +33,11 @@ the user needs to inspect, decide, or legitimately change on one item:
 full preview, source/content, quality evidence, recorded configuration,
 outputs, recovery, and an eligible next action. Select a task-appropriate
 inspector/editor only where the product actually exposes the data and
-capabilities. Keep the media content focal when inspection is the job.
+capabilities. When simultaneous inspection matters, a desktop media-first
+preview with an adjacent contextual inspector can reduce page switching;
+on narrow screens, preserve preview priority and provide accessible access
+to the inspector rather than compressing both beyond legibility. Keep the
+media content focal when inspection is the job.
 
 Do **not** force a workstation onto a read-only artifact or fabricate script
 editing, re-rendering, analytics, or publishing controls. A deliberate
