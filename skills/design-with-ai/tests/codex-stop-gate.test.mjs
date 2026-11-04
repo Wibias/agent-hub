@@ -99,14 +99,15 @@ test("implicit skill path read triggers gate for an ordinary UI improvement", ()
 
 test("valid complete proof from a real runner satisfies Stop hook", () => fixture(async (f) => {
   f.putReceipt();
-  const result = runGate({ receipt: f.receipt, baseline: f.baseline, proof: f.proof });
+  const result = runGate({ receipt: f.receipt, baseline: f.baseline, proof: f.proof, workspaceCwd: f.dir });
   assert.equal(result.exitCode, 0);
   const command = 'node "skills/design-with-ai/scripts/run-iteration-gate.mjs" --receipt "' +
     f.receipt + '" --baseline "' + f.baseline + '" --proof "' + f.proof + '"';
   f.write([f.prompt("Verbessere mit design-with-ai die Einstellungen."), f.call("exec_command", command)]);
   const report = await inspectTurnTranscript(f.transcript);
   assert.equal(report.gateCommands.length, 1);
-  assert.equal((await handleStop(f.event)).continue, true);
+  const verdict = await handleStop(f.event);
+  assert.equal(verdict.continue, true, JSON.stringify(verdict));
   const retried = await handleStop({ ...f.event, stop_hook_active: true });
   assert.equal(retried.continue, true);
   assert.equal(retried.systemMessage, undefined);
@@ -114,7 +115,7 @@ test("valid complete proof from a real runner satisfies Stop hook", () => fixtur
 
 test("Codex exec_command arrays are accepted as current-turn validator invocations", () => fixture(async (f) => {
   f.putReceipt();
-  assert.equal(runGate({ receipt: f.receipt, baseline: f.baseline, proof: f.proof }).exitCode, 0);
+  assert.equal(runGate({ receipt: f.receipt, baseline: f.baseline, proof: f.proof, workspaceCwd: f.dir }).exitCode, 0);
   const command = 'node run-iteration-gate.mjs --receipt "' + f.receipt +
     '" --baseline "' + f.baseline + '" --proof "' + f.proof + '"';
   const arrayCall = {
@@ -125,7 +126,8 @@ test("Codex exec_command arrays are accepted as current-turn validator invocatio
   };
   f.write([f.prompt("Improve the current UI with design-with-ai."), arrayCall]);
   assert.equal((await inspectTurnTranscript(f.transcript)).gateCommands.length, 1);
-  assert.equal((await handleStop(f.event)).continue, true);
+  const verdict = await handleStop(f.event);
+  assert.equal(verdict.continue, true, JSON.stringify(verdict));
 }));
 
 test("Git project Stop cannot accept legacy proof before durable history is initialized", () => fixture(async (f) => {
@@ -145,17 +147,18 @@ test("Git project Stop cannot accept legacy proof before durable history is init
 
 test("current, valid PARTIAL receipt passes only with an explicit PARTIAL final verdict", () => fixture(async (f) => {
   f.putReceipt("PARTIAL");
-  assert.equal(runGate({ receipt: f.receipt, baseline: f.baseline, proof: f.proof }).exitCode, 0);
+  assert.equal(runGate({ receipt: f.receipt, baseline: f.baseline, proof: f.proof, workspaceCwd: f.dir }).exitCode, 0);
   const command = 'node run-iteration-gate.mjs --receipt "' + f.receipt +
     '" --baseline "' + f.baseline + '" --proof "' + f.proof + '"';
   f.write([f.prompt("Verbessere mit design-with-ai die Einstellungen."), f.call("exec_command", command)]);
-  assert.equal((await handleStop({ ...f.event, last_assistant_message: "PARTIAL: noch offen." })).continue, true);
+  const verdict = await handleStop({ ...f.event, last_assistant_message: "PARTIAL: noch offen." });
+  assert.equal(verdict.continue, true, JSON.stringify(verdict));
   assert.equal((await handleStop(f.event)).decision, "block");
 }));
 
 test("stale proof after changes to receipt cannot be reused", () => fixture(async (f) => {
   f.putReceipt();
-  runGate({ receipt: f.receipt, baseline: f.baseline, proof: f.proof });
+  runGate({ receipt: f.receipt, baseline: f.baseline, proof: f.proof, workspaceCwd: f.dir });
   const receiptObject = JSON.parse(readFileSync(f.receipt, "utf8"));
   receiptObject.findings[0].acceptance = "New value";
   writeFileSync(f.receipt, JSON.stringify(receiptObject));
@@ -174,7 +177,7 @@ test("invalid PARTIAL receipt with nonzero validator exit does not satisfy the S
   invalid.findings[0].reason = "Still open";
   // Deliberately omit the required openCarryover ID so the real validator exits 1.
   writeFileSync(f.receipt, JSON.stringify(invalid));
-  assert.equal(runGate({ receipt: f.receipt, baseline: f.baseline, proof: f.proof }).exitCode, 1);
+  assert.equal(runGate({ receipt: f.receipt, baseline: f.baseline, proof: f.proof, workspaceCwd: f.dir }).exitCode, 1);
   const command = 'node run-iteration-gate.mjs --receipt "' + f.receipt +
     '" --baseline "' + f.baseline + '" --proof "' + f.proof + '"';
   f.write([f.prompt("Verbessere mit design-with-ai die Einstellungen."), f.call("exec_command", command)]);

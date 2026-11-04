@@ -86,7 +86,7 @@ test("valid gate proof is checked at Stop without transcript", () => fixture(asy
     schemaVersion: 1, intent: "IMPROVE", scope: ["/settings"], findings: [],
   }));
   recordTurnHook(f.prompt("Verbessere die UI mit design-with-ai."), { root: f.stateRoot });
-  assert.equal(runGate({ receipt, baseline, proof }).exitCode, 0);
+  assert.equal(runGate({ receipt, baseline, proof, workspaceCwd: f.root }).exitCode, 0);
   const cmd = 'node "skills/design-with-ai/scripts/run-iteration-gate.mjs" --receipt "' +
     receipt + '" --baseline "' + baseline + '" --proof "' + proof + '"';
   const result = recordTurnHook(f.tool(cmd), { root: f.stateRoot });
@@ -114,18 +114,18 @@ test("a passing proof with an old executedAt cannot certify a later turn", () =>
   writeFileSync(baseline, JSON.stringify({
     schemaVersion: 1, intent: "IMPROVE", scope: ["/settings"], findings: [],
   }));
-  assert.equal(runGate({ receipt, baseline, proof }).exitCode, 0);
+  assert.equal(runGate({ receipt, baseline, proof, workspaceCwd: f.root }).exitCode, 0);
   const old = JSON.parse(readFileSync(proof, "utf8"));
   old.executedAt = "2000-01-01T00:00:00.000Z";
   writeFileSync(proof, JSON.stringify(old));
-  assert.equal(checkProof({ receipt, baseline, checkProof: proof }).completionEligible, true);
+  assert.equal(checkProof({ receipt, baseline, checkProof: proof, workspaceCwd: f.root }).completionEligible, true);
   recordTurnHook(f.prompt("Verbessere die UI mit design-with-ai."), { root: f.stateRoot });
   const command = 'node run-iteration-gate.mjs --receipt "' + receipt +
     '" --baseline "' + baseline + '" --proof "' + proof + '"';
   recordTurnHook(f.tool(command), { root: f.stateRoot });
   const result = await handleStop(f.stop, { turnRoot: f.stateRoot });
   assert.equal(result.decision, "block");
-  assert.equal(result.proofStatus, "PROOF_INVALID_OR_STALE");
+  assert.equal(result.proofStatus, "PROOF_TOO_OLD");
 }));
 
 test("relative gate paths are resolved against the project working directory", () => fixture(async (f) => {

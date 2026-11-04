@@ -123,6 +123,17 @@ macro similarity. Do not load or run this comparison for a single-route task.
 
 ## Before/after iteration evidence
 
+**Final-edit freshness:** A gate proof must be generated only after all UI
+source changes and receipt/baseline/ledger reconciliation are complete.
+In a Git project, the gate hashes eligible tracked and untracked source
+files at execution. A later edit to `ui/index.html`, TS/TSX, CSS or other
+source invalidates the proof even if the receipt text is unchanged. Re-run
+with a new proof path after any late hook-driven fix; always use --check-proof
+on the final state. PARTIAL is allowed only as a valid, explicitly disclosed
+incomplete result, not as COMPLETE. Diagnostics distinguish changed receipt,
+baseline, ledger, source worktree or too-old proof rather than treating every
+staleness as one generic error. This is not a runtime screenshot attestation.
+
 For modifying EXISTING UI, use the persistent, project-owned history in
 `durable-findings-ledger.md` before assembling the per-run receipt. The
 independent pre-edit manifest comes from its frozen snapshot, not a newly

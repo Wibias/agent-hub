@@ -57,10 +57,18 @@ configurations.
    `run-iteration-gate.mjs --receipt ... [--baseline ...] --proof ...`
    invocation and inspect the proof with the already-shipped
    `run-iteration-gate.mjs` `checkProof()` validator.
-4. Permit `COMPLETE` only for a current, input-bound, valid COMPLETE proof.
+4. Bind a Git project's tracked and untracked source files (including
+   HTML/CSS/TS and small UI assets) to a content-derived SHA-256 snapshot at
+   gate execution. Stop compares the current source snapshot, receipt,
+   baseline, ledger and validators to the recorded proof. A code change
+   **after** a green gate, such as a late font fix in `ui/index.html`,
+   invalidates the earlier evidence even if all other gates passed.
+   Re-run the full iteration gate with a **new** proof output path after
+   the final code/evidence change.
+5. Permit `COMPLETE` only for a current, input-bound, valid COMPLETE proof.
    Permit `PARTIAL` / `NOT_VERIFIED` only with a valid matching proof
    and the corresponding **explicit verdict** in the final message.
-5. Otherwise request one Codex automatic continuation asking it to run
+6. Otherwise request one Codex automatic continuation asking it to run
    the real validator and produce/verify proof. If `stop_hook_active` is
    already true, allow termination to avoid a loop. This is a bounded
    self-correction opportunity, **not** silent success.
@@ -109,8 +117,15 @@ Key outcomes:
   modifying design-with-ai turn.
 - `TRANSCRIPT_UNAVAILABLE` or `TRANSCRIPT_SCAN_ERROR`: inspection
   could not establish the current turn; the hook fails open.
-- `proof=PROOF_MISSING`, `PROOF_INVALID_OR_STALE`,
-  `VALIDATOR_NONZERO`, or `PATH_REJECTED`: why a candidate proof failed.
+- `proof=RECEIPT_CHANGED`, `BASELINE_CHANGED`, `LEDGER_CHANGED`,
+  `WORKTREE_CHANGED`, `VALIDATOR_CHANGED`, or `PROOF_TOO_OLD`:
+  precise source of stale gate evidence. `WORKTREE_UNBOUND` means an older
+  proof never captured a project source snapshot. Each triggers a final
+  gate rerun; the diagnostic journal records only the error code, not paths
+  or source content.
+- `proof=PROOF_MISSING`, `PROOF_INVALID`, `WORKTREE_UNAVAILABLE`,
+  `VALIDATOR_NONZERO`, `INCOMPLETE_NOT_DISCLOSED`, or `PATH_REJECTED`:
+  additional reasons a candidate cannot certify completion.
 
 Per-turn checkpoint files are stored separately under
 `~/.codex/design-with-ai/turns/`. Filenames are hashes, and prompts,
@@ -140,6 +155,7 @@ Run the deterministic Node regression tests:
 node --test skills/design-with-ai/tests/codex-stop-gate.test.mjs
 node --test skills/design-with-ai/tests/install-codex-stop-gate.test.mjs
 node --test skills/design-with-ai/tests/stop-diagnostic-journal.test.mjs
+node --test skills/design-with-ai/tests/project-source-snapshot.test.mjs
 ```
 
 In Codex, `/hooks` shows whether the hook is loaded and trusted. A
@@ -161,7 +177,12 @@ from a green test in the Hub repository.
   `stop_hook_active`. It is honored as a one-retry limit. The agent can
   still end with unresolved findings and a truthful incomplete verdict.
 - **Proof scope:** The proof validates receipt structure, current input
-  hashes and observed validator subprocess result. It does not authenticate
+  hashes, a bounded Git-workspace source-content fingerprint, and observed
+  validator subprocess result. It includes tracked/untracked source code and
+  small UI assets, but intentionally excludes ignored files, generated
+  screenshot/report directories, untracked ignored files and large video
+  assets. An overlarge source file triggers explicit inability to certify
+  rather than a guessed pass. It does not authenticate
   screenshots, prove the baseline was recorded before edits, prove real
   TikTok uploads, or prevent a malicious actor from forging local JSON.
 - **Hook precedence:** Multiple matching hooks execute. Another Stop hook
