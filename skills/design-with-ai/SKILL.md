@@ -162,6 +162,16 @@ normal rendered verification. Mechanical green never overrides a failed product,
 visual, or motion verdict. Missing tooling is recorded as blocked, never silently
 passed.
 
+## Optional Codex completion enforcement
+
+For a Codex host that has explicitly installed and trusted the optional
+`Stop` hook, the runtime can request one automatic continuation when a
+modifying design-with-ai turn tries to end without current gate proof.
+This does not replace the normal verification contract. A skill alone
+cannot install or force its own hook. Installation/trust and limits are
+documented in `references/codex-stop-enforcement.md`; do not load that
+host-specific guide for ordinary cross-host design work.
+
 ## Reference map
 
 - `references/hard-invariants.md`: always-on routing and authority invariants
@@ -194,6 +204,7 @@ passed.
 - `references/motion-performance.md`: live animation profiling/repair
 - `references/motion-vocabulary.md`: effect-name reverse lookup
 - `references/verification-contract.md`: completion evidence
+- `references/codex-stop-enforcement.md`: optional Codex runtime Stop enforcement and installer
 
 <!-- eval:references -->
 - references/hard-invariants.md -- when to read: after target resolution and before acting on any design-with-ai workflow
@@ -225,6 +236,7 @@ passed.
 - references/motion-performance.md -- when to read: motion-optimize
 - references/motion-vocabulary.md -- when to read: motion-name
 - references/verification-contract.md -- when to read: modifying workflows before completion
+- references/codex-stop-enforcement.md -- when to read: configuring/troubleshooting Codex Stop hooks only
 - tests/evals/cases.jsonl -- when to read: before skill evaluation
 - tests/evals/penpot-cases.jsonl -- when to read: Penpot adapter acceptance and ownership boundaries
 - tests/evals/regression-cases.jsonl -- when to read: retained regressions
