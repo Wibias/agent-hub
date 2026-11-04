@@ -123,6 +123,15 @@ macro similarity. Do not load or run this comparison for a single-route task.
 
 ## Before/after iteration evidence
 
+For modifying EXISTING UI, use the persistent, project-owned history in
+`durable-findings-ledger.md` before assembling the per-run receipt. The
+independent pre-edit manifest comes from its frozen snapshot, not a newly
+reconstructed selection. After editing run findings-ledger.mjs sync, then
+run-iteration-gate with --ledger. When the project ledger exists the runner
+rejects proof generation/checking that omits it. This closes silent
+omission of old in-scope findings once they were imported; it cannot
+recover an older issue that was never recorded.
+
 For modifying non-motion product UI, include an issue-to-outcome ledger
 as defined in `critique-protocol.md`. A release receipt must account for
 each in-scope route or material component and each carried-forward issue.
@@ -164,8 +173,8 @@ are prepared, run the validator through the Node runner and write a fresh
 per-run proof in authorized task/temp storage outside the skill repository:
 
 ```shell
-node <skill-base-dir>/scripts/run-iteration-gate.mjs --receipt "<iteration-receipt.json>" --baseline "<prior-findings.json>" --proof "<new-gate-proof.json>"
-node <skill-base-dir>/scripts/run-iteration-gate.mjs --receipt "<iteration-receipt.json>" --baseline "<prior-findings.json>" --check-proof "<new-gate-proof.json>"
+node <skill-base-dir>/scripts/run-iteration-gate.mjs --receipt "<iteration-receipt.json>" --baseline "<prior-findings.json>" --ledger "<project/.design-with-ai/findings-ledger.json>" --proof "<new-gate-proof.json>"
+node <skill-base-dir>/scripts/run-iteration-gate.mjs --receipt "<iteration-receipt.json>" --baseline "<prior-findings.json>" --ledger "<project/.design-with-ai/findings-ledger.json>" --check-proof "<new-gate-proof.json>"
 ```
 
 Omit both `--baseline` flags only when an independent pre-edit manifest is
