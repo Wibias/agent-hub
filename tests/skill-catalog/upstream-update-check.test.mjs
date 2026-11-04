@@ -26,7 +26,7 @@ test('upstream update check tracks the five canonical sources and decisions', ()
   );
 
   const expected = new Map([
-    ['addy', ['addyosmani/agent-skills', '301b02b12bff98e4688e6984af6556802322bbde', 'not-applicable']],
+    ['addy', ['addyosmani/agent-skills', '301b02b12bff98e4688e6984af6556802322bbde', 'current']],
     ['emil', ['emilkowalski/skills', 'f1090bec277140d02ed202440185ad9d02ac1490', 'current']],
     ['matt', ['mattpocock/skills', '4ae2317ddb22b046e26455e4f9c9b3aaaf62212d', 'not-applicable']],
     ['pstack', ['cursor/plugins', 'fd268b808c786469e6dd8c8d9db864d0de4d669e', 'current']],
@@ -67,7 +67,7 @@ test('offline upstream check records Impeccable as fully adopted', () => {
   assert.equal(result.status, 0, result.stderr);
   const lines = result.stdout.trim().split(/\r?\n/);
   assert.equal(lines.length, 5);
-  assert.match(result.stdout, /RECORDED addy .*decision=not-applicable/);
+  assert.match(result.stdout, /RECORDED addy .*decision=current/);
   assert.match(result.stdout, /RECORDED emil .*decision=current/);
   assert.match(result.stdout, /RECORDED matt .*decision=not-applicable/);
   assert.match(result.stdout, /RECORDED pstack .*decision=current/);
