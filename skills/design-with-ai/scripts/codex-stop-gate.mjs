@@ -12,7 +12,6 @@ import { checkProof } from "./run-iteration-gate.mjs";
 const SKILL_PATH = /(?:^|[\\/])design-with-ai[\\/]SKILL\.md/i;
 const GATE_RUN = /(?:^|[\s;"'\\/])run-iteration-gate\.mjs/i;
 const MODIFY = /\b(?:improve-existing|restyle-existing|redesign-existing|build-product-surface|verbesser(?:e|n|ung|t)?|überarbeit(?:e|en|ung)|optimier(?:e|en|ung)|redesign|rework|restyle|polish|implement|make .{0,35}better|fix .{0,35}(?:ui|design)|update .{0,35}(?:ui|design)|improve .{0,35}(?:ui|design))\b/i;
-const READ_ONLY = /^\s*(?:audit-surface|motion-audit|motion-review|bewerte|analysiere|prüfe|review|critique|evaluate|audit)\b/i;
 const EXPLICIT = /design-with-ai|design with ai/i;
 const EXEC_TOOL = /exec|shell|command|terminal|powershell|bash|functions\.exec/i;
 const ARG = /(?:^|\s)--(receipt|baseline|proof|check-proof)\s+(?:"([^"]+)"|'([^']+)'|(\S+))/g;
@@ -126,7 +125,9 @@ export function decideStop(event, report, { home = homedir() } = {}) {
         receipt: options.receipt, baseline: options.baseline ?? null, checkProof: options.proof,
       });
     } catch { continue; }
-    if (!checked.valid) continue;
+    // A structurally coherent proof of a validator failure is not a passing
+    // PARTIAL gate. Require the actual validator process to have exited 0.
+    if (!checked.valid || checked.processExitCode !== 0) continue;
     if (checked.completionEligible) return allow("VERIFIED_COMPLETE");
     if (["PARTIAL", "NOT_VERIFIED"].includes(checked.verdict) &&
         new RegExp("\\b" + checked.verdict + "\\b", "i").test(event.last_assistant_message ?? "")) {
