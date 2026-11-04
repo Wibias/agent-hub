@@ -5,7 +5,7 @@ import { join } from "node:path";
 import test from "node:test";
 import { classifyPrompt, recordTurnHook, readTurnContext } from "../scripts/codex-turn-context.mjs";
 import { handleStop } from "../scripts/codex-stop-gate.mjs";
-import { runGate } from "../scripts/run-iteration-gate.mjs";
+import { runGate, checkProof } from "../scripts/run-iteration-gate.mjs";
 
 async function fixture(action) {
   const root = mkdtempSync(join(tmpdir(), "design-native-turn-test-"));
@@ -96,25 +96,36 @@ test("valid gate proof is checked at Stop without transcript", () => fixture(asy
   assert.equal(d.status, "VERIFIED_COMPLETE");
 }));
 
-test("a valid old proof cannot be replayed against a new native turn", () => fixture(async (f) => {
+test("a passing proof with an old executedAt cannot certify a later turn", () => fixture(async (f) => {
   const receipt = join(f.root, "receipt.json");
+  const baseline = join(f.root, "prior.json");
   const proof = join(f.root, "proof.json");
-  // Minimal old proof is intentionally marked earlier than the current prompt.
-  // checkProof validation is independently tested by the complete-proof case;
-  // this case verifies the extra captured-turn freshness boundary.
-  recordTurnHook(f.prompt("Verbessere die UI mit design-with-ai."),
-    { root: f.stateRoot });
-  const current = readTurnContext(f.event, { root: f.stateRoot });
-  assert.ok(current.promptAt);
-  const old = { schemaVersion: 1, executedAt: "2026-01-01T00:00:00.000Z" };
+  writeFileSync(receipt, JSON.stringify({
+    schemaVersion: 1, requiresPriorBaseline: true, iterationVerdict: "COMPLETE",
+    gates: { render: "PASS", functional: "PASS" },
+    changeSummary: { kind: "NO_CHANGE", rationale: "Existing UI reviewed", addressedFindingIds: [] },
+    scope: [{ route: "/settings", task: "Inspect", coverage: "INSPECTED",
+      semantics: { applicable: false, reason: "No guarded action" } }],
+    findings: [{ id: "UX-KEEP", route: "/settings", symptom: "Settings exist",
+      acceptance: "Settings remain usable", decision: "KEEP",
+      disposition: "KEEP_JUSTIFIED", justification: "Verified", after: { ref: "settings.png" } }],
+    openCarryover: [],
+  }));
+  writeFileSync(baseline, JSON.stringify({
+    schemaVersion: 1, intent: "IMPROVE", scope: ["/settings"], findings: [],
+  }));
+  assert.equal(runGate({ receipt, baseline, proof }).exitCode, 0);
+  const old = JSON.parse(readFileSync(proof, "utf8"));
+  old.executedAt = "2000-01-01T00:00:00.000Z";
   writeFileSync(proof, JSON.stringify(old));
-  writeFileSync(receipt, "{}");
-  const command = 'node run-iteration-gate.mjs --receipt "' +
-    receipt + '" --proof "' + proof + '"';
+  assert.equal(checkProof({ receipt, baseline, checkProof: proof }).completionEligible, true);
+  recordTurnHook(f.prompt("Verbessere die UI mit design-with-ai."), { root: f.stateRoot });
+  const command = 'node run-iteration-gate.mjs --receipt "' + receipt +
+    '" --baseline "' + baseline + '" --proof "' + proof + '"';
   recordTurnHook(f.tool(command), { root: f.stateRoot });
   const result = await handleStop(f.stop, { turnRoot: f.stateRoot });
   assert.equal(result.decision, "block");
-  assert.notEqual(result.status, "VERIFIED_COMPLETE");
+  assert.equal(result.proofStatus, "PROOF_INVALID_OR_STALE");
 }));
 
 test("new turn cannot inherit old gate candidate", () => fixture(async (f) => {
