@@ -2,14 +2,14 @@
   "schemaVersion": 1,
   "kind": "github-delivery/distribution-manifest",
   "name": "github-delivery",
-  "version": "1.8.4",
-  "sourceCommit": "cae77374c65e298596e375cb84210beeaa9b586b",
+  "version": "1.8.5",
+  "sourceCommit": "4e682bda78e4791c7f8dcb4e01b9d792485d5c7e",
   "files": [
     {
       "path": "CHANGELOG.md",
-      "bytes": 97834,
+      "bytes": 98651,
       "mode": "0644",
-      "sha256": "ca60afce2bf33c96a744540fd80ae7e33811d76a52a5381dc0d3faee61ec40ec"
+      "sha256": "7819a90de3068f95d4da78358bcc1374971d1ca1ed02f797cb03ac218d08d1f1"
     },
     {
       "path": "INSTALL.md",
@@ -39,7 +39,7 @@
       "path": "SKILL.md",
       "bytes": 13391,
       "mode": "0644",
-      "sha256": "0bf0a059cafb1c8d4b82d1bea35ce82b9036e55c55f033a83f87ec513c33858e"
+      "sha256": "8e62d18c20bd0713e8759af2a05ddc8b9af61457c1858998737f2c7d05d0130d"
     },
     {
       "path": "agents/comment-inspector.md",
@@ -319,9 +319,9 @@
     },
     {
       "path": "authority-host/windows/install-release.ps1",
-      "bytes": 6815,
+      "bytes": 7554,
       "mode": "0644",
-      "sha256": "34d2f1db0c3531c2d9ecf5d2d26c8fbe3fd91e29b0bd75ff69339013af86c3ac"
+      "sha256": "4d1ef759bdad3f0bc3232bc40c0a7ec79d1e4fd88050b5c1b8704193e6945e2c"
     },
     {
       "path": "authority-host/windows/install.ps1",
@@ -351,7 +351,7 @@
       "path": "package.json",
       "bytes": 3572,
       "mode": "0644",
-      "sha256": "6d1dc752066defaf81b597d80957fd79db273cfc57b984393ebeb53e19a8c090"
+      "sha256": "70469ace4a5d315980d4b416c1fe0b1232b29ec0d38b23332b8297eec8f1f4c2"
     },
     {
       "path": "references/agent-brief.md",
