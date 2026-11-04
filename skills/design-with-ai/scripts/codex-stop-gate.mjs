@@ -25,13 +25,18 @@ const within = (path, parent) => {
   const b = process.platform === "win32" ? resolve(parent).toLowerCase() : resolve(parent);
   return a === b || a.startsWith(b + sep);
 };
+function commandValue(value) {
+  if (Array.isArray(value)) return value.map((x) => String(x)).join(" ");
+  if (typeof value === "string") return value;
+  return "";
+}
 function getCommand(payload) {
-  let args = payload?.arguments ?? payload?.input ?? payload?.command ?? "";
-  if (obj(args)) return String(args.command ?? args.cmd ?? args.script ?? "");
+  const args = payload?.arguments ?? payload?.input ?? payload?.command ?? "";
+  if (obj(args)) return commandValue(args.command ?? args.cmd ?? args.script);
   if (typeof args !== "string") return "";
   try {
     const json = JSON.parse(args);
-    if (obj(json)) return String(json.command ?? json.cmd ?? json.script ?? "");
+    if (obj(json)) return commandValue(json.command ?? json.cmd ?? json.script);
   } catch { /* raw shell command */ }
   return args;
 }
