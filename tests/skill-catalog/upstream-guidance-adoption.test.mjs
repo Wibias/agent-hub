@@ -182,7 +182,7 @@ test('Impeccable vendor pin tracks upstream 4.8.0 while preserving the Agent Hub
   const engineVersion = (await text('skills/impeccable/scripts/VERSION')).trim();
   const checksums = await text('skills/impeccable/scripts/engine-checksums.txt');
 
-  assert.match(upstream, /df3a4abe7d0840d5f60324812c432e00b66a4e75/);
+  assert.match(upstream, /9fadc41729c38fd47d7ae622b501558653f9d2e9/);
   assert.match(upstream, /Skill version: `4\.8\.0`/);
   assert.match(upstream, /Engine version: `0\.1\.18`/);
   assert.match(skill, /version: 4\.8\.0/);
