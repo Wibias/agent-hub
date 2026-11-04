@@ -156,6 +156,9 @@ jobs:
       - name: Test unified taste evidence receipt
         run: node --test skills/design-with-ai/tests/taste-evidence-receipt.test.mjs
 
+      - name: Test durable historical design findings ledger
+        run: node --test skills/design-with-ai/tests/findings-ledger.test.mjs
+
       - name: Test design iteration evidence closure
         run: node --test skills/design-with-ai/tests/verify-iteration-receipt.test.mjs
 
