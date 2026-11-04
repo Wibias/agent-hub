@@ -24,6 +24,28 @@ next meaningful step. A launcher routes users toward work and status. A
 dashboard summarizes changing state. A workspace performs the task. Do not let
 one surface inherit another surface type's default skeleton.
 
+### Overview-to-detail role allocation (when applicable)
+
+When an overview uses media previews, a contact sheet, a queue, or a catalog,
+the corresponding detail surface should be evaluated as a **different user
+task**, not merely a larger preview plus the same metadata. Identify what
+the user needs to inspect, decide, or legitimately change on one item:
+full preview, source/content, quality evidence, recorded configuration,
+outputs, recovery, and an eligible next action. Select a task-appropriate
+inspector/editor only where the product actually exposes the data and
+capabilities. When simultaneous inspection matters, a desktop media-first
+preview with an adjacent contextual inspector can reduce page switching;
+on narrow screens, preserve preview priority and provide accessible access
+to the inspector rather than compressing both beyond legibility. Keep the
+media content focal when inspection is the job.
+
+Do **not** force a workstation onto a read-only artifact or fabricate script
+editing, re-rendering, analytics, or publishing controls. A deliberate
+read-only detail viewer can be correct. Separate recorded immutable job
+settings from editable defaults, and QA success from external publish
+eligibility. Workstation-level changes that modify locked data, actions,
+or navigation require the applicable redesign/authority workflow.
+
 ## Nine required artifacts
 
 Scale the artifacts to the selected profile, but do not silently skip them.
@@ -70,6 +92,26 @@ inventory on one screen is not automatically good information architecture.
 Map entry points, primary task path, browse/search strategy, secondary
 surfaces, return path, state continuity, and responsive context changes. Load
 `intent` plus `references/information-architecture.md` when taxonomy, navigation, or content ownership is an open problem; load `intent` plus `references/interaction-patterns.md` when sequence, branching, recovery, or cross-surface flow is open; stay on `intent` when a new device or context needs more than responsive reflow. `organize`, `journey`, and `transpose` are not installed.
+
+### Destination and navigation intent audit
+
+For each rendered viewport and meaningful user context, inventory repeated
+destinations and actions across shell navigation, page toolbars, content
+links, cards, breadcrumbs, and footer. Compare **resolved destination plus
+user intention**, not just identical text or icon: a global Settings link
+and a second generic Settings button beside it are usually redundant, while
+global Settings and a direct link to a specific job's settings can serve
+different tasks. Ask what the second entry point makes faster, safer, or
+more discoverable. If no concrete benefit exists, prefer one clear primary
+entry point rather than duplicated chrome.
+
+Do not enforce destination uniqueness blindly. Intentional repetitions
+can serve legal/findability conventions (for example Impressum in both
+header and footer), contextual recovery/blocked-action guidance, different
+journey entry points, or responsive layouts whose variants are not visible
+together. Record the context and benefit for each retained duplicate;
+preserve legal obligations, accessible alternative paths, and locked
+navigation contracts. Do not remove required links merely to reduce counts.
 
 ### Workflow-state semantics before visual composition
 

@@ -37,6 +37,21 @@ behaviour, and obvious performance footguns.
 
 Do not add decorative motion in this phase.
 
+### Duplicate-destination and detail-role review
+
+When inspecting a real product surface, apply `core-design-workflow.md`'s
+destination/intent audit. If two visible controls reach the same destination
+for the same user task, remove or consolidate the unearned duplicate within
+the authorized scope; otherwise document the specific legal, contextual,
+responsive, or accessibility purpose for retaining both. Do not treat
+same-looking labels or breakpoint-exclusive variants as proof of duplication.
+
+For media galleries, queues, and other overview/detail pairs, assess the
+detail route against its own task. Preserve full media inspection and surface
+available source/configuration/QA/next-step information when useful; do not
+manufacture editable controls, data, or publishing rights. A deliberately
+read-only detail surface can pass when appropriate.
+
 ### Task-first acceptance before Craft
 
 For an operator surface found in the inspected target, apply the task-first
@@ -153,6 +168,7 @@ blocking. Load `verification-contract.md` before claiming completion.
 - Browser/rendered evidence is the visual completion gate when available.
 - A passing pattern scan does not replace independent functional-quality and style-distribution review.
 - Workflow-state semantics and action eligibility require verified product contracts, not screenshots or design taste.
+- Navigation repetition needs a justified second user purpose; detail workspaces need a distinct task rather than an invented control set.
 - Every resolved iteration finding needs matched evidence; carry unresolved findings forward instead of silently declaring success.
 
 ## Motion opt-in

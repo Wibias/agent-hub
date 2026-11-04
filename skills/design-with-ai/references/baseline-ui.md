@@ -112,6 +112,29 @@ A failure in task clarity, truth, or legibility must be revised before Craft.
 If correcting it changes locked purpose or IA, route through the workflow's
 authority/redesign rules rather than silently changing the product model.
 
+## Detail workspace and navigation-purpose acceptance
+
+When a product has a list/gallery and a detail route, inspect them as a
+connected journey. The overview optimizes recognition/selection; the detail
+optimizes a single item's actual inspection, decision, or supported action.
+Compare what content is exposed (full media preview, source text, configuration,
+QA evidence, outputs, publishing state) with the real data contracts and user
+task. Avoid a metadata-only side panel that leaves supported useful work
+undiscoverable. A read-only inspector is valid when the underlying artifact
+is immutable or no further operations exist. Never invent editing, preview
+asset generation, or server capabilities to fill space.
+
+Check duplicate navigation/action destinations in the **same effective
+viewport and task context**. An identical global Settings destination
+from a top-level tab and a neighboring generic toolbar button usually
+adds noise without navigation value. Keep both only if a distinct context
+(such as deep-linking to a relevant subsection or returning from a blocked
+action) improves task completion. Header/footer legal links, accessible
+alternate paths, and breakpoint-specific controls can legitimately recur.
+Compare targets and actual behaviors, not label strings alone; the same
+label may lead to different scoped targets. No arbitrary link-count cap.
+Preserve any required legal, accessibility, or navigation contract.
+
 ## Workflow semantics acceptance (conditional)
 
 Use this when a UI mixes a process/stage rail, status labels, selectable
@@ -185,6 +208,7 @@ Before handing off to Craft, check:
 - visible hierarchy and primary action, including perceptual grouping when that was an identified defect;
 - task-first acceptance for applicable operator surfaces, including status truth, legible information, and justified containment;
 - workflow semantics for applicable stage/status/filter/action surfaces, including count predicates, independent readiness, selection behavior, and guarded transitions;
+- intentional destination repetition by context (including legal and accessible alternate navigation), and task-specific overview/detail information allocation where relevant;
 - no baseline rule accidentally changed product semantics or routes.
 
 When the target is native/mobile, load `native-mobile.md` for platform-specific units, safe areas, text scaling, gestures, and runtime verification.
