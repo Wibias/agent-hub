@@ -134,7 +134,7 @@ export function assertFusion(fusion) {
   return fusion;
 }
 
-export function fuseProviderEvidence(reports, { required = [], optional = [] } = {}) {
+export function fuseProviderEvidence(reports, { required = [], optional = [], scope = null } = {}) {
   validateSelection(required, optional);
   if (!Array.isArray(reports) || reports.length > 10) {
     throw new TypeError("Provider reports must be a bounded array");
@@ -193,7 +193,8 @@ export function fuseProviderEvidence(reports, { required = [], optional = [] } =
     kind: "dwa/provider-evidence-fusion",
     status,
     completionEligible: false,
-    inputSha256: hash(checked),
+    inputSha256: hash(scope ? { reports: checked, scope } : checked),
+    ...(scope ? { scope: structuredClone(scope) } : {}),
     coverage: {
       complete: !failedRequired.length && !incompleteOptional.length,
       required: [...required].sort(stableCompare),

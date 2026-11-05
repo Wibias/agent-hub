@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Phase 5 DWA Gate supplement. Never substitutes for canonical DWA verification.
-import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -82,11 +83,14 @@ export async function runQualityAudit(argv = process.argv.slice(2)) {
   const evaluated = await runProfileProviders({
     ...opts, outputRoot: runDir,
   });
-  const paths = {};
+  const scopePath = join(runDir, "source-scope.json");
+  writeFresh(scopePath, evaluated.sourceManifest);
+  const paths = {}, hashes = {};
   for (const report of evaluated.reports) {
     const file = join(runDir, report.provider + ".json");
     writeFresh(file, report);
     paths[report.provider] = file;
+    hashes[report.provider] = createHash("sha256").update(JSON.stringify(report, null, 2) + "\n").digest("hex");
   }
   const fusionPath = join(runDir, "fusion.json");
   writeFresh(fusionPath, evaluated.fusion);
@@ -103,9 +107,10 @@ export async function runQualityAudit(argv = process.argv.slice(2)) {
     status: evaluated.fusion.status,
     completionEligible: false,
     selected: evaluated.selection,
+    scope: evaluated.scope,
     coverage: evaluated.fusion.coverage,
     counts: evaluated.fusion.counts,
-    artifacts: { directory: runDir, reports: paths, fusion: fusionPath },
+    artifacts: { directory: runDir, reports: paths, fusion: fusionPath, sourceScope: scopePath, reportSha256: hashes },
     ...(journalCapture ? { journalCapture } : {}),
     next: evaluated.next,
   };

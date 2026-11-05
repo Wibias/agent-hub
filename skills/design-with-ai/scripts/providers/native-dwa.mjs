@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { dirname, isAbsolute, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Capability, ProviderStatus, providerFailure, assertProviderReport } from "./contract.mjs";
 import { runProcess } from "./process-runner.mjs";
@@ -8,9 +8,12 @@ import { runProcess } from "./process-runner.mjs";
 const SCRIPT = fileURLToPath(new URL("../taste-gate.mjs", import.meta.url));
 const message = (hit) => String(hit.note || hit.name || "DWA source quality signal");
 
-function normalizeHit(hit, route) {
-  const file = typeof hit.relativeFile === "string" && hit.relativeFile
-    ? hit.relativeFile : "<surface>";
+function normalizeHit(hit, route, projectRoot) {
+  const file = hit.relativeFile === "<surface>" ? "<surface>"
+    : projectRoot && typeof hit.file === "string" && isAbsolute(hit.file)
+      ? relative(projectRoot, hit.file).replaceAll("\\", "/")
+      : typeof hit.relativeFile === "string" && hit.relativeFile
+        ? hit.relativeFile : "<surface>";
   const rule = String(hit.id ?? "UNKNOWN");
   const line = Number.isInteger(hit.line) && hit.line > 0 ? hit.line : null;
   const fingerprint = [route, rule, file, line ?? "", String(hit.text ?? "")].join("|");
@@ -22,7 +25,7 @@ function normalizeHit(hit, route) {
     confidence: hit.hardGate === true ? "deterministic" : "heuristic",
     message: message(hit),
     location: { route, file, line },
-    evidence: [{ kind: "source", ref: file + (line ? ":" + line : "") }],
+    evidence: [{ kind: "source", ref: file + (line ? ":" + line : ""), snippet: String(hit.text ?? "").slice(0, 300) }],
   };
 }
 
@@ -35,7 +38,7 @@ export function createNativeDwaProvider({ script = SCRIPT, runner = runProcess }
         ? { available: true }
         : { available: false, reason: "DWA taste-gate script is missing" };
     },
-    async inspect({ target, route, intentPath, capability } = {}) {
+    async inspect({ target, route, projectRoot, intentPath, capability } = {}) {
       if (capability !== Capability.STATIC_AUDIT) {
         return providerFailure("native-dwa", Capability.STATIC_AUDIT,
           ProviderStatus.BLOCKED, "Unsupported native DWA capability");
@@ -66,7 +69,7 @@ export function createNativeDwaProvider({ script = SCRIPT, runner = runProcess }
         return providerFailure("native-dwa", Capability.STATIC_AUDIT,
           ProviderStatus.ERROR, String(payload.error || "Source gate returned invalid result"));
       }
-      const findings = payload.hits.map((hit) => normalizeHit(hit, route));
+      const findings = payload.hits.map((hit) => normalizeHit(hit, route, projectRoot));
       return assertProviderReport({
         provider: "native-dwa",
         capability: Capability.STATIC_AUDIT,
