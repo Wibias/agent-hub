@@ -68,13 +68,17 @@ export async function runCodexCandidateJudgeProbe({
       reasoningEffort,
     });
     const raw = await resource.judge(PROBE_CANDIDATE);
-    parseJudgment(raw);
-    return { status: 'ok', judgeResponseValid: true };
+    try {
+      parseJudgment(raw);
+      return { status: 'ok', executionSucceeded: true, judgeResponseValid: true };
+    } catch (error) {
+      return { ...summarizeJudgeProbeFailure(error), executionSucceeded: true, judgeResponseValid: false };
+    }
   } catch (error) {
-    return summarizeJudgeProbeFailure(error);
+    return { ...summarizeJudgeProbeFailure(error), executionSucceeded: false };
   } finally {
     if (resource && typeof resource.close === 'function') {
-      await resource.close();
+      await resource.close().catch(() => {});
     }
   }
 }
