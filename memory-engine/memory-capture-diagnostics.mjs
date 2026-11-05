@@ -20,23 +20,38 @@ function required(value, label) {
   return value.trim();
 }
 
+const DIRECT_CANDIDATE_VALIDATION = /^(?:memory candidate judgment (?:response must be|must be)|unexpected field in memory candidate judgment:|missing field in memory candidate judgment:|(?:decision|suggested_type|durability|future_utility|specificity|confidence|meaning_preserved|canonical_fact|reason|risk_flags)(?: entry)? must |(?:promote|ignore) requires )/u;
+
+/** Failure provenance comes from a fixed prefix, never a substring in provider output. */
+export function classifyCaptureFailureOrigin(message) {
+  const value = String(message ?? '').trim().toLowerCase();
+  if (/^codex candidate judge failed with exit [0-9]+(?:\b|:)/u.test(value)) return 'judge_process_exit';
+  if (/^(?:codex|node) timed out after [0-9]+ms/u.test(value)) return 'judge_timeout';
+  if (/^(?:candidate judge requires|failed to initialize isolated judge workspace:)/u.test(value)) return 'judge_setup';
+  if (DIRECT_CANDIDATE_VALIDATION.test(value)) return 'candidate_validator';
+  return 'unknown';
+}
+
 /** Categories are diagnostic hints, never a verdict about the provider. */
 export function classifyCaptureFailure(message) {
-  const value = String(message ?? '').toLowerCase();
+  const value = String(message ?? '').trim().toLowerCase();
+  const origin = classifyCaptureFailureOrigin(value);
   if (/\b429\b|rate[ _-]?limit|too many requests|resource.exhausted|quota exceeded/u.test(value)) return 'rate_limit';
   if (/\b401\b|\b403\b|unauthori[sz]ed|permission denied|authentication failed/u.test(value)) return 'authorization';
   if (/timed? out|timeout|deadline exceeded|etimedout/u.test(value)) return 'timeout';
   if (/invalid model|model not found|unknown model|unsupported model|model format/u.test(value)) return 'model_configuration';
-  if (/json|parse error|parsing|schema|validation|unexpected field|missing field|invalid (?:response|judgment|output)|(?:promote|ignore) requires|memory candidate judgment must be an object|(?:risk_flags|canonical_fact|meaning_preserved|suggested_type|durability|future_utility|specificity|confidence|reason|decision)(?: entry)? must (?:be|not|contain)/u.test(value)) return 'response_validation';
+  if (origin === 'candidate_validator') return 'response_validation';
   if (/\b502\b|\b503\b|\b504\b|econnreset|econnrefused|network error|service unavailable/u.test(value)) return 'provider_unavailable';
   if (/database is locked|sqlite|foreign key|sql error/u.test(value)) return 'database';
+  if (origin === 'judge_process_exit') return 'judge_process_failure';
+  if (origin === 'judge_setup') return 'judge_setup_failure';
   return 'unclassified';
 }
 
 /** Fixed allowlist of validation error types, without exposing model output. */
 export function classifyCaptureValidationDetail(message) {
   const value = String(message ?? '').toLowerCase();
-  if (classifyCaptureFailure(value) !== 'response_validation') return null;
+  if (classifyCaptureFailureOrigin(value) !== 'candidate_validator') return null;
   if (/memory candidate judgment response must be json|unexpected (?:token|end of json input)|unterminated string in json|json at position/u.test(value)) return 'invalid_json';
   if (/unexpected field in memory candidate judgment/u.test(value)) return 'unexpected_field';
   if (/missing field in memory candidate judgment/u.test(value)) return 'missing_field';
@@ -143,16 +158,17 @@ export function inspectMemoryCapture({ dbPath, projectId, branch, recentLimit = 
       const stage = SAFE_STAGES.has(failure.stage) ? failure.stage : 'other';
       const errorClass = SAFE_CLASSES.has(failure.error_class) ? failure.error_class : 'other';
       const category = classifyCaptureFailure(failure.error_text);
+      const failureOrigin = classifyCaptureFailureOrigin(failure.error_text);
       const validationDetail = classifyCaptureValidationDetail(failure.error_text);
       const validationField = classifyCaptureValidationField(failure.error_text);
       const validationRule = classifyCaptureValidationRule(failure.error_text);
-      const key = JSON.stringify([stage, errorClass, category, validationDetail, validationField, validationRule]);
+      const key = JSON.stringify([stage, errorClass, category, failureOrigin, validationDetail, validationField, validationRule]);
       failureGroups.set(key, (failureGroups.get(key) ?? 0) + 1);
     }
     const groupedFailures = sortGroups([...failureGroups].map(([key, n]) => {
-      const [stage, errorClass, category, validationDetail, validationField, validationRule] = JSON.parse(key);
+      const [stage, errorClass, category, failureOrigin, validationDetail, validationField, validationRule] = JSON.parse(key);
       return {
-        stage, errorClass, category,
+        stage, errorClass, category, failureOrigin,
         ...(validationDetail === null ? {} : { validationDetail }),
         ...(validationField === null ? {} : { validationField }),
         ...(validationRule === null ? {} : { validationRule }),
