@@ -1043,9 +1043,14 @@ function focusSelectedGraphNode(nodeId) {
   const viewportHeight = viewport?.height ?? window.innerHeight;
   const viewportLeft = viewport?.offsetLeft ?? 0;
   const viewportTop = viewport?.offsetTop ?? 0;
-  const outside = box.top < viewportTop || box.bottom > viewportTop + viewportHeight
+  const canvas = next.closest?.('.graph-canvas-wrap')?.getBoundingClientRect();
+  const outsideViewport = box.top < viewportTop || box.bottom > viewportTop + viewportHeight
     || box.left < viewportLeft || box.right > viewportLeft + viewportWidth;
-  if (outside) next.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  const outsideCanvas = canvas && (box.top < canvas.top || box.bottom > canvas.bottom
+    || box.left < canvas.left || box.right > canvas.right);
+  if ((outsideViewport || outsideCanvas) && typeof next.scrollIntoView === 'function') {
+    next.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }
 }
 
 /** Format distinct canonical, typed and embedding-provenance descriptions. */
