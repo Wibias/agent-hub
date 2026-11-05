@@ -158,6 +158,17 @@ test("URL, missing target, symlink and escaped project scope are blocked before 
   });
 });
 
+
+test("vendored walker extension policy matches the source symlink preflight", async () => {
+  const { SCANNABLE_EXTENSIONS, SKIP_DIRS } = await import(
+    "../../../impeccable/scripts/detector/node/file-system.mjs");
+  for (const suffix of SCANNABLE_EXTENSIONS) {
+    assert.match("file" + suffix,
+      /\.(?:html?|css|scss|sass|less|jsx?|tsx?|vue|svelte|astro|blade\.php)$/i);
+  }
+  assert.deepEqual([...SKIP_DIRS].sort(), ["__pycache__", "build", "dist", "node_modules"]);
+});
+
 test("unavailable local detector remains explicit; no npx or engine installation", async () => {
   const provider = createImpeccableProvider({ script: join(tmpdir(), "no-such-detector.mjs") });
   const registry = createProviderRegistry([provider]);
