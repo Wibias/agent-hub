@@ -2,6 +2,7 @@ import { selectPatterns } from '../knowledge/design-references/scripts/pattern-s
 import { selectRecords } from '../knowledge/design-references/scripts/selection.mjs';
 import { recordUsage } from '../knowledge/design-references/scripts/usage.mjs';
 import { hydrateP8LegacyIds } from './p8-cutover-review.mjs';
+import { categorizeP10RuntimeError } from './p10-runtime-client.mjs';
 import { selectP7ParityLexicalResults } from './p7-parity-policy.mjs';
 
 const LEGACY_SOURCE = 'legacy-control';
@@ -81,6 +82,7 @@ export async function runP11RuntimeQuery({
   request,
   graphMode = 'legacy',
   fetchCandidatePool,
+  onDiagnostic,
   recordUsageFn = recordUsage,
   recordUsageEnabled = true,
   usageLogPath,
@@ -98,6 +100,8 @@ export async function runP11RuntimeQuery({
     throw new TypeError('recordUsageFn must be a function');
   }
 
+  const diagnosticStarted = performance.now();
+  let diagnosticCategory = 'none';
   const legacySelection = selectRecords(records, request, { now });
   const legacyPatterns = selectPatternsFn(patterns, legacySelection.selected, request);
   let authoritativeSelection = legacySelection;
@@ -106,10 +110,13 @@ export async function runP11RuntimeQuery({
 
   if (request.profile !== 'quick') {
     route = routing({ graphMode, reason: 'profile-legacy-only' });
+    diagnosticCategory = 'profile-legacy-only';
   } else if (graphMode !== 'graph') {
     route = routing({ graphMode, reason: 'activation-disabled' });
+    diagnosticCategory = 'activation-disabled';
   } else if (typeof fetchCandidatePool !== 'function') {
     route = routing({ graphMode, reason: 'missing-runtime-config' });
+    diagnosticCategory = 'missing-runtime-config';
   } else {
     route = routing({ graphMode, attempted: true, reason: 'graph-runtime-error' });
     try {
@@ -160,10 +167,16 @@ export async function runP11RuntimeQuery({
           patternExact,
           reason: 'handoff-mismatch',
         });
+        diagnosticCategory = 'parity-mismatch';
       }
-    } catch {
-      // Graph routing is fail-closed. Remote/internal details never alter or
-      // leak through the valid local legacy result.
+    } catch (error) {
+      // Routing is fail-closed; only an allowlisted category reaches diagnostics.
+      const category = categorizeP10RuntimeError(error);
+      diagnosticCategory = category === 'internal-error'
+        ? 'internal-error'
+        : category === 'candidate-invalid'
+          ? 'candidate-invalid'
+          : `transport-${category}`;
     }
   }
 
@@ -175,6 +188,23 @@ export async function runP11RuntimeQuery({
       usageWarning =
         'Selected records are valid, but local usage recording failed: '
         + (error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  if (typeof onDiagnostic === 'function') {
+    try {
+      onDiagnostic({
+        phase: 'p11-route',
+        outcome: route.authoritative_source === GRAPH_SOURCE
+          ? 'graph'
+          : request.profile === 'quick' && graphMode === 'graph'
+            ? 'fallback'
+            : 'legacy',
+        category: diagnosticCategory,
+        duration_ms: Math.max(0, performance.now() - diagnosticStarted),
+      });
+    } catch {
+      // Observability must never affect the public result or fallback.
     }
   }
 
