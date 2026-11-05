@@ -42,3 +42,4 @@
 {"id":"SC42","description":"functional join code is not a kicker","files":{"src/a.tsx":"export const x = <input className='uppercase tracking-widest' />;"},"expect_names":[],"forbid_ids":["G27"],"expected_status":0}
 {"id":"SC43","description":"comment and numeric range are not dash UI copy","files":{"src/a.tsx":"// comment — example\nconst range='100–500';"},"expect_names":[],"forbid_ids":["G29"],"expected_status":0}
 {"id":"SC44","description":"non-entry toy animation easing is not entrance defect","files":{"src/a.css":".toy{animation:bounce 400ms ease-in-out}"},"expect_names":[],"forbid_ids":["G34"],"expected_status":0}
+{"id":"SC45","description":"multiline JSX arrow handler within a functional input must not become a G27 kicker","files":{"src/a.tsx":"const join = (\n<input\n  onChange={(event) => setCode(event.target.value)}\n  className=\"uppercase tracking-widest\"\n/>\n);"},"expect_names":[],"forbid_ids":["G27"],"expected_status":0}
