@@ -4,6 +4,10 @@ on:
   pull_request:
     paths:
       - "memory-engine/codex-candidate-process-error.mjs"
+      - "memory-engine/codex-candidate-launch.mjs"
+      - "scripts/doctor-codex-candidate-executable.mjs"
+      - "tests/memory-engine/codex-candidate-launch.test.mjs"
+      - "tests/memory-engine/codex-candidate-executable-probe.test.mjs"
       - "scripts/judge-memory-candidates.mjs"
       - "tests/memory-engine/codex-candidate-process-error.test.mjs"
       - ".github/workflows/verify-memory-candidate-errors.yml"
@@ -11,6 +15,10 @@ on:
     branches: [main]
     paths:
       - "memory-engine/codex-candidate-process-error.mjs"
+      - "memory-engine/codex-candidate-launch.mjs"
+      - "scripts/doctor-codex-candidate-executable.mjs"
+      - "tests/memory-engine/codex-candidate-launch.test.mjs"
+      - "tests/memory-engine/codex-candidate-executable-probe.test.mjs"
       - "scripts/judge-memory-candidates.mjs"
       - "tests/memory-engine/codex-candidate-process-error.test.mjs"
       - ".github/workflows/verify-memory-candidate-errors.yml"
@@ -30,7 +38,23 @@ jobs:
       - name: Verify safe candidate subprocess errors
         run: |
           node --check memory-engine/codex-candidate-process-error.mjs
+          node --check memory-engine/codex-candidate-launch.mjs
           node --check scripts/judge-memory-candidates.mjs
+          node --check scripts/doctor-codex-candidate-executable.mjs
           node --test \
             tests/memory-engine/codex-candidate-process-error.test.mjs \
+            tests/memory-engine/codex-candidate-launch.test.mjs \
+            tests/memory-engine/codex-candidate-executable-probe.test.mjs \
             tests/memory-engine/memory-candidate-judge.test.mjs
+
+  windows-launch:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Test shell-free native and npm-shim launch paths on Windows
+        run: |
+          node --check memory-engine/codex-candidate-launch.mjs
+          node --test tests/memory-engine/codex-candidate-launch.test.mjs tests/memory-engine/codex-candidate-executable-probe.test.mjs
