@@ -21,3 +21,5 @@ The CLI reports an array with `antipattern`, `name`, `severity`, `file`, `line`,
 ## Rollout limits
 
 This phase does not change public routing, hook installation, `skills/impeccable` files, or durable ledger schema. The adapter is enabled only when selected through `scan.mjs` or the internal registry. Integration with normal DWA workflows, browser evidence, cross-provider deduplication, and ledger migration remain separate, test-gated PRs.
+
+The scanner source-extension and excluded-directory policy is mirrored in the adapter preflight, with a CI regression checking parity against the vendored helper module. A missing Impeccable install cannot make the `quick` native-only workflow module fail during import; the optional detector is loaded only when selected.

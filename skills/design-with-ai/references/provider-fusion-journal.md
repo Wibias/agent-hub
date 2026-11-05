@@ -6,9 +6,9 @@
 
 - Missing/failed required evidence yields `BLOCKED`. A missing or unavailable selected optional provider yields `INCOMPLETE`. Complete data with observations yields `REVIEW`; complete data without observations yields `SCOPED_CLEAR`, **not** product completion.
 - Every original P0/P1/P2 finding, provider ID, source reference, DOM selector and viewport remains in a group member. No native DWA P0 is downgraded.
-- Exact source-location grouping requires an **explicit rule equivalence** and the same real file plus positive line. Current narrow equivalence is `native-dwa:G05` and `impeccable:nested-cards`. Signals with unlocated pseudo-files are never automatically merged.
+- **No automatic cross-provider source deduplication** is enabled until a semantically equivalent rule pair is independently demonstrated. Matching source line and similar theme alone are not enough. In particular, `G05` is rendered-only in the current DWA rule registry, so the earlier `native-dwa:G05` to `impeccable:nested-cards` mapping was invalid.
 - Repeated rendered findings on the same page, route, rule and selector can form one review group across widths. Their viewport evidence is kept separately.
-- Related but not proven-equal rules, including DWA `G12` and Impeccable `ai-color-palette`, remain separate and get a `POTENTIALLY_RELATED_NOT_DEDUPLICATED` correlation.
+- Related but not proven-equal rules, including DWA `G12` and Impeccable `ai-color-palette`, and DWA `G22` and Impeccable `layout-transition`, remain separate and get a `POTENTIALLY_RELATED_NOT_DEDUPLICATED` correlation.
 
 ## CLI workflow (explicit opt-in)
 
@@ -50,3 +50,7 @@ This preview contains an ordinary v1-compatible `findings[]` list of explicitly 
 The v2 sidecar contains `CAPTURED` and `ADJUDICATED` events with an ordered SHA-256 hash chain. At initialization it anchors the existing v1 event count and hash. A later v1 append is allowed, but any modification or truncation of the anchored prefix blocks access. The original `findings-ledger.json` remains schema v1 and is never rewritten by this provider pipeline. Do not feed the sidecar to the v1 reader.
 
 The hashes detect accidental changes, **not tampering by an actor able to rewrite all files and recompute hashes**. Provider reports are untrusted evidence. Code does not execute instructions from a report; human review still must confirm the actual UI. The pipeline is manual-only until Phase 5 selection and acceptance policies are separately reviewed.
+
+## Concurrent sidecar writers
+
+Writes acquire an exclusive local `*.write.lock` before loading and replacing journal contents. A second writer fails closed rather than overwriting the first writer's events. A lock left by a crashed process requires manual verification and cleanup; never delete a lock without checking whether its owner is still active. The filesystem lock is local-filesystem coordination, not a distributed transaction or a tamper-proof audit service.

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import {
-  existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync,
+  existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -122,6 +122,36 @@ test("only an explicit PROMOTE yields v1 import candidates; preview itself is re
     assert.deepEqual(readLedger(fx.legacyPath).events.map((e) => e.id),
       ["UX-EXISTING", "UX-PROVIDER-001"]);
     assert.equal(readEvidenceJournal(fx.journalPath, fx.legacyPath).events.length, 2);
+  });
+});
+
+test("concurrent journal writer lock fails closed without dropping existing events", async () => {
+  await fixture(async (fx) => {
+    initializeEvidenceJournal(fx.journalPath, fx.legacyPath);
+    const lock = fx.journalPath + ".write.lock";
+    writeFileSync(lock, "another writer", { flag: "wx" });
+    try {
+      assert.throws(() => captureProviderFusion(fx.journalPath, fx.legacyPath,
+        { runId: "audit-1", fusion: fx.fusion }), /locked by another writer/);
+      assert.equal(readEvidenceJournal(fx.journalPath, fx.legacyPath).events.length, 0);
+    } finally {
+      unlinkSync(lock);
+    }
+    const captured = captureProviderFusion(fx.journalPath, fx.legacyPath,
+      { runId: "audit-1", fusion: fx.fusion });
+    assert.equal(captured.idempotent, false);
+    assert.equal(readEvidenceJournal(fx.journalPath, fx.legacyPath).events.length, 1);
+    const decision = promotion(fx);
+    writeFileSync(lock, "another writer", { flag: "wx" });
+    try {
+      assert.throws(() => adjudicateProviderGroup(fx.journalPath, fx.legacyPath,
+        decision), /locked by another writer/);
+    } finally {
+      unlinkSync(lock);
+    }
+    assert.equal(readEvidenceJournal(fx.journalPath, fx.legacyPath).events.length, 1);
+    assert.equal(adjudicateProviderGroup(fx.journalPath, fx.legacyPath,
+      decision).idempotent, false);
   });
 });
 

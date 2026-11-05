@@ -56,23 +56,37 @@ test("canonical native HOLD remains blocked even with empty normalized findings"
   assert.equal(fusion.completionEligible, false);
 });
 
-test("same exact source rule equivalence and location correlates without discarding evidence", () => {
-  const native = finding({ id: "n1", priority: "P0" });
-  const impeccable = finding({ id: "i1", rule: "nested-cards",
-    provider: "impeccable", msg: "Another detector" });
+test("same-location but non-equivalent source rules remain separate and contextual", () => {
+  // DWA G12 and Impeccable ai-color-palette differ in the evidence each
+  // detector requires; the same source line alone proves no equivalence.
+  const native = finding({ id: "n1", rule: "G12" });
+  const impeccable = finding({ id: "i1", rule: "ai-color-palette",
+    provider: "impeccable", msg: "Similar color signal" });
   const fusion = fuseProviderEvidence([
-    report("native-dwa", [native], { verdict: "HOLD" }),
+    report("native-dwa", [native], { verdict: "REVIEW" }),
     report("impeccable", [impeccable]),
     report("taste-skill"),
   ], config);
+  assert.equal(fusion.status, "REVIEW");
+  assert.equal(fusion.groups.length, 2);
+  assert.ok(fusion.groups.every((g) => g.members.length === 1));
+  assert.equal(fusion.counts.duplicatesConservativelyGrouped, 0);
+  assert.equal(fusion.correlations.length, 1);
+  assert.equal(fusion.correlations[0].relation, "POTENTIALLY_RELATED_NOT_DEDUPLICATED");
+});
+
+test("hard native P0 is never obscured by a related external observation", () => {
+  const fusion = fuseProviderEvidence([
+    report("native-dwa", [finding({ id: "p0", rule: "G22", priority: "P0" })],
+      { verdict: "HOLD" }),
+    report("impeccable", [finding({ id: "im", provider: "impeccable",
+      rule: "layout-transition", priority: "P2" })]),
+  ], { required: ["native-dwa"], optional: ["impeccable"] });
   assert.equal(fusion.status, "BLOCKED");
-  assert.equal(fusion.groups.length, 1);
-  assert.equal(fusion.groups[0].priority, "P0");
-  assert.deepEqual(fusion.groups[0].providers, ["impeccable", "native-dwa"]);
-  assert.equal(fusion.groups[0].members.length, 2);
-  assert.equal(fusion.groups[0].observationCount, 2);
-  assert.equal(fusion.counts.duplicatesConservativelyGrouped, 1);
-  assert.equal(fusion.groups[0].members.find((m) => m.provider === "native-dwa").priority, "P0");
+  assert.equal(fusion.groups.length, 2);
+  assert.ok(fusion.groups.some((g) => g.providers.includes("native-dwa") &&
+    g.priority === "P0"));
+  assert.ok(fusion.correlations.some((x) => x.theme === "motion-layout"));
 });
 
 test("different source locations, different rules and placeholder locations remain separate", () => {

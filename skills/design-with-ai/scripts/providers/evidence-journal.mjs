@@ -1,7 +1,7 @@
 // Provider evidence journal v2 is a SIDE-CAR. The DWA findings-ledger.json v1 is never rewritten.
 import { createHash } from "node:crypto";
 import {
-  existsSync, lstatSync, readFileSync, renameSync, unlinkSync, writeFileSync,
+  closeSync, existsSync, lstatSync, openSync, readFileSync, renameSync, unlinkSync, writeFileSync,
 } from "node:fs";
 import { basename, dirname, resolve } from "node:path";
 import { readLedger } from "../findings-ledger.mjs";
@@ -39,6 +39,24 @@ function saveUpdated(path, data) {
   catch (error) {
     try { unlinkSync(temp); } catch {}
     throw new Error("Could not update provider journal: " + error.message);
+  }
+}
+
+// An atomic rename alone cannot prevent two writers from overwriting
+// each other's events. Acquire an exclusive inter-process lock BEFORE reading.
+function withJournalWriteLock(path, action) {
+  const lockPath = resolve(path) + ".write.lock";
+  let fd;
+  try {
+    fd = openSync(lockPath, "wx", 0o600);
+  } catch {
+    throw new Error("Provider journal is locked by another writer; refusing concurrent mutation");
+  }
+  try {
+    return action();
+  } finally {
+    closeSync(fd);
+    unlinkSync(lockPath);
   }
 }
 
@@ -160,6 +178,7 @@ function append(path, legacyPath, source, addition) {
 }
 
 export function captureProviderFusion(path, legacyPath, { runId, fusion } = {}) {
+  return withJournalWriteLock(path, () => {
   const journal = readEvidenceJournal(path, legacyPath);
   if (!filled(runId)) throw new Error("Capture requires runId");
   assertFusion(fusion);
@@ -175,11 +194,13 @@ export function captureProviderFusion(path, legacyPath, { runId, fusion } = {}) 
     fusionSha256: fusion.contentSha256, fusion: structuredClone(fusion),
   });
   return { idempotent: false, runId, groups: fusion.groups.length, sha256: event.sha256 };
+  });
 }
 
 export function adjudicateProviderGroup(path, legacyPath, {
   runId, groupId, decision, reason, evidenceRef, legacyFinding,
 } = {}) {
+  return withJournalWriteLock(path, () => {
   const journal = readEvidenceJournal(path, legacyPath);
   const capture = journal.events.find((e) => e.type === "CAPTURED" && e.runId === runId);
   const group = capture?.fusion.groups.find((g) => g.id === groupId);
@@ -207,6 +228,7 @@ export function adjudicateProviderGroup(path, legacyPath, {
     ...(decision === "PROMOTE" ? { legacyFinding: foundOf(legacyFinding) } : {}),
   });
   return { idempotent: false, sha256: event.sha256 };
+  });
 }
 
 // Read-only bridge: only explicitly PROMOTEd groups are candidates. It never
