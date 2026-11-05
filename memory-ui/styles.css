@@ -1870,3 +1870,88 @@ button {
     grid-template-rows: auto auto auto auto minmax(420px, 60dvh);
   }
 }
+
+/* D12.1: restore the graph to the first meaningful mobile screen. */
+.graph-legend-mobile {
+  display: none;
+}
+@media (max-width: 560px) {
+  .sidebar {
+    height: 58px;
+  }
+  .project-row {
+    min-height: 55px;
+    padding-top: 8px;
+    padding-bottom: 7px;
+  }
+  .scope-header {
+    min-height: 75px;
+    padding: 10px 14px;
+    gap: 4px;
+  }
+  .scope-header h1 {
+    font-size: 15px;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+  }
+  .branch-control {
+    gap: 12px;
+    min-height: 28px;
+  }
+  .branch-control select {
+    width: min(270px, 58vw);
+  }
+  .graph-context {
+    gap: 6px;
+    padding: 10px 13px;
+  }
+  .graph-context strong {
+    font-size: 14px;
+  }
+  .graph-context p {
+    font-size: 11px;
+    line-height: 1.45;
+  }
+  .graph-toolbar {
+    gap: 6px;
+    padding: 7px 12px;
+  }
+  .graph-toolbar .search {
+    flex: 1 1 100%;
+    min-height: 35px;
+  }
+  .graph-toolbar .filter {
+    flex: 1 1 calc((100% - 12px) / 3);
+    min-width: 0;
+    max-width: none;
+    height: 36px;
+    font-size: 11px;
+    padding-inline: 4px;
+  }
+  .graph-legend-desktop {
+    display: none;
+  }
+  .graph-legend-mobile {
+    display: block;
+    width: 100%;
+  }
+  .graph-legend-mobile summary {
+    width: fit-content;
+    min-height: 30px;
+    padding: 7px 2px;
+    font-size: 11px;
+    color: #c7d5d0;
+    cursor: pointer;
+  }
+  .graph-legend-mobile summary:focus-visible {
+    outline: 2px solid var(--accent);
+  }
+  .graph-legend-mobile .graph-legend {
+    padding: 8px 0;
+    gap: 8px 12px;
+  }
+  .graph-meta {
+    padding: 6px 12px;
+    gap: 2px;
+  }
+}
