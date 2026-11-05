@@ -7,6 +7,7 @@ import { DatabaseSync } from 'node:sqlite';
 import {
   classifyCaptureFailure,
   classifyCaptureValidationDetail,
+  classifyCaptureValidationField,
   inspectMemoryCapture,
 } from '../../memory-engine/memory-capture-diagnostics.mjs';
 import { parseCaptureDiagnosticArgs } from '../../scripts/diagnose-memory-capture.mjs';
@@ -75,6 +76,28 @@ test('validation failure detail is restricted to fixed safe labels', () => {
     assert.equal(detail.includes('PRIVATE'), false);
   }
   assert.equal(classifyCaptureValidationDetail('429 rate limit'), null);
+});
+
+test('schema field is a fixed enum and never includes failing input', () => {
+  const cases = [
+    ['meaning_preserved must be a boolean', 'meaning_preserved'],
+    ['risk_flags must be an array SECRET-ONE', 'risk_flags'],
+    ['risk_flags must not contain duplicates', 'risk_flags'],
+    ['suggested_type must be one of: PRIVATE', 'suggested_type'],
+    ['canonical_fact must be at most 500 characters', 'canonical_fact'],
+    ['memory candidate judgment must be an object', 'judgment_object'],
+    ['promote requires durability=long', 'durability'],
+    ['promote requires empty risk_flags', 'risk_flags'],
+    ['ignore requires canonical_fact=null', 'canonical_fact'],
+    ['JSON validation failed PRIVATE', 'unknown'],
+  ];
+  for (const [message, field] of cases) {
+    assert.equal(classifyCaptureValidationField(message), field, message);
+    assert.equal(classifyCaptureValidationField(message).includes('SECRET'), false);
+    assert.equal(classifyCaptureValidationField(message).includes('PRIVATE'), false);
+  }
+  assert.equal(classifyCaptureValidationField('429 rate limit'), null);
+  assert.equal(classifyCaptureValidationField('missing field in memory candidate judgment: SECRET-TWO'), null);
 });
 
 test('older schema and unknown error payloads degrade safely', async () => {
