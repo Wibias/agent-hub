@@ -44,5 +44,5 @@ test('D4 resets authority group on both graph reset and project/branch switch', 
 test('D4 displays typed truncation independently of omitted claims', async () => {
   const js = await readFile(new URL('../../memory-ui/app.js', import.meta.url), 'utf8');
   assert.match(js, /stats\.typedRelationsOmittedByBound > 0/);
-  assert.match(js, /typed omitted by limit/);
+  assert.match(js, /advisory links omitted/);
 });
