@@ -1,5 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { mkdtemp, readFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { runP19ProductionSoakCli } from '../../reference-graph/cli/p19-production-soak.mjs';
 
 import { fetchP10QuickCandidatePool } from '../../reference-graph/p10-runtime-client.mjs';
 import { runP11RuntimeQuery } from '../../reference-graph/p11-runtime-router.mjs';
@@ -151,4 +155,31 @@ test('P25 samples persist sanitized diagnostic categories without leaking raw ob
   assert.equal(sample.diagnostics.events.length, 2);
   assert.deepEqual(sample.diagnostics.events.map((e) => e.phase), ['p10-attempt', 'p11-route']);
   assert.doesNotMatch(JSON.stringify(sample), /sb_secret_DO_NOT_SERIALIZE|secret/);
+});
+
+test('P25 CLI records Node process start separately from sample start without changing health', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'p25-process-start-'));
+  const path = join(root, 'samples.jsonl');
+  const startAt = '2026-10-25T08:59:30.000Z';
+  const sampleAt = '2026-10-25T09:00:00.000Z';
+  const code = await runP19ProductionSoakCli({
+    argv: ['--sample', path],
+    env: { SUPABASE_URL: PROD_URL, SUPABASE_PUBLISHABLE_KEY: 'sb_publishable_DO_NOT_LEAK' },
+    processStartAt: startAt,
+    stdout: { write() {} },
+    sampleHealth: async () => ({
+      schema_version: 'reference-graph.p19-production-health-sample.v1',
+      sampled_at: sampleAt,
+      target_project_ref: 'vrznfnxzlxaavpqbzbzd',
+      repository_default_graph_enabled: false,
+      healthy: true,
+      blockers: [],
+    }),
+  });
+  const stored = JSON.parse((await readFile(path, 'utf8')).trim());
+  assert.equal(code, 0);
+  assert.equal(stored.collector_node_process_started_at, startAt);
+  assert.equal(stored.collector_start_to_sample_ms, 30000);
+  assert.equal(stored.healthy, true);
+  assert.doesNotMatch(JSON.stringify(stored), /sb_publishable_DO_NOT_LEAK/);
 });
