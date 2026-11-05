@@ -78,9 +78,9 @@ test('motion audit checks removal hazards and cleanup before deleting animation 
   }
 });
 
-test('Emil provenance pins the remove-animations safety delta without a new route', () => {
+test('Emil provenance retains removal safety and adapts choreography without a new route', () => {
   const text = read('skills/design-with-ai/UPSTREAM.md');
-  assert.match(text, /emilkowalski\/skills[^\n]*a81dbca07f2217b7103e510c0f13f8d5b017afc9/i);
+  assert.match(text, /emilkowalski\/skills[^\n]*c8a79627b59d72d764d6ab6f2c87c09a48169833/i);
   assert.match(text, /remove-animations/i);
   assert.match(text, /removal.*(?:hazard|safety)/i);
   assert.match(text, /no new.*(?:route|discovery surface)|not a new discovery surface/i);

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "reviewedAt": "2026-11-04",
+  "reviewedAt": "2026-11-05",
   "sources": [
     {
       "id": "addy",
@@ -12,7 +12,7 @@
     {
       "id": "emil",
       "repository": "emilkowalski/skills",
-      "reviewedCommit": "f1090bec277140d02ed202440185ad9d02ac1490",
+      "reviewedCommit": "c8a79627b59d72d764d6ab6f2c87c09a48169833",
       "scope": "design-with-ai motion sources",
       "decision": "current"
     },
@@ -26,7 +26,7 @@
     {
       "id": "pstack",
       "repository": "cursor/plugins",
-      "reviewedCommit": "fd268b808c786469e6dd8c8d9db864d0de4d669e",
+      "reviewedCommit": "bb68f2365eceafa0cb2d253112f675acf5f144cc",
       "scope": "pstack/",
       "decision": "current",
       "localPin": "c742dd61706fbacc1b95f1a20b7b988cf096ce6c"
@@ -34,9 +34,9 @@
     {
       "id": "impeccable",
       "repository": "pbakaus/impeccable",
-      "reviewedCommit": "9fadc41729c38fd47d7ae622b501558653f9d2e9",
+      "reviewedCommit": "5af4319c4e7a7ee3e5e2b9fe899bcfb21c6190cb",
       "scope": ".agents/skills/impeccable/",
-      "decision": "current",
+      "decision": "update-pending",
       "localPin": "9fadc41729c38fd47d7ae622b501558653f9d2e9"
     }
   ]

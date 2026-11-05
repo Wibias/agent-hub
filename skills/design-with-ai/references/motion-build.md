@@ -9,6 +9,9 @@ is materially open. Load `motion-systems.md` when the work defines or extends a
 shared product motion language rather than one bounded transition. Load
 `direct-manipulation.md` for drag/swipe/gesture ownership. Load
 `react-native-motion.md` only for resolved React Native/Expo targets.
+Load `motion-choreography.md` only when two or more elements must coordinate
+an entrance, exit, layout change or multi-step animation. For a single
+animation, skip that reference and keep the motion-build path lightweight.
 
 ## Construction sequence
 

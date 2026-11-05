@@ -176,13 +176,15 @@ test('github delivery treats always-on cost and generated-output review as contr
   assert.match(prDescription, /generated|mechanical/i);
 });
 
-test('Impeccable vendor pin tracks upstream 4.8.0 while preserving the Agent Hub overlay boundary', async () => {
+test('Impeccable pending refresh preserves released 4.8.0 pin and local overlay', async () => {
   const upstream = await text('skills/impeccable/UPSTREAM.md');
   const skill = await text('skills/impeccable/SKILL.md');
   const engineVersion = (await text('skills/impeccable/scripts/VERSION')).trim();
   const checksums = await text('skills/impeccable/scripts/engine-checksums.txt');
 
   assert.match(upstream, /9fadc41729c38fd47d7ae622b501558653f9d2e9/);
+  assert.match(upstream, /5af4319c4e7a7ee3e5e2b9fe899bcfb21c6190cb/);
+  assert.match(upstream, /update.pending/i);
   assert.match(upstream, /Skill version: `4\.8\.0`/);
   assert.match(upstream, /Engine version: `0\.1\.18`/);
   assert.match(skill, /version: 4\.8\.0/);

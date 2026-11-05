@@ -31,7 +31,9 @@ request.
 Load `standards.md` and `audit-playbook.md`. Recon the product motion language,
 interaction frequency, libraries/tokens, then audit purpose, timing, physicality,
 interruptibility, accessibility, source-visible performance risk, cohesion, and
-grounded missed opportunities.
+grounded missed opportunities. Only when multiple moving elements respond to a
+shared event and coordination is material, also load `motion-choreography.md`.
+Do not treat isolated animations as choreography by default.
 
 For larger scopes, read-only evidence gathering may be split by category or app
 area, but every candidate finding must be re-read and vetted against the same
@@ -51,7 +53,9 @@ sweep uses `motion-opportunities` rather than bloating the audit.
 ## `motion-review`
 
 Load `standards.md`. Review a bounded diff/surface only. Confirm every finding
-against current source evidence. Use one row per issue:
+against current source evidence. For multiple-element timing, exit or layout
+coordination in the reviewed scope, load `motion-choreography.md` conditionally;
+otherwise keep the review bounded. Use one row per issue:
 
 | Before | After | Why |
 |---|---|---|
