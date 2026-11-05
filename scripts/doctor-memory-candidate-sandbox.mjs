@@ -117,8 +117,10 @@ export async function runCandidateSandbox({
   const tmp = await mkdtemp(join(tmpdir(), 'agent-hub-memory-sandbox-'));
   const copy = join(tmp, 'snapshot.sqlite3');
   let stage = 'backup';
+  let sourceOpenedReadOnly = false;
   try {
     const source = new DatabaseSync(sourceDbPath, { readOnly: true, timeout: 5000 });
+    sourceOpenedReadOnly = true;
     try {
       await backup(source, copy);
     } finally {
@@ -128,7 +130,7 @@ export async function runCandidateSandbox({
     const before = countSandboxMemory(copy, projectId, branch);
     if (before.pendingImportance === 0) {
       return {
-        status: 'nothing_pending', sourceOpenedReadOnly: true,
+        status: 'nothing_pending', sourceOpenedReadOnly,
         writesToSource: false, scope: { projectId, branch },
         before, after: before, stages: [],
       };
@@ -159,14 +161,14 @@ export async function runCandidateSandbox({
     const failures = stages.reduce((sum, item) => sum + (item.failed ?? 0), 0);
     return {
       status: failures === 0 ? 'completed' : 'partial',
-      sourceOpenedReadOnly: true,
+      sourceOpenedReadOnly,
       writesToSource: false,
       scope: { projectId, branch },
       before, after, stages,
     };
   } catch {
     return {
-      status: 'failed', failedStage: stage, sourceOpenedReadOnly: true,
+      status: 'failed', failedStage: stage, sourceOpenedReadOnly,
       writesToSource: false, scope: { projectId, branch },
     };
   } finally {
@@ -181,7 +183,7 @@ if (entryUrl === import.meta.url) {
     const report = await runCandidateSandbox(args);
     console.log(JSON.stringify({
       type: 'agent_hub_candidate_sandbox_rehearsal_v1',
-      memoryDatabaseAccessedReadOnly: true,
+      memoryDatabaseAccessedReadOnly: report.sourceOpenedReadOnly,
       dataMutationTarget: 'temporary_sqlite_backup',
       ...report,
     }, null, 2));
