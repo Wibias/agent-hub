@@ -30,7 +30,7 @@ test('upstream update check tracks the five canonical sources and decisions', ()
     ['emil', ['emilkowalski/skills', 'c8a79627b59d72d764d6ab6f2c87c09a48169833', 'current']],
     ['matt', ['mattpocock/skills', '4ae2317ddb22b046e26455e4f9c9b3aaaf62212d', 'not-applicable']],
     ['pstack', ['cursor/plugins', 'bb68f2365eceafa0cb2d253112f675acf5f144cc', 'current']],
-    ['impeccable', ['pbakaus/impeccable', '5af4319c4e7a7ee3e5e2b9fe899bcfb21c6190cb', 'current']],
+    ['impeccable', ['pbakaus/impeccable', '5af4319c4e7a7ee3e5e2b9fe899bcfb21c6190cb', 'update-pending']],
   ]);
 
   for (const source of registry.sources) {
@@ -48,7 +48,7 @@ test('upstream update check tracks the five canonical sources and decisions', ()
 
   const impeccable = registry.sources.find((source) => source.id === 'impeccable');
   assert.equal(impeccable.scope, '.agents/skills/impeccable/');
-  assert.equal(impeccable.localPin, '5af4319c4e7a7ee3e5e2b9fe899bcfb21c6190cb');
+  assert.equal(impeccable.localPin, '9fadc41729c38fd47d7ae622b501558653f9d2e9');
 
   const checker = read('scripts/check-upstream-sources.mjs');
   assert.match(checker, /--offline/);
@@ -58,7 +58,7 @@ test('upstream update check tracks the five canonical sources and decisions', ()
   assert.match(checker, /PENDING/);
 });
 
-test('offline upstream check records Impeccable as fully adopted', () => {
+test('offline upstream check flags Impeccable reference and engine adoption as pending', () => {
   const result = spawnSync(process.execPath, ['scripts/check-upstream-sources.mjs', '--offline'], {
     cwd: resolve('.'),
     encoding: 'utf8',
@@ -73,17 +73,20 @@ test('offline upstream check records Impeccable as fully adopted', () => {
   assert.match(result.stdout, /RECORDED pstack .*decision=current/);
   assert.match(
     result.stdout,
-    /RECORDED impeccable 5af4319c4e7a7ee3e5e2b9fe899bcfb21c6190cb decision=current/,
+    /PENDING impeccable reviewed=5af4319c4e7a7ee3e5e2b9fe899bcfb21c6190cb local=9fadc41729c38fd47d7ae622b501558653f9d2e9/,
   );
-  assert.doesNotMatch(result.stdout, /PENDING impeccable/);
+  assert.doesNotMatch(result.stdout, /RECORDED impeccable/);
 });
 
-test('Impeccable vendor is fully refreshed to 4.8.0 and engine 0.1.18', () => {
+test('Impeccable remains on released engine 0.1.18 with a documented pending source delta', () => {
   const upstream = read('skills/impeccable/UPSTREAM.md');
   const skill = read('skills/impeccable/SKILL.md');
   const engineVersion = read('skills/impeccable/scripts/VERSION').trim();
 
   assert.match(upstream, /5af4319c4e7a7ee3e5e2b9fe899bcfb21c6190cb/);
+  assert.match(upstream, /9fadc41729c38fd47d7ae622b501558653f9d2e9/);
+  assert.match(upstream, /cssAuthoring\.styleClose/);
+  assert.match(upstream, /update.pending/i);
   assert.match(upstream, /Skill version: `4\.8\.0`/);
   assert.match(upstream, /Engine version: `0\.1\.18`/);
   assert.match(skill, /version: 4\.8\.0/);
@@ -99,14 +102,14 @@ test('Impeccable vendor is fully refreshed to 4.8.0 and engine 0.1.18', () => {
   assert.match(skill, /craft-floor\.md[\s\S]{0,400}UI edit/i);
 });
 
-test('Impeccable shared vendor bytes match the audited 4.8.0 snapshot', () => {
+test('Impeccable shared vendor matches last full pin except audited browser JS cherry-pick', () => {
   assert.equal(
     git('rev-parse', 'HEAD:skills/impeccable/agents'),
     '10097e136ce06d86dbf36f7d5cbb25953f9412e6',
   );
   assert.equal(
     git('rev-parse', 'HEAD:skills/impeccable/reference'),
-    'b8d6f1cec9bbe18fdbb01ab995ecbfe949583e18',
+    '67cd3f898196b6037d470c771b8425aa304c5d36',
   );
 
   const blobs = new Map([
@@ -118,8 +121,8 @@ test('Impeccable shared vendor bytes match the audited 4.8.0 snapshot', () => {
     ['skills/impeccable/scripts/live-browser-dom.js', 'ef1ca8928111080ddb923da14c7827b7396a9e62'],
     ['skills/impeccable/scripts/live-browser-ignores.js', '1a2912e57a3b2b10a0d961b5dfe568253133fe53'],
     ['skills/impeccable/scripts/live-browser-session.js', '6871770720d3dd7a284c545e20b97b613635f36f'],
-    ['skills/impeccable/reference/init.md', '0be86b1c536c32609d5f158c43704bb5d6723c28'],
-    ['skills/impeccable/reference/live.md', '6af0ac4d20cf1c799f4b3662cecb0fe88affebff'],
+    ['skills/impeccable/reference/init.md', 'fe5422cc811fb8c93989dc9a4ec7b24afbc91a69'],
+    ['skills/impeccable/reference/live.md', '045a3fb385552c55805fec252ae73ddeba9fc15b'],
     ['skills/impeccable/scripts/live-browser.js', 'cc049774b8247c478748fc487901fd38ef66514e'],
   ]);
 
