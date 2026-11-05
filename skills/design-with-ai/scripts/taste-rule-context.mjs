@@ -159,8 +159,7 @@ export function sourceRuleContexts(lines, path) {
 export function contextualRuleMatches(rule, context) {
   if (rule.hardGate === true || !["G27", "G29", "G32", "G34"].includes(rule.id)) return true;
   if (Array.isArray(context.segments)) {
-    const segments = context.segments.length ? context.segments : [context];
-    return segments.some((s) => contextualRuleMatches(rule, s));
+    return context.segments.some((s) => contextualRuleMatches(rule, s));
   }
   const { code, functionalControl, hover, keyframes, entrance } = context;
   if (!code?.trim()) return false;
