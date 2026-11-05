@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Real Chrome/CDP smoke against a reviewed, pinned upstream checkout.
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runQualityAudit } from "../../scripts/providers/quality-audit.mjs";
@@ -12,7 +12,9 @@ if (!skillRoot) {
   process.exit(2);
 }
 const root = mkdtempSync(join(tmpdir(), "dwa-browser-live-"));
-const page = join(root, "index.html");
+const built = join(root, "dist");
+mkdirSync(built);
+const page = join(built, "index.html");
 writeFileSync(page, [
   "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">",
   "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">",

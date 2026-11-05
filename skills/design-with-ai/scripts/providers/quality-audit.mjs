@@ -8,7 +8,7 @@ import { captureProviderFusion } from "./evidence-journal.mjs";
 import { runProfileProviders } from "./workflow.mjs";
 
 const allowedOptions = new Set([
-  "--profile", "--path", "--route", "--project-root", "--html",
+  "--profile", "--path", "--route", "--project-root", "--html", "--browser-root",
   "--taste-root", "--output-root", "--intent", "--page-kind", "--category",
   "--primary", "--journal", "--ledger", "--run-id",
 ]);
@@ -34,7 +34,7 @@ function parseArgs(argv) {
     if (!values.has(arg)) throw new Error(arg + " is required");
   }
   const withTaste = flags.has("--with-taste") || flags.has("--require-taste");
-  if (!withTaste && ["--html", "--taste-root", "--page-kind", "--category", "--primary"]
+  if (!withTaste && ["--html", "--browser-root", "--taste-root", "--page-kind", "--category", "--primary"]
     .some((key) => values.has(key))) {
     throw new Error("Taste-specific options require --with-taste");
   }
@@ -53,6 +53,7 @@ function parseArgs(argv) {
     withImpeccable: !flags.has("--no-impeccable"),
     withTaste, requireTaste: flags.has("--require-taste"),
     ...(values.has("--html") ? { html: resolve(values.get("--html")) } : {}),
+    ...(values.has("--browser-root") ? { browserRoot: resolve(values.get("--browser-root")) } : {}),
     ...(values.has("--taste-root") ? { tasteRoot: resolve(values.get("--taste-root")) } : {}),
     ...(values.has("--intent") ? { intentPath: resolve(values.get("--intent")) } : {}),
     ...(values.has("--page-kind") ? { pageKind: values.get("--page-kind") } : {}),

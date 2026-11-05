@@ -1,7 +1,7 @@
 // Profile-aware provider execution for the existing DWA Gate phase.
 // This coordinates additional evidence only; it cannot issue DWA completion proof.
 import { existsSync, lstatSync, realpathSync } from "node:fs";
-import { isAbsolute, relative, resolve, sep } from "node:path";
+import { dirname, extname, isAbsolute, relative, resolve, sep } from "node:path";
 import { createProviderRegistry, runProviders } from "./registry.mjs";
 import { Capability } from "./contract.mjs";
 import { createNativeDwaProvider } from "./native-dwa.mjs";
@@ -48,7 +48,7 @@ export function selectProfileProviders({
   };
 }
 
-function validateScope({ target, route, projectRoot, html, withTaste }) {
+function validateScope({ target, route, projectRoot, html, browserRoot, outputRoot, withTaste }) {
   if (![target, route, projectRoot].every(filled) || !route.startsWith("/") ||
       route.includes("\0")) {
     throw new TypeError("Local source target, /route and project root are required");
@@ -64,10 +64,34 @@ function validateScope({ target, route, projectRoot, html, withTaste }) {
       !(lstatSync(source).isDirectory() || lstatSync(source).isFile())) {
     throw new TypeError("Source target is outside the project scope");
   }
-  if (withTaste && !filled(html)) {
-    throw new TypeError("A local built HTML page is required when Taste Skill is selected");
+  let renderedRoot = null;
+  if (withTaste) {
+    if (!filled(html)) {
+      throw new TypeError("A local built HTML page is required when Taste Skill is selected");
+    }
+    const file = resolve(html);
+    if (!existsSync(file) || !lstatSync(file).isFile() ||
+        lstatSync(file).isSymbolicLink() ||
+        ![".html", ".htm"].includes(extname(file).toLowerCase())) {
+      throw new TypeError("Browser target must be a local regular HTML file");
+    }
+    const realFile = realpathSync(file);
+    const assets = resolve(browserRoot ?? dirname(file));
+    if (!existsSync(assets) || !lstatSync(assets).isDirectory() ||
+        lstatSync(assets).isSymbolicLink()) {
+      throw new TypeError("Browser asset root must be an existing regular directory");
+    }
+    renderedRoot = realpathSync(assets);
+    if (!inside(realProject, realFile) || !inside(realProject, renderedRoot) ||
+        !inside(renderedRoot, realFile) || renderedRoot === realProject) {
+      throw new TypeError("Use an isolated built-site subtree inside projectRoot for browser assets");
+    }
+    if (outputRoot && existsSync(resolve(outputRoot)) &&
+        inside(renderedRoot, realpathSync(resolve(outputRoot)))) {
+      throw new TypeError("Browser output cannot reside inside the served asset root");
+    }
   }
-  return { projectRoot: realProject, target: realSource };
+  return { projectRoot: realProject, target: realSource, renderedRoot };
 }
 
 // Dependency injection lets policy and failure transitions be exercised
@@ -75,12 +99,12 @@ function validateScope({ target, route, projectRoot, html, withTaste }) {
 export async function runProfileProviders({
   profile = "standard", withImpeccable = true, withTaste = false,
   requireTaste = false, target, route, projectRoot, html, tasteRoot,
-  outputRoot, intentPath, pageKind, category, primary,
+  browserRoot, outputRoot, intentPath, pageKind, category, primary,
 } = {}, { registry, execute = runProviders } = {}) {
   const selection = selectProfileProviders({
     profile, withImpeccable, withTaste, requireTaste,
   });
-  const location = validateScope({ target, route, projectRoot, html, withTaste });
+  const location = validateScope({ target, route, projectRoot, html, browserRoot, outputRoot, withTaste });
   const actualRegistry = registry ?? createProviderRegistry([
     createNativeDwaProvider(),
     ...(selection.static.optional.length ? [createImpeccableProvider()] : []),
@@ -98,7 +122,7 @@ export async function runProfileProviders({
     capability: Capability.RENDERED_AUDIT,
     ...selection.rendered,
     request: {
-      target: resolve(html), route, projectRoot: location.projectRoot,
+      target: resolve(html), route, projectRoot: location.renderedRoot,
       ...(outputRoot ? { outputRoot } : {}),
       ...(pageKind ? { pageKind } : {}),
       ...(category ? { category } : {}),

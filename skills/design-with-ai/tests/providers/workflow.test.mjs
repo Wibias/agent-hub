@@ -167,6 +167,50 @@ test("explicit local scope prevents arbitrary paths, URLs and missing routes", a
   });
 });
 
+test("browser is scoped to an isolated build directory, never the repository root", async () => {
+  await fixture(async (f) => {
+    const observed = [];
+    const execute = async (registry, input) => {
+      observed.push(input);
+      const id = input.capability === Capability.RENDERED_AUDIT
+        ? "taste-skill" : "native-dwa";
+      return [report(id, input.capability)];
+    };
+    const out = await runProfileProviders({
+      ...f.request, profile: "deep", withImpeccable: false,
+      withTaste: true, html: f.html, outputRoot: f.root,
+    }, { registry: registry(), execute });
+    assert.equal(out.fusion.status, "SCOPED_CLEAR");
+    assert.equal(observed[1].request.projectRoot, f.built);
+    assert.equal(observed[0].request.projectRoot, f.root);
+    await assert.rejects(() => runProfileProviders({
+      ...f.request, profile: "deep", withTaste: true,
+      html: f.html, browserRoot: f.root,
+    }, { registry: registry() }), /isolated built-site subtree/);
+    await assert.rejects(() => runProfileProviders({
+      ...f.request, profile: "deep", withTaste: true,
+      html: f.html, outputRoot: f.built,
+    }, { registry: registry() }), /Browser output/);
+    const repoHtml = join(f.root, "index.html");
+    writeFileSync(repoHtml, "<!doctype html><title>Not isolated</title>");
+    await assert.rejects(() => runProfileProviders({
+      ...f.request, profile: "deep", withTaste: true,
+      html: repoHtml,
+    }, { registry: registry() }), /isolated built-site subtree/);
+    const elsewhere = mkdtempSync(join(tmpdir(), "dwa-browser-outside-"));
+    try {
+      const externalHtml = join(elsewhere, "index.html");
+      writeFileSync(externalHtml, "<!doctype html>");
+      await assert.rejects(() => runProfileProviders({
+        ...f.request, profile: "deep", withTaste: true,
+        html: externalHtml,
+      }, { registry: registry() }), /isolated built-site subtree/);
+    } finally {
+      rmSync(elsewhere, { force: true, recursive: true });
+    }
+  });
+});
+
 test("explicit opt-out disables Impeccable without silently selecting it", async () => {
   await fixture(async (f) => {
     const out = await runProfileProviders({

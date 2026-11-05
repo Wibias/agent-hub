@@ -1,8 +1,8 @@
 // Explicit, source-only adapter for the pinned Agent Hub Impeccable distribution.
 // This executes the existing local JS detector, not the auto-downloading binary launcher.
 import { createHash } from "node:crypto";
-import { existsSync, lstatSync, realpathSync } from "node:fs";
-import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
+import { existsSync, lstatSync, realpathSync, readdirSync } from "node:fs";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { assertProviderReport, Capability, ProviderStatus, providerFailure } from "./contract.mjs";
 import { runProcess } from "./process-runner.mjs";
@@ -22,6 +22,28 @@ function safeFile(path) {
 function inside(root, path) {
   const suffix = relative(root, path);
   return suffix !== ".." && !suffix.startsWith(".." + sep) && !isAbsolute(suffix);
+}
+
+// Match the pinned vendored JS walker's scannable suffixes and skip dirs.
+const SOURCE_EXTENSION = /\.(?:html?|css|scss|sass|less|jsx?|tsx?|vue|svelte|astro|blade\.php)$/i;
+const SKIP_DIRS = new Set(["node_modules", "dist", "build", "__pycache__"]);
+const HIDDEN_SOURCE_DIRS = new Set([".vitepress", ".vuepress", ".storybook"]);
+function rejectScannableSymlinks(target) {
+  if (!lstatSync(target).isDirectory()) return;
+  const stack = [target];
+  while (stack.length) {
+    const current = stack.pop();
+    for (const entry of readdirSync(current, { withFileTypes: true })) {
+      if (SKIP_DIRS.has(entry.name)) continue;
+      if (entry.isDirectory() && entry.name.startsWith(".") &&
+          !HIDDEN_SOURCE_DIRS.has(entry.name)) continue;
+      const child = join(current, entry.name);
+      if (entry.isSymbolicLink() && SOURCE_EXTENSION.test(entry.name)) {
+        throw new Error("Symlinked UI source is outside the trusted scan scope: " + child);
+      }
+      if (entry.isDirectory()) stack.push(child);
+    }
+  }
 }
 
 function scanLocation({ target, projectRoot }) {
@@ -44,6 +66,7 @@ function scanLocation({ target, projectRoot }) {
   const realRoot = realpathSync(root);
   const realTarget = realpathSync(absolute);
   if (!inside(realRoot, realTarget)) throw new Error("Source target is outside the project root");
+  rejectScannableSymlinks(realTarget);
   return { absolute: realTarget, root: realRoot };
 }
 
@@ -79,7 +102,7 @@ function parseFinding(raw, root, route, occurrences) {
     id: "impeccable-" + hash + (ordinal ? "-" + ordinal : ""),
     providerRuleId: raw.antipattern,
     category: typeof raw.category === "string" ? raw.category : "other",
-    priority: raw.severity === "error" ? "P1" : "P2",
+    priority: advisory ? "P2" : raw.severity === "error" ? "P1" : "P2",
     confidence: "heuristic",
     advisory,
     message: typeof raw.description === "string" && raw.description.trim()

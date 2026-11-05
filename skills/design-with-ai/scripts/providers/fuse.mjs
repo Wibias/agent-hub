@@ -8,16 +8,12 @@ const allowedProviders = new Set(["native-dwa", "impeccable", "taste-skill"]);
 const prio = { P0: 3, P1: 2, P2: 1 };
 const success = new Set([ProviderStatus.PASS, ProviderStatus.FINDINGS]);
 
-// Only explicit rule aliases may collapse across providers, and only when
-// *the source file and positive line* are identical. Same-theme signals with
-// different locations are correlations, not duplicates.
-const preciseAlias = new Map([
-  ["native-dwa:G05", "nested-cards"],
-  ["impeccable:nested-cards", "nested-cards"],
-]);
+// Source scanners do not have any proven rule-equivalent pair yet. Even
+// identical source locations with visually related rules stay separate.
+
 const relatedTheme = new Map([
-  ["native-dwa:G05", "nested-cards"],
-  ["impeccable:nested-cards", "nested-cards"],
+  ["native-dwa:G22", "motion-layout"],
+  ["impeccable:layout-transition", "motion-layout"],
   ["native-dwa:G12", "palette-default"],
   ["impeccable:ai-color-palette", "palette-default"],
   ["native-dwa:G13", "typography-default"],
@@ -43,14 +39,11 @@ function bucket(report, finding) {
   if (!filled(loc.route) || !filled(loc.file) || !filled(finding.providerRuleId)) {
     throw new TypeError("Cannot fuse a finding without route, file and rule ID");
   }
-  const prefix = report.provider + ":" + finding.providerRuleId;
   if (report.capability === "static-audit") {
     // Pseudo source files and unlocated findings are intentionally distinct.
     if (loc.file === "<surface>" || !Number.isInteger(loc.line) || loc.line <= 0) {
       return "individual:" + report.provider + ":" + finding.id;
     }
-    const rule = preciseAlias.get(prefix);
-    if (rule) return JSON.stringify(["source", loc.route, loc.file, loc.line, rule]);
     return "individual:" + report.provider + ":" + finding.id;
   }
   // An identical rendered rule and DOM selector across viewports may be one

@@ -21,3 +21,5 @@ The normal DWA non-motion Gate now has an explicit profile-aware CLI: `scripts/p
 ## Phase 4 evidence fusion
 
 Manual, explicit provider reports can now be correlated with `scripts/providers/fuse.mjs` and retained in an append-only schema-v2 sidecar. This does **not** change ordinary provider selection or the existing source/render `taste-evidence-fusion.mjs` gate. Missing selected optional results remain explicitly `INCOMPLETE`, and no fusion result grants product completion. See `references/provider-fusion-journal.md`.
+
+**Review correction:** Source findings are currently **not** deduplicated across DWA and Impeccable. Similar palette, type and motion signals remain separate review leads. The old experimental G05/nested-cards mapping was removed because DWA's G05 is not emitted by the source scanner. Local output scope for the optional Taste browser is now an isolated build subtree, never the full source repository.
