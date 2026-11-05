@@ -718,7 +718,7 @@ function renderMemories() {
   const states = [...new Set(memories.map((item) => item.state))].sort();
 
   el.view.innerHTML = `
-    <div class="memory-layout">
+    <div class="memory-layout ${state.memoryInspectorOpen ? 'is-details-open' : ''}">
       <section class="memory-column">
         <div class="toolbar">
           <input
@@ -752,7 +752,8 @@ function renderMemories() {
             : '<div class="empty">No memories match the current filters.</div>'}
         </div>
       </section>
-      <aside class="inspector">
+      <aside class="inspector" aria-label="Selected memory details">
+        <div class="mobile-detail-heading"><strong>Memory details</strong><button class="text-action" id="memory-close-details" type="button">Close</button></div>
         ${renderInspector()}
       </aside>
     </div>
@@ -763,16 +764,20 @@ function renderMemories() {
   const claimState = document.querySelector('#state-filter');
 
   search?.addEventListener('input', () => {
+    const selection = { start: search.selectionStart, end: search.selectionEnd };
     state.search = search.value;
     renderMemories();
+    restoreGraphControlFocus('memory-search', selection);
   });
   authority?.addEventListener('change', () => {
     state.authority = authority.value;
     renderMemories();
+    restoreGraphControlFocus('authority-filter');
   });
   claimState?.addEventListener('change', () => {
     state.claimState = claimState.value;
     renderMemories();
+    restoreGraphControlFocus('state-filter');
   });
 
   el.view.querySelectorAll('[data-claim]').forEach((button) => {
@@ -780,6 +785,14 @@ function renderMemories() {
       resetActionState();
       selectClaim(button.dataset.claim);
     });
+  });
+
+  document.querySelector('#memory-close-details')?.addEventListener('click', () => {
+    state.memoryInspectorOpen = false;
+    renderMemories();
+    const selectedRow = [...el.view.querySelectorAll('[data-claim]')]
+      .find((item) => item.dataset.claim === state.selectedClaimId);
+    selectedRow?.focus({ preventScroll: true });
   });
 
   document.querySelector('#replace-memory')?.addEventListener('click', () => {
@@ -2034,6 +2047,7 @@ function renderView() {
 
 async function selectClaim(claimId) {
   state.selectedClaimId = claimId;
+  state.memoryInspectorOpen = true;
   state.claim = null;
   updateUrl();
   renderMemories();
@@ -2073,6 +2087,8 @@ async function loadScope({
   state.selectedClaimId = null;
   state.selectedCandidateId = null;
   state.selectedGraphNodeId = null;
+  state.memoryInspectorOpen = false;
+  state.graphInspectorOpen = false;
   resetActionState();
   state.search = '';
   state.authority = 'all';
@@ -2202,6 +2218,8 @@ el.tabs.addEventListener('click', async (event) => {
   const button = event.target.closest('[data-view]');
   if (!button || button.dataset.view === state.view) return;
   state.view = button.dataset.view;
+  state.memoryInspectorOpen = false;
+  state.graphInspectorOpen = false;
   state.selectedClaimId = null;
   state.selectedCandidateId = null;
   state.claim = null;
