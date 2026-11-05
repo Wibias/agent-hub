@@ -126,7 +126,7 @@ export async function runCandidateSandbox({
     if (before.pendingImportance === 0) {
       return {
         status: 'nothing_pending', sourceOpenedReadOnly: true,
-        sourceDatabaseChanged: false, scope: { projectId, branch },
+        writesToSource: false, scope: { projectId, branch },
         before, after: before, stages: [],
       };
     }
@@ -157,14 +157,14 @@ export async function runCandidateSandbox({
     return {
       status: failures === 0 ? 'completed' : 'partial',
       sourceOpenedReadOnly: true,
-      sourceDatabaseChanged: false,
+      writesToSource: false,
       scope: { projectId, branch },
       before, after, stages,
     };
   } catch {
     return {
       status: 'failed', failedStage: stage, sourceOpenedReadOnly: true,
-      sourceDatabaseChanged: false, scope: { projectId, branch },
+      writesToSource: false, scope: { projectId, branch },
     };
   } finally {
     await rm(tmp, { recursive: true, force: true });
