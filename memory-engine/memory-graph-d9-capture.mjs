@@ -28,7 +28,7 @@ function safeGit(command, args) {
 export function validD9FilePath(path) {
   return typeof path === 'string' && path.length > 0 && path.length <= 4096
     && !path.includes('\\') && !path.includes('\0') && !path.startsWith('/')
-    && !path.startsWith(':') && !/[*?\[\]]/.test(path)
+    && !path.includes(':') && !/[*?\[\]]/.test(path)
     && !path.split('/').some((part) => part === '' || part === '.' || part === '..');
 }
 
