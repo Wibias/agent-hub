@@ -27,6 +27,15 @@ export class P10RuntimeTransportError extends Error {
   }
 }
 
+export function categorizeP10RuntimeError(error) {
+  if (!(error instanceof P10RuntimeTransportError)) return 'internal-error';
+  if (error.message === RUNTIME_TIMEOUT_MESSAGE) return 'timeout';
+  if (error.message.startsWith('P10 runtime projection failed with HTTP ')) return 'http';
+  if (error.message === 'P10 runtime projection returned invalid JSON') return 'invalid-json';
+  if (error.message === 'P10 runtime projection request failed') return 'network';
+  return 'candidate-invalid';
+}
+
 function requireNonEmptyString(value, name) {
   if (typeof value !== 'string' || value.trim().length === 0) {
     throw new P10RuntimeTransportError(`${name} must be a non-empty string`);
@@ -158,6 +167,7 @@ export async function fetchP10QuickCandidatePool({
   supabaseUrl,
   publishableKey,
   fetchImpl = fetch,
+  onDiagnostic,
   timeoutMs = 1500,
   retryTimeoutMs = timeoutMs,
   expectedDate = new Date().toISOString().slice(0, 10),
@@ -177,27 +187,50 @@ export async function fetchP10QuickCandidatePool({
   url.searchParams.set('order', 'asset_id.asc');
 
   const startedAt = performance.now();
+  const tracedAttempt = async (attempt, budgetMs) => {
+    const started = performance.now();
+    let outcome = 'ok';
+    let category = 'none';
+    try {
+      return await fetchProjectionAttempt({
+        url,
+        key,
+        fetchImpl,
+        timeoutMs: budgetMs,
+        referenceDate,
+      });
+    } catch (error) {
+      outcome = 'failed';
+      category = categorizeP10RuntimeError(error);
+      throw error;
+    } finally {
+      const durationMs = Math.max(0, performance.now() - started);
+      if (typeof onDiagnostic === 'function') {
+        try {
+          onDiagnostic({
+            phase: 'p10-attempt',
+            attempt,
+            outcome,
+            category,
+            duration_ms: durationMs,
+            timeout_budget_ms: budgetMs,
+            timeout_overrun_ms: Math.max(0, durationMs - budgetMs),
+          });
+        } catch {
+          // Diagnostics are best-effort and may never change routing.
+        }
+      }
+    }
+  };
   let candidates;
 
   try {
-    candidates = await fetchProjectionAttempt({
-      url,
-      key,
-      fetchImpl,
-      timeoutMs,
-      referenceDate,
-    });
+    candidates = await tracedAttempt(1, timeoutMs);
   } catch (error) {
     if (!(error instanceof P10RuntimeTransportError) || error.message !== RUNTIME_TIMEOUT_MESSAGE) {
       throw error;
     }
-    candidates = await fetchProjectionAttempt({
-      url,
-      key,
-      fetchImpl,
-      timeoutMs: retryTimeoutMs,
-      referenceDate,
-    });
+    candidates = await tracedAttempt(2, retryTimeoutMs);
   }
 
   return {
