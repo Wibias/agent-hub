@@ -276,7 +276,10 @@ function renderScopeHeader() {
 
 function renderTabs() {
   el.tabs.querySelectorAll('[data-view]').forEach((button) => {
-    button.classList.toggle('is-active', button.dataset.view === state.view);
+    const active = button.dataset.view === state.view;
+    button.classList.toggle('is-active', active);
+    if (active) button.setAttribute('aria-current', 'page');
+    else button.removeAttribute('aria-current');
   });
 }
 
@@ -843,7 +846,10 @@ function graphFilteredEdges(nodes) {
   return graph.edges.filter((edge) => (
     visible.has(edge.from)
     && visible.has(edge.to)
-    && (state.graphOrigin === 'all' || (state.graphOrigin === 'typed' ? edge.source === 'typed_relation' : edge.origin === state.graphOrigin))
+    && (state.graphOrigin === 'all'
+      || (state.graphOrigin === 'typed'
+        ? edge.source === 'typed_relation'
+        : edge.source !== 'typed_relation' && edge.origin === state.graphOrigin))
   ));
 }
 
@@ -927,6 +933,126 @@ function graphPositions(nodes, edges) {
   return positions;
 }
 
+
+/** Human-readable presentation labels never change the canonical authority. */
+function graphAuthorityLabel(authority) {
+  return ({
+    user_direct: 'Direct user statement',
+    agent_inference: 'Agent interpretation',
+    repo_trusted: 'Repository-backed evidence',
+    session: 'Session observation',
+    tool: 'Tool observation',
+    untrusted: 'Unverified source',
+  })[authority] ?? String(authority ?? 'Unknown').replaceAll('_', ' ');
+}
+
+/** Git verification is independent of the memory source's authority. */
+function graphFreshnessLabel(status) {
+  return ({
+    fresh: 'Git file verified',
+    stale: 'Git file not verified',
+    unchecked: 'Git check unavailable',
+    not_repository: 'Not a Git record',
+  })[status] ?? 'Verification unknown';
+}
+
+/** Explain why a Git check passed, failed or does not apply. */
+function graphFreshnessHelp(status) {
+  return ({
+    fresh: 'The recorded file matches the selected checkout at this revision.',
+    stale: 'The recorded Git blob could not be verified here. It may have changed, disappeared or become inaccessible.',
+    unchecked: 'The file was not verified. Check the selected repository, branch and Git access.',
+    not_repository: 'This memory is not based on a repository file. Git freshness does not apply.',
+  })[status] ?? 'No verified Git freshness result is available.';
+}
+
+/** Summarize all scoped graph nodes, regardless of the active UI filters. */
+function graphVerificationSummary(graph) {
+  const statuses = { fresh: 0, stale: 0, unchecked: 0 };
+  for (const node of graph?.nodes ?? []) {
+    const status = node.freshness?.status;
+    if (Object.hasOwn(statuses, status)) statuses[status] += 1;
+  }
+  const total = statuses.fresh + statuses.stale + statuses.unchecked;
+  if (graph?.gitContext?.status !== 'verified') return {
+    tone: 'caution', label: 'GIT CONTEXT',
+    title: 'Repository verification unavailable',
+    message: 'The selected checkout is not verified. Repository memories must not be treated as fresh.',
+    count: total ? total + ' Git-linked' : 'No verified checkout',
+  };
+  if (statuses.stale > 0) return {
+    tone: 'caution', label: 'EVIDENCE STATUS',
+    title: statuses.stale + (statuses.stale === 1 ? ' Git-linked memory needs review' : ' Git-linked memories need review'),
+    message: 'At least one recorded file could not be verified. Open a node to inspect its evidence.',
+    count: statuses.fresh + ' / ' + total + ' verified',
+  };
+  if (statuses.unchecked > 0) return {
+    tone: 'caution', label: 'EVIDENCE STATUS',
+    title: 'Some Git-linked memories are unchecked',
+    message: 'A verified checkout does not guarantee that each referenced file was checked.',
+    count: statuses.fresh + ' / ' + total + ' verified',
+  };
+  if (total === 0 && graph?.stats?.truncated) return {
+    tone: 'neutral', label: 'EVIDENCE STATUS',
+    title: 'No Git-linked memories in the returned graph',
+    message: 'The graph is limited. Omitted memories may include Git-linked evidence.',
+    count: '0 Git-linked shown',
+  };
+  if (total === 0) return {
+    tone: 'neutral', label: 'EVIDENCE STATUS',
+    title: 'No repository-backed memories in this scope',
+    message: 'The graph can show session or agent memories without any Git file evidence.',
+    count: '0 Git-linked',
+  };
+  return {
+    tone: 'verified', label: 'EVIDENCE STATUS',
+    title: 'Repository evidence verified',
+    message: 'All Git-linked nodes in this scoped graph match the selected checkout.',
+    count: statuses.fresh + ' / ' + total + ' verified',
+  };
+}
+
+/** Normalize origin terminology without changing underlying edge classes. */
+function graphRelationOriginLabel(edge) {
+  if (edge?.source === 'typed_relation') return 'Advisory';
+  if (edge?.origin === 'inferred') return 'Similarity';
+  return 'Recorded';
+}
+
+/** Restore keyboard focus and text selection after graph controls rerender. */
+function restoreGraphControlFocus(id, selection = null) {
+  const target = document.getElementById(id);
+  if (!target) return;
+  target.focus({ preventScroll: true });
+  if (selection && typeof target.setSelectionRange === 'function'
+    && Number.isInteger(selection.start) && Number.isInteger(selection.end)) {
+    target.setSelectionRange(selection.start, selection.end);
+  }
+}
+
+/** Focus the re-rendered SVG node and reveal it only when outside the viewport. */
+function focusSelectedGraphNode(nodeId) {
+  const next = [...el.view.querySelectorAll('.graph-node[data-graph-node]')]
+    .find((item) => item.dataset.graphNode === nodeId);
+  if (!next) return;
+  next.focus({ preventScroll: true });
+  if (typeof next.getBoundingClientRect !== 'function') return;
+  const box = next.getBoundingClientRect();
+  const viewport = window.visualViewport;
+  const viewportWidth = viewport?.width ?? window.innerWidth;
+  const viewportHeight = viewport?.height ?? window.innerHeight;
+  const viewportLeft = viewport?.offsetLeft ?? 0;
+  const viewportTop = viewport?.offsetTop ?? 0;
+  const canvas = next.closest?.('.graph-canvas-wrap')?.getBoundingClientRect();
+  const outsideViewport = box.top < viewportTop || box.bottom > viewportTop + viewportHeight
+    || box.left < viewportLeft || box.right > viewportLeft + viewportWidth;
+  const outsideCanvas = canvas && (box.top < canvas.top || box.bottom > canvas.bottom
+    || box.left < canvas.left || box.right > canvas.right);
+  if ((outsideViewport || outsideCanvas) && typeof next.scrollIntoView === 'function') {
+    next.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }
+}
+
 /** Format distinct canonical, typed and embedding-provenance descriptions. */
 function graphEdgeProvenance(edge) {
   const provenance = edge?.provenance ?? {};
@@ -990,22 +1116,34 @@ function graphInspector(node, visibleEdges) {
       <div class="inspector-head">
         <div class="inspector-ref">${escapeHtml(node.ref)}</div>
         <h2>${escapeHtml(node.value)}</h2>
+        <p class="graph-inspector-subtitle">What this memory records, where it came from and which connections are visible.</p>
+      </div>
+      <div class="graph-evidence-status ${escapeHtml(node.freshness?.status ?? 'unknown')}">
+        <span class="graph-evidence-kicker">VERIFICATION CONTEXT</span>
+        <strong>${escapeHtml(graphFreshnessLabel(node.freshness?.status))}</strong>
+        <p>${escapeHtml(graphFreshnessHelp(node.freshness?.status))}</p>
       </div>
       <section class="inspect-section">
-        <h3>Graph node</h3>
+        <h3>Source & state</h3>
         ${definition([
-          ['Authority', node.authority],
-          ['Group', node.groupLabel || node.group],
-          ['State', node.state, statusClass(node.state)],
-          ['Lifecycle', node.lifecycleStatus],
-          ['Git freshness', node.freshness?.status || 'unknown', statusClass(node.freshness?.status)],
-          ['Freshness detail', node.freshness?.explanation],
-          ['Kind', node.kind],
-          ['Subject', node.subject],
-          ['Predicate', node.predicate],
-          ['Created', dateTime(node.createdAt)],
-          ['Semantic', node.semanticIndexed ? 'indexed' : 'not indexed'],
+          ['Evidence authority', graphAuthorityLabel(node.authority)],
+          ['Record state', node.state, statusClass(node.state)],
+          ['Lifecycle state', node.lifecycleStatus],
+          ['Evidence group', node.groupLabel || graphAuthorityLabel(node.group)],
+          ['Recorded', dateTime(node.createdAt)],
         ])}
+        <details class="graph-technical">
+          <summary>Technical metadata</summary>
+          ${definition([
+            ['Kind', node.kind],
+            ['Subject', node.subject],
+            ['Predicate', node.predicate],
+            ['Raw authority', node.authority],
+            ['Raw Git state', node.freshness?.status || 'unknown'],
+            ['Git detail', node.freshness?.explanation],
+            ['Semantic index', node.semanticIndexed ? 'indexed' : 'not indexed'],
+          ])}
+        </details>
         <div class="action-row graph-open-row">
           <button id="graph-open-memory" class="text-action" type="button">
             Open in Memories
@@ -1023,14 +1161,15 @@ function graphInspector(node, visibleEdges) {
         ])}
       </section>
       <section class="inspect-section">
-        <h3>Neighbors</h3>
+        <h3>Connected memories</h3>
+        <p class="graph-section-intro">Recorded connections and advisory suggestions are different kinds of evidence. Select a neighbor to inspect it.</p>
         <div class="graph-neighbor-list">
           ${neighbors.length
             ? neighbors.map(({ edge, node: neighbor }) => `
                 <button class="graph-neighbor" type="button" data-graph-node="${escapeHtml(neighbor.id)}">
                   <span class="graph-neighbor-top">
                     <span class="ref">${escapeHtml(neighbor.ref)}</span>
-                    <span class="graph-origin ${escapeHtml(edge.origin)}">${escapeHtml(edge.origin)}</span>
+                    <span class="graph-origin ${escapeHtml(edge.origin)}">${escapeHtml(graphRelationOriginLabel(edge))}</span>
                   </span>
                   <span class="graph-neighbor-relation">${escapeHtml(edge.relation.replaceAll('_', ' '))}</span>
                   <span class="graph-neighbor-meta">
@@ -1076,26 +1215,36 @@ function renderGraph() {
   const labelEveryNode = nodes.length <= 60;
   const stats = state.graph.stats ?? {};
   const gitContext = state.graph.gitContext ?? { status: 'unconfigured', revisionSha: null };
+  const verification = graphVerificationSummary(state.graph);
   el.view.innerHTML = `
     <div class="graph-layout">
-      <section class="graph-stage">
+      <section class="graph-stage" aria-label="Memory connections">
+        <div class="graph-context" data-verification-tone="${escapeHtml(verification.tone)}">
+          <div class="graph-context-body">
+            <span class="graph-context-kicker">${escapeHtml(verification.label)}</span>
+            <strong>${escapeHtml(verification.title)}</strong>
+            <p>${escapeHtml(verification.message)}</p>
+          </div>
+          <span class="graph-context-count">${escapeHtml(verification.count)}</span>
+        </div>
         <div class="graph-toolbar">
+          <label class="sr-only" for="graph-search">Search memories in this graph</label>
           <input
             id="graph-search"
             class="search"
             type="search"
             autocomplete="off"
-            placeholder="Search graph nodes…"
+            placeholder="Find a memory, source or topic…"
             value="${escapeHtml(state.graphSearch)}"
           >
-          <select id="graph-origin-filter" class="filter" aria-label="Filter graph by edge origin">
+          <select id="graph-origin-filter" class="filter" aria-label="Relation type">
             <option value="all" ${state.graphOrigin === 'all' ? 'selected' : ''}>All relations</option>
-            <option value="explicit" ${state.graphOrigin === 'explicit' ? 'selected' : ''}>Explicit only</option>
-            <option value="inferred" ${state.graphOrigin === 'inferred' ? 'selected' : ''}>Inferred only</option>
-            <option value="typed" ${state.graphOrigin === 'typed' ? 'selected' : ''}>Typed only</option>
+            <option value="explicit" ${state.graphOrigin === 'explicit' ? 'selected' : ''}>Recorded only</option>
+            <option value="inferred" ${state.graphOrigin === 'inferred' ? 'selected' : ''}>Similarity only</option>
+            <option value="typed" ${state.graphOrigin === 'typed' ? 'selected' : ''}>Advisory only</option>
           </select>
           <select id="graph-group-filter" class="filter" aria-label="Filter graph by Evidence authority">
-            <option value="all" ${state.graphGroup === 'all' ? 'selected' : ''}>All authorities</option>
+            <option value="all" ${state.graphGroup === 'all' ? 'selected' : ''}>All sources</option>
             ${groups.map((group) => `
               <option value="${escapeHtml(group.id)}" ${group.id === state.graphGroup ? 'selected' : ''}>
                 ${escapeHtml(group.label)} (${number(group.count)})
@@ -1113,24 +1262,24 @@ function renderGraph() {
         </div>
         <div class="graph-meta">
           <div class="graph-legend" aria-label="Graph relation legend">
-            <span class="graph-legend-item"><span class="graph-legend-swatch explicit"></span>Explicit relation</span>
-            <span class="graph-legend-item"><span class="graph-legend-swatch typed"></span>Advisory typed</span>
+            <span class="graph-legend-item"><span class="graph-legend-swatch explicit"></span>Explicit relation · recorded</span>
+            <span class="graph-legend-item"><span class="graph-legend-swatch typed"></span>Advisory typed · not proof</span>
             <span class="graph-legend-item"><span class="graph-legend-swatch inferred"></span>Inferred similarity (optional)</span>
           </div>
           <div class="graph-stats">
-            <span>${number(nodes.length)} / ${number(stats.nodeCount)} nodes</span>
+            <span>${number(nodes.length)} of ${number(stats.nodeCount)} memories shown</span>
             <span>·</span>
-            <span>${number(edges.length)} / ${number(stats.edgeCount)} edges</span>
+            <span>${number(edges.length)} of ${number(stats.edgeCount)} links shown</span>
             <span>· ${number(stats.typedRelations)} typed</span>
-            <span>· Git: ${escapeHtml(gitContext.status)}${gitContext.status === 'verified' && gitContext.revisionSha ? `<code>${escapeHtml(gitContext.revisionSha.slice(0, 12))}</code>` : ''}</span>
-            ${stats.typedRelationsOmittedByBound > 0 ? `<span>· ${number(stats.typedRelationsOmittedByBound)} typed omitted by limit</span>` : ''}
-            ${stats.repositoryNodesUnchecked ? `<span>· ${number(stats.repositoryNodesUnchecked)} Git-unchecked</span>` : ''}
+            <span>· Checkout: ${gitContext.status === 'verified' ? 'verified' : 'not verified'}</span>
+            ${stats.typedRelationsOmittedByBound > 0 ? `<span>· ${number(stats.typedRelationsOmittedByBound)} advisory links omitted</span>` : ''}
+            ${stats.repositoryNodesUnchecked ? `<span>· ${number(stats.repositoryNodesUnchecked)} Git records unchecked</span>` : ''}
             ${stats.truncated ? `<span>· ${number(stats.omittedClaims)} omitted by bound</span>` : ''}
           </div>
         </div>
         <div class="graph-canvas-wrap">
           ${nodes.length ? `
-            <svg class="graph-canvas" viewBox="0 0 1000 680" role="img" aria-label="Memory relation graph">
+            <svg class="graph-canvas" viewBox="0 0 1000 680" role="group" aria-label="Interactive memory relation graph">
               <g class="graph-edges">
                 ${edges.map((edge) => {
                   const from = positions.get(edge.from);
@@ -1163,6 +1312,7 @@ function renderGraph() {
                       transform="translate(${point.x.toFixed(2)} ${point.y.toFixed(2)})"
                       role="button"
                       tabindex="0"
+                      aria-pressed="${node.id === selected?.id ? 'true' : 'false'}"
                       aria-label="${escapeHtml(`${node.ref} ${node.value}`)}"
                     >
                       <circle r="10"></circle>
@@ -1187,26 +1337,32 @@ function renderGraph() {
   const group = document.querySelector('#graph-group-filter');
   const nodeState = document.querySelector('#graph-state-filter');
   search?.addEventListener('input', () => {
+    const selection = { start: search.selectionStart, end: search.selectionEnd };
     state.graphSearch = search.value;
     renderGraph();
+    restoreGraphControlFocus('graph-search', selection);
   });
   origin?.addEventListener('change', () => {
     state.graphOrigin = origin.value;
     renderGraph();
+    restoreGraphControlFocus('graph-origin-filter');
   });
   group?.addEventListener('change', () => {
     state.graphGroup = group.value;
     renderGraph();
+    restoreGraphControlFocus('graph-group-filter');
   });
   nodeState?.addEventListener('change', () => {
     state.graphNodeState = nodeState.value;
     renderGraph();
+    restoreGraphControlFocus('graph-state-filter');
   });
 
   const selectGraphNode = (nodeId) => {
     if (!state.graph?.nodes.some((node) => node.id === nodeId)) return;
     state.selectedGraphNodeId = nodeId;
     renderGraph();
+    focusSelectedGraphNode(nodeId);
   };
   el.view.querySelectorAll('[data-graph-node]').forEach((target) => {
     target.addEventListener('click', () => selectGraphNode(target.dataset.graphNode));

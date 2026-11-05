@@ -1,0 +1,42 @@
+name: Memory Console D12 Design with AI refinement
+
+on:
+  pull_request:
+    paths:
+      - "memory-ui/**"
+      - "tests/memory-engine/memory-console-d12-design.test.mjs"
+      - "docs/memory-console-d12-design-brief.md"
+      - ".design-with-ai/**"
+      - ".github/workflows/verify-memory-console-d12.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "memory-ui/**"
+      - "tests/memory-engine/memory-console-d12-design.test.mjs"
+      - ".github/workflows/verify-memory-console-d12.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Verify client JavaScript and D12 tests
+        run: |
+          node --check memory-ui/app.js
+          node --check tests/memory-engine/memory-console-d12-design.test.mjs
+          node --test \
+            tests/memory-engine/memory-console-d12-design.test.mjs \
+            tests/memory-engine/memory-graph-ui.test.mjs \
+            tests/memory-engine/memory-graph-v2.test.mjs \
+            tests/memory-engine/memory-ui.test.mjs
+      - name: Design with AI source taste gate
+        run: |
+          node skills/design-with-ai/scripts/taste-gate.mjs --path memory-ui --json
