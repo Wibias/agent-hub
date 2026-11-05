@@ -272,3 +272,41 @@ test("browser route must match a real static HTML route, not an SPA label", asyn
     }, { registry: registry() }), /Requested route does not match/);
   });
 });
+
+test("source fingerprint covers JavaScript used by Impeccable", async () => {
+  await fixture(async (f) => {
+    const js = join(f.srcDir, "helper.js");
+    writeFileSync(js, "export const demo = 1;");
+    const before = await runProfileProviders({ ...f.request, profile: "quick" }, {
+      registry: registry(),
+    });
+    writeFileSync(js, "export const demo = 2;");
+    const after = await runProfileProviders({ ...f.request, profile: "quick" }, {
+      registry: registry(),
+    });
+    assert.notEqual(before.scope.sourceSha256, after.scope.sourceSha256);
+  });
+});
+
+test("a changed intent file invalidates the source snapshot", async () => {
+  await fixture(async (f) => {
+    const intentPath = join(f.root, "intent.json");
+    writeFileSync(intentPath, '{"exceptions":[]}');
+    const args = { ...f.request, profile: "quick", intentPath };
+    const before = await runProfileProviders(args, { registry: registry() });
+    writeFileSync(intentPath, '{"exceptions":[{"rule":"G29","reason":"documented"}]}');
+    const after = await runProfileProviders(args, { registry: registry() });
+    assert.notEqual(before.scope.sourceSha256, after.scope.sourceSha256);
+  });
+});
+
+test("static route mapping accepts uppercase HTML extensions", async () => {
+  await fixture(async (f) => {
+    const html = join(f.built, "test", "index.HTML");
+    writeFileSync(html, "<!doctype html><h1>Test</h1>");
+    const out = await runProfileProviders({
+      ...f.request, withTaste: true, html,
+    }, { registry: registry() });
+    assert.equal(out.scope.routeBinding, "verified-static-html-path");
+  });
+});

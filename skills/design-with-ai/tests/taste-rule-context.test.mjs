@@ -38,3 +38,23 @@ test("context filters never suppress hard gates", () => {
   const context = sourceRuleContexts(["// transition-all"], "test.tsx")[0];
   assert.equal(contextualRuleMatches({ id: "G29", hardGate: true }, context), true);
 });
+
+test("visible JSX slashes cannot hide following UI copy", () => {
+  assert.equal(match("G29", ["<span>See // — next</span>"], "test.tsx"), true);
+});
+
+test("CSS selector split before brace retains hover context", () => {
+  assert.equal(match("G32", [".button:hover", "{", "transform: scale(1.05);", "}"]), true);
+});
+
+test("CSS control selector remains functional across separate declaration line", () => {
+  assert.equal(match("G27", [".join-code input {", "@apply uppercase tracking-widest;", "}"]), false);
+});
+
+test("a literal brace within CSS content cannot close a hover rule", () => {
+  assert.equal(match("G32", [".button:hover {", 'content: "}";', "transform: scale(1.05);"]), true);
+});
+
+test("multiline template literals preserve source comment markers as text", () => {
+  assert.equal(match("G29", ["const label = \x60Hello", "/* not a comment — UI */", "world\x60;"], "test.tsx", 2), true);
+});
