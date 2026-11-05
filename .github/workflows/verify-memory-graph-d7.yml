@@ -1,0 +1,41 @@
+name: Memory Graph D7 validation
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: memory-graph-d7-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Validate D7 CLI syntax and help
+        run: |
+          node --check scripts/validate-memory-graph-d7.mjs
+          node scripts/validate-memory-graph-d7.mjs --help
+      - name: Verify temporary Git/SQLite scale, freshness and concurrent requests
+        run: |
+          node --test \
+            tests/memory-engine/memory-graph-d7-validation.test.mjs \
+            tests/memory-engine/memory-graph-d7-integration.test.mjs
+      - name: Verify D6/D5/D4 compatibility
+        run: |
+          node --test \
+            tests/memory-engine/memory-graph-diagnostics*.test.mjs \
+            tests/memory-engine/memory-console-git-*.test.mjs \
+            tests/memory-engine/memory-graph-v2*.test.mjs \
+            tests/memory-engine/git-freshness-helper.test.mjs
