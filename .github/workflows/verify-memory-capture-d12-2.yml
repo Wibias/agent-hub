@@ -1,0 +1,35 @@
+name: Memory Capture D12.2 Diagnostics
+
+on:
+  pull_request:
+    paths:
+      - "memory-engine/memory-capture-diagnostics.mjs"
+      - "scripts/diagnose-memory-capture.mjs"
+      - "tests/memory-engine/memory-capture-diagnostics.test.mjs"
+      - ".github/workflows/verify-memory-capture-d12-2.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "memory-engine/memory-capture-diagnostics.mjs"
+      - "scripts/diagnose-memory-capture.mjs"
+      - "tests/memory-engine/memory-capture-diagnostics.test.mjs"
+      - ".github/workflows/verify-memory-capture-d12-2.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Check syntax and run read-only capture diagnostics tests
+        run: |
+          node --check memory-engine/memory-capture-diagnostics.mjs
+          node --check scripts/diagnose-memory-capture.mjs
+          node --test tests/memory-engine/memory-capture-diagnostics.test.mjs
