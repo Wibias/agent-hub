@@ -65,7 +65,7 @@ test("same exact source rule equivalence and location correlates without discard
     report("impeccable", [impeccable]),
     report("taste-skill"),
   ], config);
-  assert.equal(fusion.status, "REVIEW");
+  assert.equal(fusion.status, "BLOCKED");
   assert.equal(fusion.groups.length, 1);
   assert.equal(fusion.groups[0].priority, "P0");
   assert.deepEqual(fusion.groups[0].providers, ["impeccable", "native-dwa"]);
