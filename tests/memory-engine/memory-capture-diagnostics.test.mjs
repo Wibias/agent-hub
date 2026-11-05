@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import {
   classifyCaptureFailure,
+  classifyCaptureFailureOrigin,
   classifyCaptureValidationDetail,
   classifyCaptureValidationField,
   classifyCaptureValidationRule,
@@ -36,7 +37,7 @@ test('failure groups classify hints but never return raw failure messages', asyn
     db.prepare('INSERT INTO memory_evidence_proposals VALUES (?,?,?,?,?,?)').run(projectId, branch, 'needs_confirmation', 'knowledge', '{}', null);
     db.prepare('INSERT INTO memory_evidence_proposals VALUES (?,?,?,?,?,?)').run(projectId, branch, 'ignored', 'knowledge', '{}', null);
     db.prepare('INSERT INTO memory_pipeline_failures VALUES (?,?,?,?,?)').run(projectId, branch, 'importance', 'candidate_stage_failure', '429 token: SECRET-ALPHA');
-    db.prepare('INSERT INTO memory_pipeline_failures VALUES (?,?,?,?,?)').run(projectId, branch, 'importance', 'candidate_stage_failure', 'invalid JSON SECRET-BETA');
+    db.prepare('INSERT INTO memory_pipeline_failures VALUES (?,?,?,?,?)').run(projectId, branch, 'importance', 'candidate_stage_failure', 'memory candidate judgment response must be JSON: Unexpected token SECRET-BETA');
     db.prepare('INSERT INTO memory_pipeline_failures VALUES (?,?,?,?,?)').run(projectId, branch, 'pipeline_control', 'PipelineStalled', 'automatic candidate queues made no progress');
     db.prepare('INSERT INTO memory_pipeline_failures VALUES (?,?,?,?,?)').run('other', branch, 'importance', 'candidate_stage_failure', '429 other');
     db.prepare('INSERT INTO memory_pipeline_runs VALUES (?,?,?,?,?,?,?)').run('private-run-id', projectId, branch, 'Stop', 'partial', 0, '2026-11-05T21:00:00Z');
@@ -68,7 +69,7 @@ test('validation failure detail is restricted to fixed safe labels', () => {
     ['missing field in memory candidate judgment: canonical_fact', 'missing_field'],
     ['promote requires empty risk_flags SECRET-BETA', 'decision_invariant'],
     ['meaning_preserved must be a boolean', 'schema_violation'],
-    ['invalid JSON response with unknown formatter SECRET-GAMMA', 'other_validation'],
+    ['memory candidate judgment response must be non-empty JSON with unknown formatter SECRET-GAMMA', 'other_validation'],
   ];
   for (const [message, expected] of samples) {
     const detail = classifyCaptureValidationDetail(message);
@@ -118,6 +119,27 @@ test('schema rule uses only fixed allowlisted labels', () => {
   }
   assert.equal(classifyCaptureValidationRule('promote requires durability=long'), null);
   assert.equal(classifyCaptureValidationRule('429 too many requests'), null);
+});
+
+test('judge subprocess output is not mistaken for canonical_fact validation', () => {
+  const processError = 'codex candidate judge failed with exit 1: Provider output quoted the instruction: canonical_fact must be null.';
+  assert.equal(classifyCaptureFailureOrigin(processError), 'judge_process_exit');
+  assert.equal(classifyCaptureFailure(processError), 'judge_process_failure');
+  assert.equal(classifyCaptureValidationDetail(processError), null);
+  assert.equal(classifyCaptureValidationField(processError), null);
+  assert.equal(classifyCaptureValidationRule(processError), null);
+
+  const withRateLimit = 'codex candidate judge failed with exit 1: HTTP 429 rate limit; canonical_fact must be null.';
+  assert.equal(classifyCaptureFailureOrigin(withRateLimit), 'judge_process_exit');
+  assert.equal(classifyCaptureFailure(withRateLimit), 'rate_limit');
+  assert.equal(classifyCaptureValidationDetail(withRateLimit), null);
+
+  const validatorError = 'canonical_fact must be a non-empty string';
+  assert.equal(classifyCaptureFailureOrigin(validatorError), 'candidate_validator');
+  assert.equal(classifyCaptureFailure(validatorError), 'response_validation');
+  assert.equal(classifyCaptureValidationDetail(validatorError), 'schema_violation');
+  assert.equal(classifyCaptureValidationField(validatorError), 'canonical_fact');
+  assert.equal(classifyCaptureValidationRule(validatorError), 'invalid_type_or_empty');
 });
 
 test('older schema and unknown error payloads degrade safely', async () => {
