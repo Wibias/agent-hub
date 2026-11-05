@@ -15,6 +15,10 @@ async function fixture(fn) {
   const root = mkdtempSync(join(tmpdir(), "dwa-real-e2e-"));
   const srcDir = join(root, "src");
   mkdirSync(srcDir);
+  const built = join(root, "dist");
+  mkdirSync(join(built, "settings"), { recursive: true });
+  const renderedPage = join(built, "settings", "index.html");
+  writeFileSync(renderedPage, "<!doctype html><title>Settings</title>");
   const page = join(srcDir, "index.html");
   writeFileSync(page, [
     "<!doctype html>",
@@ -24,7 +28,7 @@ async function fixture(fn) {
     "<p>Settings and recent activity.</p><a href=\"/settings\">Settings</a>",
     "</main></body></html>",
   ].join("\n"));
-  try { return await fn({ root, page, srcDir }); }
+  try { return await fn({ root, page, srcDir, built, renderedPage }); }
   finally { rmSync(root, { force: true, recursive: true }); }
 }
 function invoke(f, extra = []) {
@@ -67,8 +71,8 @@ test("quick preserves only the DWA native provider", () => fixture((f) => {
 
 test("missing opt-in browser installation never claims a green three-provider check", () =>
   fixture((f) => {
-    const run = invoke(f, ["--profile", "deep", "--with-taste", "--html", f.page,
-      "--taste-root", join(f.root, "not-installed")]);
+    const run = invoke(f, ["--profile", "deep", "--with-taste", "--html", f.renderedPage,
+      "--taste-root", join(f.root, "not-installed"), "--browser-root", f.built]);
     assert.equal(run.status, 1, run.stderr + "\n" + run.stdout);
     const summary = JSON.parse(run.stdout);
     assert.equal(summary.status, "INCOMPLETE");
@@ -79,7 +83,7 @@ test("missing opt-in browser installation never claims a green three-provider ch
 
 test("explicitly required missing Taste runtime blocks", () => fixture((f) => {
   const run = invoke(f, ["--profile", "deep", "--require-taste",
-    "--html", f.page, "--taste-root", join(f.root, "missing")]);
+    "--html", f.renderedPage, "--taste-root", join(f.root, "missing"), "--browser-root", f.built]);
   assert.equal(run.status, 1, run.stderr + "\n" + run.stdout);
   const summary = JSON.parse(run.stdout);
   assert.equal(summary.status, "BLOCKED");

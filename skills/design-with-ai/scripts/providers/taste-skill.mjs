@@ -94,8 +94,10 @@ function parseReport(report, { exitCode, route, page, project, runDir }) {
   try { url = new URL(report.url); } catch {
     throw new Error("Taste Skill report has no local browser URL");
   }
-  if (url.protocol !== "http:" || url.hostname !== "127.0.0.1") {
-    throw new Error("Taste Skill attempted or reported a non-local browser target");
+  const expectedPath = "/" + relative(project, page).replaceAll("\\", "/").split("/").map(encodeURIComponent).join("/");
+  if (url.protocol !== "http:" || url.hostname !== "127.0.0.1" ||
+      decodeURIComponent(url.pathname) !== decodeURIComponent(expectedPath)) {
+    throw new Error("Taste Skill browser URL does not match the exact local HTML target");
   }
   if (!Array.isArray(report.widths) || report.widths.length !== WIDTHS.length ||
       report.widths.some((item, i) => !isObject(item) ||

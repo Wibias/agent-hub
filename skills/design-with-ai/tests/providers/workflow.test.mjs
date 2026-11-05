@@ -28,14 +28,14 @@ async function fixture(fn) {
   const srcDir = join(root, "src");
   const built = join(root, "dist");
   mkdirSync(srcDir);
-  mkdirSync(built);
+  mkdirSync(join(built, "test"), { recursive: true });
   const target = join(srcDir, "page.tsx");
-  const html = join(built, "index.html");
+  const html = join(built, "test", "index.html");
   writeFileSync(target, "export const Page = () => <h1>Test</h1>;");
   writeFileSync(html, "<!doctype html><h1>Test</h1>");
   try {
     return await fn({ root, srcDir, built, target, html,
-      request: { target: srcDir, projectRoot: root, route: "/test" } });
+      request: { target: srcDir, projectRoot: root, route: "/test", browserRoot: built } });
   } finally { rmSync(root, { force: true, recursive: true }); }
 }
 const registry = () => createProviderRegistry([
@@ -229,4 +229,46 @@ test("invalid profile selection cannot implicitly require unavailable capabiliti
     /explicitly enabled/);
   assert.throws(() => selectProfileProviders({ withImpeccable: "yes" }),
     /Invalid/);
+});
+
+test("source snapshot binds evidence to target, route and changing working files", async () => {
+  await fixture(async (f) => {
+    const original = await runProfileProviders({ ...f.request, profile: "quick" },
+      { registry: registry() });
+    assert.equal(original.scope.target, "src");
+    assert.equal(original.scope.route, "/test");
+    assert.equal(original.scope.fileCount, 1);
+    assert.match(original.scope.sourceSha256, /^[0-9a-f]{64}$/);
+    assert.equal(original.scope.routeBinding, "declared-source-route");
+    assert.equal(original.fusion.scope.sourceSha256, original.scope.sourceSha256);
+    writeFileSync(f.target, "export const Page = () => <h1>Changed</h1>;");
+    const changed = await runProfileProviders({ ...f.request, profile: "quick" },
+      { registry: registry() });
+    assert.notEqual(original.scope.sourceSha256, changed.scope.sourceSha256);
+  });
+});
+
+test("a source mutation during scanning fails closed", async () => {
+  await fixture(async (f) => {
+    let changed = false;
+    const execute = async (_, input) => {
+      if (!changed) {
+        writeFileSync(f.target, "export const changed = true;");
+        changed = true;
+      }
+      return [report("native-dwa", input.capability)];
+    };
+    await assert.rejects(() => runProfileProviders({
+      ...f.request, profile: "quick",
+    }, { registry: registry(), execute }), /changed during provider execution/);
+  });
+});
+
+test("browser route must match a real static HTML route, not an SPA label", async () => {
+  await fixture(async (f) => {
+    await assert.rejects(() => runProfileProviders({
+      ...f.request, route: "/quiz/jeopardy/setup",
+      withTaste: true, html: f.html,
+    }, { registry: registry() }), /Requested route does not match/);
+  });
 });
