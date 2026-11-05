@@ -7,7 +7,7 @@ are maintained here.
 | Source | Snapshot / access | Role | Licence / provenance |
 |---|---|---|---|
 | LexnLin design-with-AI thread | accessed 2026-07-12; URL recorded historically | Methods 1-3 and component-by-component framing | public thread, historical local note |
-| emilkowalski/skills | commit `a81dbca07f2217b7103e510c0f13f8d5b017afc9` reviewed 2026-10-28 | motion craft, animation review standards, vocabulary, runtime animation performance, and `remove-animations` removal-safety/cleanup delta; `break-ui` remains owned by `fortify worst-case` | MIT |
+| emilkowalski/skills | commit `c8a79627b59d72d764d6ab6f2c87c09a48169833` reviewed 2026-11-05 | motion craft, removal-safety, runtime motion advice and selectively adapted `choreograph` coordination guidance; no new skill route and no wholesale recipe import; `break-ui` remains owned by `fortify worst-case` | MIT |
 | MengTo/Skills | commit `321c769739b823de5eb94eb3a52aa1974fe783a2` reviewed 2026-09-04 | design-first prompting and runtime animation profiling | MIT |
 | ibelick/ui-skills `baseline-ui` | local adapted snapshot | baseline UI floor | MIT |
 | jakubkrehel/make-interfaces-feel-better | local adapted snapshot | micro craft | MIT |
@@ -78,6 +78,17 @@ integration pins upstream capability/provenance only: Penpot source, MCP server
 code, client configuration, credentials, and session state are not vendored into
 this skill. Current upstream OAuth support and legacy query-token compatibility
 are treated as current-source facts, not a permanent universal client contract.
+
+The 2026-11-05 Emil refresh classifies `choreograph` as `EXTEND` for
+coordinated motion only. `references/motion-choreography.md` is loaded
+conditionally by existing motion-build, motion-audit and motion-review paths
+when several elements respond to one event; isolated animation work remains
+unchanged. The adaptation keeps lead/support/static roles, together/overlap/
+sequence/carry choices, interruption and reduced-motion checks. It rejects
+the upstream's absolute uniform-stagger prohibition, and corrects the
+`AnimatePresence` sequencing claim: official Motion docs confirm
+`mode="sync"` as the default, with `wait` as the explicit sequential mode.
+The existing project token, accessibility and measurement gates remain canonical.
 
 `impeccable` is intentionally not vendored or modified by `design-with-ai`. It
 remains an independently managed explicit/delegated specialist and may update on
