@@ -7,7 +7,9 @@ const ENTRY = /(?:^|[^a-z])(?:enter|entry|intro|appear|reveal|mount|fade[-_]?in|
 
 function stripComments(line, state) {
   let code = "";
-  let quote = state.template ? "\x60" : null;
+  const active = state.controlFrames?.at(-1);
+  let quote = active?.type === "jsxQuote" || active?.type === "jsQuote"
+    ? active.quote : state.template ? "\x60" : null;
   for (let i = 0; i < line.length; i++) {
     const char = line[i], next = line[i + 1];
     if (state.block) {
@@ -42,39 +44,96 @@ function stripComments(line, state) {
 
 function withoutControlTags(source, state) {
   let result = "", offset = 0;
+  const frames = state.controlFrames;
   while (offset < source.length) {
-    if (state.control) {
-      // Attribute expressions can contain => or comparisons. Only an
-      // unquoted > outside JSX braces closes an opening control tag.
-      for (; offset < source.length; offset++) {
-        const char = source[offset];
-        if (state.controlQuote) {
-          if (char === "\\") { offset++; continue; }
-          if (char === state.controlQuote) state.controlQuote = null;
-          continue;
+    if (!state.control) {
+      const next = /<\s*(?:input|textarea)\b/i.exec(source.slice(offset));
+      if (!next) return result + source.slice(offset);
+      result += source.slice(offset, offset + next.index);
+      offset += next.index;
+      state.control = true;
+      frames.length = 0;
+      frames.push({ type: "tag" });
+    }
+    for (; offset < source.length && state.control; offset++) {
+      const char = source[offset], next = source[offset + 1];
+      const frame = frames.at(-1);
+      if (frame.type === "jsxQuote") {
+        // Backslashes do not escape JSX literal-attribute delimiters.
+        if (char === frame.quote) frames.pop();
+        continue;
+      }
+      if (frame.type === "jsQuote") {
+        if (char === "\\") { offset++; continue; }
+        if (char === frame.quote) {
+          frames.pop();
+          if (frames.at(-1)?.type === "js") frames.at(-1).regexAllowed = false;
         }
-        if (char === "'" || char === '"' || char === "\x60") {
-          state.controlQuote = char;
-          continue;
+        continue;
+      }
+      if (frame.type === "template") {
+        if (char === "\\") { offset++; continue; }
+        if (char === "\x60") {
+          frames.pop();
+          if (frames.at(-1)?.type === "js") frames.at(-1).regexAllowed = false;
+        } else if (char === "$" && next === "{") {
+          frames.push({ type: "js", depth: 1, regexAllowed: true });
+          offset++;
         }
-        if (char === "{") { state.controlBraceDepth++; continue; }
-        if (char === "}" && state.controlBraceDepth > 0) { state.controlBraceDepth--; continue; }
-        if (char === ">" && state.controlBraceDepth === 0) {
+        continue;
+      }
+      if (frame.type === "regex") {
+        if (char === "\\") { offset++; continue; }
+        if (char === "[") frame.inClass = true;
+        else if (char === "]") frame.inClass = false;
+        else if (char === "/" && !frame.inClass) {
+          frames.pop();
+          if (frames.at(-1)?.type === "js") frames.at(-1).regexAllowed = false;
+        }
+        continue;
+      }
+      if (frame.type === "blockComment") {
+        if (char === "*" && next === "/") { frames.pop(); offset++; }
+        continue;
+      }
+      if (frame.type === "tag") {
+        if (char === "'" || char === '"') frames.push({ type: "jsxQuote", quote: char });
+        else if (char === "{") frames.push({ type: "js", depth: 1, regexAllowed: true });
+        else if (char === ">") {
           state.control = false;
+          frames.length = 0;
           offset++;
           break;
         }
+        continue;
       }
-      if (state.control) return result;
-      continue;
+      // Braced JavaScript attribute or template interpolation. This lexical
+      // slash heuristic distinguishes simple regex literals from division.
+      if (char === "/" && next === "/") { offset = source.length; break; }
+      if (char === "/" && next === "*") { frames.push({ type: "blockComment" }); offset++; continue; }
+      if (char === "/" && frame.regexAllowed) { frames.push({ type: "regex", inClass: false }); continue; }
+      if (char === "'" || char === '"') { frames.push({ type: "jsQuote", quote: char }); continue; }
+      if (char === "\x60") { frames.push({ type: "template" }); continue; }
+      if (char === "{") { frame.depth++; frame.regexAllowed = true; continue; }
+      if (char === "}") {
+        if (--frame.depth === 0) {
+          frames.pop();
+          if (frames.at(-1)?.type === "js") frames.at(-1).regexAllowed = false;
+        } else frame.regexAllowed = false;
+        continue;
+      }
+      if (/\s/.test(char)) continue;
+      if (/[a-z_$]/i.test(char)) {
+        let end = offset + 1;
+        while (end < source.length && /[\w$]/.test(source[end])) end++;
+        frame.regexAllowed = /^(?:return|throw|yield|case|void|delete|typeof|instanceof|of|in|new|await)$/.test(source.slice(offset, end));
+        offset = end - 1;
+        continue;
+      }
+      if (/\d/.test(char)) { frame.regexAllowed = false; continue; }
+      frame.regexAllowed = /[=(:,!?\[{+\-*%&|^~<>;]/.test(char);
     }
-    const next = /<\s*(?:input|textarea)\b/i.exec(source.slice(offset));
-    if (!next) return result + source.slice(offset);
-    result += source.slice(offset, offset + next.index);
-    offset += next.index;
-    state.control = true;
-    state.controlQuote = null;
-    state.controlBraceDepth = 0;
+    if (state.control) return result;
   }
   return result;
 }
@@ -147,7 +206,7 @@ export function sourceRuleContexts(lines, path) {
   const mayEmbedStyle = EMBEDDED_STYLE_FILES.has(extension);
   const state = {
     block: false, html: false, template: false, control: false,
-    controlQuote: null, controlBraceDepth: 0,
+    controlFrames: [],
     inStyle: false, cssQuote: null, pending: "", blocks: [],
   };
   const result = [];
