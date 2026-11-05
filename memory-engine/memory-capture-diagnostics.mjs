@@ -71,6 +71,18 @@ export function classifyCaptureValidationField(message) {
   return 'unknown';
 }
 
+/** Fixed error-shape labels. This never returns untrusted response fragments. */
+export function classifyCaptureValidationRule(message) {
+  if (classifyCaptureValidationDetail(message) !== 'schema_violation') return null;
+  const value = String(message ?? '').toLowerCase();
+  if (/must be one of:/u.test(value)) return 'invalid_enum';
+  if (/must not contain duplicates/u.test(value)) return 'duplicate_entries';
+  if (/must contain at most \d+ entries/u.test(value)) return 'too_many_entries';
+  if (/must be at most \d+ characters/u.test(value)) return 'too_long';
+  if (/must be an? (?:array|boolean|object|non-empty string)|must be a non-empty string/u.test(value)) return 'invalid_type_or_empty';
+  return 'other_schema';
+}
+
 function sortGroups(rows, keys) {
   return rows.sort((a, b) => b.count - a.count
     || keys.map((key) => String(a[key]).localeCompare(String(b[key]), 'en')).find((n) => n !== 0) || 0);
@@ -133,15 +145,17 @@ export function inspectMemoryCapture({ dbPath, projectId, branch, recentLimit = 
       const category = classifyCaptureFailure(failure.error_text);
       const validationDetail = classifyCaptureValidationDetail(failure.error_text);
       const validationField = classifyCaptureValidationField(failure.error_text);
-      const key = JSON.stringify([stage, errorClass, category, validationDetail, validationField]);
+      const validationRule = classifyCaptureValidationRule(failure.error_text);
+      const key = JSON.stringify([stage, errorClass, category, validationDetail, validationField, validationRule]);
       failureGroups.set(key, (failureGroups.get(key) ?? 0) + 1);
     }
     const groupedFailures = sortGroups([...failureGroups].map(([key, n]) => {
-      const [stage, errorClass, category, validationDetail, validationField] = JSON.parse(key);
+      const [stage, errorClass, category, validationDetail, validationField, validationRule] = JSON.parse(key);
       return {
         stage, errorClass, category,
         ...(validationDetail === null ? {} : { validationDetail }),
         ...(validationField === null ? {} : { validationField }),
+        ...(validationRule === null ? {} : { validationRule }),
         count: n,
       };
     }), ['stage', 'category']);
