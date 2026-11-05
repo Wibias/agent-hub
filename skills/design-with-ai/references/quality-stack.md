@@ -141,6 +141,12 @@ not independently prove the cited evidence.
 
 ## 4. Gate
 
+### Provider evidence supplement (profile-aware)
+
+For a resolved local web UI source target, use the existing Gate plus `scripts/providers/quality-audit.mjs` as an additive evidence step. The `quick` profile runs only the native source detector; `standard`/`deep` may add the locally vendored Impeccable JS detector by default (`--no-impeccable` opts out). Taste Skill browser inspection must be explicitly enabled with `--with-taste`, a trusted installed skill root and a local built HTML target; without selection it must not start. Consult `provider-quality-rollout.md` for flags and coverage semantics. Treat `INCOMPLETE`/`BLOCKED` as missing or failed supplemental evidence, never a clean quality claim. A native source `HOLD` remains blocking. No external provider may replace the remaining required rendered inspection, receipt, durable ledger or proof.
+
+## 4. Gate
+
 Run `scripts/taste-gate.ps1` on touched UI files when applicable, then inspect
 the rendered result. `HOLD` is a mechanically decisive blocker.
 `REVIEW` and `REVIEW_CLUSTER` are contextual leads that must be adjudicated

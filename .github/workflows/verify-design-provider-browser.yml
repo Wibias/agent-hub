@@ -1,0 +1,48 @@
+name: Design provider real browser smoke
+
+on:
+  pull_request:
+    paths:
+      - 'skills/design-with-ai/scripts/providers/**'
+      - 'skills/design-with-ai/tests/providers/**'
+      - '.github/workflows/verify-design-provider-browser.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  chrome-cdp:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Resolve installed Chrome
+        run: |
+          set -euo pipefail
+          CHROME="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium || true)"
+          test -n "$CHROME"
+          echo "CHROME_PATH=$CHROME" >> "$GITHUB_ENV"
+
+      - name: Fetch exact reviewed Taste Skill source
+        run: |
+          set -euo pipefail
+          install -d "$RUNNER_TEMP/taste-skill"
+          git -C "$RUNNER_TEMP/taste-skill" init -q
+          git -C "$RUNNER_TEMP/taste-skill" remote add origin https://github.com/leonxlnx/taste-skill.git
+          git -C "$RUNNER_TEMP/taste-skill" fetch -q --depth=1 origin 9b4bf937a1f69348126959c15d2f99a73e65699b
+          git -C "$RUNNER_TEMP/taste-skill" checkout -q --detach FETCH_HEAD
+          test "$(git -C "$RUNNER_TEMP/taste-skill" rev-parse HEAD)" = "9b4bf937a1f69348126959c15d2f99a73e65699b"
+          grep -q 'tasteskill 2.5.0' "$RUNNER_TEMP/taste-skill/skills/taste-skill/SKILL.md"
+
+      - name: Real pinned upstream browser provider end-to-end
+        env:
+          TASTE_SKILL_ROOT: ${{ runner.temp }}/taste-skill/skills/taste-skill
+        run: node skills/design-with-ai/tests/providers/browser-live-smoke.mjs

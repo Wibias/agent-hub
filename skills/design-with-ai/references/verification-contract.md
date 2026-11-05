@@ -38,6 +38,10 @@ exit code zero because they require contextual and rendered adjudication.
 Neither is a mechanical pass: inspect the named families against
 `anti-slop-gates.md` and the rendered result before making a quality claim.
 
+## Optional profile-aware provider execution
+
+The regular non-motion Gate can use `scripts/providers/quality-audit.mjs --profile standard --path <source> --project-root <project> --route <route>` to supplement native source evidence with the local Impeccable static detector. `quick` remains native-only. Rendered Taste Skill is an explicitly selected, preinstalled external capability with `--with-taste --html <local-html> --taste-root <trusted-skill-dir>`. Details are in `provider-quality-rollout.md`. Preserve every provider status and artifact reference, including `UNAVAILABLE` and errors. A scoped clear result is not a valid `COMPLETE`, and the original DWA verification contract remains mandatory.
+
 ## Quality-stack evidence
 
 For look-better and final redesign/new-surface polish, record evidence for the
