@@ -1219,6 +1219,26 @@ function graphEdgeProvenance(edge) {
   ].filter(Boolean).join(' · ') || 'canonical lifecycle';
 }
 
+/** Small-screen readable index of real visible edges; no relation inference. */
+function graphConnectionIndex(nodes, edges) {
+  if (!edges.length) return '';
+  const byId = new Map(nodes.map(node => [node.id, node]));
+  const rows = edges.slice(0, 12).map(edge => {
+    const from = byId.get(edge.from);
+    const to = byId.get(edge.to);
+    if (!from || !to) return '';
+    return '<button class="graph-connection-row" type="button" data-graph-node="'
+      + escapeHtml(to.id) + '"><span>' + escapeHtml(memoryDisplayTitle(from.value))
+      + '</span><strong>' + escapeHtml(graphRelationLabel(edge)) + ' · '
+      + escapeHtml(graphRelationOriginLabel(edge)) + '</strong><span>'
+      + escapeHtml(memoryDisplayTitle(to.value)) + '</span></button>';
+  }).join('');
+  return '<details class="graph-connection-index"><summary>'
+    + number(edges.length) + ' visible connections</summary><div class="graph-connection-rows">'
+    + rows + '</div>' + (edges.length > 12
+      ? '<p class="graph-connection-limit">Showing the first 12. Filter memories for more.</p>'
+      : '') + '</details>';
+}
 function graphNeighbors(node, edges) {
   if (!node || !state.graph) return [];
   const byId = new Map(state.graph.nodes.map((item) => [item.id, item]));
@@ -1419,6 +1439,7 @@ function renderGraph() {
             ${stats.truncated ? `<span>· ${number(stats.omittedClaims)} omitted by bound</span>` : ''}
           </div>
         </div>
+        ${graphConnectionIndex(nodes, edges)}
         <div class="graph-canvas-wrap">
           ${nodes.length ? `
             <svg class="graph-canvas" viewBox="0 0 ${graphWidth} ${graphHeight}" role="group" aria-label="Interactive memory relation graph">
