@@ -21,6 +21,9 @@ import {
   prepareIsolatedCodexHome,
 } from '../memory-engine/codex-memory-behavioral-eval.mjs';
 import {
+  summarizeCodexCandidateProcessExit,
+} from '../memory-engine/codex-candidate-process-error.mjs';
+import {
   defaultCodexMemoryDbPath,
   resolveCodexProjectScope,
 } from '../memory-engine/adapters/codex-hook-cli.mjs';
@@ -275,13 +278,7 @@ export async function createCodexMemoryCandidateJudge({
         timeoutMs,
       });
       if (executed.code !== 0) {
-        throw new Error(
-          [
-            'codex candidate judge failed with exit ' + executed.code,
-            executed.stderr.trim(),
-            executed.stdout.trim(),
-          ].filter(Boolean).join(': '),
-        );
+        throw new Error(summarizeCodexCandidateProcessExit(executed));
       }
 
       return readFile(resultPath, 'utf8');
