@@ -54,8 +54,17 @@ test("real native and vendored Impeccable gate run through the profile CLI", () 
       assert.ok(existsSync(path));
       const report = JSON.parse(readFileSync(path, "utf8"));
       assert.equal(report.provider, name);
+      assert.equal(report.auditScope.route, "/settings");
+      assert.equal(report.auditScope.target, "src/index.html");
+      assert.equal(report.auditScope.sourceSha256, summary.scope.sourceSha256);
+      assert.match(report.auditScope.sourceSha256, /^[0-9a-f]{64}$/);
       assert.ok(["PASS", "FINDINGS"].includes(report.status), JSON.stringify(report));
     }
+    assert.ok(existsSync(summary.artifacts.sourceScope));
+    const sourceManifest = JSON.parse(readFileSync(summary.artifacts.sourceScope, "utf8"));
+    assert.equal(sourceManifest.files.length, summary.scope.fileCount);
+    assert.equal(sourceManifest.files[0].path, "src/index.html");
+    assert.match(summary.artifacts.reportSha256["native-dwa"], /^[0-9a-f]{64}$/);
     assert.ok(existsSync(summary.artifacts.fusion));
     assert.equal(JSON.parse(readFileSync(summary.artifacts.fusion, "utf8"))
       .completionEligible, false);

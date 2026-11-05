@@ -144,7 +144,17 @@ export async function runProfileProviders({
   if (before.summary.sourceSha256 !== after.summary.sourceSha256) {
     throw new Error("Audited source changed during provider execution; evidence invalid");
   }
-  const reports = [...staticReports, ...renderedReports];
+  const reports = [...staticReports, ...renderedReports].map((report) => ({
+    ...report,
+    auditScope: {
+      sourceSha256: before.summary.sourceSha256,
+      target: before.summary.target,
+      route,
+      gitHead: before.summary.gitHead,
+      ...(report.capability === Capability.RENDERED_AUDIT
+        ? { rendered: before.summary.rendered } : {}),
+    },
+  }));
   const fusion = fuseProviderEvidence(reports, {
     required: selection.required,
     optional: selection.optional,

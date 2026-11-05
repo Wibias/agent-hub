@@ -193,6 +193,9 @@ export function createImpeccableProvider({ script = DEFAULT_SCRIPT, runner = run
             primary: primary.length,
             advisory: findings.length - primary.length,
             sourceOnly: true,
+            // Upstream findings JSON has no per-file scan-progress report.
+            filesScanned: null,
+            coverageCountVerified: false,
             requiresRenderedReview: true,
             // 2 means findings, not a tool failure, per Impeccable CLI.
             detectorExitCode: run.exitCode,
