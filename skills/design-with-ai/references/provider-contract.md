@@ -28,3 +28,7 @@ The Impeccable `live` workflow is **not** part of this contract and must not be 
 ## Phase 3: optional Taste Skill rendered provider
 
 `createTasteSkillProvider()` integrates the **current** upstream `tasteskill 2.5.0` `scripts/consistency.mjs`, not obsolete `draw.mjs`, `lint.mjs` or `inspect.mjs` commands. It runs only on an explicitly selected local HTML file with Node 22+, a preinstalled compatible skill, and Chrome. The required viewport set is 1440/768/390 px plus the upstream first-screen sweep. The adapter enforces per-run output isolation, checks the complete report and coverage, and emits normalized evidence; it does not override canonical DWA verification. See `references/taste-skill-provider.md`.
+
+## Phase 4: conservative fusion and schema-v2 sidecar
+
+`fuseProviderEvidence()` retains all original observations, groups only narrowly equivalent locations, and keeps loose correlations separate. It never turns external provider findings into DWA acceptance. `evidence-journal.mjs` provides an opt-in append-only schema-v2 **sidecar** anchored to an unchanged v1 event prefix, not a v1 migration. Reviewer decisions require explicit disposition and evidence. `previewLegacyImport()` prepares only explicitly promoted, separately reviewed findings for the existing v1 `findings-ledger.mjs import`. All existing ledger, receipt and proof workflows remain unchanged. See `references/provider-fusion-journal.md`.
