@@ -58,3 +58,32 @@ test("a literal brace within CSS content cannot close a hover rule", () => {
 test("multiline template literals preserve source comment markers as text", () => {
   assert.equal(match("G29", ["const label = \x60Hello", "/* not a comment — UI */", "world\x60;"], "test.tsx", 2), true);
 });
+
+test("G27 does not hide a visible sibling kicker beside a functional input", () => {
+  const jsx = '<input className="uppercase tracking-widest" /><span className="uppercase tracking-widest">ROUND</span>';
+  assert.equal(match("G27", [jsx], "test.tsx"), true);
+});
+
+test("G32 does not attribute a static scale to a closed sibling hover block", () => {
+  const css = '.button:hover { opacity: 1; } .static { transform: scale(1.05); }';
+  assert.equal(match("G32", [css], "test.css"), false);
+});
+
+test("G34 does not leak keyframe context into a later entrance block", () => {
+  const css = '@keyframes reveal { 50% { opacity: 1; } } .page-enter { animation: fade-in 200ms ease-in-out; }';
+  assert.equal(match("G34", [css], "test.css"), true);
+});
+
+test("G34 treats separate infinite animation declarations as ambient rather than entry motion", () => {
+  const css = [".reveal {", "animation: reveal 2s infinite;", "animation-timing-function: ease-in-out;", "}"];
+  assert.equal(match("G34", css, "test.css", 3), false);
+});
+
+test("G29 does not classify an empty table dash as UI prose", () => {
+  assert.equal(match("G29", ["<td>—</td>"], "test.tsx"), false);
+});
+
+test("G32 retains CSS hover evidence inside an embedded style block", () => {
+  const html = ["<style>", ".button:hover {", "transform: scale(1.05);", "}", "</style>"];
+  assert.equal(match("G32", html, "test.html", 3), true);
+});
