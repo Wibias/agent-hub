@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   classifyJudgeProbeSetupError,
+  classifyJudgeProbeExecutionError,
   parseJudgeProbeArgs,
   runCodexCandidateJudgeProbe,
   summarizeJudgeProbeFailure,
@@ -66,7 +67,7 @@ test('probe reports safe exit categories without stdout, stderr or auth strings'
   });
   assert.deepEqual(output, {
     status: 'failed', origin: 'judge_process_exit', category: 'rate_limit', exitCode: 1,
-    failedStage: 'execution', executionSucceeded: false,
+    failedStage: 'execution', executionIssue: 'subprocess_exit', executionSucceeded: false,
   });
   assert.equal(closed, true);
   assert.equal(JSON.stringify(output).includes(secret), false);
@@ -114,4 +115,21 @@ test('setup failure is distinguished from a provider failure without exposing pa
     assert.equal(output.executionSucceeded, false);
     assert.equal(JSON.stringify(output).includes('PRIVATE'), false);
   }
+});
+
+test('probe distinguishes a missing executable from a failed provider request', async () => {
+  const output = await runCodexCandidateJudgeProbe({
+    createJudge: async () => ({
+      async judge() {
+        throw Object.assign(new Error('spawn C:\\PRIVATE-CODEX ENOENT'), { code: 'ENOENT' });
+      },
+      async close() {},
+    }),
+  });
+  assert.equal(output.status, 'failed');
+  assert.equal(output.failedStage, 'execution');
+  assert.equal(output.executionIssue, 'executable_not_found');
+  assert.equal(output.executionSucceeded, false);
+  assert.equal(JSON.stringify(output).includes('PRIVATE-CODEX'), false);
+  assert.equal(classifyJudgeProbeExecutionError(new Error('codex candidate judge failed with exit 1: usage limit')), 'subprocess_exit');
 });
