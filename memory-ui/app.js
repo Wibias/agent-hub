@@ -318,9 +318,9 @@ function memoryRow(memory) {
     >
       <span class="memory-row-top">
         <span class="ref">${escapeHtml(memory.ref)}</span>
-        <span class="authority">${escapeHtml(memory.authority.replaceAll('_', ' '))}</span>
+        <span class="authority">${escapeHtml(graphAuthorityLabel(memory.authority))}</span>
       </span>
-      <span class="memory-value">${escapeHtml(memory.value)}</span>
+      <span class="memory-value">${escapeHtml(memoryDisplayTitle(memory.value))}</span>
       <span class="memory-row-bottom">
         <span class="inline-state ${escapeHtml(memory.state)}">${escapeHtml(memory.state)}</span>
         <span>${escapeHtml(memory.provenance?.label ?? 'Unknown')}</span>
