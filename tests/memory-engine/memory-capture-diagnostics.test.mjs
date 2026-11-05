@@ -8,6 +8,7 @@ import {
   classifyCaptureFailure,
   classifyCaptureValidationDetail,
   classifyCaptureValidationField,
+  classifyCaptureValidationRule,
   inspectMemoryCapture,
 } from '../../memory-engine/memory-capture-diagnostics.mjs';
 import { parseCaptureDiagnosticArgs } from '../../scripts/diagnose-memory-capture.mjs';
@@ -98,6 +99,25 @@ test('schema field is a fixed enum and never includes failing input', () => {
   }
   assert.equal(classifyCaptureValidationField('429 rate limit'), null);
   assert.equal(classifyCaptureValidationField('missing field in memory candidate judgment: SECRET-TWO'), null);
+});
+
+test('schema rule uses only fixed allowlisted labels', () => {
+  const cases = [
+    ['suggested_type must be one of: SECRET', 'invalid_enum'],
+    ['meaning_preserved must be a boolean SECRET', 'invalid_type_or_empty'],
+    ['risk_flags must not contain duplicates', 'duplicate_entries'],
+    ['risk_flags must contain at most 7 entries', 'too_many_entries'],
+    ['canonical_fact must be at most 500 characters', 'too_long'],
+    ['reason must be a non-empty string', 'invalid_type_or_empty'],
+    ['risk_flags must use SECRET-specific format', 'other_schema'],
+  ];
+  for (const [message, expected] of cases) {
+    const actual = classifyCaptureValidationRule(message);
+    assert.equal(actual, expected, message);
+    assert.equal(actual.includes('SECRET'), false);
+  }
+  assert.equal(classifyCaptureValidationRule('promote requires durability=long'), null);
+  assert.equal(classifyCaptureValidationRule('429 too many requests'), null);
 });
 
 test('older schema and unknown error payloads degrade safely', async () => {
