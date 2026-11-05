@@ -48,6 +48,23 @@ export function classifyCaptureFailure(message) {
   return 'unclassified';
 }
 
+/** Fixed hints from a failed Codex process. This is not a provider verdict. */
+export function classifyCaptureProcessSignal(message) {
+  if (classifyCaptureFailureOrigin(message) !== 'judge_process_exit') return null;
+  const value = String(message ?? '').toLowerCase();
+  if (/\binvalid_model_format\b|invalid model format/u.test(value)) return 'invalid_model_format';
+  if (/\bmodel_not_found\b|model (?:not found|does not exist)/u.test(value)) return 'model_not_found';
+  if (/\binvalid_request_error\b|\bbad request\b|\bhttp 400\b/u.test(value)) return 'bad_request';
+  if (/\binsufficient_quota\b|usage limit|quota exceeded|out of credits/u.test(value)) return 'quota_exhausted';
+  if (/\b429\b|rate[ _-]?limit|too many requests/u.test(value)) return 'rate_limit';
+  if (/\bauthentication_error\b|\bunauthorized\b|\bhttp 401\b/u.test(value)) return 'authentication';
+  if (/\bpermission_denied\b|\bhttp 403\b/u.test(value)) return 'permission_denied';
+  if (/\bcontext_length_exceeded\b|context window exceeded/u.test(value)) return 'context_limit';
+  if (/\b(?:http 50[0234]|bad gateway|service unavailable|gateway timeout)\b/u.test(value)) return 'provider_5xx';
+  if (/econnreset|econnrefused|connection (?:refused|reset|closed)|stream disconnected/u.test(value)) return 'connection';
+  return 'unknown';
+}
+
 /** Fixed allowlist of validation error types, without exposing model output. */
 export function classifyCaptureValidationDetail(message) {
   const value = String(message ?? '').toLowerCase();
@@ -159,16 +176,18 @@ export function inspectMemoryCapture({ dbPath, projectId, branch, recentLimit = 
       const errorClass = SAFE_CLASSES.has(failure.error_class) ? failure.error_class : 'other';
       const category = classifyCaptureFailure(failure.error_text);
       const failureOrigin = classifyCaptureFailureOrigin(failure.error_text);
+      const processSignal = classifyCaptureProcessSignal(failure.error_text);
       const validationDetail = classifyCaptureValidationDetail(failure.error_text);
       const validationField = classifyCaptureValidationField(failure.error_text);
       const validationRule = classifyCaptureValidationRule(failure.error_text);
-      const key = JSON.stringify([stage, errorClass, category, failureOrigin, validationDetail, validationField, validationRule]);
+      const key = JSON.stringify([stage, errorClass, category, failureOrigin, processSignal, validationDetail, validationField, validationRule]);
       failureGroups.set(key, (failureGroups.get(key) ?? 0) + 1);
     }
     const groupedFailures = sortGroups([...failureGroups].map(([key, n]) => {
-      const [stage, errorClass, category, failureOrigin, validationDetail, validationField, validationRule] = JSON.parse(key);
+      const [stage, errorClass, category, failureOrigin, processSignal, validationDetail, validationField, validationRule] = JSON.parse(key);
       return {
         stage, errorClass, category, failureOrigin,
+        ...(processSignal === null ? {} : { processSignal }),
         ...(validationDetail === null ? {} : { validationDetail }),
         ...(validationField === null ? {} : { validationField }),
         ...(validationRule === null ? {} : { validationRule }),
