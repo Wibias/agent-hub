@@ -524,18 +524,23 @@ function renderInspector() {
         ${definition([
           ['Evidence authority', graphAuthorityLabel(claim.authority)],
           ['Record state', claim.state, statusClass(claim.state)],
-          ['Kind', claim.kind],
           ['Created', dateTime(claim.created_at)],
           ['Branch', claim.branch_scope],
-          ['Semantic', detail.semanticIndexed ? 'indexed' : 'not indexed'],
         ])}
+        <details class="inspector-advanced">
+          <summary>Technical memory fields</summary>
+          ${definition([
+            ['Kind', claim.kind],
+            ['Semantic index', detail.semanticIndexed ? 'available' : 'not indexed'],
+          ])}
+        </details>
       </section>
 
       <section class="inspect-section">
         <h3>Provenance</h3>
         <div class="inspector-chain">${provenanceChain(detail)}</div>
         <div class="spacer-12"></div>
-        ${definition([
+        ${definitionOptional([
           [
             'Evidence',
             compactTechnicalId(evidence.id),
@@ -569,7 +574,7 @@ function renderInspector() {
         ['Relation target', detail.relation?.targetRef],
       ])}
       <section class="inspect-section">
-        <h3>Recall usage</h3>
+        <details class="inspector-advanced"><summary>Recall usage</summary>
         ${definition([
           ['Retrieved', number(usage.retrieval_count)],
           ['Budget retained', number(usage.retained_count)],
@@ -577,6 +582,7 @@ function renderInspector() {
           ['Last retained', dateTime(usage.last_retained_at)],
           ['Last context', dateTime(usage.last_context_at)],
         ])}
+        </details>
       </section>
 
       <section class="inspect-section">
