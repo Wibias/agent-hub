@@ -27,9 +27,9 @@ node scripts/diagnose-memory-graph.mjs --project-id 'github.com/example/repo' --
 
 Omit `--repo-root` when the scope has no repository-backed Evidence. When repository-backed nodes exist without a matching trusted Git checkout, the diagnosis is intentionally **blocked**, not passed. Multiple `--repo-root` flags are allowed, but no more than 16. Use `--max-p95-ms 2000` if you explicitly want to flag p95 latency above 2000 ms.
 
-The tool re-resolves the Git checkout separately for each sample, runs the same `memoryUiGraph()` Graph v2 projection used by the Memory Console, and measures the **full per-sample wall-clock latency** (including Git resolution, blob checks, and projection). The p50/p95 metrics use nearest-rank values, not a warm-cache throughput benchmark. One run is not a historical performance baseline.
+The tool re-resolves the Git checkout separately for each sample, runs the same `memoryUiGraph()` Graph v2 projection used by the Memory Console, and measures the **full per-sample wall-clock latency** (including Git resolution, blob checks, and projection). The p50/p95 metrics use nearest-rank values, not a warm-cache throughput benchmark. Threshold decisions use the unrounded p95; reported timings are rounded to two decimals. One run is not a historical performance baseline.
 
-Output is JSON, with read-only status, graph counts, freshness status/reason counts, truncation counts, Git-context stability, and latency. No claim text, raw Evidence, absolute checkout paths, stored vectors, or raw exception messages are included. Project IDs, branches, and a 12-character Git revision prefix are included, so **inspect before sharing**.
+Output is JSON, with read-only status, graph counts, freshness status/reason counts, truncation counts, Git-context stability, and latency. Graph counters describe the final successful sample; a stale-repository warning is retained if it occurred during any successful sample. No claim text, raw Evidence, absolute checkout paths, stored vectors, or raw exception messages are included. Project IDs, branches, and a 12-character Git revision prefix are included, so **inspect before sharing**.
 
 ## Outcome and exit codes
 

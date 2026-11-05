@@ -71,6 +71,9 @@ test('D6 percentile computation is deterministic and rejects invalid timings', (
     samples: 5, minMs: 2, p50Ms: 5, p95Ms: 10, maxMs: 10,
   });
   assert.deepEqual(latencySummary([3]), { samples: 1, minMs: 3, p50Ms: 3, p95Ms: 3, maxMs: 3 });
+  assert.deepEqual(latencySummary(Array.from({ length: 20 }, (_, i) => 20 - i)), {
+    samples: 20, minMs: 1, p50Ms: 10, p95Ms: 19, maxMs: 20,
+  });
   assert.throws(() => latencySummary([-1]));
   assert.throws(() => latencySummary([Infinity]));
 });
@@ -112,6 +115,46 @@ test('D6 detects changing Git context between repeated measurements', async () =
     projectId: 'project-x', branch: 'main', rootsConfigured: 1, samples: 2,
     queryGraph: async () => ({
       scope: counter++ === 0 ? SCOPE : { status: 'branch_mismatch', revisionSha: null },
+      graph: graph([makeNode('repo', 'unchecked')]),
+    }),
+  });
+  assert.equal(report.outcome, 'blocked');
+  assert.equal(report.git.stable, false);
+  assert.ok(report.notes.includes('git_context_changed_during_sampling'));
+});
+
+test('D6 retains stale warnings observed in an earlier successful sample', async () => {
+  let call = 0;
+  const report = await runGraphDiagnostics({
+    projectId: 'project-x', branch: 'main', rootsConfigured: 1, samples: 2,
+    queryGraph: async () => ({
+      scope: SCOPE,
+      graph: graph([makeNode('repo', call++ === 0 ? 'stale' : 'fresh')]),
+    }),
+  });
+  assert.equal(report.graph.freshness.fresh, 1, 'report retains the last sample');
+  assert.equal(report.outcome, 'attention', 'earlier stale observations must not be erased');
+  assert.ok(report.notes.includes('repository_nodes_not_fresh'));
+});
+
+test('D6 checks the unrounded p95 against its latency threshold', async () => {
+  const timings = [0, 2000.004, 3000, 5000.004];
+  const report = await runGraphDiagnostics({
+    projectId: 'project-x', branch: 'main', samples: 2, maxP95Ms: 2000,
+    now: () => timings.shift(),
+    queryGraph: async () => ({ scope: SCOPE, graph: graph([makeNode('u', 'not_repository')]) }),
+  });
+  assert.equal(report.performance.p95Ms, 2000);
+  assert.equal(report.outcome, 'attention');
+  assert.ok(report.notes.includes('latency_threshold_exceeded'));
+});
+
+test('D6 detects revision-only Git context change while both samples are verified', async () => {
+  let call = 0;
+  const report = await runGraphDiagnostics({
+    projectId: 'project-x', branch: 'main', rootsConfigured: 1, samples: 2,
+    queryGraph: async () => ({
+      scope: { ...SCOPE, revisionSha: call++ === 0 ? SHA : 'b'.repeat(40) },
       graph: graph([makeNode('repo', 'unchecked')]),
     }),
   });

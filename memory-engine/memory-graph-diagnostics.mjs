@@ -157,6 +157,7 @@ export async function runGraphDiagnostics({
   const durations = [];
   const contexts = [];
   let graphSummary = null;
+  let staleSeen = false;
   let failed = false;
   for (let i = 0; i < samples; i++) {
     const start = now();
@@ -173,6 +174,7 @@ export async function runGraphDiagnostics({
         revision: scope.status === 'verified' && /^[a-f0-9]{40}$/i.test(scope.revisionSha ?? '')
           ? scope.revisionSha.toLowerCase() : null });
       graphSummary = summary;
+      staleSeen ||= summary.freshness.stale > 0;
     } catch {
       failed = true;
       break; // Do not leak raw SQL/Git errors, which may contain private paths.
@@ -186,15 +188,19 @@ export async function runGraphDiagnostics({
   const git = failed ? { status: 'unknown', revision: null }
     : (contexts.at(-1) ?? { status: 'unknown', revision: null });
   const timing = !failed && durations.length ? latencySummary(durations) : null;
+  // Compare the raw nearest-rank p95; rounding is presentation-only.
+  const rawP95Ms = timing
+    ? [...durations].sort((a, b) => a - b)[Math.ceil(0.95 * durations.length) - 1]
+    : null;
   const notes = [];
   if (failed) notes.push('read_only_graph_query_failed');
   if (!failed && !stable) notes.push('git_context_changed_during_sampling');
   if (!failed && graphSummary?.nodes === 0) notes.push('empty_graph_scope');
   if (!failed && graphSummary?.repositoryNodes && git.status !== 'verified') notes.push('repository_freshness_unverified');
-  if (!failed && graphSummary?.freshness.stale > 0) notes.push('repository_nodes_not_fresh');
+  if (!failed && staleSeen) notes.push('repository_nodes_not_fresh');
   if (!failed && graphSummary?.limits.nodesOmitted > 0) notes.push('graph_node_limit_reached');
   if (!failed && graphSummary?.limits.typedRelationsOmitted > 0) notes.push('graph_relation_limit_reached');
-  if (maxP95Ms !== null && timing && timing.p95Ms > maxP95Ms) notes.push('latency_threshold_exceeded');
+  if (maxP95Ms !== null && rawP95Ms !== null && rawP95Ms > maxP95Ms) notes.push('latency_threshold_exceeded');
   const outcome = failed ? 'fail'
     : !stable || notes.includes('repository_freshness_unverified') ? 'blocked'
       : notes.length ? 'attention' : 'pass';

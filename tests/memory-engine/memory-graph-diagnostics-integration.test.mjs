@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { execFileSync } from 'node:child_process';
+import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -81,4 +82,62 @@ test('D6 scope discovery reveals identifiers and counts without memory payload',
   });
   assert.deepEqual(report.scopes, [{ projectId: PROJECT, branches: [{ branch: 'main', claims: 1 }] }]);
   assert.doesNotMatch(outputs[0], /SECRET_USER_CONTENT|d6-claim|d6-evidence|memory.sqlite3/);
+});
+
+/** Run the verified Git-scope diagnostic through the actual CLI entry point. */
+test('D6 CLI verifies a real repository Evidence blob in a trusted checkout', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'agent-hub-d6-verified-'));
+  t.after(async () => rm(root, { recursive: true, force: true }));
+  const checkout = join(root, 'checkout');
+  await mkdir(join(checkout, 'docs'), { recursive: true });
+  const git = (...args) => execFileSync('git', ['-C', checkout, ...args], {
+    encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 3000,
+  }).trim();
+  git('init', '-b', 'main');
+  git('config', 'user.email', 'd6@example.invalid');
+  git('config', 'user.name', 'D6 Fixture');
+  git('config', 'commit.gpgsign', 'false');
+  git('remote', 'add', 'origin', `https://${PROJECT}.git`);
+  await writeFile(join(checkout, 'docs', 'guide.md'), 'Verified Git Evidence.\n', 'utf8');
+  git('add', 'docs/guide.md');
+  git('commit', '-m', 'fixture');
+  const revision = git('rev-parse', 'HEAD');
+  const blobOid = git('rev-parse', `${revision}:docs/guide.md`);
+  const dbPath = join(root, 'memory.sqlite3');
+  const memory = new MemoryEngine({ dbPath });
+  try {
+    memory.registerProject({ projectId: PROJECT, repoIdentity: PROJECT });
+    const capturedAt = new Date(Date.now() - 60_000).toISOString();
+    memory.ingest({
+      evidence: {
+        id: 'd6-git-evidence', projectId: PROJECT, harness: 'codex', sessionId: 'git',
+        sourceKind: 'repository', sourceRef: 'docs/guide.md',
+        capturedAt, branch: 'main', commitSha: revision,
+        path: 'docs/guide.md', blobOid, content: 'SECRET_TEST_EVIDENCE',
+        authorityClass: 'repo_trusted', metadata: {},
+      },
+      claim: {
+        id: 'd6-git-claim', kind: 'code_observation', subject: 'git',
+        predicate: 'documents', value: 'SECRET_TEST_CLAIM',
+        branchScope: 'main', createdAt: capturedAt,
+      },
+    });
+  } finally {
+    memory.close();
+  }
+  const before = await fingerprint(dbPath);
+  const output = [];
+  const report = await executeMemoryGraphDiagnosis({
+    argv: ['--db-path', dbPath, '--project-id', PROJECT, '--branch', 'main',
+      '--repo-root', checkout, '--samples', '2'],
+    emit: (value) => output.push(value),
+  });
+  assert.equal(report.outcome, 'pass');
+  assert.equal(report.git.status, 'verified');
+  assert.equal(report.git.stable, true);
+  assert.equal(report.graph.repositoryNodes, 1);
+  assert.equal(report.graph.freshness.fresh, 1);
+  assert.deepEqual(report.notes, []);
+  assert.doesNotMatch(output[0], /SECRET_TEST_|d6-git-claim|d6-git-evidence|agent-hub-d6-verified-|memory\.sqlite3/);
+  assert.equal(await fingerprint(dbPath), before);
 });
