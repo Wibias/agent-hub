@@ -1354,6 +1354,10 @@ function renderGraph() {
   const stats = state.graph.stats ?? {};
   const gitContext = state.graph.gitContext ?? { status: 'unconfigured', revisionSha: null };
   const verification = graphVerificationSummary(state.graph);
+  const previousCanvas = el.view.querySelector?.('.graph-canvas-wrap');
+  const priorScroll = previousCanvas
+    ? { left: previousCanvas.scrollLeft, top: previousCanvas.scrollTop }
+    : null;
   el.view.innerHTML = `
     <div class="graph-layout ${state.graphInspectorOpen ? 'is-details-open' : ''}">
       <section class="graph-stage" aria-label="Memory connections">
@@ -1470,6 +1474,19 @@ function renderGraph() {
       </aside>
     </div>
   `;
+
+  // Keep canvas navigation stable during search, selection and 10-second refresh.
+  const activeCanvas = el.view.querySelector?.('.graph-canvas-wrap');
+  if (activeCanvas && priorScroll) {
+    activeCanvas.scrollLeft = priorScroll.left;
+    activeCanvas.scrollTop = priorScroll.top;
+  } else if (activeCanvas && selected && readableLayout) {
+    const point = positions.get(selected.id);
+    if (point) {
+      activeCanvas.scrollLeft = Math.max(0, point.x - activeCanvas.clientWidth / 2);
+      activeCanvas.scrollTop = Math.max(0, point.y - activeCanvas.clientHeight / 2);
+    }
+  }
 
   const search = document.querySelector('#graph-search');
   const origin = document.querySelector('#graph-origin-filter');
