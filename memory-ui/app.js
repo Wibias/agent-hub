@@ -917,12 +917,12 @@ function graphLabelLines(value, maxChars = 27) {
 /** A bounded semantic layout: connected claims are positioned next to each other. */
 function graphReadableLayout(nodes, edges) {
   if (nodes.length > 24) return null;
-  const cols = Math.min(4, Math.max(1, Math.ceil(Math.sqrt(nodes.length))));
+  const cols = Math.min(3, Math.max(1, Math.ceil(Math.sqrt(nodes.length))));
   const rows = Math.max(1, Math.ceil(nodes.length / cols));
   const width = 1200;
-  const height = Math.max(720, 120 + rows * 156);
-  const firstX = (width - (cols - 1) * 280) / 2;
-  const firstY = (height - (rows - 1) * 156) / 2;
+  const height = Math.max(720, 120 + rows * 172);
+  const firstX = (width - (cols - 1) * 360) / 2;
+  const firstY = (height - (rows - 1) * 172) / 2;
   const byId = new Map(nodes.map(node => [node.id, node]));
   const adjacent = new Map(nodes.map(node => [node.id, new Set()]));
   for (const edge of edges) {
@@ -950,8 +950,8 @@ function graphReadableLayout(nodes, edges) {
     }
   }
   const positions = new Map(ordered.map((node, i) => [node.id, {
-    x: firstX + (i % cols) * 280,
-    y: firstY + Math.floor(i / cols) * 156,
+    x: firstX + (i % cols) * 360,
+    y: firstY + Math.floor(i / cols) * 172,
   }]));
   return { positions, width, height };
 }
