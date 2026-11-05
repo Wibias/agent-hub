@@ -20,6 +20,32 @@ test("G27 excludes functional join-code inputs including multiline JSX", () => {
   assert.equal(match("G27", ['<span className="uppercase tracking-widest">01 • STEP</span>'], "test.tsx"), true);
 });
 
+test("G27 respects JSX arrow handlers, quoted > and comparisons inside controls", () => {
+  const jsx = [
+    "const field = (",
+    "  <input",
+    "    onChange={(event) => setCode(event.target.value)}",
+    '    title="Use > to compare"',
+    '    value={score > 0 ? "yes" : "no"}',
+    '    className="uppercase tracking-widest"',
+    "  />",
+    ");",
+  ];
+  assert.equal(match("G27", jsx, "test.tsx", 6), false);
+  assert.equal(match("G27", [
+    "<textarea",
+    "  onChange={(event) => update(event.target.value)}",
+    '  className="uppercase tracking-widest"',
+  ], "test.tsx"), false);
+  assert.equal(match("G27", [
+    '<input onChange={(e) => update(e.target.value)} className="uppercase tracking-widest" />',
+    '<span className="uppercase tracking-widest">ROUND</span>',
+  ], "test.tsx", 2), true);
+  assert.equal(match("G27", [
+    '<input onChange={(e) => update(e.target.value)} /><span className="uppercase tracking-widest">ROUND</span>',
+  ], "test.tsx"), true);
+});
+
 test("G32 requires hover rather than keyframe scaling", () => {
   assert.equal(match("G32", ["@keyframes pulse {", "  50% { transform: scale(1.05); }"]), false);
   assert.equal(match("G32", [".button:hover {", "  transform: scale(1.05);"]), true);
