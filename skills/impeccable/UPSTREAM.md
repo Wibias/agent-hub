@@ -4,10 +4,22 @@ Agent Hub vendors the Impeccable skill from `pbakaus/impeccable`.
 
 ## Current pin
 
-- Upstream commit: `9fadc41729c38fd47d7ae622b501558653f9d2e9`
+- Upstream commit: `5af4319c4e7a7ee3e5e2b9fe899bcfb21c6190cb`
 - Skill version: `4.8.0`
 - Engine version: `0.1.18`
-- Refreshed: `2026-11-04`
+- Refreshed: `2026-11-05`
+
+## Engine release boundary
+
+The November 5 upstream head includes newer Rust engine sources (live-wrap
+disambiguation, Vue live preview/accept handling, runtime output cleanup)
+but does **not** ship a new engine binary. The published engine is still
+`0.1.18` (October 26, 2026). Those unreleased native changes are **not
+included in the pinned binary**, and updating these three shared skill files
+does not deliver them. Do not claim the native fixes are installed until a
+new signed engine release and checksums are adopted. The shared vendor patch
+only updates `reference/init.md`, `reference/live.md`, and
+`scripts/live-browser.js`.
 
 ## Sync contract
 
