@@ -2,6 +2,7 @@
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { basename, dirname, extname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { sourceRuleContexts, contextualRuleMatches } from "./taste-rule-context.mjs";
 
 const DEFAULT_EXTENSIONS = new Set([
   ".tsx", ".jsx", ".vue", ".svelte", ".html", ".css", ".scss", ".mdx", ".md",
@@ -120,9 +121,11 @@ function scanTextRules(files, rootDir, registry) {
     for (const file of files) {
       const content = readFileSync(file, "utf8");
       const lines = content.split(/\r?\n/);
+      const contexts = sourceRuleContexts(lines, file);
       for (let index = 0; index < lines.length; index += 1) {
-        const line = lines[index];
-        if (!regexes.some((regex) => regex.test(line))) continue;
+        const line = contexts[index].code;
+        if (!regexes.some((regex) => regex.test(line)) ||
+            !contextualRuleMatches(rule, contexts[index])) continue;
         hits.push({
           severity: rule.severity,
           id: rule.id,

@@ -1,0 +1,40 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { contextualRuleMatches, sourceRuleContexts } from "../scripts/taste-rule-context.mjs";
+
+const match = (id, lines, path = "test.css", at = lines.length) =>
+  contextualRuleMatches({ id, hardGate: false }, sourceRuleContexts(lines, path)[at - 1]);
+
+test("G29 skips comments, numeric ranges and missing-value placeholders but retains visible copy", () => {
+  assert.equal(match("G29", ["// An — explanation"], "test.tsx"), false);
+  assert.equal(match("G29", ["/* comment", " — still comment */"], "test.css"), false);
+  assert.equal(match("G29", ["const values = '100–500';"], "test.tsx"), false);
+  assert.equal(match("G29", ["const fallback = '—';"], "test.tsx"), false);
+  assert.equal(match("G29", ["<span>Speed — important</span>"], "test.tsx"), true);
+  assert.equal(match("G29", ['content: "Loading — done";'], "test.css"), true);
+});
+
+test("G27 excludes functional join-code inputs including multiline JSX", () => {
+  assert.equal(match("G27", ['<input className="uppercase tracking-widest" />'], "test.tsx"), false);
+  assert.equal(match("G27", ['<input', '  className="uppercase tracking-widest"'], "test.tsx"), false);
+  assert.equal(match("G27", ['<span className="uppercase tracking-widest">01 • STEP</span>'], "test.tsx"), true);
+});
+
+test("G32 requires hover rather than keyframe scaling", () => {
+  assert.equal(match("G32", ["@keyframes pulse {", "  50% { transform: scale(1.05); }"]), false);
+  assert.equal(match("G32", [".button:hover {", "  transform: scale(1.05);"]), true);
+  assert.equal(match("G32", ['<button className="hover:scale-105">Go</button>'], "test.tsx"), true);
+});
+
+test("G34 preserves entrance leads but skips ambient or toy motion", () => {
+  assert.equal(match("G34", [".ambient {", " animation: float 2s ease-in-out infinite;"]), false);
+  assert.equal(match("G34", [".toy {", " animation: bounce 1s ease-in-out;"]), false);
+  assert.equal(match("G34", [".page-enter {", " animation: fade-in 240ms ease-in-out both;"]), true);
+  assert.equal(match("G34", ["@keyframes reveal {", "  50% { animation-timing-function: ease-in-out; }"]), false);
+  assert.equal(match("G34", ['<section className="animate-in ease-in-out">Welcome</section>'], "test.tsx"), true);
+});
+
+test("context filters never suppress hard gates", () => {
+  const context = sourceRuleContexts(["// transition-all"], "test.tsx")[0];
+  assert.equal(contextualRuleMatches({ id: "G29", hardGate: true }, context), true);
+});
