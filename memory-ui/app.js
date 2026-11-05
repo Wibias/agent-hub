@@ -414,6 +414,20 @@ function definition(rows) {
   `;
 }
 
+/** Keep optional diagnostics inspectable without showing a sea of n/a fields. */
+function definitionOptional(rows) {
+  const meaningful = rows.filter((row) => row[1] !== undefined && row[1] !== null
+    && row[1] !== '' && row[1] !== '—' && row[1] !== 'n/a' && row[1] !== 'none');
+  return meaningful.length ? definition(meaningful) : '';
+}
+
+/** Render an optional advanced disclosure only when data exists. */
+function optionalInspectorSection(label, rows) {
+  const content = definitionOptional(rows);
+  if (!content) return '';
+  return "<section class='inspect-section'><details class='inspector-advanced'><summary>"
+    + escapeHtml(label) + '</summary>' + content + '</details></section>';
+}
 function renderClaimActions(claim) {
   if (
     claim?.authority !== 'user_direct'
@@ -506,10 +520,10 @@ function renderInspector() {
       </div>
 
       <section class="inspect-section">
-        <h3>Memory</h3>
+        <h3>Source & status</h3>
         ${definition([
-          ['Authority', claim.authority],
-          ['State', claim.state, statusClass(claim.state)],
+          ['Evidence authority', graphAuthorityLabel(claim.authority)],
+          ['Record state', claim.state, statusClass(claim.state)],
           ['Kind', claim.kind],
           ['Created', dateTime(claim.created_at)],
           ['Branch', claim.branch_scope],
@@ -545,19 +559,15 @@ function renderInspector() {
         ])}
       </section>
 
-      <section class="inspect-section">
-        <h3>Pipeline</h3>
-        ${definition([
-          ['Candidate', candidate?.ref || 'n/a'],
-          ['Status', candidate?.status || 'n/a', statusClass(candidate?.status)],
-          ['Importance', importance?.decision || 'n/a'],
-          ['Durability', importance?.durability || 'n/a'],
-          ['Utility', importance?.future_utility || 'n/a'],
-          ['Relation', detail.relation?.relation || 'n/a'],
-          ['Relation target', detail.relation?.targetRef || 'none'],
-        ])}
-      </section>
-
+      ${optionalInspectorSection('Pipeline details', [
+        ['Candidate', candidate?.ref],
+        ['Status', candidate?.status, statusClass(candidate?.status)],
+        ['Importance', importance?.decision],
+        ['Durability', importance?.durability],
+        ['Utility', importance?.future_utility],
+        ['Relation', detail.relation?.relation],
+        ['Relation target', detail.relation?.targetRef],
+      ])}
       <section class="inspect-section">
         <h3>Recall usage</h3>
         ${definition([
@@ -593,10 +603,6 @@ function renderInspector() {
           : '<div class="inline-empty">No conflicts.</div>'}
       </section>
 
-      <section class="inspect-section">
-        <h3>Value</h3>
-        <p class="inspect-value">${escapeHtml(claim.value)}</p>
-      </section>
 
       ${renderClaimActions(claim)}
     </div>
