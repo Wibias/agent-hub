@@ -5,6 +5,8 @@ on:
     paths:
       - 'skills/design-with-ai/scripts/providers/**'
       - 'skills/design-with-ai/tests/providers/**'
+      - 'skills/design-with-ai/scripts/taste-rule-context.mjs'
+      - 'skills/design-with-ai/scripts/taste-gate.mjs'
       - '.github/workflows/verify-design-provider-browser.yml'
   workflow_dispatch:
 
