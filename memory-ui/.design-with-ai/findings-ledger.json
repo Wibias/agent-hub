@@ -108,6 +108,66 @@
       "disposition": "IMPROVED_BUT_OPEN",
       "reason": "Authority and Git freshness have separate semantic labels and inspector blocks; visual distinction has not been inspected in a browser.",
       "evidenceRef": "tests/memory-engine/memory-console-d12-design.test.mjs#authority"
+    },
+    {
+      "type": "FOUND",
+      "id": "D12-1-01",
+      "route": "/",
+      "kind": "VISUAL",
+      "priority": "HIGH",
+      "symptom": "Graph node labels show opaque @hex references instead of the meaning of each memory; screenshot at 390px and 760px requires opening the inspector to identify nodes.",
+      "acceptance": "For <=24 visible nodes the canvas displays readable claim-derived titles directly on each interactive node, with opaque refs only in disclosure/tooltip; no invented semantic claims.",
+      "evidenceRef": "User-supplied Memory Console screenshots 2026-11-05: desktop, 760px and 390px; D12.1 user feedback."
+    },
+    {
+      "type": "FOUND",
+      "id": "D12-1-02",
+      "route": "/",
+      "kind": "WORKFLOW",
+      "priority": "HIGH",
+      "symptom": "Relation lines show no readable semantic label; screenshots cannot show what rejects or supersedes what.",
+      "acceptance": "On selecting a node, recorded relation names are visible on its connected edges, and direction/from/to is inspectable without creating inferred relations.",
+      "evidenceRef": "User-supplied Memory Console screenshots 2026-11-05: desktop, 760px and 390px; D12.1 user feedback."
+    },
+    {
+      "type": "FOUND",
+      "id": "D12-1-03",
+      "route": "/",
+      "kind": "WORKFLOW",
+      "priority": "HIGH",
+      "symptom": "At 390px the graph is scrollable but the full inspector remains permanently stacked after a large canvas.",
+      "acceptance": "Small-screen graph displays canvas first and opens an accessible dismissible inspector only on explicit node selection; desktop inspector remains persistent.",
+      "evidenceRef": "User-supplied Memory Console screenshots 2026-11-05: desktop, 760px and 390px; D12.1 user feedback."
+    },
+    {
+      "type": "FOUND",
+      "id": "D12-1-04",
+      "route": "/",
+      "kind": "WORKFLOW",
+      "priority": "MEDIUM",
+      "symptom": "At 390px the memories list and complete inspector are stacked continuously; selected memory creates a very long page and list loses focus.",
+      "acceptance": "At mobile widths, memory details are hidden until a memory is selected and have a clear close/back action, preserving existing replace/forget gating.",
+      "evidenceRef": "User-supplied Memory Console screenshots 2026-11-05: desktop, 760px and 390px; D12.1 user feedback."
+    },
+    {
+      "type": "FOUND",
+      "id": "D12-1-05",
+      "route": "/",
+      "kind": "DETAIL",
+      "priority": "MEDIUM",
+      "symptom": "Memories inspector displays empty pipeline fields ('n/a') and no-change lifecycle/conflict sections; primary record meaning gets lost.",
+      "acceptance": "Prioritize record, state and source, suppress empty optional pipeline rows by default and keep advanced metadata accessible without fabricating values.",
+      "evidenceRef": "User-supplied Memory Console screenshots 2026-11-05: desktop, 760px and 390px; D12.1 user feedback."
+    },
+    {
+      "type": "FOUND",
+      "id": "D12-1-06",
+      "route": "/",
+      "kind": "VISUAL",
+      "priority": "MEDIUM",
+      "symptom": "Narrow graph screenshot shows tiny text, disconnected visible node labels and overlong controls; 760px screenshot wastes space on vertical scroll and inspector.",
+      "acceptance": "Graph uses readable node containers, selective relation labels, compact mobile legend and fit-for-purpose viewport sizes, with no horizontal PAGE overflow.",
+      "evidenceRef": "User-supplied Memory Console screenshots 2026-11-05: desktop, 760px and 390px; D12.1 user feedback."
     }
   ]
 }
