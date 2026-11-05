@@ -1801,3 +1801,72 @@ button {
     line-height: 1.55;
   }
 }
+
+/* D12.1: a compact direct-reading path for relationships on narrow screens. */
+.graph-connection-index {
+  display: none;
+}
+@media (max-width: 980px) {
+  .graph-connection-index {
+    display: block;
+    padding: 0 14px;
+    background: #0c0f10;
+    border-bottom: 1px solid var(--line);
+  }
+  .graph-connection-index summary {
+    display: list-item;
+    width: fit-content;
+    min-height: 44px;
+    padding: 13px 4px;
+    color: #d8e1de;
+    font-size: 12px;
+    font-weight: 650;
+    cursor: pointer;
+  }
+  .graph-connection-index summary:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  .graph-connection-rows {
+    display: grid;
+    gap: 0;
+    margin-bottom: 12px;
+    border-top: 1px solid var(--line);
+  }
+  .graph-connection-row {
+    display: grid;
+    gap: 5px;
+    width: 100%;
+    padding: 12px 5px;
+    text-align: left;
+    border: 0;
+    border-bottom: 1px solid var(--line);
+    background: transparent;
+    color: #dfe5e2;
+    font: 500 12px/1.45 ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+  .graph-connection-row strong {
+    color: #a3c8be;
+    font-weight: 650;
+    padding-left: 10px;
+    font-size: 11px;
+  }
+  .graph-connection-row:hover,
+  .graph-connection-row:focus-visible {
+    background: #152023;
+    outline: 1px solid var(--line-strong);
+  }
+  .graph-connection-limit {
+    color: var(--muted);
+    font-size: 11px;
+    margin: 0 0 12px;
+  }
+  .graph-stage {
+    grid-template-rows: auto auto auto auto minmax(400px, 55dvh);
+  }
+}
+@media (max-width: 560px) {
+  .graph-stage {
+    grid-template-rows: auto auto auto auto minmax(420px, 60dvh);
+  }
+}
