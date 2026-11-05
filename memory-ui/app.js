@@ -1429,11 +1429,19 @@ function renderGraph() {
           </select>
         </div>
         <div class="graph-meta">
-          <div class="graph-legend" aria-label="Graph relation legend">
+          <div class="graph-legend graph-legend-desktop" aria-label="Graph relation legend">
             <span class="graph-legend-item"><span class="graph-legend-swatch explicit"></span>Explicit relation · recorded</span>
             <span class="graph-legend-item"><span class="graph-legend-swatch typed"></span>Advisory typed · not proof</span>
             <span class="graph-legend-item"><span class="graph-legend-swatch inferred"></span>Inferred similarity (optional)</span>
           </div>
+          <details class="graph-legend-mobile">
+            <summary>Connection key</summary>
+            <div class="graph-legend" aria-label="Connection types">
+              <span class="graph-legend-item"><span class="graph-legend-swatch explicit"></span>Recorded</span>
+              <span class="graph-legend-item"><span class="graph-legend-swatch typed"></span>Advisory, not proof</span>
+              <span class="graph-legend-item"><span class="graph-legend-swatch inferred"></span>Similarity suggestion</span>
+            </div>
+          </details>
           <div class="graph-stats">
             <span>${number(nodes.length)} of ${number(stats.nodeCount)} memories shown</span>
             <span>·</span>
