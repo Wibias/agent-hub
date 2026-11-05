@@ -1177,26 +1177,36 @@ function renderGraph() {
   const labelEveryNode = nodes.length <= 60;
   const stats = state.graph.stats ?? {};
   const gitContext = state.graph.gitContext ?? { status: 'unconfigured', revisionSha: null };
+  const verification = graphVerificationSummary(state.graph);
   el.view.innerHTML = `
     <div class="graph-layout">
-      <section class="graph-stage">
+      <section class="graph-stage" aria-label="Memory connections">
+        <div class="graph-context" data-verification-tone="${escapeHtml(verification.tone)}">
+          <div class="graph-context-body">
+            <span class="graph-context-kicker">${escapeHtml(verification.label)}</span>
+            <strong>${escapeHtml(verification.title)}</strong>
+            <p>${escapeHtml(verification.message)}</p>
+          </div>
+          <span class="graph-context-count">${escapeHtml(verification.count)}</span>
+        </div>
         <div class="graph-toolbar">
+          <label class="sr-only" for="graph-search">Search memories in this graph</label>
           <input
             id="graph-search"
             class="search"
             type="search"
             autocomplete="off"
-            placeholder="Search graph nodes…"
+            placeholder="Find a memory, source or topic…"
             value="${escapeHtml(state.graphSearch)}"
           >
-          <select id="graph-origin-filter" class="filter" aria-label="Filter graph by edge origin">
+          <select id="graph-origin-filter" class="filter" aria-label="Relation type">
             <option value="all" ${state.graphOrigin === 'all' ? 'selected' : ''}>All relations</option>
-            <option value="explicit" ${state.graphOrigin === 'explicit' ? 'selected' : ''}>Explicit only</option>
-            <option value="inferred" ${state.graphOrigin === 'inferred' ? 'selected' : ''}>Inferred only</option>
-            <option value="typed" ${state.graphOrigin === 'typed' ? 'selected' : ''}>Typed only</option>
+            <option value="explicit" ${state.graphOrigin === 'explicit' ? 'selected' : ''}>Recorded only</option>
+            <option value="inferred" ${state.graphOrigin === 'inferred' ? 'selected' : ''}>Similarity only</option>
+            <option value="typed" ${state.graphOrigin === 'typed' ? 'selected' : ''}>Advisory only</option>
           </select>
           <select id="graph-group-filter" class="filter" aria-label="Filter graph by Evidence authority">
-            <option value="all" ${state.graphGroup === 'all' ? 'selected' : ''}>All authorities</option>
+            <option value="all" ${state.graphGroup === 'all' ? 'selected' : ''}>All sources</option>
             ${groups.map((group) => `
               <option value="${escapeHtml(group.id)}" ${group.id === state.graphGroup ? 'selected' : ''}>
                 ${escapeHtml(group.label)} (${number(group.count)})
@@ -1214,18 +1224,18 @@ function renderGraph() {
         </div>
         <div class="graph-meta">
           <div class="graph-legend" aria-label="Graph relation legend">
-            <span class="graph-legend-item"><span class="graph-legend-swatch explicit"></span>Explicit relation</span>
-            <span class="graph-legend-item"><span class="graph-legend-swatch typed"></span>Advisory typed</span>
+            <span class="graph-legend-item"><span class="graph-legend-swatch explicit"></span>Explicit relation · recorded</span>
+            <span class="graph-legend-item"><span class="graph-legend-swatch typed"></span>Advisory typed · not proof</span>
             <span class="graph-legend-item"><span class="graph-legend-swatch inferred"></span>Inferred similarity (optional)</span>
           </div>
           <div class="graph-stats">
-            <span>${number(nodes.length)} / ${number(stats.nodeCount)} nodes</span>
+            <span>${number(nodes.length)} of ${number(stats.nodeCount)} memories shown</span>
             <span>·</span>
-            <span>${number(edges.length)} / ${number(stats.edgeCount)} edges</span>
+            <span>${number(edges.length)} of ${number(stats.edgeCount)} links shown</span>
             <span>· ${number(stats.typedRelations)} typed</span>
-            <span>· Git: ${escapeHtml(gitContext.status)}${gitContext.status === 'verified' && gitContext.revisionSha ? `<code>${escapeHtml(gitContext.revisionSha.slice(0, 12))}</code>` : ''}</span>
-            ${stats.typedRelationsOmittedByBound > 0 ? `<span>· ${number(stats.typedRelationsOmittedByBound)} typed omitted by limit</span>` : ''}
-            ${stats.repositoryNodesUnchecked ? `<span>· ${number(stats.repositoryNodesUnchecked)} Git-unchecked</span>` : ''}
+            <span>· Checkout: ${gitContext.status === 'verified' ? 'verified' : 'not verified'}</span>
+            ${stats.typedRelationsOmittedByBound > 0 ? `<span>· ${number(stats.typedRelationsOmittedByBound)} advisory links omitted</span>` : ''}
+            ${stats.repositoryNodesUnchecked ? `<span>· ${number(stats.repositoryNodesUnchecked)} Git records unchecked</span>` : ''}
             ${stats.truncated ? `<span>· ${number(stats.omittedClaims)} omitted by bound</span>` : ''}
           </div>
         </div>
