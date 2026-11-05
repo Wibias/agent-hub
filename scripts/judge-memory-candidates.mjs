@@ -24,6 +24,9 @@ import {
   summarizeCodexCandidateProcessExit,
 } from '../memory-engine/codex-candidate-process-error.mjs';
 import {
+  resolveCodexCandidateLaunch,
+} from '../memory-engine/codex-candidate-launch.mjs';
+import {
   defaultCodexMemoryDbPath,
   resolveCodexProjectScope,
 } from '../memory-engine/adapters/codex-hook-cli.mjs';
@@ -245,6 +248,7 @@ export async function createCodexMemoryCandidateJudge({
     }
 
     const isolatedEnv = createIsolatedCodexEnv(env, isolatedCodexHome);
+    const codexLaunch = resolveCodexCandidateLaunch({ env: isolatedEnv });
     await initializeEmptyWorkspace(workspace, isolatedEnv);
 
     const evaluatorId = [
@@ -271,12 +275,27 @@ export async function createCodexMemoryCandidateJudge({
       if (model) args.push('--model', model);
       args.push('-');
 
-      const executed = await runProcess('codex', args, {
-        cwd: workspace,
-        env: isolatedEnv,
-        input: prompt,
-        timeoutMs,
-      });
+      let executed;
+      try {
+        executed = await runProcess(codexLaunch.command, [
+          ...codexLaunch.prefixArgs,
+          ...args,
+        ], {
+          cwd: workspace,
+          env: isolatedEnv,
+          input: prompt,
+          timeoutMs,
+        });
+      } catch (error) {
+        const failure = error?.code === 'ENOENT'
+          ? 'executable_not_found'
+          : error?.code === 'EACCES' || error?.code === 'EPERM'
+            ? 'permission_denied'
+            : /timed out after [0-9]+ms/u.test(String(error?.message ?? ''))
+              ? 'timeout'
+              : 'unknown';
+        throw new Error('codex candidate judge launch failed: ' + failure);
+      }
       if (executed.code !== 0) {
         throw new Error(summarizeCodexCandidateProcessExit(executed));
       }
