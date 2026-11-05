@@ -123,9 +123,13 @@ function scanTextRules(files, rootDir, registry) {
       const lines = content.split(/\r?\n/);
       const contexts = sourceRuleContexts(lines, file);
       for (let index = 0; index < lines.length; index += 1) {
-        const line = contexts[index].code;
-        if (!regexes.some((regex) => regex.test(line)) ||
-            !contextualRuleMatches(rule, contexts[index])) continue;
+        // Hard P0 rules must inspect the original bytes, never lexical guesses.
+        const line = rule.hardGate === true ? lines[index] : contexts[index].code;
+        if (!regexes.some((regex) => regex.test(line))) continue;
+        if (rule.hardGate !== true && ["G27", "G29", "G32", "G34"].includes(rule.id) &&
+            !contexts[index].segments.some((segment) =>
+              regexes.some((regex) => regex.test(segment.code)) &&
+              contextualRuleMatches(rule, segment))) continue;
         hits.push({
           severity: rule.severity,
           id: rule.id,
