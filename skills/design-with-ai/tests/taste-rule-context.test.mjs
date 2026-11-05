@@ -44,11 +44,11 @@ test("visible JSX slashes cannot hide following UI copy", () => {
 });
 
 test("CSS selector split before brace retains hover context", () => {
-  assert.equal(match("G32", [".button:hover", "{", "transform: scale(1.05);", "}"]), true);
+  assert.equal(match("G32", [".button:hover", "{", "transform: scale(1.05);", "}"], "test.css", 3), true);
 });
 
 test("CSS control selector remains functional across separate declaration line", () => {
-  assert.equal(match("G27", [".join-code input {", "@apply uppercase tracking-widest;", "}"]), false);
+  assert.equal(match("G27", [".join-code input {", "@apply uppercase tracking-widest;", "}"], "test.css", 2), false);
 });
 
 test("a literal brace within CSS content cannot close a hover rule", () => {
