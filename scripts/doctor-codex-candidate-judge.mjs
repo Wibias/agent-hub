@@ -72,6 +72,19 @@ export function classifyJudgeProbeSetupError(error) {
   return 'unknown';
 }
 
+/** The runtime phase is known, but only a safe, fixed reason is returned. */
+export function classifyJudgeProbeExecutionError(error) {
+  if (error && typeof error === 'object') {
+    if (error.code === 'ENOENT') return 'executable_not_found';
+    if (error.code === 'EACCES' || error.code === 'EPERM') return 'executable_permission';
+    if (error.code === 'EPIPE') return 'broken_pipe';
+  }
+  const message = String(error instanceof Error ? error.message : error ?? '').toLowerCase();
+  if (message.startsWith('codex candidate judge failed with exit ')) return 'subprocess_exit';
+  if (message.startsWith('codex timed out after ')) return 'subprocess_timeout';
+  return 'unknown';
+}
+
 export async function runCodexCandidateJudgeProbe({
   model = null,
   reasoningEffort = 'medium',
@@ -100,6 +113,7 @@ export async function runCodexCandidateJudgeProbe({
       ...summarizeJudgeProbeFailure(error),
       failedStage: phase,
       ...(phase === 'setup' ? { setupIssue: classifyJudgeProbeSetupError(error) } : {}),
+      ...(phase === 'execution' ? { executionIssue: classifyJudgeProbeExecutionError(error) } : {}),
       executionSucceeded: false,
     };
   } finally {
