@@ -109,7 +109,7 @@ test('schema rule uses only fixed allowlisted labels', () => {
     ['risk_flags must contain at most 7 entries', 'too_many_entries'],
     ['canonical_fact must be at most 500 characters', 'too_long'],
     ['reason must be a non-empty string', 'invalid_type_or_empty'],
-    ['risk_flags must use SECRET-specific format', 'other_schema'],
+    ['reason must contain SECRET-specific formatting', 'other_schema'],
   ];
   for (const [message, expected] of cases) {
     const actual = classifyCaptureValidationRule(message);
