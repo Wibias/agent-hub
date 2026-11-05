@@ -27,7 +27,7 @@ export function classifyCaptureFailure(message) {
   if (/\b401\b|\b403\b|unauthori[sz]ed|permission denied|authentication failed/u.test(value)) return 'authorization';
   if (/timed? out|timeout|deadline exceeded|etimedout/u.test(value)) return 'timeout';
   if (/invalid model|model not found|unknown model|unsupported model|model format/u.test(value)) return 'model_configuration';
-  if (/json|parse error|parsing|schema|validation|unexpected field|missing field|invalid (?:response|judgment|output)/u.test(value)) return 'response_validation';
+  if (/json|parse error|parsing|schema|validation|unexpected field|missing field|invalid (?:response|judgment|output)|(?:promote|ignore) requires|memory candidate judgment must be an object|(?:risk_flags|canonical_fact|meaning_preserved|suggested_type|durability|future_utility|specificity|confidence|reason|decision)(?: entry)? must (?:be|not|contain)/u.test(value)) return 'response_validation';
   if (/\b502\b|\b503\b|\b504\b|econnreset|econnrefused|network error|service unavailable/u.test(value)) return 'provider_unavailable';
   if (/database is locked|sqlite|foreign key|sql error/u.test(value)) return 'database';
   return 'unclassified';
