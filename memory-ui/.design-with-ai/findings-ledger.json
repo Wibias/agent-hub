@@ -60,6 +60,54 @@
       "symptom": "Raw authority classes and inferred/typed relation origins need domain-accurate explanatory labels and separation from proof claims.",
       "acceptance": "The graph clearly describes how canonical, advisory typed and optional similarity edges differ, and never equates agent-derived inference with verified Git provenance.",
       "evidenceRef": "memory-ui/app.js:930-959,978-1127 (main 466ec57)"
+    },
+    {
+      "type": "REVIEWED",
+      "runId": "d12-2026-11-05-source-review",
+      "id": "D12-UX-01",
+      "disposition": "IMPROVED_BUT_OPEN",
+      "reason": "Search focus and caret restoration implemented and source-tested; uninterrupted keyboard interaction needs browser confirmation.",
+      "evidenceRef": "tests/memory-engine/memory-console-d12-design.test.mjs#graph-focus"
+    },
+    {
+      "type": "REVIEWED",
+      "runId": "d12-2026-11-05-source-review",
+      "id": "D12-UX-02",
+      "disposition": "IMPROVED_BUT_OPEN",
+      "reason": "Selected-node SVG focus restoration implemented and checked at source level; assistive technology interaction needs browser confirmation.",
+      "evidenceRef": "tests/memory-engine/memory-console-d12-design.test.mjs#graph-focus"
+    },
+    {
+      "type": "REVIEWED",
+      "runId": "d12-2026-11-05-source-review",
+      "id": "D12-UX-03",
+      "disposition": "IMPROVED_BUT_OPEN",
+      "reason": "Pure presentation helper tests cover missing, fresh, stale, unchecked and unbound Git; prominent placement needs rendered evaluation.",
+      "evidenceRef": "tests/memory-engine/memory-console-d12-design.test.mjs#status-overview"
+    },
+    {
+      "type": "REVIEWED",
+      "runId": "d12-2026-11-05-source-review",
+      "id": "D12-UX-04",
+      "disposition": "UNVERIFIED",
+      "reason": "Typography was raised in CSS, but actual contrast and readability at normal zoom were not measured in a browser.",
+      "evidenceRef": "memory-ui/styles.css#D12"
+    },
+    {
+      "type": "REVIEWED",
+      "runId": "d12-2026-11-05-source-review",
+      "id": "D12-UX-05",
+      "disposition": "UNVERIFIED",
+      "reason": "Responsive transposition rules are present; no rendered 390px/760px viewport or overflow screenshot has been verified.",
+      "evidenceRef": "memory-ui/styles.css#D12-responsive"
+    },
+    {
+      "type": "REVIEWED",
+      "runId": "d12-2026-11-05-source-review",
+      "id": "D12-UX-06",
+      "disposition": "IMPROVED_BUT_OPEN",
+      "reason": "Authority and Git freshness have separate semantic labels and inspector blocks; visual distinction has not been inspected in a browser.",
+      "evidenceRef": "tests/memory-engine/memory-console-d12-design.test.mjs#authority"
     }
   ]
 }
