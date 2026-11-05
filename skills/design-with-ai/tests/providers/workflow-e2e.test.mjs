@@ -15,6 +15,10 @@ async function fixture(fn) {
   const root = mkdtempSync(join(tmpdir(), "dwa-real-e2e-"));
   const srcDir = join(root, "src");
   mkdirSync(srcDir);
+  const built = join(root, "dist");
+  mkdirSync(join(built, "settings"), { recursive: true });
+  const renderedPage = join(built, "settings", "index.html");
+  writeFileSync(renderedPage, "<!doctype html><title>Settings</title>");
   const page = join(srcDir, "index.html");
   writeFileSync(page, [
     "<!doctype html>",
@@ -24,7 +28,7 @@ async function fixture(fn) {
     "<p>Settings and recent activity.</p><a href=\"/settings\">Settings</a>",
     "</main></body></html>",
   ].join("\n"));
-  try { return await fn({ root, page, srcDir }); }
+  try { return await fn({ root, page, srcDir, built, renderedPage }); }
   finally { rmSync(root, { force: true, recursive: true }); }
 }
 function invoke(f, extra = []) {
@@ -50,8 +54,17 @@ test("real native and vendored Impeccable gate run through the profile CLI", () 
       assert.ok(existsSync(path));
       const report = JSON.parse(readFileSync(path, "utf8"));
       assert.equal(report.provider, name);
+      assert.equal(report.auditScope.route, "/settings");
+      assert.equal(report.auditScope.target, "src/index.html");
+      assert.equal(report.auditScope.sourceSha256, summary.scope.sourceSha256);
+      assert.match(report.auditScope.sourceSha256, /^[0-9a-f]{64}$/);
       assert.ok(["PASS", "FINDINGS"].includes(report.status), JSON.stringify(report));
     }
+    assert.ok(existsSync(summary.artifacts.sourceScope));
+    const sourceManifest = JSON.parse(readFileSync(summary.artifacts.sourceScope, "utf8"));
+    assert.equal(sourceManifest.files.length, summary.scope.fileCount);
+    assert.equal(sourceManifest.files[0].path, "src/index.html");
+    assert.match(summary.artifacts.reportSha256["native-dwa"], /^[0-9a-f]{64}$/);
     assert.ok(existsSync(summary.artifacts.fusion));
     assert.equal(JSON.parse(readFileSync(summary.artifacts.fusion, "utf8"))
       .completionEligible, false);
@@ -67,8 +80,8 @@ test("quick preserves only the DWA native provider", () => fixture((f) => {
 
 test("missing opt-in browser installation never claims a green three-provider check", () =>
   fixture((f) => {
-    const run = invoke(f, ["--profile", "deep", "--with-taste", "--html", f.page,
-      "--taste-root", join(f.root, "not-installed")]);
+    const run = invoke(f, ["--profile", "deep", "--with-taste", "--html", f.renderedPage,
+      "--taste-root", join(f.root, "not-installed"), "--browser-root", f.built]);
     assert.equal(run.status, 1, run.stderr + "\n" + run.stdout);
     const summary = JSON.parse(run.stdout);
     assert.equal(summary.status, "INCOMPLETE");
@@ -79,7 +92,7 @@ test("missing opt-in browser installation never claims a green three-provider ch
 
 test("explicitly required missing Taste runtime blocks", () => fixture((f) => {
   const run = invoke(f, ["--profile", "deep", "--require-taste",
-    "--html", f.page, "--taste-root", join(f.root, "missing")]);
+    "--html", f.renderedPage, "--taste-root", join(f.root, "missing"), "--browser-root", f.built]);
   assert.equal(run.status, 1, run.stderr + "\n" + run.stdout);
   const summary = JSON.parse(run.stdout);
   assert.equal(summary.status, "BLOCKED");

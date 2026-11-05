@@ -134,3 +134,13 @@ test("cream plus expressive serif plus sage is a contextual replacement-default 
     assert.ok(hit.probes.length >= 2);
   } finally { fx.cleanup(); }
 });
+
+test("hard source P0 remains mechanically decisive even within a comment", () => {
+  const fx = fixture({ "src/a.tsx": "// transition-all" });
+  try {
+    const result = run(fx.root);
+    assert.equal(result.status, 1);
+    assert.equal(result.parsed.verdict, "HOLD");
+    assert.ok(result.parsed.hits.some((hit) => hit.id === "G22"));
+  } finally { fx.cleanup(); }
+});

@@ -8,6 +8,7 @@ import { createNativeDwaProvider } from "./native-dwa.mjs";
 import { createImpeccableProvider } from "./impeccable.mjs";
 import { createTasteSkillProvider } from "./taste-skill.mjs";
 import { fuseProviderEvidence } from "./fuse.mjs";
+import { sourceScopeProof, staticRouteForHtml } from "./scope-proof.mjs";
 
 const profiles = new Set(["quick", "standard", "deep"]);
 const filled = (s) => typeof s === "string" && s.trim().length > 0;
@@ -86,6 +87,9 @@ function validateScope({ target, route, projectRoot, html, browserRoot, outputRo
         !inside(renderedRoot, realFile) || renderedRoot === realProject) {
       throw new TypeError("Use an isolated built-site subtree inside projectRoot for browser assets");
     }
+    if (staticRouteForHtml(renderedRoot, realFile) !== route) {
+      throw new TypeError("Requested route does not match the built HTML path; SPA routes require verified route-specific HTML");
+    }
     if (outputRoot && existsSync(resolve(outputRoot)) &&
         inside(renderedRoot, realpathSync(resolve(outputRoot)))) {
       throw new TypeError("Browser output cannot reside inside the served asset root");
@@ -105,6 +109,11 @@ export async function runProfileProviders({
     profile, withImpeccable, withTaste, requireTaste,
   });
   const location = validateScope({ target, route, projectRoot, html, browserRoot, outputRoot, withTaste });
+  const before = sourceScopeProof({
+    projectRoot: location.projectRoot, target: location.target, route,
+    renderedRoot: location.renderedRoot, html: withTaste ? resolve(html) : null,
+    intentPath,
+  });
   const actualRegistry = registry ?? createProviderRegistry([
     createNativeDwaProvider(),
     ...(selection.static.optional.length ? [createImpeccableProvider()] : []),
@@ -129,10 +138,30 @@ export async function runProfileProviders({
       ...(primary ? { primary } : {}),
     },
   }) : [];
-  const reports = [...staticReports, ...renderedReports];
+  const after = sourceScopeProof({
+    projectRoot: location.projectRoot, target: location.target, route,
+    renderedRoot: location.renderedRoot, html: withTaste ? resolve(html) : null,
+    intentPath,
+  });
+  if (before.summary.sourceSha256 !== after.summary.sourceSha256 ||
+      before.observedInputsSha256 !== after.observedInputsSha256) {
+    throw new Error("Audited source changed during provider execution; evidence invalid");
+  }
+  const reports = [...staticReports, ...renderedReports].map((report) => ({
+    ...report,
+    auditScope: {
+      sourceSha256: before.summary.sourceSha256,
+      target: before.summary.target,
+      route,
+      gitHead: before.summary.gitHead,
+      ...(report.capability === Capability.RENDERED_AUDIT
+        ? { rendered: before.summary.rendered } : {}),
+    },
+  }));
   const fusion = fuseProviderEvidence(reports, {
     required: selection.required,
     optional: selection.optional,
+    scope: before.summary,
   });
   return {
     schemaVersion: 1,
@@ -141,6 +170,8 @@ export async function runProfileProviders({
     selection,
     reports,
     fusion,
+    scope: before.summary,
+    sourceManifest: before.manifest,
     completionEligible: false,
     next: "Run the unchanged DWA rendered verification, evidence receipt, ledger reconciliation and iteration proof.",
   };

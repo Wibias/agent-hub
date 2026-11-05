@@ -178,3 +178,22 @@ test("tampered fusion data fails the content digest check", () => {
   fusion.status = "REVIEW";
   assert.throws(() => assertFusion(fusion), /digest mismatch/);
 });
+
+test("fusion rejects successful reports that claim different source snapshots", () => {
+  const scope = { sourceSha256: "a".repeat(64), route: "/", target: "src", gitHead: null };
+  const a = { ...report("native-dwa"), auditScope: scope };
+  const b = { ...report("impeccable"), auditScope: { ...scope, sourceSha256: "b".repeat(64) } };
+  assert.throws(() => fuseProviderEvidence([a, b], {
+    required: ["native-dwa"], optional: ["impeccable"], scope,
+  }), /scope|fingerprint|snapshot/i);
+});
+
+test("fusion derives a common evidence scope from standalone report files", () => {
+  const scope = { sourceSha256: "a".repeat(64), route: "/setup", target: "src", gitHead: null };
+  const a = { ...report("native-dwa"), auditScope: scope };
+  const b = { ...report("impeccable"), auditScope: scope };
+  const result = fuseProviderEvidence([a, b], {
+    required: ["native-dwa"], optional: ["impeccable"],
+  });
+  assert.equal(result.scope.sourceSha256, scope.sourceSha256);
+});

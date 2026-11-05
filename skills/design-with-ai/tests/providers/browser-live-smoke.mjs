@@ -13,8 +13,8 @@ if (!skillRoot) {
 }
 const root = mkdtempSync(join(tmpdir(), "dwa-browser-live-"));
 const built = join(root, "dist");
-mkdirSync(built);
-const page = join(built, "index.html");
+mkdirSync(join(built, "settings"), { recursive: true });
+const page = join(built, "settings", "index.html");
 writeFileSync(page, [
   "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">",
   "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">",
@@ -56,7 +56,7 @@ try {
     "--profile", "deep",
     "--path", page, "--project-root", root,
     "--route", "/settings", "--output-root", root,
-    "--require-taste", "--html", page, "--taste-root", skillRoot,
+    "--require-taste", "--html", page, "--browser-root", built, "--taste-root", skillRoot,
     "--page-kind", "software", "--category", "Account settings",
     "--primary", "Save changes",
   ]);

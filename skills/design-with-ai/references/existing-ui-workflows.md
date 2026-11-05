@@ -21,6 +21,19 @@ This diagnostic is conditional; routine UI edits do not need it.
 
 ## Shared execution contract
 
+### Auditable provider Gate
+
+For every resolved local web UI source scope, execute the additive profile-aware
+provider check through `scripts/providers/quality-audit.mjs` in the normal Gate
+phase. The selected profile determines whether native DWA runs alone or with
+the optional Impeccable static provider. Taste Skill stays explicit opt-in.
+Read `provider-quality-rollout.md` for the command and trustworthy build-path
+requirements. The active agent must verify the report; an installed skill does
+not execute the command automatically. When the CLI is missing or cannot run,
+record `NOT_RUN` or `INCOMPLETE`, not a passing scan. Do not write journals
+unless explicitly opted in. Preserve the existing rendered review, durable
+ledger, receipt, and completion-proof gates.
+
 Before editing:
 
 1. Resolve the exact route, component, flow, or bounded visible surface.

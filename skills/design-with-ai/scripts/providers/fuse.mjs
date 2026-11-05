@@ -134,11 +134,51 @@ export function assertFusion(fusion) {
   return fusion;
 }
 
-export function fuseProviderEvidence(reports, { required = [], optional = [] } = {}) {
+// Standalone evidence CLI calls may not have the run's full source manifest.
+// Derive the common minimum scope from attached per-provider attestations.
+// Never fuse a mixture of different or missing claims under a green scope.
+function commonScope(reports, supplied) {
+  const claimed = reports.filter((r) => r.auditScope !== undefined);
+  if (!supplied && !claimed.length) return null; // legacy v1 report support
+  if (claimed.length !== reports.length || !reports.length) {
+    throw new TypeError("Cannot fuse mixed scoped and unscoped provider reports");
+  }
+  const expected = supplied ?? claimed[0].auditScope;
+  if (!expected || !/^[0-9a-f]{64}$/.test(expected.sourceSha256 ?? "") ||
+      !filled(expected.route) || !filled(expected.target)) {
+    throw new TypeError("Provider audit scope is missing a valid source fingerprint");
+  }
+  for (const r of reports) {
+    const s = r.auditScope;
+    if (!s || s.sourceSha256 !== expected.sourceSha256 ||
+        s.target !== expected.target || s.route !== expected.route ||
+        (s.gitHead ?? null) !== (expected.gitHead ?? null)) {
+      throw new TypeError("Provider report scope or source fingerprint mismatch");
+    }
+    if (r.capability === "rendered-audit" &&
+        JSON.stringify(s.rendered ?? null) !== JSON.stringify(expected.rendered ?? s.rendered ?? null)) {
+      throw new TypeError("Provider rendered source fingerprint mismatch");
+    }
+  }
+  const rendered = claimed.map((r) => r.auditScope.rendered).filter(Boolean);
+  if (rendered.length > 1 &&
+      rendered.some((v) => JSON.stringify(v) !== JSON.stringify(rendered[0]))) {
+    throw new TypeError("Conflicting rendered source scope");
+  }
+  return structuredClone(supplied ?? {
+    sourceSha256: expected.sourceSha256,
+    route: expected.route, target: expected.target,
+    gitHead: expected.gitHead ?? null,
+    ...(rendered.length ? { rendered: rendered[0] } : {}),
+  });
+}
+
+export function fuseProviderEvidence(reports, { required = [], optional = [], scope = null } = {}) {
   validateSelection(required, optional);
   if (!Array.isArray(reports) || reports.length > 10) {
     throw new TypeError("Provider reports must be a bounded array");
   }
+  const resolvedScope = commonScope(reports, scope);
   const selected = new Set([...required, ...optional]);
   const byId = new Map();
   const checked = [];
@@ -193,7 +233,8 @@ export function fuseProviderEvidence(reports, { required = [], optional = [] } =
     kind: "dwa/provider-evidence-fusion",
     status,
     completionEligible: false,
-    inputSha256: hash(checked),
+    inputSha256: hash(resolvedScope ? { reports: checked, scope: resolvedScope } : checked),
+    ...(resolvedScope ? { scope: resolvedScope } : {}),
     coverage: {
       complete: !failedRequired.length && !incompleteOptional.length,
       required: [...required].sort(stableCompare),

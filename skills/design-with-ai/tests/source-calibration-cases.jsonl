@@ -12,7 +12,7 @@
 {"id":"SC12","description":"AI cliche copy triggers generic-copy review","files":{"src/a.tsx":"export const x = <h1>Seamless workflows</h1>;"},"expect_names":["ai-cliche"],"forbid_ids":[],"expected_status":0}
 {"id":"SC13","description":"placeholder brand triggers trust-content review","files":{"src/a.tsx":"export const x = <span>Acme</span>;"},"expect_names":["placeholder-brand"],"forbid_ids":[],"expected_status":0}
 {"id":"SC14","description":"wide side stripe triggers decorative-accent review","files":{"src/a.tsx":"export const x = <aside className='border-l-4'>Note</aside>;"},"expect_names":["side-stripe"],"forbid_ids":[],"expected_status":0}
-{"id":"SC15","description":"weak easing triggers motion-default review","files":{"src/a.css":".x{transition-timing-function:ease-in-out}"},"expect_names":["weak-or-enter-easing"],"forbid_ids":[],"expected_status":0}
+{"id":"SC15","description":"explicit entry easing remains a review lead","files":{"src/a.css":".page-enter{animation:fade-in 240ms ease-in-out both}"},"expect_names":["weak-or-enter-easing"],"forbid_ids":[],"expected_status":0}
 {"id":"SC16","description":"hover scale 105 triggers motion-default review","files":{"src/a.tsx":"export const x = <button className='hover:scale-105'>Go</button>;"},"expect_names":["hover-scale-105"],"forbid_ids":[],"expected_status":0}
 {"id":"SC17","description":"emoji ornament triggers icon-default review","files":{"src/a.tsx":"export const x = <span>✨</span>;"},"expect_names":["emoji-as-ui"],"forbid_ids":[],"expected_status":0}
 {"id":"SC18","description":"scroll cue copy triggers decorative navigation review","files":{"src/a.tsx":"export const x = <span>Scroll to explore</span>;"},"expect_names":["scroll-cue"],"forbid_ids":[],"expected_status":0}
@@ -37,3 +37,8 @@
 {"id":"SC37","description":"visible initial state stays below opacity-zero rule","files":{"src/a.tsx":"export const x = <motion.div initial={{ opacity: 1 }}>Content</motion.div>;"},"expect_names":[],"forbid_ids":["G59"],"expected_status":0}
 {"id":"SC38","description":"semantic ordered prose without decorative numbered meta stays below section-chrome rules","files":{"src/a.tsx":"export const x = <ol><li>Step 1: Connect account</li></ol>;"},"expect_names":[],"forbid_ids":["G27","G28"],"expected_status":0}
 {"id":"SC39","description":"one replacement-default ingredient alone stays below derived cluster","files":{"src/a.tsx":"export const x = <main className='bg-stone-100'>Journal</main>;"},"expect_names":[],"forbid_ids":["G67"],"expected_status":0}
+{"id":"SC40","description":"ambient loop must not trigger entry easing","files":{"src/a.css":".stars{animation:twinkle 2s ease-in-out infinite}"},"expect_names":[],"forbid_ids":["G34"],"expected_status":0}
+{"id":"SC41","description":"CSS keyframe scale is not hover scale","files":{"src/a.css":"@keyframes pop{50%{transform:scale(1.05)}}"},"expect_names":[],"forbid_ids":["G32"],"expected_status":0}
+{"id":"SC42","description":"functional join code is not a kicker","files":{"src/a.tsx":"export const x = <input className='uppercase tracking-widest' />;"},"expect_names":[],"forbid_ids":["G27"],"expected_status":0}
+{"id":"SC43","description":"comment and numeric range are not dash UI copy","files":{"src/a.tsx":"// comment — example\nconst range='100–500';"},"expect_names":[],"forbid_ids":["G29"],"expected_status":0}
+{"id":"SC44","description":"non-entry toy animation easing is not entrance defect","files":{"src/a.css":".toy{animation:bounce 400ms ease-in-out}"},"expect_names":[],"forbid_ids":["G34"],"expected_status":0}

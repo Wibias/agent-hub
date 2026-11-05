@@ -185,6 +185,7 @@ test("missing browser coverage, skipped checks, falsified counts and wrong sourc
       (r) => { r.page = "/another/project/index.html"; },
       (r) => { r.out = "/another/location"; },
       (r) => { r.url = "https://example.com"; },
+      (r) => { r.url = "http://127.0.0.1:5200/another-page.html"; },
       (r) => { r.widths[0].findings.push({ check: "visual-empty", sev: "FAIL",
         sel: "canvas", msg: "Blank" }); },
       (r) => { r.widths[0].findings.push({ check: "visual-empty", sev: "WARN",
