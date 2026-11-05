@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { join, win32 } from 'node:path';
 import { resolveCodexCandidateLaunch } from '../../memory-engine/codex-candidate-launch.mjs';
 
-function simulate(files, env = { Path: 'C:\\Users\\ws\\AppData\\Roaming\\npm' }) {
+function simulate(files, env = { Path: 'C:\\Fixture\\npm' }) {
   return resolveCodexCandidateLaunch({
     platform: 'win32',
     env,
@@ -17,7 +17,7 @@ function simulate(files, env = { Path: 'C:\\Users\\ws\\AppData\\Roaming\\npm' })
 }
 
 test('Windows npm PowerShell shim resolves directly to its Node CLI (no shell)', () => {
-  const dir = 'C:\\Users\\ws\\AppData\\Roaming\\npm';
+  const dir = 'C:\\Fixture\\npm';
   const ps1 = win32.join(dir, 'codex.ps1');
   const js = win32.join(dir, 'node_modules', '@openai', 'codex', 'bin', 'codex.js');
   assert.deepEqual(simulate([ps1, js]), {
