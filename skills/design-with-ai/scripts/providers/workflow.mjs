@@ -112,6 +112,7 @@ export async function runProfileProviders({
   const before = sourceScopeProof({
     projectRoot: location.projectRoot, target: location.target, route,
     renderedRoot: location.renderedRoot, html: withTaste ? resolve(html) : null,
+    intentPath,
   });
   const actualRegistry = registry ?? createProviderRegistry([
     createNativeDwaProvider(),
@@ -140,6 +141,7 @@ export async function runProfileProviders({
   const after = sourceScopeProof({
     projectRoot: location.projectRoot, target: location.target, route,
     renderedRoot: location.renderedRoot, html: withTaste ? resolve(html) : null,
+    intentPath,
   });
   if (before.summary.sourceSha256 !== after.summary.sourceSha256) {
     throw new Error("Audited source changed during provider execution; evidence invalid");

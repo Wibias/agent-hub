@@ -4,7 +4,15 @@ import { execFileSync } from "node:child_process";
 import { lstatSync, readFileSync, readdirSync } from "node:fs";
 import { extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
-const extensions = new Set([".tsx", ".jsx", ".vue", ".svelte", ".html", ".css", ".scss", ".mdx", ".md"]);
+// Superset of native DWA and vendored Impeccable file extensions.
+const extensions = new Set([
+  ".tsx", ".jsx", ".vue", ".svelte", ".html", ".htm", ".css", ".scss",
+  ".sass", ".less", ".mdx", ".md", ".js", ".ts", ".astro", ".blade.php",
+]);
+const eligible = (name) => {
+  const lower = name.toLowerCase();
+  return extensions.has(extname(lower)) || lower.endsWith(".blade.php");
+};
 const skipped = new Set(["node_modules", ".git", "dist", "build", ".next"]);
 const hash = (value) => createHash("sha256").update(value).digest("hex");
 const normalize = (value) => value.replaceAll("\\", "/");
@@ -24,7 +32,7 @@ function collectedFiles(target) {
       const path = join(dir, entry.name);
       if (entry.isSymbolicLink()) continue;
       if (entry.isDirectory() && !skipped.has(entry.name)) stack.push(path);
-      else if (entry.isFile() && extensions.has(extname(entry.name).toLowerCase())) files.push(path);
+      else if (entry.isFile() && eligible(entry.name)) files.push(path);
       if (files.length + stack.length > 25000) throw new TypeError("Source scope is too large to attest");
     }
   }
@@ -42,7 +50,7 @@ function gitHead(root) {
   }
 }
 
-export function sourceScopeProof({ projectRoot, target, route, renderedRoot = null, html = null }) {
+export function sourceScopeProof({ projectRoot, target, route, renderedRoot = null, html = null, intentPath = null }) {
   const root = resolve(projectRoot), source = resolve(target);
   if (!isInside(root, source)) throw new TypeError("Source scope escapes project");
   const files = collectedFiles(source).map((file) => ({
@@ -50,6 +58,16 @@ export function sourceScopeProof({ projectRoot, target, route, renderedRoot = nu
     sha256: hash(readFileSync(file)),
   }));
   if (!files.length) throw new TypeError("Source scope has no eligible files");
+  const intent = intentPath ? (() => {
+    const path = resolve(intentPath), st = lstatSync(path);
+    if (!st.isFile() || st.isSymbolicLink()) {
+      throw new TypeError("Intent contract must be an existing regular file");
+    }
+    return {
+      path: isInside(root, path) ? normalize(relative(root, path)) : "<external-intent>",
+      sha256: hash(readFileSync(path)),
+    };
+  })() : null;
   const rendered = html ? {
     page: normalize(relative(root, resolve(html))),
     sha256: hash(readFileSync(html)),
@@ -61,6 +79,7 @@ export function sourceScopeProof({ projectRoot, target, route, renderedRoot = nu
     route,
     gitHead: gitHead(root),
     files,
+    intent,
     rendered,
   };
   const sourceSha256 = hash(JSON.stringify(manifest));
@@ -71,6 +90,7 @@ export function sourceScopeProof({ projectRoot, target, route, renderedRoot = nu
       route,
       gitHead: manifest.gitHead,
       fileCount: files.length,
+      intent,
       sourceSha256,
       routeBinding: rendered ? "verified-static-html-path" : "declared-source-route",
       rendered,
@@ -79,7 +99,7 @@ export function sourceScopeProof({ projectRoot, target, route, renderedRoot = nu
 }
 
 export function staticRouteForHtml(renderedRoot, html) {
-  const rel = normalize(relative(renderedRoot, html));
+  const rel = normalize(relative(renderedRoot, html)).replace(/\.html?$/i, (ext) => ext.toLowerCase());
   if (rel === "index.html" || rel === "index.htm") return "/";
   if (rel.endsWith("/index.html") || rel.endsWith("/index.htm")) {
     return "/" + rel.replace(/\/index\.html?$/, "");
