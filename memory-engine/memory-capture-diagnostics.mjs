@@ -45,6 +45,33 @@ export function classifyCaptureValidationDetail(message) {
   return 'other_validation';
 }
 
+const VALIDATION_FIELDS = Object.freeze([
+  'decision', 'suggested_type', 'durability', 'future_utility',
+  'specificity', 'confidence', 'meaning_preserved', 'canonical_fact',
+  'reason', 'risk_flags',
+]);
+
+/** Emits only canonical schema field labels, never the failing output or unknown keys. */
+export function classifyCaptureValidationField(message) {
+  const detail = classifyCaptureValidationDetail(message);
+  if (detail !== 'schema_violation' && detail !== 'decision_invariant') return null;
+
+  const value = String(message ?? '').toLowerCase();
+  if (detail === 'schema_violation' && /memory candidate judgment must be an object/u.test(value)) {
+    return 'judgment_object';
+  }
+  for (const field of VALIDATION_FIELDS) {
+    const name = field.replace(/[.*+?^$\{\}()|[\]\\]/g, '\\function sortGroups(rows, keys) {');
+    const pattern = new RegExp('(?:^|[^a-z_])' + name + '(?: entry)? must (?:be|not|contain)', 'u');
+    if (pattern.test(value)) return field;
+  }
+  if (detail === 'decision_invariant') {
+    const requirement = value.match(/(?:promote|ignore) requires (?:non-empty |empty )?([a-z_]+)(?:=|\b)/u)?.[1];
+    return VALIDATION_FIELDS.includes(requirement) ? requirement : 'unknown';
+  }
+  return 'unknown';
+}
+
 function sortGroups(rows, keys) {
   return rows.sort((a, b) => b.count - a.count
     || keys.map((key) => String(a[key]).localeCompare(String(b[key]), 'en')).find((n) => n !== 0) || 0);
@@ -106,12 +133,18 @@ export function inspectMemoryCapture({ dbPath, projectId, branch, recentLimit = 
       const errorClass = SAFE_CLASSES.has(failure.error_class) ? failure.error_class : 'other';
       const category = classifyCaptureFailure(failure.error_text);
       const validationDetail = classifyCaptureValidationDetail(failure.error_text);
-      const key = JSON.stringify([stage, errorClass, category, validationDetail]);
+      const validationField = classifyCaptureValidationField(failure.error_text);
+      const key = JSON.stringify([stage, errorClass, category, validationDetail, validationField]);
       failureGroups.set(key, (failureGroups.get(key) ?? 0) + 1);
     }
     const groupedFailures = sortGroups([...failureGroups].map(([key, n]) => {
-      const [stage, errorClass, category, validationDetail] = JSON.parse(key);
-      return { stage, errorClass, category, ...(validationDetail === null ? {} : { validationDetail }), count: n };
+      const [stage, errorClass, category, validationDetail, validationField] = JSON.parse(key);
+      return {
+        stage, errorClass, category,
+        ...(validationDetail === null ? {} : { validationDetail }),
+        ...(validationField === null ? {} : { validationField }),
+        count: n,
+      };
     }), ['stage', 'category']);
 
     const recentRuns = has('memory_pipeline_runs') ? db.prepare(`
