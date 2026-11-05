@@ -33,6 +33,18 @@ export function classifyCaptureFailure(message) {
   return 'unclassified';
 }
 
+/** Fixed allowlist of validation error types, without exposing model output. */
+export function classifyCaptureValidationDetail(message) {
+  const value = String(message ?? '').toLowerCase();
+  if (classifyCaptureFailure(value) !== 'response_validation') return null;
+  if (/memory candidate judgment response must be json|unexpected (?:token|end of json input)|unterminated string in json|json at position/u.test(value)) return 'invalid_json';
+  if (/unexpected field in memory candidate judgment/u.test(value)) return 'unexpected_field';
+  if (/missing field in memory candidate judgment/u.test(value)) return 'missing_field';
+  if (/(?:promote|ignore) requires/u.test(value)) return 'decision_invariant';
+  if (/memory candidate judgment must be an object|(?:risk_flags|canonical_fact|meaning_preserved|suggested_type|durability|future_utility|specificity|confidence|reason|decision)(?: entry)? must (?:be|not|contain)|risk_flags must not contain duplicates/u.test(value)) return 'schema_violation';
+  return 'other_validation';
+}
+
 function sortGroups(rows, keys) {
   return rows.sort((a, b) => b.count - a.count
     || keys.map((key) => String(a[key]).localeCompare(String(b[key]), 'en')).find((n) => n !== 0) || 0);
@@ -93,12 +105,13 @@ export function inspectMemoryCapture({ dbPath, projectId, branch, recentLimit = 
       const stage = SAFE_STAGES.has(failure.stage) ? failure.stage : 'other';
       const errorClass = SAFE_CLASSES.has(failure.error_class) ? failure.error_class : 'other';
       const category = classifyCaptureFailure(failure.error_text);
-      const key = JSON.stringify([stage, errorClass, category]);
+      const validationDetail = classifyCaptureValidationDetail(failure.error_text);
+      const key = JSON.stringify([stage, errorClass, category, validationDetail]);
       failureGroups.set(key, (failureGroups.get(key) ?? 0) + 1);
     }
     const groupedFailures = sortGroups([...failureGroups].map(([key, n]) => {
-      const [stage, errorClass, category] = JSON.parse(key);
-      return { stage, errorClass, category, count: n };
+      const [stage, errorClass, category, validationDetail] = JSON.parse(key);
+      return { stage, errorClass, category, ...(validationDetail === null ? {} : { validationDetail }), count: n };
     }), ['stage', 'category']);
 
     const recentRuns = has('memory_pipeline_runs') ? db.prepare(`
