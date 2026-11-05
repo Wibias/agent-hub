@@ -1478,6 +1478,44 @@ button {
     min-height: 0;
     overflow: visible;
   }
+  .memory-layout,
+  .review-layout {
+    height: auto;
+    min-width: 0;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto;
+  }
+  .memory-column,
+  .review-list {
+    min-width: 0;
+    min-height: 180px;
+    max-height: 48dvh;
+    overflow: auto;
+  }
+  .inspector,
+  .review-inspector {
+    min-width: 0;
+    min-height: 220px;
+    border-left: 0;
+    border-top: 1px solid var(--line-strong);
+  }
+  .inspector-scroll,
+  .review-inspector {
+    overflow: visible;
+  }
+  .toolbar {
+    flex-wrap: wrap;
+    min-height: 56px;
+    padding: 10px 12px;
+  }
+  .wide-view {
+    height: auto;
+    min-width: 0;
+    overflow-x: auto;
+  }
+  .summary-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
   .graph-layout {
     height: auto;
     grid-template-columns: minmax(0, 1fr);
