@@ -846,7 +846,10 @@ function graphFilteredEdges(nodes) {
   return graph.edges.filter((edge) => (
     visible.has(edge.from)
     && visible.has(edge.to)
-    && (state.graphOrigin === 'all' || (state.graphOrigin === 'typed' ? edge.source === 'typed_relation' : edge.origin === state.graphOrigin))
+    && (state.graphOrigin === 'all'
+      || (state.graphOrigin === 'typed'
+        ? edge.source === 'typed_relation'
+        : edge.source !== 'typed_relation' && edge.origin === state.graphOrigin))
   ));
 }
 
@@ -953,6 +956,7 @@ function graphFreshnessLabel(status) {
   })[status] ?? 'Verification unknown';
 }
 
+/** Explain why a Git check passed, failed or does not apply. */
 function graphFreshnessHelp(status) {
   return ({
     fresh: 'The recorded file matches the selected checkout at this revision.',
@@ -988,6 +992,12 @@ function graphVerificationSummary(graph) {
     message: 'A verified checkout does not guarantee that each referenced file was checked.',
     count: statuses.fresh + ' / ' + total + ' verified',
   };
+  if (total === 0 && graph?.stats?.truncated) return {
+    tone: 'neutral', label: 'EVIDENCE STATUS',
+    title: 'No Git-linked memories in the returned graph',
+    message: 'The graph is limited. Omitted memories may include Git-linked evidence.',
+    count: '0 Git-linked shown',
+  };
   if (total === 0) return {
     tone: 'neutral', label: 'EVIDENCE STATUS',
     title: 'No repository-backed memories in this scope',
@@ -1002,12 +1012,14 @@ function graphVerificationSummary(graph) {
   };
 }
 
+/** Normalize origin terminology without changing underlying edge classes. */
 function graphRelationOriginLabel(edge) {
   if (edge?.source === 'typed_relation') return 'Advisory';
   if (edge?.origin === 'inferred') return 'Similarity';
   return 'Recorded';
 }
 
+/** Restore keyboard focus and text selection after graph controls rerender. */
 function restoreGraphControlFocus(id, selection = null) {
   const target = document.getElementById(id);
   if (!target) return;
@@ -1016,6 +1028,24 @@ function restoreGraphControlFocus(id, selection = null) {
     && Number.isInteger(selection.start) && Number.isInteger(selection.end)) {
     target.setSelectionRange(selection.start, selection.end);
   }
+}
+
+/** Focus the re-rendered SVG node and reveal it only when outside the viewport. */
+function focusSelectedGraphNode(nodeId) {
+  const next = [...el.view.querySelectorAll('.graph-node[data-graph-node]')]
+    .find((item) => item.dataset.graphNode === nodeId);
+  if (!next) return;
+  next.focus({ preventScroll: true });
+  if (typeof next.getBoundingClientRect !== 'function') return;
+  const box = next.getBoundingClientRect();
+  const viewport = window.visualViewport;
+  const viewportWidth = viewport?.width ?? window.innerWidth;
+  const viewportHeight = viewport?.height ?? window.innerHeight;
+  const viewportLeft = viewport?.offsetLeft ?? 0;
+  const viewportTop = viewport?.offsetTop ?? 0;
+  const outside = box.top < viewportTop || box.bottom > viewportTop + viewportHeight
+    || box.left < viewportLeft || box.right > viewportLeft + viewportWidth;
+  if (outside) next.scrollIntoView({ block: 'nearest', inline: 'nearest' });
 }
 
 /** Format distinct canonical, typed and embedding-provenance descriptions. */
@@ -1327,9 +1357,7 @@ function renderGraph() {
     if (!state.graph?.nodes.some((node) => node.id === nodeId)) return;
     state.selectedGraphNodeId = nodeId;
     renderGraph();
-    const next = [...el.view.querySelectorAll('.graph-node[data-graph-node]')]
-      .find((item) => item.dataset.graphNode === nodeId);
-    next?.focus({ preventScroll: true });
+    focusSelectedGraphNode(nodeId);
   };
   el.view.querySelectorAll('[data-graph-node]').forEach((target) => {
     target.addEventListener('click', () => selectGraphNode(target.dataset.graphNode));
