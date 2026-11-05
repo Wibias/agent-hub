@@ -122,6 +122,15 @@ test('judge parser accepts strict promote recommendation and preserves structure
   assert.deepEqual(parsed, promoteJudgment());
 });
 
+test('judge parser accepts fenced JSON with LF and CRLF line endings', () => {
+  for (const newline of ['\n', '\r\n']) {
+    for (const language of ['```json', '```']) {
+      const response = [language, JSON.stringify(promoteJudgment()), '```'].join(newline);
+      assert.deepEqual(parseMemoryCandidateJudgment(response), promoteJudgment());
+    }
+  }
+});
+
 test('judge parser rejects extra keys and unsafe promote recommendations', () => {
   assert.throws(
     () => parseMemoryCandidateJudgment(JSON.stringify({
