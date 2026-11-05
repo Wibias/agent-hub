@@ -153,6 +153,9 @@ jobs:
       - name: Test optional provider fusion and durable sidecar journal
         run: node --test skills/design-with-ai/tests/providers/fuse.test.mjs skills/design-with-ai/tests/providers/evidence-journal.test.mjs
 
+      - name: Test profile-aware provider selection and real local source chain
+        run: node --test skills/design-with-ai/tests/providers/workflow.test.mjs skills/design-with-ai/tests/providers/workflow-e2e.test.mjs
+
       - name: Test cluster-aware design taste gate
         run: node --test skills/design-with-ai/tests/taste-gate.test.mjs
 

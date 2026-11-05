@@ -14,6 +14,10 @@
 
 Do not auto-enable any Impeccable live mode. Any future live feature requires a separate explicit-user-request and trust-boundary design and must not enter ordinary `standard` or `deep` gates.
 
+## Phase 5 profile execution
+
+The normal DWA non-motion Gate now has an explicit profile-aware CLI: `scripts/providers/quality-audit.mjs`. Quick runs native only. Standard/deep run native plus the optional vendored static Impeccable detector unless `--no-impeccable` is set. The Taste Skill browser is **never started implicitly**; require explicit `--with-taste` and the compatible installed runtime, or `--require-taste` to make missing browser evidence a blocker. The original source/render receipts and iteration gate are unchanged. See `references/provider-quality-rollout.md` for the tested command, report paths and rollback. This supersedes the earlier “planned only” selection state below; the sidecar remains explicitly opt-in.
+
 ## Phase 4 evidence fusion
 
 Manual, explicit provider reports can now be correlated with `scripts/providers/fuse.mjs` and retained in an append-only schema-v2 sidecar. This does **not** change ordinary provider selection or the existing source/render `taste-evidence-fusion.mjs` gate. Missing selected optional results remain explicitly `INCOMPLETE`, and no fusion result grants product completion. See `references/provider-fusion-journal.md`.
