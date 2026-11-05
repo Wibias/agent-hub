@@ -1,0 +1,24 @@
+name: Memory Console D12.1 Readability
+on:
+  pull_request:
+    paths:
+      - "memory-ui/**"
+      - "tests/memory-engine/memory-console-d12-1-readable.test.mjs"
+      - ".github/workflows/verify-memory-console-d12-1.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Verify UI and regressions
+        run: |
+          node --check memory-ui/app.js
+          node --test tests/memory-engine/memory-console-d12-1-readable.test.mjs tests/memory-engine/memory-console-d12-design.test.mjs tests/memory-engine/memory-graph-ui.test.mjs tests/memory-engine/memory-graph-v2-ui.test.mjs tests/memory-engine/memory-ui.test.mjs
+      - name: Design with AI source taste gate
+        run: node skills/design-with-ai/scripts/taste-gate.mjs --path memory-ui --json
