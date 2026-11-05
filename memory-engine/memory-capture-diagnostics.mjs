@@ -61,8 +61,7 @@ export function classifyCaptureValidationField(message) {
     return 'judgment_object';
   }
   for (const field of VALIDATION_FIELDS) {
-    const name = field.replace(/[.*+?^$\{\}()|[\]\\]/g, '\\function sortGroups(rows, keys) {');
-    const pattern = new RegExp('(?:^|[^a-z_])' + name + '(?: entry)? must (?:be|not|contain)', 'u');
+    const pattern = new RegExp('(?:^|[^a-z_])' + field + '(?: entry)? must (?:be|not|contain)', 'u');
     if (pattern.test(value)) return field;
   }
   if (detail === 'decision_invariant') {
