@@ -1527,6 +1527,14 @@ button {
   }
   .graph-canvas-wrap {
     min-height: 340px;
+    overflow: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+  }
+  /* Keep the 1000 x 680 viewBox at 1:1: no 5px labels or tiny SVG targets. */
+  .graph-canvas {
+    min-width: 1000px;
+    min-height: 680px;
   }
   .graph-inspector {
     min-height: 240px;
