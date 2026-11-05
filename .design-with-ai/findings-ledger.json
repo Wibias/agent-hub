@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 1,
+  "events": [
+    {
+      "type": "FOUND",
+      "id": "D12-UX-01",
+      "route": "/",
+      "kind": "WORKFLOW",
+      "priority": "HIGH",
+      "symptom": "Graph search reconstructs innerHTML on every input event, discarding keyboard focus and cursor continuity.",
+      "acceptance": "Typing successive characters keeps the search field focused, preserves selection and filters matching nodes.",
+      "evidenceRef": "memory-ui/app.js:1189-1192 (main 466ec57)"
+    },
+    {
+      "type": "FOUND",
+      "id": "D12-UX-02",
+      "route": "/",
+      "kind": "WORKFLOW",
+      "priority": "HIGH",
+      "symptom": "Click or Enter on a graph node replaces its DOM without restoring focus, interrupting keyboard exploration.",
+      "acceptance": "Selecting a node by keyboard retains visible focus on the selected node after graph rerender.",
+      "evidenceRef": "memory-ui/app.js:1206-1218 (main 466ec57)"
+    },
+    {
+      "type": "FOUND",
+      "id": "D12-UX-03",
+      "route": "/",
+      "kind": "DETAIL",
+      "priority": "HIGH",
+      "symptom": "Git status and repository evidence availability are shown as technical fragments, while node freshness and authority are not clearly distinguished in the graph hierarchy.",
+      "acceptance": "A prominent graph scope summary accurately differentiates unverified Git, no repository claims, fresh, stale and unchecked states; inspector separates evidence authority from Git verification.",
+      "evidenceRef": "memory-ui/app.js:978-1128 (main 466ec57)"
+    },
+    {
+      "type": "FOUND",
+      "id": "D12-UX-04",
+      "route": "/",
+      "kind": "VISUAL",
+      "priority": "MEDIUM",
+      "symptom": "Graph meta text is 9.5px, origin labels 8px, and graph relationship metadata 9px, creating difficult reading at normal zoom.",
+      "acceptance": "Graph context, node relationship labels and essential metadata use a readable type scale without obscuring the primary graph.",
+      "evidenceRef": "memory-ui/styles.css:924-1100 (main 466ec57)"
+    },
+    {
+      "type": "FOUND",
+      "id": "D12-UX-05",
+      "route": "/",
+      "kind": "VISUAL",
+      "priority": "MEDIUM",
+      "symptom": "Body min-width 860px and graph min-width 560px plus inspector min-width 300px force narrow-window clipping rather than responsive transposition.",
+      "acceptance": "At 760px and 390px viewport widths all primary graph controls, graph canvas and inspector remain accessible without horizontal viewport scrolling.",
+      "evidenceRef": "memory-ui/styles.css:32-39,901-906,1157-1194 (main 466ec57)"
+    },
+    {
+      "type": "FOUND",
+      "id": "D12-UX-06",
+      "route": "/",
+      "kind": "DETAIL",
+      "priority": "MEDIUM",
+      "symptom": "Raw authority classes and inferred/typed relation origins need domain-accurate explanatory labels and separation from proof claims.",
+      "acceptance": "The graph clearly describes how canonical, advisory typed and optional similarity edges differ, and never equates agent-derived inference with verified Git provenance.",
+      "evidenceRef": "memory-ui/app.js:930-959,978-1127 (main 466ec57)"
+    }
+  ]
+}
