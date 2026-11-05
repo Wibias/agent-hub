@@ -1,0 +1,35 @@
+name: Memory Graph D11 Read-only Operations
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Validate D11 code
+        run: |
+          node --check scripts/monitor-memory-graph-d11.mjs
+          node --check memory-engine/memory-graph-d11-monitor.mjs
+      - name: Verify D11 operational checks and existing D7-D9 boundaries
+        run: |
+          node --test \
+            tests/memory-engine/memory-graph-d11*.test.mjs \
+            tests/memory-engine/memory-graph-d9*.test.mjs \
+            tests/memory-engine/memory-graph-d8*.test.mjs \
+            tests/memory-engine/memory-graph-d7*.test.mjs \
+            tests/memory-engine/memory-graph-diagnostics*.test.mjs \
+            tests/memory-engine/memory-console-git*.test.mjs \
+            tests/memory-engine/memory-graph-v2*.test.mjs \
+            tests/memory-engine/git-freshness-helper.test.mjs
