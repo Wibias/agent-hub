@@ -4,7 +4,7 @@ import { verifyCodexCandidateExecutable } from '../../scripts/doctor-codex-candi
 
 const launch = () => ({
   command: 'C:\\Program Files\\nodejs\\node.exe',
-  prefixArgs: ['C:\\Users\\ws\\npm\\node_modules\\@openai\\codex\\bin\\codex.js'],
+  prefixArgs: ['C:\\Fixture\\npm\\node_modules\\@openai\\codex\\bin\\codex.js'],
   kind: 'npm_node',
 });
 
