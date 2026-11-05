@@ -10,6 +10,8 @@ const state = {
   graphGroup: 'all',
   graphNodeState: 'all',
   selectedGraphNodeId: null,
+  graphInspectorOpen: false,
+  memoryInspectorOpen: false,
   view: 'memories',
   projectId: null,
   branch: null,
@@ -160,6 +162,7 @@ function resetGraphState({ keepData = false } = {}) {
   state.graphGroup = 'all';
   state.graphNodeState = 'all';
   state.selectedGraphNodeId = null;
+  state.graphInspectorOpen = false;
 }
 
 function actionsAreOpen() {
@@ -853,6 +856,90 @@ function graphFilteredEdges(nodes) {
   ));
 }
 
+/** Render excerpts from recorded claim text only; never reinterpret content. */
+function memoryDisplayTitle(value) {
+  const text = String(value ?? '').replace(/\s+/g, ' ').trim()
+    .replace(/^(?:memory|agent decision):\s*/i, '');
+  return text || 'Untitled memory';
+}
+
+/** Two readable lines at a stable width; the full original stays in the inspector. */
+function graphLabelLines(value, maxChars = 27) {
+  const words = [...memoryDisplayTitle(value)].join('').split(/\s+/);
+  const lines = ['', ''];
+  let index = 0;
+  for (const word of words) {
+    const next = lines[index] ? lines[index] + ' ' + word : word;
+    if ([...next].length <= maxChars) {
+      lines[index] = next;
+      continue;
+    }
+    if (index === 0) {
+      if (!lines[0]) lines[0] = [...word].slice(0, maxChars).join('');
+      index = 1;
+      if ([...word].length > maxChars) {
+        lines[1] = [...word].slice(maxChars, maxChars * 2 - 1).join('');
+      } else {
+        lines[1] = word;
+      }
+    } else {
+      break;
+    }
+  }
+  const original = memoryDisplayTitle(value);
+  const shown = lines.filter(Boolean).join(' ');
+  if ([...original].length > [...shown].length) {
+    lines[1] = [...(lines[1] || lines[0])].slice(0, maxChars - 1).join('') + '…';
+    if (!lines[1]) lines[1] = '…';
+  }
+  return lines.filter(Boolean);
+}
+
+/** A bounded semantic layout: connected claims are positioned next to each other. */
+function graphReadableLayout(nodes, edges) {
+  if (nodes.length > 24) return null;
+  const cols = Math.min(4, Math.max(1, Math.ceil(Math.sqrt(nodes.length))));
+  const rows = Math.max(1, Math.ceil(nodes.length / cols));
+  const width = 80 + cols * 280;
+  const height = 120 + rows * 156;
+  const byId = new Map(nodes.map(node => [node.id, node]));
+  const adjacent = new Map(nodes.map(node => [node.id, new Set()]));
+  for (const edge of edges) {
+    if (!adjacent.has(edge.from) || !adjacent.has(edge.to)) continue;
+    adjacent.get(edge.from).add(edge.to);
+    adjacent.get(edge.to).add(edge.from);
+  }
+  const ordered = [];
+  const visited = new Set();
+  const roots = [...nodes].sort((a, b) =>
+    adjacent.get(b.id).size - adjacent.get(a.id).size || a.id.localeCompare(b.id, 'en'));
+  for (const root of roots) {
+    if (visited.has(root.id)) continue;
+    const queue = [root.id];
+    visited.add(root.id);
+    for (let index = 0; index < queue.length; index += 1) {
+      const id = queue[index];
+      ordered.push(byId.get(id));
+      const links = [...adjacent.get(id)].sort((a, b) => a.localeCompare(b, 'en'));
+      for (const next of links) {
+        if (visited.has(next)) continue;
+        visited.add(next);
+        queue.push(next);
+      }
+    }
+  }
+  const positions = new Map(ordered.map((node, i) => [node.id, {
+    x: 180 + (i % cols) * 280,
+    y: 100 + Math.floor(i / cols) * 156,
+  }]));
+  return { positions, width, height };
+}
+
+/** Keep relation semantics from the actual edge, never from inferred keywords. */
+function graphRelationLabel(edge) {
+  return String(edge?.relation ?? 'related').replaceAll('_', ' ');
+}
+
 function graphPositions(nodes, edges) {
   const width = 1000;
   const height = 680;
@@ -1203,7 +1290,10 @@ function renderGraph() {
   const edges = graphFilteredEdges(nodes);
   const states = [...new Set(state.graph.nodes.map((node) => node.state))].sort();
   const groups = state.graph.groups ?? [];
-  const positions = graphPositions(nodes, edges);
+  const readableLayout = graphReadableLayout(nodes, edges);
+  const positions = readableLayout?.positions ?? graphPositions(nodes, edges);
+  const graphWidth = readableLayout?.width ?? 1000;
+  const graphHeight = readableLayout?.height ?? 680;
   const selected = nodes.find((node) => node.id === state.selectedGraphNodeId)
     ?? nodes.find((node) => node.state === 'active')
     ?? nodes[0]
@@ -1212,7 +1302,7 @@ function renderGraph() {
     state.selectedGraphNodeId = selected.id;
   }
 
-  const labelEveryNode = nodes.length <= 60;
+  const labelEveryNode = nodes.length <= 24;
   const stats = state.graph.stats ?? {};
   const gitContext = state.graph.gitContext ?? { status: 'unconfigured', revisionSha: null };
   const verification = graphVerificationSummary(state.graph);
