@@ -276,7 +276,10 @@ function renderScopeHeader() {
 
 function renderTabs() {
   el.tabs.querySelectorAll('[data-view]').forEach((button) => {
-    button.classList.toggle('is-active', button.dataset.view === state.view);
+    const active = button.dataset.view === state.view;
+    button.classList.toggle('is-active', active);
+    if (active) button.setAttribute('aria-current', 'page');
+    else button.removeAttribute('aria-current');
   });
 }
 
@@ -1081,7 +1084,7 @@ function graphInspector(node, visibleEdges) {
         <p class="graph-inspector-subtitle">What this memory records, where it came from and which connections are visible.</p>
       </div>
       <div class="graph-evidence-status ${escapeHtml(node.freshness?.status ?? 'unknown')}">
-        <span class="graph-evidence-kicker">GIT FILE CHECK</span>
+        <span class="graph-evidence-kicker">VERIFICATION CONTEXT</span>
         <strong>${escapeHtml(graphFreshnessLabel(node.freshness?.status))}</strong>
         <p>${escapeHtml(graphFreshnessHelp(node.freshness?.status))}</p>
       </div>
@@ -1241,7 +1244,7 @@ function renderGraph() {
         </div>
         <div class="graph-canvas-wrap">
           ${nodes.length ? `
-            <svg class="graph-canvas" viewBox="0 0 1000 680" role="img" aria-label="Memory relation graph">
+            <svg class="graph-canvas" viewBox="0 0 1000 680" role="group" aria-label="Interactive memory relation graph">
               <g class="graph-edges">
                 ${edges.map((edge) => {
                   const from = positions.get(edge.from);
@@ -1274,6 +1277,7 @@ function renderGraph() {
                       transform="translate(${point.x.toFixed(2)} ${point.y.toFixed(2)})"
                       role="button"
                       tabindex="0"
+                      aria-pressed="${node.id === selected?.id ? 'true' : 'false'}"
                       aria-label="${escapeHtml(`${node.ref} ${node.value}`)}"
                     >
                       <circle r="10"></circle>
