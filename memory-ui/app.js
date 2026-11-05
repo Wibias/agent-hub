@@ -1298,26 +1298,34 @@ function renderGraph() {
   const group = document.querySelector('#graph-group-filter');
   const nodeState = document.querySelector('#graph-state-filter');
   search?.addEventListener('input', () => {
+    const selection = { start: search.selectionStart, end: search.selectionEnd };
     state.graphSearch = search.value;
     renderGraph();
+    restoreGraphControlFocus('graph-search', selection);
   });
   origin?.addEventListener('change', () => {
     state.graphOrigin = origin.value;
     renderGraph();
+    restoreGraphControlFocus('graph-origin-filter');
   });
   group?.addEventListener('change', () => {
     state.graphGroup = group.value;
     renderGraph();
+    restoreGraphControlFocus('graph-group-filter');
   });
   nodeState?.addEventListener('change', () => {
     state.graphNodeState = nodeState.value;
     renderGraph();
+    restoreGraphControlFocus('graph-state-filter');
   });
 
   const selectGraphNode = (nodeId) => {
     if (!state.graph?.nodes.some((node) => node.id === nodeId)) return;
     state.selectedGraphNodeId = nodeId;
     renderGraph();
+    const next = [...el.view.querySelectorAll('.graph-node[data-graph-node]')]
+      .find((item) => item.dataset.graphNode === nodeId);
+    next?.focus({ preventScroll: true });
   };
   el.view.querySelectorAll('[data-graph-node]').forEach((target) => {
     target.addEventListener('click', () => selectGraphNode(target.dataset.graphNode));
