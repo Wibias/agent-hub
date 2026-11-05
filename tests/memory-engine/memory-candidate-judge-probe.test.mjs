@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  classifyJudgeProbeSetupError,
   parseJudgeProbeArgs,
   runCodexCandidateJudgeProbe,
   summarizeJudgeProbeFailure,
@@ -65,7 +66,7 @@ test('probe reports safe exit categories without stdout, stderr or auth strings'
   });
   assert.deepEqual(output, {
     status: 'failed', origin: 'judge_process_exit', category: 'rate_limit', exitCode: 1,
-    executionSucceeded: false,
+    failedStage: 'execution', executionSucceeded: false,
   });
   assert.equal(closed, true);
   assert.equal(JSON.stringify(output).includes(secret), false);
@@ -91,4 +92,26 @@ test('probe does not accept malformed model responses as success', async () => {
   assert.equal(output.category, 'response_validation');
   assert.equal(output.executionSucceeded, true);
   assert.equal(output.judgeResponseValid, false);
+  assert.equal(output.failedStage, 'response_validation');
+});
+
+test('setup failure is distinguished from a provider failure without exposing paths', async () => {
+  const cases = [
+    [new Error('candidate judge requires an authenticated Codex home containing auth.json'), 'missing_codex_auth'],
+    [new Error('failed to initialize isolated judge workspace: PRIVATE-PATH'), 'git_workspace_setup'],
+    [Object.assign(new Error('spawn PRIVATE-PATH ENOENT'), { code: 'ENOENT' }), 'missing_executable_or_file'],
+    [Object.assign(new Error('access PRIVATE-PATH EACCES'), { code: 'EACCES' }), 'filesystem_permission'],
+    [new Error('PRIVATE-TOKEN UNKNOWN FAILURE'), 'unknown'],
+  ];
+  for (const [error, expected] of cases) {
+    assert.equal(classifyJudgeProbeSetupError(error), expected);
+    const output = await runCodexCandidateJudgeProbe({
+      async createJudge() { throw error; },
+    });
+    assert.equal(output.status, 'failed');
+    assert.equal(output.failedStage, 'setup');
+    assert.equal(output.setupIssue, expected);
+    assert.equal(output.executionSucceeded, false);
+    assert.equal(JSON.stringify(output).includes('PRIVATE'), false);
+  }
 });
