@@ -41,6 +41,9 @@ export function parseCandidateSandboxArgs(argv = []) {
       result.executeOnCopy = true;
       continue;
     }
+    if (!['--source-db', '--project-id', '--branch', '--limit', '--model', '--reasoning-effort'].includes(flag)) {
+      throw new Error('unsupported option');
+    }
     const value = argv[++i];
     if (typeof value !== 'string' || !value.trim()) throw new Error('missing option value');
     if (flag === '--source-db') result.sourceDbPath = resolve(value);
