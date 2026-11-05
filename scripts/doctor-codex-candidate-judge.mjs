@@ -54,6 +54,24 @@ export function summarizeJudgeProbeFailure(error) {
   };
 }
 
+/** Stable reasons only. Never expose filesystem locations or exception messages. */
+export function classifyJudgeProbeSetupError(error) {
+  const code = error && typeof error === 'object' ? error.code : null;
+  if (code === 'ENOENT') return 'missing_executable_or_file';
+  if (code === 'EACCES' || code === 'EPERM') return 'filesystem_permission';
+  const message = String(error instanceof Error ? error.message : error ?? '').toLowerCase();
+  if (message.startsWith('candidate judge requires an authenticated codex home containing auth.json')) {
+    return 'missing_codex_auth';
+  }
+  if (message.startsWith('failed to initialize isolated judge workspace:')) {
+    return 'git_workspace_setup';
+  }
+  if (message.startsWith('cwd must be a non-empty string') || message.startsWith('timeoutms must be a positive integer')) {
+    return 'invalid_configuration';
+  }
+  return 'unknown';
+}
+
 export async function runCodexCandidateJudgeProbe({
   model = null,
   reasoningEffort = 'medium',
@@ -61,21 +79,29 @@ export async function runCodexCandidateJudgeProbe({
   parseJudgment = parseMemoryCandidateJudgment,
 } = {}) {
   let resource = null;
+  let phase = 'setup';
   try {
     resource = await createJudge({
       cwd: process.cwd(),
       model,
       reasoningEffort,
     });
+    phase = 'execution';
     const raw = await resource.judge(PROBE_CANDIDATE);
+    phase = 'response_validation';
     try {
       parseJudgment(raw);
       return { status: 'ok', executionSucceeded: true, judgeResponseValid: true };
     } catch (error) {
-      return { ...summarizeJudgeProbeFailure(error), executionSucceeded: true, judgeResponseValid: false };
+      return { ...summarizeJudgeProbeFailure(error), failedStage: phase, executionSucceeded: true, judgeResponseValid: false };
     }
   } catch (error) {
-    return { ...summarizeJudgeProbeFailure(error), executionSucceeded: false };
+    return {
+      ...summarizeJudgeProbeFailure(error),
+      failedStage: phase,
+      ...(phase === 'setup' ? { setupIssue: classifyJudgeProbeSetupError(error) } : {}),
+      executionSucceeded: false,
+    };
   } finally {
     if (resource && typeof resource.close === 'function') {
       await resource.close().catch(() => {});
