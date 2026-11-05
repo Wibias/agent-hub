@@ -1,0 +1,34 @@
+name: Memory Graph D9 Explicit Repository Capture
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Validate D9 CLI and module syntax
+        run: |
+          node --check scripts/capture-memory-graph-d9.mjs
+          node --check memory-engine/memory-graph-d9-capture.mjs
+      - name: Verify D9 capture, live D8/D7 boundaries and existing Memory Graph
+        run: |
+          node --test \
+            tests/memory-engine/memory-graph-d9-*.test.mjs \
+            tests/memory-engine/memory-graph-d8*.test.mjs \
+            tests/memory-engine/memory-graph-d7*.test.mjs \
+            tests/memory-engine/memory-graph-diagnostics*.test.mjs \
+            tests/memory-engine/memory-console-git*.test.mjs \
+            tests/memory-engine/memory-graph-v2*.test.mjs \
+            tests/memory-engine/git-freshness-helper.test.mjs
