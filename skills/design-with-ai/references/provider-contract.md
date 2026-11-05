@@ -20,3 +20,7 @@ Findings include provider rule ID, priority, stable finding ID, route/file locat
 This phase introduces the contract without changing public routing or automatically running external tools. Later PRs may add optional pinned Impeccable and taste-skill providers behind explicit capability probes and provider-selection policy. Only after compatibility tests should provider evidence be mapped to append-only ledger v2 events. Never rewrite historical v1 events.
 
 The Impeccable `live` workflow is **not** part of this contract and must not be invoked automatically. Process execution with `shell:false` does not prevent a trusted executable from doing unsafe work. No external provider runtime is auto-installed or executed by this foundation.
+
+## Phase 2: Impeccable static adapter
+
+`createImpeccableProvider()` consumes the existing vendored JS detector's JSON array and exits (0 clean, 2 findings, 1 incomplete); it intentionally **does not** invoke the network-capable Rust engine launcher. See `references/impeccable-provider.md` and the explicit `scripts/providers/scan.mjs` pilot. The native DWA taste gate remains canonical and is not replaced or suppressed.

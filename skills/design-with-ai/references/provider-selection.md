@@ -8,7 +8,7 @@
 | standard | Existing DWA gates and rendered evidence where available | Optional Impeccable source checks and taste browser evidence |
 | deep | Existing DWA gates and project/visual review | Optional Impeccable detector and taste-skill lint/inspect/draw |
 
-**Current state:** `native-dwa` is the only registered implementation in this initial foundation PR. The registry does not enable providers by itself. Integration into workflow execution and external provider discovery belong to subsequent PRs. All modifying UI work continues to require existing source/render proof and human-contextual judgments.
+**Current state:** `native-dwa` and the bundled-JS `impeccable` static adapter are available to an explicit internal registry caller. `scripts/providers/scan.mjs` provides a manual pilot with `--provider impeccable` or `--provider native-dwa`; it never auto-installs engines. Browser capabilities are not enabled. Integrating provider selection with the normal workflow remains a separate change. All modifying UI work continues to require existing source/render proof and human-contextual judgments.
 
 `runProviders()` receives explicit lists of `required` and `optional` provider IDs. The caller must inspect every returned status. A missing required capability means `BLOCKED`, not `PASS`. An optional unavailable capability is `UNAVAILABLE` and must be recorded where it would otherwise be expected evidence. A returned `PASS` does not establish successful product UX, correct rendered behavior, or a completed iteration.
 
