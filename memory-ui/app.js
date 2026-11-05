@@ -1078,22 +1078,34 @@ function graphInspector(node, visibleEdges) {
       <div class="inspector-head">
         <div class="inspector-ref">${escapeHtml(node.ref)}</div>
         <h2>${escapeHtml(node.value)}</h2>
+        <p class="graph-inspector-subtitle">What this memory records, where it came from and which connections are visible.</p>
+      </div>
+      <div class="graph-evidence-status ${escapeHtml(node.freshness?.status ?? 'unknown')}">
+        <span class="graph-evidence-kicker">GIT FILE CHECK</span>
+        <strong>${escapeHtml(graphFreshnessLabel(node.freshness?.status))}</strong>
+        <p>${escapeHtml(graphFreshnessHelp(node.freshness?.status))}</p>
       </div>
       <section class="inspect-section">
-        <h3>Graph node</h3>
+        <h3>Source & state</h3>
         ${definition([
-          ['Authority', node.authority],
-          ['Group', node.groupLabel || node.group],
-          ['State', node.state, statusClass(node.state)],
-          ['Lifecycle', node.lifecycleStatus],
-          ['Git freshness', node.freshness?.status || 'unknown', statusClass(node.freshness?.status)],
-          ['Freshness detail', node.freshness?.explanation],
-          ['Kind', node.kind],
-          ['Subject', node.subject],
-          ['Predicate', node.predicate],
-          ['Created', dateTime(node.createdAt)],
-          ['Semantic', node.semanticIndexed ? 'indexed' : 'not indexed'],
+          ['Evidence authority', graphAuthorityLabel(node.authority)],
+          ['Record state', node.state, statusClass(node.state)],
+          ['Lifecycle state', node.lifecycleStatus],
+          ['Evidence group', node.groupLabel || graphAuthorityLabel(node.group)],
+          ['Recorded', dateTime(node.createdAt)],
         ])}
+        <details class="graph-technical">
+          <summary>Technical metadata</summary>
+          ${definition([
+            ['Kind', node.kind],
+            ['Subject', node.subject],
+            ['Predicate', node.predicate],
+            ['Raw authority', node.authority],
+            ['Raw Git state', node.freshness?.status || 'unknown'],
+            ['Git detail', node.freshness?.explanation],
+            ['Semantic index', node.semanticIndexed ? 'indexed' : 'not indexed'],
+          ])}
+        </details>
         <div class="action-row graph-open-row">
           <button id="graph-open-memory" class="text-action" type="button">
             Open in Memories
@@ -1111,14 +1123,15 @@ function graphInspector(node, visibleEdges) {
         ])}
       </section>
       <section class="inspect-section">
-        <h3>Neighbors</h3>
+        <h3>Connected memories</h3>
+        <p class="graph-section-intro">Recorded connections and advisory suggestions are different kinds of evidence. Select a neighbor to inspect it.</p>
         <div class="graph-neighbor-list">
           ${neighbors.length
             ? neighbors.map(({ edge, node: neighbor }) => `
                 <button class="graph-neighbor" type="button" data-graph-node="${escapeHtml(neighbor.id)}">
                   <span class="graph-neighbor-top">
                     <span class="ref">${escapeHtml(neighbor.ref)}</span>
-                    <span class="graph-origin ${escapeHtml(edge.origin)}">${escapeHtml(edge.origin)}</span>
+                    <span class="graph-origin ${escapeHtml(edge.origin)}">${escapeHtml(graphRelationOriginLabel(edge))}</span>
                   </span>
                   <span class="graph-neighbor-relation">${escapeHtml(edge.relation.replaceAll('_', ' '))}</span>
                   <span class="graph-neighbor-meta">
