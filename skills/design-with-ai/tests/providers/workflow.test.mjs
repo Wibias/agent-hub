@@ -310,3 +310,17 @@ test("static route mapping accepts uppercase HTML extensions", async () => {
     assert.equal(out.scope.routeBinding, "verified-static-html-path");
   });
 });
+
+test("a file changed then restored during scanning invalidates observed input state", async () => {
+  await fixture(async (f) => {
+    const original = "export const Page = () => <h1>Test</h1>;";
+    const execute = async (_, input) => {
+      writeFileSync(f.target, "export const changed = true;");
+      writeFileSync(f.target, original);
+      return [report("native-dwa", input.capability)];
+    };
+    await assert.rejects(() => runProfileProviders({
+      ...f.request, profile: "quick",
+    }, { registry: registry(), execute }), /changed during provider execution/);
+  });
+});

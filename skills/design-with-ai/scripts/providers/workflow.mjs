@@ -143,7 +143,8 @@ export async function runProfileProviders({
     renderedRoot: location.renderedRoot, html: withTaste ? resolve(html) : null,
     intentPath,
   });
-  if (before.summary.sourceSha256 !== after.summary.sourceSha256) {
+  if (before.summary.sourceSha256 !== after.summary.sourceSha256 ||
+      before.observedInputsSha256 !== after.observedInputsSha256) {
     throw new Error("Audited source changed during provider execution; evidence invalid");
   }
   const reports = [...staticReports, ...renderedReports].map((report) => ({

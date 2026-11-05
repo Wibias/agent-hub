@@ -1,7 +1,7 @@
 // Reproducible source-scope evidence. A Git HEAD alone is insufficient for dirty trees.
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { lstatSync, readFileSync, readdirSync } from "node:fs";
+import { lstatSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
 // Superset of native DWA and vendored Impeccable file extensions.
@@ -53,7 +53,15 @@ function gitHead(root) {
 export function sourceScopeProof({ projectRoot, target, route, renderedRoot = null, html = null, intentPath = null }) {
   const root = resolve(projectRoot), source = resolve(target);
   if (!isInside(root, source)) throw new TypeError("Source scope escapes project");
-  const files = collectedFiles(source).map((file) => ({
+  const sourceFiles = collectedFiles(source);
+  const inputStat = (file) => {
+    const st = statSync(file, { bigint: true });
+    return [file, String(st.size), String(st.ctimeNs), String(st.mtimeNs)];
+  };
+  const observedInputs = sourceFiles.map(inputStat);
+  if (intentPath) observedInputs.push(inputStat(resolve(intentPath)));
+  if (html) observedInputs.push(inputStat(resolve(html)));
+  const files = sourceFiles.map((file) => ({
     path: normalize(relative(root, file)),
     sha256: hash(readFileSync(file)),
   }));
@@ -85,6 +93,9 @@ export function sourceScopeProof({ projectRoot, target, route, renderedRoot = nu
   const sourceSha256 = hash(JSON.stringify(manifest));
   return {
     manifest,
+    // Detect changed-then-restored files on filesystems with reliable ctime.
+    // This is not an OS-level immutable snapshot or an attacker-proof guarantee.
+    observedInputsSha256: hash(JSON.stringify(observedInputs)),
     summary: {
       target: manifest.target,
       route,
