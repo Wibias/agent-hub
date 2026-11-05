@@ -88,6 +88,7 @@ async function runProductionProbeProfile({
   now,
   records,
   patterns,
+  onDiagnostic,
 }) {
   let fetchCandidatePool;
   if (profile === 'quick' && graphMode === 'graph') {
@@ -101,6 +102,7 @@ async function runProductionProbeProfile({
         timeoutMs: 1500,
         retryTimeoutMs: 5000,
         expectedDate,
+        onDiagnostic,
       });
     }
   }
@@ -113,6 +115,7 @@ async function runProductionProbeProfile({
     fetchCandidatePool,
     recordUsageEnabled: false,
     now,
+    onDiagnostic,
   });
   return routing;
 }
@@ -122,24 +125,45 @@ export async function probeP17Runtime({
   env = process.env,
   now = new Date(),
   runProfile,
+  onDiagnostic,
 } = {}) {
   requireDate(now, 'now');
   if (runProfile !== undefined && typeof runProfile !== 'function') {
     throw new TypeError('runProfile must be a function');
   }
 
+  const emitStage = (stage, started) => {
+    if (typeof onDiagnostic === 'function') {
+      try {
+        onDiagnostic({
+          phase: 'p17-stage',
+          stage,
+          duration_ms: Math.max(0, performance.now() - started),
+        });
+      } catch {
+        // Diagnostic observers never participate in activation or routing.
+      }
+    }
+  };
+  const projectionStarted = performance.now();
   const projection = await planP17QueryRuntime({
     argv: [],
     env,
     statePath,
   });
+  emitStage('state-projection', projectionStarted);
   const graphMode = projection.env[ACTIVATION_FLAG] === 'graph' ? 'graph' : 'legacy';
+  const recordsStarted = performance.now();
   const records = runProfile ? null : loadRecords();
+  emitStage('load-records', recordsStarted);
+  const patternsStarted = performance.now();
   const patterns = runProfile ? null : loadPatterns();
+  emitStage('load-patterns', patternsStarted);
   const executeProfile = runProfile ?? ((input) => runProductionProbeProfile({
     ...input,
     records,
     patterns,
+    onDiagnostic,
   }));
 
   const result = {};
@@ -149,14 +173,20 @@ export async function probeP17Runtime({
       limit: TAXONOMY.profiles[profile].default,
       ...PROBE_REQUEST,
     };
-    const routing = await executeProfile({
-      profile,
-      graphMode,
-      env: projection.env,
-      request,
-      now,
-    });
-    result[profile] = normalizeProbeRouting(profile, routing);
+    const profileStarted = performance.now();
+    try {
+      const routing = await executeProfile({
+        profile,
+        graphMode,
+        env: projection.env,
+        request,
+        now,
+        onDiagnostic,
+      });
+      result[profile] = normalizeProbeRouting(profile, routing);
+    } finally {
+      emitStage(`profile-${profile}`, profileStarted);
+    }
   }
   return result;
 }

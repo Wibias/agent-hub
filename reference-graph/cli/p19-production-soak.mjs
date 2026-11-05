@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { createHash } from 'node:crypto';
+import { performance } from 'node:perf_hooks';
 import {
   appendFile,
   chmod,
@@ -126,6 +127,7 @@ export async function runP19ProductionSoakCli({
   sampleHealth = sampleP19ProductionHealth,
   evaluate = evaluateP19PromotionReadiness,
   statePath,
+  processStartAt = null,
 } = {}) {
   if (!Array.isArray(argv) || argv.length === 0) throw usageError();
   const [mode, ...args] = argv;
@@ -161,12 +163,27 @@ export async function runP19ProductionSoakCli({
     expectArgCount(argv, 2);
     const [samplesPath] = args;
     const sample = await sampleHealth({ env, statePath });
-    await appendPrivateJsonLine(samplesPath, sample, {
+    let persistedSample = sample;
+    if (processStartAt !== null) {
+      const started = new Date(processStartAt);
+      if (typeof processStartAt !== 'string' || Number.isNaN(started.valueOf())
+          || started.toISOString() !== processStartAt) {
+        throw new Error('P25 processStartAt must be canonical UTC');
+      }
+      const deltaMs = Date.parse(sample?.sampled_at) - started.valueOf();
+      persistedSample = {
+        ...sample,
+        collector_node_process_started_at: processStartAt,
+        collector_start_to_sample_ms: Number.isFinite(deltaMs) && deltaMs >= 0
+          ? deltaMs : null,
+      };
+    }
+    await appendPrivateJsonLine(samplesPath, persistedSample, {
       mkdirImpl,
       appendFileImpl,
       chmodImpl,
     });
-    stdout.write(`${JSON.stringify(sample)}\n`);
+    stdout.write(`${JSON.stringify(persistedSample)}\n`);
     return sample?.healthy === true ? 0 : 2;
   }
 
@@ -196,7 +213,9 @@ const invokedAsMain = process.argv[1]
 
 if (invokedAsMain) {
   try {
-    process.exitCode = await runP19ProductionSoakCli();
+    process.exitCode = await runP19ProductionSoakCli({
+      processStartAt: new Date(performance.timeOrigin).toISOString(),
+    });
   } catch (error) {
     process.stderr.write(`${redactP19Error(error, process.env)}\n`);
     process.exitCode = 1;

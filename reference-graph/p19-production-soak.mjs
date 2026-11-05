@@ -1,4 +1,4 @@
-import { performance } from 'node:perf_hooks';
+import { monitorEventLoopDelay, performance } from 'node:perf_hooks';
 
 import { probeP17Runtime } from './p17-activation-runner.mjs';
 import { readP17ActivationState } from './p17-local-runtime-actuator.mjs';
@@ -67,6 +67,68 @@ function sanitizeRouting(value) {
       authoritative_source: deep.authoritative_source ?? null,
     },
   };
+}
+
+const P25_DIAGNOSTICS_SCHEMA = 'reference-graph.p25-probe-diagnostics.v1';
+const P25_STAGES = new Set([
+  'state-projection', 'load-records', 'load-patterns',
+  'profile-quick', 'profile-standard', 'profile-deep',
+]);
+const P25_ATTEMPT_CATEGORIES = new Set([
+  'none', 'timeout', 'http', 'invalid-json', 'network',
+  'candidate-invalid', 'internal-error',
+]);
+const P25_ROUTE_CATEGORIES = new Set([
+  'none', 'profile-legacy-only', 'activation-disabled',
+  'missing-runtime-config', 'parity-mismatch',
+  'transport-timeout', 'transport-http', 'transport-invalid-json',
+  'transport-network', 'candidate-invalid', 'internal-error',
+]);
+
+function p25Duration(value) {
+  return Number.isFinite(value) && value >= 0 && value <= 3_600_000
+    ? value : null;
+}
+
+function sanitizeP25Event(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  if (value.phase === 'p10-attempt') {
+    if (![1, 2].includes(value.attempt)
+        || !['ok', 'failed'].includes(value.outcome)
+        || !P25_ATTEMPT_CATEGORIES.has(value.category)
+        || p25Duration(value.duration_ms) === null
+        || p25Duration(value.timeout_budget_ms) === null
+        || p25Duration(value.timeout_overrun_ms) === null) return null;
+    return {
+      phase: 'p10-attempt',
+      attempt: value.attempt,
+      outcome: value.outcome,
+      category: value.category,
+      duration_ms: value.duration_ms,
+      timeout_budget_ms: value.timeout_budget_ms,
+      timeout_overrun_ms: value.timeout_overrun_ms,
+    };
+  }
+  if (value.phase === 'p11-route') {
+    if (!['graph', 'fallback', 'legacy'].includes(value.outcome)
+        || !P25_ROUTE_CATEGORIES.has(value.category)) return null;
+    return {
+      phase: 'p11-route',
+      outcome: value.outcome,
+      category: value.category,
+      duration_ms: p25Duration(value.duration_ms),
+    };
+  }
+  if (value.phase === 'p17-stage') {
+    if (!P25_STAGES.has(value.stage)
+        || p25Duration(value.duration_ms) === null) return null;
+    return {
+      phase: 'p17-stage',
+      stage: value.stage,
+      duration_ms: value.duration_ms,
+    };
+  }
+  return null;
 }
 
 function stateBlockers(state) {
@@ -226,12 +288,31 @@ export async function sampleP19ProductionHealth({
   }
 
   const runtimeEnv = runtimeEnvWithoutElevatedSupabaseCredentialsP19(env);
+  const diagnosticEvents = [];
+  const recordDiagnostic = (event) => {
+    if (diagnosticEvents.length >= 32) return;
+    const safe = sanitizeP25Event(event);
+    if (safe) diagnosticEvents.push(safe);
+  };
+  const eventLoop = monitorEventLoopDelay({ resolution: 20 });
+  eventLoop.enable();
+  const withDiagnostics = (sample) => diagnosticEvents.length === 0 ? sample : {
+    ...sample,
+    diagnostics: {
+      schema_version: P25_DIAGNOSTICS_SCHEMA,
+      events: diagnosticEvents,
+      event_loop_delay_max_ms: Number.isFinite(eventLoop.max)
+        ? Math.max(0, eventLoop.max / 1_000_000)
+        : 0,
+    },
+  };
   const start = requireMonotonic(monotonicNow());
   try {
     const rawRouting = await probeRuntime({
       statePath,
       env: runtimeEnv,
       now: sampledDate,
+      onDiagnostic: recordDiagnostic,
     });
     const end = requireMonotonic(monotonicNow());
     const routing = sanitizeRouting(rawRouting);
@@ -239,26 +320,28 @@ export async function sampleP19ProductionHealth({
       ...stateBlockers(state),
       ...routingBlockers(routing),
     ];
-    return {
+    return withDiagnostics({
       ...base,
       probe_duration_ms: Math.max(0, end - start),
       routing,
       healthy: blockers.length === 0,
       blockers,
-    };
+    });
   } catch {
     const end = requireMonotonic(monotonicNow());
     const blockers = [
       ...stateBlockers(state),
       'probe-error',
     ];
-    return {
+    return withDiagnostics({
       ...base,
       probe_duration_ms: Math.max(0, end - start),
       routing: null,
       healthy: false,
       blockers,
-    };
+    });
+  } finally {
+    eventLoop.disable();
   }
 }
 
