@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -149,5 +149,56 @@ test('D9 does not grant trust to a different project or invalid Git path', async
       path: '../secret', write: true,
     }), /invalid relative Git file path/);
     assert.equal(memory.exportCanonical().claims.length, 0);
+  } finally { memory.close(); }
+});
+
+test('D9 rejects committed Git symlinks without creating claims', async (t) => {
+  if (process.platform === 'win32') {
+    t.skip('creating Git symlinks requires Windows developer privileges');
+    return;
+  }
+  const { repoRoot, dbPath, git } = await fixture(t);
+  await symlink('guide.md', join(repoRoot, 'docs', 'link.md'));
+  git('add', 'docs/link.md');
+  git('commit', '-m', 'add symlink');
+  const memory = new MemoryEngine({ dbPath });
+  try {
+    assert.throws(() => captureD9RepositoryFile({
+      memory, repoRoot, projectId: PROJECT, branch: 'main',
+      path: 'docs/link.md', write: true,
+    }), /not a regular committed blob/);
+    assert.equal(memory.exportCanonical().claims.length, 0);
+  } finally { memory.close(); }
+});
+
+test('D9 Git capture ignores inherited GIT_DIR and GIT_WORK_TREE overrides', async (t) => {
+  const { dir, dbPath, argv } = await fixture(t);
+  const other = join(dir, 'other-checkout');
+  await mkdir(other);
+  const gitOther = (...args) => execFileSync('git', ['-C', other, ...args], {
+    encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 5000,
+  }).trim();
+  gitOther('init', '-b', 'main');
+  gitOther('config', 'user.email', 'other@example.invalid');
+  const configuration = join(other, '.git', 'config');
+  const before = await readFile(configuration);
+  const vars = ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE'];
+  const previous = vars.map((name) => process.env[name]);
+  try {
+    process.env.GIT_DIR = join(other, '.git');
+    process.env.GIT_WORK_TREE = other;
+    process.env.GIT_INDEX_FILE = join(other, '.git', 'index');
+    const result = executeD9Capture({ argv, emit: () => {} });
+    assert.equal(result.outcome, 'ready');
+  } finally {
+    for (let i = 0; i < vars.length; i++) {
+      if (previous[i] === undefined) delete process.env[vars[i]];
+      else process.env[vars[i]] = previous[i];
+    }
+  }
+  assert.deepEqual(await readFile(configuration), before);
+  const memory = new MemoryEngine({ dbPath, readOnly: true });
+  try {
+    assert.equal(memory.exportCanonical().evidence.length, 0);
   } finally { memory.close(); }
 });
