@@ -85,8 +85,14 @@ export function parseD7Args(argv = []) {
 
 /** Execute Git only for disposable fixture construction, never in HTTP handlers. */
 function fixtureGit(repo, ...args) {
+  // `git -C` does not override GIT_DIR / GIT_WORK_TREE. Never let caller
+  // repository, index, object or config overrides redirect fixture writes.
+  const env = { ...process.env };
+  for (const name of Object.keys(env)) {
+    if (/^GIT_/i.test(name)) delete env[name];
+  }
   return execFileSync('git', ['-C', repo, ...args], {
-    encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 5000,
+    encoding: 'utf8', env, stdio: ['ignore', 'pipe', 'pipe'], timeout: 5000,
   }).trim();
 }
 
@@ -99,6 +105,9 @@ async function createFixtureCheckout(directory) {
   fixtureGit(repoRoot, 'config', 'user.name', 'D7 Fixture');
   fixtureGit(repoRoot, 'config', 'commit.gpgsign', 'false');
   fixtureGit(repoRoot, 'config', 'core.autocrlf', 'false');
+  const disabledHooks = join(directory, 'hooks-disabled');
+  await mkdir(disabledHooks);
+  fixtureGit(repoRoot, 'config', 'core.hooksPath', disabledHooks);
   fixtureGit(repoRoot, 'remote', 'add', 'origin', `https://${PROJECT}.git`);
   const path = join(repoRoot, 'docs', 'guide.md');
   await writeFile(path, 'D7 fixture version one.\n', 'utf8');

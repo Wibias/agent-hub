@@ -30,6 +30,10 @@ failing closed, and three simultaneous HTTP graph reads plus one overview read
 without revealing Git paths. Graph timings are recorded as nearest-rank p50/p95
 per fixture size. No hard CI performance SLA is imposed on shared runners.
 
+Synthetic Git commands ignore inherited `GIT_*` overrides and use a
+repository-local empty hooks directory so user Git environments cannot redirect
+fixture writes or run custom hooks.
+
 Synthetic mode can create and delete files **only in a fresh OS temporary
 folder**. It does **not** run `git reset` or `git checkout` on an existing
 user checkout. All seeded Evidence and Claims contain disposable fixture text.

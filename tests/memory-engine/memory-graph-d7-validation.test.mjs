@@ -32,6 +32,15 @@ test('D7 live assessment blocks untrusted context, stale or unchecked repository
   assert.ok(assessD7LiveCoverage(missing).notes.includes('repository_nodes_unchecked'));
   const failed = report(); failed.outcome = 'fail';
   assert.equal(assessD7LiveCoverage(failed).status, 'fail');
+  const failedQuery = { outcome: 'fail', graph: null,
+    git: { status: 'unknown', stable: true }, performance: null };
+  assert.deepEqual(assessD7LiveCoverage(failedQuery), {
+    status: 'fail', notes: ['underlying_read_only_query_failed'],
+    sampleCount: null, repositoryNodes: null, freshRepositoryNodes: null,
+    gitStatus: 'unknown', gitStable: true, p95Ms: null,
+  });
+  assert.throws(() => assessD7LiveCoverage({ ...failedQuery, outcome: 'pass' }), TypeError);
+  assert.throws(() => assessD7LiveCoverage({ ...failedQuery, graph: undefined }), TypeError);
 });
 
 test('D7 scale projection checks 100, 250, 500 and 501 with explicit truncation', () => {
@@ -58,6 +67,12 @@ test('D7 state machine rejects any accidental freshness or typed-edge escalation
   };
   assert.equal(assessD7FreshnessTransitions(phases).status, 'pass');
   phases.changedCommit.graph.nodes[0].freshness.status = 'fresh';
+  assert.equal(assessD7FreshnessTransitions(phases).status, 'fail');
+  phases.changedCommit.graph.nodes[0].freshness.status = 'stale';
+  phases.changedCommit.graph.edges = [{ source: 'typed_relation' }];
+  assert.equal(assessD7FreshnessTransitions(phases).status, 'fail');
+  phases.changedCommit.graph.edges = [];
+  phases.initial.graph.edges = [];
   assert.equal(assessD7FreshnessTransitions(phases).status, 'fail');
 });
 

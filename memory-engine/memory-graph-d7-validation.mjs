@@ -7,7 +7,20 @@ const VALID_FRESHNESS = new Set(['fresh', 'stale', 'unchecked']);
 
 /** Explain whether a live D6 report actually exercised repository freshness. */
 export function assessD7LiveCoverage(report) {
-  if (!report || typeof report !== 'object' || !report.graph || !report.git) {
+  if (!report || typeof report !== 'object' || !report.git
+      || typeof report.git.status !== 'string' || typeof report.git.stable !== 'boolean') {
+    throw new TypeError('D6 diagnostic report required');
+  }
+  // D6 returns a null graph when the read-only query fails. Preserve its
+  // sanitized failure outcome instead of throwing a second exception.
+  if (report.outcome === 'fail' && report.graph === null) {
+    return {
+      status: 'fail', notes: ['underlying_read_only_query_failed'],
+      sampleCount: null, repositoryNodes: null, freshRepositoryNodes: null,
+      gitStatus: report.git.status, gitStable: report.git.stable, p95Ms: null,
+    };
+  }
+  if (!report.graph || typeof report.graph !== 'object') {
     throw new TypeError('D6 diagnostic report required');
   }
   const notes = [];
