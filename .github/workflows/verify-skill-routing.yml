@@ -147,6 +147,9 @@ jobs:
       - name: Test vendored Impeccable provider adapter
         run: node --test skills/design-with-ai/tests/providers/impeccable.test.mjs
 
+      - name: Test optional Taste Skill browser provider
+        run: node --test skills/design-with-ai/tests/providers/taste-skill.test.mjs
+
       - name: Test cluster-aware design taste gate
         run: node --test skills/design-with-ai/tests/taste-gate.test.mjs
 

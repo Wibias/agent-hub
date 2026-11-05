@@ -24,3 +24,7 @@ The Impeccable `live` workflow is **not** part of this contract and must not be 
 ## Phase 2: Impeccable static adapter
 
 `createImpeccableProvider()` consumes the existing vendored JS detector's JSON array and exits (0 clean, 2 findings, 1 incomplete); it intentionally **does not** invoke the network-capable Rust engine launcher. See `references/impeccable-provider.md` and the explicit `scripts/providers/scan.mjs` pilot. The native DWA taste gate remains canonical and is not replaced or suppressed.
+
+## Phase 3: optional Taste Skill rendered provider
+
+`createTasteSkillProvider()` integrates the **current** upstream `tasteskill 2.5.0` `scripts/consistency.mjs`, not obsolete `draw.mjs`, `lint.mjs` or `inspect.mjs` commands. It runs only on an explicitly selected local HTML file with Node 22+, a preinstalled compatible skill, and Chrome. The required viewport set is 1440/768/390 px plus the upstream first-screen sweep. The adapter enforces per-run output isolation, checks the complete report and coverage, and emits normalized evidence; it does not override canonical DWA verification. See `references/taste-skill-provider.md`.

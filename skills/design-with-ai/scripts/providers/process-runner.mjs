@@ -14,7 +14,7 @@ export async function runProcess({
   if (typeof executable !== "string" || !executable.trim() || executable.includes("\0") ||
       !Array.isArray(args) || !args.every((arg) => typeof arg === "string" && !arg.includes("\0")) ||
       typeof cwd !== "string" || !cwd.trim() ||
-      !Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 120_000 ||
+      !Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 600_000 ||
       !Number.isInteger(maxOutputBytes) || maxOutputBytes < 1 || maxOutputBytes > 16_777_216 ||
       !Array.isArray(envKeys) || !envKeys.every((key) => /^[A-Za-z_][A-Za-z0-9_]*$/.test(key))) {
     throw new TypeError("Invalid bounded process invocation");
