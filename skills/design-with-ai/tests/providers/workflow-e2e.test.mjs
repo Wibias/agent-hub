@@ -29,7 +29,8 @@ async function fixture(fn) {
 }
 function invoke(f, extra = []) {
   return spawnSync(process.execPath, [cli,
-    "--profile", "standard", "--path", f.page,
+    ...(extra.includes("--profile") ? [] : ["--profile", "standard"]),
+    "--path", f.page,
     "--route", "/settings", "--project-root", f.root,
     "--output-root", f.root, ...extra,
   ], { encoding: "utf8", timeout: 90_000 });
