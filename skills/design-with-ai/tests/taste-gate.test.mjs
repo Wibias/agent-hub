@@ -103,6 +103,24 @@ test("multiline JSX handler cannot turn a functional input into a G27 kicker", (
   } finally { fx.cleanup(); }
 });
 
+test("complex control attributes cannot hide a following G27 decorative kicker", () => {
+  const fx = fixture({ "src/a.tsx": [
+    "const input = <input",
+    "  pattern={/[{]/.source}",
+    "  onChange={(event) => { // don't swallow the rest",
+    "    update(event);",
+    "  }}",
+    '  className="uppercase tracking-widest"',
+    "  />;",
+    '<span className="uppercase tracking-widest">ROUND</span>;',
+  ].join("\n") });
+  try {
+    const result = run(fx.root);
+    assert.equal(result.status, 0);
+    assert.ok(result.parsed.hits.some((hit) => hit.id === "G27"));
+  } finally { fx.cleanup(); }
+});
+
 test("real numbered process can document a section-chrome exception", () => {
   const fx = fixture(
     { "src/onboarding.tsx": `<span className="uppercase tracking-widest">01 · CONNECT ACCOUNT</span>` },
