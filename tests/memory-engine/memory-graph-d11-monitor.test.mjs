@@ -81,3 +81,46 @@ test('D11 rejects mismatched project or malformed data instead of claiming succe
   assert.throws(() => assessD11Observation({ audit: {}, live: live() }), /scoped reports/);
   assert.equal(assessD11Observation({ audit: audit(), live: live({ outcome: 'fail', p95Ms: null }) }).outcome, 'fail');
 });
+
+test('D11 accepts a prior failed null-graph receipt and preserves fail-to-pass recovery', () => {
+  const failed = assessD11Observation({ audit: audit(), live: live({
+    outcome: 'fail', repo: null, fresh: null, p95Ms: null,
+    notes: ['underlying_read_only_query_failed'],
+  }) });
+  assert.equal(failed.outcome, 'fail');
+  assert.equal(failed.repository.nodes, null);
+  assert.equal(failed.repository.fresh, null);
+  assert.deepEqual(validateD11Previous(failed, scope), {
+    outcome: 'fail', repositoryNodes: null, freshRepositoryNodes: null,
+  });
+  const recovered = assessD11Observation({ audit: audit(), live: live(), previous: failed });
+  assert.equal(recovered.outcome, 'pass');
+  assert.equal(recovered.transition, 'recovered');
+  assert.throws(
+    () => validateD11Previous({ ...failed, repository: { nodes: null, fresh: 0 } }, scope),
+    /invalid counts/,
+  );
+  assert.throws(
+    () => validateD11Previous({ ...failed, repository: { nodes: 'invalid', fresh: null } }, scope),
+    /invalid counts/,
+  );
+  assert.throws(
+    () => validateD11Previous({ ...failed, outcome: 'pass' }, scope),
+    /invalid counts/,
+  );
+});
+
+test('D11 fail classification ignores the 12-code display limit', () => {
+  const badAudit = audit({ outcome: 'unexpected', primary: 0, active: 0, omitted: 1 });
+  const badLive = live({
+    outcome: 'unexpected', repo: 1, fresh: 0, p95Ms: 2501,
+    gitStatus: 'unbound', stable: false,
+    notes: ['repository_nodes_stale', 'repository_nodes_unchecked',
+      'd6_attention', 'underlying_read_only_query_failed'],
+  });
+  const result = assessD11Observation({ audit: badAudit, live: badLive, maxP95Ms: 2000 });
+  assert.equal(result.reasonCodes.length, 12);
+  assert.ok(!result.reasonCodes.includes('invalid_d7_outcome'));
+  assert.ok(!result.reasonCodes.includes('invalid_d8_outcome'));
+  assert.equal(result.outcome, 'fail');
+});

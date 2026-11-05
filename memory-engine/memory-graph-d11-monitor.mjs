@@ -5,10 +5,12 @@
 const VALID_STATES = new Set(['pass', 'blocked', 'fail']);
 const MAX_REASON_CODES = 12;
 
+/** Accept only finite, non-negative integers representable without precision loss. */
 function safeCount(value) {
   return Number.isSafeInteger(value) && value >= 0 ? value : null;
 }
 
+/** Identify explicit project and branch scopes before comparing monitor receipts. */
 function validScope(scope) {
   return scope && typeof scope.projectId === 'string' && scope.projectId.trim()
     && typeof scope.branch === 'string' && scope.branch.trim();
@@ -24,6 +26,12 @@ export function validateD11Previous(previous, scope) {
   }
   const repo = safeCount(previous.repository?.nodes);
   const fresh = safeCount(previous.repository?.fresh);
+  // A failed read-only query can legitimately produce two unknown counts.
+  // Treat only exact null/null on a fail receipt as an accepted unknown pair.
+  if (previous.outcome === 'fail' && previous.repository?.nodes === null
+    && previous.repository?.fresh === null) {
+    return { outcome: 'fail', repositoryNodes: null, freshRepositoryNodes: null };
+  }
   if (repo === null || fresh === null || fresh > repo) {
     throw new TypeError('previous report contains invalid counts');
   }
@@ -77,9 +85,11 @@ export function assessD11Observation({ audit, live, previous = null, maxP95Ms = 
   if (safeNotes.has('underlying_read_only_query_failed')) reasons.push('read_only_query_failed');
   if (!['pass', 'blocked', 'fail'].includes(live.outcome)) reasons.push('invalid_d7_outcome');
   if (!['ready_for_d7_live', 'blocked'].includes(audit.outcome)) reasons.push('invalid_d8_outcome');
-  const codes = [...new Set(reasons)].slice(0, MAX_REASON_CODES);
-  const outcome = live.outcome === 'fail' || codes.includes('invalid_diagnostic_counts')
-    || codes.includes('invalid_d7_outcome') || codes.includes('invalid_d8_outcome')
+  // The receipt is bounded, but severity must consider every reason.
+  const distinctReasons = [...new Set(reasons)];
+  const codes = distinctReasons.slice(0, MAX_REASON_CODES);
+  const outcome = live.outcome === 'fail' || distinctReasons.includes('invalid_diagnostic_counts')
+    || distinctReasons.includes('invalid_d7_outcome') || distinctReasons.includes('invalid_d8_outcome')
     ? 'fail' : codes.length ? 'blocked' : 'pass';
 
   const previousOutcome = previousSummary?.outcome ?? null;
