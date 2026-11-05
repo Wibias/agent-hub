@@ -22,6 +22,12 @@ export function resolveCodexCandidateLaunch({
     ? env.CODEX_BIN.trim()
     : 'codex';
 
+  // Explicit Node entrypoints are portable across platforms and avoid shell wrappers.
+  const configuredExt = win32.extname(configured).toLowerCase();
+  if (['.js', '.mjs', '.cjs'].includes(configuredExt)) {
+    return { command: nodeExecutable, prefixArgs: [configured], kind: 'npm_node' };
+  }
+
   if (platform !== 'win32') {
     return { command: configured, prefixArgs: [], kind: 'native' };
   }
