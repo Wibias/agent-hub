@@ -8,6 +8,8 @@ on:
       - "scripts/doctor-codex-candidate-executable.mjs"
       - "scripts/doctor-codex-candidate-live.mjs"
       - "scripts/doctor-memory-candidate-sandbox.mjs"
+      - "scripts/doctor-memory-candidate-review.mjs"
+      - "tests/memory-engine/memory-candidate-local-review.test.mjs"
       - "tests/memory-engine/memory-candidate-sandbox.test.mjs"
       - "tests/memory-engine/codex-candidate-live-probe.test.mjs"
       - "tests/memory-engine/codex-candidate-launch.test.mjs"
@@ -25,6 +27,8 @@ on:
       - "scripts/doctor-codex-candidate-executable.mjs"
       - "scripts/doctor-codex-candidate-live.mjs"
       - "scripts/doctor-memory-candidate-sandbox.mjs"
+      - "scripts/doctor-memory-candidate-review.mjs"
+      - "tests/memory-engine/memory-candidate-local-review.test.mjs"
       - "tests/memory-engine/memory-candidate-sandbox.test.mjs"
       - "tests/memory-engine/codex-candidate-live-probe.test.mjs"
       - "tests/memory-engine/codex-candidate-launch.test.mjs"
@@ -56,6 +60,7 @@ jobs:
           node --check scripts/doctor-codex-candidate-executable.mjs
           node --check scripts/doctor-codex-candidate-live.mjs
           node --check scripts/doctor-memory-candidate-sandbox.mjs
+          node --check scripts/doctor-memory-candidate-review.mjs
           node --test \
             tests/memory-engine/codex-candidate-process-error.test.mjs \
             tests/memory-engine/codex-candidate-launch.test.mjs \
@@ -63,6 +68,7 @@ jobs:
             tests/memory-engine/codex-candidate-live-probe.test.mjs \
             tests/memory-engine/codex-candidate-relation-runtime.test.mjs \
             tests/memory-engine/memory-candidate-sandbox.test.mjs \
+            tests/memory-engine/memory-candidate-local-review.test.mjs \
             tests/memory-engine/memory-candidate-judge.test.mjs
 
   windows-launch:
@@ -75,4 +81,4 @@ jobs:
       - name: Test shell-free native and npm-shim launch paths on Windows
         run: |
           node --check memory-engine/codex-candidate-launch.mjs
-          node --test tests/memory-engine/codex-candidate-launch.test.mjs tests/memory-engine/codex-candidate-executable-probe.test.mjs tests/memory-engine/codex-candidate-live-probe.test.mjs tests/memory-engine/codex-candidate-relation-runtime.test.mjs tests/memory-engine/memory-candidate-sandbox.test.mjs
+          node --test tests/memory-engine/codex-candidate-launch.test.mjs tests/memory-engine/codex-candidate-executable-probe.test.mjs tests/memory-engine/codex-candidate-live-probe.test.mjs tests/memory-engine/codex-candidate-relation-runtime.test.mjs tests/memory-engine/memory-candidate-sandbox.test.mjs tests/memory-engine/memory-candidate-local-review.test.mjs
