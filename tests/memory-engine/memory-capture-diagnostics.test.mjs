@@ -7,6 +7,7 @@ import { DatabaseSync } from 'node:sqlite';
 import {
   classifyCaptureFailure,
   classifyCaptureFailureOrigin,
+  classifyCaptureProcessSignal,
   classifyCaptureValidationDetail,
   classifyCaptureValidationField,
   classifyCaptureValidationRule,
@@ -140,6 +141,24 @@ test('judge subprocess output is not mistaken for canonical_fact validation', ()
   assert.equal(classifyCaptureValidationDetail(validatorError), 'schema_violation');
   assert.equal(classifyCaptureValidationField(validatorError), 'canonical_fact');
   assert.equal(classifyCaptureValidationRule(validatorError), 'invalid_type_or_empty');
+});
+
+test('failed Codex process signals are allowlisted and never return provider text', () => {
+  const cases = [
+    ['invalid model format modelType/model SECRET', 'invalid_model_format'],
+    ['Provider error code: invalid_request_error SECRET', 'bad_request'],
+    ['insufficient_quota: SECRET', 'quota_exhausted'],
+    ['429 Too Many Requests SECRET', 'rate_limit'],
+    ['Error: connection reset SECRET', 'connection'],
+    ['unexpected situation SECRET', 'unknown'],
+  ];
+  for (const [detail, category] of cases) {
+    const message = 'codex candidate judge failed with exit 1: ' + detail;
+    const output = classifyCaptureProcessSignal(message);
+    assert.equal(output, category);
+    assert.equal(output.includes('SECRET'), false);
+  }
+  assert.equal(classifyCaptureProcessSignal('canonical_fact must be a non-empty string'), null);
 });
 
 test('older schema and unknown error payloads degrade safely', async () => {
