@@ -45,7 +45,7 @@ test('probe uses a benign fixed candidate, validates response, and closes isolat
       };
     },
   });
-  assert.deepEqual(output, { status: 'ok', judgeResponseValid: true });
+  assert.deepEqual(output, { status: 'ok', executionSucceeded: true, judgeResponseValid: true });
   assert.equal(received.source_authority, 'user_direct');
   assert.equal(received.proposed_type, 'constraint');
   assert.equal(closed, true);
@@ -65,6 +65,7 @@ test('probe reports safe exit categories without stdout, stderr or auth strings'
   });
   assert.deepEqual(output, {
     status: 'failed', origin: 'judge_process_exit', category: 'rate_limit', exitCode: 1,
+    executionSucceeded: false,
   });
   assert.equal(closed, true);
   assert.equal(JSON.stringify(output).includes(secret), false);
@@ -88,4 +89,6 @@ test('probe does not accept malformed model responses as success', async () => {
   assert.equal(output.status, 'failed');
   assert.equal(output.origin, 'candidate_validator');
   assert.equal(output.category, 'response_validation');
+  assert.equal(output.executionSucceeded, true);
+  assert.equal(output.judgeResponseValid, false);
 });
