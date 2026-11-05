@@ -1307,7 +1307,7 @@ function renderGraph() {
   const gitContext = state.graph.gitContext ?? { status: 'unconfigured', revisionSha: null };
   const verification = graphVerificationSummary(state.graph);
   el.view.innerHTML = `
-    <div class="graph-layout">
+    <div class="graph-layout ${state.graphInspectorOpen ? 'is-details-open' : ''}">
       <section class="graph-stage" aria-label="Memory connections">
         <div class="graph-context" data-verification-tone="${escapeHtml(verification.tone)}">
           <div class="graph-context-body">
@@ -1369,7 +1369,7 @@ function renderGraph() {
         </div>
         <div class="graph-canvas-wrap">
           ${nodes.length ? `
-            <svg class="graph-canvas" viewBox="0 0 1000 680" role="group" aria-label="Interactive memory relation graph">
+            <svg class="graph-canvas" viewBox="0 0 ${graphWidth} ${graphHeight}" role="group" aria-label="Interactive memory relation graph">
               <g class="graph-edges">
                 ${edges.map((edge) => {
                   const from = positions.get(edge.from);
@@ -1385,6 +1385,7 @@ function renderGraph() {
                     >
                       <title>${escapeHtml(edge.relation)} · ${escapeHtml(edge.origin)}${edge.relation === 'semantic_similarity' && Number.isFinite(edge.weight) ? ` · ${edge.weight.toFixed(3)}` : ''}</title>
                     </line>
+                    ${graphSelectedRelationNote(edge, from, to, selected)}
                   `;
                 }).join('')}
               </g>
@@ -1403,10 +1404,9 @@ function renderGraph() {
                       role="button"
                       tabindex="0"
                       aria-pressed="${node.id === selected?.id ? 'true' : 'false'}"
-                      aria-label="${escapeHtml(`${node.ref} ${node.value}`)}"
+                      aria-label="${escapeHtml(`${memoryDisplayTitle(node.value)}; ${node.state}; ${graphAuthorityLabel(node.authority)}`)}"
                     >
-                      <circle r="10"></circle>
-                      ${(labelEveryNode || node.id === selected?.id) ? `<text x="15" y="4">${escapeHtml(node.ref)}</text>` : ''}
+                      ${(labelEveryNode || node.id === selected?.id) ? graphNodeCardSvg(node) : '<circle r="9"></circle>'}
                       <title>${escapeHtml(node.ref)} · ${escapeHtml(node.state)} · ${escapeHtml(node.value)}</title>
                     </g>
                   `;
@@ -1416,7 +1416,8 @@ function renderGraph() {
           ` : '<div class="empty">No graph nodes match the current filters.</div>'}
         </div>
       </section>
-      <aside class="graph-inspector">
+      <aside class="graph-inspector" aria-label="Selected memory details">
+        <div class="mobile-detail-heading"><strong>Memory details</strong><button class="text-action" id="graph-close-details" type="button">Close</button></div>
         ${graphInspector(selected, edges)}
       </aside>
     </div>
@@ -1451,6 +1452,7 @@ function renderGraph() {
   const selectGraphNode = (nodeId) => {
     if (!state.graph?.nodes.some((node) => node.id === nodeId)) return;
     state.selectedGraphNodeId = nodeId;
+    state.graphInspectorOpen = true;
     renderGraph();
     focusSelectedGraphNode(nodeId);
   };
@@ -1463,12 +1465,19 @@ function renderGraph() {
     });
   });
 
+  document.querySelector('#graph-close-details')?.addEventListener('click', () => {
+    state.graphInspectorOpen = false;
+    renderGraph();
+    if (state.selectedGraphNodeId) focusSelectedGraphNode(state.selectedGraphNodeId);
+  });
+
   document.querySelector('#graph-open-memory')?.addEventListener('click', async () => {
     if (!selected) return;
     state.view = 'memories';
     state.selectedClaimId = null;
     state.claim = null;
     resetActionState();
+    state.memoryInspectorOpen = true;
     updateUrl();
     renderView();
     await selectClaim(selected.id);
