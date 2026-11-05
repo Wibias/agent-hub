@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import {
   classifyCaptureFailure,
+  classifyCaptureValidationDetail,
   inspectMemoryCapture,
 } from '../../memory-engine/memory-capture-diagnostics.mjs';
 import { parseCaptureDiagnosticArgs } from '../../scripts/diagnose-memory-capture.mjs';
@@ -56,6 +57,24 @@ test('failure groups classify hints but never return raw failure messages', asyn
     try { db.close(); } catch {}
     await rm(root, { recursive: true, force: true });
   }
+});
+
+test('validation failure detail is restricted to fixed safe labels', () => {
+  const samples = [
+    ['memory candidate judgment response must be JSON: Unexpected token SECRET-ALPHA', 'invalid_json'],
+    ['unexpected field in memory candidate judgment: PRIVATE', 'unexpected_field'],
+    ['missing field in memory candidate judgment: canonical_fact', 'missing_field'],
+    ['promote requires empty risk_flags SECRET-BETA', 'decision_invariant'],
+    ['meaning_preserved must be a boolean', 'schema_violation'],
+    ['invalid JSON response with unknown formatter SECRET-GAMMA', 'other_validation'],
+  ];
+  for (const [message, expected] of samples) {
+    const detail = classifyCaptureValidationDetail(message);
+    assert.equal(detail, expected);
+    assert.equal(detail.includes('SECRET'), false);
+    assert.equal(detail.includes('PRIVATE'), false);
+  }
+  assert.equal(classifyCaptureValidationDetail('429 rate limit'), null);
 });
 
 test('older schema and unknown error payloads degrade safely', async () => {
