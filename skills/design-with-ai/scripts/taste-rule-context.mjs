@@ -44,10 +44,28 @@ function withoutControlTags(source, state) {
   let result = "", offset = 0;
   while (offset < source.length) {
     if (state.control) {
-      const end = source.indexOf(">", offset);
-      if (end < 0) return result;
-      state.control = false;
-      offset = end + 1;
+      // Attribute expressions can contain => or comparisons. Only an
+      // unquoted > outside JSX braces closes an opening control tag.
+      for (; offset < source.length; offset++) {
+        const char = source[offset];
+        if (state.controlQuote) {
+          if (char === "\\") { offset++; continue; }
+          if (char === state.controlQuote) state.controlQuote = null;
+          continue;
+        }
+        if (char === "'" || char === '"' || char === "\x60") {
+          state.controlQuote = char;
+          continue;
+        }
+        if (char === "{") { state.controlBraceDepth++; continue; }
+        if (char === "}" && state.controlBraceDepth > 0) { state.controlBraceDepth--; continue; }
+        if (char === ">" && state.controlBraceDepth === 0) {
+          state.control = false;
+          offset++;
+          break;
+        }
+      }
+      if (state.control) return result;
       continue;
     }
     const next = /<\s*(?:input|textarea)\b/i.exec(source.slice(offset));
@@ -55,6 +73,8 @@ function withoutControlTags(source, state) {
     result += source.slice(offset, offset + next.index);
     offset += next.index;
     state.control = true;
+    state.controlQuote = null;
+    state.controlBraceDepth = 0;
   }
   return result;
 }
@@ -127,6 +147,7 @@ export function sourceRuleContexts(lines, path) {
   const mayEmbedStyle = EMBEDDED_STYLE_FILES.has(extension);
   const state = {
     block: false, html: false, template: false, control: false,
+    controlQuote: null, controlBraceDepth: 0,
     inStyle: false, cssQuote: null, pending: "", blocks: [],
   };
   const result = [];
