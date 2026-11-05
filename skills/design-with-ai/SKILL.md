@@ -127,19 +127,6 @@ Guidance is not evidence. It never counts toward `source-evidence.md` sampling a
 
 Profiles change evidence depth, not authority.
 
-### Required local-web provider Gate step
-
-For a resolved local web UI target, execute
-`scripts/providers/quality-audit.mjs` during the normal Gate phase, using
-the selected profile and actual local source scope, project root, and route.
-Read `references/provider-quality-rollout.md` for the exact command and output
-semantics. The skill text does not execute a CLI automatically: the active
-agent must run it and verify the output, or explicitly report
-`NOT_RUN`/`INCOMPLETE` with the reason. Never claim that provider checks ran
-because the skill is installed. Taste Skill stays explicit opt-in, and no
-journal writes occur without project authorization. This supplemental step
-never replaces existing source/render/ledger/receipt/proof gates.
-
 ## Internal quality stack
 
 Ordinary polish is one workflow, not delegation across sibling skills:
