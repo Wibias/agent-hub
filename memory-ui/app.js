@@ -940,6 +940,33 @@ function graphRelationLabel(edge) {
   return String(edge?.relation ?? 'related').replaceAll('_', ' ');
 }
 
+/** Semantic claim excerpts inside interactive SVG cards, never opaque refs. */
+function graphNodeCardSvg(node) {
+  const lines = graphLabelLines(node.value);
+  const meta = node.state + ' · ' + graphAuthorityLabel(node.authority);
+  const clippedMeta = [...meta].length > 37 ? [...meta].slice(0, 36).join('') + '…' : meta;
+  return "<rect class='graph-node-card' x='-126' y='-42' width='252' height='84' rx='9'></rect>"
+    + "<circle cx='-109' cy='-21' r='5'></circle>"
+    + "<text class='graph-node-title' x='-96' y='" + (lines.length === 1 ? '-7' : '-17') + "'>"
+    + lines.map((line, index) => "<tspan x='-96' dy='" + (index === 0 ? '0' : '18') + "'>" + escapeHtml(line) + '</tspan>').join('')
+    + '</text>'
+    + "<text class='graph-node-caption' x='-96' y='29'>" + escapeHtml(clippedMeta) + '</text>';
+}
+
+/** Only actual selected-node relations receive inline semantic labels. */
+function graphSelectedRelationNote(edge, from, to, selected) {
+  if (!selected || (edge.from !== selected.id && edge.to !== selected.id)) return '';
+  const relation = graphRelationLabel(edge);
+  const width = Math.min(196, Math.max(68, relation.length * 7.3 + 24));
+  const x = ((from.x + to.x) / 2).toFixed(2);
+  const y = ((from.y + to.y) / 2).toFixed(2);
+  const source = edge.source === 'typed_relation' ? 'advisory' : edge.origin;
+  const direction = edge.from === selected.id ? 'outgoing' : 'incoming';
+  return "<g class='graph-edge-note " + escapeHtml(source) + "' transform='translate(" + x + ' ' + y + ")'>"
+    + "<rect x='" + (-width / 2).toFixed(1) + "' y='-12' width='" + width.toFixed(1) + "' height='24' rx='5'></rect>"
+    + "<text y='4' text-anchor='middle'>" + escapeHtml(relation) + '</text>'
+    + '<title>' + escapeHtml(relation + ' · ' + direction) + '</title></g>';
+}
 function graphPositions(nodes, edges) {
   const width = 1000;
   const height = 680;
