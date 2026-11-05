@@ -919,8 +919,10 @@ function graphReadableLayout(nodes, edges) {
   if (nodes.length > 24) return null;
   const cols = Math.min(4, Math.max(1, Math.ceil(Math.sqrt(nodes.length))));
   const rows = Math.max(1, Math.ceil(nodes.length / cols));
-  const width = 80 + cols * 280;
-  const height = 120 + rows * 156;
+  const width = 1200;
+  const height = Math.max(720, 120 + rows * 156);
+  const firstX = (width - (cols - 1) * 280) / 2;
+  const firstY = (height - (rows - 1) * 156) / 2;
   const byId = new Map(nodes.map(node => [node.id, node]));
   const adjacent = new Map(nodes.map(node => [node.id, new Set()]));
   for (const edge of edges) {
@@ -948,8 +950,8 @@ function graphReadableLayout(nodes, edges) {
     }
   }
   const positions = new Map(ordered.map((node, i) => [node.id, {
-    x: 180 + (i % cols) * 280,
-    y: 100 + Math.floor(i / cols) * 156,
+    x: firstX + (i % cols) * 280,
+    y: firstY + Math.floor(i / cols) * 156,
   }]));
   return { positions, width, height };
 }
@@ -1301,12 +1303,12 @@ function graphInspector(node, visibleEdges) {
             ? neighbors.map(({ edge, node: neighbor }) => `
                 <button class="graph-neighbor" type="button" data-graph-node="${escapeHtml(neighbor.id)}">
                   <span class="graph-neighbor-top">
-                    <span class="ref">${escapeHtml(neighbor.ref)}</span>
+                    <span class="graph-neighbor-name">${escapeHtml(memoryDisplayTitle(neighbor.value))}</span>
                     <span class="graph-origin ${escapeHtml(edge.origin)}">${escapeHtml(graphRelationOriginLabel(edge))}</span>
                   </span>
                   <span class="graph-neighbor-relation">${escapeHtml(edge.relation.replaceAll('_', ' '))}</span>
                   <span class="graph-neighbor-meta">
-                    ${edge.relation === 'semantic_similarity' ? `weight ${Number(edge.weight ?? 0).toFixed(3)} · ` : ''}${escapeHtml(graphEdgeProvenance(edge))}
+                    <span class="graph-neighbor-ref">${escapeHtml(neighbor.ref)}</span> · ${edge.relation === 'semantic_similarity' ? `weight ${Number(edge.weight ?? 0).toFixed(3)} · ` : ''}${escapeHtml(graphEdgeProvenance(edge))}
                   </span>
                 </button>
               `).join('')
