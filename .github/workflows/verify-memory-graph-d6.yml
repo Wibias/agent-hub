@@ -1,0 +1,37 @@
+name: Memory Graph D6 diagnostics
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: memory-graph-d6-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Validate D6 CLI syntax and help
+        run: |
+          node --check scripts/diagnose-memory-graph.mjs
+          node scripts/diagnose-memory-graph.mjs --help
+      - name: Validate D6 diagnostics, real SQLite smoke, and D5/D4 regressions
+        run: |
+          node --test \
+            tests/memory-engine/memory-graph-diagnostics.test.mjs \
+            tests/memory-engine/memory-graph-diagnostics-integration.test.mjs \
+            tests/memory-engine/memory-console-git-context.test.mjs \
+            tests/memory-engine/memory-console-git-integration.test.mjs \
+            tests/memory-engine/memory-graph-v2*.test.mjs \
+            tests/memory-engine/git-freshness-helper.test.mjs
