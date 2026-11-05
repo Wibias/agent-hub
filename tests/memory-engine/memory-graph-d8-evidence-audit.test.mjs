@@ -86,6 +86,21 @@ test('D8 blocks incomplete or historical repository Evidence as live prerequisit
   assert.equal(inactive.outcome, 'blocked');
 });
 
+test('D8 blocks each malformed repository Evidence field independently', () => {
+  const cases = [
+    { field: 'path', change: { path: '../secrets' } },
+    { field: 'blob_oid', change: { blob_oid: 'not-an-oid' } },
+    { field: 'commit_sha', change: { commit_sha: 'short' } },
+    { field: 'branch', change: { branch: 'feature/x' } },
+  ];
+  for (const { field, change } of cases) {
+    const result = audit(fixture([repo('r', 'main', change)], [claim('c', 'r')]));
+    assert.equal(result.outcome, 'blocked', field);
+    assert.equal(result.claims.repositoryVisibleIncompleteEvidence, 1, field);
+    assert.equal(result.nextStep, 'review_repository_evidence_metadata_and_state', field);
+  }
+});
+
 test('D8 reports missing/mismatched primary evidence without exposing identifiers', () => {
   const data = fixture([session('s', 'feature/x')], [claim('a', 'nonexistent'), claim('b', 's')]);
   const result = audit(data);
@@ -104,5 +119,9 @@ test('D8 conservatively detects all graph-v2 repository markers', () => {
 
 test('D8 requires an explicit registered scope and canonical export', () => {
   assert.throws(() => auditRepositoryEvidence(null, { projectId: PROJECT, branch: 'main' }), TypeError);
+  assert.throws(
+    () => auditRepositoryEvidence(fixture(), { projectId: 'github.com/example/unregistered', branch: 'main' }),
+    /scope not registered/,
+  );
   assert.equal(audit(fixture()).claims.inScope, 0);
 });
