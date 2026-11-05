@@ -927,6 +927,94 @@ function graphPositions(nodes, edges) {
   return positions;
 }
 
+
+/** Human-readable presentation labels never change the canonical authority. */
+function graphAuthorityLabel(authority) {
+  return ({
+    user_direct: 'Direct user statement',
+    agent_inference: 'Agent interpretation',
+    repo_trusted: 'Repository-backed evidence',
+    session: 'Session observation',
+    tool: 'Tool observation',
+    untrusted: 'Unverified source',
+  })[authority] ?? String(authority ?? 'Unknown').replaceAll('_', ' ');
+}
+
+/** Git verification is independent of the memory source's authority. */
+function graphFreshnessLabel(status) {
+  return ({
+    fresh: 'Git file verified',
+    stale: 'Git file not verified',
+    unchecked: 'Git check unavailable',
+    not_repository: 'Not a Git record',
+  })[status] ?? 'Verification unknown';
+}
+
+function graphFreshnessHelp(status) {
+  return ({
+    fresh: 'The recorded file matches the selected checkout at this revision.',
+    stale: 'The recorded Git blob could not be verified here. It may have changed, disappeared or become inaccessible.',
+    unchecked: 'The file was not verified. Check the selected repository, branch and Git access.',
+    not_repository: 'This memory is not based on a repository file. Git freshness does not apply.',
+  })[status] ?? 'No verified Git freshness result is available.';
+}
+
+/** Summarize all scoped graph nodes, regardless of the active UI filters. */
+function graphVerificationSummary(graph) {
+  const statuses = { fresh: 0, stale: 0, unchecked: 0 };
+  for (const node of graph?.nodes ?? []) {
+    const status = node.freshness?.status;
+    if (Object.hasOwn(statuses, status)) statuses[status] += 1;
+  }
+  const total = statuses.fresh + statuses.stale + statuses.unchecked;
+  if (graph?.gitContext?.status !== 'verified') return {
+    tone: 'caution', label: 'GIT CONTEXT',
+    title: 'Repository verification unavailable',
+    message: 'The selected checkout is not verified. Repository memories must not be treated as fresh.',
+    count: total ? total + ' Git-linked' : 'No verified checkout',
+  };
+  if (statuses.stale > 0) return {
+    tone: 'caution', label: 'EVIDENCE STATUS',
+    title: statuses.stale + (statuses.stale === 1 ? ' Git-linked memory needs review' : ' Git-linked memories need review'),
+    message: 'At least one recorded file could not be verified. Open a node to inspect its evidence.',
+    count: statuses.fresh + ' / ' + total + ' verified',
+  };
+  if (statuses.unchecked > 0) return {
+    tone: 'caution', label: 'EVIDENCE STATUS',
+    title: 'Some Git-linked memories are unchecked',
+    message: 'A verified checkout does not guarantee that each referenced file was checked.',
+    count: statuses.fresh + ' / ' + total + ' verified',
+  };
+  if (total === 0) return {
+    tone: 'neutral', label: 'EVIDENCE STATUS',
+    title: 'No repository-backed memories in this scope',
+    message: 'The graph can show session or agent memories without any Git file evidence.',
+    count: '0 Git-linked',
+  };
+  return {
+    tone: 'verified', label: 'EVIDENCE STATUS',
+    title: 'Repository evidence verified',
+    message: 'All Git-linked nodes in this scoped graph match the selected checkout.',
+    count: statuses.fresh + ' / ' + total + ' verified',
+  };
+}
+
+function graphRelationOriginLabel(edge) {
+  if (edge?.source === 'typed_relation') return 'Advisory';
+  if (edge?.origin === 'inferred') return 'Similarity';
+  return 'Recorded';
+}
+
+function restoreGraphControlFocus(id, selection = null) {
+  const target = document.getElementById(id);
+  if (!target) return;
+  target.focus({ preventScroll: true });
+  if (selection && typeof target.setSelectionRange === 'function'
+    && Number.isInteger(selection.start) && Number.isInteger(selection.end)) {
+    target.setSelectionRange(selection.start, selection.end);
+  }
+}
+
 /** Format distinct canonical, typed and embedding-provenance descriptions. */
 function graphEdgeProvenance(edge) {
   const provenance = edge?.provenance ?? {};
