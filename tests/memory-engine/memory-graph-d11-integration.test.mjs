@@ -63,7 +63,7 @@ test('D11 rejects unsafe/implicit arguments, and --help never needs an existing 
   const scoped = ['--db-path', 'store.sqlite3', '--repo-root', 'checkout',
     '--project-id', PROJECT, '--branch', 'main'];
   for (const invalid of ['25', '0', '1.5', '-1', 'not-a-number']) {
-    assert.throws(() => parseD11Args([...scoped, '--samples', invalid]), /1\\.\\.5/, invalid);
+    assert.throws(() => parseD11Args([...scoped, '--samples', invalid]), /1\.\.5/, invalid);
   }
   const emitted = [];
   const result = await executeD11Monitor({ argv: ['--help'], emit: (x) => emitted.push(x) });
@@ -161,6 +161,6 @@ test('D11 CLI exit codes and stderr remain deterministic and path-free', {
   assert.equal(hash(await readFile(dbPath)), before);
   for (const run of [passed, blocked, invalid, absent]) {
     assert.doesNotMatch(run.stdout + run.stderr,
-      /PRIVATE_|docs\\/test|store\\.sqlite3|agent-hub-d11-/);
+      /PRIVATE_|docs\/test|store\.sqlite3|agent-hub-d11-/);
   }
 });
