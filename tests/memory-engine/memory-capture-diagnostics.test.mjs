@@ -89,7 +89,7 @@ test('schema field is a fixed enum and never includes failing input', () => {
     ['promote requires durability=long', 'durability'],
     ['promote requires empty risk_flags', 'risk_flags'],
     ['ignore requires canonical_fact=null', 'canonical_fact'],
-    ['JSON validation failed PRIVATE', 'unknown'],
+    ['promote requires UNKNOWN=long PRIVATE', 'unknown'],
   ];
   for (const [message, field] of cases) {
     assert.equal(classifyCaptureValidationField(message), field, message);
