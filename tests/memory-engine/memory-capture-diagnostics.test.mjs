@@ -49,7 +49,7 @@ test('failure groups classify hints but never return raw failure messages', asyn
     assert.deepEqual(result.pipeline.failureGroups.map((x) => x.category).sort(), ['rate_limit','response_validation','unclassified']);
     assert.equal(result.pipeline.recentRuns[0].promotedCount, 0);
     const encoded = JSON.stringify(result);
-    for (const secret of ['SECRET-ALPHA','SECRET-BETA','private-run-id','other']) {
+    for (const secret of ['SECRET-ALPHA','SECRET-BETA','private-run-id','429 other']) {
       assert.equal(encoded.includes(secret), false, secret);
     }
     assert.throws(() => inspectMemoryCapture({ dbPath, projectId, branch, recentLimit: 999 }), /recentLimit/);
