@@ -19,6 +19,8 @@ import {
   createIsolatedCodexEnv,
   prepareIsolatedCodexHome,
 } from '../memory-engine/codex-memory-behavioral-eval.mjs';
+import { resolveCodexCandidateLaunch } from '../memory-engine/codex-candidate-launch.mjs';
+import { codexCandidateFailureCode } from '../memory-engine/codex-candidate-process-error.mjs';
 import {
   defaultCodexMemoryDbPath,
   resolveCodexProjectScope,
@@ -241,6 +243,7 @@ export async function createCodexMemoryCandidateRelationJudge({
     }
 
     const isolatedEnv = createIsolatedCodexEnv(env, isolatedCodexHome);
+    const codexLaunch = resolveCodexCandidateLaunch({ env: isolatedEnv });
     await initializeEmptyWorkspace(workspace, isolatedEnv);
 
     const evaluatorId = [
@@ -266,20 +269,32 @@ export async function createCodexMemoryCandidateRelationJudge({
       if (model) args.push('--model', model);
       args.push('-');
 
-      const executed = await runProcess('codex', args, {
-        cwd: workspace,
-        env: isolatedEnv,
-        input: prompt,
-        timeoutMs,
-      });
+      let executed;
+      try {
+        executed = await runProcess(codexLaunch.command, [
+          ...codexLaunch.prefixArgs,
+          ...args,
+        ], {
+          cwd: workspace,
+          env: isolatedEnv,
+          input: prompt,
+          timeoutMs,
+        });
+      } catch (error) {
+        const failure = error?.code === 'ENOENT'
+          ? 'executable_not_found'
+          : error?.code === 'EACCES' || error?.code === 'EPERM'
+            ? 'permission_denied'
+            : /timed out after [0-9]+ms/u.test(String(error?.message ?? ''))
+              ? 'timeout'
+              : 'unknown';
+        throw new Error('codex relation judge launch failed: ' + failure);
+      }
       if (executed.code !== 0) {
-        throw new Error(
-          [
-            'codex relation judge failed with exit ' + executed.code,
-            executed.stderr.trim(),
-            executed.stdout.trim(),
-          ].filter(Boolean).join(': '),
-        );
+        const exitCode = Number.isInteger(executed.code) && executed.code >= 0
+          ? String(executed.code) : 'unknown';
+        throw new Error('codex relation judge failed with exit '
+          + exitCode + ': ' + codexCandidateFailureCode(executed));
       }
 
       return readFile(resultPath, 'utf8');
