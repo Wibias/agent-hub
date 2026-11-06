@@ -89,4 +89,46 @@ export const ATOMIC_SHADOW_FIXTURES = Object.freeze([
       + String.fromCharCode(96).repeat(3) + 'js\nconsole.log(123)\n' + String.fromCharCode(96).repeat(3),
     expected: [],
   },
+  {
+    id: 'hard-negative-demo',
+    source: 'For this demo, always use a purple card layout.',
+    expected: [],
+  },
+  {
+    id: 'hard-negative-time',
+    source: 'Always debug today with the old seed data, just for this test.',
+    expected: [],
+  },
+  {
+    id: 'hard-negative-german',
+    source: 'Nur heute müssen wir immer drei Browser ausprobieren.',
+    expected: [],
+  },
+  {
+    id: 'hard-negative-quotation',
+    source: 'The example says: "Always use green backgrounds." That is not our project rule.',
+    expected: [],
+  },
+  {
+    id: 'hard-negative-reported-speech',
+    source: 'He said always use the old codebase, but that is not our decision.',
+    expected: [],
+  },
+  {
+    id: 'hard-negative-blockquote',
+    source: '> Always use unsafe demo defaults.',
+    expected: [],
+  },
+  {
+    id: 'hard-negative-hypothetical',
+    source: 'In this example, always use dummy addresses for the temporary mockup.',
+    expected: [],
+  },
+  {
+    id: 'explicit-future-preference',
+    source: 'In future sessions, I prefer dark editorial layouts for the UI.',
+    expected: [
+      { fragment: 'In future sessions, I prefer dark editorial layouts for the UI.', disposition: 'durable_review' },
+    ],
+  },
 ]);
