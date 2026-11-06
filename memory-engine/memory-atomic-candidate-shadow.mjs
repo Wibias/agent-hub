@@ -68,8 +68,7 @@ export function proposeAtomicCandidateShadows(source, { sourceAuthority = 'user_
     || /https?:\/\/\S*(?:token|secret|key)=/iu.test(source)) return reject('sensitive_source');
 
   // Strictly scoped research plans must not be broken into global prohibitions.
-  if ((/^#{1,6}\s/mu.test(source) || source.length > 1800)
-    && SCOPED_AUDIT_CUE.test(source)) return reject('scoped_audit_protocol');
+  if (SCOPED_AUDIT_CUE.test(source)) return reject('scoped_audit_protocol');
   if (source.includes(String.fromCharCode(96).repeat(3))) return reject('code_block');
 
   const chunks = segment(source);
