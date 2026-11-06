@@ -19,6 +19,9 @@ authenticate a conversation.
 - The local manifest binds each proposed decision to the full SHA-256 hash
   of its **original canonical_fact**, exact Evidence opaque refs, status, kind,
   and source authority. These are consistency checks, not signatures.
+  The Evidence **body bytes** are NOT independently bound to the chat review;
+  an in-place source text modification with the same ID could go undetected.
+  Such integrity requires additional trusted provenance and review.
 - All currently open proposals in the exact project and branch must be
   represented. A new open proposal or any disappeared proposal blocks the
   result. No hidden 100-item truncation is treated as success.
