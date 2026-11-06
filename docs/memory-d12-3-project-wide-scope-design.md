@@ -25,7 +25,7 @@ It prints only caller-supplied project/source branch and counts.
     $Next = "$HOME\agent-hub-D12-3-project-scope-audit"
     if (-not (Test-Path $Previous)) { throw "Missing decision worktree" }
     if (Test-Path $Next) { throw "Destination exists; do not overwrite" }
-    git -C $Previous fetch origin pull/REPLACE_PR/head
+    git -C $Previous fetch origin pull/201/head
     if ($LASTEXITCODE -ne 0) { throw "Fetch failed" }
     git -C $Previous worktree add --detach $Next FETCH_HEAD
     if ($LASTEXITCODE -ne 0) { throw "Worktree creation failed" }
