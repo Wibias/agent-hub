@@ -51,11 +51,11 @@ test('synthetic evaluation reports fixture-level coverage and error counts witho
   assert.equal(result.productionMemoriesRead, false);
   assert.equal(result.productionMemoriesWritten, false);
   assert.equal(result.measured.fixtures, ATOMIC_SHADOW_FIXTURES.length);
-  assert.equal(result.measured.expectedReviewSuggestions, 7);
-  assert.equal(result.measured.matched, 7);
+  assert.equal(result.measured.expectedReviewSuggestions, 8);
+  assert.equal(result.measured.matched, 8);
   assert.equal(result.measured.missed, 0);
   assert.equal(result.measured.falsePositives, 0);
-  assert.equal(result.measured.actualReviewSuggestions, 7);
+  assert.equal(result.measured.actualReviewSuggestions, 8);
   assert.equal(result.measured.precisionOnFixtures, 1);
   assert.equal(result.measured.recallOnFixtures, 1);
   assert.equal(JSON.stringify(result).includes('compatibility shim'), false);
