@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Real Chrome/CDP smoke against a reviewed, pinned upstream checkout.
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -91,6 +92,21 @@ try {
   assert.ok(scope.detectorContext?.some((dependency) =>
     dependency.path === "DESIGN.md" &&
     /^[a-f0-9]{64}$/.test(dependency.sha256)), "External DESIGN.md dependency missing from source fingerprint");
+  // The CSS file is served to Chrome and must also be bound to the shared
+  // fingerprint, even though the source target is just that stylesheet.
+  assert.equal(scope.rendered.assetCoverage, "COMPLETE_LOCAL_TREE_BOUNDED");
+  assert.equal(scope.renderedAssets.fileCount, 2);
+  assert.deepEqual(scope.renderedAssets.files.map((x) => x.path),
+    ["dist/settings/fixture.css", "dist/settings/index.html"]);
+  const linkedCss = scope.renderedAssets.files.find((x) =>
+    x.path === "dist/settings/fixture.css");
+  assert.equal(linkedCss.sha256,
+    createHash("sha256").update(readFileSync(stylesheet)).digest("hex"));
+  assert.equal(scope.rendered.assetTreeSha256, scope.renderedAssets.filesSha256);
+  assert.equal(taste.auditScope.rendered.assetTreeSha256,
+    scope.rendered.assetTreeSha256);
+  assert.equal(fusion.scope.rendered.assetTreeSha256,
+    scope.rendered.assetTreeSha256);
   assert.equal(impeccable.auditScope.sourceSha256, result.scope.sourceSha256);
   assert.equal(taste.auditScope.sourceSha256, result.scope.sourceSha256);
   assert.equal(impeccable.summary.coverageCountVerified, true);
@@ -135,6 +151,8 @@ try {
       impeccableFilesScanned: impeccable.summary.filesScanned,
       impeccableCoverageVerified: impeccable.summary.coverageCountVerified,
       boundDesignDependencies: scope.detectorContext?.map((x) => x.path) ?? [],
+      renderedAssetCount: scope.renderedAssets.fileCount,
+      renderedAssetDigest: scope.rendered.assetTreeSha256,
       tasteRawObservations: taste.findings.length,
       tasteFusedObservations: fusedTaste.length,
       tasteReviewClassCounts: taste.summary.reviewClassCounts,
