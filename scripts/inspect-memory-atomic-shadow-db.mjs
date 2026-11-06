@@ -57,17 +57,41 @@ export function inspectAtomicShadowDb({
     ).all(projectId, branch, limit);
     const items = [];
     const totals = { durable_review: 0, bounded_review: 0, ambiguous_review: 0 };
+    const reasonCodes = {
+      explicit_future_scope: 0,
+      explicit_bounded_scope: 0,
+      quality_feedback_without_duration: 0,
+    };
+    let candidatesRequiringReview = 0;
+    let scopedAuditCandidatesExcluded = 0;
     for (const candidate of candidates) {
       const result = summarizeAtomicCandidateShadows(
         proposeAtomicCandidateShadows(candidate.proposed_value),
       );
+      const suggestionCount = Object.values(result.counts).reduce((sum, count) => sum + count, 0);
+      if (suggestionCount > 0) candidatesRequiringReview += 1;
+      if (result.reason === 'scoped_audit_protocol') scopedAuditCandidatesExcluded += 1;
       for (const key of Object.keys(totals)) totals[key] += result.counts[key];
+      for (const suggestion of result.suggestions) {
+        if (Object.hasOwn(reasonCodes, suggestion.reasonCode)) {
+          reasonCodes[suggestion.reasonCode] += 1;
+        }
+      }
       items.push({
         candidateRef: memoryCandidateJudgeRef(candidate.id),
         candidateKind: KINDS.has(candidate.proposed_type) ? candidate.proposed_type : 'unknown',
         reason: result.reason,
         segmentsInspected: result.segmentsInspected,
         reviewCounts: result.counts,
+        reviewHintCount: suggestionCount,
+        reviewReasonCodes: Object.fromEntries(
+          Object.entries(reasonCodes).filter(([reasonCode]) => result.suggestions.some(
+            suggestion => suggestion.reasonCode === reasonCode,
+          )).map(([reasonCode]) => [
+            reasonCode,
+            result.suggestions.filter(suggestion => suggestion.reasonCode === reasonCode).length,
+          ]),
+        ),
         // No hashes or offsets here: never leak source-dependent data from DB.
       });
     }
@@ -80,7 +104,11 @@ export function inspectAtomicShadowDb({
       contentIncluded: false,
       scope: { projectId, branch },
       candidateCount: items.length,
+      candidatesRequiringReview,
+      scopedAuditCandidatesExcluded,
       reviewCounts: totals,
+      reviewReasonCodes: reasonCodes,
+      reviewHintInterpretation: 'Multiple hints are not independent facts, confirmed rules, or promotions.',
       items,
     };
   } finally {
