@@ -146,6 +146,24 @@ test("partial, inconsistent and malformed detector results are ERROR", async () 
   });
 });
 
+test("incomplete detector exit retains a bounded sanitized stderr suffix", async () => {
+  await fixture(async ({ root, target }) => {
+    const stderr = "suppressed-prefix-".repeat(40) + "\nFATAL_SCANNER_EXIT\n";
+    const provider = createImpeccableProvider({
+      runner: async () => result({ exitCode: 1, stderr }),
+    });
+    const out = await provider.inspect({
+      capability: Capability.STATIC_AUDIT, target, route: "/settings", projectRoot: root,
+    });
+    assert.equal(out.status, ProviderStatus.ERROR);
+    assert.match(out.reason, /exit 1/);
+    assert.match(out.reason, /FATAL_SCANNER_EXIT/);
+    assert.ok(out.reason.length < 320, "stderr diagnostics must be bounded");
+    assert.ok(!out.reason.includes("suppressed-prefix-".repeat(20)));
+    assert.ok(!out.reason.includes("\n"), "control characters must be escaped or collapsed");
+  });
+});
+
 test("missing, duplicate, contradictory or empty source receipts never PASS", async () => {
   await fixture(async ({ root, target }) => {
     const cases = [
