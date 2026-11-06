@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -214,6 +216,18 @@ test("viewport text ignores off-screen content and all markers are considered", 
   } finally {
     Object.assign(globalThis, old);
   }
+});
+
+test("symlinked CLI invocation executes and rejects missing options instead of silently exiting", async () => {
+  await fixture(async ({ root }) => {
+    if (process.platform === "win32") return; // File symlinks need elevated rights on some Windows hosts.
+    const source = fileURLToPath(new URL("../../scripts/providers/rendered-state-probe.mjs", import.meta.url));
+    const link = join(root, "state-probe-cli.mjs");
+    symlinkSync(source, link);
+    const result = spawnSync(process.execPath, [link], { encoding: "utf8", timeout: 10000 });
+    assert.equal(result.status, 2, result.stderr);
+    assert.match(result.stderr, /Required option --base-url/);
+  });
 });
 
 test("an unavailable browser records INCOMPLETE evidence instead of a false success", async () => {
