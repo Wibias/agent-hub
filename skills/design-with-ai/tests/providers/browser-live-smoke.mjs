@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { runQualityAudit } from "../../scripts/providers/quality-audit.mjs";
 
 const skillRoot = process.env.TASTE_SKILL_ROOT;
@@ -130,16 +130,63 @@ try {
   assert.deepEqual(tasteSummary.reviewClassCounts, taste.summary.reviewClassCounts);
   assert.equal(tasteSummary.renderedStateVerified, false);
   assert.equal(tasteSummary.renderedStateProof, "NOT_PROVIDED_BY_UPSTREAM");
+  // Compare against the upstream JSON itself. Comparing fusion only to
+  // normalized findings can miss a normalization bug that drops both.
+  const upstream = readArtifact(taste.provenance.report);
+  const upstreamRows = [
+    ...upstream.widths.flatMap((width, wi) =>
+      width.findings.map((finding, fi) => ({
+        raw: finding, ref: taste.provenance.report +
+          "#/widths/" + wi + "/findings/" + fi,
+      }))),
+    ...upstream.sweep.findings.map((finding, fi) => ({
+      raw: finding, ref: taste.provenance.report + "#/sweep/findings/" + fi,
+    })),
+  ];
+  assert.equal(upstreamRows.length, taste.findings.length,
+    "Normalization must retain every upstream width/sweep finding");
+  assert.equal(upstream.counts.FAIL, taste.summary.counts.FAIL);
+  assert.equal(upstream.counts.WARN, taste.summary.counts.WARN);
+  assert.ok(upstreamRows.some(({ raw }) =>
+    raw.check === "copy-fact" && raw.sev === "FAIL"),
+  "The fact-free fixture must produce the upstream copy-fact FAIL");
+  const normalizedByReportRef = new Map(taste.findings.map((finding) => {
+    const pointers = finding.evidence.filter((e) => e.kind === "rendered-report");
+    assert.equal(pointers.length, 1, "Each observation needs exactly one upstream report pointer");
+    return [pointers[0].ref, finding];
+  }));
+  assert.equal(normalizedByReportRef.size, upstreamRows.length,
+    "Each normalized observation needs a distinct upstream JSON pointer");
+  for (const { raw, ref } of upstreamRows) {
+    const normalized = normalizedByReportRef.get(ref);
+    assert.ok(normalized, "Missing normalized upstream observation: " + ref);
+    assert.equal(normalized.providerRuleId, raw.check);
+    assert.equal(normalized.upstreamSeverity, raw.sev);
+    assert.equal(normalized.priority, raw.sev === "FAIL" ? "P1" : "P2");
+    assert.equal(normalized.message, raw.msg);
+    assert.equal(normalized.location.selector, raw.sel);
+    const crop = normalized.evidence.find((e) => e.kind === "rendered-crop");
+    if (raw.crop !== undefined) {
+      assert.equal(crop?.ref, join(dirname(taste.provenance.report), raw.crop));
+    } else {
+      assert.equal(crop, undefined, "No crop can appear without an upstream crop");
+    }
+  }
   const rawById = new Map(taste.findings.map((f) => [f.id, f]));
   const fusedTaste = fusion.groups.flatMap((g) => g.members)
     .filter((member) => member.provider === "taste-skill");
-  assert.equal(fusedTaste.length, taste.findings.length);
+  assert.equal(fusedTaste.length, upstreamRows.length);
+  assert.equal(new Set(fusedTaste.map((m) => m.id)).size, fusedTaste.length,
+    "Fusion must not duplicate or lose upstream findings");
   for (const member of fusedTaste) {
     const original = rawById.get(member.id);
     assert.ok(original, "A fused Taste finding must match a raw observation");
     assert.equal(member.reviewClass, original.reviewClass);
     assert.equal(member.upstreamSeverity, original.upstreamSeverity);
     assert.equal(member.priority, original.priority);
+    assert.equal(member.ruleId, original.providerRuleId);
+    assert.deepEqual(member.evidence, original.evidence,
+      "Fusion must preserve upstream report and crop evidence references");
   }
   assert.equal(fusion.completionEligible, false);
   process.stdout.write(JSON.stringify({
