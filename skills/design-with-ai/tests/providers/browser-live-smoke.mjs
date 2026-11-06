@@ -85,6 +85,14 @@ try {
   const impeccable = readArtifact(result.artifacts.reports.impeccable);
   const taste = readArtifact(result.artifacts.reports["taste-skill"]);
   const fusion = readArtifact(result.artifacts.fusion);
+  const scope = readArtifact(result.artifacts.sourceScope);
+  // The real fixture's DESIGN.md lives outside the selected CSS file. Its
+  // policy hash must still be bound to the shared source-fingerprint receipt.
+  assert.ok(scope.detectorContext?.some((dependency) =>
+    dependency.path === "DESIGN.md" &&
+    /^[a-f0-9]{64}$/.test(dependency.sha256)), "External DESIGN.md dependency missing from source fingerprint");
+  assert.equal(impeccable.auditScope.sourceSha256, result.scope.sourceSha256);
+  assert.equal(taste.auditScope.sourceSha256, result.scope.sourceSha256);
   assert.equal(impeccable.summary.coverageCountVerified, true);
   assert.equal(impeccable.summary.filesScanned, 1);
   assert.equal(impeccable.summary.degradedFiles, 0);
@@ -126,6 +134,7 @@ try {
     integratedEvidence: {
       impeccableFilesScanned: impeccable.summary.filesScanned,
       impeccableCoverageVerified: impeccable.summary.coverageCountVerified,
+      boundDesignDependencies: scope.detectorContext?.map((x) => x.path) ?? [],
       tasteRawObservations: taste.findings.length,
       tasteFusedObservations: fusedTaste.length,
       tasteReviewClassCounts: taste.summary.reviewClassCounts,
