@@ -122,7 +122,8 @@ test('the inventory opaque ref selects exactly one scoped open proposal, no text
     assert.equal(report.promotionAllowed, false);
     assert.equal(report.contentIncluded, false);
     assert.equal(report.proposal.sourcesStructurallyReviewable, true);
-    assert.equal(report.proposal.sourceAuthorityNeedsHumanReview, false);
+    assert.equal(report.proposal.sourceAuthorityNeedsHumanReview, true);
+    assert.equal(report.proposal.nonUserDirectEvidencePresent, false);
     assert.equal(report.sources[0].authorityClass, 'user_direct');
     assert.equal(report.sources[0].hostOriginAuthenticatedByThisAudit, false);
     assert.equal(report.claimComparison.total, 1);
@@ -160,6 +161,7 @@ test('other authority, cross-scope Evidence, missing Evidence and secret sensiti
     const other = inspect(dbPath, refAt(dbPath, 1));
     assert.equal(other.sources[0].authorityClass, 'agent_inference');
     assert.equal(other.proposal.sourceAuthorityNeedsHumanReview, true);
+    assert.equal(other.proposal.nonUserDirectEvidencePresent, true);
     for (const index of [2, 3, 4, 5]) {
       const item = inspect(dbPath, refAt(dbPath, index), { showLocalContent: true });
       assert.equal(item.status, 'ok');
