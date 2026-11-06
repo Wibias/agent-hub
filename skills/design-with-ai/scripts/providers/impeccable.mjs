@@ -34,11 +34,14 @@ function readScanProof(stderr) {
       proof.candidateFiles !== proof.eligibleFiles + proof.ignoredFiles ||
       proof.eligibleFiles === 0 ||
       proof.scannedFiles + proof.degradedFiles !== proof.eligibleFiles ||
-      proof.degradedFiles !== 0 ||
       proof.configEnabled !== true ||
       typeof proof.inlineIgnoresEnabled !== "boolean" ||
       typeof proof.designSystemEnabled !== "boolean") {
     throw new Error("Incomplete or contradictory source scan receipt");
+  }
+  if (proof.degradedFiles > 0) {
+    throw new Error("HTML parser fallback degraded " + proof.degradedFiles +
+      " file(s); full selector/cascade checks were not run");
   }
   return proof;
 }
