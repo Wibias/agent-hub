@@ -1,0 +1,37 @@
+name: Memory Legacy Candidate Local Review D12.3
+
+on:
+  pull_request:
+    paths:
+      - "scripts/inspect-memory-cross-branch-legacy-candidates.mjs"
+      - "tests/memory-engine/memory-cross-branch-legacy-candidate-review.test.mjs"
+      - "docs/memory-d12-3-legacy-candidate-review.md"
+      - ".github/workflows/verify-memory-legacy-candidate-review.yml"
+  push:
+    branches: [main]
+    paths:
+      - "scripts/inspect-memory-cross-branch-legacy-candidates.mjs"
+      - "tests/memory-engine/memory-cross-branch-legacy-candidate-review.test.mjs"
+      - "docs/memory-d12-3-legacy-candidate-review.md"
+      - ".github/workflows/verify-memory-legacy-candidate-review.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Verify bounded read-only legacy candidate evidence review
+        run: |
+          node --check scripts/inspect-memory-cross-branch-legacy-candidates.mjs
+          node --test tests/memory-engine/memory-cross-branch-legacy-candidate-review.test.mjs
