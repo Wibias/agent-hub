@@ -5618,6 +5618,7 @@ export class MemoryEngine {
       if (preflight.status !== 'eligible_for_manual_promotion_review'
         || preflight.preflightPassed !== true
         || preflight.activeClaimsInScope !== 0
+        || preflight.unresolvedClaimsInScope !== 0
         || preflight.otherPendingCandidates !== 0
         || preflight.unresolvedEvidenceProposals !== 0) {
         throw new Error('atomic promotion preflight has unresolved safety gates');
