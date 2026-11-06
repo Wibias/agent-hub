@@ -62,7 +62,7 @@ test('CLI only permits explicit scoped read-only inputs and complete refs', () =
   assert.throws(()=>parseAtomicRuleDraftArgs([...base, '--show-local-content']),/unsupported/);
   assert.throws(()=>parseAtomicRuleDraftArgs([...base, '--draft-file','other.txt']),/duplicate/);
   assert.throws(()=>parseAtomicRuleDraftArgs(base.slice(0,-2)), /required/);
-  assert.throws(()=>parseAtomicRuleDraftArgs(base.slice(0,6).concat(base.slice(10))), /candidate and review references/);
+  assert.throws(()=>parseAtomicRuleDraftArgs(base.slice(0,6).concat(base.slice(10))), /requires candidate, refs, and intent together/);
 });
 
 test('one combined draft is only an evidence-bound preview, with no raw content output', async () => {
@@ -108,7 +108,7 @@ test('draft must not be a secret, one-off command list, or unsupported length', 
       'Set api_key=abcdefghijklmnop for future deployments.',
     ]) assert.throws(()=>propose(text));
     assert.throws(()=>propose(undefined));
-    assert.throws(()=>propose(DRAFT,undefined));
+    assert.throws(()=>previewAtomicRuleDraft({report,candidateRef,reviewRefs,draftText:null}));
   });
 });
 
