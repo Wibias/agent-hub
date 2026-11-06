@@ -5564,6 +5564,8 @@ export class MemoryEngine {
       if (previous) {
         const claim = this.getClaim(previous.claim_id);
         const candidate = this.getCandidate(stage.source_candidate_id);
+        const original = this.getEvidence(stage.source_evidence_id);
+        const storedConfirmation = this.getEvidence(stage.confirmation_evidence_id);
         const roles = this.getClaimEvidence(previous.claim_id);
         const expectedId = 'memory-atomic-' + createHash('sha256')
           .update(JSON.stringify(['atomic-claim-v1',projectId,branch,stageId]),'utf8')
@@ -5575,6 +5577,26 @@ export class MemoryEngine {
           || claim.state !== 'active'
           || claim.created_from_evidence_id !== stage.confirmation_evidence_id
           || candidate?.status !== 'ignored'
+          || candidate.project_id !== projectId
+          || candidate.branch !== branch
+          || candidate.source_evidence_id !== stage.source_evidence_id
+          || original?.authority_class !== 'user_direct'
+          || original?.sensitivity !== 'normal'
+          || original.project_id !== projectId
+          || original.branch !== branch
+          || original.content_redacted !== candidate.proposed_value
+          || storedConfirmation?.authority_class !== 'user_direct'
+          || storedConfirmation?.sensitivity !== 'normal'
+          || storedConfirmation.project_id !== projectId
+          || storedConfirmation.branch !== branch
+          || storedConfirmation.metadata?.event_type !== 'user_prompt'
+          || storedConfirmation.metadata?.hook_event_name !== 'UserPromptSubmit'
+          || storedConfirmation.metadata?.explicit_memory !== true
+          || storedConfirmation.metadata?.explicit_memory_mode !== 'atomic_rule_confirm'
+          || storedConfirmation.metadata?.atomic_rule_draft_ref !== stage.draft_ref
+          || stage.duration !== 'permanent'
+          || stage.rule_sha256 !== createHash('sha256')
+            .update(parsed.ruleText,'utf8').digest('hex')
           || previous.promotion_policy !== ATOMIC_CLAIM_PROMOTION_POLICY_VERSION
           || roles.length !== 2
           || roles[0].role !== 'primary'
