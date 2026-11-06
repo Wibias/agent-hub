@@ -1,0 +1,37 @@
+name: Memory Project-wide Scope Audit D12.3
+
+on:
+  pull_request:
+    paths:
+      - "scripts/inspect-memory-project-rule-scope.mjs"
+      - "tests/memory-engine/memory-project-scope-readonly-audit.test.mjs"
+      - "docs/memory-d12-3-project-wide-scope-design.md"
+      - ".github/workflows/verify-memory-project-scope-audit.yml"
+  push:
+    branches: [main]
+    paths:
+      - "scripts/inspect-memory-project-rule-scope.mjs"
+      - "tests/memory-engine/memory-project-scope-readonly-audit.test.mjs"
+      - "docs/memory-d12-3-project-wide-scope-design.md"
+      - ".github/workflows/verify-memory-project-scope-audit.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Run project-wide read-only scope audit regressions
+        run: |
+          node --check scripts/inspect-memory-project-rule-scope.mjs
+          node --test tests/memory-engine/memory-project-scope-readonly-audit.test.mjs
