@@ -40,11 +40,11 @@ A single bounded JSON file makes semantic clustering and manual review possible.
 
 ## Windows: one local export command block
 
-Run in interactive PowerShell 7 with Node >= 24. Reuses the previous PR #211
-worktree as the local base, without resetting or changing it.
+Run in interactive PowerShell 7 with Node >= 24. Reuses the previously created Phase 13 worktree as the local base,
+so running the older PR #211 candidate review is not a prerequisite.
 
     $ErrorActionPreference = "Stop"
-    $Previous = "$HOME\agent-hub-D12-3-legacy-candidate-review"
+    $Previous = "$HOME\agent-hub-D12-3-cross-branch-reconcile"
     $Next = "$HOME\agent-hub-D12-3-all-candidates-export"
     if (-not (Test-Path $Previous)) { throw "Previous worktree missing" }
     if (Test-Path $Next) { throw "Export worktree already exists; do not overwrite" }
