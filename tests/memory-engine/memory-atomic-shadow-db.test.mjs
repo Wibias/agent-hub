@@ -4,6 +4,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { memoryCandidateJudgeRef } from '../../memory-engine/memory-candidate-judge.mjs';
 import {
   inspectAtomicShadowDb,
   parseAtomicShadowDbArgs,
@@ -116,7 +117,8 @@ test('multiple feedback hints from one candidate are not reported as separate me
     assert.equal(report.scopedAuditCandidatesExcluded, 1);
     assert.equal(report.reviewCounts.ambiguous_review, 2);
     assert.equal(report.reviewReasonCodes.quality_feedback_without_duration, 2);
-    const feedback = report.items.find(item => item.candidateKind === 'correction');
+    const feedback = report.items.find(item => item.candidateRef === memoryCandidateJudgeRef('feedback8'));
+    assert.ok(feedback);
     assert.equal(feedback.reviewHintCount, 2);
     assert.deepEqual(feedback.reviewReasonCodes, {
       quality_feedback_without_duration: 2,
