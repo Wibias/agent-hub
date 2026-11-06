@@ -240,3 +240,29 @@ test('atomic finalization remains branch-scoped and cannot create a global rule'
     assert.equal(memory.exportCanonical().claims.length,0);
   });
 });
+
+test('replay fails closed after source or confirmation Evidence is modified',async()=>{
+  await fixture(async({memory,sidecar,stageId})=>{
+    const first=await memory.finalizeStagedAtomicRuleClaim(approval(stageId));
+    sidecar.prepare('UPDATE evidence SET content_redacted=? WHERE id=?')
+      .run('Forged evidence after promotion','source-evidence');
+    await assert.rejects(
+      ()=>memory.finalizeStagedAtomicRuleClaim(approval(stageId)),
+      /provenance has changed/,
+    );
+    sidecar.prepare('UPDATE evidence SET content_redacted=? WHERE id=?')
+      .run(SOURCE,'source-evidence');
+    sidecar.prepare('UPDATE evidence SET metadata_json=? WHERE id=?')
+      .run(JSON.stringify({
+        event_type:'user_prompt',explicit_memory:true,
+        explicit_memory_mode:'candidate_confirm',
+      }),'confirmation-evidence');
+    await assert.rejects(
+      ()=>memory.finalizeStagedAtomicRuleClaim(approval(stageId)),
+      /provenance has changed/,
+    );
+    assert.equal(memory.getClaim(first.claimId).state,'active');
+    assert.equal(sidecar.prepare('SELECT COUNT(*) AS n FROM claims').get().n,1);
+    assert.equal(sidecar.prepare('SELECT COUNT(*) AS n FROM memory_atomic_rule_claim_promotions').get().n,1);
+  });
+});
