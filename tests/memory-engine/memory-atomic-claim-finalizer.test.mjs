@@ -55,7 +55,7 @@ async function fixture(run,{promotionLedger=true}={}) {
     });
     memory.recordEvidence({
       id:'confirmation-evidence',projectId:PROJECT,branch:BRANCH,harness:'codex',
-      sessionId:'new-session',sourceKind:'session',sourceRef:'session:new',
+      sessionId:'new-session',sourceKind:'session',sourceRef:'session:new-session',
       capturedAt:'2026-11-06T12:00:00.000Z',authorityClass:'user_direct',
       content:atomicRuleConfirmationText({
         projectId:PROJECT,branch:BRANCH,draftRef:draft.draftRef,ruleText:RULE,
