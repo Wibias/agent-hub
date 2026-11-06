@@ -20,6 +20,7 @@ function fixture(fn) {
   mkdirSync(join(root, "src"), { recursive: true });
   mkdirSync(join(renderedRoot, "settings"), { recursive: true });
   mkdirSync(join(renderedRoot, "assets"), { recursive: true });
+  writeFileSync(join(root, "package.json"), "{}\n");
   writeFileSync(source, "export const Page = 1;\n");
   writeFileSync(html, '<!doctype html><link rel="stylesheet" href="../assets/app.css"><script src="../assets/app.js"></script>');
   writeFileSync(css, "body { color: red; }\n");

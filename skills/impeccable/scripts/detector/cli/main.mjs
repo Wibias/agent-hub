@@ -216,6 +216,7 @@ async function detectCli() {
     configEnabled: !args.includes('--no-config'),
     inlineIgnoresEnabled: !args.includes('--no-config') && !args.includes('--no-inline-ignores'),
     designSystemEnabled: false,
+    designSystemResolvedFiles: 0,
   };
   const jsonMode = args.includes('--json');
   const quietMode = args.includes('--quiet');
@@ -305,6 +306,7 @@ async function detectCli() {
   const scanOptionsFor = (localPath) => {
     if (!designSystemEnabled || !localPath) return baseScanOptions;
     const designSystem = loadDesignSystemForTarget(localPath, { cache: designSystemCache });
+    if (scanProofMode && designSystem) scanProof.designSystemResolvedFiles++;
     return designSystem ? { ...baseScanOptions, designSystem } : baseScanOptions;
   };
   const targets = args.filter(a => !a.startsWith('--'));

@@ -38,6 +38,7 @@ function fakeBrowser({
   screenshotFailure = false,
   pageErrors = false,
   transitionAfterScreenshot = false,
+  clientRedirectBounce = false,
 } = {}) {
   let closes = 0;
   const opened = [];
@@ -47,12 +48,18 @@ function fakeBrowser({
       const width = viewport.width;
       let captured = false;
       return {
-        newPage: async () => ({
+        newPage: async () => {
+          const frame = {};
+          let onNavigation = () => {};
+          return {
+          mainFrame: () => frame,
           on: (kind, cb) => {
+            if (kind === "framenavigated") onNavigation = cb;
             if (pageErrors && kind === "pageerror") cb(new Error("Fixture page exception"));
           },
           goto: async () => {
             if (navigationFailure) throw new Error("Navigation timeout");
+            onNavigation(frame);
             return {
               status: () => status,
               request: () => ({ redirectedFrom: () => redirected ? { url: "/entry" } : null }),
@@ -74,13 +81,16 @@ function fakeBrowser({
             missingText: [],
             forbiddenTextVisible: [],
           },
-          waitForTimeout: async () => {},
+          waitForTimeout: async () => {
+            if (clientRedirectBounce) { onNavigation(frame); onNavigation(frame); }
+          },
           screenshot: async ({ path }) => {
             if (screenshotFailure) throw new Error("Capture failed");
             writeFileSync(path, "screenshot-" + width);
             captured = true;
           },
-        }),
+          };
+        },
         close: async () => { closes++; },
       };
     },
@@ -127,13 +137,17 @@ test("loading, empty, redirected, failed or unscreened state cannot be observed"
       { postCaptureRoute: "/login" },
       { waitFailure: true }, { screenshotFailure: true },
       { navigationFailure: true }, { pageErrors: true },
-      { transitionAfterScreenshot: true },
+      { transitionAfterScreenshot: true }, { clientRedirectBounce: true },
     ]) {
       const out = await probeRenderedState(input, {
         browserFactory: fakeBrowser(scenario).factory,
       });
       assert.equal(out.status, "INCOMPLETE", JSON.stringify(scenario));
       assert.equal(out.declaredDomStateObserved, false);
+      if (scenario.clientRedirectBounce) {
+        assert.ok(out.observations.every((r) => r.mainFrameNavigationCount === 3),
+          "Away-and-back JS redirects must be rejected even with matching final route");
+      }
       assert.equal(out.tasteFramesVerified, false);
       assert.ok(existsSync(join(out.artifactDirectory, "state-report.json")));
     }

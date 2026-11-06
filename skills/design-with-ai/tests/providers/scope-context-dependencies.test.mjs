@@ -165,6 +165,30 @@ test("ambiguous HTML link separators cannot bypass linked CSS provenance", () =>
   });
 });
 
+test("valueless link attributes retain CSS byte provenance and fail closed on duplicates", () => {
+  fixture(({ root, src }) => {
+    const html = join(src, "page.html");
+    const css = join(src, "site.css");
+    writeFileSync(css, "h1 { color: red; }\n");
+    const inspect = () => sourceScopeProof({
+      projectRoot: root, target: html, route: "/page", includeDetectorContext: true,
+    });
+    writeFileSync(html, '<link rel="stylesheet" crossorigin disabled href="site.css">');
+    const initial = inspect();
+    assert.deepEqual(initial.manifest.linkedStylesheets.map((x) => x.path),
+      ["src/site.css"]);
+    writeFileSync(css, "h1 { color: blue; }\n");
+    assert.notEqual(inspect().summary.sourceSha256, initial.summary.sourceSha256);
+    writeFileSync(html, '<link rel="icon" crossorigin disabled href="site.css">');
+    assert.equal((inspect().manifest.linkedStylesheets ?? []).length, 0,
+      "Non-stylesheet links with boolean attributes must not import CSS");
+    writeFileSync(html, '<link rel="stylesheet" crossorigin crossorigin href="site.css">');
+    assert.throws(inspect, /Duplicate HTML link attribute cannot be attested/);
+    writeFileSync(html, '<link rel="stylesheet"crossorigin href="site.css">');
+    assert.throws(inspect, /Ambiguous HTML link attributes cannot be attested/);
+  });
+});
+
 test("symlinked linked CSS and escaping local stylesheet reads cannot be attested", () => {
   fixture(({ root, src }) => {
     const html = join(src, "page.html");

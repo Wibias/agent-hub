@@ -147,21 +147,25 @@ function linkedStylesheetFiles(root, sourceFiles) {
       // The detector accepts some HTML syntax our conservative tokenizer does
       // not (e.g. adjacent quoted attributes and slash-separated attributes).
       // Never attest a partial parse: all tag bytes must be accounted for.
-      const attributePattern = /\s([^\s"'<>\/=\x60]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/g;
       const tagBody = tag[0].slice(5, -1);
-      const matches = [...tagBody.matchAll(attributePattern)];
-      const unparsed = tagBody.replace(attributePattern, "").trim();
-      if (unparsed && unparsed !== "/") {
-        throw new TypeError("Ambiguous HTML link attributes cannot be attested");
-      }
-      for (const match of matches) {
-        // Anchor attribute names at whitespace and preserve dots/colons:
-        // data.rel is distinct from rel, never its suffix.
-        const name = match[1].toLowerCase();
+      // Advance over the ENTIRE tag, including standard valueless attributes
+      // (e.g. crossorigin). Whitespace is mandatory between attributes.
+      // A partial parse must never certify a stylesheet dependency.
+      const attributePattern = /(\s+)([^\s"'<>\/=\x60]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'<> =\x60]+)))?/gy;
+      let offset = 0;
+      while (offset < tagBody.length) {
+        if (/^\s*\/?\s*$/.test(tagBody.slice(offset))) break;
+        attributePattern.lastIndex = offset;
+        const match = attributePattern.exec(tagBody);
+        if (!match) {
+          throw new TypeError("Ambiguous HTML link attributes cannot be attested");
+        }
+        const name = match[2].toLowerCase();
         if (attributes.has(name)) {
           throw new TypeError("Duplicate HTML link attribute cannot be attested");
         }
-        attributes.set(name, match[2] ?? match[3] ?? match[4]);
+        attributes.set(name, match[3] ?? match[4] ?? match[5] ?? "");
+        offset = attributePattern.lastIndex;
       }
       const rel = attributes.get("rel") ?? "";
       const href = attributes.get("href") ?? "";

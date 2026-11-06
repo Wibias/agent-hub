@@ -174,6 +174,13 @@ export async function probeRenderedState(input, { browserFactory = loadPlaywrigh
         const page = await context.newPage();
         const errors = [];
         page.on("pageerror", (error) => errors.push(browserError(error)));
+        // Register before goto: count main-frame navigations even when JS
+        // leaves and returns to the requested route during the observation.
+        const mainFrame = page.mainFrame();
+        let mainFrameNavigations = 0;
+        page.on("framenavigated", (frame) => {
+          if (frame === mainFrame) mainFrameNavigations++;
+        });
         const response = await page.goto(opts.url, { waitUntil: "domcontentloaded", timeout: 45_000 });
         record.httpStatus = response?.status?.() ?? null;
         record.redirectChainPresent =
@@ -197,13 +204,14 @@ export async function probeRenderedState(input, { browserFactory = loadPlaywrigh
         const capturedUrl = new URL(page.url());
         record.finalPath = capturedUrl.pathname;
         record.finalOrigin = capturedUrl.origin;
+        record.mainFrameNavigationCount = mainFrameNavigations;
         record.signals = { first, second, afterScreenshot };
         record.pageErrorCount = errors.length;
         if (errors.length) record.pageErrorSamples = errors.slice(0, 3);
         record.screenshot = screenshot;
         record.screenshotSha256 = sha(readFileSync(screenshot));
         record.status = record.httpStatus === 200 &&
-          !record.redirectChainPresent &&
+          !record.redirectChainPresent && mainFrameNavigations === 1 &&
           record.path === opts.route && record.finalPath === opts.route &&
           record.origin === new URL(opts.url).origin &&
           record.finalOrigin === new URL(opts.url).origin &&

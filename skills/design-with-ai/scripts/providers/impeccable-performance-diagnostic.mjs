@@ -86,7 +86,7 @@ function readCompleteProof(stderr, mode) {
   try { proof = JSON.parse(receipts[0].slice(SCAN_PROOF_PREFIX.length)); }
   catch { throw new Error("Invalid Impeccable scan receipt JSON"); }
   const numbers = ["candidateFiles", "eligibleFiles", "ignoredFiles",
-    "scannedFiles", "degradedFiles", "durationMs"];
+    "scannedFiles", "degradedFiles", "durationMs", "designSystemResolvedFiles"];
   if (!proof || typeof proof !== "object" || Array.isArray(proof) ||
       proof.schemaVersion !== 1 ||
       numbers.some((key) => !Number.isSafeInteger(proof[key]) || proof[key] < 0) ||
@@ -94,6 +94,7 @@ function readCompleteProof(stderr, mode) {
       proof.candidateFiles !== proof.eligibleFiles + proof.ignoredFiles ||
       proof.scannedFiles !== proof.eligibleFiles ||
       proof.degradedFiles !== 0 ||
+      proof.designSystemResolvedFiles > proof.scannedFiles ||
       !["configEnabled", "inlineIgnoresEnabled", "designSystemEnabled"]
         .every((key) => typeof proof[key] === "boolean")) {
     throw new Error("Incomplete, degraded or contradictory Impeccable source coverage");
@@ -103,7 +104,8 @@ function readCompleteProof(stderr, mode) {
   if (proof.configEnabled !== configured ||
       proof.inlineIgnoresEnabled !== inline ||
       (!configured && proof.designSystemEnabled) ||
-      (mode.id === "no-design-system" && proof.designSystemEnabled)) {
+      (mode.id === "no-design-system" && proof.designSystemEnabled) ||
+      (!proof.designSystemEnabled && proof.designSystemResolvedFiles !== 0)) {
     throw new Error("Impeccable receipt contradicts benchmark scan mode");
   }
   return proof;
@@ -134,6 +136,8 @@ function validateDetectorResult(result, mode) {
     candidateFiles: proof.candidateFiles,
     ignoredFiles: proof.ignoredFiles,
     degradedFiles: proof.degradedFiles,
+    designSystemEnabled: proof.designSystemEnabled,
+    designSystemResolvedFiles: proof.designSystemResolvedFiles,
     findings: findings.length,
     primary: primary.length,
     advisory: findings.length - primary.length,
@@ -183,14 +187,22 @@ export async function compareImpeccableModes(argv, { runner = runProcess, script
       runs.push(row);
     }
   }
+  const designSystemComparison = runs
+    .filter((r) => ["configured", "no-inline-ignores"].includes(r.mode))
+    .every((r) => r.designSystemEnabled && r.designSystemResolvedFiles === r.filesScanned)
+    ? "ESTABLISHED" : "NOT_ESTABLISHED";
   return {
     schemaVersion: 1,
     kind: "dwa/impeccable-performance-diagnostic",
     status: "COMPLETE",
+    designSystemComparison,
     target: scope.target,
     roundsRequested: opts.rounds,
     runs,
-    note: "Modes isolate inline exceptions and DESIGN.md interpretation. Wall-clock differences can still reflect JIT, file caches, OS scheduling and run order. This is not a rendered UI audit or a DWA completion proof.",
+    note: (designSystemComparison === "ESTABLISHED"
+      ? "Modes isolate inline exceptions and resolved DESIGN.md interpretation. "
+      : "DESIGN.md comparison NOT ESTABLISHED: design-system disabled, unresolved or only partially resolved. Inline ignores remain isolated. ") +
+      "Wall-clock differences can still reflect JIT, file caches, OS scheduling and run order. This is not a rendered UI audit or a DWA completion proof.",
   };
 }
 

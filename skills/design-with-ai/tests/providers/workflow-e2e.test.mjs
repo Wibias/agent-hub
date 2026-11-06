@@ -32,6 +32,7 @@ async function fixture(fn) {
   ].join("\n"));
   const page = join(srcDir, "source.css");
   writeFileSync(page, ".panel { padding: 12px; color: #222; }\n");
+  writeFileSync(join(root, "package.json"), "{}\n");
   try { return await fn({ root, page, htmlPage, srcDir, built, renderedPage }); }
   finally { rmSync(root, { force: true, recursive: true }); }
 }

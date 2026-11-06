@@ -14,8 +14,8 @@ Specify `--rounds 2` to run the four modes twice with the second pass in reverse
 
 | Mode | Relevant behavior |
 | --- | --- |
-| `configured` | Honors project filters, inline suppressions, and design-system context |
-| `no-inline-ignores` | Keeps project filters and DESIGN.md, disables only inline suppressions |
+| `configured` | Honors project filters and inline suppressions; uses DESIGN.md only when enabled and resolved |
+| `no-inline-ignores` | Keeps project filters and available DESIGN.md when enabled, disables only inline suppressions |
 | `no-design-system` | Keeps project filters and inline suppressions, disables only DESIGN.md analysis |
 | `no-config` | Disables project filters, inline suppressions **and** design-system context |
 
@@ -24,6 +24,8 @@ This separation matters because `--no-config` alone cannot identify the cause of
 Each scan is a fresh local Node process with fixed arguments, bounded execution (120 seconds per mode) and a bounded output buffer. Output contains **counts grouped by rule**, durations and explicit completion status; no source snippets, file contents or detector stdout are copied into the summary.
 
 ## Reading the results
+
+`designSystemComparison` is `ESTABLISHED` only when both configured modes actually resolved a DESIGN.md for every scanned file. If project configuration disables it, no file resolves it, or only some files do, the scan may still be `COMPLETE` but the comparison is `NOT_ESTABLISHED`. Each mode reports `designSystemEnabled` and `designSystemResolvedFiles`; a complete scan is not itself proof that DESIGN.md was used.
 
 - An empty findings array is not proof of design quality.
 - Compare the per-mode durations **within and across rounds**, not just one pair. OS file-cache warming, JIT compilation, build activity and file system scanning can affect wall time.
