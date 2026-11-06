@@ -1,6 +1,6 @@
 # Combined Design-With-AI provider validation (2026-11-06)
 
-This **non-mergeable integration candidate** combines five independent, unmerged Agent Hub Draft PR heads, followed by the separate policy-provenance fix in Draft #206:
+This **non-mergeable integration candidate** combines five independent, unmerged Agent Hub Draft PR heads, followed by the policy-provenance fix #206 and rendered-asset provenance fix #208:
 
 | Component | PR | Pinned head |
 | --- | --- | --- |
@@ -10,8 +10,9 @@ This **non-mergeable integration candidate** combines five independent, unmerged
 | Optional declared DOM-state observation | #198 | `b21dab2dc3a15f91648b6215c896ce87074704b4` |
 | Design-root directory memoization | #200 | `8e6fc5120d6bdcb29df7c4d6ccc1c1e3094b7507` |
 | External Impeccable policy inputs in DWA source fingerprint | #206 | `f1fbc19b967d4fc37afa168f604fb6a16f57e504` |
+| Complete bounded local rendered build-tree fingerprints | #208 | `b957d85af46389878647fe57fd73bf3e5725d02e` |
 
-All six constituent PRs were 14/14 CI-green independently before combining. Their change paths do not overlap. CI on the **combined branch** is separately required; separate green CI runs do not prove the combination works.
+All seven constituent PRs were 14/14 CI-green independently before combining. PRs #206 and #208 both touch `scope-proof.mjs` and `workflow.test.mjs`; their changes are **integrated explicitly and checked for retention of both safeguards**. CI on the combined branch is separately required; individual green CI runs do not prove the combination works.
 
 ## Joint real Chrome/Taste/Impeccable regression
 
@@ -23,6 +24,7 @@ It additionally asserts:
 - Taste retains original finding count, `FAIL/WARN` severity, heuristic class counts and evidence through the central fusion.
 - Taste is **not** runtime-state verified, even if its rendered scan completed; `productCompletionEligible` stays false.
 - The same real Chrome fixture's out-of-target `DESIGN.md` appears by relative path and SHA-256 in `sourceScopeProof().manifest.detectorContext`; all providers' audit scopes bind to the resulting fingerprint.
+- Its loaded `dist/settings/fixture.css` and `index.html` both appear in the bounded `manifest.renderedAssets` with file-level SHA-256. The rendered aggregate digest matches the Taste and fused scope.
 - Incomplete source/browser evidence cannot claim an accepted product.
 - All work occurs on disposable fixtures; no product files, users' worktrees, or upstream detector checkout are edited.
 
@@ -30,7 +32,7 @@ It additionally asserts:
 
 This branch is a **test candidate only**; do not merge it as a substitute for merging and reviewing the constituent changes individually. The upstream Taste run currently cannot attest an authenticated game phase or that standalone DOM-state-probe screenshots match its own browser contexts. The separate DOM-state probe in PR #198 has only deterministic contract/failure tests in CI and has not yet demonstrated a live game backend.
 
-**Policy provenance fix included:** #206 now binds out-of-target `DESIGN.md`, its sidecar and shared/local `.impeccable` detector config files to the source manifest. New tests cover file creation, editing, nested project boundaries, symlink escapes, and a configuration mutation during provider execution. A passing combined Chrome smoke is required before claiming that this integration path works. These policy digests still do **not** prove every possible runtime or environment dependency is immutable. The completed-file receipt is separate from configuration provenance.
+**Policy and local build provenance fixes included:** #206 binds out-of-target `DESIGN.md`, its sidecar and shared/local `.impeccable` detector configs. #208 binds the full isolated regular-file build subtree to the shared source fingerprint and before/after stat checks, with explicit file/byte/depth limits and fail-closed symlink handling. Tests cover creation, deletion, mutation and path safety. The combined Chrome smoke checks both the external policy digest and the locally linked CSS's own hash. Neither fix proves remote CDN bytes, service-worker caches, authenticated room state or every dynamic network response. A completed file receipt is separate from these provenance guarantees.
 
 CodeRabbit full review quota was exhausted previously. An available independent reviewer must inspect the combined candidate and outstanding provenance limitation before any production promotion.
 
