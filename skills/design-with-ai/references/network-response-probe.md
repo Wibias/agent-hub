@@ -49,6 +49,6 @@ It is intentionally separate from default DWA execution and the historical evide
 
 ## Independent review
 
-A manual CodeRabbit review was requested on the combined Draft #205. That external review has not yet reported results. This experiment adds deterministic unit/negative tests, but mocked browser evidence is **not** a real Chrome network verification.
+The combined Draft #205 has a separately triggered full CodeRabbit review; that review does not review this independent #210 experiment. #210 has no completed independent full CodeRabbit review. In addition to deterministic injected-browser regressions, the browser CI fixture runs **actual Chrome** against a trusted loopback server for matching local HTTP response bodies, intentionally tampered CSS, a never-answered fetch, and a response with completed headers but a deliberately incomplete body. These tests establish only behavior on the isolated fixture; an external review and current-base combined testing are required before any future integration.
 
 All changes stay in `Wibias/agent-hub`; `streamer-content` remains read-only and no PR is merged.
