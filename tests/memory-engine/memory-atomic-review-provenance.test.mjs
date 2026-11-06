@@ -64,9 +64,9 @@ test('CLI rejects mutation options, duplicate and incomplete review intent', () 
   assert.equal(parseAtomicReviewArgs([...base,'--show-local-content']).showLocalContent,true);
   assert.throws(() => parseAtomicReviewArgs([...base,'--apply']),/unsupported argument/);
   assert.throws(() => parseAtomicReviewArgs([...base,'--branch','other']),/duplicate argument/);
-  assert.throws(() => parseAtomicReviewArgs([...base,'--intent','retain_for_confirmation']),/complete selection/);
+  assert.throws(() => parseAtomicReviewArgs([...base,'--intent','retain_for_confirmation']),/requires candidate, refs, and intent together/);
   assert.throws(() => parseAtomicReviewArgs([...base,'--limit','21']),/limit/);
-  assert.throws(() => parseAtomicReviewArgs([...base,'--review-refs','~a123']),/complete selection/);
+  assert.throws(() => parseAtomicReviewArgs([...base,'--review-refs','~a123']),/requires candidate, refs, and intent together/);
 });
 
 test('read-only review rejects mismatched evidence, secret and unrelated scope', async () => {
