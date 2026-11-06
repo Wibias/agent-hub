@@ -140,6 +140,9 @@ async function detectHtml(filePath, options = {}) {
       };
     });
   } catch (err) {
+  // The regex fallback is intentionally lossy: selector/cascade/contrast checks
+  // are absent. A DWA scan receipt must never call this completed coverage.
+  options?.onDegraded?.(filePath);
   if (!globalThis.__impeccableStaticHtmlWarned) {
     globalThis.__impeccableStaticHtmlWarned = true;
 
