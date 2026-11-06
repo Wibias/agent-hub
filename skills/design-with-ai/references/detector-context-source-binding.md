@@ -19,6 +19,23 @@ The DWA snapshot includes only the digest, not policy contents. Files already pr
 
 The resolver is deliberately independent of the optional Impeccable plugin. The DWA native quick profile must still work when Impeccable is unavailable.
 
+## HTML-linked stylesheet dependencies
+
+A selected **single HTML source file**, with Impeccable enabled and without Taste,
+can still cause the vendored static-HTML detector to read local
+`<link rel="stylesheet" href="...">` CSS files outside the selected target.
+`sourceScopeProof()` therefore binds existing local linked stylesheets to an
+optional sorted `manifest.linkedStylesheets` array containing only
+project-relative paths and SHA-256 digests. Their file metadata also joins
+`observedInputsSha256`. A CSS change invalidates the before/after proof even
+when the HTML itself is byte-for-byte unchanged.
+
+This path resolution follows Impeccable's local href query/fragment stripping
+and rejects symlinked, out-of-project, or ambiguous entity-encoded local
+stylesheets rather than silently claiming full provenance. Files already
+included in the selected source manifest are not duplicated. The native-only
+quick profile does not acquire these optional detector inputs.
+
 ## Limits
 
 This strengthens provenance; it **does not** prove the static detector saw every relevant design failure, that Taste Skill captured the intended application state, or that source files were OS-level immutable during the scan.
