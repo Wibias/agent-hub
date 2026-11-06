@@ -7,6 +7,61 @@ const hash = (x) => createHash("sha256").update(JSON.stringify(x)).digest("hex")
 const allowedProviders = new Set(["native-dwa", "impeccable", "taste-skill"]);
 const prio = { P0: 3, P1: 2, P2: 1 };
 const success = new Set([ProviderStatus.PASS, ProviderStatus.FINDINGS]);
+const TASTE_CLASSES = new Set([
+  "POTENTIAL_USABILITY", "GEOMETRY_NEEDS_VISUAL_REVIEW",
+  "CONTEXTUAL_HOUSE_RULE", "UNCLASSIFIED_HEURISTIC",
+]);
+
+// Taste's extra fields are review labels, not acceptance or de-duplication
+// keys. Never let arbitrary strings from a provider enter the fused record.
+function tasteMemberMetadata(report, finding) {
+  if (report.provider !== "taste-skill") return {};
+  const metadata = {};
+  if (finding.reviewClass !== undefined) {
+    if (!TASTE_CLASSES.has(finding.reviewClass)) {
+      throw new TypeError("Invalid Taste review class");
+    }
+    metadata.reviewClass = finding.reviewClass;
+  }
+  if (finding.upstreamSeverity !== undefined) {
+    if (!["FAIL", "WARN"].includes(finding.upstreamSeverity)) {
+      throw new TypeError("Invalid Taste upstream severity");
+    }
+    metadata.upstreamSeverity = finding.upstreamSeverity;
+  }
+  return metadata;
+}
+
+function tasteFusionSummary(report) {
+  if (report.provider !== "taste-skill") return {};
+  // The pinned Taste 2.5.0 checker does not prove SPA hydration or game phase.
+  // Never treat an upstream PASS as a ready-state assertion.
+  const result = {
+    renderedStateVerified: false,
+    renderedStateProof: "NOT_PROVIDED_BY_UPSTREAM",
+  };
+  const counts = report.summary?.reviewClassCounts;
+  if (counts !== undefined) {
+    if (!counts || typeof counts !== "object" || Array.isArray(counts) ||
+        Object.keys(counts).length !== TASTE_CLASSES.size ||
+        Object.keys(counts).some((k) => !TASTE_CLASSES.has(k) ||
+          !Number.isSafeInteger(counts[k]) || counts[k] < 0)) {
+      throw new TypeError("Invalid Taste review class counts");
+    }
+    const counted = Object.fromEntries([...TASTE_CLASSES].map((id) => [id, 0]));
+    for (const item of report.findings) {
+      if (!TASTE_CLASSES.has(item.reviewClass)) {
+        throw new TypeError("Taste class summary does not match observations");
+      }
+      counted[item.reviewClass]++;
+    }
+    if ([...TASTE_CLASSES].some((id) => counts[id] !== counted[id])) {
+      throw new TypeError("Taste class summary does not match observations");
+    }
+    result.reviewClassCounts = structuredClone(counts);
+  }
+  return result;
+}
 
 // Source scanners do not have any proven rule-equivalent pair yet. Even
 // identical source locations with visually related rules stay separate.
@@ -65,6 +120,7 @@ function memberOf(report, finding) {
     message: finding.message,
     location: structuredClone(finding.location),
     evidence: structuredClone(finding.evidence),
+    ...tasteMemberMetadata(report, finding),
   };
 }
 
@@ -247,6 +303,7 @@ export function fuseProviderEvidence(reports, { required = [], optional = [], sc
       // No embedded filesystem access or executable instructions are needed.
       provenance: r.provenance ?? null,
       verdict: r.verdict ?? null,
+      ...tasteFusionSummary(r),
     })),
     counts: {
       observations: total,
