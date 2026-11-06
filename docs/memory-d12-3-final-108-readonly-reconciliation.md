@@ -75,7 +75,7 @@ reset, overwrite or merge any existing worktree.
     if (-not (Test-Path $Previous)) { throw 'Previous worktree missing' }
     if (Test-Path $Next) { throw 'Worktree exists; do not overwrite' }
 
-    git -C $Previous fetch origin pull/REPLACE_PR/head
+    git -C $Previous fetch origin pull/217/head
     if ($LASTEXITCODE -ne 0) { throw 'Fetch failed' }
     git -C $Previous worktree add --detach $Next FETCH_HEAD
     if ($LASTEXITCODE -ne 0) { throw 'Worktree failed' }
