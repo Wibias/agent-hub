@@ -1,0 +1,40 @@
+name: Memory Atomic Claim Finalizer D12.3
+
+on:
+  pull_request:
+    paths:
+      - "memory-engine/index.mjs"
+      - "memory-engine/memory-atomic-claim-promotion-ledger.mjs"
+      - "tests/memory-engine/memory-atomic-claim-finalizer.test.mjs"
+      - "docs/memory-d12-3-claim-finalizer.md"
+      - ".github/workflows/verify-memory-atomic-claim-finalizer.yml"
+  push:
+    branches: [main]
+    paths:
+      - "memory-engine/index.mjs"
+      - "memory-engine/memory-atomic-claim-promotion-ledger.mjs"
+      - "tests/memory-engine/memory-atomic-claim-finalizer.test.mjs"
+      - "docs/memory-d12-3-claim-finalizer.md"
+      - ".github/workflows/verify-memory-atomic-claim-finalizer.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Verify staged atomic Claim finalizer, rollback, and portability
+        run: |
+          node --check memory-engine/index.mjs
+          node --check memory-engine/memory-atomic-claim-promotion-ledger.mjs
+          node --test tests/memory-engine/memory-atomic-claim-finalizer.test.mjs
