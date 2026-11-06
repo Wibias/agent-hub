@@ -29,10 +29,12 @@ function readScanProof(stderr) {
   catch { throw new Error("Invalid scan receipt JSON"); }
   if (!proof || typeof proof !== "object" || Array.isArray(proof) ||
       proof.schemaVersion !== 1 ||
-      !["candidateFiles", "eligibleFiles", "scannedFiles", "ignoredFiles", "durationMs"]
+      !["candidateFiles", "eligibleFiles", "scannedFiles", "ignoredFiles", "degradedFiles", "durationMs"]
         .every((key) => Number.isSafeInteger(proof[key]) && proof[key] >= 0) ||
       proof.candidateFiles !== proof.eligibleFiles + proof.ignoredFiles ||
-      proof.eligibleFiles === 0 || proof.scannedFiles !== proof.eligibleFiles ||
+      proof.eligibleFiles === 0 ||
+      proof.scannedFiles + proof.degradedFiles !== proof.eligibleFiles ||
+      proof.degradedFiles !== 0 ||
       proof.configEnabled !== true ||
       typeof proof.inlineIgnoresEnabled !== "boolean" ||
       typeof proof.designSystemEnabled !== "boolean") {
@@ -227,6 +229,7 @@ export function createImpeccableProvider({ script = DEFAULT_SCRIPT, runner = run
             eligibleFiles: proof.eligibleFiles,
             candidateFiles: proof.candidateFiles,
             ignoredFiles: proof.ignoredFiles,
+            degradedFiles: proof.degradedFiles,
             coverageCountVerified: true,
             coverageMethod: "bundled-detector-completed-source-file-count",
             // Explicit modes, not a count of findings suppressed by waivers.
