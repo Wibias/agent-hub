@@ -49,7 +49,7 @@ worktree as the local base, without resetting or changing it.
     if (-not (Test-Path $Previous)) { throw "Previous worktree missing" }
     if (Test-Path $Next) { throw "Export worktree already exists; do not overwrite" }
 
-    git -C $Previous fetch origin pull/REPLACE_PR/head
+    git -C $Previous fetch origin pull/215/head
     if ($LASTEXITCODE -ne 0) { throw "Fetch failed" }
     git -C $Previous worktree add --detach $Next FETCH_HEAD
     if ($LASTEXITCODE -ne 0) { throw "Worktree creation failed" }
