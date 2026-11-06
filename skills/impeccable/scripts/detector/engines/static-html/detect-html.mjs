@@ -124,6 +124,9 @@ async function detectHtml(filePath, options = {}) {
       ruleId: 'import-static-parser',
       target: filePath,
     }, async () => {
+      // Narrow injection hook for a deterministic parser-unavailable regression
+      // test; normal CLI scans always use the vendored dynamic imports.
+      if (options?.parserLoader) return options.parserLoader();
       const [htmlparser2, cssSelect, csstree, domutils] = await Promise.all([
         import('htmlparser2'),
         import('css-select'),
