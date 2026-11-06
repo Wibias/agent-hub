@@ -1,0 +1,39 @@
+name: Memory Atomic Review Provenance D12.3
+
+on:
+  pull_request:
+    paths:
+      - "memory-engine/memory-atomic-review-provenance.mjs"
+      - "scripts/inspect-memory-atomic-review.mjs"
+      - "tests/memory-engine/memory-atomic-review-provenance.test.mjs"
+      - "docs/memory-d12-3-review-provenance.md"
+      - ".github/workflows/verify-memory-atomic-review.yml"
+  push:
+    branches: [main]
+    paths:
+      - "memory-engine/memory-atomic-review-provenance.mjs"
+      - "scripts/inspect-memory-atomic-review.mjs"
+      - "tests/memory-engine/memory-atomic-review-provenance.test.mjs"
+      - ".github/workflows/verify-memory-atomic-review.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Check provenance-only review
+        run: |
+          node --check memory-engine/memory-atomic-review-provenance.mjs
+          node --check scripts/inspect-memory-atomic-review.mjs
+          node --test tests/memory-engine/memory-atomic-review-provenance.test.mjs
