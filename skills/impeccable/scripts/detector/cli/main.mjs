@@ -212,6 +212,7 @@ async function detectCli() {
     eligibleFiles: 0,
     scannedFiles: 0,
     ignoredFiles: 0,
+    degradedFiles: 0,
     configEnabled: !args.includes('--no-config'),
     inlineIgnoresEnabled: !args.includes('--no-config') && !args.includes('--no-inline-ignores'),
     designSystemEnabled: false,
@@ -284,7 +285,16 @@ async function detectCli() {
   // apply by default. `--no-config` (raw scan) and the dedicated
   // `--no-inline-ignores` both turn them off.
   const inlineIgnoresEnabled = configEnabled && !args.includes('--no-inline-ignores');
-  const baseScanOptions = { inlineIgnores: inlineIgnoresEnabled };
+  // A fallback may produce regex findings, but it did not complete the HTML
+  // selector/cascade checks. Keep that file distinct from a complete scan.
+  const degradedFiles = new Set();
+  const baseScanOptions = {
+    inlineIgnores: inlineIgnoresEnabled,
+    ...(scanProofMode ? { onDegraded: (file) => {
+      degradedFiles.add(file);
+      scanProof.degradedFiles = degradedFiles.size;
+    } } : {}),
+  };
   if (viewport) baseScanOptions.viewport = viewport;
   // DESIGN.md must resolve from EACH scan target's own project root, not from
   // process.cwd(): scanning project B's files from inside project A applied A's
@@ -411,7 +421,7 @@ async function detectCli() {
             // so a scan spanning sibling projects applies the right rules per file.
             const fileOptions = scanOptionsFor(file);
             const fileFindings = await detectLocalFile(file, fileOptions);
-            if (scanProofMode) scanProof.scannedFiles++;
+            if (scanProofMode && !degradedFiles.has(file)) scanProof.scannedFiles++;
             // Annotate findings with import context
             const importers = importedByMap.get(file);
             if (importers && importers.size > 0) {
@@ -431,7 +441,7 @@ async function detectCli() {
           if (scanProofMode) scanProof.eligibleFiles++;
           const fileOptions = scanOptionsFor(resolved);
           allFindings.push(...await detectLocalFile(resolved, fileOptions));
-          if (scanProofMode) scanProof.scannedFiles++;
+          if (scanProofMode && !degradedFiles.has(resolved)) scanProof.scannedFiles++;
         }
       }
     } finally {
