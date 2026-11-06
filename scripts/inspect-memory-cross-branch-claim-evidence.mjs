@@ -97,7 +97,7 @@ export function inspectCrossBranchClaimEvidence({
       return { ...baseline, status: 'blocked', blockers: ['project_not_registered'] };
     }
     const claims = db.prepare(
-      'SELECT id,branch_scope,kind,state,subject,predicate,value_text,created_from_evidence_id ' +
+      'SELECT id,branch_scope,kind,state,created_from_evidence_id ' +
       'FROM claims WHERE project_id=? ' +
       "AND state IN ('active','candidate','stale','conflicted') " +
       'ORDER BY id ASC LIMIT ?',
@@ -116,7 +116,7 @@ export function inspectCrossBranchClaimEvidence({
     const claim = matches[0];
     const sources = db.prepare(
       'SELECT l.evidence_id,l.role,e.id AS source_exists,e.project_id,e.branch,' +
-      'e.sensitivity,e.authority_class,e.source_kind,e.content_redacted ' +
+      'e.sensitivity,e.authority_class,e.source_kind ' +
       'FROM claim_evidence l LEFT JOIN evidence e ON e.id=l.evidence_id ' +
       'WHERE l.claim_id=? ORDER BY l.role ASC,l.evidence_id ASC',
     ).all(claim.id);
@@ -129,6 +129,12 @@ export function inspectCrossBranchClaimEvidence({
         && row.sensitivity === 'normal'
         && ['primary', 'supporting'].includes(row.role));
     const safeContent = showLocalContent && sourceSafe;
+    const claimText = safeContent ? db.prepare(
+      'SELECT subject,predicate,value_text FROM claims WHERE id=?',
+    ).get(claim.id) : null;
+    const evidenceContentQuery = safeContent ? db.prepare(
+      'SELECT content_redacted FROM evidence WHERE id=?',
+    ) : null;
     const refs = sources.map(row => evidenceRef(row.evidence_id));
     if (new Set(refs).size !== refs.length) {
       return { ...baseline, status: 'blocked', blockers: ['opaque_evidence_ref_collision'] };
@@ -147,7 +153,9 @@ export function inspectCrossBranchClaimEvidence({
         hostOriginAuthenticatedByThisAudit: false,
       };
       if (safeContent) {
-        item.localRedactedEvidenceExcerpt = excerpt(source.content_redacted, MAX_EVIDENCE_CHARS);
+        item.localRedactedEvidenceExcerpt = excerpt(
+          evidenceContentQuery.get(source.evidence_id)?.content_redacted, MAX_EVIDENCE_CHARS,
+        );
       }
       return item;
     });
@@ -159,9 +167,9 @@ export function inspectCrossBranchClaimEvidence({
       allSourcesStructurallySafe: sourceSafe,
       requiresHumanMeaningReview: true,
       ...(safeContent ? {
-        localSubject: excerpt(claim.subject, MAX_CLAIM_CHARS),
-        localPredicate: excerpt(claim.predicate, MAX_CLAIM_CHARS),
-        localValue: excerpt(claim.value_text, MAX_CLAIM_CHARS),
+        localSubject: excerpt(claimText.subject, MAX_CLAIM_CHARS),
+        localPredicate: excerpt(claimText.predicate, MAX_CLAIM_CHARS),
+        localValue: excerpt(claimText.value_text, MAX_CLAIM_CHARS),
       } : {}),
     };
     return {
