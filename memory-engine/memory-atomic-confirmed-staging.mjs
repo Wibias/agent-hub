@@ -168,6 +168,9 @@ export function stageConfirmedAtomicRule(request = {}) {
     verifyConfirmation(confirmation, {
       projectId, branch, candidateId, reviewRefs, draftRef, ruleText,
     }, verified.source.created_at, verified.source.evidence_id);
+    if (Date.parse(stagedAt) < Date.parse(confirmation.captured_at)) {
+      throw new Error('staging timestamp cannot precede direct-user confirmation');
+    }
 
     const alreadyActive = db.prepare(
       'SELECT id FROM claims WHERE project_id = ? AND branch_scope = ? '
