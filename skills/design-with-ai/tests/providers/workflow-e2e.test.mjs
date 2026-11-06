@@ -82,7 +82,7 @@ test("HTML fallback without parser dependencies is incomplete, never a green pro
     const impeccable = JSON.parse(readFileSync(
       summary.artifacts.reports.impeccable, "utf8"));
     assert.equal(impeccable.status, "ERROR");
-    assert.match(impeccable.reason, /Incomplete or contradictory source scan receipt/);
+    assert.match(impeccable.reason, /HTML parser fallback degraded/);
   }));
 
 test("quick preserves only the DWA native provider", () => fixture((f) => {
