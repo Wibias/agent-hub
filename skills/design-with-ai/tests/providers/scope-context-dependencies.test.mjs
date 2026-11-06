@@ -65,6 +65,55 @@ test("shared, local and sidecar detector config influence the source fingerprint
   });
 });
 
+test("HTML-only Impeccable source proof includes linked sibling CSS bytes", () => {
+  fixture(({ root, src }) => {
+    const html = join(src, "page.html");
+    const css = join(src, "site.css");
+    writeFileSync(html,
+      '<!doctype html><link href="site.css?v=1&theme=2" rel="stylesheet"><h1>Title</h1>');
+    writeFileSync(css, "h1 { color: red; }\n");
+    const inspect = (includeDetectorContext) => sourceScopeProof({
+      projectRoot: root, target: html, route: "/page", includeDetectorContext,
+    });
+    const first = inspect(true);
+    assert.equal(first.manifest.files.length, 1, "only selected HTML is the source file");
+    assert.deepEqual(first.manifest.linkedStylesheets.map((x) => x.path),
+      ["src/site.css"]);
+    const nativeBefore = inspect(false);
+    writeFileSync(css, "h1 { color: blue; }\n");
+    const changed = inspect(true);
+    assert.notEqual(changed.summary.sourceSha256, first.summary.sourceSha256,
+      "HTML-only proof must bind linked CSS changes to the manifest digest");
+    assert.notEqual(changed.observedInputsSha256, first.observedInputsSha256,
+      "linked CSS input metadata must also change on subsequent scans");
+    assert.equal(inspect(false).summary.sourceSha256, nativeBefore.summary.sourceSha256,
+      "native-only source proof must not acquire optional detector dependencies");
+  });
+});
+
+test("symlinked linked CSS and escaping local stylesheet reads cannot be attested", () => {
+  fixture(({ root, src }) => {
+    const html = join(src, "page.html");
+    const css = join(src, "site.css");
+    const external = mkdtempSync(join(tmpdir(), "dwa-external-css-"));
+    try {
+      const outside = join(external, "other.css");
+      writeFileSync(outside, "body { color: purple; }\n");
+      writeFileSync(html, '<link rel="stylesheet" href="site.css">');
+      symlinkSync(outside, css);
+      const inspect = () => sourceScopeProof({
+        projectRoot: root, target: html, route: "/page", includeDetectorContext: true,
+      });
+      assert.throws(inspect, /Linked stylesheet must be a regular in-project file/);
+      rmSync(css);
+      writeFileSync(html, '<link rel="stylesheet" href="' + outside + '">');
+      assert.throws(inspect, /Linked stylesheet escapes declared project scope/);
+    } finally {
+      rmSync(external, { recursive: true, force: true });
+    }
+  });
+});
+
 test("nested design documents stay isolated across source directories", () => {
   fixture(({ root, src, inspect }) => {
     writeFileSync(join(root, "DESIGN.md"), "---\ncolors:\n  ink: '#111111'\n---\n");
