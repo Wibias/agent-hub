@@ -4,6 +4,9 @@ on:
   pull_request:
     paths:
       - "memory-engine/memory-atomic-review-provenance.mjs"
+      - "memory-engine/memory-atomic-rule-draft.mjs"
+      - "scripts/preview-memory-atomic-rule-draft.mjs"
+      - "tests/memory-engine/memory-atomic-rule-draft.test.mjs"
       - "scripts/inspect-memory-atomic-review.mjs"
       - "tests/memory-engine/memory-atomic-review-provenance.test.mjs"
       - "docs/memory-d12-3-review-provenance.md"
@@ -12,6 +15,9 @@ on:
     branches: [main]
     paths:
       - "memory-engine/memory-atomic-review-provenance.mjs"
+      - "memory-engine/memory-atomic-rule-draft.mjs"
+      - "scripts/preview-memory-atomic-rule-draft.mjs"
+      - "tests/memory-engine/memory-atomic-rule-draft.test.mjs"
       - "scripts/inspect-memory-atomic-review.mjs"
       - "tests/memory-engine/memory-atomic-review-provenance.test.mjs"
       - ".github/workflows/verify-memory-atomic-review.yml"
@@ -35,5 +41,7 @@ jobs:
       - name: Check provenance-only review
         run: |
           node --check memory-engine/memory-atomic-review-provenance.mjs
+          node --check memory-engine/memory-atomic-rule-draft.mjs
+          node --check scripts/preview-memory-atomic-rule-draft.mjs
           node --check scripts/inspect-memory-atomic-review.mjs
-          node --test tests/memory-engine/memory-atomic-review-provenance.test.mjs
+          node --test tests/memory-engine/memory-atomic-review-provenance.test.mjs tests/memory-engine/memory-atomic-rule-draft.test.mjs
