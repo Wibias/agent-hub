@@ -27,11 +27,23 @@ It does not depend on or activate the write-capable Draft stack #187-#192.
 ## How to run on Windows
 
 First obtain a current opaque reference with PR #193's inventory.
-Use a separate local worktree to avoid touching the installed application.
+Create a separate detached worktree from the existing read-only audit
+worktree (do not reset the existing branch or merge anything).
 
-    $Repo = "$HOME\agent-hub-D12-3-evidence-review"
+    $Audit = "$HOME\agent-hub-D12-3-proposal-audit"
+    $Review = "$HOME\agent-hub-D12-3-evidence-review"
+    if (-not (Test-Path $Audit)) { throw "Audit worktree missing" }
+    if (Test-Path $Review) { throw "Review worktree already exists" }
+    git -C $Audit fetch origin pull/194/head
+    if ($LASTEXITCODE -ne 0) { throw "Fetch failed" }
+    git -C $Audit worktree add --detach $Review FETCH_HEAD
+    if ($LASTEXITCODE -ne 0) { throw "Review worktree creation failed" }
+
+Then select a single currently open proposal with its opaque ref:
+
     $Db = if ($env:AGENT_HUB_MEMORY_DB) { $env:AGENT_HUB_MEMORY_DB } else { Join-Path $env:LOCALAPPDATA "agent-hub\memory.sqlite3" }
-    node "$Repo\scripts\inspect-memory-proposal-evidence.mjs" --db-path $Db --project-id github.com/Wibias/streamer-content --branch main --proposal-ref "~p72cc39ed74bf"
+    if (-not (Test-Path $Db)) { throw "Memory database missing" }
+    node "$Review\scripts\inspect-memory-proposal-evidence.mjs" --db-path $Db --project-id github.com/Wibias/streamer-content --branch main --proposal-ref "~p72cc39ed74bf"
 
 For your own terminal only, add:
 
