@@ -119,6 +119,10 @@ test('only explicit reviewed write in canonical transaction creates one correct 
     assert.equal(sidecar.prepare('SELECT COUNT(*) AS n FROM memory_atomic_rule_claim_promotions').get().n,1);
     assert.equal(sidecar.prepare('SELECT COUNT(*) AS n FROM claims').get().n,1);
     assert.equal(sidecar.prepare('SELECT COUNT(*) AS n FROM claim_fts').get().n,1);
+    const recalled = memory.recall({
+      projectId:PROJECT,branch:BRANCH,query:'overlay',limit:10,
+    });
+    assert.ok(recalled.items.some(item => item.claim.id === result.claimId));
     const replay=await memory.finalizeStagedAtomicRuleClaim(approval(stageId));
     assert.equal(replay.status,'already_promoted');
     assert.equal(replay.claimCreated,false);
