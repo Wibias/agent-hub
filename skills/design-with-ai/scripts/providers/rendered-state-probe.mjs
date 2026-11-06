@@ -140,17 +140,21 @@ export async function probeRenderedState(input, { browserFactory = loadPlaywrigh
         const first = await page.evaluate(SNAPSHOT, opts.contract);
         await page.waitForTimeout(750);
         const second = await page.evaluate(SNAPSHOT, opts.contract);
-        record.signals = { first, second };
-        record.pageErrorCount = errors.length;
-        if (errors.length) record.pageErrorSamples = errors.slice(0, 3);
-        record.status = record.httpStatus >= 200 && record.httpStatus < 400 &&
-          record.path === opts.route && errors.length === 0 &&
-          !record.markerWaitError && completeSample(first) && completeSample(second)
-          ? "DOM_SIGNALS_OBSERVED" : "INCOMPLETE";
         const screenshot = join(runDir, "state-" + width + ".png");
         await page.screenshot({ path: screenshot, fullPage: false, timeout: 20_000 });
+        // Sample once more AFTER screenshot so an immediately dismissed loading
+        // overlay or state transition is not certified as captured evidence.
+        const afterScreenshot = await page.evaluate(SNAPSHOT, opts.contract);
+        record.signals = { first, second, afterScreenshot };
+        record.pageErrorCount = errors.length;
+        if (errors.length) record.pageErrorSamples = errors.slice(0, 3);
         record.screenshot = screenshot;
         record.screenshotSha256 = sha(readFileSync(screenshot));
+        record.status = record.httpStatus >= 200 && record.httpStatus < 400 &&
+          record.path === opts.route && errors.length === 0 &&
+          !record.markerWaitError && completeSample(first) &&
+          completeSample(second) && completeSample(afterScreenshot)
+          ? "DOM_SIGNALS_OBSERVED" : "INCOMPLETE";
       } catch (e) {
         record.status = "INCOMPLETE";
         record.error = browserError(e);
