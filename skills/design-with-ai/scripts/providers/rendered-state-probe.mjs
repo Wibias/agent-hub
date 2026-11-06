@@ -14,7 +14,10 @@ const filled = (x) => typeof x === "string" && x.trim().length > 0;
 const arrayStrings = (v, max) =>
   Array.isArray(v) && v.length <= max && v.every((x) =>
     filled(x) && x.length <= 240 && !/[\r\n\0]/.test(x));
-const browserError = (e) => String(e?.message ?? e).slice(0, 260);
+// Browser and JavaScript failures can contain full URLs, including query secrets.
+const browserError = (e) => String(e?.message ?? e)
+  .replace(/https?:\/\/[^\s'"<>]+/gi, "<url-redacted>")
+  .slice(0, 260);
 // A positive state marker must be REQUIRED by the entire selector. Reject
 // selector lists, :not(), ancestor-only predicates and generic mounted roots.
 const POSITIVE_MARKER = /^\[data-[a-z][a-z0-9-]*(?:\s*(?:=|~=|\|=|\^=|\$=|\*=)\s*(?:"[^"]+"|'[^']+'|[a-zA-Z0-9_-]+))?\]$/i;
@@ -172,8 +175,15 @@ export async function probeRenderedState(input, { browserFactory = loadPlaywrigh
           serviceWorkers: "block", storageState: { cookies: [], origins: [] },
         });
         const page = await context.newPage();
-        const errors = [];
-        page.on("pageerror", (error) => errors.push(browserError(error)));
+        // A hostile or broken page can emit an arbitrary number of exceptions.
+        // Preserve the count and at most three redacted examples, never all
+        // raw error strings in memory or persistent evidence.
+        let pageErrorCount = 0;
+        const pageErrorSamples = [];
+        page.on("pageerror", (error) => {
+          pageErrorCount++;
+          if (pageErrorSamples.length < 3) pageErrorSamples.push(browserError(error));
+        });
         // Register before goto: count main-frame navigations even when JS
         // leaves and returns to the requested route during the observation.
         const mainFrame = page.mainFrame();
@@ -206,8 +216,8 @@ export async function probeRenderedState(input, { browserFactory = loadPlaywrigh
         record.finalOrigin = capturedUrl.origin;
         record.mainFrameNavigationCount = mainFrameNavigations;
         record.signals = { first, second, afterScreenshot };
-        record.pageErrorCount = errors.length;
-        if (errors.length) record.pageErrorSamples = errors.slice(0, 3);
+        record.pageErrorCount = pageErrorCount;
+        if (pageErrorSamples.length) record.pageErrorSamples = pageErrorSamples;
         record.screenshot = screenshot;
         record.screenshotSha256 = sha(readFileSync(screenshot));
         record.status = record.httpStatus === 200 &&
@@ -215,7 +225,7 @@ export async function probeRenderedState(input, { browserFactory = loadPlaywrigh
           record.path === opts.route && record.finalPath === opts.route &&
           record.origin === new URL(opts.url).origin &&
           record.finalOrigin === new URL(opts.url).origin &&
-          errors.length === 0 &&
+          pageErrorCount === 0 &&
           !record.markerWaitError && completeSample(first) &&
           completeSample(second) && completeSample(afterScreenshot)
           ? "DOM_SIGNALS_OBSERVED" : "INCOMPLETE";

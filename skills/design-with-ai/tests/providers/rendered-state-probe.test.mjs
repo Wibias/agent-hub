@@ -37,6 +37,7 @@ function fakeBrowser({
   navigationFailure = false,
   screenshotFailure = false,
   pageErrors = false,
+  pageErrorMessage = "Fixture page exception",
   transitionAfterScreenshot = false,
   clientRedirectBounce = false,
 } = {}) {
@@ -55,7 +56,10 @@ function fakeBrowser({
           mainFrame: () => frame,
           on: (kind, cb) => {
             if (kind === "framenavigated") onNavigation = cb;
-            if (pageErrors && kind === "pageerror") cb(new Error("Fixture page exception"));
+            if (pageErrors && kind === "pageerror") {
+              const count = pageErrors === true ? 1 : pageErrors;
+              for (let i = 0; i < count; i++) cb(new Error(pageErrorMessage));
+            }
           },
           goto: async () => {
             if (navigationFailure) throw new Error("Navigation timeout");
@@ -151,6 +155,34 @@ test("loading, empty, redirected, failed or unscreened state cannot be observed"
       assert.equal(out.tasteFramesVerified, false);
       assert.ok(existsSync(join(out.artifactDirectory, "state-report.json")));
     }
+  });
+});
+
+test("pageerror flood retains only bounded URL-redacted samples and fails closed", async () => {
+  await fixture(async ({ input }) => {
+    const secret = "do-not-persist-this-query-token";
+    const rawUrl = "http://127.0.0.1:5191/game/live?access=" + secret;
+    const out = await probeRenderedState(input, {
+      browserFactory: fakeBrowser({
+        pageErrors: 2_500,
+        pageErrorMessage: "Browser failure at " + rawUrl + " with extra details",
+      }).factory,
+    });
+    assert.equal(out.status, "INCOMPLETE");
+    assert.equal(out.declaredDomStateObserved, false);
+    assert.equal(out.productCompletionEligible, false);
+    assert.equal(out.observations.length, 3);
+    for (const observation of out.observations) {
+      assert.equal(observation.status, "INCOMPLETE");
+      assert.equal(observation.pageErrorCount, 2_500);
+      assert.equal(observation.pageErrorSamples.length, 3);
+      assert.ok(observation.pageErrorSamples.every((s) =>
+        s.includes("<url-redacted>") && s.length <= 260));
+    }
+    const persisted = readFileSync(join(out.artifactDirectory, "state-report.json"), "utf8");
+    assert.ok(!persisted.includes(secret));
+    assert.ok(!persisted.includes(rawUrl));
+    assert.ok(persisted.includes("<url-redacted>"));
   });
 });
 
