@@ -43,6 +43,9 @@ function mockChrome({ input, htmlBytes, cssBytes }, {
   screenshotError = false,
   bodyUnavailable = false,
   pendingRequest = false,
+  floodRequests = 0,
+  floodFailedRequests = 0,
+  floodPageErrors = 0,
 } = {}) {
   const contexts = [];
   let closed = 0;
@@ -85,6 +88,17 @@ function mockChrome({ input, htmlBytes, cssBytes }, {
                 events.get("requestfailed")?.(request);
               }
               if (pendingRequest) events.get("request")?.({});
+              for (let i = 0; i < floodRequests; i++) {
+                events.get("request")?.({}); // No response: bounded tracking, fail closed.
+              }
+              for (let i = 0; i < floodFailedRequests; i++) {
+                const request = {};
+                events.get("request")?.(request);
+                events.get("requestfailed")?.(request);
+              }
+              for (let i = 0; i < floodPageErrors; i++) {
+                events.get("pageerror")?.(new Error("Repeated page failure"));
+              }
             }
             if (mutateCss) writeFileSync(join(input.renderedRoot, "settings", "site.css"),
               "body { color: red; }\n");
@@ -167,6 +181,28 @@ test("a started but unfinished browser request prevents a false local-body PASS"
     "A pending request is not a verified response, even if earlier bodies matched");
     assert.equal(report.productCompletionEligible, false);
     assert.equal(report.tasteFramesVerified, false);
+  });
+});
+
+test("request and error floods remain bounded and cannot yield a false PASS", async () => {
+  await fixture(async (f) => {
+    const report = await probeNetworkResponses(f.input, {
+      browserFactory: mockChrome(f, {
+        floodRequests: 2_500, floodFailedRequests: 2_500, floodPageErrors: 2_500,
+      }).factory,
+    });
+    assert.equal(report.status, "INCOMPLETE");
+    assert.equal(report.observations.length, 3);
+    assert.ok(report.observations.every((o) =>
+      o.status === "INCOMPLETE" &&
+      o.issues.includes("REQUEST_COUNT_LIMIT") &&
+      o.issues.includes("BROWSER_REQUEST_FAILED") &&
+      o.issues.includes("BROWSER_PAGE_ERRORS") &&
+      o.pageErrorCount === 2_500 &&
+      o.outstandingRequestCount <= 2_000 &&
+      o.issues.length <= 5),
+    "Repeated events must not grow request retention or diagnostic arrays without bound");
+    assert.equal(report.productCompletionEligible, false);
   });
 });
 
