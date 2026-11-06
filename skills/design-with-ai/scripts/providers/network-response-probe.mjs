@@ -179,25 +179,40 @@ export async function probeNetworkResponses(options, { browserFactory = loadBrow
         const page = await ctx.newPage();
         const pending = [];
         const outstandingRequests = new Set();
-        const pageErrors = [];
-        page.on("pageerror", (e) => pageErrors.push(shortError(e)));
-        page.on("request", (request) => outstandingRequests.add(request));
+        const issueSet = new Set();
+        const recordIssue = (issue) => {
+          if (!issueSet.has(issue)) {
+            issueSet.add(issue);
+            obs.issues.push(issue);
+          }
+        };
+        let pageErrorCount = 0;
+        let requestCount = 0;
+        let responseCount = 0;
+        page.on("pageerror", () => { pageErrorCount++; });
+        page.on("request", (request) => {
+          if (++requestCount > MAX_RESPONSES) {
+            recordIssue("REQUEST_COUNT_LIMIT");
+            return; // Keep Playwright request objects bounded even under a request flood.
+          }
+          outstandingRequests.add(request);
+        });
         page.on("requestfinished", (request) => outstandingRequests.delete(request));
         page.on("requestfailed", (request) => {
           outstandingRequests.delete(request);
           // Failed requests must not quietly disappear from the observed set.
           // Never store URLs or request bodies, which may contain credentials.
-          obs.issues.push("BROWSER_REQUEST_FAILED");
+          recordIssue("BROWSER_REQUEST_FAILED");
         });
         page.on("response", (response) => {
-          if (obs.local.length + obs.external.length >= MAX_RESPONSES) {
-            obs.issues.push("RESPONSE_COUNT_LIMIT");
+          if (++responseCount > MAX_RESPONSES) {
+            recordIssue("RESPONSE_COUNT_LIMIT");
             return;
           }
           const resourceUrl = response.url();
           let path;
           try { path = localAssetPath(resourceUrl, context); }
-          catch { obs.issues.push("UNSAFE_LOCAL_RESOURCE_URL"); return; }
+          catch { recordIssue("UNSAFE_LOCAL_RESOURCE_URL"); return; }
           if (path === null) {
             obs.external.push({
               urlSha256: sha(resourceUrl), status: response.status(),
@@ -212,16 +227,16 @@ export async function probeNetworkResponses(options, { browserFactory = loadBrow
           };
           obs.local.push(row);
           if (!expected.has(path)) {
-            obs.issues.push("UNMAPPED_LOCAL_RESPONSE");
+            recordIssue("UNMAPPED_LOCAL_RESPONSE");
             return;
           }
           if (response.status() !== 200) {
-            obs.issues.push("NON_200_LOCAL_RESPONSE");
+            recordIssue("NON_200_LOCAL_RESPONSE");
             return;
           }
           const indicatedLength = Number(response.headers?.()?.["content-length"]);
           if (Number.isFinite(indicatedLength) && indicatedLength > MAX_BODY_BYTES) {
-            obs.issues.push("LOCAL_RESPONSE_TOO_LARGE");
+            recordIssue("LOCAL_RESPONSE_TOO_LARGE");
             return;
           }
           const task = (async () => {
@@ -229,15 +244,15 @@ export async function probeNetworkResponses(options, { browserFactory = loadBrow
               const body = await response.body();
               if (!Buffer.isBuffer(body) || body.length > MAX_BODY_BYTES ||
                   obs.localBytesChecked + body.length > MAX_CAPTURE_BYTES) {
-                obs.issues.push("LOCAL_RESPONSE_BODY_LIMIT");
+                recordIssue("LOCAL_RESPONSE_BODY_LIMIT");
                 return;
               }
               obs.localBytesChecked += body.length;
               row.receivedSha256 = sha(body);
               row.bodyVerified = row.receivedSha256 === row.expectedSha256;
-              if (!row.bodyVerified) obs.issues.push("LOCAL_RESPONSE_BODY_MISMATCH");
+              if (!row.bodyVerified) recordIssue("LOCAL_RESPONSE_BODY_MISMATCH");
             } catch {
-              obs.issues.push("LOCAL_RESPONSE_BODY_UNAVAILABLE");
+              recordIssue("LOCAL_RESPONSE_BODY_UNAVAILABLE");
             }
           })();
           pending.push(task);
@@ -261,15 +276,15 @@ export async function probeNetworkResponses(options, { browserFactory = loadBrow
         // bytes after the screenshot. A response-only listener misses it.
         // Record only the count, never URLs or request content.
         obs.outstandingRequestCount = outstandingRequests.size;
-        if (outstandingRequests.size > 0) obs.issues.push("BROWSER_REQUESTS_STILL_PENDING");
-        obs.pageErrorCount = pageErrors.length;
-        if (pageErrors.length) obs.issues.push("BROWSER_PAGE_ERRORS");
+        if (outstandingRequests.size > 0) recordIssue("BROWSER_REQUESTS_STILL_PENDING");
+        obs.pageErrorCount = pageErrorCount;
+        if (pageErrorCount > 0) recordIssue("BROWSER_PAGE_ERRORS");
         obs.status = obs.httpStatus === 200 && obs.finalUrlMatched &&
           obs.screenshotSha256 && obs.local.length > 0 &&
           obs.local.every((entry) => entry.bodyVerified) &&
           obs.issues.length === 0 ? "LOCAL_BODY_BYTES_MATCHED" : "INCOMPLETE";
       } catch (error) {
-        obs.issues.push("BROWSER_PROBE_FAILURE: " + shortError(error));
+        recordIssue("BROWSER_PROBE_FAILURE: " + shortError(error));
       } finally {
         await ctx?.close().catch(() => {});
       }
