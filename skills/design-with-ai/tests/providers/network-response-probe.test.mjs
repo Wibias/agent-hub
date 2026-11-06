@@ -42,6 +42,7 @@ function mockChrome({ input, htmlBytes, cssBytes }, {
   noResponses = false,
   screenshotError = false,
   bodyUnavailable = false,
+  hangBody = false,
   pendingRequest = false,
   floodRequests = 0,
   floodFailedRequests = 0,
@@ -60,6 +61,9 @@ function mockChrome({ input, htmlBytes, cssBytes }, {
           headers: () => ({ "content-length": String(body.length) }),
           body: async () => {
             if (bodyUnavailable) throw new Error("Body was evicted");
+            if (hangBody && resourceUrl.endsWith("site.css")) {
+              return new Promise(() => {}); // Headers received, body never finishes.
+            }
             return body;
           },
         });
@@ -166,6 +170,37 @@ test("corrupt CSS bytes, unknown file, lost response and screenshot failures nev
   });
 });
 
+
+test("a response body that never finishes has a bounded timeout and fails closed", async () => {
+  await fixture(async (f) => {
+    const report = await probeNetworkResponses(f.input, {
+      browserFactory: mockChrome(f, { hangBody: true }).factory,
+      bodyReadTimeoutMs: 20,
+    });
+    assert.equal(report.status, "INCOMPLETE");
+    assert.equal(report.observations.length, 3);
+    assert.ok(report.observations.every((o) =>
+      o.status === "INCOMPLETE" &&
+      o.issues.includes("LOCAL_RESPONSE_BODY_UNAVAILABLE") &&
+      o.local.some((x) => x.path.endsWith("/site.css") && !x.bodyVerified)),
+    "An unresolved response body cannot block a verdict or count as verified");
+    assert.equal(report.productCompletionEligible, false);
+  });
+});
+
+test("browser failures retain a per-viewport issue rather than escaping catch scope", async () => {
+  await fixture(async (f) => {
+    const report = await probeNetworkResponses(f.input, {
+      browserFactory: mockChrome(f, { screenshotError: true }).factory,
+    });
+    assert.equal(report.status, "INCOMPLETE");
+    assert.equal(report.observations.length, 3);
+    assert.ok(report.observations.every((o) =>
+      o.issues.some((issue) => issue.includes("BROWSER_PROBE_FAILURE: Screenshot unavailable"))),
+    "Failure details must remain attached to each affected observation");
+    assert.equal(report.error, undefined);
+  });
+});
 
 test("a started but unfinished browser request prevents a false local-body PASS", async () => {
   await fixture(async (f) => {
