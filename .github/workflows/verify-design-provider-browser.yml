@@ -49,3 +49,17 @@ jobs:
 
       - name: Real Chrome declared DOM-state regression cases
         run: node skills/design-with-ai/tests/providers/rendered-state-chrome-smoke.mjs
+
+      # Test-only dependency. The real production probe dynamically loads
+      # Playwright from the explicit path, never from a global package.
+      # No browser download, postinstall scripts, package.json or product changes.
+      - name: Install exact Playwright transport for integration smoke
+        run: |
+          set -euo pipefail
+          npm install --prefix "$RUNNER_TEMP/dwa-playwright-test" --no-save --no-audit --no-fund --ignore-scripts --package-lock=false playwright-core@1.64.1
+          node -e "const p=require(process.env.RUNNER_TEMP+'/dwa-playwright-test/node_modules/playwright-core/package.json'); if(p.version !== '1.64.1') process.exit(1)"
+          test -f "$RUNNER_TEMP/dwa-playwright-test/node_modules/playwright-core/index.mjs"
+          echo "DWA_PLAYWRIGHT_ROOT=$RUNNER_TEMP/dwa-playwright-test/node_modules/playwright-core" >> "$GITHUB_ENV"
+
+      - name: Real Playwright transport DOM-state regression cases
+        run: node skills/design-with-ai/tests/providers/rendered-state-playwright-smoke.mjs
