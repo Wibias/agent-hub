@@ -21,7 +21,7 @@ The contract **must** use exactly one positive, state-specific `[data-*]` attrib
 
 ## Run
 
-Requires an **already installed, trusted** Playwright package root containing `index.mjs`, a locally reachable HTTP origin and Chrome/Chromium available to Playwright. No install, download or `npx` is performed.
+Requires an **already installed, trusted** Playwright package root containing `index.mjs`, a locally reachable HTTP origin, and either an installed Google Chrome browser (the default `channel: "chrome"`) or an explicit browser executable supplied with `--chrome <path>`. Playwright's bundled Chromium alone does not satisfy the default Chrome channel. No install, download or `npx` is performed.
 
 ```sh
 node skills/design-with-ai/scripts/providers/rendered-state-probe.mjs \
