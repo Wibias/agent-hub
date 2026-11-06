@@ -1,0 +1,198 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import {
+  mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { probeNetworkResponses } from "../../scripts/providers/network-response-probe.mjs";
+
+async function fixture(fn) {
+  const root = mkdtempSync(join(tmpdir(), "dwa-network-fixture-"));
+  const renderedRoot = join(root, "dist");
+  const settings = join(renderedRoot, "settings");
+  const pw = join(root, "node_modules", "playwright-core");
+  mkdirSync(settings, { recursive: true });
+  mkdirSync(pw, { recursive: true });
+  const html = join(settings, "index.html");
+  const css = join(settings, "site.css");
+  const htmlBytes = Buffer.from("<!doctype html><title>Settings</title><link rel='stylesheet' href='site.css'>");
+  const cssBytes = Buffer.from("body { color: #171717; }");
+  writeFileSync(html, htmlBytes);
+  writeFileSync(css, cssBytes);
+  writeFileSync(join(pw, "index.mjs"), "export const chromium = {};\n");
+  const input = {
+    baseUrl: "http://127.0.0.1:5191",
+    route: "/settings",
+    projectRoot: root, renderedRoot, html,
+    playwrightRoot: pw, outRoot: root,
+  };
+  try { return await fn({ root, html, css, htmlBytes, cssBytes, input }); }
+  finally { rmSync(root, { recursive: true, force: true }); }
+}
+
+function mockChrome({ input, htmlBytes, cssBytes }, {
+  mutateCss = false,
+  remote = false,
+  omitCss = false,
+  wrongCss = false,
+  missing = false,
+  failRequest = false,
+  redirected = false,
+  noResponses = false,
+  screenshotError = false,
+  bodyUnavailable = false,
+} = {}) {
+  const contexts = [];
+  let closed = 0;
+  const factory = async () => ({
+    launch: async () => ({
+      newContext: async (opts) => {
+        contexts.push(opts);
+        const events = new Map();
+        const response = (resourceUrl, body, status = 200) => ({
+          url: () => resourceUrl,
+          status: () => status,
+          headers: () => ({ "content-length": String(body.length) }),
+          body: async () => {
+            if (bodyUnavailable) throw new Error("Body was evicted");
+            return body;
+          },
+        });
+        const page = {
+          on: (event, handler) => { events.set(event, handler); },
+          goto: async () => {
+            if (!noResponses) {
+              events.get("response")?.(response(
+                "http://127.0.0.1:5191/settings", htmlBytes));
+              if (!omitCss) {
+                events.get("response")?.(response(
+                  missing ? "http://127.0.0.1:5191/settings/not-in-manifest.css" :
+                    "http://127.0.0.1:5191/settings/site.css",
+                  wrongCss ? Buffer.from("tampered") : cssBytes));
+              }
+              if (remote) events.get("response")?.(response(
+                "https://cdn.example.test/file.js?secret-do-not-log", Buffer.from("external")));
+              if (failRequest) events.get("requestfailed")?.({});
+            }
+            if (mutateCss) writeFileSync(join(input.renderedRoot, "settings", "site.css"),
+              "body { color: red; }\n");
+            return { status: () => 200 };
+          },
+          waitForTimeout: async () => {},
+          screenshot: async ({ path }) => {
+            if (screenshotError) throw new Error("Screenshot unavailable");
+            writeFileSync(path, "image");
+          },
+          url: () => "http://127.0.0.1:5191" + (redirected ? "/login" : "/settings"),
+        };
+        return {
+          newPage: async () => page,
+          close: async () => { closed++; },
+        };
+      },
+      close: async () => { closed++; },
+    }),
+  });
+  return { factory, contexts, getClosed: () => closed };
+}
+
+test("actual response body hashes match a local two-file manifest across three widths", async () => {
+  await fixture(async (f) => {
+    const chrome = mockChrome(f);
+    const report = await probeNetworkResponses(f.input, { browserFactory: chrome.factory });
+    assert.equal(report.status, "LOCAL_RESPONSES_MATCHED", JSON.stringify(report));
+    assert.equal(report.expectedLocalFileCount, 2);
+    assert.equal(report.observations.length, 3);
+    assert.deepEqual(report.observations.map((o) => o.width), [1440, 768, 390]);
+    assert.ok(report.observations.every((o) =>
+      o.status === "LOCAL_BODY_BYTES_MATCHED" && o.local.length === 2 &&
+      o.local.every((file) => file.bodyVerified === true) && o.issues.length === 0 &&
+      /^[a-f0-9]{64}$/.test(o.screenshotSha256)));
+    assert.equal(report.localAssetTreeUnchanged, true);
+    assert.equal(report.tasteFramesVerified, false);
+    assert.equal(report.productCompletionEligible, false);
+    assert.equal(chrome.contexts.length, 3);
+    assert.equal(chrome.getClosed(), 4);
+    assert.ok(chrome.contexts.every((c) =>
+      c.serviceWorkers === "block" && c.storageState.cookies.length === 0));
+    assert.equal(JSON.parse(readFileSync(
+      join(report.artifactDirectory, "network-report.json"), "utf8")).status,
+      "LOCAL_RESPONSES_MATCHED");
+  });
+});
+
+test("corrupt CSS bytes, unknown file, lost response and screenshot failures never PASS", async () => {
+  await fixture(async (f) => {
+    const scenarios = [
+      { wrongCss: true }, { missing: true }, { noResponses: true },
+      { screenshotError: true }, { failRequest: true },
+      { redirected: true }, { bodyUnavailable: true },
+    ];
+    for (const scenario of scenarios) {
+      const result = await probeNetworkResponses(f.input, {
+        browserFactory: mockChrome(f, scenario).factory,
+      });
+      assert.equal(result.status, "INCOMPLETE", JSON.stringify(scenario));
+      assert.equal(result.productCompletionEligible, false);
+      assert.equal(result.tasteFramesVerified, false);
+    }
+  });
+});
+
+test("remote URL credentials and query never enter report; external stays unverified", async () => {
+  await fixture(async (f) => {
+    const result = await probeNetworkResponses(f.input, {
+      browserFactory: mockChrome(f, { remote: true }).factory,
+    });
+    assert.equal(result.status, "LOCAL_MATCHED_EXTERNAL_UNVERIFIED");
+    assert.ok(result.observations.every((o) =>
+      o.external.length === 1 && o.external[0].bodyVerified === false));
+    const json = JSON.stringify(result);
+    assert.ok(!json.includes("cdn.example.test"));
+    assert.ok(!json.includes("secret-do-not-log"));
+  });
+});
+
+test("a file mutation during probe invalidates snapshot even when response bodies match", async () => {
+  await fixture(async (f) => {
+    const result = await probeNetworkResponses(f.input, {
+      browserFactory: mockChrome(f, { mutateCss: true }).factory,
+    });
+    assert.equal(result.status, "INCOMPLETE");
+    assert.equal(result.localAssetTreeUnchanged, false);
+  });
+});
+
+test("remote origins, bad routes, missing trusted Playwright and non-isolated builds are rejected", async () => {
+  await fixture(async (f) => {
+    for (const changes of [
+      { baseUrl: "https://example.com" },
+      { baseUrl: "http://user:pass@127.0.0.1:5191/" },
+      { baseUrl: "http://127.0.0.1:5191/private" },
+      { route: "//cdn.example.test" },
+      { route: "/%2e%2e/foo" },
+      { route: "/other" },
+      { playwrightRoot: join(f.root, "not-installed") },
+      { renderedRoot: f.root },
+      { outRoot: f.input.renderedRoot },
+    ]) {
+      await assert.rejects(() => probeNetworkResponses({
+        ...f.input, ...changes,
+      }), /origin|root|Playwright|build|route|Route|HTML|outside|loopback/i,
+      JSON.stringify(changes));
+    }
+  });
+});
+
+test("unavailable Chrome does not claim matched network bodies", async () => {
+  await fixture(async (f) => {
+    const r = await probeNetworkResponses(f.input, {
+      browserFactory: async () => { throw new Error("Browser missing"); },
+    });
+    assert.equal(r.status, "INCOMPLETE");
+    assert.match(r.error, /Browser missing/);
+    assert.equal(r.observations.length, 0);
+    assert.equal(r.localAssetTreeUnchanged, true);
+  });
+});
