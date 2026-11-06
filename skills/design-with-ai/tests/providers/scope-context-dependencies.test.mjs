@@ -137,6 +137,34 @@ test("data.rel cannot shadow an entity-encoded rel or bypass linked CSS proof", 
   });
 });
 
+test("ambiguous HTML link separators cannot bypass linked CSS provenance", () => {
+  fixture(({ root, src }) => {
+    const html = join(src, "page.html");
+    const css = join(src, "site.css");
+    writeFileSync(css, "h1 { color: red; }\n");
+    const inspect = (includeDetectorContext) => sourceScopeProof({
+      projectRoot: root, target: html, route: "/page", includeDetectorContext,
+    });
+    for (const markup of [
+      '<link rel="stylesheet"href="site.css">',
+      '<link/rel=stylesheet href=site.css>',
+    ]) {
+      writeFileSync(html, markup);
+      assert.throws(() => inspect(true),
+        /Ambiguous HTML link attributes cannot be attested/, markup);
+      writeFileSync(css, "h1 { color: blue; }\n");
+      assert.throws(() => inspect(true),
+        /Ambiguous HTML link attributes cannot be attested/,
+        "CSS-only mutation must not receive an unsupported proof");
+      assert.equal(inspect(false).manifest.linkedStylesheets, undefined,
+        "native-only scans must not parse optional detector dependencies");
+    }
+    writeFileSync(html, '<link rel="stylesheet" href="site.css">');
+    assert.deepEqual(inspect(true).manifest.linkedStylesheets.map((x) => x.path),
+      ["src/site.css"], "ordinary links must remain supported");
+  });
+});
+
 test("symlinked linked CSS and escaping local stylesheet reads cannot be attested", () => {
   fixture(({ root, src }) => {
     const html = join(src, "page.html");
