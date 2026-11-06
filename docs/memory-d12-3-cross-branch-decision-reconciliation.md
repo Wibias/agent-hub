@@ -76,7 +76,7 @@ DO NOT commit either source or the combined file.
     $Next = "$HOME\agent-hub-D12-3-cross-branch-reconcile"
     if (-not (Test-Path $Previous)) { throw "Previous worktree missing" }
     if (Test-Path $Next) { throw "Destination exists; do not overwrite" }
-    git -C $Previous fetch origin pull/REPLACE_PR/head
+    git -C $Previous fetch origin pull/209/head
     if ($LASTEXITCODE -ne 0) { throw "Fetch failed" }
     git -C $Previous worktree add --detach $Next FETCH_HEAD
     if ($LASTEXITCODE -ne 0) { throw "Worktree failed" }
