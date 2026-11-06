@@ -60,3 +60,37 @@ redaction, agent-inference exclusion, exact source references, multiple
 hints per Candidate, duplicate/ref mismatch rejection and no-write operation.
 
 This preview is not authorization and cannot create durable Memories.
+
+## Human-authored, single-rule draft preview
+
+A reviewer may combine multiple verified hints from ONE original Candidate into
+a new, manually written statement in a LOCAL UTF-8 text file. For example,
+create a local file named rule-draft.txt with one sentence that accurately
+describes the intended project rule. Do not paste the source messages into
+GitHub or CI.
+
+The preview accepts exact Candidate and review refs returned by the first
+inspection command and opens the SQLite source read-only:
+
+    node scripts/preview-memory-atomic-rule-draft.mjs --db-path MEMORY_DB --project-id REPO --branch main --candidate-ref CANDIDATE_REF --review-refs REF1,REF2 --draft-file LOCAL_DRAFT_FILE
+
+The operator must review the local draft before running the command.
+The command reads only the local file, does not print the draft text, and
+revalidates Candidate-to-Evidence linkage against the current DB on every run.
+It rejects stale, duplicate, cross-scope, tampered, missing or secret-redacted
+evidence. It produces one opaque draftRef that changes when the draft text
+or its exact selected evidence refs change.
+
+Output is PREVIEW_ONLY. A synthesized statement is not an authoritative quote
+from the original user, its semantic equivalence is not mechanically proven,
+and a CLI selection is not authenticated user-direct consent. It explicitly
+reports zero confirmed durable rules and zero Claims.
+
+To persist a real rule, the user must separately make an explicit direct-user
+confirmation of the exact agreed project-scoped wording. An audited future
+implementation must capture that NEW confirmation evidence and link it to
+the original source spans and review without bypassing the current
+one-Candidate source-equality or candidate-confirmation checks.
+
+Never invoke the existing whole-Candidate confirmation command to confirm a
+mixed original instruction. That could persist unrelated temporary tasks.
