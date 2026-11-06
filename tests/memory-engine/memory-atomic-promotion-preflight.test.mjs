@@ -98,6 +98,8 @@ test('preflight validates original/source/confirmation and returns non-authorizi
     assert.equal(outcome.confirmedScope,'permanent_branch_scoped');
     assert.equal(outcome.sourceSpanCount,2);
     assert.equal(outcome.activeClaimsInScope,0);
+    assert.equal(outcome.otherPendingCandidates,0);
+    assert.equal(outcome.unresolvedEvidenceProposals,0);
     assert.equal(outcome.claimCreated,false);
     assert.equal(outcome.promotionAllowed,false);
     assert.equal(outcome.writesToSource,false);
@@ -202,5 +204,54 @@ test('the preflight uses no write-capable methods or provider calls',async()=>{
       assert.equal(result.promotionAllowed,false);
       assert.equal(result.writesToSource,false);
     }finally{db.close();}
+  });
+});
+
+test('unresolved scoped candidates prevent automatic eligibility for a new Claim',async()=>{
+  await fixture(async({dbPath,stageId,memory})=>{
+    memory.recordEvidence({
+      id:'other-source',projectId:PROJECT,branch:BRANCH,harness:'codex',
+      sessionId:'other-session',sourceKind:'session',sourceRef:'session:other',
+      capturedAt:'2026-11-06T08:00:00.000Z',authorityClass:'user_direct',
+      content:'Another unrelated pending review question.',
+      metadata:{event_type:'user_prompt'},
+    });
+    memory.recordCandidate({
+      id:'other-candidate',evidenceId:'other-source',type:'constraint',
+      proposedValue:'Another unrelated pending review question.',
+      decisionReason:'test',policyVersion:'capture-v1',
+      fingerprint:SHA('other-source'),createdAt:'2026-11-06T08:00:00.000Z',
+    });
+    const outcome=preflight({dbPath,stageId});
+    assert.equal(outcome.status,'needs_unresolved_memory_review');
+    assert.equal(outcome.otherPendingCandidates,1);
+    assert.equal(outcome.manualRelationReviewRequired,true);
+    assert.equal(outcome.promotionAllowed,false);
+  });
+});
+
+test('unresolved scoped evidence proposals are never ignored just because Claims are empty',async()=>{
+  await fixture(async({dbPath,stageId,writable})=>{
+    const exists=writable.prepare(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='memory_evidence_proposals'"
+    ).get();
+    assert.ok(exists);
+    writable.prepare(
+      'INSERT INTO memory_evidence_proposals '
+      + '(id,project_id,branch,kind,canonical_fact,status,'
+      + 'policy_version,evaluator_id,fingerprint,created_at) '
+      + 'VALUES (?,?,?,?,?,?,?,?,?,?)'
+    ).run(
+      'p1',PROJECT,BRANCH,'procedure',
+      'A separate synthetic proposal to review.',
+      'needs_confirmation','fixture-v1','test-evaluator',SHA('proposal-fixture'),
+      '2026-11-06T08:00:00.000Z',
+    );
+    const result=preflight({dbPath,stageId});
+    assert.equal(result.status,'needs_unresolved_memory_review');
+    assert.equal(result.unresolvedEvidenceProposals,1);
+    assert.equal(result.activeClaimsInScope,0);
+    assert.equal(result.promotionAllowed,false);
+    assert.equal(JSON.stringify(result).includes('synthetic proposal'),false);
   });
 });
