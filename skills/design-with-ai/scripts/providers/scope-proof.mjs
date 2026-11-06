@@ -181,11 +181,14 @@ export function sourceScopeProof({
       sha256: hash(readFileSync(path)),
     };
   })() : null;
+  // renderedAssetProof attests canonical paths: reuse those exact asset keys.
+  const renderedPageKey = renderedAssets
+    ? normalize(relative(realpathSync(root), realpathSync(html))) : null;
   const rendered = renderedAssets ? {
-    page: normalize(relative(root, resolve(html))),
+    page: renderedPageKey,
     sha256: renderedAssets.files.find((asset) =>
-      asset.path === normalize(relative(root, resolve(html)))).sha256,
-    root: normalize(relative(root, renderedRoot)),
+      asset.path === renderedPageKey).sha256,
+    root: normalize(relative(realpathSync(root), realpathSync(renderedRoot))),
     assetCount: renderedAssets.fileCount,
     assetTotalBytes: renderedAssets.totalBytes,
     assetTreeSha256: renderedAssets.filesSha256,
