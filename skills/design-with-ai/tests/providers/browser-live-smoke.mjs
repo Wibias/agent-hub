@@ -187,6 +187,8 @@ try {
     assert.equal(member.upstreamSeverity, original.upstreamSeverity);
     assert.equal(member.priority, original.priority);
     assert.equal(member.ruleId, original.providerRuleId);
+    assert.equal(member.message, original.message);
+    assert.deepEqual(member.location, original.location);
     assert.deepEqual(member.evidence, original.evidence,
       "Fusion must preserve upstream report and crop evidence references");
   }
