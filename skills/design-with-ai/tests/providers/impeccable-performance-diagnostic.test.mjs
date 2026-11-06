@@ -183,3 +183,24 @@ test("real detector enforces DESIGN.md separately from inline waivers", async ()
       "diagnostic must not change the source file");
   });
 });
+
+test("real diagnostic accepts a DESIGN.md-permitted font in every mode", async () => {
+  await fixture(async ({ project, source }) => {
+    writeFileSync(join(project, "DESIGN.md"),
+      "---\ntypography:\n  body:\n    fontFamily: Arial\n---\n");
+    writeFileSync(source, ".allowed { font-family: Arial; }\n");
+    const before = readFileSync(source, "utf8");
+    const out = await compareImpeccableModes(
+      ["--target", source, "--project-root", project],
+    );
+    assert.equal(out.status, "COMPLETE", JSON.stringify(out));
+    assert.deepEqual(out.runs.map((r) => r.mode),
+      ["configured", "no-inline-ignores", "no-design-system", "no-config"]);
+    for (const { mode, byRule } of out.runs) {
+      assert.equal(byRule["design-system-font"] ?? 0, 0,
+        `Allowed Arial must not be reported as a design-system violation in ${mode}`);
+    }
+    assert.equal(readFileSync(source, "utf8"), before,
+      "the four-mode diagnostic must leave permitted-font sources unchanged");
+  });
+});
