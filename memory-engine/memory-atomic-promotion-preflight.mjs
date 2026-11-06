@@ -77,6 +77,7 @@ export function inspectAtomicPromotionPreflight({
       || confirmation.harness !== 'codex'
       || confirmation.source_kind !== 'session'
       || typeof confirmation.session_id !== 'string' || !confirmation.session_id
+      || confirmation.source_ref !== 'session:' + confirmation.session_id
       || confirmation.path !== null
       || metadata.event_type !== 'user_prompt'
       || metadata.hook_event_name !== 'UserPromptSubmit'
