@@ -4,7 +4,7 @@
 import { createHash } from "node:crypto";
 import {
   closeSync, constants, existsSync, fstatSync, lstatSync, openSync,
-  readSync, readdirSync, realpathSync,
+  readSync, opendirSync, realpathSync,
 } from "node:fs";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 
@@ -96,7 +96,12 @@ export function renderedAssetProof({ projectRoot, renderedRoot, html }) {
   while (stack.length) {
     const { directory, depth } = stack.pop();
     if (depth > MAX_DEPTH) throw new TypeError("Rendered asset tree exceeds maximum depth");
-    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    // Streaming Dirent reads enforce the entry cap *before* allocating a
+    // potentially huge array of directory entries.
+    const stream = opendirSync(directory);
+    try {
+      let entry;
+      while ((entry = stream.readSync()) !== null) {
       if (++entryCount > MAX_ENTRIES) {
         throw new TypeError("Rendered asset tree exceeds entry count limit");
       }
@@ -136,6 +141,9 @@ export function renderedAssetProof({ projectRoot, renderedRoot, html }) {
         bytes: state.size,
         sha256: hashRegularFile(canonicalFile, state.size),
       });
+      }
+    } finally {
+      stream.closeSync();
     }
   }
   assetFiles.sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
