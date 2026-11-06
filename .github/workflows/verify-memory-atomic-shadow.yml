@@ -1,0 +1,47 @@
+name: Memory Atomic Shadow D12.3
+
+on:
+  pull_request:
+    paths:
+      - "memory-engine/memory-atomic-candidate-shadow.mjs"
+      - "memory-engine/memory-atomic-shadow-fixtures.mjs"
+      - "scripts/inspect-memory-atomic-shadow.mjs"
+      - "scripts/eval-memory-atomic-shadow.mjs"
+      - "tests/memory-engine/memory-atomic-candidate-shadow.test.mjs"
+      - "tests/memory-engine/memory-atomic-shadow-eval.test.mjs"
+      - ".github/workflows/verify-memory-atomic-shadow.yml"
+  push:
+    branches: [main]
+    paths:
+      - "memory-engine/memory-atomic-candidate-shadow.mjs"
+      - "memory-engine/memory-atomic-shadow-fixtures.mjs"
+      - "scripts/inspect-memory-atomic-shadow.mjs"
+      - "scripts/eval-memory-atomic-shadow.mjs"
+      - "tests/memory-engine/memory-atomic-candidate-shadow.test.mjs"
+      - "tests/memory-engine/memory-atomic-shadow-eval.test.mjs"
+      - ".github/workflows/verify-memory-atomic-shadow.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Validate D12.3 shadow scripts
+        run: |
+          node --check memory-engine/memory-atomic-candidate-shadow.mjs
+          node --check scripts/inspect-memory-atomic-shadow.mjs
+          node --check scripts/eval-memory-atomic-shadow.mjs
+          node --test tests/memory-engine/memory-atomic-candidate-shadow.test.mjs tests/memory-engine/memory-atomic-shadow-eval.test.mjs
+      - name: Run synthetic replay comparison
+        run: node scripts/eval-memory-atomic-shadow.mjs
