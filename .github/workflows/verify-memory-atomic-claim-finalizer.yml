@@ -37,4 +37,4 @@ jobs:
         run: |
           node --check memory-engine/index.mjs
           node --check memory-engine/memory-atomic-claim-promotion-ledger.mjs
-          node --test tests/memory-engine/memory-atomic-claim-finalizer.test.mjs tests/memory-engine/foundation.test.mjs tests/memory-engine/claim-provenance.test.mjs tests/memory-engine/memory-candidate-confirmation.test.mjs
+          node --test tests/memory-engine/memory-atomic-claim-finalizer.test.mjs tests/memory-engine/memory-atomic-promotion-preflight.test.mjs tests/memory-engine/foundation.test.mjs tests/memory-engine/claim-provenance.test.mjs tests/memory-engine/memory-candidate-confirmation.test.mjs
