@@ -32,6 +32,7 @@ function fakeBrowser({
   navigationFailure = false,
   screenshotFailure = false,
   pageErrors = false,
+  transitionAfterScreenshot = false,
 } = {}) {
   let closes = 0;
   const opened = [];
@@ -39,6 +40,7 @@ function fakeBrowser({
     newContext: async ({ viewport, serviceWorkers, storageState }) => {
       opened.push({ viewport, serviceWorkers, storageState });
       const width = viewport.width;
+      let captured = false;
       return {
         newPage: async () => ({
           on: (kind, cb) => {
@@ -52,7 +54,10 @@ function fakeBrowser({
           waitForSelector: async () => {
             if (waitFailure) throw new Error("Wait timed out");
           },
-          evaluate: async () => states[width] || {
+          evaluate: async () => captured && transitionAfterScreenshot ? {
+            markerVisible: false, blockersVisible: [],
+            missingText: [], forbiddenTextVisible: [],
+          } : states[width] || {
             markerVisible: true,
             blockersVisible: [],
             missingText: [],
@@ -62,6 +67,7 @@ function fakeBrowser({
           screenshot: async ({ path }) => {
             if (screenshotFailure) throw new Error("Capture failed");
             writeFileSync(path, "screenshot-" + width);
+            captured = true;
           },
         }),
         close: async () => { closes++; },
@@ -107,6 +113,7 @@ test("loading, empty, redirected, failed or unscreened state cannot be observed"
       { states: bad }, { status: 404 }, { route: "/wrong" },
       { waitFailure: true }, { screenshotFailure: true },
       { navigationFailure: true }, { pageErrors: true },
+      { transitionAfterScreenshot: true },
     ]) {
       const out = await probeRenderedState(input, {
         browserFactory: fakeBrowser(scenario).factory,
