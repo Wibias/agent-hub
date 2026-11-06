@@ -1,0 +1,37 @@
+name: Memory Unresolved Proposal Inventory D12.3
+
+on:
+  pull_request:
+    paths:
+      - "scripts/inspect-memory-unresolved-proposals.mjs"
+      - "tests/memory-engine/memory-unresolved-proposals-audit.test.mjs"
+      - "docs/memory-d12-3-unresolved-triage.md"
+      - ".github/workflows/verify-memory-unresolved-proposals.yml"
+  push:
+    branches: [main]
+    paths:
+      - "scripts/inspect-memory-unresolved-proposals.mjs"
+      - "tests/memory-engine/memory-unresolved-proposals-audit.test.mjs"
+      - "docs/memory-d12-3-unresolved-triage.md"
+      - ".github/workflows/verify-memory-unresolved-proposals.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Verify private read-only proposal inventory and scope isolation
+        run: |
+          node --check scripts/inspect-memory-unresolved-proposals.mjs
+          node --test tests/memory-engine/memory-unresolved-proposals-audit.test.mjs
