@@ -18,6 +18,7 @@ const WIDTHS = Object.freeze([1440, 768, 390]);
 const MAX_RESPONSES = 2_000;
 const MAX_BODY_BYTES = 16 * 1024 * 1024;
 const MAX_CAPTURE_BYTES = 128 * 1024 * 1024;
+const MAX_IN_FLIGHT_BODY_READS = 4;
 const MAX_BODY_WAIT_MS = 15_000;
 const sha = (value) => createHash("sha256").update(value).digest("hex");
 const inside = (root, value) => {
@@ -195,6 +196,9 @@ export async function probeNetworkResponses(options, {
         let pageErrorCount = 0;
         let requestCount = 0;
         let responseCount = 0;
+        let bodyReadsInFlight = 0;
+        let reservedBodyBytes = 0;
+        obs.bodyReadsStarted = 0;
         page.on("pageerror", () => { pageErrorCount++; });
         page.on("request", (request) => {
           if (++requestCount > MAX_RESPONSES) {
@@ -245,6 +249,23 @@ export async function probeNetworkResponses(options, {
             recordIssue("LOCAL_RESPONSE_TOO_LARGE");
             return;
           }
+          // Pre-reserve known body bytes and cap the number of reads BEFORE
+          // asking Playwright for any response body.
+          const reservation = Math.max(expected.get(path).bytes,
+            Number.isFinite(indicatedLength) && indicatedLength > 0 ? indicatedLength : 0);
+          if (reservation > MAX_BODY_BYTES ||
+              reservedBodyBytes + reservation > MAX_CAPTURE_BYTES) {
+            recordIssue("LOCAL_RESPONSE_BODY_LIMIT");
+            return;
+          }
+          // Playwright may buffer internally; this is an adapter-level limit.
+          if (bodyReadsInFlight >= MAX_IN_FLIGHT_BODY_READS) {
+            recordIssue("LOCAL_RESPONSE_CONCURRENT_LIMIT");
+            return;
+          }
+          reservedBodyBytes += reservation;
+          bodyReadsInFlight++;
+          obs.bodyReadsStarted++;
           const task = (async () => {
             try {
               // A response can deliver headers without ever completing its body.
@@ -274,6 +295,8 @@ export async function probeNetworkResponses(options, {
               if (!row.bodyVerified) recordIssue("LOCAL_RESPONSE_BODY_MISMATCH");
             } catch {
               recordIssue("LOCAL_RESPONSE_BODY_UNAVAILABLE");
+            } finally {
+              bodyReadsInFlight--;
             }
           })();
           pending.push(task);
@@ -293,6 +316,7 @@ export async function probeNetworkResponses(options, {
           await page.waitForTimeout(100);
           if (previous === pending.length) break;
         }
+        obs.finalUrlMatched = obs.finalUrlMatched && page.url() === context.url;
         // A request that was started but has not finished can still return
         // bytes after the screenshot. A response-only listener misses it.
         // Record only the count, never URLs or request content.

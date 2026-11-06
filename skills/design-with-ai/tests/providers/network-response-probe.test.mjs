@@ -47,9 +47,12 @@ function mockChrome({ input, htmlBytes, cssBytes }, {
   floodRequests = 0,
   floodFailedRequests = 0,
   floodPageErrors = 0,
+  floodResponses = 0,
+  navigateDuringDrain = false,
 } = {}) {
   const contexts = [];
   let closed = 0;
+  let bodyReads = 0;
   const factory = async () => ({
     launch: async () => ({
       newContext: async (opts) => {
@@ -60,6 +63,7 @@ function mockChrome({ input, htmlBytes, cssBytes }, {
           status: () => status,
           headers: () => ({ "content-length": String(body.length) }),
           body: async () => {
+            bodyReads++;
             if (bodyUnavailable) throw new Error("Body was evicted");
             if (hangBody && resourceUrl.endsWith("site.css")) {
               return new Promise(() => {}); // Headers received, body never finishes.
@@ -67,6 +71,7 @@ function mockChrome({ input, htmlBytes, cssBytes }, {
             return body;
           },
         });
+        let currentRoute = redirected ? "/login" : "/settings";
         const page = {
           on: (event, handler) => { events.set(event, handler); },
           goto: async () => {
@@ -86,6 +91,9 @@ function mockChrome({ input, htmlBytes, cssBytes }, {
               }
               if (remote) deliver(
                 "https://cdn.example.test/file.js?secret-do-not-log", Buffer.from("external"));
+              for (let i = 0; i < floodResponses; i++) {
+                deliver("http://127.0.0.1:5191/settings/site.css", cssBytes);
+              }
               if (failRequest) {
                 const request = {};
                 events.get("request")?.(request);
@@ -108,12 +116,14 @@ function mockChrome({ input, htmlBytes, cssBytes }, {
               "body { color: red; }\n");
             return { status: () => 200 };
           },
-          waitForTimeout: async () => {},
+          waitForTimeout: async (ms) => {
+            if (navigateDuringDrain && ms === 100) currentRoute = "/settings/other.html";
+          },
           screenshot: async ({ path }) => {
             if (screenshotError) throw new Error("Screenshot unavailable");
             writeFileSync(path, "image");
           },
-          url: () => "http://127.0.0.1:5191" + (redirected ? "/login" : "/settings"),
+          url: () => "http://127.0.0.1:5191" + currentRoute,
         };
         return {
           newPage: async () => page,
@@ -123,7 +133,7 @@ function mockChrome({ input, htmlBytes, cssBytes }, {
       close: async () => { closed++; },
     }),
   });
-  return { factory, contexts, getClosed: () => closed };
+  return { factory, contexts, getClosed: () => closed, getBodyReads: () => bodyReads };
 }
 
 test("actual response body hashes match a local two-file manifest across three widths", async () => {
@@ -238,6 +248,35 @@ test("request and error floods remain bounded and cannot yield a false PASS", as
       o.issues.length <= 5),
     "Repeated events must not grow request retention or diagnostic arrays without bound");
     assert.equal(report.productCompletionEligible, false);
+  });
+});
+
+test("response flood preserves bounded rows and body reads", async () => {
+  await fixture(async (f) => {
+    const chrome = mockChrome(f, { floodResponses: 2_500 });
+    const report = await probeNetworkResponses(f.input, { browserFactory: chrome.factory });
+    assert.equal(report.status, "INCOMPLETE");
+    assert.ok(report.observations.every((o) =>
+      o.issues.includes("RESPONSE_COUNT_LIMIT") &&
+      o.local.length === 2_000 &&
+      o.bodyReadsStarted <= 4 &&
+      o.issues.includes("LOCAL_RESPONSE_CONCURRENT_LIMIT")),
+    "Response overflow retains only 2,000 local rows, limits reads and fails closed");
+    assert.ok(chrome.getBodyReads() <= 12,
+      "Response flood cannot launch more than four body() calls per viewport");
+  });
+});
+
+test("navigation during the body drain invalidates an earlier screenshot URL match", async () => {
+  await fixture(async (f) => {
+    const report = await probeNetworkResponses(f.input, {
+      browserFactory: mockChrome(f, { navigateDuringDrain: true }).factory,
+    });
+    assert.equal(report.status, "INCOMPLETE");
+    assert.ok(report.observations.every((o) =>
+      o.httpStatus === 200 && o.finalUrlMatched === false &&
+      o.local.every((row) => row.bodyVerified)),
+    "All matching network evidence still cannot certify a changed final route");
   });
 });
 

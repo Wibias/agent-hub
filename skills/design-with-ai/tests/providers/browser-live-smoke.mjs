@@ -136,11 +136,12 @@ try {
   const upstreamRows = [
     ...upstream.widths.flatMap((width, wi) =>
       width.findings.map((finding, fi) => ({
-        raw: finding, ref: taste.provenance.report +
+        raw: finding, width: width.width, ref: taste.provenance.report +
           "#/widths/" + wi + "/findings/" + fi,
       }))),
     ...upstream.sweep.findings.map((finding, fi) => ({
-      raw: finding, ref: taste.provenance.report + "#/sweep/findings/" + fi,
+      raw: finding, width: finding.width || 0,
+      ref: taste.provenance.report + "#/sweep/findings/" + fi,
     })),
   ];
   assert.equal(upstreamRows.length, taste.findings.length,
@@ -157,7 +158,7 @@ try {
   }));
   assert.equal(normalizedByReportRef.size, upstreamRows.length,
     "Each normalized observation needs a distinct upstream JSON pointer");
-  for (const { raw, ref } of upstreamRows) {
+  for (const { raw, ref, width } of upstreamRows) {
     const normalized = normalizedByReportRef.get(ref);
     assert.ok(normalized, "Missing normalized upstream observation: " + ref);
     assert.equal(normalized.providerRuleId, raw.check);
@@ -165,6 +166,7 @@ try {
     assert.equal(normalized.priority, raw.sev === "FAIL" ? "P1" : "P2");
     assert.equal(normalized.message, raw.msg);
     assert.equal(normalized.location.selector, raw.sel);
+    assert.equal(normalized.location.width, width);
     const crop = normalized.evidence.find((e) => e.kind === "rendered-crop");
     if (raw.crop !== undefined) {
       assert.equal(crop?.ref, join(dirname(taste.provenance.report), raw.crop));
