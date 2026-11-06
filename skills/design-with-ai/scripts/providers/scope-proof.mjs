@@ -129,6 +129,57 @@ function detectorContextFiles(root, sourceFiles) {
   });
 }
 
+// Impeccable's static-HTML engine reads local <link rel="stylesheet">
+// files even when the selected source target is just one HTML file. Bind
+// those additional bytes to the same before/after provenance as DESIGN.md.
+// This standalone resolver must not import the optional Impeccable provider.
+function linkedStylesheetFiles(root, sourceFiles) {
+  const paths = new Set();
+  const selected = new Set(sourceFiles);
+  for (const htmlFile of sourceFiles) {
+    if (!/\.html?$/i.test(htmlFile)) continue;
+    const html = readFileSync(htmlFile, "utf8");
+    const linkTags = html.matchAll(/<link\b(?:[^>"']|"[^"]*"|'[^']*')*>/gi);
+    let tagCount = 0;
+    for (const tag of linkTags) {
+      if (++tagCount > 1000) throw new TypeError("Too many HTML stylesheet links to attest");
+      const attributes = new Map();
+      for (const match of tag[0].matchAll(
+        /\b([a-z][a-z0-9:-]*)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/gi
+      )) {
+        attributes.set(match[1].toLowerCase(), match[2] ?? match[3] ?? match[4]);
+      }
+      if (!/\bstylesheet\b/i.test(attributes.get("rel") ?? "")) continue;
+      const href = attributes.get("href") ?? "";
+      if (!href || /^(https?:)?\/\//i.test(href)) continue;
+      // The detector removes query/fragment portions before reading disk.
+      // Entity-encoded paths cannot be safely matched without HTML parsing:
+      // reject them instead of silently omitting a real read dependency.
+      if (href.includes("&")) {
+        throw new TypeError("Entity-bearing stylesheet href cannot be attested");
+      }
+      const unversioned = href.split(/[?#]/)[0];
+      if (!unversioned) continue;
+      const css = resolve(dirname(htmlFile), unversioned);
+      if (!existsSync(css)) continue; // Detector also skips unreadable links.
+      if (!isInside(root, css)) {
+        throw new TypeError("Linked stylesheet escapes declared project scope");
+      }
+      const st = lstatSync(css);
+      const canonical = realpathSync(css);
+      if (!st.isFile() || st.isSymbolicLink() ||
+          !isInside(realpathSync(root), canonical) || canonical !== css) {
+        throw new TypeError("Linked stylesheet must be a regular in-project file");
+      }
+      if (!selected.has(css)) paths.add(css);
+    }
+    if (tagCount !== [...html.matchAll(/<link\b/gi)].length) {
+      throw new TypeError("Ambiguous HTML link markup cannot be attested");
+    }
+  }
+  return [...paths].sort();
+}
+
 function gitHead(root) {
   try {
     return execFileSync("git", ["-C", root, "rev-parse", "--verify", "HEAD"], {
@@ -150,6 +201,7 @@ export function sourceScopeProof({
   // Quick/native-only audits must not fail on unrelated Impeccable policy
   // files. Caller opts into these dependencies only when selecting Impeccable.
   const contextFiles = includeDetectorContext ? detectorContextFiles(root, sourceFiles) : [];
+  const linkedStylesheets = includeDetectorContext ? linkedStylesheetFiles(root, sourceFiles) : [];
   const inputStat = (file) => {
     const st = statSync(file, { bigint: true });
     return [file, String(st.size), String(st.ctimeNs), String(st.mtimeNs)];
@@ -157,7 +209,7 @@ export function sourceScopeProof({
   const renderedAssets = html ? renderedAssetProof({
     projectRoot: root, renderedRoot, html,
   }) : null;
-  const observedInputs = [...sourceFiles, ...contextFiles].map(inputStat);
+  const observedInputs = [...sourceFiles, ...contextFiles, ...linkedStylesheets].map(inputStat);
   if (intentPath) observedInputs.push(inputStat(resolve(intentPath)));
   if (renderedAssets) for (const asset of renderedAssets.files) {
     observedInputs.push(inputStat(resolve(root, asset.path)));
@@ -168,6 +220,10 @@ export function sourceScopeProof({
   }));
   if (!files.length) throw new TypeError("Source scope has no eligible files");
   const detectorContext = contextFiles.map((file) => ({
+    path: normalize(relative(root, file)),
+    sha256: hash(readFileSync(file)),
+  }));
+  const linkedStylesheetProof = linkedStylesheets.map((file) => ({
     path: normalize(relative(root, file)),
     sha256: hash(readFileSync(file)),
   }));
@@ -201,6 +257,7 @@ export function sourceScopeProof({
     gitHead: gitHead(root),
     files,
     ...(detectorContext.length ? { detectorContext } : {}),
+    ...(linkedStylesheetProof.length ? { linkedStylesheets: linkedStylesheetProof } : {}),
     ...(renderedAssets ? { renderedAssets } : {}),
     intent,
     rendered,
