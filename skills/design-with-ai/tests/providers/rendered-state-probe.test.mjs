@@ -59,7 +59,10 @@ function fakeBrowser({
             };
           },
           url: () => origin + (captured && postCaptureRoute ? postCaptureRoute : route),
-          waitForFunction: async () => {
+          waitForFunction: async (predicate, arg) => {
+            assert.equal(predicate, snapshotDeclaredDomState,
+              "browser wait must use the same serializable function as DOM snapshots");
+            assert.equal(arg.markerOnly, true);
             if (waitFailure) throw new Error("Wait timed out");
           },
           evaluate: async () => captured && transitionAfterScreenshot ? {
@@ -172,26 +175,36 @@ test("viewport text ignores off-screen content and all markers are considered", 
   });
   const markerHidden = element(1200);
   const markerVisible = element(20);
+  const hiddenAncestor = element(30);
+  hiddenAncestor.hidden = true;
+  hiddenAncestor.parentElement = markerVisible;
+  const hiddenWrapper = element(10);
+  hiddenWrapper.hidden = true;
+  let markerCandidates = [markerHidden, markerVisible];
   const visible = {
     nodeValue: "Playing now", parentElement: markerVisible,
     rect: box(20),
   };
   const offscreen = {
-    nodeValue: "Loading below fold", parentElement: element(1300),
-    rect: box(1300),
+    nodeValue: "Loading below fold", parentElement: markerVisible,
+    rect: box(1300), // Parent is visible but these specific word ranges are not.
+  };
+  const hiddenWord = {
+    nodeValue: "Secret under hidden ancestor", parentElement: hiddenAncestor,
+    rect: box(30),
   };
   try {
     globalThis.innerWidth = 390;
     globalThis.innerHeight = 900;
     globalThis.NodeFilter = { SHOW_TEXT: 4 };
-    globalThis.getComputedStyle = () => ({
-      display: "block", visibility: "visible", opacity: "1",
+    globalThis.getComputedStyle = (node) => ({
+      display: node.hidden ? "none" : "block", visibility: "visible", opacity: "1",
     });
     globalThis.document = {
       body: {},
-      querySelectorAll: () => [markerHidden, markerVisible],
+      querySelectorAll: () => markerCandidates,
       createTreeWalker: () => {
-        const nodes = [visible, offscreen]; let pos = 0;
+        const nodes = [visible, offscreen, hiddenWord]; let pos = 0;
         return { nextNode: () => nodes[pos++] ?? null };
       },
       createRange: () => {
@@ -206,13 +219,22 @@ test("viewport text ignores off-screen content and all markers are considered", 
     };
     const result = snapshotDeclaredDomState({
       readySelector: "[data-game-phase='live']",
-      requiredText: ["Playing now", "below fold"],
-      forbiddenText: ["Loading"],
+      requiredText: ["Playing now", "below fold", "Secret"],
+      forbiddenText: ["Loading", "Secret"],
     });
     assert.equal(result.markerVisible, true, "second visible matching marker is valid");
-    assert.deepEqual(result.missingText, ["below fold"]);
+    assert.deepEqual(result.missingText, ["below fold", "Secret"]);
     assert.deepEqual(result.forbiddenTextVisible, []);
     assert.equal(result.textTruncated, false);
+    const markerOnly = () => snapshotDeclaredDomState({
+      readySelector: "[data-game-phase='live']", markerOnly: true,
+    });
+    assert.equal(markerOnly(), true, "the browser wait accepts a visible marker");
+    markerCandidates = [markerHidden];
+    assert.equal(markerOnly(), false, "off-screen markers cannot release the wait");
+    markerCandidates = [markerVisible];
+    markerVisible.parentElement = hiddenWrapper;
+    assert.equal(markerOnly(), false, "hidden ancestors cannot release the wait");
   } finally {
     Object.assign(globalThis, old);
   }
@@ -228,6 +250,55 @@ test("symlinked CLI invocation executes and rejects missing options instead of s
     assert.equal(result.status, 2, result.stderr);
     assert.match(result.stderr, /Required option --base-url/);
   });
+});
+
+test("DOM text traversal itself enforces both node and word scan limits", () => {
+  const old = {
+    document: globalThis.document, getComputedStyle: globalThis.getComputedStyle,
+    NodeFilter: globalThis.NodeFilter,
+    innerWidth: globalThis.innerWidth, innerHeight: globalThis.innerHeight,
+  };
+  const rect = { top: 10, bottom: 30, left: 0, right: 120, width: 120, height: 20 };
+  const parent = { parentElement: null, getBoundingClientRect: () => rect };
+  try {
+    globalThis.innerWidth = 390;
+    globalThis.innerHeight = 900;
+    globalThis.NodeFilter = { SHOW_TEXT: 4 };
+    globalThis.getComputedStyle = () => ({
+      display: "block", visibility: "visible", opacity: "1",
+    });
+    const run = (nodes) => {
+      globalThis.document = {
+        body: {},
+        querySelectorAll: () => [parent],
+        createTreeWalker: () => {
+          let index = 0;
+          return { nextNode: () => nodes[index++] ?? null };
+        },
+        createRange: () => ({
+          setStart: () => {}, setEnd: () => {},
+          getClientRects: () => [rect], detach: () => {},
+        }),
+      };
+      return snapshotDeclaredDomState({
+        readySelector: "[data-game-phase='live']",
+        requiredText: ["word"],
+      });
+    };
+    const overNodeLimit = Array.from({ length: 3001 },
+      () => ({ nodeValue: "word", parentElement: parent }));
+    const nodesResult = run(overNodeLimit);
+    assert.equal(nodesResult.markerVisible, true);
+    assert.equal(nodesResult.textTruncated, true, "3,001 nodes must truncate");
+    const wordsResult = run([{
+      nodeValue: Array(6001).fill("word").join(" "),
+      parentElement: parent,
+    }]);
+    assert.equal(wordsResult.markerVisible, true);
+    assert.equal(wordsResult.textTruncated, true, "6,001 words must truncate");
+  } finally {
+    Object.assign(globalThis, old);
+  }
 });
 
 test("an unavailable browser records INCOMPLETE evidence instead of a false success", async () => {
