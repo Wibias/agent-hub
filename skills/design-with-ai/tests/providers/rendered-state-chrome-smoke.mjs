@@ -28,6 +28,19 @@ class Cdp {
     this.seq = 0;
     this.pending = new Map();
     this.listeners = new Set();
+    this.eventWaits = new Set();
+    const rejectOutstanding = (reason) => {
+      for (const call of this.pending.values()) {
+        clearTimeout(call.timeout);
+        call.reject(new Error(reason));
+      }
+      this.pending.clear();
+      for (const cancel of [...this.eventWaits]) cancel(new Error(reason));
+    };
+    socket.addEventListener('close', () =>
+      rejectOutstanding('Chrome CDP WebSocket closed'));
+    socket.addEventListener('error', () =>
+      rejectOutstanding('Chrome CDP WebSocket error'));
     socket.addEventListener('message', ({ data }) => {
       const m = JSON.parse(String(data));
       if (m.id) {
@@ -46,7 +59,13 @@ class Cdp {
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => { this.pending.delete(id); reject(new Error('CDP timeout: ' + method)); }, 20_000);
       this.pending.set(id, { resolve, reject, timeout });
-      this.socket.send(JSON.stringify({ id, method, params, ...(sessionId ? { sessionId } : {}) }));
+      try {
+        this.socket.send(JSON.stringify({ id, method, params, ...(sessionId ? { sessionId } : {}) }));
+      } catch (error) {
+        clearTimeout(timeout);
+        this.pending.delete(id);
+        reject(error);
+      }
     });
   }
   on(listener) { this.listeners.add(listener); return () => this.listeners.delete(listener); }
@@ -54,11 +73,22 @@ class Cdp {
     let off;
     let timeout;
     return new Promise((resolve, reject) => {
+      const cancel = (error) => {
+        clearTimeout(timeout);
+        off();
+        this.eventWaits.delete(cancel);
+        reject(error);
+      };
       off = this.on((m) => {
         if (m.method !== method || m.sessionId !== sessionId) return;
-        clearTimeout(timeout); off(); resolve(m.params);
+        clearTimeout(timeout);
+        off();
+        this.eventWaits.delete(cancel);
+        resolve(m.params);
       });
-      timeout = setTimeout(() => { off(); reject(new Error('CDP event timeout: ' + method)); }, 20_000);
+      this.eventWaits.add(cancel);
+      timeout = setTimeout(() =>
+        cancel(new Error('CDP event timeout: ' + method)), 20_000);
     });
   }
   close() { this.socket.close(); }
@@ -191,7 +221,38 @@ async function openPage(cdp, width, height) {
   };
 }
 
+
+// A closed Chrome socket must reject commands and event waits immediately,
+// not leave unresolved promises behind until a 20-second CDP timeout.
+async function assertDisconnectedSocketRejects() {
+  for (const kind of ['close', 'error']) {
+    const socket = new EventTarget();
+    socket.readyState = WebSocket.OPEN;
+    socket.send = () => {};
+    socket.close = () => {};
+    const cdp = new Cdp(socket);
+    const pending = [
+      cdp.send('Target.createTarget'),
+      cdp.send('Page.navigate'),
+      cdp.once('Page.loadEventFired', 'test-session'),
+    ];
+    socket.dispatchEvent(new Event(kind));
+    const expected = kind === 'close' ? /WebSocket closed/ : /WebSocket error/;
+    await Promise.all(pending.map((promise) =>
+      assert.rejects(promise, expected)));
+    assert.equal(cdp.pending.size, 0, 'disconnected commands must be cleared');
+    assert.equal(cdp.eventWaits.size, 0, 'disconnected event waits must be cleared');
+  }
+  const socket = new EventTarget();
+  socket.readyState = WebSocket.OPEN;
+  socket.send = () => { throw new Error('synthetic send failure'); };
+  const cdp = new Cdp(socket);
+  await assert.rejects(cdp.send('Runtime.evaluate'), /synthetic send failure/);
+  assert.equal(cdp.pending.size, 0, 'failed synchronous sends must not leave pending work');
+}
+
 async function main() {
+  await assertDisconnectedSocketRejects();
   const root = mkdtempSync(join(tmpdir(), 'dwa-state-real-chrome-'));
   const server = createServer((request, response) => {
     response.setHeader('Cache-Control', 'no-store');
