@@ -13,6 +13,7 @@ function receiptFor(args = [], overrides = {}) {
     configEnabled: !noConfig,
     inlineIgnoresEnabled: !noConfig && !args.includes("--no-inline-ignores"),
     designSystemEnabled: !noConfig && !args.includes("--no-design-system"),
+    designSystemResolvedFiles: !noConfig && !args.includes("--no-design-system") ? 1 : 0,
     ...overrides,
   }) + "\n";
 }
@@ -46,6 +47,7 @@ test("four independent modes preserve configured and isolated ignore/design flag
       { runner, script: fake },
     );
     assert.equal(report.status, "COMPLETE");
+    assert.equal(report.designSystemComparison, "ESTABLISHED");
     assert.deepEqual(report.runs.map((r) => r.mode),
       ["configured", "no-inline-ignores", "no-design-system", "no-config"]);
     assert.deepEqual(calls.map((c) => c.args.slice(1, -1)),
@@ -122,6 +124,8 @@ test("missing, degraded and contradictory scan receipts invalidate every timing 
       receiptFor([], { ignoredFiles: 2 }),
       receiptFor([], { designSystemEnabled: "unknown" }),
       receiptFor([], { configEnabled: false }),
+      receiptFor([], { designSystemResolvedFiles: 2 }),
+      receiptFor([], { designSystemEnabled: false, designSystemResolvedFiles: 1 }),
     ];
     for (const stderr of invalid) {
       const r = await compareImpeccableModes(
@@ -134,6 +138,29 @@ test("missing, degraded and contradictory scan receipts invalidate every timing 
       assert.equal(r.status, "INCOMPLETE");
       assert.equal(r.runs.length, 1);
       assert.equal(r.runs[0].status, "ERROR");
+    }
+  });
+});
+
+test("disabled or unresolved DESIGN.md is reported as unestablished without failing configured scans", async () => {
+  await fixture(async ({ project, source, root }) => {
+    const fake = join(root, "fake-detector.mjs");
+    writeFileSync(fake, "// mock\n");
+    for (const disabled of [true, false]) {
+      const out = await compareImpeccableModes(
+        ["--target", source, "--project-root", project],
+        { script: fake, runner: async (options) => ({
+          stdout: "[]", stderr: receiptFor(options.args, {
+            designSystemEnabled: !disabled && !options.args.includes("--no-design-system") &&
+              !options.args.includes("--no-config"),
+            designSystemResolvedFiles: 0,
+          }), exitCode: 0, error: null, timedOut: false, outputLimitExceeded: false,
+        }) },
+      );
+      assert.equal(out.status, "COMPLETE");
+      assert.equal(out.designSystemComparison, "NOT_ESTABLISHED");
+      assert.match(out.note, /NOT ESTABLISHED/);
+      assert.equal(out.runs[0].designSystemResolvedFiles, 0);
     }
   });
 });
@@ -151,6 +178,23 @@ test("invalid invocation or escaped scope is rejected", async () => {
   });
 });
 
+test("vendored detector really finds waived vs raw source rule while leaving input unchanged", async () => {
+  await fixture(async ({ project, source }) => {
+    const before = readFileSync(source, "utf8");
+    const out = await compareImpeccableModes(
+      ["--target", source, "--project-root", project],
+    );
+    assert.equal(out.status, "COMPLETE", JSON.stringify(out));
+    assert.equal(out.designSystemComparison, "NOT_ESTABLISHED");
+    const byMode = Object.fromEntries(out.runs.map((r) => [r.mode, r]));
+    assert.equal(byMode.configured.byRule["overused-font"] ?? 0, 0);
+    assert.equal(byMode["no-inline-ignores"].byRule["overused-font"], 1);
+    assert.equal(byMode["no-design-system"].byRule["overused-font"] ?? 0, 0);
+    assert.equal(byMode["no-config"].byRule["overused-font"], 1);
+    assert.equal(readFileSync(source, "utf8"), before);
+  });
+});
+
 test("real detector enforces DESIGN.md separately from inline waivers", async () => {
   await fixture(async ({ project, source }) => {
     // Space Grotesk is deliberately undocumented, but the existing
@@ -162,6 +206,8 @@ test("real detector enforces DESIGN.md separately from inline waivers", async ()
       ["--target", source, "--project-root", project],
     );
     assert.equal(out.status, "COMPLETE", JSON.stringify(out));
+    assert.equal(out.designSystemComparison, "ESTABLISHED",
+      "A resolved DESIGN.md must establish the policy comparison");
     const byMode = Object.fromEntries(out.runs.map((r) => [r.mode, r]));
     assert.equal(byMode.configured.byRule["design-system-font"], 1,
       "configured mode must enforce the real DESIGN.md font contract");
@@ -194,6 +240,8 @@ test("real diagnostic accepts a DESIGN.md-permitted font in every mode", async (
       ["--target", source, "--project-root", project],
     );
     assert.equal(out.status, "COMPLETE", JSON.stringify(out));
+    assert.equal(out.designSystemComparison, "ESTABLISHED",
+      "A resolved DESIGN.md must establish the policy comparison");
     assert.deepEqual(out.runs.map((r) => r.mode),
       ["configured", "no-inline-ignores", "no-design-system", "no-config"]);
     for (const { mode, byRule } of out.runs) {
