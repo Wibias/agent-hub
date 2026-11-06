@@ -88,8 +88,8 @@ export function inspectCrossBranchClaimEvidence({
   try {
     db.exec('BEGIN');
     began = true;
-    if (!['project_registry', 'claims', 'evidence', 'claim_evidence',
-      'memory_candidates', 'memory_evidence_proposals'].every(name => hasTable(db, name))) {
+    if (!['project_registry', 'claims', 'evidence', 'claim_evidence']
+      .every(name => hasTable(db, name))) {
       return { ...baseline, status: 'blocked', blockers: ['required_ledger_missing'] };
     }
     if (!db.prepare('SELECT 1 FROM project_registry WHERE project_id=?')
