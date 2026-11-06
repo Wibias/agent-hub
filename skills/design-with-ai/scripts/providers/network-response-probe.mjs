@@ -99,6 +99,11 @@ function localAssetPath(resourceUrl, context) {
   if (segments.some((seg) => seg === "." || seg === "..")) {
     throw new TypeError("Unsafe local resource traversal");
   }
+  // A static /settings route is normally served from /settings/index.html.
+  // Correlate exactly the declared document route, not arbitrary SPA aliases.
+  if (path === context.route || path === context.route + "/") {
+    return relative(context.project, context.html).replaceAll("\\", "/");
+  }
   const file = join(context.rendered, ...segments);
   if (!inside(context.rendered, file)) {
     throw new TypeError("Requested resource escapes built asset root");
@@ -171,6 +176,11 @@ export async function probeNetworkResponses(options, { browserFactory = loadBrow
         const pending = [];
         const pageErrors = [];
         page.on("pageerror", (e) => pageErrors.push(shortError(e)));
+        page.on("requestfailed", (request) => {
+          // Missing responses must not quietly disappear from the observed set.
+          // Never store URLs or request bodies, which may contain credentials.
+          obs.issues.push("BROWSER_REQUEST_FAILED");
+        });
         page.on("response", (response) => {
           if (obs.local.length + obs.external.length >= MAX_RESPONSES) {
             obs.issues.push("RESPONSE_COUNT_LIMIT");
@@ -201,7 +211,7 @@ export async function probeNetworkResponses(options, { browserFactory = loadBrow
             obs.issues.push("NON_200_LOCAL_RESPONSE");
             return;
           }
-          const indicatedLength = Number(response.headers?.()["content-length"]);
+          const indicatedLength = Number(response.headers?.()?.["content-length"]);
           if (Number.isFinite(indicatedLength) && indicatedLength > MAX_BODY_BYTES) {
             obs.issues.push("LOCAL_RESPONSE_TOO_LARGE");
             return;
