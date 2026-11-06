@@ -291,3 +291,42 @@ test('missing proposal ledger never counts as zero unresolved proposals',async()
     assert.equal(result.promotionAllowed,false);
   },{proposalLedger:false});
 });
+
+test('failed Candidates and proposals still require manual resolution before any Claim',async()=>{
+  await fixture(async({dbPath,stageId,writable,memory})=>{
+    memory.recordEvidence({
+      id:'failed-source',projectId:PROJECT,branch:BRANCH,harness:'codex',
+      sessionId:'failed-session',sourceKind:'session',sourceRef:'session:failed',
+      capturedAt:'2026-11-06T09:00:00.000Z',authorityClass:'user_direct',
+      content:'An unresolved failed memory candidate.',
+      metadata:{event_type:'user_prompt'},
+    });
+    memory.recordCandidate({
+      id:'failed-candidate',evidenceId:'failed-source',type:'constraint',
+      proposedValue:'An unresolved failed memory candidate.',
+      decisionReason:'synthetic fixture',policyVersion:'capture-v1',
+      fingerprint:SHA('failed-candidate'),createdAt:'2026-11-06T09:00:00.000Z',
+    });
+    writable.prepare("UPDATE memory_candidates SET status='failed' WHERE id='failed-candidate'").run();
+    let report=preflight({dbPath,stageId});
+    assert.equal(report.status,'needs_unresolved_memory_review');
+    assert.equal(report.otherPendingCandidates,1);
+    assert.equal(report.promotionAllowed,false);
+    writable.prepare("UPDATE memory_candidates SET status='ignored' WHERE id='failed-candidate'").run();
+    writable.prepare(
+      'INSERT INTO memory_evidence_proposals '
+      + '(id,project_id,branch,kind,canonical_fact,status,'
+      + 'policy_version,evaluator_id,fingerprint,created_at) '
+      + 'VALUES (?,?,?,?,?,?,?,?,?,?)',
+    ).run(
+      'failed-proposal',PROJECT,BRANCH,'procedure',
+      'An unresolved failed synthetic evidence proposal.',
+      'failed','fixture-v1','fixture',SHA('failed-proposal'),
+      '2026-11-06T09:00:00.000Z',
+    );
+    report=preflight({dbPath,stageId});
+    assert.equal(report.status,'needs_unresolved_memory_review');
+    assert.equal(report.unresolvedEvidenceProposals,1);
+    assert.equal(report.promotionAllowed,false);
+  });
+});
