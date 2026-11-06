@@ -99,7 +99,7 @@ test("byte limits fail closed for oversized files and unexpected special entries
     truncateSync(huge, 129 * 1024 * 1024);
     assert.throws(() => f.sample(), /per-file byte limit/);
   });
-}
+});
 
 test("too many assets are rejected rather than silently truncated", () => {
   fixture((f) => {
