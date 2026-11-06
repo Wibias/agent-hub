@@ -28,6 +28,8 @@ function fakeBrowser({
   states = {},
   status = 200,
   route = "/game/live",
+  origin = "http://127.0.0.1:5191",
+  postCaptureRoute = null,
   waitFailure = false,
   navigationFailure = false,
   screenshotFailure = false,
@@ -50,7 +52,7 @@ function fakeBrowser({
             if (navigationFailure) throw new Error("Navigation timeout");
             return { status: () => status };
           },
-          url: () => "http://127.0.0.1:5191" + route,
+          url: () => origin + (captured && postCaptureRoute ? postCaptureRoute : route),
           waitForSelector: async () => {
             if (waitFailure) throw new Error("Wait timed out");
           },
@@ -111,6 +113,8 @@ test("loading, empty, redirected, failed or unscreened state cannot be observed"
     };
     for (const scenario of [
       { states: bad }, { status: 404 }, { route: "/wrong" },
+      { origin: "https://other-host.example" },
+      { postCaptureRoute: "/login" },
       { waitFailure: true }, { screenshotFailure: true },
       { navigationFailure: true }, { pageErrors: true },
       { transitionAfterScreenshot: true },
