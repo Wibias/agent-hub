@@ -106,6 +106,14 @@ test("scoped PASS requires 1440/768/390 plus first-screen sweep and separate pro
     assert.equal(report.status, ProviderStatus.PASS, report.reason);
     assert.deepEqual(report.summary.widths, WIDTHS);
     assert.equal(report.summary.productCompletionEligible, false);
+    assert.equal(report.summary.renderedStateVerified, false);
+    assert.equal(report.summary.renderedStateProof, "NOT_PROVIDED_BY_UPSTREAM");
+    assert.deepEqual(report.summary.reviewClassCounts, {
+      POTENTIAL_USABILITY: 0,
+      GEOMETRY_NEEDS_VISUAL_REVIEW: 0,
+      CONTEXTUAL_HOUSE_RULE: 0,
+      UNCLASSIFIED_HEURISTIC: 0,
+    });
     assert.equal(report.provenance.version, "2.5.0");
     assert.ok(existsSync(report.provenance.report));
     const cmd = harness.lastCommand();
@@ -146,11 +154,55 @@ test("FAIL and WARN remain contextual findings with inspectable crop and report 
     const report = await provider.inspect(opts(fx));
     assert.equal(report.status, ProviderStatus.FINDINGS, report.reason);
     assert.deepEqual(report.findings.map((f) => f.priority), ["P1", "P2"]);
+    assert.deepEqual(report.findings.map((f) => f.upstreamSeverity), ["FAIL", "WARN"]);
+    assert.deepEqual(report.findings.map((f) => f.reviewClass),
+      ["POTENTIAL_USABILITY", "CONTEXTUAL_HOUSE_RULE"]);
+    assert.equal(report.summary.reviewClassCounts.POTENTIAL_USABILITY, 1);
+    assert.equal(report.summary.reviewClassCounts.CONTEXTUAL_HOUSE_RULE, 1);
+    assert.equal(report.summary.renderedStateVerified, false);
     assert.equal(report.findings[0].providerRuleId, "off-viewport");
     assert.equal(report.findings[0].location.width, 1440);
     assert.ok(report.findings[0].evidence[0].ref.includes("#/widths/0/findings/0"));
     assert.ok(report.findings[0].evidence[1].ref.endsWith("1440-01-off-viewport.jpg"));
     assert.equal(report.findings[1].location.width, 1280);
+  });
+});
+
+test("pinned Taste review classes preserve raw FAILs, unknown checks and evidence counts", async () => {
+  await fixture(async (fx) => {
+    const harness = mockRunner(fx, (report) => {
+      const rows = [
+        { check: "spill", sev: "FAIL", sel: ".stage", msg: "extends beyond frame" },
+        { check: "visual-caption", sev: "FAIL", sel: "figure", msg: "caption under image" },
+        { check: "cut-text", sev: "FAIL", sel: "h1", msg: "text may be clipped" },
+        { check: "new-upstream-check", sev: "FAIL", sel: "section", msg: "unknown check" },
+      ];
+      report.widths[0].findings.push(...rows);
+      report.counts.FAIL = rows.length;
+      report.checks["spill"] = "FAIL";
+    });
+    const provider = createTasteSkillProvider({
+      skillRoot: fx.skillRoot, runner: harness.runner, nodeMajor: 22,
+    });
+    const report = await provider.inspect(opts(fx));
+    assert.equal(report.status, ProviderStatus.FINDINGS, report.reason);
+    assert.equal(report.findings.length, 4);
+    assert.deepEqual(report.findings.map((f) => f.priority),
+      ["P1", "P1", "P1", "P1"]);
+    assert.deepEqual(report.findings.map((f) => f.reviewClass), [
+      "GEOMETRY_NEEDS_VISUAL_REVIEW",
+      "CONTEXTUAL_HOUSE_RULE",
+      "POTENTIAL_USABILITY",
+      "UNCLASSIFIED_HEURISTIC",
+    ]);
+    assert.deepEqual(report.summary.reviewClassCounts, {
+      POTENTIAL_USABILITY: 1,
+      GEOMETRY_NEEDS_VISUAL_REVIEW: 1,
+      CONTEXTUAL_HOUSE_RULE: 1,
+      UNCLASSIFIED_HEURISTIC: 1,
+    });
+    assert.equal(report.summary.counts.FAIL, 4);
+    assert.equal(report.summary.renderedStateVerified, false);
   });
 });
 

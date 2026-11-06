@@ -1,0 +1,129 @@
+import assert from "node:assert/strict";
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { test } from "node:test";
+import { compareImpeccableModes } from "../../scripts/providers/impeccable-performance-diagnostic.mjs";
+
+async function fixture(fn) {
+  const root = mkdtempSync(join(tmpdir(), "dwa-impeccable-perf-"));
+  const project = join(root, "project");
+  mkdirSync(project);
+  const source = join(project, "source.css");
+  writeFileSync(source,
+    'font-family: "Space Grotesk"; /* impeccable-disable-line overused-font: deliberate */\n' +
+    ".banner { animation: bounce 2s infinite; }\n");
+  try { return await fn({ root, project, source }); }
+  finally { rmSync(root, { recursive: true, force: true }); }
+}
+
+test("four independent modes preserve configured and isolated ignore/design flags", async () => {
+  await fixture(async ({ project, source, root }) => {
+    const calls = [];
+    const fake = join(root, "fake-detector.mjs");
+    writeFileSync(fake, "// read only fixture\n");
+    const runner = async (options) => {
+      calls.push(options);
+      return {
+        stdout: "[]", stderr: "", exitCode: 0, error: null,
+        timedOut: false, outputLimitExceeded: false,
+      };
+    };
+    const report = await compareImpeccableModes(
+      ["--target", source, "--project-root", project],
+      { runner, script: fake },
+    );
+    assert.equal(report.status, "COMPLETE");
+    assert.deepEqual(report.runs.map((r) => r.mode),
+      ["configured", "no-inline-ignores", "no-design-system", "no-config"]);
+    assert.deepEqual(calls.map((c) => c.args.slice(1, -1)),
+      [
+        ["--json"],
+        ["--json", "--no-inline-ignores"],
+        ["--json", "--no-design-system"],
+        ["--json", "--no-config"],
+      ]);
+    for (const c of calls) {
+      assert.equal(c.cwd, project);
+      assert.equal(c.timeoutMs, 120_000);
+      assert.equal(c.maxOutputBytes, 4_194_304);
+      assert.ok(!c.args.includes("npx"));
+    }
+  });
+});
+
+test("alternating rounds reverse mode order without making product claims", async () => {
+  await fixture(async ({ project, source, root }) => {
+    const fake = join(root, "fake-detector.mjs");
+    writeFileSync(fake, "// test\n");
+    const runner = async () => ({
+      stdout: "[]", stderr: "", exitCode: 0, error: null,
+      timedOut: false, outputLimitExceeded: false,
+    });
+    const out = await compareImpeccableModes(
+      ["--target", source, "--project-root", project, "--rounds", "2"],
+      { runner, script: fake },
+    );
+    assert.equal(out.runs.length, 8);
+    assert.deepEqual(out.runs.slice(4).map((r) => r.mode),
+      ["no-config", "no-design-system", "no-inline-ignores", "configured"]);
+    assert.match(out.note, /run order/);
+  });
+});
+
+test("detector timeout, partial status or malformed output is INCOMPLETE, never PASS", async () => {
+  await fixture(async ({ project, source, root }) => {
+    const fake = join(root, "fake-detector.mjs");
+    writeFileSync(fake, "// test\n");
+    const results = [
+      { exitCode: 1, stdout: "[]" },
+      { exitCode: 0, stdout: "garbage" },
+      { exitCode: 2, stdout: "[]" },
+      { exitCode: 0, stdout: "[]", timedOut: true },
+    ];
+    for (const mock of results) {
+      const output = await compareImpeccableModes(
+        ["--target", source, "--project-root", project],
+        {
+          script: fake,
+          runner: async () => ({
+            stdout: "[]", stderr: "", exitCode: 0,
+            error: null, timedOut: false, outputLimitExceeded: false, ...mock,
+          }),
+        },
+      );
+      assert.equal(output.status, "INCOMPLETE");
+      assert.equal(output.runs.length, 1);
+      assert.equal(output.runs[0].status, "ERROR");
+    }
+  });
+});
+
+test("invalid invocation or escaped scope is rejected", async () => {
+  await fixture(async ({ project, source, root }) => {
+    for (const args of [
+      ["--target", source, "--project-root", project, "--rounds", "0"],
+      ["--target", source, "--project-root", project, "--rounds", "4"],
+      ["--target", source, "--project-root", project, "--unknown", "yes"],
+      ["--target", root, "--project-root", project],
+    ]) {
+      await assert.rejects(() => compareImpeccableModes(args), /rounds|argument|scope|escapes project root/i);
+    }
+  });
+});
+
+test("vendored detector really finds waived vs raw source rule while leaving input unchanged", async () => {
+  await fixture(async ({ project, source }) => {
+    const before = readFileSync(source, "utf8");
+    const out = await compareImpeccableModes(
+      ["--target", source, "--project-root", project],
+    );
+    assert.equal(out.status, "COMPLETE", JSON.stringify(out));
+    const byMode = Object.fromEntries(out.runs.map((r) => [r.mode, r]));
+    assert.equal(byMode.configured.byRule["overused-font"] ?? 0, 0);
+    assert.equal(byMode["no-inline-ignores"].byRule["overused-font"], 1);
+    assert.equal(byMode["no-design-system"].byRule["overused-font"] ?? 0, 0);
+    assert.equal(byMode["no-config"].byRule["overused-font"], 1);
+    assert.equal(readFileSync(source, "utf8"), before);
+  });
+});

@@ -10,6 +10,29 @@ import { runProcess } from "./process-runner.mjs";
 
 const WIDTHS = [1440, 768, 390];
 const PAGE_KINDS = new Set(["software", "gaming", "tech", "product", "service", "place"]);
+// Conservative *review* hints for the pinned Taste Skill 2.5.0 check IDs.
+// Never suppress, downgrade, approve or turn an upstream FAIL into DWA P0.
+const CONTEXTUAL_TASTE_RULES = new Set([
+  "visual-caption", "section-height", "one-section", "hero-screen", "hero-fill",
+  "photo-set", "photo-upscale", "nav-family", "cta", "hover",
+  "one-heading", "heading-scale", "copy-headline", "copy-headings",
+  "copy-buttons", "copy-length", "section-air", "section-tile",
+]);
+const GEOMETRY_REVIEW_RULES = new Set([
+  "spill", "container-edges", "section-gaps", "row-lines",
+  "off-grid", "centre-axis", "tilt", "stagger",
+]);
+const POTENTIAL_USABILITY_RULES = new Set([
+  "contrast", "cut-text", "off-viewport", "overlap-text", "fold-cut", "forms",
+  "links", "assets", "empty-visual", "visual-empty", "no-visual",
+  "busy-ground", "nav-covers", "fake-button", "broken-image",
+]);
+function tasteReviewClass(check) {
+  if (POTENTIAL_USABILITY_RULES.has(check)) return "POTENTIAL_USABILITY";
+  if (GEOMETRY_REVIEW_RULES.has(check)) return "GEOMETRY_NEEDS_VISUAL_REVIEW";
+  if (CONTEXTUAL_TASTE_RULES.has(check)) return "CONTEXTUAL_HOUSE_RULE";
+  return "UNCLASSIFIED_HEURISTIC";
+}
 const ENV_KEYS = [
   "PATH", "Path", "SystemRoot", "WINDIR", "HOME", "USERPROFILE", "TMP", "TEMP", "TMPDIR",
   "CHROME_PATH", "LOCALAPPDATA", "PROGRAMFILES",
@@ -78,6 +101,8 @@ function validatedFinding(raw, { width, route, file, reportPath, pointer, runDir
     category: "rendered",
     priority: raw.sev === "FAIL" ? "P1" : "P2",
     confidence: "heuristic",
+    upstreamSeverity: raw.sev,
+    reviewClass: tasteReviewClass(raw.check),
     message: raw.msg,
     location: { route, file, width, selector: raw.sel },
     evidence,
@@ -142,6 +167,12 @@ function parseReport(report, { exitCode, route, page, project, runDir }) {
       (exitCode === 1 && counters.FAIL === 0)) {
     throw new Error("Taste Skill exit status and reported finding counts disagree");
   }
+  const reviewClassCounts = {
+    POTENTIAL_USABILITY: 0, GEOMETRY_NEEDS_VISUAL_REVIEW: 0,
+    CONTEXTUAL_HOUSE_RULE: 0, UNCLASSIFIED_HEURISTIC: 0,
+  };
+  for (const finding of normalized) reviewClassCounts[finding.reviewClass]++;
+
   return assertProviderReport({
     provider: "taste-skill",
     capability: Capability.RENDERED_AUDIT,
@@ -158,11 +189,16 @@ function parseReport(report, { exitCode, route, page, project, runDir }) {
     },
     summary: {
       counts: counters,
+      reviewClassCounts,
       widths: [...WIDTHS],
       sweepWidths: report.sweep.widths,
       requiresAdjudication: true,
       productCompletionEligible: false,
-      note: "Taste Skill house rules are contextual evidence, not DWA blockers.",
+      renderedStateVerified: false,
+      // The upstream checker waits for its own kit's data-ready convention,
+      // not arbitrary React/game session state or backend hydration.
+      renderedStateProof: "NOT_PROVIDED_BY_UPSTREAM",
+      note: "Raw FAIL/WARN are retained as contextual evidence. A completed Taste scan is not proof the intended runtime state loaded.",
     },
     findings: normalized,
   }, { providerId: "taste-skill", capability: Capability.RENDERED_AUDIT });
