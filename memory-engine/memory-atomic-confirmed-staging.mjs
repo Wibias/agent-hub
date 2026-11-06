@@ -67,8 +67,12 @@ function verifyConfirmation(row, request, createdAt, sourceEvidenceId) {
     || row.project_id !== request.projectId || row.branch !== request.branch
     || row.authority_class !== 'user_direct' || row.sensitivity !== 'normal'
     || row.source_kind !== 'session' || row.harness !== 'codex'
-    || !proper(row.session_id) || row.path !== null
-    || metadata.event_type !== 'user_prompt' || metadata.explicit_memory !== true
+    || !proper(row.session_id)
+    || row.source_ref !== 'session:' + row.session_id
+    || row.path !== null
+    || metadata.event_type !== 'user_prompt'
+    || metadata.hook_event_name !== 'UserPromptSubmit'
+    || metadata.explicit_memory !== true
     || metadata.explicit_memory_mode !== 'atomic_rule_confirm'
     || metadata.atomic_rule_draft_ref !== request.draftRef
     || row.content_redacted !== atomicRuleConfirmationText(request)) {
