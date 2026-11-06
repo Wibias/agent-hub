@@ -21,6 +21,12 @@ const proposalRef = id => '~p' + digest(id);
 const evidenceRef = id => '~e' + digest(id);
 const claimRef = id => '~c' + digest(id);
 const allowed = (value, options) => options.includes(value) ? value : 'unknown';
+function eventType(json) {
+  try {
+    const value = JSON.parse(json ?? '{}')?.event_type;
+    return allowed(value, ['user_prompt', 'tool_output', 'tool_result', 'assistant_message']);
+  } catch { return 'unknown'; }
+}
 const tablePresent = (db, name) => Boolean(db.prepare(
   "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",
 ).get(name));
@@ -142,6 +148,7 @@ export function inspectLocalMemoryProposalEvidence({
           'codex', 'claude', 'cursor', 'opencode',
         ]) : 'missing',
         // A declared authority class is not proof of host-authenticated consent.
+        eventType: exists ? eventType(r.metadata_json) : 'missing',
         hostOriginAuthenticatedByThisAudit: false,
       };
       if (safeContent && inScope && normal) {
@@ -223,7 +230,7 @@ export function inspectLocalMemoryProposalEvidence({
         status: allowed(proposal.status, OPEN_STATUSES),
         linkedEvidence: rows.length,
         sourcesStructurallyReviewable: sourcesValid,
-        sourceAuthorityNeedsHumanReview: sources.some(
+        sourceAuthorityNeedsHumanReview: !sourcesValid || sources.some(
           s => s.authorityClass !== 'user_direct',
         ),
         meaningNeedsHumanReview: true,
@@ -233,7 +240,7 @@ export function inspectLocalMemoryProposalEvidence({
       recordedRelation: relation && validRelation.includes(relation.relation)
         ? relation.relation : null,
       relationLedgerPresent,
-      recordedRelationTargetInScope: relation?.related_claim_id
+      recordedRelationTargetInScope: claimsLedgerPresent && relation?.related_claim_id
         ? Boolean(db.prepare('SELECT 1 FROM claims WHERE id=? AND project_id=? ' +
           'AND branch_scope=?').get(relation.related_claim_id, projectId, branch))
         : null,
