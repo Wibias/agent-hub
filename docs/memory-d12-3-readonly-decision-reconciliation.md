@@ -87,7 +87,7 @@ the existing #193/#194 worktrees.
     $Next = "$HOME\agent-hub-D12-3-decision-reconcile"
     if (-not (Test-Path $Previous)) { throw "Evidence review worktree missing" }
     if (Test-Path $Next) { throw "Destination worktree exists" }
-    git -C $Previous fetch origin pull/195/head
+    git -C $Previous fetch origin pull/199/head
     if ($LASTEXITCODE -ne 0) { throw "Fetch failed" }
     git -C $Previous worktree add --detach $Next FETCH_HEAD
     if ($LASTEXITCODE -ne 0) { throw "Worktree failed" }
