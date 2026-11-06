@@ -144,9 +144,17 @@ function linkedStylesheetFiles(root, sourceFiles) {
     for (const tag of linkTags) {
       if (++tagCount > 1000) throw new TypeError("Too many HTML stylesheet links to attest");
       const attributes = new Map();
-      for (const match of tag[0].matchAll(
-        /\s([^\s"'<>\/=\x60]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/g
-      )) {
+      // The detector accepts some HTML syntax our conservative tokenizer does
+      // not (e.g. adjacent quoted attributes and slash-separated attributes).
+      // Never attest a partial parse: all tag bytes must be accounted for.
+      const attributePattern = /\s([^\s"'<>\/=\x60]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/g;
+      const tagBody = tag[0].slice(5, -1);
+      const matches = [...tagBody.matchAll(attributePattern)];
+      const unparsed = tagBody.replace(attributePattern, "").trim();
+      if (unparsed && unparsed !== "/") {
+        throw new TypeError("Ambiguous HTML link attributes cannot be attested");
+      }
+      for (const match of matches) {
         // Anchor attribute names at whitespace and preserve dots/colons:
         // data.rel is distinct from rel, never its suffix.
         const name = match[1].toLowerCase();
