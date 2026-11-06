@@ -164,7 +164,7 @@ export function inspectAtomicPromotionPreflight({
     // still awaiting user confirmation or other scoped candidates.
     const otherPendingCandidates = db.prepare(
       "SELECT COUNT(*) AS n FROM memory_candidates WHERE project_id=? AND branch=? "
-      + "AND id<>? AND status IN ('pending','needs_confirmation')"
+      + "AND id<>? AND status NOT IN ('ignored','promoted','superseded')"
     ).get(projectId,branch,source.candidate_id).n;
     const proposalTable = db.prepare(
       "SELECT 1 AS present FROM sqlite_master "
@@ -175,7 +175,7 @@ export function inspectAtomicPromotionPreflight({
     }
     const unresolvedEvidenceProposals = db.prepare(
       "SELECT COUNT(*) AS n FROM memory_evidence_proposals "
-      + "WHERE project_id=? AND branch=? AND status IN ('pending','needs_confirmation')"
+      + "WHERE project_id=? AND branch=? AND status NOT IN ('ignored','promoted','superseded')"
     ).get(projectId,branch).n;
     outcome = activeClaims > 0
       ? {status:'needs_relation_review',manualRelationReviewRequired:true}
