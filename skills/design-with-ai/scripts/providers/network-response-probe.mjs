@@ -178,10 +178,14 @@ export async function probeNetworkResponses(options, { browserFactory = loadBrow
         });
         const page = await ctx.newPage();
         const pending = [];
+        const outstandingRequests = new Set();
         const pageErrors = [];
         page.on("pageerror", (e) => pageErrors.push(shortError(e)));
+        page.on("request", (request) => outstandingRequests.add(request));
+        page.on("requestfinished", (request) => outstandingRequests.delete(request));
         page.on("requestfailed", (request) => {
-          // Missing responses must not quietly disappear from the observed set.
+          outstandingRequests.delete(request);
+          // Failed requests must not quietly disappear from the observed set.
           // Never store URLs or request bodies, which may contain credentials.
           obs.issues.push("BROWSER_REQUEST_FAILED");
         });
@@ -253,6 +257,11 @@ export async function probeNetworkResponses(options, { browserFactory = loadBrow
           await page.waitForTimeout(100);
           if (previous === pending.length) break;
         }
+        // A request that was started but has not finished can still return
+        // bytes after the screenshot. A response-only listener misses it.
+        // Record only the count, never URLs or request content.
+        obs.outstandingRequestCount = outstandingRequests.size;
+        if (outstandingRequests.size > 0) obs.issues.push("BROWSER_REQUESTS_STILL_PENDING");
         obs.pageErrorCount = pageErrors.length;
         if (pageErrors.length) obs.issues.push("BROWSER_PAGE_ERRORS");
         obs.status = obs.httpStatus === 200 && obs.finalUrlMatched &&
