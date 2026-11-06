@@ -1,0 +1,40 @@
+name: Memory Atomic Promotion Preflight D12.3
+
+on:
+  pull_request:
+    paths:
+      - "memory-engine/memory-atomic-promotion-preflight.mjs"
+      - "scripts/inspect-memory-atomic-promotion-preflight.mjs"
+      - "tests/memory-engine/memory-atomic-promotion-preflight.test.mjs"
+      - "docs/memory-d12-3-promotion-preflight.md"
+      - ".github/workflows/verify-memory-atomic-promotion-preflight.yml"
+  push:
+    branches: [main]
+    paths:
+      - "memory-engine/memory-atomic-promotion-preflight.mjs"
+      - "scripts/inspect-memory-atomic-promotion-preflight.mjs"
+      - "tests/memory-engine/memory-atomic-promotion-preflight.test.mjs"
+      - "docs/memory-d12-3-promotion-preflight.md"
+      - ".github/workflows/verify-memory-atomic-promotion-preflight.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Verify read-only atomic promotion preflight
+        run: |
+          node --check memory-engine/memory-atomic-promotion-preflight.mjs
+          node --check scripts/inspect-memory-atomic-promotion-preflight.mjs
+          node --test tests/memory-engine/memory-atomic-promotion-preflight.test.mjs
