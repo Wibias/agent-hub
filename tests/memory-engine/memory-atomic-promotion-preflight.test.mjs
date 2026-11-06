@@ -15,6 +15,10 @@ import {
 import {
   inspectAtomicPromotionPreflight,
 } from '../../memory-engine/memory-atomic-promotion-preflight.mjs';
+import {
+  parseAtomicPromotionPreflightArgs,
+  runAtomicPromotionPreflight,
+} from '../../scripts/inspect-memory-atomic-promotion-preflight.mjs';
 
 const PROJECT='github.com/example/demo-repo';
 const BRANCH='main';
@@ -253,5 +257,26 @@ test('unresolved scoped evidence proposals are never ignored just because Claims
     assert.equal(result.activeClaimsInScope,0);
     assert.equal(result.promotionAllowed,false);
     assert.equal(JSON.stringify(result).includes('synthetic proposal'),false);
+  });
+});
+
+test('CLI rejects mutation flags and requires exact stage and scope',async()=>{
+  const args=[
+    '--db-path','fixture.sqlite3','--project-id',PROJECT,
+    '--branch',BRANCH,'--stage-id','atomic-stage-'+'a'.repeat(24),
+  ];
+  assert.equal(parseAtomicPromotionPreflightArgs(args).projectId,PROJECT);
+  assert.throws(()=>parseAtomicPromotionPreflightArgs([...args,'--apply']),/unsupported/);
+  assert.throws(()=>parseAtomicPromotionPreflightArgs([...args,'--branch','feature']),/duplicate/);
+  assert.throws(()=>parseAtomicPromotionPreflightArgs(args.slice(0,-2)),/required/);
+  assert.throws(()=>parseAtomicPromotionPreflightArgs([
+    ...args.slice(0,-1),'unsafe-id',
+  ]),/invalid staged rule/);
+  await fixture(async({dbPath,stageId})=>{
+    const outcome=runAtomicPromotionPreflight({
+      dbPath,projectId:PROJECT,branch:BRANCH,stageId,
+    });
+    assert.equal(outcome.status,'eligible_for_manual_promotion_review');
+    assert.equal(outcome.writesToSource,false);
   });
 });
