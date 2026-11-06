@@ -156,6 +156,10 @@ export function inspectAtomicPromotionPreflight({
       "SELECT COUNT(*) AS n FROM claims WHERE project_id=? AND branch_scope=? "
       + "AND state='active' AND value_text=?"
     ).get(projectId,branch,ruleText).n;
+    const unresolvedClaims = db.prepare(
+      "SELECT COUNT(*) AS n FROM claims WHERE project_id=? AND branch_scope=? "
+      + "AND state IN ('candidate','conflicted','stale')"
+    ).get(projectId,branch).n;
     if (exactDuplicate > 0) {
       return {...report,...blocked('active_duplicate_claim'),activeClaims};
     }
@@ -177,7 +181,7 @@ export function inspectAtomicPromotionPreflight({
       "SELECT COUNT(*) AS n FROM memory_evidence_proposals "
       + "WHERE project_id=? AND branch=? AND status NOT IN ('ignored','promoted','superseded')"
     ).get(projectId,branch).n;
-    outcome = activeClaims > 0
+    outcome = (activeClaims > 0 || unresolvedClaims > 0)
       ? {status:'needs_relation_review',manualRelationReviewRequired:true}
       : (otherPendingCandidates > 0 || unresolvedEvidenceProposals > 0)
         ? {status:'needs_unresolved_memory_review',manualRelationReviewRequired:true}
@@ -190,6 +194,7 @@ export function inspectAtomicPromotionPreflight({
       confirmationEvidenceVerified:true,
       sourceSpanCount:spans.length,
       activeClaimsInScope:activeClaims,
+      unresolvedClaimsInScope:unresolvedClaims,
       otherPendingCandidates,
       unresolvedEvidenceProposals,
       requiresSeparateWriteCapableImplementation:true,
