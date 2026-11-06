@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
-  mkdtempSync, mkdirSync, rmSync, writeFileSync,
+  mkdtempSync, mkdirSync, rmSync, unlinkSync, writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -284,6 +284,36 @@ test("an out-of-target Impeccable policy mutation during scanning fails closed",
       ...f.request, profile: "standard",
     }, { registry: registry(), execute }), /changed during provider execution/);
   });
+});
+
+test("rendered CSS, JS and media changes during the Taste provider fail closed", async () => {
+  for (const scenario of ["edit-css", "edit-js", "remove-image", "add-chunk"]) {
+    await fixture(async (f) => {
+      const dir = join(f.built, "test");
+      const css = join(dir, "layout.css");
+      const js = join(dir, "screen.js");
+      const image = join(dir, "image.svg");
+      writeFileSync(css, "h1 { color: green }\n");
+      writeFileSync(js, "window.loaded = 1;\n");
+      writeFileSync(image, "<svg></svg>\n");
+      const execute = async (_, input) => {
+        if (input.capability === Capability.RENDERED_AUDIT) {
+          if (scenario === "edit-css") writeFileSync(css, "h1 { color: red }\n");
+          if (scenario === "edit-js") writeFileSync(js, "window.loaded = 2;\n");
+          if (scenario === "remove-image") unlinkSync(image);
+          if (scenario === "add-chunk") writeFileSync(join(dir, "lazy-chunk.mjs"),
+            "export const loaded = true;\n");
+          return [report("taste-skill", input.capability)];
+        }
+        return [report("native-dwa", input.capability)];
+      };
+      await assert.rejects(() => runProfileProviders({
+        ...f.request, profile: "deep", withImpeccable: false,
+        withTaste: true, html: f.html, outputRoot: f.root,
+      }, { registry: registry(), execute }), /changed during provider execution/,
+      "Must reject " + scenario);
+    });
+  }
 });
 
 test("browser route must match a real static HTML route, not an SPA label", async () => {
