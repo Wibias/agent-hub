@@ -255,8 +255,16 @@ test('rejects fake host approval, extra fields, duplicate refs, and invalid reta
 
 test('missing required ledger and unknown project fail closed', async () => {
   await fixture(async ({ db, dbPath, manifest }) => {
-    assert.deepEqual(inspect(dbPath, manifest, { projectId: 'github.com/not/registered' })
-      .blockers, ['project_not_registered']);
+    assert.throws(() => inspect(dbPath, manifest, {
+      projectId: 'github.com/not/registered',
+    }), /exact scope/u);
+    const unknownProjectManifest = {
+      ...manifest,
+      scope: { projectId: 'github.com/not/registered', sourceBranch: MAIN },
+    };
+    assert.deepEqual(inspect(dbPath, unknownProjectManifest, {
+      projectId: 'github.com/not/registered',
+    }).blockers, ['project_not_registered']);
     db.exec('DROP TABLE memory_evidence_proposal_evidence');
     assert.deepEqual(inspect(dbPath, manifest).blockers, ['required_ledger_missing']);
   });
