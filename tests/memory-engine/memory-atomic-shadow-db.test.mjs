@@ -68,7 +68,15 @@ test('shadow reads only pending user candidate scope, no text or DB changes', as
     assert.equal(report.sourceDatabaseModified, false);
     assert.equal(report.candidateCount, 3);
     assert.equal(report.items.length, 3);
+    assert.equal(report.candidatesRequiringReview, 1);
+    assert.equal(report.scopedAuditCandidatesExcluded, 1);
     assert.equal(report.reviewCounts.durable_review, 1);
+    assert.equal(report.reviewReasonCodes.explicit_future_scope, 1);
+    assert.equal(report.items[0].reviewHintCount, 1);
+    assert.deepEqual(report.items[0].reviewReasonCodes, { explicit_future_scope: 1 });
+    assert.equal(report.items[1].reviewHintCount, 0);
+    assert.equal(report.items[2].reviewHintCount, 0);
+    assert.match(report.reviewHintInterpretation, /not independent facts/);
     assert.equal(report.reviewCounts.bounded_review, 0);
     assert.equal(report.reviewCounts.ambiguous_review, 0);
     assert.equal(report.items[1].reason, 'scoped_audit_protocol');
@@ -90,5 +98,35 @@ test('limit bounds queries and does not promote or re-evaluate anything', async 
     assert.equal(result.candidateCount, 1);
     assert.equal(result.reviewCounts.durable_review, 1);
     assert.equal(db.prepare("SELECT COUNT(*) AS n FROM memory_candidates WHERE status='pending'").get().n,6);
+  });
+});
+
+test('multiple feedback hints from one candidate are not reported as separate memory facts', async () => {
+  await withDb(async (db, path) => {
+    db.prepare('INSERT INTO memory_candidates VALUES (?,?,?,?,?,?,?,?,?)').run(
+      'feedback8', 'test/project', 'main', 'user_direct', 'correction',
+      'You judged the overlay too quickly without test content. You did not research the actual browser behavior. Fix the overlay today.',
+      'pending', null, '2026-11-04T00:00:00Z',
+    );
+    const report = inspectAtomicShadowDb({
+      dbPath: path, projectId: 'test/project', branch: 'main',
+    });
+    assert.equal(report.candidateCount, 4);
+    assert.equal(report.candidatesRequiringReview, 2);
+    assert.equal(report.scopedAuditCandidatesExcluded, 1);
+    assert.equal(report.reviewCounts.ambiguous_review, 2);
+    assert.equal(report.reviewReasonCodes.quality_feedback_without_duration, 2);
+    const feedback = report.items.find(item => item.candidateKind === 'correction');
+    assert.equal(feedback.reviewHintCount, 2);
+    assert.deepEqual(feedback.reviewReasonCodes, {
+      quality_feedback_without_duration: 2,
+    });
+    assert.equal(report.contentIncluded, false);
+    assert.equal(report.sourceDatabaseModified, false);
+    const output = JSON.stringify(report);
+    assert.equal(output.includes('browser behavior'), false);
+    assert.equal(output.includes('overlay too quickly'), false);
+    assert.equal(output.includes('feedback8'), false);
+    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM memory_candidates WHERE id='feedback8' AND status='pending'").get().n, 1);
   });
 });
