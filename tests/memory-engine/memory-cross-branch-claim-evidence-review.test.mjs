@@ -54,8 +54,8 @@ async function fixture(fn) {
         .run(id, project, 'user_direct', SECRET + ' subject', 'states',
           SECRET + ' value', state, branch, evidence, '2026-11-05T00:00:00.000Z');
       db.prepare('INSERT INTO claim_evidence (claim_id,evidence_id,role,linked_at) ' +
-        'VALUES (?,?,"primary",?)')
-        .run(id, evidence, '2026-11-05T00:00:00.000Z');
+        'VALUES (?,?,?,?)')
+        .run(id, evidence, 'primary', '2026-11-05T00:00:00.000Z');
     };
     addClaim('claim-a', PROJECT, FEATURE, 'source-a', 'active');
     addClaim('claim-b', PROJECT, FEATURE, 'source-b', 'active');
