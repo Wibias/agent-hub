@@ -20,6 +20,8 @@ const cases = {
     marker + '<div style="margin-top:1400px">Loading below fold</div>'),
   '/hidden': page('<div style="opacity:0">' + marker + '</div>'),
   '/below': page(marker + '<div style="margin-top:1400px">Below requirement</div>'),
+  '/blocked': page(marker + '<div data-access-blocker>Checking access</div>'),
+  '/forbidden': page(marker + '<p>Access denied</p>'),
 };
 
 class Cdp {
@@ -324,19 +326,33 @@ async function main() {
       requiredText: ['Playing now'], forbiddenText: ['Below requirement'],
     });
     assert.equal(belowForbidden.status, 'DOM_SIGNALS_OBSERVED', JSON.stringify(belowForbidden));
+    const blocked = await probe('/blocked', {
+      forbiddenSelectors: ['[data-access-blocker]'], forbiddenText: [],
+    });
+    assert.equal(blocked.status, 'INCOMPLETE');
+    assert.ok(blocked.observations.every((x) =>
+      x.status === 'INCOMPLETE' && x.signals?.first.markerVisible === true &&
+      x.signals?.first.blockersVisible?.includes('[data-access-blocker]')),
+    'a visible blocking selector must prevent DOM readiness at every viewport');
+    const forbidden = await probe('/forbidden', { forbiddenText: ['Access denied'] });
+    assert.equal(forbidden.status, 'INCOMPLETE');
+    assert.ok(forbidden.observations.every((x) =>
+      x.status === 'INCOMPLETE' && x.signals?.first.markerVisible === true &&
+      x.signals?.first.forbiddenTextVisible?.includes('Access denied')),
+    'visible forbidden text must prevent DOM readiness at every viewport');
     const redirected = await probe('/redirect', { forbiddenText: [] });
     assert.equal(redirected.status, 'INCOMPLETE');
     assert.ok(redirected.observations.every((x) =>
       x.httpStatus === 200 && x.finalPath === '/redirect' &&
       x.redirectChainPresent === true && x.signals?.first.markerVisible === true),
     'an otherwise-ready same-route redirect cannot pass');
-    for (const report of [complete, hidden, belowRequired, belowForbidden, redirected]) {
+    for (const report of [complete, hidden, belowRequired, belowForbidden, blocked, forbidden, redirected]) {
       assert.equal(report.tasteFramesVerified, false);
       assert.equal(report.productCompletionEligible, false);
       assert.equal(report.authenticatedSessionVerified, false);
       assert.equal(report.gamePhaseVerified, false);
     }
-    console.log('Real Chrome DOM state probe passed: 5 scenarios at 1440/768/390, including hidden ancestors, viewport text and same-route HTTP redirects.');
+    console.log('Real Chrome DOM state probe passed: 7 scenarios at 1440/768/390, including hidden ancestors, viewport text, blockers, forbidden text and same-route HTTP redirects.');
   } finally {
     await chrome?.close();
     await new Promise((resolve) => server.close(resolve));
