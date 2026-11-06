@@ -64,7 +64,7 @@ test("a CSS/JS/image/font asset changes the scoped digest without HTML changes",
       const before = f.sample();
       const bytes = readFileSync(file);
       assert.ok(bytes.length > 0, "Fixture asset must not be empty");
-      bytes[0] ^= 1; // Same-length mutation, including binary font content.
+      bytes[bytes.length - 1] ^= 1; // Same-length trailing-byte mutation, including binary fonts.
       writeFileSync(file, bytes);
       const changed = f.sample();
       assert.equal(changed.summary.rendered.sha256, initial.summary.rendered.sha256,
