@@ -46,3 +46,15 @@ jobs:
         env:
           TASTE_SKILL_ROOT: ${{ runner.temp }}/taste-skill/skills/taste-skill
         run: node skills/design-with-ai/tests/providers/browser-live-smoke.mjs
+
+      - name: Install pinned Playwright core for CI-only network proof
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/dwa-playwright"
+          npm install --prefix "$RUNNER_TEMP/dwa-playwright" --ignore-scripts --no-audit --no-fund --no-save --package-lock=false --save-exact playwright-core@1.64.1
+          test -f "$RUNNER_TEMP/dwa-playwright/node_modules/playwright-core/index.mjs"
+
+      - name: Real Chrome received-body SHA match and tamper detection
+        env:
+          DWA_PLAYWRIGHT_ROOT: ${{ runner.temp }}/dwa-playwright/node_modules/playwright-core
+        run: node skills/design-with-ai/tests/providers/network-response-live-smoke.mjs
