@@ -6,6 +6,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { MemoryEngine } from '../../memory-engine/index.mjs';
+import { EVIDENCE_PROPOSAL_SCHEMA_SQL } from '../../memory-engine/evidence-bound-proposal-store.mjs';
 import { inspectAtomicReviewDb } from '../../scripts/inspect-memory-atomic-review.mjs';
 import { previewAtomicRuleDraft } from '../../memory-engine/memory-atomic-rule-draft.mjs';
 import {
@@ -27,7 +28,7 @@ const SOURCE='You judged the UI too quickly without fixture data. '
 const RULE='In all future demo UI reviews, verify realistic fixtures and required assets before reporting defects.';
 const SHA=value=>createHash('sha256').update(value,'utf8').digest('hex');
 
-async function fixture(run, {stage=true}={}) {
+async function fixture(run, {stage=true,proposalLedger=true}={}) {
   const dir=await mkdtemp(join(tmpdir(),'atomic-promotion-preflight-'));
   const dbPath=join(dir,'memory.sqlite3');
   const memory=new MemoryEngine({dbPath});
@@ -67,6 +68,7 @@ async function fixture(run, {stage=true}={}) {
       },
     });
     writable=new DatabaseSync(dbPath,{enableForeignKeyConstraints:true,timeout:5000});
+    if(proposalLedger)writable.exec(EVIDENCE_PROPOSAL_SCHEMA_SQL);
     let stageId=null;
     if(stage){
       installAtomicRuleStagingSchema(writable);
@@ -167,7 +169,7 @@ test('malformed or tampered staging, spans, and Evidence fail closed without con
     assertIssue('confirmation_text_invalid');
     writable.prepare('UPDATE memory_atomic_rule_staging SET rule_sha256=? WHERE id=?')
       .run(SHA(RULE),stageId);
-    writable.prepare('UPDATE memory_atomic_rule_staging_spans SET start_offset=9999 WHERE staging_id=?')
+    writable.prepare('UPDATE memory_atomic_rule_staging_spans SET start_offset=1 WHERE staging_id=?')
       .run(stageId);
     assertIssue('original_spans_invalid');
     // Proof missing scope cannot see same staged source
@@ -279,4 +281,13 @@ test('CLI rejects mutation flags and requires exact stage and scope',async()=>{
     assert.equal(outcome.status,'eligible_for_manual_promotion_review');
     assert.equal(outcome.writesToSource,false);
   });
+});
+
+test('missing proposal ledger never counts as zero unresolved proposals',async()=>{
+  await fixture(async({dbPath,stageId})=>{
+    const result=preflight({dbPath,stageId});
+    assert.equal(result.status,'blocked');
+    assert.equal(result.issue,'proposal_ledger_unavailable');
+    assert.equal(result.promotionAllowed,false);
+  },{proposalLedger:false});
 });
