@@ -1,0 +1,37 @@
+name: Memory D12.3 Final 108 Review Reconciliation
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/reconcile-memory-final-108-review.mjs'
+      - 'tests/memory-engine/memory-final-108-review-reconciliation.test.mjs'
+      - 'docs/memory-d12-3-final-108-readonly-reconciliation.md'
+      - '.github/workflows/verify-memory-final-108-reconciliation.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/reconcile-memory-final-108-review.mjs'
+      - 'tests/memory-engine/memory-final-108-review-reconciliation.test.mjs'
+      - 'docs/memory-d12-3-final-108-readonly-reconciliation.md'
+      - '.github/workflows/verify-memory-final-108-reconciliation.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Verify final 108 read-only reconciliation
+        run: |
+          node --check scripts/reconcile-memory-final-108-review.mjs
+          node --test tests/memory-engine/memory-final-108-review-reconciliation.test.mjs
