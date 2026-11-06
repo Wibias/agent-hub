@@ -189,8 +189,11 @@ export function createImpeccableProvider({ script = DEFAULT_SCRIPT, runner = run
       if (![0, 2].includes(run.exitCode)) {
         // The released Rust engine uses exit 1 for incomplete scans, even when
         // JSON contains valid findings from other targets. Never promote that to PASS.
+        const stderrTail = String(run.stderr ?? "").trim()
+          .replace(/[\x00-\x1f\x7f]/g, " ").slice(-240);
         return providerFailure("impeccable", capability, ProviderStatus.ERROR,
-          "Impeccable detector did not complete (exit " + String(run.exitCode) + ")");
+          "Impeccable detector did not complete (exit " + String(run.exitCode) + ")" +
+          (stderrTail ? ": " + stderrTail : ""));
       }
       let raw;
       try { raw = JSON.parse(run.stdout); } catch {
