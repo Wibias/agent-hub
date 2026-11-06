@@ -50,6 +50,11 @@ jobs:
       - name: Real Chrome declared DOM-state regression cases
         run: node skills/design-with-ai/tests/providers/rendered-state-chrome-smoke.mjs
 
+      # Exercise the corrected #205 moving-base error-evidence contract as
+      # part of the joint test/CI integration, not solely in base-branch CI.
+      - name: Bounded and URL-redacted DOM-state browser errors
+        run: node --test skills/design-with-ai/tests/providers/rendered-state-probe.test.mjs
+
       # Test-only dependency. The real production probe dynamically loads
       # Playwright from the explicit path, never from a global package.
       # No browser download, postinstall scripts, package.json or product changes.
