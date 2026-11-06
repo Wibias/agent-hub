@@ -330,3 +330,26 @@ test('failed Candidates and proposals still require manual resolution before any
     assert.equal(report.promotionAllowed,false);
   });
 });
+
+test('nonactive but unresolved stale or conflicted Claims also require relation review',async()=>{
+  for(const state of ['stale','conflicted','candidate']){
+    await fixture(async({dbPath,stageId,memory})=>{
+      memory.assertClaim({
+        evidenceId:'source',
+        claim:{
+          id:'unresolved-'+state,kind:'user_direct',
+          subject:'user memory',predicate:'states',
+          value:'A separate unresolved claim requiring review.',
+          state,branchScope:BRANCH,
+          createdAt:'2026-11-03T00:00:00.000Z',
+        },
+      });
+      const report=preflight({dbPath,stageId});
+      assert.equal(report.status,'needs_relation_review');
+      assert.equal(report.activeClaimsInScope,0);
+      assert.equal(report.unresolvedClaimsInScope,1);
+      assert.equal(report.manualRelationReviewRequired,true);
+      assert.equal(report.promotionAllowed,false);
+    });
+  }
+});
