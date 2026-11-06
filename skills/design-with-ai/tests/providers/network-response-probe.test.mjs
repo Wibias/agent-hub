@@ -42,6 +42,7 @@ function mockChrome({ input, htmlBytes, cssBytes }, {
   noResponses = false,
   screenshotError = false,
   bodyUnavailable = false,
+  pendingRequest = false,
 } = {}) {
   const contexts = [];
   let closed = 0;
@@ -63,17 +64,27 @@ function mockChrome({ input, htmlBytes, cssBytes }, {
           on: (event, handler) => { events.set(event, handler); },
           goto: async () => {
             if (!noResponses) {
-              events.get("response")?.(response(
-                "http://127.0.0.1:5191/settings", htmlBytes));
+              const deliver = (url, body) => {
+                const request = { url: () => url };
+                events.get("request")?.(request);
+                events.get("response")?.(response(url, body));
+                events.get("requestfinished")?.(request);
+              };
+              deliver("http://127.0.0.1:5191/settings", htmlBytes);
               if (!omitCss) {
-                events.get("response")?.(response(
+                deliver(
                   missing ? "http://127.0.0.1:5191/settings/not-in-manifest.css" :
                     "http://127.0.0.1:5191/settings/site.css",
-                  wrongCss ? Buffer.from("tampered") : cssBytes));
+                  wrongCss ? Buffer.from("tampered") : cssBytes);
               }
-              if (remote) events.get("response")?.(response(
-                "https://cdn.example.test/file.js?secret-do-not-log", Buffer.from("external")));
-              if (failRequest) events.get("requestfailed")?.({});
+              if (remote) deliver(
+                "https://cdn.example.test/file.js?secret-do-not-log", Buffer.from("external"));
+              if (failRequest) {
+                const request = {};
+                events.get("request")?.(request);
+                events.get("requestfailed")?.(request);
+              }
+              if (pendingRequest) events.get("request")?.({});
             }
             if (mutateCss) writeFileSync(join(input.renderedRoot, "settings", "site.css"),
               "body { color: red; }\n");
@@ -108,6 +119,7 @@ test("actual response body hashes match a local two-file manifest across three w
     assert.ok(report.observations.every((o) =>
       o.status === "LOCAL_BODY_BYTES_MATCHED" && o.local.length === 2 &&
       o.local.every((file) => file.bodyVerified === true) && o.issues.length === 0 &&
+      o.outstandingRequestCount === 0 &&
       /^[a-f0-9]{64}$/.test(o.screenshotSha256)));
     assert.equal(report.localAssetTreeUnchanged, true);
     assert.equal(report.tasteFramesVerified, false);
@@ -137,6 +149,24 @@ test("corrupt CSS bytes, unknown file, lost response and screenshot failures nev
       assert.equal(result.productCompletionEligible, false);
       assert.equal(result.tasteFramesVerified, false);
     }
+  });
+});
+
+
+test("a started but unfinished browser request prevents a false local-body PASS", async () => {
+  await fixture(async (f) => {
+    const report = await probeNetworkResponses(f.input, {
+      browserFactory: mockChrome(f, { pendingRequest: true }).factory,
+    });
+    assert.equal(report.status, "INCOMPLETE");
+    assert.equal(report.observations.length, 3);
+    assert.ok(report.observations.every((o) =>
+      o.httpStatus === 200 && o.local.every((x) => x.bodyVerified) &&
+      o.outstandingRequestCount === 1 &&
+      o.issues.includes("BROWSER_REQUESTS_STILL_PENDING")),
+    "A pending request is not a verified response, even if earlier bodies matched");
+    assert.equal(report.productCompletionEligible, false);
+    assert.equal(report.tasteFramesVerified, false);
   });
 });
 
