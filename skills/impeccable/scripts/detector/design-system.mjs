@@ -588,17 +588,29 @@ function designSystemStartDir(targetPath, cwd = process.cwd()) {
 //
 // Returns { dir, hasDesign } for the stopping directory, or null when the walk
 // runs out. This is the fix for cross-project contamination.
-export function findDesignRoot(startDir) {
+export function findDesignRoot(startDir, { cache } = {}) {
   let dir = path.resolve(startDir);
   const homeDir = path.resolve(os.homedir());
+  // Existing root:<path> entries memoize parsed design tokens only. Separate
+  // resolve:<path> entries prevent repeating DESIGN.md / boundary filesystem
+  // probes for every source file in the same nested directory tree.
+  // The caller owns this cache for ONE source scan; never reuse across runs.
+  const visited = [];
+  const remember = (resolved) => {
+    if (cache) for (const entry of visited) cache.set(`resolve:${entry}`, resolved);
+    return resolved;
+  };
   while (true) {
-    if (resolveDesignMdPath(dir)) return { dir, hasDesign: true };
+    const key = `resolve:${dir}`;
+    if (cache?.has(key)) return remember(cache.get(key));
+    visited.push(dir);
+    if (resolveDesignMdPath(dir)) return remember({ dir, hasDesign: true });
     if (PROJECT_ROOT_MARKERS.some((marker) => fs.existsSync(path.join(dir, marker)))) {
-      return { dir, hasDesign: false };
+      return remember({ dir, hasDesign: false });
     }
-    if (dir === homeDir) return null;
+    if (dir === homeDir) return remember(null);
     const parent = path.dirname(dir);
-    if (parent === dir) return null;
+    if (parent === dir) return remember(null);
     dir = parent;
   }
 }
@@ -611,7 +623,7 @@ export function findDesignRoot(startDir) {
 // scan; a target with no design root above it resolves to null.
 export function loadDesignSystemForTarget(targetPath, { cache, cwd = process.cwd() } = {}) {
   const startDir = designSystemStartDir(targetPath, cwd);
-  const found = findDesignRoot(startDir);
+  const found = findDesignRoot(startDir, { cache });
   const key = found ? `root:${found.dir}` : '\0none';
   if (cache && cache.has(key)) return cache.get(key);
   const loaded = found?.hasDesign ? loadDesignSystemForCwd(found.dir) : null;
