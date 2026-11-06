@@ -34,10 +34,19 @@ writeFileSync(css, cssBytes);
 writeFileSync(favicon, faviconBytes);
 
 let tamperCss = false;
+let servedHtmlBytes = htmlBytes;
+const hangingResponses = new Set();
 const server = createServer((req, res) => {
   const pathname = new URL(req.url ?? "/", "http://localhost").pathname;
+  if (pathname === "/hanging-local") {
+    // Deliberately never send response headers or body. A fetch() started by
+    // the page must remain observable even though other assets have loaded.
+    hangingResponses.add(res);
+    res.once("close", () => hangingResponses.delete(res));
+    return;
+  }
   const files = new Map([
-    ["/settings", { data: htmlBytes, type: "text/html; charset=utf-8" }],
+    ["/settings", { data: servedHtmlBytes, type: "text/html; charset=utf-8" }],
     ["/settings/site.css", {
       data: tamperCss ? Buffer.from("body { color: red; }\n") : cssBytes,
       type: "text/css",
@@ -97,11 +106,34 @@ try {
     o.issues.includes("LOCAL_RESPONSE_BODY_MISMATCH")));
   assert.equal(readFileSync(css).toString(), cssBytes.toString());
 
+  // Real Chrome negative: a page-script fetch stays open with no HTTP response.
+  // Keep the served document byte-identical to its on-disk build artifact, so
+  // an INCOMPLETE result specifically proves in-flight request detection.
+  tamperCss = false;
+  servedHtmlBytes = Buffer.from(htmlBytes.toString("utf8").replace(
+    "</body>", '<script>void fetch("/hanging-local").catch(() => {});</script></body>',
+  ));
+  writeFileSync(html, servedHtmlBytes);
+  const pending = await probeNetworkResponses(input);
+  assert.equal(pending.status, "INCOMPLETE", JSON.stringify(pending));
+  assert.equal(pending.localAssetTreeUnchanged, true);
+  assert.equal(pending.observations.length, 3);
+  assert.ok(pending.observations.every((o) =>
+    o.httpStatus === 200 && o.finalUrlMatched &&
+    o.local.length > 0 && o.local.every((entry) => entry.bodyVerified) &&
+    o.outstandingRequestCount > 0 &&
+    o.issues.includes("BROWSER_REQUESTS_STILL_PENDING")),
+  "Real Chrome must reject otherwise-matching bodies when fetch() remains in flight");
+  assert.equal(pending.tasteFramesVerified, false);
+  assert.equal(pending.productCompletionEligible, false);
+
   process.stdout.write(JSON.stringify({
     status: "REAL_CHROME_NETWORK_PROBE_CONFIRMED",
     widths: [1440, 768, 390],
     regularStatus: match.status,
     tamperedStatus: mismatch.status,
+    hangingStatus: pending.status,
+    hangingRequestDetected: true,
     assetCount: match.expectedLocalFileCount,
     responseCountPerWidth: match.observations.map((x) => x.local.length),
     wrongHttpBytesDetected: true,
@@ -109,6 +141,11 @@ try {
     productCompletionEligible: false,
   }, null, 2) + "\n");
 } finally {
+  // Closing the responses also prevents an intentionally hung fixture from
+  // holding Node's HTTP server open if the browser exits unexpectedly.
+  for (const response of hangingResponses) {
+    if (!response.destroyed && !response.writableEnded) response.end();
+  }
   await new Promise((accept) => server.close(() => accept()));
   rmSync(project, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 }
