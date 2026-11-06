@@ -17,7 +17,7 @@ Create an explicit contract outside the served build directory, e.g. `/safe/cont
 }
 ```
 
-The contract **must** have a positive, state-specific `data-*` CSS marker. A generic `#root`, `main` or headline is not evidence of a complete app state. The caller is responsible for choosing markers that actually represent the expected state. Do not invent marker names or insert them into a product only to make a test pass. Missing markers mean `INCOMPLETE`.
+The contract **must** use exactly one positive, state-specific `[data-*]` attribute selector. Selector lists, `:not(...)`, ancestor-only conditions and generic `#root`/`main` mounts are rejected because they could succeed without the desired state. Optional `forbiddenSelectors`, `requiredText` and `forbiddenText` arrays default to empty arrays. The caller is responsible for choosing markers that actually represent the expected state. Do not invent marker names or insert them into a product only to make a test pass. Missing markers mean `INCOMPLETE`.
 
 ## Run
 
@@ -32,7 +32,7 @@ node skills/design-with-ai/scripts/providers/rendered-state-probe.mjs \
   --out-root /safe/evidence
 ```
 
-Optionally pass `--chrome /path/to/chrome`. The output root must already exist and should be outside the served build. The current pilot creates **three anonymous, isolated Chrome contexts**, at 1440, 768 and 390 px. For each, it checks exact route and HTTP status, absence of JavaScript page errors, the positive DOM marker, forbidden loading selectors, and required/forbidden visible text, twice with a short stability interval. It saves a screenshot with a SHA-256 digest and a structured `state-report.json` in a unique evidence folder. A timeout, redirect, incomplete viewport, missing image or missing marker produces `INCOMPLETE`, never scoped success.
+Optionally pass `--chrome /path/to/chrome`. The output root must already exist and should be outside the served build. The current pilot creates **three anonymous, isolated Chrome contexts**, at 1440, 768 and 390 px. For each, it checks exact route and HTTP status, absence of JavaScript page errors, the positive DOM marker, forbidden loading selectors, and required/forbidden **viewport-visible text**, twice with a short stability interval and a third observation immediately after the screenshot. Matching considers any visible state marker (not just the first in DOM order). The text scan is bounded to 3,000 text nodes and 6,000 words and fails closed when truncated. Navigation redirect chains are rejected even when they return to the requested route. It saves a screenshot with a SHA-256 digest and a structured `state-report.json` in a unique evidence folder. A timeout, redirect, incomplete viewport, missing image or missing marker produces `INCOMPLETE`, never scoped success.
 
 ## Interpretation
 

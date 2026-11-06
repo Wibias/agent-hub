@@ -113,6 +113,7 @@ export async function runProfileProviders({
     projectRoot: location.projectRoot, target: location.target, route,
     renderedRoot: location.renderedRoot, html: withTaste ? resolve(html) : null,
     intentPath,
+    includeDetectorContext: selection.static.optional.includes("impeccable"),
   });
   const actualRegistry = registry ?? createProviderRegistry([
     createNativeDwaProvider(),
@@ -142,6 +143,7 @@ export async function runProfileProviders({
     projectRoot: location.projectRoot, target: location.target, route,
     renderedRoot: location.renderedRoot, html: withTaste ? resolve(html) : null,
     intentPath,
+    includeDetectorContext: selection.static.optional.includes("impeccable"),
   });
   if (before.summary.sourceSha256 !== after.summary.sourceSha256 ||
       before.observedInputsSha256 !== after.observedInputsSha256) {
