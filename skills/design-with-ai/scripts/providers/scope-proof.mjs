@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { lstatSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { extname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { renderedAssetProof } from "./rendered-assets.mjs";
 
 // Superset of native DWA and vendored Impeccable file extensions.
 const extensions = new Set([
@@ -58,9 +59,16 @@ export function sourceScopeProof({ projectRoot, target, route, renderedRoot = nu
     const st = statSync(file, { bigint: true });
     return [file, String(st.size), String(st.ctimeNs), String(st.mtimeNs)];
   };
+  const renderedAssets = html ? renderedAssetProof({
+    projectRoot: root, renderedRoot, html,
+  }) : null;
   const observedInputs = sourceFiles.map(inputStat);
   if (intentPath) observedInputs.push(inputStat(resolve(intentPath)));
-  if (html) observedInputs.push(inputStat(resolve(html)));
+  if (renderedAssets) for (const asset of renderedAssets.files) {
+    // Includes HTML plus every local CSS/JS/media/font file under the served
+    // root. The asset list itself is included in the source manifest below.
+    observedInputs.push(inputStat(resolve(root, asset.path)));
+  }
   const files = sourceFiles.map((file) => ({
     path: normalize(relative(root, file)),
     sha256: hash(readFileSync(file)),
@@ -76,10 +84,15 @@ export function sourceScopeProof({ projectRoot, target, route, renderedRoot = nu
       sha256: hash(readFileSync(path)),
     };
   })() : null;
-  const rendered = html ? {
+  const rendered = renderedAssets ? {
     page: normalize(relative(root, resolve(html))),
-    sha256: hash(readFileSync(html)),
+    sha256: renderedAssets.files.find((asset) =>
+      asset.path === normalize(relative(root, resolve(html)))).sha256,
     root: normalize(relative(root, renderedRoot)),
+    assetCount: renderedAssets.fileCount,
+    assetTotalBytes: renderedAssets.totalBytes,
+    assetTreeSha256: renderedAssets.filesSha256,
+    assetCoverage: "COMPLETE_LOCAL_TREE_BOUNDED",
   } : null;
   const manifest = {
     schemaVersion: 1,
@@ -87,6 +100,7 @@ export function sourceScopeProof({ projectRoot, target, route, renderedRoot = nu
     route,
     gitHead: gitHead(root),
     files,
+    ...(renderedAssets ? { renderedAssets } : {}),
     intent,
     rendered,
   };
