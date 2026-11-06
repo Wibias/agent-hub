@@ -10,6 +10,13 @@ import { createProviderRegistry, runProviders } from "../../scripts/providers/re
 import { createImpeccableProvider } from "../../scripts/providers/impeccable.mjs";
 
 const cli = fileURLToPath(new URL("../../scripts/providers/scan.mjs", import.meta.url));
+const vendoredCli = fileURLToPath(new URL("../../../impeccable/scripts/detect.mjs", import.meta.url));
+const validProof = Object.freeze({
+  schemaVersion: 1, candidateFiles: 1, eligibleFiles: 1,
+  scannedFiles: 1, ignoredFiles: 0, durationMs: 1,
+  configEnabled: true, inlineIgnoresEnabled: true, designSystemEnabled: false,
+});
+const proofLine = (proof = validProof) => "DWA_IMPECCABLE_SCAN_PROOF=" + JSON.stringify(proof) + "\n";
 
 async function fixture(fn) {
   const root = mkdtempSync(join(tmpdir(), "dwa-impeccable-"));
@@ -19,9 +26,9 @@ async function fixture(fn) {
   finally { rmSync(root, { recursive: true, force: true }); }
 }
 
-function result({ stdout = "[]", exitCode = 0 } = {}) {
+function result({ stdout = "[]", exitCode = 0, stderr = proofLine() } = {}) {
   return {
-    stdout, stderr: "", exitCode, error: null,
+    stdout, stderr, exitCode, error: null,
     timedOut: false, outputLimitExceeded: false,
   };
 }
@@ -58,6 +65,11 @@ test("normalizes primary and advisory Impeccable findings without inventing P0",
     assert.equal(report.provenance.implementation, "bundled-js");
     assert.equal(invocation.executable, process.execPath);
     assert.ok(invocation.args.includes("--json"));
+    assert.ok(invocation.args.includes("--dwa-scan-proof"));
+    assert.equal(invocation.timeoutMs, 120_000);
+    assert.equal(report.summary.filesScanned, 1);
+    assert.equal(report.summary.coverageCountVerified, true);
+    assert.equal(report.summary.coverageMethod, "bundled-detector-completed-source-file-count");
     assert.ok(invocation.args.includes(resolve(target)));
     assert.ok(!invocation.args.includes("npx"));
     assert.equal(invocation.cwd, root);
@@ -105,6 +117,8 @@ test("empty valid detector output is a scoped PASS only", async () => {
     assert.equal(report.status, ProviderStatus.PASS);
     assert.equal(report.summary.requiresRenderedReview, true);
     assert.equal(report.summary.sourceOnly, true);
+    assert.equal(report.summary.filesScanned, 1);
+    assert.equal(report.summary.coverageCountVerified, true);
   });
 });
 
@@ -128,6 +142,77 @@ test("partial, inconsistent and malformed detector results are ERROR", async () 
         capability: Capability.STATIC_AUDIT, target, route: "/", projectRoot: root,
       });
       assert.equal(out.status, ProviderStatus.ERROR, JSON.stringify(run));
+    }
+  });
+});
+
+test("missing, duplicate, contradictory or empty source receipts never PASS", async () => {
+  await fixture(async ({ root, target }) => {
+    const cases = [
+      "",
+      proofLine() + proofLine(),
+      proofLine({ ...validProof, scannedFiles: 0 }),
+      proofLine({ ...validProof, candidateFiles: 0 }),
+      proofLine({ ...validProof, eligibleFiles: 0, scannedFiles: 0, ignoredFiles: 1 }),
+      proofLine({ ...validProof, scannedFiles: 3 }),
+      proofLine({ ...validProof, configEnabled: false }),
+      "DWA_IMPECCABLE_SCAN_PROOF={invalid}\n",
+    ];
+    for (const stderr of cases) {
+      const p = createImpeccableProvider({
+        runner: async () => result({ stderr }),
+      });
+      const report = await p.inspect({
+        capability: Capability.STATIC_AUDIT, target, route: "/", projectRoot: root,
+      });
+      assert.equal(report.status, ProviderStatus.ERROR, JSON.stringify({ stderr, report }));
+    }
+  });
+});
+
+test("real vendored scanner reports actual eligible and completed files", async () => {
+  await fixture(({ root, target }) => {
+    const second = join(root, "second.tsx");
+    writeFileSync(target, "export const Card = () => <div className=\"rounded-lg border-l-4 animate-bounce\">hello</div>;\n");
+    writeFileSync(second, "export const Clean = () => <main>fine</main>;\n");
+    const run = spawnSync(process.execPath,
+      [vendoredCli, "--json", "--dwa-scan-proof", root],
+      { cwd: root, encoding: "utf8", timeout: 30_000 });
+    assert.equal(run.status, 2, run.stderr);
+    const findings = JSON.parse(run.stdout);
+    assert.ok(findings.some((f) => f.antipattern === "side-tab"));
+    assert.ok(findings.some((f) => f.antipattern === "bounce-easing"));
+    const marker = run.stderr.split(/\r?\n/).find((line) =>
+      line.startsWith("DWA_IMPECCABLE_SCAN_PROOF="));
+    assert.ok(marker, run.stderr);
+    const proof = JSON.parse(marker.split("=").slice(1).join("="));
+    assert.equal(proof.candidateFiles, 2);
+    assert.equal(proof.eligibleFiles, 2);
+    assert.equal(proof.scannedFiles, 2);
+    assert.equal(proof.ignoredFiles, 0);
+  });
+});
+
+test("inline waivers suppress findings without suppressing file coverage", async () => {
+  await fixture(({ root, target }) => {
+    writeFileSync(target, 'font-family: "Space Grotesk"; /* impeccable-disable-line overused-font: test fixture */\n');
+    // The extension must be CSS for this realistic inline-waiver control.
+    const css = join(root, "style.css");
+    writeFileSync(css, 'font-family: "Space Grotesk"; /* impeccable-disable-line overused-font: test fixture */\n');
+    const scan = (extra = []) => spawnSync(process.execPath,
+      [vendoredCli, "--json", "--dwa-scan-proof", ...extra, css],
+      { cwd: root, encoding: "utf8", timeout: 30_000 });
+    const regular = scan();
+    const raw = scan(["--no-inline-ignores"]);
+    assert.equal(regular.status, 0, regular.stderr);
+    assert.equal(JSON.parse(regular.stdout).length, 0);
+    assert.equal(raw.status, 2, raw.stderr);
+    assert.ok(JSON.parse(raw.stdout).some((f) => f.antipattern === "overused-font"));
+    for (const run of [regular, raw]) {
+      const meta = run.stderr.split(/\r?\n/)
+        .find((line) => line.startsWith("DWA_IMPECCABLE_SCAN_PROOF="));
+      assert.ok(meta, run.stderr);
+      assert.equal(JSON.parse(meta.slice("DWA_IMPECCABLE_SCAN_PROOF=".length)).scannedFiles, 1);
     }
   });
 });
