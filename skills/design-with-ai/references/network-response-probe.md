@@ -35,7 +35,7 @@ Output is a unique evidence directory with `network-report.json` plus three scre
 | `LOCAL_MATCHED_EXTERNAL_UNVERIFIED` | Same local match, but at least one **external** browser response was observed and its bytes were intentionally not attested. CLI exit code is nonzero. |
 | `INCOMPLETE` | A local response was unmatched, unavailable, too large or altered; a browser request failed or remained unfinished at capture; or the browser/asset check failed. No source-quality verdict is issued. |
 
-Each response body is limited to **16 MiB**, response count to **2,000 per width**, and cumulative local body bytes to **128 MiB per width**. Existing rendered asset-tree limits remain in force. Incomplete checks fail closed; no successful result is manufactured from zero observed local responses.
+Each response body is limited to **16 MiB**, both started-request tracking and response processing to **2,000 events per width**, and cumulative local body bytes to **128 MiB per width**. Request or response overflow fails closed; repeated issue types are deduplicated and page exceptions are counted instead of retained as unbounded strings. Existing rendered asset-tree limits remain in force. Incomplete checks fail closed; no successful result is manufactured from zero observed local responses.
 
 ## What it does NOT prove
 
