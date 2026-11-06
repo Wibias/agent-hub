@@ -45,6 +45,7 @@ export function verifyCapturedAtomicConfirmationEvidence(evidence, {
     || evidence.authority_class !== 'user_direct'
     || evidence.sensitivity !== 'normal'
     || evidence.session_id !== sessionId
+    || evidence.source_ref !== 'session:' + sessionId
     || evidence.content_redacted !== command
     || evidence.metadata?.event_type !== 'user_prompt'
     || evidence.metadata?.hook_event_name !== 'UserPromptSubmit'
