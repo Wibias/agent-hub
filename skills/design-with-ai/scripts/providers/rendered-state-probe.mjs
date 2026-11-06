@@ -145,7 +145,7 @@ export async function probeRenderedState(input, { browserFactory = loadPlaywrigh
         if (errors.length) record.pageErrorSamples = errors.slice(0, 3);
         record.status = record.httpStatus >= 200 && record.httpStatus < 400 &&
           record.path === opts.route && errors.length === 0 &&
-          completeSample(first) && completeSample(second)
+          !record.markerWaitError && completeSample(first) && completeSample(second)
           ? "DOM_SIGNALS_OBSERVED" : "INCOMPLETE";
         const screenshot = join(runDir, "state-" + width + ".png");
         await page.screenshot({ path: screenshot, fullPage: false, timeout: 20_000 });
