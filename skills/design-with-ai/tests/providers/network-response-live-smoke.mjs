@@ -19,6 +19,7 @@ mkdirSync(directory, { recursive: true });
 const html = join(directory, "index.html");
 const css = join(directory, "site.css");
 const favicon = join(renderedRoot, "favicon.ico");
+const partialBody = join(renderedRoot, "partial-body.bin");
 const htmlBytes = Buffer.from(
   '<!doctype html><html lang="en"><head><meta charset="utf-8">' +
   '<link rel="icon" href="/favicon.ico">' +
@@ -29,9 +30,11 @@ const htmlBytes = Buffer.from(
 );
 const cssBytes = Buffer.from("body { color: #151515; background: white; }\n");
 const faviconBytes = Buffer.from([0x00, 0x00, 0x01, 0x00, 0x01, 0x00]);
+const partialBodyBytes = Buffer.from("complete local response body must match this file\n");
 writeFileSync(html, htmlBytes);
 writeFileSync(css, cssBytes);
 writeFileSync(favicon, faviconBytes);
+writeFileSync(partialBody, partialBodyBytes);
 
 let tamperCss = false;
 let servedHtmlBytes = htmlBytes;
@@ -39,10 +42,23 @@ const hangingResponses = new Set();
 const server = createServer((req, res) => {
   const pathname = new URL(req.url ?? "/", "http://localhost").pathname;
   if (pathname === "/hanging-local") {
-    // Deliberately never send response headers or body. A fetch() started by
-    // the page must remain observable even though other assets have loaded.
+    // Never send response headers: a started request remains outstanding.
     hangingResponses.add(res);
     res.once("close", () => hangingResponses.delete(res));
+    return;
+  }
+  if (pathname === "/partial-body.bin") {
+    // Send a real 200 response and a short body prefix, but never complete
+    // the declared Content-Length. Playwright receives a response event;
+    // response.body() must still time out rather than blocking indefinitely.
+    hangingResponses.add(res);
+    res.once("close", () => hangingResponses.delete(res));
+    res.writeHead(200, {
+      "content-type": "application/octet-stream",
+      "content-length": partialBodyBytes.length,
+      "cache-control": "no-store",
+    });
+    res.write(partialBodyBytes.subarray(0, 4));
     return;
   }
   const files = new Map([
@@ -127,6 +143,29 @@ try {
   assert.equal(pending.tasteFramesVerified, false);
   assert.equal(pending.productCompletionEligible, false);
 
+  // Real Chrome negative: response headers and four initial bytes arrive,
+  // but the declared response body never finishes. The local file is complete
+  // and the actual received bytes cannot be mistaken for an attested match.
+  servedHtmlBytes = Buffer.from(htmlBytes.toString("utf8").replace(
+    "</body>", '<script>void fetch("/partial-body.bin").catch(() => {});</script></body>',
+  ));
+  writeFileSync(html, servedHtmlBytes);
+  const incompleteBody = await probeNetworkResponses(input, {
+    bodyReadTimeoutMs: 350, // CI fixture only; production remains capped at 15s.
+  });
+  assert.equal(incompleteBody.status, "INCOMPLETE", JSON.stringify(incompleteBody));
+  assert.equal(incompleteBody.localAssetTreeUnchanged, true);
+  assert.equal(incompleteBody.observations.length, 3);
+  assert.ok(incompleteBody.observations.every((o) =>
+    o.httpStatus === 200 && o.finalUrlMatched &&
+    o.local.some((entry) =>
+      entry.path === "dist/partial-body.bin" &&
+      entry.status === 200 && entry.bodyVerified === false) &&
+    o.issues.includes("LOCAL_RESPONSE_BODY_UNAVAILABLE")),
+  "Real Chrome must reject a 200 response with an incomplete body");
+  assert.equal(incompleteBody.tasteFramesVerified, false);
+  assert.equal(incompleteBody.productCompletionEligible, false);
+
   process.stdout.write(JSON.stringify({
     status: "REAL_CHROME_NETWORK_PROBE_CONFIRMED",
     widths: [1440, 768, 390],
@@ -134,6 +173,8 @@ try {
     tamperedStatus: mismatch.status,
     hangingStatus: pending.status,
     hangingRequestDetected: true,
+    partialBodyStatus: incompleteBody.status,
+    partialBodyTimeoutDetected: true,
     assetCount: match.expectedLocalFileCount,
     responseCountPerWidth: match.observations.map((x) => x.local.length),
     wrongHttpBytesDetected: true,
