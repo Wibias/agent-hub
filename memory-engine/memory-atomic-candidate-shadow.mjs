@@ -9,6 +9,8 @@ const TENTATIVE_CUE = /\b(?:maybe|perhaps|possibly|might|could|consider|vielleic
 const SCOPED_AUDIT_CUE = /\b(?:strict read.only|read.only audit|validation and research task|do not implement recommendations|for this audit|in this audit|audit[- ]auftrag|ausschließlich für diese prüfung)\b/iu;
 const FEEDBACK_CUE = /\b(?:too quickly|too fast|rushed|did not research|not researched|check properly|test properly|vorschnell|zu schnell|nicht richtig recherchiert|nicht gründlich|ordentlich und sorgfältig|vorher testen)\b/iu;
 const TASK_CUE = /^(?:please |now |then |next |add\b|implement\b|create\b|fix\b|run\b|test\b|upload\b|füge\b|erstelle\b|teste\b|prüfe\b|wiederhole\b|setze\b|mach\b|mache\b|dann\b|jetzt\b)/iu;
+const LOCAL_SCOPE_CUE = /\b(?:for this demo|for this sprint|for this task|for this test|only for this task|for today|today|tonight|one.off|in this example|as an example|für diese demo|für diesen test|für diesen sprint|nur heute|heute|einmalig|beispielsweise|als beispiel)\b/iu;
+const REPORTED_SPEECH_CUE = /\b(?:he said|she said|they said|someone said|the example says|quoted text|sample prompt|er sagte|sie sagte|zitat|zitiert)\b/iu;
 const RULE_CUE = /\b(?:must|must not|should|prefer|we use|we decided|i prefer|we prefer|always|use|verify|review|test|check|require|never|müssen|muss|soll|sollte|bevorzuge|verwenden|prüfen|testen|nicht|künftig|vorher)\b/iu;
 
 function hash(value) {
@@ -38,7 +40,9 @@ function segment(source) {
 
 function classifyFragment(fragment) {
   if (/[?？]\s*$/u.test(fragment) || TENTATIVE_CUE.test(fragment)) return null;
-  if (SCOPED_AUDIT_CUE.test(fragment)) return null;
+  if (SCOPED_AUDIT_CUE.test(fragment) || LOCAL_SCOPE_CUE.test(fragment)) return null;
+  if (REPORTED_SPEECH_CUE.test(fragment) || /^\s*>/u.test(fragment)) return null;
+  if (/["“”]/u.test(fragment)) return null;
   if (DURABLE_CUE.test(fragment) && RULE_CUE.test(fragment)) {
     return { disposition: 'durable_review', reasonCode: 'explicit_future_scope' };
   }
