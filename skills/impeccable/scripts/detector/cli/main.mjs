@@ -384,7 +384,7 @@ async function detectCli() {
             }
           }
 
-          const candidates = walkDir(resolved);
+          const candidates = walkDir(resolved, { strict: scanProofMode });
           const files = candidates
             .filter(file => !shouldIgnoreDetectionFile(file, process.cwd(), detectionConfig));
           if (scanProofMode) {
