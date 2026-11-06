@@ -6,6 +6,8 @@ on:
       - "memory-engine/memory-atomic-candidate-shadow.mjs"
       - "memory-engine/memory-atomic-shadow-fixtures.mjs"
       - "scripts/inspect-memory-atomic-shadow.mjs"
+      - "scripts/inspect-memory-atomic-shadow-db.mjs"
+      - "tests/memory-engine/memory-atomic-shadow-db.test.mjs"
       - "scripts/eval-memory-atomic-shadow.mjs"
       - "tests/memory-engine/memory-atomic-candidate-shadow.test.mjs"
       - "tests/memory-engine/memory-atomic-shadow-eval.test.mjs"
@@ -16,6 +18,8 @@ on:
       - "memory-engine/memory-atomic-candidate-shadow.mjs"
       - "memory-engine/memory-atomic-shadow-fixtures.mjs"
       - "scripts/inspect-memory-atomic-shadow.mjs"
+      - "scripts/inspect-memory-atomic-shadow-db.mjs"
+      - "tests/memory-engine/memory-atomic-shadow-db.test.mjs"
       - "scripts/eval-memory-atomic-shadow.mjs"
       - "tests/memory-engine/memory-atomic-candidate-shadow.test.mjs"
       - "tests/memory-engine/memory-atomic-shadow-eval.test.mjs"
@@ -41,7 +45,8 @@ jobs:
         run: |
           node --check memory-engine/memory-atomic-candidate-shadow.mjs
           node --check scripts/inspect-memory-atomic-shadow.mjs
+          node --check scripts/inspect-memory-atomic-shadow-db.mjs
           node --check scripts/eval-memory-atomic-shadow.mjs
-          node --test tests/memory-engine/memory-atomic-candidate-shadow.test.mjs tests/memory-engine/memory-atomic-shadow-eval.test.mjs
+          node --test tests/memory-engine/memory-atomic-candidate-shadow.test.mjs tests/memory-engine/memory-atomic-shadow-eval.test.mjs tests/memory-engine/memory-atomic-shadow-db.test.mjs
       - name: Run synthetic replay comparison
         run: node scripts/eval-memory-atomic-shadow.mjs
