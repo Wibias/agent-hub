@@ -18,6 +18,7 @@ const WIDTHS = Object.freeze([1440, 768, 390]);
 const MAX_RESPONSES = 2_000;
 const MAX_BODY_BYTES = 16 * 1024 * 1024;
 const MAX_CAPTURE_BYTES = 128 * 1024 * 1024;
+const MAX_BODY_WAIT_MS = 15_000;
 const sha = (value) => createHash("sha256").update(value).digest("hex");
 const inside = (root, value) => {
   const rel = relative(root, value);
@@ -128,8 +129,13 @@ async function loadBrowser(packageRoot) {
  * are represented by SHA-256 only. This is diagnostic evidence, NOT a Taste
  * report supplement and NOT a DWA completion gate.
  */
-export async function probeNetworkResponses(options, { browserFactory = loadBrowser } = {}) {
+export async function probeNetworkResponses(options, {
+  browserFactory = loadBrowser, bodyReadTimeoutMs = MAX_BODY_WAIT_MS,
+} = {}) {
   const context = strictInputs(options);
+  const bodyDeadline = Number.isSafeInteger(bodyReadTimeoutMs) &&
+    bodyReadTimeoutMs > 0 && bodyReadTimeoutMs <= MAX_BODY_WAIT_MS
+    ? bodyReadTimeoutMs : MAX_BODY_WAIT_MS;
   const before = renderedAssetProof({
     projectRoot: context.project, renderedRoot: context.rendered, html: context.html,
   });
@@ -170,6 +176,13 @@ export async function probeNetworkResponses(options, { browserFactory = loadBrow
       };
       report.observations.push(obs);
       let ctx;
+      const issueSet = new Set();
+      const recordIssue = (issue) => {
+        if (!issueSet.has(issue)) {
+          issueSet.add(issue);
+          obs.issues.push(issue);
+        }
+      };
       try {
         ctx = await browser.newContext({
           viewport: { width, height: 900 },
@@ -179,13 +192,6 @@ export async function probeNetworkResponses(options, { browserFactory = loadBrow
         const page = await ctx.newPage();
         const pending = [];
         const outstandingRequests = new Set();
-        const issueSet = new Set();
-        const recordIssue = (issue) => {
-          if (!issueSet.has(issue)) {
-            issueSet.add(issue);
-            obs.issues.push(issue);
-          }
-        };
         let pageErrorCount = 0;
         let requestCount = 0;
         let responseCount = 0;
@@ -241,7 +247,22 @@ export async function probeNetworkResponses(options, { browserFactory = loadBrow
           }
           const task = (async () => {
             try {
-              const body = await response.body();
+              // A response can deliver headers without ever completing its body.
+              // Stop awaiting after a fixed deadline and fail closed; do not
+              // let a stalled response hang the entire probe indefinitely.
+              let timer;
+              let body;
+              try {
+                body = await Promise.race([
+                  response.body(),
+                  new Promise((_, reject) => {
+                    timer = setTimeout(() => reject(new Error("Response body timed out")),
+                      bodyDeadline);
+                  }),
+                ]);
+              } finally {
+                clearTimeout(timer);
+              }
               if (!Buffer.isBuffer(body) || body.length > MAX_BODY_BYTES ||
                   obs.localBytesChecked + body.length > MAX_CAPTURE_BYTES) {
                 recordIssue("LOCAL_RESPONSE_BODY_LIMIT");
