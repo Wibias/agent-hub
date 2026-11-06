@@ -98,9 +98,11 @@ function readCompleteProof(stderr, mode) {
         .every((key) => typeof proof[key] === "boolean")) {
     throw new Error("Incomplete, degraded or contradictory Impeccable source coverage");
   }
-  if ((mode.id === "no-config" && (proof.configEnabled ||
-      proof.inlineIgnoresEnabled || proof.designSystemEnabled)) ||
-      (mode.id === "no-inline-ignores" && proof.inlineIgnoresEnabled) ||
+  const configured = mode.id !== "no-config";
+  const inline = configured && mode.id !== "no-inline-ignores";
+  if (proof.configEnabled !== configured ||
+      proof.inlineIgnoresEnabled !== inline ||
+      (!configured && proof.designSystemEnabled) ||
       (mode.id === "no-design-system" && proof.designSystemEnabled)) {
     throw new Error("Impeccable receipt contradicts benchmark scan mode");
   }
