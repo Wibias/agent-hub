@@ -270,7 +270,16 @@ function parseArgs(argv) {
   };
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+function isCliEntry() {
+  if (!process.argv[1]) return false;
+  try {
+    return realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url));
+  } catch {
+    return false;
+  }
+}
+
+if (isCliEntry()) {
   try {
     const report = await probeRenderedState(parseArgs(process.argv.slice(2)));
     process.stdout.write(JSON.stringify(report, null, 2) + "\n");
