@@ -112,7 +112,7 @@ export function inspectUnresolvedMemoryProposals({
     ).all(projectId,branch)) {
       if(Object.hasOwn(statusCounts,row.status))statusCounts[row.status]=row.n;
     }
-    const unresolvedTotal=STATUSES.values().reduce(
+    const unresolvedTotal=[...STATUSES].reduce(
       (n,s)=>n+statusCounts[s],0,
     );
     const rows=db.prepare(
