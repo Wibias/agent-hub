@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Real Chrome/CDP smoke against a reviewed, pinned upstream checkout.
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runQualityAudit } from "../../scripts/providers/quality-audit.mjs";
@@ -16,6 +16,10 @@ const built = join(root, "dist");
 mkdirSync(join(built, "settings"), { recursive: true });
 const page = join(built, "settings", "index.html");
 const stylesheet = join(built, "settings", "fixture.css");
+// Exercise the combined Impeccable DESIGN.md path as well as its
+// completed-source-file receipt in the real three-provider smoke.
+writeFileSync(join(root, "DESIGN.md"),
+  "---\ntypography:\n  body:\n    fontFamily: Arial\n---\n");
 // The stylesheet is served with the fixture and is the static source target.
 // This exercises a complete vendored CSS scan without optional HTML parsers.
 writeFileSync(stylesheet, [
@@ -75,11 +79,59 @@ try {
   assert.equal(result.coverage.complete, true);
   assert.ok(["SCOPED_CLEAR", "REVIEW", "BLOCKED"].includes(result.status));
   assert.equal(result.completionEligible, false);
+  // Joint integration assertions: an upstream success is only a scoped
+  // completed scan, not a verified game state or permission to ship.
+  const readArtifact = (file) => JSON.parse(readFileSync(file, "utf8"));
+  const impeccable = readArtifact(result.artifacts.reports.impeccable);
+  const taste = readArtifact(result.artifacts.reports["taste-skill"]);
+  const fusion = readArtifact(result.artifacts.fusion);
+  assert.equal(impeccable.summary.coverageCountVerified, true);
+  assert.equal(impeccable.summary.filesScanned, 1);
+  assert.equal(impeccable.summary.degradedFiles, 0);
+  assert.equal(impeccable.summary.designSystemEnabled, true);
+  assert.equal(taste.summary.renderedStateVerified, false);
+  assert.equal(taste.summary.renderedStateProof, "NOT_PROVIDED_BY_UPSTREAM");
+  assert.equal(taste.summary.productCompletionEligible, false);
+  const classes = [
+    "POTENTIAL_USABILITY", "GEOMETRY_NEEDS_VISUAL_REVIEW",
+    "CONTEXTUAL_HOUSE_RULE", "UNCLASSIFIED_HEURISTIC",
+  ];
+  assert.equal(classes.reduce((n, id) => {
+    const count = taste.summary.reviewClassCounts[id];
+    assert.ok(Number.isSafeInteger(count) && count >= 0);
+    return n + count;
+  }, 0), taste.findings.length);
+  const tasteSummary = fusion.reports.find((r) => r.provider === "taste-skill");
+  assert.ok(tasteSummary);
+  assert.deepEqual(tasteSummary.reviewClassCounts, taste.summary.reviewClassCounts);
+  assert.equal(tasteSummary.renderedStateVerified, false);
+  assert.equal(tasteSummary.renderedStateProof, "NOT_PROVIDED_BY_UPSTREAM");
+  const rawById = new Map(taste.findings.map((f) => [f.id, f]));
+  const fusedTaste = fusion.groups.flatMap((g) => g.members)
+    .filter((member) => member.provider === "taste-skill");
+  assert.equal(fusedTaste.length, taste.findings.length);
+  for (const member of fusedTaste) {
+    const original = rawById.get(member.id);
+    assert.ok(original, "A fused Taste finding must match a raw observation");
+    assert.equal(member.reviewClass, original.reviewClass);
+    assert.equal(member.upstreamSeverity, original.upstreamSeverity);
+    assert.equal(member.priority, original.priority);
+  }
+  assert.equal(fusion.completionEligible, false);
   process.stdout.write(JSON.stringify({
     status: result.status, coverage: statuses,
     artifactDirectory: result.artifacts.directory,
     browser: "real Chrome / upstream consistency.mjs, 1440/768/390",
     productCompletionEligible: false,
+    integratedEvidence: {
+      impeccableFilesScanned: impeccable.summary.filesScanned,
+      impeccableCoverageVerified: impeccable.summary.coverageCountVerified,
+      tasteRawObservations: taste.findings.length,
+      tasteFusedObservations: fusedTaste.length,
+      tasteReviewClassCounts: taste.summary.reviewClassCounts,
+      tasteRenderedStateVerified: tasteSummary.renderedStateVerified,
+      allProviderEvidenceProductCompletionEligible: fusion.completionEligible,
+    },
   }, null, 2) + "\n");
 } finally {
   rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
