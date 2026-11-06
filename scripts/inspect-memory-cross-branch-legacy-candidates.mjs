@@ -185,6 +185,14 @@ export function inspectLegacyCandidateEvidence({
         requiresHumanMeaningReview: true,
       };
     });
+    // A single unsafe item invalidates ALL opt-in content in the batch.
+    // Never leak another row's selected content while reporting a blocked run.
+    if (blockers.length) {
+      for (const item of items) {
+        delete item.localProposedValueExcerpt;
+        if (item.source) delete item.source.localRedactedEvidenceExcerpt;
+      }
+    }
     return {
       ...baseline,
       status: blockers.length ? 'blocked' : 'manual_candidate_review_required',
