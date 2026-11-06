@@ -20,6 +20,9 @@ const pages = {
   '/blocked': page(marker + '<div data-access-blocker>Checking access</div>'),
   '/forbidden': page(marker + '<p>Access denied</p>'),
   '/below': page(marker + '<div style="margin-top:1400px">Below requirement</div>'),
+  '/bounce': page(marker + '<script>if (!sessionStorage.getItem("dwa-once")) {' +
+    'sessionStorage.setItem("dwa-once", "1");' +
+    'setTimeout(() => { location.href = "/bounce-hop"; }, 100);}</script>'),
 };
 
 const playwrightRoot = process.env.DWA_PLAYWRIGHT_ROOT;
@@ -37,6 +40,9 @@ const server = createServer((request, response) => {
   if (request.url === '/ready') {
     readyCookies.push(request.headers.cookie ?? '');
     response.setHeader('Set-Cookie', 'dwa-context-isolation=1; Path=/; SameSite=Lax');
+  }
+  if (request.url === '/bounce-hop') {
+    return response.end(page('<script>location.replace("/bounce")</script>'));
   }
   if (request.url === '/redirect') {
     if (!request.headers.cookie?.includes('return=1')) {
@@ -129,7 +135,14 @@ try {
     x.finalPath === '/redirect' && x.signals?.first.markerVisible === true),
   'Same-route HTTP redirect chains must invalidate otherwise-ready Playwright evidence');
 
-  console.log('Real production Playwright transport passed: 7 scenarios at 1440/768/390, anonymous contexts, PNG hashes, visible-state checks, and same-route HTTP redirect rejection.');
+  const jsBounce = await probe('/bounce', { forbiddenText: [] });
+  assertWidths(jsBounce, 'INCOMPLETE');
+  assert.ok(jsBounce.observations.every((x) =>
+    x.httpStatus === 200 && x.finalPath === '/bounce' &&
+    x.mainFrameNavigationCount >= 3 && x.signals?.afterScreenshot?.markerVisible === true),
+  'JS redirect away and back must fail despite an otherwise-ready same-route screenshot');
+
+  console.log('Real production Playwright transport passed: 8 scenarios at 1440/768/390, including JS bounce redirects, isolated contexts, PNG hashes and same-route HTTP redirect rejection.');
 } finally {
   await new Promise((resolve) => server.close(resolve));
   rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });

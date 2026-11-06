@@ -171,10 +171,18 @@ async function openPage(cdp, width, height) {
   let redirectCount = 0;
   let finalStatus = null;
   const pageErrorHandlers = new Set();
+  const frameNavigationHandlers = new Set();
+  const mainFrame = {};
   const off = cdp.on((m) => {
     if (m.sessionId !== sessionId) return;
-    if (m.method === 'Page.frameNavigated' && !m.params.frame.parentId) url = m.params.frame.url;
-    if (m.method === 'Page.navigatedWithinDocument') url = m.params.url;
+    if (m.method === 'Page.frameNavigated' && !m.params.frame.parentId) {
+      url = m.params.frame.url;
+      if (url !== 'about:blank') for (const cb of frameNavigationHandlers) cb(mainFrame);
+    }
+    if (m.method === 'Page.navigatedWithinDocument') {
+      url = m.params.url;
+      for (const cb of frameNavigationHandlers) cb(mainFrame);
+    }
     if (m.method === 'Network.requestWillBeSent' &&
         m.params.type === 'Document' && m.params.redirectResponse) redirectCount++;
     if (m.method === 'Network.responseReceived' && m.params.type === 'Document') {
@@ -195,7 +203,11 @@ async function openPage(cdp, width, height) {
     return response.result.value;
   };
   return {
-    on(event, listener) { if (event === 'pageerror') pageErrorHandlers.add(listener); },
+    mainFrame() { return mainFrame; },
+    on(event, listener) {
+      if (event === 'pageerror') pageErrorHandlers.add(listener);
+      if (event === 'framenavigated') frameNavigationHandlers.add(listener);
+    },
     async goto(address) {
       redirectCount = 0; finalStatus = null;
       const loaded = cdp.once('Page.loadEventFired', sessionId);
