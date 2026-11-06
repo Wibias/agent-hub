@@ -159,22 +159,38 @@ export function inspectAtomicPromotionPreflight({
     if (exactDuplicate > 0) {
       return {...report,...blocked('active_duplicate_claim'),activeClaims};
     }
-    outcome = activeClaims === 0
-      ? {
-        status:'eligible_for_manual_promotion_review',
-        preflightPassed:true,manualRelationReviewRequired:false,
-      }
-      : {
-        status:'needs_relation_review',
-        preflightPassed:true,manualRelationReviewRequired:true,
-      };
+    // Do not skip other unresolved memory work when the active Claim
+    // ledger is empty. A fresh Claim must not silently supersede proposals
+    // still awaiting user confirmation or other scoped candidates.
+    const otherPendingCandidates = db.prepare(
+      "SELECT COUNT(*) AS n FROM memory_candidates WHERE project_id=? AND branch=? "
+      + "AND id<>? AND status IN ('pending','needs_confirmation')"
+    ).get(projectId,branch,source.candidate_id).n;
+    const proposalTable = db.prepare(
+      "SELECT 1 AS present FROM sqlite_master "
+      + "WHERE type='table' AND name='memory_evidence_proposals'"
+    ).get();
+    const unresolvedEvidenceProposals = proposalTable
+      ? db.prepare(
+        "SELECT COUNT(*) AS n FROM memory_evidence_proposals "
+        + "WHERE project_id=? AND branch=? AND status IN ('pending','needs_confirmation')"
+      ).get(projectId,branch).n
+      : 0;
+    outcome = activeClaims > 0
+      ? {status:'needs_relation_review',manualRelationReviewRequired:true}
+      : (otherPendingCandidates > 0 || unresolvedEvidenceProposals > 0)
+        ? {status:'needs_unresolved_memory_review',manualRelationReviewRequired:true}
+        : {status:'eligible_for_manual_promotion_review',manualRelationReviewRequired:false};
     return {
       ...report,...outcome,
+      preflightPassed:true,
       confirmedScope:'permanent_branch_scoped',
       sourceEvidenceVerified:true,
       confirmationEvidenceVerified:true,
       sourceSpanCount:spans.length,
       activeClaimsInScope:activeClaims,
+      otherPendingCandidates,
+      unresolvedEvidenceProposals,
       requiresSeparateWriteCapableImplementation:true,
     };
   } catch {
