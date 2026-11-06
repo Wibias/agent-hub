@@ -1,0 +1,45 @@
+name: Memory Atomic Confirmation Hook D12.3
+
+on:
+  pull_request:
+    paths:
+      - "memory-engine/memory-atomic-confirmation-capture.mjs"
+      - "memory-engine/adapters/codex-hooks-core.mjs"
+      - "memory-engine/adapters/codex-hook-cli-core.mjs"
+      - "memory-engine/adapters/codex-memory-recall-runtime.mjs"
+      - "tests/memory-engine/memory-atomic-confirmation-capture.test.mjs"
+      - "docs/memory-d12-3-confirm-hook.md"
+      - ".github/workflows/verify-memory-atomic-confirm-hook.yml"
+  push:
+    branches: [main]
+    paths:
+      - "memory-engine/memory-atomic-confirmation-capture.mjs"
+      - "memory-engine/adapters/codex-hooks-core.mjs"
+      - "memory-engine/adapters/codex-hook-cli-core.mjs"
+      - "memory-engine/adapters/codex-memory-recall-runtime.mjs"
+      - "tests/memory-engine/memory-atomic-confirmation-capture.test.mjs"
+      - "docs/memory-d12-3-confirm-hook.md"
+      - ".github/workflows/verify-memory-atomic-confirm-hook.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Check strict user-prompt atomic confirmation capture
+        run: |
+          node --check memory-engine/memory-atomic-confirmation-capture.mjs
+          node --check memory-engine/adapters/codex-hooks-core.mjs
+          node --check memory-engine/adapters/codex-hook-cli-core.mjs
+          node --test tests/memory-engine/memory-atomic-confirmation-capture.test.mjs
