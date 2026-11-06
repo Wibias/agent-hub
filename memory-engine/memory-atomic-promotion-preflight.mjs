@@ -170,12 +170,13 @@ export function inspectAtomicPromotionPreflight({
       "SELECT 1 AS present FROM sqlite_master "
       + "WHERE type='table' AND name='memory_evidence_proposals'"
     ).get();
-    const unresolvedEvidenceProposals = proposalTable
-      ? db.prepare(
-        "SELECT COUNT(*) AS n FROM memory_evidence_proposals "
-        + "WHERE project_id=? AND branch=? AND status IN ('pending','needs_confirmation')"
-      ).get(projectId,branch).n
-      : 0;
+    if (!proposalTable) {
+      return {...report,...blocked('proposal_ledger_unavailable')};
+    }
+    const unresolvedEvidenceProposals = db.prepare(
+      "SELECT COUNT(*) AS n FROM memory_evidence_proposals "
+      + "WHERE project_id=? AND branch=? AND status IN ('pending','needs_confirmation')"
+    ).get(projectId,branch).n;
     outcome = activeClaims > 0
       ? {status:'needs_relation_review',manualRelationReviewRequired:true}
       : (otherPendingCandidates > 0 || unresolvedEvidenceProposals > 0)
