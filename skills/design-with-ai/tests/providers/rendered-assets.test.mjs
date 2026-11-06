@@ -72,6 +72,34 @@ test("a CSS/JS/image/font asset changes the scoped digest without HTML changes",
   });
 });
 
+test("mixed canonical HTML and aliased project ancestor resolve the same page digest", () => {
+  fixture((f) => {
+    const aliasHome = mkdtempSync(join(tmpdir(), "dwa-canonical-parent-"));
+    try {
+      // Only an ancestor is symlinked; the project root itself is a real
+      // directory entry, as required by renderedAssetProof's strict lstat.
+      const actualParent = join(f.root, "..");
+      const linkedParent = join(aliasHome, "linked-parent");
+      symlinkSync(actualParent, linkedParent, "dir");
+      const aliasRoot = join(linkedParent, f.root.split(/[\\/]/).at(-1));
+      const result = sourceScopeProof({
+        projectRoot: aliasRoot,
+        target: join(aliasRoot, "src", "page.tsx"),
+        route: "/settings",
+        renderedRoot: f.renderedRoot, // Canonical path, unlike projectRoot.
+        html: f.html,
+        includeDetectorContext: false,
+      });
+      assert.equal(result.manifest.rendered.page, "dist/settings/index.html");
+      assert.equal(result.manifest.rendered.sha256,
+        result.manifest.renderedAssets.files.find((e) =>
+          e.path === "dist/settings/index.html").sha256);
+    } finally {
+      rmSync(aliasHome, { recursive: true, force: true });
+    }
+  });
+});
+
 test("adding and removing previously unseen local assets changes the digest", () => {
   fixture((f) => {
     const original = f.sample();
