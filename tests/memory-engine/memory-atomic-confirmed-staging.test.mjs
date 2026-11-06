@@ -137,6 +137,9 @@ test('confirmation must match scope, exact draft, source authority, and explicit
     assertFail({reviewRefs:[...request.reviewRefs].reverse()});
     assertFail({confirmationEvidenceId:'source-evidence'});
     assertFail({confirmationEvidenceId:'not-found'});
+    assert.throws(() => stageConfirmedAtomicRule({
+      ...request, stagedAt:'2026-11-05T23:00:00.000Z',
+    }), /cannot precede direct-user confirmation/);
     db.prepare('UPDATE evidence SET metadata_json=? WHERE id=?')
       .run(JSON.stringify({event_type:'user_prompt',explicit_memory_mode:'candidate_confirm'}),'confirmation-evidence');
     assertFail({});
