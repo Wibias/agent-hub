@@ -10,7 +10,7 @@ import { DatabaseSync } from 'node:sqlite';
 import {
   parseFinal108ReconciliationArgs, validateFinal108Manifest,
   reconcileFinal108Review,
-} from './reconcile-memory-final-108-review.mjs';
+} from '../../scripts/reconcile-memory-final-108-review.mjs';
 
 const PROJECT = 'github.com/example/streamer-content';
 const MAIN = 'main';
@@ -18,7 +18,7 @@ const SECRET = 'DO_NOT_PRINT_PRIVATE_USER_TEXT';
 const OTHER = ['feature/a', 'feature/b', 'feature/c', 'feature/d'];
 const sha = value => createHash('sha256').update(value, 'utf8').digest('hex');
 const ref = (prefix, id) => '~' + prefix + sha(id).slice(0, 12);
-const CLI = fileURLToPath(new URL('./reconcile-memory-final-108-review.mjs', import.meta.url));
+const CLI = fileURLToPath(new URL('../../scripts/reconcile-memory-final-108-review.mjs', import.meta.url));
 
 function fixture(run) {
   const root = mkdtempSync(join(tmpdir(), 'd12-3-full-reconcile-'));
