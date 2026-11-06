@@ -1,8 +1,9 @@
 // Reproducible source-scope evidence. A Git HEAD alone is insufficient for dirty trees.
 import { createHash } from "node:crypto";
+import { homedir } from "node:os";
 import { execFileSync } from "node:child_process";
-import { lstatSync, readFileSync, readdirSync, statSync } from "node:fs";
-import { extname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { existsSync, lstatSync, readFileSync, readdirSync, realpathSync, statSync } from "node:fs";
+import { dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
 // Superset of native DWA and vendored Impeccable file extensions.
 const extensions = new Set([
@@ -39,6 +40,94 @@ function collectedFiles(target) {
   return files.sort();
 }
 
+// Config and design policy affect a source-scan verdict even when they are
+// outside the selected source subtree. Hash precisely the local dependency
+// files used by the bundled detector; never embed their contents in evidence.
+// This source-boundary resolver deliberately does NOT import Impeccable: the
+// native DWA quick profile must remain operational without that provider.
+const DESIGN_NAMES = ["DESIGN.md", "Design.md", "design.md"];
+const DESIGN_FALLBACK_DIRS = [".agents/context", "docs"];
+const ROOT_MARKERS = [".git", "package.json", ".impeccable"];
+const DETECTOR_CONFIG_NAMES = [
+  ".impeccable/config.json", ".impeccable/config.local.json",
+];
+
+function firstExistingDirectoryFile(dir, names) {
+  return names.map((name) => join(dir, name)).find(existsSync) ?? null;
+}
+
+function designAt(dir) {
+  const direct = firstExistingDirectoryFile(dir, DESIGN_NAMES);
+  if (direct) return { file: direct, contextDir: dir, root: dir };
+  for (const contextDir of DESIGN_FALLBACK_DIRS) {
+    const sub = join(dir, contextDir);
+    const file = firstExistingDirectoryFile(sub, DESIGN_NAMES);
+    if (file) return { file, contextDir: sub, root: dir };
+  }
+  return null;
+}
+
+function designContextFor(directory, cache) {
+  const visited = [];
+  let dir = resolve(directory);
+  const home = resolve(homedir());
+  const remember = (result) => {
+    for (const part of visited) cache.set(part, result);
+    return result;
+  };
+  while (true) {
+    if (cache.has(dir)) return remember(cache.get(dir));
+    visited.push(dir);
+    // A local design document takes precedence over a local package marker,
+    // matching the vendored detector's project-root semantics.
+    const found = designAt(dir);
+    if (found) return remember(found);
+    if (ROOT_MARKERS.some((name) => existsSync(join(dir, name)))) {
+      return remember(null);
+    }
+    if (dir === home) return remember(null);
+    const parent = dirname(dir);
+    if (parent === dir) return remember(null);
+    dir = parent;
+  }
+}
+
+function detectorContextFiles(root, sourceFiles) {
+  const contextPaths = new Set();
+  const cache = new Map();
+  for (const name of DETECTOR_CONFIG_NAMES) {
+    const file = join(root, name);
+    if (existsSync(file)) contextPaths.add(file);
+  }
+  for (const file of sourceFiles) {
+    const design = designContextFor(dirname(file), cache);
+    if (!design) continue;
+    // A design policy outside the declared project boundary can influence
+    // this scan but cannot honestly be claimed as in-scope provenance.
+    if (!isInside(root, design.root)) {
+      throw new TypeError("Detector DESIGN.md resolves outside projectRoot");
+    }
+    contextPaths.add(design.file);
+    const sidecar = [
+      join(design.root, ".impeccable/design.json"),
+      join(design.root, "DESIGN.json"),
+      join(design.contextDir, "DESIGN.json"),
+    ].find(existsSync);
+    if (sidecar) contextPaths.add(sidecar);
+  }
+
+  const actual = new Set(sourceFiles);
+  return [...contextPaths].sort().filter((path) => !actual.has(path)).map((file) => {
+    const st = lstatSync(file);
+    const canonical = realpathSync(file);
+    if (!st.isFile() || st.isSymbolicLink() ||
+        canonical !== resolve(file) || !isInside(root, canonical)) {
+      throw new TypeError("Detector context dependency must be a regular in-project file");
+    }
+    return file;
+  });
+}
+
 function gitHead(root) {
   try {
     return execFileSync("git", ["-C", root, "rev-parse", "--verify", "HEAD"], {
@@ -54,11 +143,12 @@ export function sourceScopeProof({ projectRoot, target, route, renderedRoot = nu
   const root = resolve(projectRoot), source = resolve(target);
   if (!isInside(root, source)) throw new TypeError("Source scope escapes project");
   const sourceFiles = collectedFiles(source);
+  const contextFiles = detectorContextFiles(root, sourceFiles);
   const inputStat = (file) => {
     const st = statSync(file, { bigint: true });
     return [file, String(st.size), String(st.ctimeNs), String(st.mtimeNs)];
   };
-  const observedInputs = sourceFiles.map(inputStat);
+  const observedInputs = [...sourceFiles, ...contextFiles].map(inputStat);
   if (intentPath) observedInputs.push(inputStat(resolve(intentPath)));
   if (html) observedInputs.push(inputStat(resolve(html)));
   const files = sourceFiles.map((file) => ({
@@ -66,6 +156,10 @@ export function sourceScopeProof({ projectRoot, target, route, renderedRoot = nu
     sha256: hash(readFileSync(file)),
   }));
   if (!files.length) throw new TypeError("Source scope has no eligible files");
+  const detectorContext = contextFiles.map((file) => ({
+    path: normalize(relative(root, file)),
+    sha256: hash(readFileSync(file)),
+  }));
   const intent = intentPath ? (() => {
     const path = resolve(intentPath), st = lstatSync(path);
     if (!st.isFile() || st.isSymbolicLink()) {
@@ -87,6 +181,7 @@ export function sourceScopeProof({ projectRoot, target, route, renderedRoot = nu
     route,
     gitHead: gitHead(root),
     files,
+    ...(detectorContext.length ? { detectorContext } : {}),
     intent,
     rendered,
   };

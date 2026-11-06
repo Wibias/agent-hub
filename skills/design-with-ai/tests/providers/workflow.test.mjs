@@ -264,6 +264,28 @@ test("a source mutation during scanning fails closed", async () => {
   });
 });
 
+test("an out-of-target Impeccable policy mutation during scanning fails closed", async () => {
+  await fixture(async (f) => {
+    const context = join(f.root, ".impeccable");
+    mkdirSync(context);
+    const config = join(context, "config.local.json");
+    writeFileSync(config, '{"detector":{"ignoreRules":[]}}\n');
+    writeFileSync(join(f.root, "DESIGN.md"),
+      "---\ntypography:\n  body:\n    fontFamily: Arial\n---\n");
+    let changed = false;
+    const execute = async (_, input) => {
+      if (!changed) {
+        writeFileSync(config, '{"detector":{"ignoreRules":["overused-font"]}}\n');
+        changed = true;
+      }
+      return [report("native-dwa", input.capability), report("impeccable", input.capability)];
+    };
+    await assert.rejects(() => runProfileProviders({
+      ...f.request, profile: "standard",
+    }, { registry: registry(), execute }), /changed during provider execution/);
+  });
+});
+
 test("browser route must match a real static HTML route, not an SPA label", async () => {
   await fixture(async (f) => {
     await assert.rejects(() => runProfileProviders({
