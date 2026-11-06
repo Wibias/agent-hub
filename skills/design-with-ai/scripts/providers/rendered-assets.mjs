@@ -102,45 +102,45 @@ export function renderedAssetProof({ projectRoot, renderedRoot, html }) {
     try {
       let entry;
       while ((entry = stream.readSync()) !== null) {
-      if (++entryCount > MAX_ENTRIES) {
-        throw new TypeError("Rendered asset tree exceeds entry count limit");
-      }
-      const path = join(directory, entry.name);
-      // No skipped hidden directories or file-type allowlist. An excluded file
-      // could still be imported by CSS or served dynamically.
-      if (entry.isSymbolicLink()) {
-        throw new TypeError("Symlink inside rendered asset tree cannot be attested");
-      }
-      if (entry.isDirectory()) {
-        stack.push({ directory: path, depth: depth + 1 });
-        continue;
-      }
-      if (!entry.isFile()) {
-        throw new TypeError("Non-regular entry inside rendered asset tree cannot be attested");
-      }
-      const state = lstatSync(path);
-      if (!state.isFile() || state.isSymbolicLink()) {
-        throw new TypeError("Rendered asset changed type during traversal");
-      }
-      if (!Number.isSafeInteger(state.size) || state.size > MAX_FILE_BYTES) {
-        throw new TypeError("Rendered asset exceeds per-file byte limit");
-      }
-      totalBytes += state.size;
-      if (totalBytes > MAX_TOTAL_BYTES) {
-        throw new TypeError("Rendered assets exceed total byte limit");
-      }
-      if (assetFiles.length >= MAX_FILES) {
-        throw new TypeError("Rendered assets exceed file-count limit");
-      }
-      const canonicalFile = realpathSync(path);
-      if (!within(canonicalRoot, canonicalFile)) {
-        throw new TypeError("Rendered asset escapes build subtree");
-      }
-      assetFiles.push({
-        path: pathSlashes(relative(canonicalProject, canonicalFile)),
-        bytes: state.size,
-        sha256: hashRegularFile(canonicalFile, state.size),
-      });
+        if (++entryCount > MAX_ENTRIES) {
+          throw new TypeError("Rendered asset tree exceeds entry count limit");
+        }
+        const path = join(directory, entry.name);
+        // No skipped hidden directories or file-type allowlist. An excluded file
+        // could still be imported by CSS or served dynamically.
+        if (entry.isSymbolicLink()) {
+          throw new TypeError("Symlink inside rendered asset tree cannot be attested");
+        }
+        if (entry.isDirectory()) {
+          stack.push({ directory: path, depth: depth + 1 });
+          continue;
+        }
+        if (!entry.isFile()) {
+          throw new TypeError("Non-regular entry inside rendered asset tree cannot be attested");
+        }
+        const state = lstatSync(path);
+        if (!state.isFile() || state.isSymbolicLink()) {
+          throw new TypeError("Rendered asset changed type during traversal");
+        }
+        if (!Number.isSafeInteger(state.size) || state.size > MAX_FILE_BYTES) {
+          throw new TypeError("Rendered asset exceeds per-file byte limit");
+        }
+        totalBytes += state.size;
+        if (totalBytes > MAX_TOTAL_BYTES) {
+          throw new TypeError("Rendered assets exceed total byte limit");
+        }
+        if (assetFiles.length >= MAX_FILES) {
+          throw new TypeError("Rendered assets exceed file-count limit");
+        }
+        const canonicalFile = realpathSync(path);
+        if (!within(canonicalRoot, canonicalFile)) {
+          throw new TypeError("Rendered asset escapes build subtree");
+        }
+        assetFiles.push({
+          path: pathSlashes(relative(canonicalProject, canonicalFile)),
+          bytes: state.size,
+          sha256: hashRegularFile(canonicalFile, state.size),
+        });
       }
     } finally {
       stream.closeSync();
