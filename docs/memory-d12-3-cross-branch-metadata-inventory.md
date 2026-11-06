@@ -36,7 +36,7 @@ reset the existing branches or merge:
     $Next = "$HOME\agent-hub-D12-3-cross-branch-inventory"
     if (-not (Test-Path $Previous)) { throw "Missing previous worktree" }
     if (Test-Path $Next) { throw "Destination exists; do not overwrite" }
-    git -C $Previous fetch origin pull/REPLACE_PR/head
+    git -C $Previous fetch origin pull/202/head
     if ($LASTEXITCODE -ne 0) { throw "Fetch failed" }
     git -C $Previous worktree add --detach $Next FETCH_HEAD
     if ($LASTEXITCODE -ne 0) { throw "Worktree creation failed" }
