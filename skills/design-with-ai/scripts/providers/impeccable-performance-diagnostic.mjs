@@ -74,11 +74,45 @@ function trustedScope({ target, projectRoot }) {
   return { root: realRoot, target: realSource };
 }
 
-function validateDetectorResult(result) {
+const SCAN_PROOF_PREFIX = "DWA_IMPECCABLE_SCAN_PROOF=";
+
+function readCompleteProof(stderr, mode) {
+  const receipts = String(stderr ?? "").split(/\r?\n/)
+    .filter((line) => line.startsWith(SCAN_PROOF_PREFIX));
+  if (receipts.length !== 1) {
+    throw new Error("Missing or duplicate Impeccable completed-file receipt");
+  }
+  let proof;
+  try { proof = JSON.parse(receipts[0].slice(SCAN_PROOF_PREFIX.length)); }
+  catch { throw new Error("Invalid Impeccable scan receipt JSON"); }
+  const numbers = ["candidateFiles", "eligibleFiles", "ignoredFiles",
+    "scannedFiles", "degradedFiles", "durationMs"];
+  if (!proof || typeof proof !== "object" || Array.isArray(proof) ||
+      proof.schemaVersion !== 1 ||
+      numbers.some((key) => !Number.isSafeInteger(proof[key]) || proof[key] < 0) ||
+      proof.eligibleFiles === 0 ||
+      proof.candidateFiles !== proof.eligibleFiles + proof.ignoredFiles ||
+      proof.scannedFiles !== proof.eligibleFiles ||
+      proof.degradedFiles !== 0 ||
+      !["configEnabled", "inlineIgnoresEnabled", "designSystemEnabled"]
+        .every((key) => typeof proof[key] === "boolean")) {
+    throw new Error("Incomplete, degraded or contradictory Impeccable source coverage");
+  }
+  if ((mode.id === "no-config" && (proof.configEnabled ||
+      proof.inlineIgnoresEnabled || proof.designSystemEnabled)) ||
+      (mode.id === "no-inline-ignores" && proof.inlineIgnoresEnabled) ||
+      (mode.id === "no-design-system" && proof.designSystemEnabled)) {
+    throw new Error("Impeccable receipt contradicts benchmark scan mode");
+  }
+  return proof;
+}
+
+function validateDetectorResult(result, mode) {
   if (result.error || result.timedOut || result.outputLimitExceeded ||
       ![0, 2].includes(result.exitCode)) {
     throw new Error("Detector failed, timed out, or returned a partial result");
   }
+  const proof = readCompleteProof(result.stderr, mode);
   let findings;
   try { findings = JSON.parse(result.stdout); } catch {
     throw new Error("Detector stdout is not JSON");
@@ -94,6 +128,10 @@ function validateDetectorResult(result) {
     throw new Error("Detector exit code contradicts findings");
   }
   return {
+    filesScanned: proof.scannedFiles,
+    candidateFiles: proof.candidateFiles,
+    ignoredFiles: proof.ignoredFiles,
+    degradedFiles: proof.degradedFiles,
     findings: findings.length,
     primary: primary.length,
     advisory: findings.length - primary.length,
@@ -116,7 +154,7 @@ export async function compareImpeccableModes(argv, { runner = runProcess, script
       const started = performance.now();
       const run = await runner({
         executable: process.execPath,
-        args: [resolve(script), "--json", ...mode.flags, scope.target],
+        args: [resolve(script), "--json", "--dwa-scan-proof", ...mode.flags, scope.target],
         cwd: scope.root,
         timeoutMs: 120_000,
         maxOutputBytes: 4_194_304,
@@ -124,7 +162,7 @@ export async function compareImpeccableModes(argv, { runner = runProcess, script
       const elapsedMs = Math.round(performance.now() - started);
       const row = { round: round + 1, mode: mode.id, elapsedMs };
       try {
-        Object.assign(row, validateDetectorResult(run));
+        Object.assign(row, validateDetectorResult(run, mode));
         row.status = "COMPLETE";
       } catch (error) {
         row.status = "ERROR";
