@@ -50,7 +50,7 @@ Create a separate detached worktree from the existing Phase 10 checkout:
     $Next = "$HOME\agent-hub-D12-3-claim-review"
     if (-not (Test-Path $Previous)) { throw "Previous worktree missing" }
     if (Test-Path $Next) { throw "Destination already exists" }
-    git -C $Previous fetch origin pull/REPLACE_PR/head
+    git -C $Previous fetch origin pull/203/head
     if ($LASTEXITCODE -ne 0) { throw "Fetch failed" }
     git -C $Previous worktree add --detach $Next FETCH_HEAD
     if ($LASTEXITCODE -ne 0) { throw "Worktree creation failed" }
