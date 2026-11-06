@@ -72,9 +72,11 @@ export function inspectAtomicShadowDb({
       if (suggestionCount > 0) candidatesRequiringReview += 1;
       if (result.reason === 'scoped_audit_protocol') scopedAuditCandidatesExcluded += 1;
       for (const key of Object.keys(totals)) totals[key] += result.counts[key];
+      const itemReasonCodes = {};
       for (const suggestion of result.suggestions) {
         if (Object.hasOwn(reasonCodes, suggestion.reasonCode)) {
           reasonCodes[suggestion.reasonCode] += 1;
+          itemReasonCodes[suggestion.reasonCode] = (itemReasonCodes[suggestion.reasonCode] ?? 0) + 1;
         }
       }
       items.push({
@@ -84,14 +86,7 @@ export function inspectAtomicShadowDb({
         segmentsInspected: result.segmentsInspected,
         reviewCounts: result.counts,
         reviewHintCount: suggestionCount,
-        reviewReasonCodes: Object.fromEntries(
-          Object.entries(reasonCodes).filter(([reasonCode]) => result.suggestions.some(
-            suggestion => suggestion.reasonCode === reasonCode,
-          )).map(([reasonCode]) => [
-            reasonCode,
-            result.suggestions.filter(suggestion => suggestion.reasonCode === reasonCode).length,
-          ]),
-        ),
+        reviewReasonCodes: itemReasonCodes,
         // No hashes or offsets here: never leak source-dependent data from DB.
       });
     }
