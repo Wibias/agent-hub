@@ -15,11 +15,10 @@ const root = mkdtempSync(join(tmpdir(), "dwa-browser-live-"));
 const built = join(root, "dist");
 mkdirSync(join(built, "settings"), { recursive: true });
 const page = join(built, "settings", "index.html");
-writeFileSync(page, [
-  "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">",
-  "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">",
-  "<title>Account Settings - Browser Verification Fixture</title>",
-  "<style>",
+const stylesheet = join(built, "settings", "fixture.css");
+// The stylesheet is served with the fixture and is the static source target.
+// This exercises a complete vendored CSS scan without optional HTML parsers.
+writeFileSync(stylesheet, [
   ":root { color-scheme: light; font-family: Arial, sans-serif }",
   "* { box-sizing: border-box }",
   "body { margin: 0; background: #fafafa; color: #171717 }",
@@ -34,7 +33,12 @@ writeFileSync(page, [
   "input { display: block; width: min(100%, 460px); padding: 12px; border: 1px solid #999 }",
   "button { margin-top: 20px; padding: 12px 20px; border: 0; background: #194d86; color: white }",
   "footer { padding: 28px 20px; border-top: 1px solid #ccc }",
-  "</style></head><body>",
+].join("\n"));
+writeFileSync(page, [
+  "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">",
+  "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">",
+  "<title>Account Settings - Browser Verification Fixture</title>",
+  "<link rel=\"stylesheet\" href=\"./fixture.css\"></head><body>",
   "<header><nav aria-label=\"Primary\"><a href=\"#settings\">Settings</a>",
   "<a href=\"#activity\">Activity</a><a href=\"#help\">Help</a></nav></header>",
   "<main><section id=\"settings\"><h1>Account settings</h1>",
@@ -54,7 +58,7 @@ writeFileSync(page, [
 try {
   const result = await runQualityAudit([
     "--profile", "deep",
-    "--path", page, "--project-root", root,
+    "--path", stylesheet, "--project-root", root,
     "--route", "/settings", "--output-root", root,
     "--require-taste", "--html", page, "--browser-root", built, "--taste-root", skillRoot,
     "--page-kind", "software", "--category", "Account settings",
