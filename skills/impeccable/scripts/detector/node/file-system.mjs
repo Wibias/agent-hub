@@ -46,15 +46,27 @@ const IMPORT_SPECIFIER_PATTERNS = [
   /@(?:use|forward)\s+['"]([^'"]+)['"]/g,
 ];
 
-function walkDir(dir) {
+function walkDir(dir, { strict = false } = {}) {
   const files = [];
   let entries;
-  try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return files; }
+  try { entries = fs.readdirSync(dir, { withFileTypes: true }); }
+  catch (error) {
+    if (strict) throw new Error('Impeccable source traversal failed at ' + dir, { cause: error });
+    return files;
+  }
   for (const entry of entries) {
     if (SKIP_DIRS.has(entry.name)) continue;
     if (entry.isDirectory() && entry.name.startsWith('.') && !HIDDEN_SOURCE_DIRS.has(entry.name)) continue;
     const full = path.join(dir, entry.name);
-    if (entry.isDirectory()) files.push(...walkDir(full));
+    // Only a complete trusted file tree can produce DWA proof. Ordinary
+    // Impeccable scans retain their historical permissive traversal.
+    if (strict && entry.isSymbolicLink()) {
+      throw new Error('Impeccable source traversal encountered a symlink: ' + full);
+    }
+    if (strict && !(entry.isDirectory() || entry.isFile())) {
+      throw new Error('Impeccable source traversal encountered a special file: ' + full);
+    }
+    if (entry.isDirectory()) files.push(...walkDir(full, { strict }));
     else if (hasScannableExtension(entry.name)) files.push(full);
   }
   return files;
