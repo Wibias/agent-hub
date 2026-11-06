@@ -155,10 +155,10 @@ function linkedStylesheetFiles(root, sourceFiles) {
       // The detector removes query/fragment portions before reading disk.
       // Entity-encoded paths cannot be safely matched without HTML parsing:
       // reject them instead of silently omitting a real read dependency.
-      if (href.includes("&")) {
+      const unversioned = href.split(/[?#]/)[0];
+      if (unversioned.includes("&")) {
         throw new TypeError("Entity-bearing stylesheet href cannot be attested");
       }
-      const unversioned = href.split(/[?#]/)[0];
       if (!unversioned) continue;
       const css = resolve(dirname(htmlFile), unversioned);
       if (!existsSync(css)) continue; // Detector also skips unreadable links.
@@ -168,7 +168,7 @@ function linkedStylesheetFiles(root, sourceFiles) {
       const st = lstatSync(css);
       const canonical = realpathSync(css);
       if (!st.isFile() || st.isSymbolicLink() ||
-          !isInside(realpathSync(root), canonical) || canonical !== css) {
+          !isInside(realpathSync(root), canonical)) {
         throw new TypeError("Linked stylesheet must be a regular in-project file");
       }
       if (!selected.has(css)) paths.add(css);
