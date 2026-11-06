@@ -32,24 +32,24 @@ async function fixture(run) {
     );
     const evidence = db.prepare('INSERT INTO evidence VALUES (?,?,?,?,?,?)');
     const candidate = db.prepare('INSERT INTO memory_candidates VALUES (?,?,?,?,?,?,?,?,?,?)');
-    evidence.run('e1','repo/project','main','user_direct','public',TEXT);
+    evidence.run('e1','repo/project','main','user_direct','normal',TEXT);
     candidate.run('c1','repo/project','main','user_direct','correction',TEXT,'pending',null,'e1','2026-11-01');
-    evidence.run('e2','repo/project','main','user_direct','public',AUDIT);
+    evidence.run('e2','repo/project','main','user_direct','normal',AUDIT);
     candidate.run('c2','repo/project','main','user_direct','constraint',AUDIT,'pending',null,'e2','2026-11-02');
     // Same branch candidate, but evidence belongs to another branch.
-    evidence.run('e3','repo/project','feature','user_direct','public','In future always use a test fixture.');
+    evidence.run('e3','repo/project','feature','user_direct','normal','In future always use a test fixture.');
     candidate.run('c3','repo/project','main','user_direct','constraint','In future always use a test fixture.','pending',null,'e3','2026-11-03');
     // Tampered source evidence, which must be rejected.
-    evidence.run('e4','repo/project','main','user_direct','public','A different original source text.');
+    evidence.run('e4','repo/project','main','user_direct','normal','A different original source text.');
     candidate.run('c4','repo/project','main','user_direct','correction',TEXT,'pending',null,'e4','2026-11-04');
     // Secret redacted source must not be eligible.
     evidence.run('e5','repo/project','main','user_direct','secret_redacted','In future always use the provided credential.');
     candidate.run('c5','repo/project','main','user_direct','constraint','In future always use the provided credential.','pending',null,'e5','2026-11-05');
-    evidence.run('e6','repo/project','feature','user_direct','public','In future always use PostgreSQL.');
+    evidence.run('e6','repo/project','feature','user_direct','normal','In future always use PostgreSQL.');
     candidate.run('c6','repo/project','feature','user_direct','constraint','In future always use PostgreSQL.','pending',null,'e6','2026-11-06');
-    evidence.run('e7','other/repo','main','user_direct','public','In future always use MySQL.');
+    evidence.run('e7','other/repo','main','user_direct','normal','In future always use MySQL.');
     candidate.run('c7','other/repo','main','user_direct','constraint','In future always use MySQL.','pending',null,'e7','2026-11-07');
-    evidence.run('e8','repo/project','main','agent_inference','public','In future always use agent guesses.');
+    evidence.run('e8','repo/project','main','agent_inference','normal','In future always use agent guesses.');
     candidate.run('c8','repo/project','main','agent_inference','constraint','In future always use agent guesses.','pending',null,'e8','2026-11-08');
     return await run(db, path);
   } finally {
