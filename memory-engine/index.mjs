@@ -5571,7 +5571,7 @@ export class MemoryEngine {
         if (!claim || claim.id !== expectedId
           || claim.project_id !== projectId || claim.branch_scope !== branch
           || claim.kind !== 'user_direct' || claim.subject !== 'user memory'
-          || claim.predicate !== 'states' || claim.value_text !== parsed.ruleText
+          || claim.predicate !== 'states' || claim.value !== parsed.ruleText
           || claim.state !== 'active'
           || claim.created_from_evidence_id !== stage.confirmation_evidence_id
           || candidate?.status !== 'ignored'
