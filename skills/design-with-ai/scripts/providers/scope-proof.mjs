@@ -149,9 +149,16 @@ function linkedStylesheetFiles(root, sourceFiles) {
       )) {
         attributes.set(match[1].toLowerCase(), match[2] ?? match[3] ?? match[4]);
       }
-      if (!/\bstylesheet\b/i.test(attributes.get("rel") ?? "")) continue;
+      const rel = attributes.get("rel") ?? "";
       const href = attributes.get("href") ?? "";
       if (!href || /^(https?:)?\/\//i.test(href)) continue;
+      // htmlparser2 decodes entities in attribute values. A raw-attribute
+      // parser must reject encoded relations before testing for "stylesheet":
+      // rel="style&#115;heet" otherwise bypasses the proof entirely.
+      if (rel.includes("&")) {
+        throw new TypeError("Entity-bearing stylesheet rel cannot be attested");
+      }
+      if (!/\bstylesheet\b/i.test(rel)) continue;
       // The detector removes query/fragment portions before reading disk.
       // Entity-encoded paths cannot be safely matched without HTML parsing:
       // reject them instead of silently omitting a real read dependency.
