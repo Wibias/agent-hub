@@ -121,7 +121,16 @@ async function startChrome(executable, root) {
     let lines;
     for (let i = 0; i < 100; i++) {
       if (child.exitCode !== null || child.signalCode !== null) throw new Error('Chrome exited early');
-      if (existsSync(path)) { lines = readFileSync(path, 'utf8').trim().split(/\r?\n/); break; }
+      if (existsSync(path)) {
+        // Chrome can create DevToolsActivePort before its two lines have
+        // been flushed. Existence alone is not a ready CDP endpoint.
+        const candidate = readFileSync(path, 'utf8').trim().split(/\r?\n/);
+        if (/^\d+$/.test(candidate[0]) &&
+            candidate[1]?.startsWith('/devtools/browser/')) {
+          lines = candidate;
+          break;
+        }
+      }
       await sleep(100);
     }
     assert.ok(lines?.[0] && lines?.[1], 'Chrome debugging endpoint unavailable');
