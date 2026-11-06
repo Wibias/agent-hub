@@ -115,6 +115,7 @@ test('exact scoped intent manifest matches but never authenticates consent or ap
     assert.equal(report.claimsCreated, 0);
     assert.equal(report.promotionAllowed, false);
     assert.equal(report.semanticConflictChecked, false);
+    assert.equal(report.sourceBodyIntegrityVerified, false);
     assert.equal(report.projectWidePropagationImplemented, false);
     assert.equal(report.contentIncluded, false);
     assert.equal(report.claimComparison.semanticConflictDetected, null);
