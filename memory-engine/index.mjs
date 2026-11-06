@@ -6,6 +6,10 @@ import {
   importTypedRelationSidecar as importDerivedRelationSidecar,
 } from './claim-relations-ledger.mjs';
 import { DatabaseSync } from 'node:sqlite';
+import { createHash } from 'node:crypto';
+import {
+  ATOMIC_CLAIM_PROMOTION_POLICY_VERSION,
+} from './memory-atomic-claim-promotion-ledger.mjs';
 
 import { assertAuthorityClass } from './authority.mjs';
 import { validateMemoryCandidateJudgment } from './memory-candidate-judge.mjs';
@@ -5491,6 +5495,193 @@ export class MemoryEngine {
     }
 
     return this.getEvidence(preparedEvidence.id);
+  }
+
+  /**
+   * Explicit, test-gated atomic finalizer. Not invoked by Codex hooks or
+   * production CLIs. Requires a separately installed promotion ledger.
+   *
+   * A fresh, stored direct-user confirmation must already exist, and the
+   * read-only Phase 5 preflight must pass inside this SAME write transaction.
+   */
+  async finalizeStagedAtomicRuleClaim({
+    projectId,
+    branch,
+    stageId,
+    operatorReviewed = false,
+    promotedAt = this.#clock(),
+  } = {}) {
+    for (const [value, name] of [
+      [projectId, 'projectId'],
+      [branch, 'branch'],
+      [stageId, 'stageId'],
+      [promotedAt, 'promotedAt'],
+    ]) assertNonEmptyString(value, name);
+    if (!/^atomic-stage-[0-9a-f]{24}$/u.test(stageId)
+      || operatorReviewed !== true
+      || !Number.isFinite(Date.parse(promotedAt))) {
+      throw new Error('explicit reviewed atomic promotion parameters required');
+    }
+
+    // Dynamic import avoids a static import cycle with source sensitivity
+    // guards used by the D12.3 atomic shadow review module.
+    const { inspectAtomicPromotionPreflight } = await import(
+      './memory-atomic-promotion-preflight.mjs'
+    );
+    const { parseAtomicRuleConfirmationPrompt } = await import(
+      './memory-atomic-confirmation-capture.mjs'
+    );
+    const hasLedger = this.#db.prepare(
+      "SELECT name FROM sqlite_master WHERE type='table' "
+      + "AND name='memory_atomic_rule_claim_promotions'"
+    ).get();
+    if (!hasLedger) throw new Error('atomic Claim promotion schema is not installed');
+    if (this.#db.prepare('PRAGMA foreign_keys').get().foreign_keys !== 1) {
+      throw new Error('foreign keys must be enabled for atomic Claim promotion');
+    }
+
+    this.#db.exec('BEGIN IMMEDIATE');
+    try {
+      const stage = this.#db.prepare(
+        'SELECT * FROM memory_atomic_rule_staging '
+        + 'WHERE id=? AND project_id=? AND branch=?'
+      ).get(stageId,projectId,branch);
+      if (!stage) throw new Error('atomic staging record unavailable in scope');
+      const confirmation = this.#db.prepare(
+        'SELECT * FROM evidence WHERE id=?'
+      ).get(stage.confirmation_evidence_id);
+      const parsed = parseAtomicRuleConfirmationPrompt(
+        confirmation?.content_redacted ?? '',
+      );
+      if (!parsed || parsed.projectId !== projectId || parsed.branch !== branch
+        || parsed.draftRef !== stage.draft_ref) {
+        throw new Error('exact user confirmation for staging record is invalid');
+      }
+
+      const previous = this.#db.prepare(
+        'SELECT * FROM memory_atomic_rule_claim_promotions WHERE stage_id=?'
+      ).get(stageId);
+      if (previous) {
+        const claim = this.getClaim(previous.claim_id);
+        const candidate = this.getCandidate(stage.source_candidate_id);
+        const original = this.getEvidence(stage.source_evidence_id);
+        const storedConfirmation = this.getEvidence(stage.confirmation_evidence_id);
+        const roles = this.getClaimEvidence(previous.claim_id);
+        const expectedId = 'memory-atomic-' + createHash('sha256')
+          .update(JSON.stringify(['atomic-claim-v1',projectId,branch,stageId]),'utf8')
+          .digest('hex').slice(0,24);
+        if (!claim || claim.id !== expectedId
+          || claim.project_id !== projectId || claim.branch_scope !== branch
+          || claim.kind !== 'user_direct' || claim.subject !== 'user memory'
+          || claim.predicate !== 'states' || claim.value !== parsed.ruleText
+          || claim.state !== 'active'
+          || claim.created_from_evidence_id !== stage.confirmation_evidence_id
+          || candidate?.status !== 'ignored'
+          || candidate.project_id !== projectId
+          || candidate.branch !== branch
+          || candidate.source_evidence_id !== stage.source_evidence_id
+          || original?.authority_class !== 'user_direct'
+          || original?.sensitivity !== 'normal'
+          || original.project_id !== projectId
+          || original.branch !== branch
+          || original.content_redacted !== candidate.proposed_value
+          || storedConfirmation?.authority_class !== 'user_direct'
+          || storedConfirmation?.sensitivity !== 'normal'
+          || storedConfirmation.project_id !== projectId
+          || storedConfirmation.branch !== branch
+          || storedConfirmation.metadata?.event_type !== 'user_prompt'
+          || storedConfirmation.metadata?.hook_event_name !== 'UserPromptSubmit'
+          || storedConfirmation.metadata?.explicit_memory !== true
+          || storedConfirmation.metadata?.explicit_memory_mode !== 'atomic_rule_confirm'
+          || storedConfirmation.metadata?.atomic_rule_draft_ref !== stage.draft_ref
+          || stage.duration !== 'permanent'
+          || stage.rule_sha256 !== createHash('sha256')
+            .update(parsed.ruleText,'utf8').digest('hex')
+          || previous.promotion_policy !== ATOMIC_CLAIM_PROMOTION_POLICY_VERSION
+          || roles.length !== 2
+          || roles[0].role !== 'primary'
+          || roles[0].evidence.id !== stage.confirmation_evidence_id
+          || roles[1].role !== 'supporting'
+          || roles[1].evidence.id !== stage.source_evidence_id) {
+          throw new Error('existing atomic Claim promotion provenance has changed');
+        }
+        this.#db.exec('COMMIT');
+        return {
+          status:'already_promoted',claimId:claim.id,
+          claimCreated:false,sourceCandidateConsumed:true,
+        };
+      }
+
+      const preflight=inspectAtomicPromotionPreflight({
+        db:this.#db,projectId,branch,stageId,
+      });
+      if (preflight.status !== 'eligible_for_manual_promotion_review'
+        || preflight.preflightPassed !== true
+        || preflight.activeClaimsInScope !== 0
+        || preflight.unresolvedClaimsInScope !== 0
+        || preflight.otherPendingCandidates !== 0
+        || preflight.unresolvedEvidenceProposals !== 0) {
+        throw new Error('atomic promotion preflight has unresolved safety gates');
+      }
+
+      if (Date.parse(promotedAt) < Date.parse(stage.staged_at)
+        || Date.parse(promotedAt) < Date.parse(confirmation.captured_at)) {
+        throw new Error('atomic Claim promotion cannot precede confirmation');
+      }
+
+      const id='memory-atomic-' + createHash('sha256')
+        .update(JSON.stringify(['atomic-claim-v1',projectId,branch,stageId]),'utf8')
+        .digest('hex').slice(0,24);
+      if (this.getClaim(id)) throw new Error('atomic Claim id is already occupied');
+      const preparedClaim=prepareClaimInput({
+        evidence:{
+          id:stage.confirmation_evidence_id,
+          projectId,branch,
+        },
+        claim:{
+          id,kind:'user_direct',subject:'user memory',predicate:'states',
+          value:parsed.ruleText,state:'active',branchScope:branch,
+          createdAt:promotedAt,
+        },
+      });
+      if (preparedClaim.valueRedacted) {
+        throw new Error('redacted content cannot become a confirmed atomic Claim');
+      }
+
+      insertClaimAndLifecycle(this.#db,{
+        claim:preparedClaim,
+        evidenceContent:confirmation.content_redacted,
+        lifecycle:prepareLifecycle(id,{}),
+      });
+      this.#db.prepare(
+        'INSERT INTO claim_evidence (claim_id,evidence_id,role,linked_at) '
+        + "VALUES (?,?,'supporting',?)"
+      ).run(id,stage.source_evidence_id,promotedAt);
+      const consumed=this.#db.prepare(
+        'UPDATE memory_candidates SET status=?,decision_reason=? '
+        + "WHERE id=? AND project_id=? AND branch=? AND status='pending' "
+        + 'AND evaluated_at IS NULL'
+      ).run(
+        'ignored','atomic_rule_consumed_by_confirmed_claim',
+        stage.source_candidate_id,projectId,branch,
+      );
+      if (Number(consumed.changes)!==1) {
+        throw new Error('source Candidate raced or cannot be consumed');
+      }
+      this.#db.prepare(
+        'INSERT INTO memory_atomic_rule_claim_promotions '
+        + '(stage_id,claim_id,promotion_policy,promoted_at) VALUES (?,?,?,?)'
+      ).run(stageId,id,ATOMIC_CLAIM_PROMOTION_POLICY_VERSION,promotedAt);
+
+      this.#db.exec('COMMIT');
+      return {
+        status:'promoted',claimId:id,claimCreated:true,
+        sourceCandidateConsumed:true,sourceEvidenceLinks:2,
+      };
+    } catch (error) {
+      this.#db.exec('ROLLBACK');
+      throw error;
+    }
   }
 
   assertClaim({ evidenceId, evidenceIds = undefined, claim, lifecycle = {} }) {
