@@ -35,7 +35,7 @@ async function fixture(fn, { ledger = true } = {}) {
         sessionId: 'synthetic-session-' + id,
         sourceKind: 'session', sourceRef: 'synthetic:' + id,
         capturedAt: '2026-11-05T00:00:00.000Z',
-        content: SECRET_EVIDENCE + '-' + id,
+        content: SECRET_EVIDENCE,
         authorityClass: authority,
         metadata: { event_type: 'user_prompt' },
       });
