@@ -65,7 +65,7 @@ test('shadow reads only pending user candidate scope, no text or DB changes', as
     assert.equal(report.readOnly, true);
     assert.equal(report.modelInvocations, 0);
     assert.equal(report.contentIncluded, false);
-    assert.equal(report.sourceDatabaseModified, false);
+    assert.equal(report.writesToSource, false);
     assert.equal(report.candidateCount, 3);
     assert.equal(report.items.length, 3);
     assert.equal(report.candidatesRequiringReview, 1);
@@ -122,7 +122,7 @@ test('multiple feedback hints from one candidate are not reported as separate me
       quality_feedback_without_duration: 2,
     });
     assert.equal(report.contentIncluded, false);
-    assert.equal(report.sourceDatabaseModified, false);
+    assert.equal(report.writesToSource, false);
     const output = JSON.stringify(report);
     assert.equal(output.includes('browser behavior'), false);
     assert.equal(output.includes('overlay too quickly'), false);
