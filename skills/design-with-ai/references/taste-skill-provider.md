@@ -14,6 +14,21 @@ Use `--output-root /existing/private/directory` to keep per-run artifacts there.
 
 Exit: 0 for a scoped `PASS`; 1 for `FINDINGS`; 2 for `BLOCKED`, `UNAVAILABLE` or `ERROR`. A missing browser, stale/missing report, skipped checks, failed width, inconsistent counts or an incomplete upstream run is **never a green result**. Raw `report.json`, Chrome profile and diagnostic crops are isolated in a unique run folder; valid findings link directly to the report's JSON pointers and existing diagnostic crops. Output is not deleted by the adapter, so users can inspect evidence; clean up run directories deliberately after review.
 
+## Interpreting raw findings and runtime-state limits
+
+The adapter preserves every upstream FAIL/WARN, its source check ID, screenshot crop and stable evidence pointer. For reviewer triage, it also records the raw `upstreamSeverity` and a **non-authoritative** `reviewClass` on each observation:
+
+| Class | Meaning |
+| --- | --- |
+| `POTENTIAL_USABILITY` | Candidate text clipping, contrast, broken media or interaction obstruction. Verify in a stable rendered state. |
+| `GEOMETRY_NEEDS_VISUAL_REVIEW` | Spill/edge/stagger/tilt geometry, which may be intended decoration or an actual overflow defect. Requires screenshot and design-brief context. |
+| `CONTEXTUAL_HOUSE_RULE` | Taste Skill's website conventions such as no captions, fixed section heights, hero rules or photo requirements. Not binding DWA requirements. |
+| `UNCLASSIFIED_HEURISTIC` | New/unknown upstream check ID. Preserve it without guessing its meaning. |
+
+These labels **do not suppress findings, change severity-to-priority mapping, or automatically promote anything into DWA's durable ledger**. The report's `summary.reviewClassCounts` retains the raw observation count across all classes.
+
+**Important for SPAs and interactive game screens:** the upstream `waitReady()` primarily recognizes its own kit's `data-ready` convention; it does not establish a general React/SPA hydration, authenticated room, socket connection, or game phase. The DWA adapter therefore always reports `summary.renderedStateVerified: false` and `renderedStateProof: NOT_PROVIDED_BY_UPSTREAM`. This remains true even when all viewport scans complete or a provider returns scoped `PASS`. For a claimed *specific interactive state*, a separate route/viewport-specific browser readiness proof is required before using Taste findings as a design evaluation. Do not call a placeholder or loading skeleton a final layout.
+
 ## Authority and safety
 
 This is **evidence**, not a DWA completion proof. Taste Skill 2.5.0 contains opinionated website-specific rules including one-section-per-screen, no image captions, equal left/right edges and restrictions on effects and contact formatting. These are **not universal DWA requirements**. Every FAIL is mapped to contextual review priority P1, every WARN to P2. The DWA project brief, locked design decisions, actual UI behavior, and existing `taste-evidence-receipt.mjs` / `run-iteration-gate.mjs` remain authoritative. Existing native DWA rendered/source checks must still run.
