@@ -74,8 +74,12 @@ test("nested design documents stay isolated across source directories", () => {
     writeFileSync(join(child, "child.css"), "h1 { color: #111; }\n");
     const snapshot = inspect(src);
     assert.deepEqual(snapshot.manifest.detectorContext.map((x) => x.path),
-      ["DESIGN.md", "src/component/DESIGN.md"]);
-    assert.equal(snapshot.summary.fileCount, 2);
+      ["DESIGN.md"]);
+    // A DESIGN.md inside the selected source directory is already present
+    // in the regular source manifest; never duplicate it in detectorContext.
+    assert.ok(snapshot.manifest.files.some((x) =>
+      x.path === "src/component/DESIGN.md"));
+    assert.equal(snapshot.summary.fileCount, 3);
     const before = snapshot.summary.sourceSha256;
     writeFileSync(join(child, "DESIGN.md"), "---\ncolors:\n  ink: '#444444'\n---\n");
     assert.notEqual(inspect(src).summary.sourceSha256, before);
