@@ -153,6 +153,9 @@ export function stageConfirmedAtomicRule(request = {}) {
   if (!db.prepare(
     "SELECT 1 AS present FROM sqlite_master WHERE type='table' AND name='memory_atomic_rule_staging'"
   ).get()) throw new Error('atomic staging schema is not installed');
+  if (db.prepare('PRAGMA foreign_keys').get().foreign_keys !== 1) {
+    throw new Error('atomic staging requires SQLite foreign-key enforcement');
+  }
 
   db.exec('BEGIN IMMEDIATE');
   try {
