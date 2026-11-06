@@ -24,7 +24,7 @@ function validRow(row, projectId, branch) {
     && row.evidence_project_id === projectId
     && row.evidence_branch === branch
     && row.authority_class === 'user_direct'
-    && row.sensitivity !== 'secret_redacted'
+    && row.sensitivity === 'normal'
     && typeof row.proposed_value === 'string'
     && row.proposed_value === row.content_redacted;
 }
