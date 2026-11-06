@@ -35,6 +35,16 @@ Therefore actual production staging is **not enabled**. Do not fabricate
 metadata via manually inserted records, and do not treat a CLI argument or
 assistant paraphrase as a user confirmation.
 
+The staging validator checks stored authority labels, metadata, exact text and
+source ordering. It does **not** cryptographically authenticate the origin of
+SQLite rows. The future integration must capture this metadata only through
+an authenticated user-prompt hook and must not accept operator-provided
+authority labels as equivalent user consent.
+
+The original observation is branch-scoped to main. A permanent rule is not
+automatically propagated to all feature branches. Such propagation requires
+a separately audited project-level scope and Recall policy.
+
 ## Stage only, not canonical Claim
 
 memory-engine/memory-atomic-confirmed-staging.mjs supplies:
