@@ -14,10 +14,13 @@ const PAGE_KINDS = new Set(["software", "gaming", "tech", "product", "service", 
 // Never suppress, downgrade, approve or turn an upstream FAIL into DWA P0.
 const CONTEXTUAL_TASTE_RULES = new Set([
   "visual-caption", "section-height", "one-section", "hero-screen", "hero-fill",
-  "photo-set", "photo-upscale", "container-edges", "section-gaps", "row-lines",
-  "off-grid", "centre-axis", "tilt", "stagger", "nav-family", "cta", "hover",
+  "photo-set", "photo-upscale", "nav-family", "cta", "hover",
   "one-heading", "heading-scale", "copy-headline", "copy-headings",
   "copy-buttons", "copy-length", "section-air", "section-tile",
+]);
+const GEOMETRY_REVIEW_RULES = new Set([
+  "spill", "container-edges", "section-gaps", "row-lines",
+  "off-grid", "centre-axis", "tilt", "stagger",
 ]);
 const POTENTIAL_USABILITY_RULES = new Set([
   "contrast", "cut-text", "off-viewport", "overlap-text", "fold-cut", "forms",
@@ -26,6 +29,7 @@ const POTENTIAL_USABILITY_RULES = new Set([
 ]);
 function tasteReviewClass(check) {
   if (POTENTIAL_USABILITY_RULES.has(check)) return "POTENTIAL_USABILITY";
+  if (GEOMETRY_REVIEW_RULES.has(check)) return "GEOMETRY_NEEDS_VISUAL_REVIEW";
   if (CONTEXTUAL_TASTE_RULES.has(check)) return "CONTEXTUAL_HOUSE_RULE";
   return "UNCLASSIFIED_HEURISTIC";
 }
@@ -164,7 +168,8 @@ function parseReport(report, { exitCode, route, page, project, runDir }) {
     throw new Error("Taste Skill exit status and reported finding counts disagree");
   }
   const reviewClassCounts = {
-    POTENTIAL_USABILITY: 0, CONTEXTUAL_HOUSE_RULE: 0, UNCLASSIFIED_HEURISTIC: 0,
+    POTENTIAL_USABILITY: 0, GEOMETRY_NEEDS_VISUAL_REVIEW: 0,
+    CONTEXTUAL_HOUSE_RULE: 0, UNCLASSIFIED_HEURISTIC: 0,
   };
   for (const finding of normalized) reviewClassCounts[finding.reviewClass]++;
 
