@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
-  mkdtempSync, mkdirSync, rmSync, unlinkSync, writeFileSync,
+  mkdtempSync, mkdirSync, rmSync, symlinkSync, unlinkSync, writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -219,6 +219,33 @@ test("explicit opt-out disables Impeccable without silently selecting it", async
     assert.deepEqual(out.reports.map((r) => r.provider), ["native-dwa"]);
     assert.ok(out.selection.notSelected.includes("impeccable"));
     assert.equal(out.fusion.status, "SCOPED_CLEAR");
+  });
+});
+
+test("native quick and --no-impeccable ignore unrelated unsafe Impeccable configs", async () => {
+  await fixture(async (f) => {
+    const separate = mkdtempSync(join(tmpdir(), "dwa-unrelated-policy-"));
+    try {
+      const configDir = join(f.root, ".impeccable");
+      mkdirSync(configDir);
+      const externalConfig = join(separate, "config.local.json");
+      writeFileSync(externalConfig, '{"detector":{"ignoreRules":[]}}');
+      symlinkSync(externalConfig, join(configDir, "config.local.json"));
+      const quick = await runProfileProviders({
+        ...f.request, profile: "quick",
+      }, { registry: registry() });
+      assert.deepEqual(quick.reports.map((r) => r.provider), ["native-dwa"]);
+      assert.equal(quick.fusion.status, "SCOPED_CLEAR");
+      const noImpeccable = await runProfileProviders({
+        ...f.request, withImpeccable: false,
+      }, { registry: registry() });
+      assert.equal(noImpeccable.fusion.status, "SCOPED_CLEAR");
+      await assert.rejects(() => runProfileProviders({
+        ...f.request, profile: "standard", withImpeccable: true,
+      }, { registry: registry() }), /Detector context dependency must be a regular in-project file/);
+    } finally {
+      rmSync(separate, { recursive: true, force: true });
+    }
   });
 });
 
