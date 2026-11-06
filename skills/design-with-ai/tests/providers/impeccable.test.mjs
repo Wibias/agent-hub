@@ -13,7 +13,7 @@ const cli = fileURLToPath(new URL("../../scripts/providers/scan.mjs", import.met
 const vendoredCli = fileURLToPath(new URL("../../../impeccable/scripts/detect.mjs", import.meta.url));
 const validProof = Object.freeze({
   schemaVersion: 1, candidateFiles: 1, eligibleFiles: 1,
-  scannedFiles: 1, ignoredFiles: 0, durationMs: 1,
+  scannedFiles: 1, ignoredFiles: 0, degradedFiles: 0, durationMs: 1,
   configEnabled: true, inlineIgnoresEnabled: true, designSystemEnabled: false,
 });
 const proofLine = (proof = validProof) => "DWA_IMPECCABLE_SCAN_PROOF=" + JSON.stringify(proof) + "\n";
@@ -152,6 +152,8 @@ test("missing, duplicate, contradictory or empty source receipts never PASS", as
       "",
       proofLine() + proofLine(),
       proofLine({ ...validProof, scannedFiles: 0 }),
+      proofLine({ ...validProof, scannedFiles: 0, degradedFiles: 1 }),
+      proofLine({ ...validProof, scannedFiles: 1, degradedFiles: 1 }),
       proofLine({ ...validProof, candidateFiles: 0 }),
       proofLine({ ...validProof, eligibleFiles: 0, scannedFiles: 0, ignoredFiles: 1 }),
       proofLine({ ...validProof, scannedFiles: 3 }),
@@ -190,6 +192,7 @@ test("real vendored scanner reports actual eligible and completed files", async 
     assert.equal(proof.eligibleFiles, 2);
     assert.equal(proof.scannedFiles, 2);
     assert.equal(proof.ignoredFiles, 0);
+    assert.equal(proof.degradedFiles, 0);
   });
 });
 
@@ -214,6 +217,22 @@ test("inline waivers suppress findings without suppressing file coverage", async
       assert.ok(meta, run.stderr);
       assert.equal(JSON.parse(meta.slice("DWA_IMPECCABLE_SCAN_PROOF=".length)).scannedFiles, 1);
     }
+  });
+});
+
+test("HTML parser fallback is explicitly degraded, not complete browser-grade evidence", async () => {
+  await fixture(async ({ root }) => {
+    const { detectHtml } = await import(
+      "../../../impeccable/scripts/detector/engines/static-html/detect-html.mjs");
+    const page = join(root, "degraded.html");
+    writeFileSync(page, "<!doctype html><html><body><main>Loaded</main></body></html>\n");
+    const degraded = [];
+    const findings = await detectHtml(page, {
+      parserLoader: async () => { throw new Error("Test-only missing parser modules"); },
+      onDegraded: (file) => degraded.push(file),
+    });
+    assert.equal(Array.isArray(findings), true);
+    assert.deepEqual(degraded, [page]);
   });
 });
 
