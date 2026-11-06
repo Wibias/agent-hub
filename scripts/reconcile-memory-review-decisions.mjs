@@ -115,6 +115,7 @@ export function reconcileLocalDecisionIntents({
     decisionsApplied: 0, claimsCreated: 0, promotionAllowed: false,
     projectWidePropagationImplemented: false,
     hostConsentAuthenticated: false, semanticConflictChecked: false,
+    sourceBodyIntegrityVerified: false,
     manifestOrigin: manifest.origin, contentIncluded: false,
     scope: { projectId, branch },
   };
