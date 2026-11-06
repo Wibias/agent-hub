@@ -9,7 +9,7 @@ With an explicitly trusted Playwright install and an already running local HTTP 
 1. Takes a fresh bounded SHA-256 manifest of every regular local file under the declared `--browser-root` (PR #208).
 2. Opens the built page at **1440, 768 and 390 px** using separate anonymous Chrome contexts with service workers blocked.
 3. Observes Playwright `response` events from **these probe contexts**, reads each local response's actual body bytes and compares its SHA-256 with the corresponding file from the build manifest. The explicit route's document response maps to its declared `index.html`.
-4. Records redacted metadata, per-viewport screenshot SHA-256 and all failed/unmatched responses. Does not save response bodies, raw remote URLs, query parameters or credentials.
+4. Records redacted metadata, per-viewport screenshot SHA-256, failed/unmatched responses and a count of requests still in flight at capture time. A known unfinished request makes the result `INCOMPLETE`, even if earlier response bodies matched. Does not save response bodies, raw remote URLs, query parameters or credentials.
 5. Re-hashes the build tree after the browser run and rejects changed build digests.
 
 Example run from an isolated `agent-hub` checkout:
@@ -33,7 +33,7 @@ Output is a unique evidence directory with `network-report.json` plus three scre
 | --- | --- |
 | `LOCAL_RESPONSES_MATCHED` | All *observed* local response bodies match their local file hashes at the three probe widths, with no recorded request or page error and an unchanged local asset tree. |
 | `LOCAL_MATCHED_EXTERNAL_UNVERIFIED` | Same local match, but at least one **external** browser response was observed and its bytes were intentionally not attested. CLI exit code is nonzero. |
-| `INCOMPLETE` | A local response was unmatched, unavailable, too large, altered, unrequested or the browser/asset check failed. No source-quality verdict is issued. |
+| `INCOMPLETE` | A local response was unmatched, unavailable, too large or altered; a browser request failed or remained unfinished at capture; or the browser/asset check failed. No source-quality verdict is issued. |
 
 Each response body is limited to **16 MiB**, response count to **2,000 per width**, and cumulative local body bytes to **128 MiB per width**. Existing rendered asset-tree limits remain in force. Incomplete checks fail closed; no successful result is manufactured from zero observed local responses.
 
