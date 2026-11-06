@@ -202,6 +202,21 @@ async function detectCli() {
     return arg;
   });
   if (args[0] === 'detect') args = args.slice(1);
+  // Internal, opt-in audit receipt for the Agent Hub adapter. Normal CLI JSON
+  // remains a findings array; progress metadata is emitted on stderr only.
+  const scanProofMode = args.includes('--dwa-scan-proof');
+  const proofStartedAt = Date.now();
+  const scanProof = {
+    schemaVersion: 1,
+    candidateFiles: 0,
+    eligibleFiles: 0,
+    scannedFiles: 0,
+    ignoredFiles: 0,
+    degradedFiles: 0,
+    configEnabled: !args.includes('--no-config'),
+    inlineIgnoresEnabled: !args.includes('--no-config') && !args.includes('--no-inline-ignores'),
+    designSystemEnabled: false,
+  };
   const jsonMode = args.includes('--json');
   const quietMode = args.includes('--quiet');
   const helpMode = args.includes('--help');
@@ -270,7 +285,16 @@ async function detectCli() {
   // apply by default. `--no-config` (raw scan) and the dedicated
   // `--no-inline-ignores` both turn them off.
   const inlineIgnoresEnabled = configEnabled && !args.includes('--no-inline-ignores');
-  const baseScanOptions = { inlineIgnores: inlineIgnoresEnabled };
+  // A fallback may produce regex findings, but it did not complete the HTML
+  // selector/cascade checks. Keep that file distinct from a complete scan.
+  const degradedFiles = new Set();
+  const baseScanOptions = {
+    inlineIgnores: inlineIgnoresEnabled,
+    ...(scanProofMode ? { onDegraded: (file) => {
+      degradedFiles.add(file);
+      scanProof.degradedFiles = degradedFiles.size;
+    } } : {}),
+  };
   if (viewport) baseScanOptions.viewport = viewport;
   // DESIGN.md must resolve from EACH scan target's own project root, not from
   // process.cwd(): scanning project B's files from inside project A applied A's
@@ -284,6 +308,14 @@ async function detectCli() {
     return designSystem ? { ...baseScanOptions, designSystem } : baseScanOptions;
   };
   const targets = args.filter(a => !a.startsWith('--'));
+  if (scanProofMode) {
+    // No stdin, URLs or multi-target partial proof can masquerade as source coverage.
+    if (!jsonMode || targets.length !== 1 || /^(?:https?|file):\/\//i.test(targets[0])) {
+      process.stderr.write('Error: --dwa-scan-proof requires --json and one local target.\n');
+      process.exit(1);
+    }
+    scanProof.designSystemEnabled = designSystemEnabled;
+  }
 
   if (helpMode) { printUsage(); process.exit(0); }
 
@@ -352,8 +384,14 @@ async function detectCli() {
             }
           }
 
-          const files = walkDir(resolved)
+          const candidates = walkDir(resolved);
+          const files = candidates
             .filter(file => !shouldIgnoreDetectionFile(file, process.cwd(), detectionConfig));
+          if (scanProofMode) {
+            scanProof.candidateFiles += candidates.length;
+            scanProof.eligibleFiles += files.length;
+            scanProof.ignoredFiles += candidates.length - files.length;
+          }
           const htmlCount = files.filter(f => HTML_EXTENSIONS.has(path.extname(f).toLowerCase())).length;
 
           // Warn and confirm if scanning many files (static HTML/CSS processes each HTML file)
@@ -383,6 +421,7 @@ async function detectCli() {
             // so a scan spanning sibling projects applies the right rules per file.
             const fileOptions = scanOptionsFor(file);
             const fileFindings = await detectLocalFile(file, fileOptions);
+            if (scanProofMode && !degradedFiles.has(file)) scanProof.scannedFiles++;
             // Annotate findings with import context
             const importers = importedByMap.get(file);
             if (importers && importers.size > 0) {
@@ -394,9 +433,15 @@ async function detectCli() {
             allFindings.push(...fileFindings);
           }
         } else if (stat.isFile()) {
-          if (shouldIgnoreDetectionFile(resolved, process.cwd(), detectionConfig)) continue;
+          if (scanProofMode) scanProof.candidateFiles++;
+          if (shouldIgnoreDetectionFile(resolved, process.cwd(), detectionConfig)) {
+            if (scanProofMode) scanProof.ignoredFiles++;
+            continue;
+          }
+          if (scanProofMode) scanProof.eligibleFiles++;
           const fileOptions = scanOptionsFor(resolved);
           allFindings.push(...await detectLocalFile(resolved, fileOptions));
+          if (scanProofMode && !degradedFiles.has(resolved)) scanProof.scannedFiles++;
         }
       }
     } finally {
@@ -408,6 +453,15 @@ async function detectCli() {
   allFindings = filterByScopes(allFindings, scopes);
   // --no-advisory drops advisory findings before any output or exit-code math.
   if (noAdvisory) allFindings = allFindings.filter((f) => !isAdvisory(f));
+
+  if (scanProofMode) {
+    // Count only files whose detector pass returned. A crash never writes a
+    // successful receipt; the DWA adapter rejects absent/partial receipts.
+    process.stderr.write('DWA_IMPECCABLE_SCAN_PROOF=' + JSON.stringify({
+      ...scanProof,
+      durationMs: Date.now() - proofStartedAt,
+    }) + '\n');
+  }
 
   // The exit code and failure count reflect non-advisory findings only. An
   // advisory-only scan still prints its notes but exits 0 (a clean pass), so
