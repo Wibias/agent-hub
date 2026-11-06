@@ -70,7 +70,9 @@ function validateOptions({ baseUrl, route, contract, playwrightRoot, outRoot, ch
   };
 }
 
-export const snapshotDeclaredDomState = ({ readySelector, forbiddenSelectors = [], requiredText = [], forbiddenText = [] }) => {
+export const snapshotDeclaredDomState = ({
+  readySelector, forbiddenSelectors = [], requiredText = [], forbiddenText = [], markerOnly = false,
+}) => {
   const inViewport = (r) => r.width > 0 && r.height > 0 &&
     r.bottom > 0 && r.top < innerHeight && r.right > 0 && r.left < innerWidth;
   const shown = (element) => {
@@ -85,6 +87,9 @@ export const snapshotDeclaredDomState = ({ readySelector, forbiddenSelectors = [
   };
   const selectedVisible = (selector) =>
     [...document.querySelectorAll(selector)].some(shown);
+  // The same serializable function is used by the browser wait and all
+  // snapshots, avoiding visibility rules that can disagree across phases.
+  if (markerOnly) return selectedVisible(readySelector);
   const visibleWords = [];
   let textTruncated = false;
   if (requiredText.length || forbiddenText.length) {
@@ -177,20 +182,9 @@ export async function probeRenderedState(input, { browserFactory = loadPlaywrigh
         record.path = navigatedUrl.pathname;
         record.origin = navigatedUrl.origin;
         try {
-          await page.waitForFunction((selector) => {
-            const intersects = (rect) => rect.width > 0 && rect.height > 0 &&
-              rect.bottom > 0 && rect.top < innerHeight &&
-              rect.right > 0 && rect.left < innerWidth;
-            return [...document.querySelectorAll(selector)].some((element) => {
-              if (!intersects(element.getBoundingClientRect())) return false;
-              for (let node = element; node; node = node.parentElement) {
-                const style = getComputedStyle(node);
-                if (style.display === "none" || style.visibility === "hidden" ||
-                    Number(style.opacity) <= 0.05) return false;
-              }
-              return true;
-            });
-          }, opts.contract.readySelector, { timeout: 15_000 });
+          await page.waitForFunction(snapshotDeclaredDomState,
+            { readySelector: opts.contract.readySelector, markerOnly: true },
+            { timeout: 15_000 });
         } catch (e) { record.markerWaitError = browserError(e); }
         const first = await page.evaluate(snapshotDeclaredDomState, opts.contract);
         await page.waitForTimeout(750);
