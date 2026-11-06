@@ -104,7 +104,7 @@ test('only explicit reviewed write in canonical transaction creates one correct 
     assert.equal(claim.kind,'user_direct');
     assert.equal(claim.subject,'user memory');
     assert.equal(claim.predicate,'states');
-    assert.equal(claim.value_text,RULE);
+    assert.equal(claim.value,RULE);
     assert.equal(claim.branch_scope,BRANCH);
     assert.equal(claim.project_id,PROJECT);
     assert.equal(claim.state,'active');
@@ -138,7 +138,7 @@ test('canonical export/import retains primary user approval and original support
     try{
       restored.importCanonical(exported);
       const claim=restored.getClaim(result.claimId);
-      assert.equal(claim?.value_text,RULE);
+      assert.equal(claim?.value,RULE);
       assert.equal(claim?.state,'active');
       const evidence=restored.getClaimEvidence(result.claimId);
       assert.deepEqual(evidence.map(x=>x.role),['primary','supporting']);
