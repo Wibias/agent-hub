@@ -1,0 +1,37 @@
+name: Memory Cross-branch Proposal Evidence Review D12.3
+
+on:
+  pull_request:
+    paths:
+      - "scripts/inspect-memory-cross-branch-proposal-evidence.mjs"
+      - "tests/memory-engine/memory-cross-branch-proposal-evidence-review.test.mjs"
+      - "docs/memory-d12-3-cross-branch-proposal-evidence-review.md"
+      - ".github/workflows/verify-memory-cross-branch-proposal-review.yml"
+  push:
+    branches: [main]
+    paths:
+      - "scripts/inspect-memory-cross-branch-proposal-evidence.mjs"
+      - "tests/memory-engine/memory-cross-branch-proposal-evidence-review.test.mjs"
+      - "docs/memory-d12-3-cross-branch-proposal-evidence-review.md"
+      - ".github/workflows/verify-memory-cross-branch-proposal-review.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Verify read-only cross-branch proposal selection and privacy
+        run: |
+          node --check scripts/inspect-memory-cross-branch-proposal-evidence.mjs
+          node --test tests/memory-engine/memory-cross-branch-proposal-evidence-review.test.mjs
