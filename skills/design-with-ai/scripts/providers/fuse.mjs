@@ -27,6 +27,10 @@ function tasteMemberMetadata(report, finding) {
     if (!["FAIL", "WARN"].includes(finding.upstreamSeverity)) {
       throw new TypeError("Invalid Taste upstream severity");
     }
+    const expectedPriority = finding.upstreamSeverity === "FAIL" ? "P1" : "P2";
+    if (finding.priority !== expectedPriority) {
+      throw new TypeError("Taste upstream severity contradicts normalized priority");
+    }
     metadata.upstreamSeverity = finding.upstreamSeverity;
   }
   return metadata;

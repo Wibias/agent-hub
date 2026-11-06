@@ -9,6 +9,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
+import { createImpeccableProvider } from "../../scripts/providers/impeccable.mjs";
+import { Capability } from "../../scripts/providers/contract.mjs";
 
 const cli = fileURLToPath(new URL("../../scripts/providers/quality-audit.mjs", import.meta.url));
 async function fixture(fn) {
@@ -72,17 +74,37 @@ test("real native and vendored Impeccable gate run through the profile CLI", () 
       .completionEligible, false);
   }));
 
-test("HTML fallback without parser dependencies is incomplete, never a green provider proof", () =>
-  fixture((f) => {
-    const run = invoke(f, [], f.htmlPage);
-    assert.equal(run.status, 1, run.stderr + "\n" + run.stdout);
-    const summary = JSON.parse(run.stdout);
-    assert.equal(summary.status, "INCOMPLETE");
-    assert.equal(summary.coverage.complete, false);
-    const impeccable = JSON.parse(readFileSync(
-      summary.artifacts.reports.impeccable, "utf8"));
-    assert.equal(impeccable.status, "ERROR");
-    assert.match(impeccable.reason, /HTML parser fallback degraded/);
+test("forced missing HTML parsers in the real child process cannot create green coverage", () =>
+  fixture(async (f) => {
+    // Use a test-local Node ESM resolver to reject optional parser modules.
+    // The actual CLI and Impeccable provider remain unchanged. The env
+    // allowlist of the production process runner is not bypassed.
+    const loader = join(f.root, "deny-static-html-parser.mjs");
+    writeFileSync(loader, [
+      "const denied = new Set(['htmlparser2','css-select','css-tree','domutils']);",
+      "export async function resolve(specifier, context, nextResolve) {",
+      "  if (denied.has(specifier)) throw new Error('TEST_ONLY_PARSER_UNAVAILABLE');",
+      "  return nextResolve(specifier, context);",
+      "}",
+    ].join("\n"));
+    const runner = async ({ args, cwd }) => {
+      const run = spawnSync(process.execPath,
+        ["--no-warnings", "--experimental-loader", loader, ...args],
+        { cwd, encoding: "utf8", timeout: 30_000 });
+      return {
+        stdout: run.stdout ?? "", stderr: run.stderr ?? "",
+        exitCode: run.status, error: run.error ?? null,
+        timedOut: Boolean(run.error?.code === "ETIMEDOUT"),
+        outputLimitExceeded: false,
+      };
+    };
+    const provider = createImpeccableProvider({ runner });
+    const report = await provider.inspect({
+      capability: Capability.STATIC_AUDIT,
+      target: f.htmlPage, projectRoot: f.root, route: "/settings",
+    });
+    assert.equal(report.status, "ERROR", JSON.stringify(report));
+    assert.match(report.reason, /HTML parser fallback degraded/);
   }));
 
 test("quick preserves only the DWA native provider", () => fixture((f) => {

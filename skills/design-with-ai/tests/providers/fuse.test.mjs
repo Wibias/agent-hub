@@ -127,6 +127,38 @@ test("repeated rendered rule at same DOM selector groups widths, keeping each vi
   assert.equal(fusion.groups[0].priority, "P1");
 });
 
+test("Taste FAIL/P2 and WARN/P1 contradictions are rejected before evidence grouping", () => {
+  for (const [severity, priority] of [
+    ["FAIL", "P2"], ["WARN", "P1"], ["FAIL", "P0"],
+  ]) {
+    const raw = {
+      ...finding({
+        id: "taste-" + severity + "-" + priority,
+        provider: "taste-skill", rule: "spill", file: "dist/index.html",
+        line: null, width: 390, selector: ".stage", priority,
+      }),
+      upstreamSeverity: severity,
+      reviewClass: "GEOMETRY_NEEDS_VISUAL_REVIEW",
+    };
+    assert.throws(() => fuseProviderEvidence([
+      report("taste-skill", [raw]),
+    ], { required: ["taste-skill"] }), /severity contradicts normalized priority/);
+  }
+  const valid = {
+    ...finding({
+      id: "taste-valid", provider: "taste-skill",
+      file: "dist/index.html", line: null, width: 390,
+      selector: ".stage", priority: "P1",
+    }),
+    upstreamSeverity: "FAIL",
+  };
+  const fused = fuseProviderEvidence([
+    report("taste-skill", [valid]),
+  ], { required: ["taste-skill"] });
+  assert.equal(fused.groups[0].priority, "P1");
+  assert.equal(fused.groups[0].members[0].upstreamSeverity, "FAIL");
+});
+
 test("Taste triage and unverified game state survive fusion without severity downgrades", () => {
   const a = {
     ...finding({

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -56,7 +56,7 @@ test("four independent modes preserve configured and isolated ignore/design flag
         ["--json", "--dwa-scan-proof", "--no-config"],
       ]);
     for (const c of calls) {
-      assert.equal(c.cwd, project);
+      assert.equal(c.cwd, realpathSync(project));
       assert.equal(c.timeoutMs, 120_000);
       assert.equal(c.maxOutputBytes, 4_194_304);
       assert.ok(!c.args.includes("npx"));
