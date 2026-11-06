@@ -23,7 +23,11 @@ const inside = (root, value) => {
   const rel = relative(root, value);
   return rel !== ".." && !rel.startsWith(".." + sep) && !isAbsolute(rel);
 };
-const shortError = (error) => String(error?.message ?? error).slice(0, 220);
+// Browser/navigation errors may include full URLs with query secrets. Retain
+// only a short redacted explanation in persistent diagnostic evidence.
+const shortError = (error) => String(error?.message ?? error)
+  .replace(/https?:\/\/[^\s'"<>]+/gi, "<url-redacted>")
+  .slice(0, 220);
 const string = (value) => typeof value === "string" && value.trim().length > 0;
 
 function strictInputs(options) {
