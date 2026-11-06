@@ -38,6 +38,7 @@ writeFileSync(partialBody, partialBodyBytes);
 
 let tamperCss = false;
 let servedHtmlBytes = htmlBytes;
+const parallelStyles = new Map();
 const hangingResponses = new Set();
 const server = createServer((req, res) => {
   const pathname = new URL(req.url ?? "/", "http://localhost").pathname;
@@ -69,6 +70,9 @@ const server = createServer((req, res) => {
     }],
     ["/favicon.ico", { data: faviconBytes, type: "image/x-icon" }],
   ]);
+  for (const [assetPath, bytes] of parallelStyles) {
+    files.set(assetPath, { data: bytes, type: "text/css" });
+  }
   const content = files.get(pathname);
   if (!content) {
     res.writeHead(404, { "cache-control": "no-store" });
@@ -80,7 +84,17 @@ const server = createServer((req, res) => {
     "content-length": content.data.length,
     "cache-control": "no-store",
   });
-  res.end(content.data);
+  if (parallelStyles.has(pathname)) {
+    // Emit all six headers promptly and postpone their completed bodies.
+    // Chrome should observe a legitimate burst, requiring a queue instead
+    // of false INCOMPLETE from the fifth concurrent local response.
+    res.flushHeaders();
+    setTimeout(() => {
+      if (!res.destroyed && !res.writableEnded) res.end(content.data);
+    }, 500);
+  } else {
+    res.end(content.data);
+  }
 });
 try {
   await new Promise((accept, reject) => {
@@ -166,6 +180,35 @@ try {
   assert.equal(incompleteBody.tasteFramesVerified, false);
   assert.equal(incompleteBody.productCompletionEligible, false);
 
+  // Real browser positive: at least six independent, local CSS responses
+  // arrive before their delayed bodies finish. The queue must allow the
+  // complete mapped set to be verified without a concurrency false negative.
+  const parallelCount = 6;
+  const parallelLinks = [];
+  for (let i = 0; i < parallelCount; i++) {
+    const name = "parallel-" + i + ".css";
+    const bytes = Buffer.from("body { --dwa-parallel-" + i + ": " + i + "; }\n");
+    writeFileSync(join(directory, name), bytes);
+    parallelStyles.set("/settings/" + name, bytes);
+    parallelLinks.push('<link rel="stylesheet" href="/settings/' + name + '">');
+  }
+  servedHtmlBytes = Buffer.from(htmlBytes.toString("utf8").replace(
+    "</head>", parallelLinks.join("") + "</head>",
+  ));
+  writeFileSync(html, servedHtmlBytes);
+  const parallel = await probeNetworkResponses(input);
+  assert.equal(parallel.status, "LOCAL_RESPONSES_MATCHED", JSON.stringify(parallel));
+  assert.equal(parallel.localAssetTreeUnchanged, true);
+  assert.ok(parallel.observations.every((o) =>
+    o.status === "LOCAL_BODY_BYTES_MATCHED" &&
+    o.bodyReadsStarted >= parallelCount + 2 &&
+    o.maxBodyQueueDepth > 0 &&
+    Array.from({ length: parallelCount }, (_, i) =>
+      o.local.some((entry) =>
+        entry.path === "dist/settings/parallel-" + i + ".css" &&
+        entry.bodyVerified === true)).every(Boolean)),
+  "Real Chrome must queue and hash six parallel CSS response bodies at every width");
+
   process.stdout.write(JSON.stringify({
     status: "REAL_CHROME_NETWORK_PROBE_CONFIRMED",
     widths: [1440, 768, 390],
@@ -175,6 +218,9 @@ try {
     hangingRequestDetected: true,
     partialBodyStatus: incompleteBody.status,
     partialBodyTimeoutDetected: true,
+    parallelResponseStatus: parallel.status,
+    parallelAssetsVerified: parallelCount,
+    peakBodyQueuePerWidth: parallel.observations.map((o) => o.maxBodyQueueDepth),
     assetCount: match.expectedLocalFileCount,
     responseCountPerWidth: match.observations.map((x) => x.local.length),
     wrongHttpBytesDetected: true,
