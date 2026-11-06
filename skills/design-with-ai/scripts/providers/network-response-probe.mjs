@@ -19,6 +19,7 @@ const MAX_RESPONSES = 2_000;
 const MAX_BODY_BYTES = 16 * 1024 * 1024;
 const MAX_CAPTURE_BYTES = 128 * 1024 * 1024;
 const MAX_IN_FLIGHT_BODY_READS = 4;
+const MAX_QUEUED_BODY_READS = 64;
 const MAX_BODY_WAIT_MS = 15_000;
 const sha = (value) => createHash("sha256").update(value).digest("hex");
 const inside = (root, value) => {
@@ -192,16 +193,71 @@ export async function probeNetworkResponses(options, {
         });
         const page = await ctx.newPage();
         const pending = [];
+        const queuedBodyReads = [];
         const outstandingRequests = new Set();
         let pageErrorCount = 0;
         let requestCount = 0;
         let responseCount = 0;
         let bodyReadsInFlight = 0;
-        // body() does not support cancellation: after one timeout, never
-        // start another read while the timed-out promise may still be alive.
+        // response.body() is not cancellable. A timeout blocks all further
+        // starts for this viewport, including already queued responses.
         let bodyReadTimeoutDetected = false;
         let reservedBodyBytes = 0;
         obs.bodyReadsStarted = 0;
+        obs.maxBodyQueueDepth = 0;
+        const startQueuedBodyReads = () => {
+          if (bodyReadTimeoutDetected) {
+            while (queuedBodyReads.length > 0) {
+              recordIssue("LOCAL_RESPONSE_CONCURRENT_LIMIT");
+              queuedBodyReads.shift().finish();
+            }
+            return;
+          }
+          while (bodyReadsInFlight < MAX_IN_FLIGHT_BODY_READS &&
+              queuedBodyReads.length > 0) {
+            const { response, row, finish } = queuedBodyReads.shift();
+            bodyReadsInFlight++;
+            obs.bodyReadsStarted++;
+            const task = (async () => {
+              try {
+                let timer;
+                let body;
+                try {
+                  body = await Promise.race([
+                    response.body(),
+                    new Promise((_, reject) => {
+                      timer = setTimeout(() => reject(new Error("Response body timed out")),
+                        bodyDeadline);
+                    }),
+                  ]);
+                } finally {
+                  clearTimeout(timer);
+                }
+                if (!Buffer.isBuffer(body) || body.length > MAX_BODY_BYTES ||
+                    obs.localBytesChecked + body.length > MAX_CAPTURE_BYTES) {
+                  recordIssue("LOCAL_RESPONSE_BODY_LIMIT");
+                  return;
+                }
+                obs.localBytesChecked += body.length;
+                row.receivedSha256 = sha(body);
+                row.bodyVerified = row.receivedSha256 === row.expectedSha256;
+                if (!row.bodyVerified) recordIssue("LOCAL_RESPONSE_BODY_MISMATCH");
+              } catch (error) {
+                if (error?.message === "Response body timed out") {
+                  bodyReadTimeoutDetected = true;
+                }
+                recordIssue("LOCAL_RESPONSE_BODY_UNAVAILABLE");
+              }
+            })();
+            // The runner catches all body errors. Resolve the per-response
+            // completion promise only after its own body has been examined.
+            void task.finally(() => {
+              if (!bodyReadTimeoutDetected) bodyReadsInFlight--;
+              finish();
+              startQueuedBodyReads();
+            });
+          }
+        };
         page.on("pageerror", () => { pageErrorCount++; });
         page.on("request", (request) => {
           if (++requestCount > MAX_RESPONSES) {
@@ -261,53 +317,24 @@ export async function probeNetworkResponses(options, {
             recordIssue("LOCAL_RESPONSE_BODY_LIMIT");
             return;
           }
-          // Playwright may buffer internally; this is an adapter-level limit.
-          if (bodyReadTimeoutDetected || bodyReadsInFlight >= MAX_IN_FLIGHT_BODY_READS) {
+          // Enqueue a bounded number of mapped response objects. The queue
+          // is processed at most four at a time; overflow fails closed,
+          // rather than spuriously rejecting an ordinary six-asset burst.
+          if (bodyReadTimeoutDetected) {
             recordIssue("LOCAL_RESPONSE_CONCURRENT_LIMIT");
             return;
           }
+          if (queuedBodyReads.length >= MAX_QUEUED_BODY_READS) {
+            recordIssue("LOCAL_RESPONSE_QUEUE_LIMIT");
+            return;
+          }
           reservedBodyBytes += reservation;
-          bodyReadsInFlight++;
-          obs.bodyReadsStarted++;
-          const task = (async () => {
-            try {
-              // A response can deliver headers without ever completing its body.
-              // Stop awaiting after a fixed deadline and fail closed; do not
-              // let a stalled response hang the entire probe indefinitely.
-              let timer;
-              let body;
-              try {
-                body = await Promise.race([
-                  response.body(),
-                  new Promise((_, reject) => {
-                    timer = setTimeout(() => reject(new Error("Response body timed out")),
-                      bodyDeadline);
-                  }),
-                ]);
-              } finally {
-                clearTimeout(timer);
-              }
-              if (!Buffer.isBuffer(body) || body.length > MAX_BODY_BYTES ||
-                  obs.localBytesChecked + body.length > MAX_CAPTURE_BYTES) {
-                recordIssue("LOCAL_RESPONSE_BODY_LIMIT");
-                return;
-              }
-              obs.localBytesChecked += body.length;
-              row.receivedSha256 = sha(body);
-              row.bodyVerified = row.receivedSha256 === row.expectedSha256;
-              if (!row.bodyVerified) recordIssue("LOCAL_RESPONSE_BODY_MISMATCH");
-            } catch (error) {
-              if (error?.message === "Response body timed out") {
-                bodyReadTimeoutDetected = true;
-              }
-              recordIssue("LOCAL_RESPONSE_BODY_UNAVAILABLE");
-            } finally {
-              // A timed-out response.body() can still be unresolved. Do not
-              // release its slot or permit a later wave to start more reads.
-              if (!bodyReadTimeoutDetected) bodyReadsInFlight--;
-            }
-          })();
-          pending.push(task);
+          let finish;
+          const completed = new Promise((resolve) => { finish = resolve; });
+          queuedBodyReads.push({ response, row, finish });
+          obs.maxBodyQueueDepth = Math.max(obs.maxBodyQueueDepth, queuedBodyReads.length);
+          pending.push(completed);
+          startQueuedBodyReads();
         });
         const nav = await page.goto(context.url, {
           waitUntil: "load", timeout: 45_000,

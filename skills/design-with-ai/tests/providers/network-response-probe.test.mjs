@@ -50,6 +50,10 @@ function mockChrome({ input, htmlBytes, cssBytes }, {
   floodResponses = 0,
   navigateDuringDrain = false,
   lateResponsesAfterTimeout = false,
+  parallelResponses = 0,
+  delayedBodies = false,
+  contentLength,
+  laterResponseWaves = 0,
 } = {}) {
   const contexts = [];
   let closed = 0;
@@ -60,12 +64,14 @@ function mockChrome({ input, htmlBytes, cssBytes }, {
         contexts.push(opts);
         const events = new Map();
         let lateResponsesEmitted = false;
+        let remainingWaves = laterResponseWaves;
         const response = (resourceUrl, body, status = 200) => ({
           url: () => resourceUrl,
           status: () => status,
-          headers: () => ({ "content-length": String(body.length) }),
+          headers: () => ({ "content-length": String(contentLength ?? body.length) }),
           body: async () => {
             bodyReads++;
+            if (delayedBodies) await new Promise((resolve) => setTimeout(resolve, 5));
             if (bodyUnavailable) throw new Error("Body was evicted");
             if (hangBody && resourceUrl.endsWith("site.css")) {
               return new Promise(() => {}); // Headers received, body never finishes.
@@ -93,6 +99,9 @@ function mockChrome({ input, htmlBytes, cssBytes }, {
               }
               if (remote) deliver(
                 "https://cdn.example.test/file.js?secret-do-not-log", Buffer.from("external"));
+              for (let i = 0; i < parallelResponses; i++) {
+                deliver("http://127.0.0.1:5191/settings/site.css", cssBytes);
+              }
               for (let i = 0; i < floodResponses; i++) {
                 deliver("http://127.0.0.1:5191/settings/site.css", cssBytes);
               }
@@ -119,6 +128,17 @@ function mockChrome({ input, htmlBytes, cssBytes }, {
             return { status: () => 200 };
           },
           waitForTimeout: async (ms) => {
+            if ((ms === 750 || ms === 100) && remainingWaves > 0) {
+              const count = Math.min(3, remainingWaves);
+              remainingWaves -= count;
+              for (let i = 0; i < count; i++) {
+                const req = {};
+                events.get("request")?.(req);
+                events.get("response")?.(response(
+                  "http://127.0.0.1:5191/settings/site.css", cssBytes));
+                events.get("requestfinished")?.(req);
+              }
+            }
             if (navigateDuringDrain && ms === 100) currentRoute = "/settings/other.html";
             if (lateResponsesAfterTimeout && ms === 100 && !lateResponsesEmitted) {
               lateResponsesEmitted = true;
@@ -282,6 +302,47 @@ test("timed-out body reads retain their slot and reject a later response wave", 
   });
 });
 
+test("six simultaneous mapped response bodies are queued and all verified", async () => {
+  await fixture(async (f) => {
+    const chrome = mockChrome(f, { parallelResponses: 6, delayedBodies: true });
+    const report = await probeNetworkResponses(f.input, { browserFactory: chrome.factory });
+    assert.equal(report.status, "LOCAL_RESPONSES_MATCHED", JSON.stringify(report));
+    assert.ok(report.observations.every((o) =>
+      o.local.length === 8 && o.local.every((row) => row.bodyVerified) &&
+      o.bodyReadsStarted === 8 && o.maxBodyQueueDepth >= 2 &&
+      o.issues.length === 0));
+    assert.equal(chrome.getBodyReads(), 8 * 3);
+  });
+});
+
+test("oversized Content-Length rejects response before reading its body", async () => {
+  await fixture(async (f) => {
+    const chrome = mockChrome(f, { contentLength: 16 * 1024 * 1024 + 1 });
+    const report = await probeNetworkResponses(f.input, { browserFactory: chrome.factory });
+    assert.equal(report.status, "INCOMPLETE");
+    assert.equal(chrome.getBodyReads(), 0);
+    assert.ok(report.observations.every((o) =>
+      o.bodyReadsStarted === 0 && o.issues.includes("LOCAL_RESPONSE_TOO_LARGE")));
+  });
+});
+
+test("128 MiB cumulative reservation is enforced across response waves", async () => {
+  await fixture(async (f) => {
+    const chrome = mockChrome(f, {
+      contentLength: 15 * 1024 * 1024, laterResponseWaves: 7,
+    });
+    const report = await probeNetworkResponses(f.input, { browserFactory: chrome.factory });
+    assert.equal(report.status, "INCOMPLETE");
+    assert.ok(report.observations.every((o) =>
+      o.issues.includes("LOCAL_RESPONSE_BODY_LIMIT") &&
+      o.local.length === 9 && o.bodyReadsStarted === 8 &&
+      o.local.filter((row) => row.bodyVerified).length === 8),
+    "Nine 15-MiB reservations exceed the 128-MiB budget, despite tiny actual bodies");
+    assert.equal(chrome.getBodyReads(), 8 * 3,
+      "The ninth response must be rejected before calling body()");
+  });
+});
+
 test("response flood preserves bounded rows and body reads", async () => {
   await fixture(async (f) => {
     const chrome = mockChrome(f, { floodResponses: 2_500 });
@@ -289,12 +350,13 @@ test("response flood preserves bounded rows and body reads", async () => {
     assert.equal(report.status, "INCOMPLETE");
     assert.ok(report.observations.every((o) =>
       o.issues.includes("RESPONSE_COUNT_LIMIT") &&
+      o.issues.includes("LOCAL_RESPONSE_QUEUE_LIMIT") &&
       o.local.length === 2_000 &&
-      o.bodyReadsStarted <= 4 &&
-      o.issues.includes("LOCAL_RESPONSE_CONCURRENT_LIMIT")),
-    "Response overflow retains only 2,000 local rows, limits reads and fails closed");
-    assert.ok(chrome.getBodyReads() <= 12,
-      "Response flood cannot launch more than four body() calls per viewport");
+      o.bodyReadsStarted <= 4 + 64 &&
+      o.maxBodyQueueDepth <= 64),
+    "Response overflow retains only 2,000 rows and a bounded 64-item read queue");
+    assert.ok(chrome.getBodyReads() <= 3 * (4 + 64),
+      "Response flood cannot launch more than the bounded active and queued reads");
   });
 });
 
@@ -337,21 +399,20 @@ test("a file mutation during probe invalidates snapshot even when response bodie
 
 test("remote origins, bad routes, missing trusted Playwright and non-isolated builds are rejected", async () => {
   await fixture(async (f) => {
-    for (const changes of [
-      { baseUrl: "https://example.com" },
-      { baseUrl: "http://user:pass@127.0.0.1:5191/" },
-      { baseUrl: "http://127.0.0.1:5191/private" },
-      { route: "//cdn.example.test" },
-      { route: "/%2e%2e/foo" },
-      { route: "/other" },
-      { playwrightRoot: join(f.root, "not-installed") },
-      { renderedRoot: f.root },
-      { outRoot: f.input.renderedRoot },
+    for (const [changes, reason] of [
+      [{ baseUrl: "https://example.com" }, /Only a clean loopback HTTP origin is allowed/],
+      [{ baseUrl: "http://user:pass@127.0.0.1:5191/" }, /Only a clean loopback HTTP origin is allowed/],
+      [{ baseUrl: "http://127.0.0.1:5191/private" }, /Only a clean loopback HTTP origin is allowed/],
+      [{ route: "//cdn.example.test" }, /Route must be an unambiguous absolute local path/],
+      [{ route: "/%2e%2e/foo" }, /Route must be an unambiguous absolute local path/],
+      [{ route: "/other" }, /HTML does not map to the declared isolated build route/],
+      [{ playwrightRoot: join(f.root, "not-installed") }, /Roots, HTML and Playwright must exist/],
+      [{ renderedRoot: f.root }, /HTML does not map to the declared isolated build route/],
+      [{ outRoot: f.input.renderedRoot }, /Evidence output root must be outside/],
     ]) {
       await assert.rejects(() => probeNetworkResponses({
         ...f.input, ...changes,
-      }), /origin|root|Playwright|build|route|Route|HTML|outside|loopback/i,
-      JSON.stringify(changes));
+      }), reason, JSON.stringify(changes));
     }
   });
 });

@@ -211,6 +211,9 @@ async function openPage(cdp, width, height) {
     async goto(address) {
       redirectCount = 0; finalStatus = null;
       const loaded = cdp.once('Page.loadEventFired', sessionId);
+      // Register rejection handling immediately: navigation can fail before
+      // this await is reached, and the socket can reject the load waiter.
+      loaded.catch(() => {});
       const nav = await cdp.send('Page.navigate', { url: address }, sessionId);
       if (nav.errorText) throw new Error('Chrome navigation: ' + nav.errorText);
       await loaded;
