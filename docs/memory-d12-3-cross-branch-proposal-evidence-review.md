@@ -41,7 +41,7 @@ merge, reset or mutate prior worktrees.
     $Next = "$HOME\agent-hub-D12-3-proposal-cross-branch"
     if (-not (Test-Path $Previous)) { throw "Previous worktree missing" }
     if (Test-Path $Next) { throw "Destination already exists" }
-    git -C $Previous fetch origin pull/REPLACE_PR/head
+    git -C $Previous fetch origin pull/204/head
     if ($LASTEXITCODE -ne 0) { throw "Fetch failed" }
     git -C $Previous worktree add --detach $Next FETCH_HEAD
     if ($LASTEXITCODE -ne 0) { throw "Worktree failed" }
