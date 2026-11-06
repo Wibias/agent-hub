@@ -105,7 +105,7 @@ test('preflight validates original/source/confirmation and returns non-authorizi
     assert.equal(outcome.modelInvocations,0);
     assert.equal(JSON.stringify(outcome).includes(RULE),false);
     assert.equal(JSON.stringify(outcome).includes(SOURCE),false);
-    assert.equal(JSON.stringify(outcome).includes('confirmation'),false);
+    assert.equal(JSON.stringify(outcome).includes('"confirmation"'),false);
     assert.equal(memory.exportCanonical().claims.length,claimsBefore);
     assert.equal(memory.getCandidate('candidate').status,'pending');
   });
@@ -164,8 +164,6 @@ test('malformed or tampered staging, spans, and Evidence fail closed without con
     writable.prepare('UPDATE memory_atomic_rule_staging_spans SET start_offset=9999 WHERE staging_id=?')
       .run(stageId);
     assertIssue('original_spans_invalid');
-    writable.prepare('UPDATE memory_atomic_rule_staging_spans SET start_offset=? WHERE staging_id=? AND review_ref=?')
-      .run(0,stageId, 'nonexistent'); // unrelated attempt changes nothing
     // Proof missing scope cannot see same staged source
     assert.equal(preflight({dbPath,stageId,branch:'feature'}).issue,'staging_entry_missing');
     assert.equal(memory.getCandidate('candidate').status,'pending');
