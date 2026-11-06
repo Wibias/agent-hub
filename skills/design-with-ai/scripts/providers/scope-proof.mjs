@@ -140,11 +140,16 @@ function gitHead(root) {
   }
 }
 
-export function sourceScopeProof({ projectRoot, target, route, renderedRoot = null, html = null, intentPath = null }) {
+export function sourceScopeProof({
+  projectRoot, target, route, renderedRoot = null, html = null,
+  intentPath = null, includeDetectorContext = true,
+}) {
   const root = resolve(projectRoot), source = resolve(target);
   if (!isInside(root, source)) throw new TypeError("Source scope escapes project");
   const sourceFiles = collectedFiles(source);
-  const contextFiles = detectorContextFiles(root, sourceFiles);
+  // Quick/native-only audits must not fail on unrelated Impeccable policy
+  // files. Caller opts into these dependencies only when selecting Impeccable.
+  const contextFiles = includeDetectorContext ? detectorContextFiles(root, sourceFiles) : [];
   const inputStat = (file) => {
     const st = statSync(file, { bigint: true });
     return [file, String(st.size), String(st.ctimeNs), String(st.mtimeNs)];

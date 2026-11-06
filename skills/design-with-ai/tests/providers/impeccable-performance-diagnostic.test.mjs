@@ -5,6 +5,18 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { compareImpeccableModes } from "../../scripts/providers/impeccable-performance-diagnostic.mjs";
 
+function receiptFor(args = [], overrides = {}) {
+  const noConfig = args.includes("--no-config");
+  return "DWA_IMPECCABLE_SCAN_PROOF=" + JSON.stringify({
+    schemaVersion: 1, candidateFiles: 1, eligibleFiles: 1,
+    ignoredFiles: 0, scannedFiles: 1, degradedFiles: 0, durationMs: 1,
+    configEnabled: !noConfig,
+    inlineIgnoresEnabled: !noConfig && !args.includes("--no-inline-ignores"),
+    designSystemEnabled: !noConfig && !args.includes("--no-design-system"),
+    ...overrides,
+  }) + "\n";
+}
+
 async function fixture(fn) {
   const root = mkdtempSync(join(tmpdir(), "dwa-impeccable-perf-"));
   const project = join(root, "project");
@@ -25,7 +37,7 @@ test("four independent modes preserve configured and isolated ignore/design flag
     const runner = async (options) => {
       calls.push(options);
       return {
-        stdout: "[]", stderr: "", exitCode: 0, error: null,
+        stdout: "[]", stderr: receiptFor(options.args), exitCode: 0, error: null,
         timedOut: false, outputLimitExceeded: false,
       };
     };
@@ -38,10 +50,10 @@ test("four independent modes preserve configured and isolated ignore/design flag
       ["configured", "no-inline-ignores", "no-design-system", "no-config"]);
     assert.deepEqual(calls.map((c) => c.args.slice(1, -1)),
       [
-        ["--json"],
-        ["--json", "--no-inline-ignores"],
-        ["--json", "--no-design-system"],
-        ["--json", "--no-config"],
+        ["--json", "--dwa-scan-proof"],
+        ["--json", "--dwa-scan-proof", "--no-inline-ignores"],
+        ["--json", "--dwa-scan-proof", "--no-design-system"],
+        ["--json", "--dwa-scan-proof", "--no-config"],
       ]);
     for (const c of calls) {
       assert.equal(c.cwd, project);
@@ -56,8 +68,8 @@ test("alternating rounds reverse mode order without making product claims", asyn
   await fixture(async ({ project, source, root }) => {
     const fake = join(root, "fake-detector.mjs");
     writeFileSync(fake, "// test\n");
-    const runner = async () => ({
-      stdout: "[]", stderr: "", exitCode: 0, error: null,
+    const runner = async (options) => ({
+      stdout: "[]", stderr: receiptFor(options.args), exitCode: 0, error: null,
       timedOut: false, outputLimitExceeded: false,
     });
     const out = await compareImpeccableModes(
@@ -87,7 +99,7 @@ test("detector timeout, partial status or malformed output is INCOMPLETE, never 
         {
           script: fake,
           runner: async () => ({
-            stdout: "[]", stderr: "", exitCode: 0,
+            stdout: "[]", stderr: receiptFor([]), exitCode: 0,
             error: null, timedOut: false, outputLimitExceeded: false, ...mock,
           }),
         },
@@ -95,6 +107,33 @@ test("detector timeout, partial status or malformed output is INCOMPLETE, never 
       assert.equal(output.status, "INCOMPLETE");
       assert.equal(output.runs.length, 1);
       assert.equal(output.runs[0].status, "ERROR");
+    }
+  });
+});
+
+test("missing, degraded and contradictory scan receipts invalidate every timing mode", async () => {
+  await fixture(async ({ root, project, source }) => {
+    const fake = join(root, "fake-detector.mjs");
+    writeFileSync(fake, "// test\n");
+    const invalid = [
+      "",
+      receiptFor([], { degradedFiles: 1, scannedFiles: 0 }),
+      receiptFor([], { scannedFiles: 0 }),
+      receiptFor([], { ignoredFiles: 2 }),
+      receiptFor([], { designSystemEnabled: "unknown" }),
+      receiptFor([], { configEnabled: false }),
+    ];
+    for (const stderr of invalid) {
+      const r = await compareImpeccableModes(
+        ["--target", source, "--project-root", project],
+        { script: fake, runner: async () => ({
+          stdout: "[]", stderr, exitCode: 0, error: null,
+          timedOut: false, outputLimitExceeded: false,
+        }) },
+      );
+      assert.equal(r.status, "INCOMPLETE");
+      assert.equal(r.runs.length, 1);
+      assert.equal(r.runs[0].status, "ERROR");
     }
   });
 });
