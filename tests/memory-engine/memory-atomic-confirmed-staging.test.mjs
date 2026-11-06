@@ -56,10 +56,10 @@ async function fixture(action, { installSchema = true } = {}) {
     });
     const confirmation = memory.recordEvidence({
       id:'confirmation-evidence',projectId:PROJECT,branch:BRANCH,harness:'codex',
-      sessionId:'session-confirm',sourceKind:'session',sourceRef:'session:confirm',
+      sessionId:'session-confirm',sourceKind:'session',sourceRef:'session:session-confirm',
       capturedAt:CONFIRM_AT,content:confirmationContent,authorityClass:'user_direct',
       metadata:{
-        event_type:'user_prompt',explicit_memory:true,
+        event_type:'user_prompt',hook_event_name:'UserPromptSubmit',explicit_memory:true,
         explicit_memory_mode:'atomic_rule_confirm',
         atomic_rule_draft_ref:draftRef,
       },
