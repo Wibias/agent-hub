@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { probeRenderedState } from "../../scripts/providers/rendered-state-probe.mjs";
+import { probeRenderedState, snapshotDeclaredDomState } from "../../scripts/providers/rendered-state-probe.mjs";
 
 async function fixture(fn) {
   const root = mkdtempSync(join(tmpdir(), "dwa-rendered-state-test-"));
@@ -28,6 +28,7 @@ function fakeBrowser({
   states = {},
   status = 200,
   route = "/game/live",
+  redirected = false,
   origin = "http://127.0.0.1:5191",
   postCaptureRoute = null,
   waitFailure = false,
@@ -50,10 +51,13 @@ function fakeBrowser({
           },
           goto: async () => {
             if (navigationFailure) throw new Error("Navigation timeout");
-            return { status: () => status };
+            return {
+              status: () => status,
+              request: () => ({ redirectedFrom: () => redirected ? { url: "/entry" } : null }),
+            };
           },
           url: () => origin + (captured && postCaptureRoute ? postCaptureRoute : route),
-          waitForSelector: async () => {
+          waitForFunction: async () => {
             if (waitFailure) throw new Error("Wait timed out");
           },
           evaluate: async () => captured && transitionAfterScreenshot ? {
@@ -113,6 +117,7 @@ test("loading, empty, redirected, failed or unscreened state cannot be observed"
     };
     for (const scenario of [
       { states: bad }, { status: 404 }, { route: "/wrong" },
+      { redirected: true },
       { origin: "https://other-host.example" },
       { postCaptureRoute: "/login" },
       { waitFailure: true }, { screenshotFailure: true },
@@ -128,6 +133,87 @@ test("loading, empty, redirected, failed or unscreened state cannot be observed"
       assert.ok(existsSync(join(out.artifactDirectory, "state-report.json")));
     }
   });
+});
+
+test("omitted optional lists are normalized and truncated viewport text cannot certify state", async () => {
+  await fixture(async ({ input }) => {
+    const noLists = {
+      schemaVersion: 1, stateKey: "game-live", readySelector: "[data-game-phase='live']",
+    };
+    const okay = await probeRenderedState({ ...input, contract: noLists }, {
+      browserFactory: fakeBrowser().factory,
+    });
+    assert.equal(okay.status, "DOM_SIGNALS_OBSERVED");
+    const truncated = await probeRenderedState(input, {
+      browserFactory: fakeBrowser({
+        states: { 390: {
+          markerVisible: true, blockersVisible: [],
+          missingText: [], forbiddenTextVisible: [], textTruncated: true,
+        } },
+      }).factory,
+    });
+    assert.equal(truncated.status, "INCOMPLETE");
+  });
+});
+
+test("viewport text ignores off-screen content and all markers are considered", () => {
+  const old = {
+    document: globalThis.document, getComputedStyle: globalThis.getComputedStyle,
+    NodeFilter: globalThis.NodeFilter,
+    innerWidth: globalThis.innerWidth, innerHeight: globalThis.innerHeight,
+  };
+  const box = (top, height = 30) => ({
+    top, bottom: top + height, left: 0, right: 200, width: 200, height,
+  });
+  const element = (top) => ({
+    parentElement: null, getBoundingClientRect: () => box(top),
+  });
+  const markerHidden = element(1200);
+  const markerVisible = element(20);
+  const visible = {
+    nodeValue: "Playing now", parentElement: markerVisible,
+    rect: box(20),
+  };
+  const offscreen = {
+    nodeValue: "Loading below fold", parentElement: element(1300),
+    rect: box(1300),
+  };
+  try {
+    globalThis.innerWidth = 390;
+    globalThis.innerHeight = 900;
+    globalThis.NodeFilter = { SHOW_TEXT: 4 };
+    globalThis.getComputedStyle = () => ({
+      display: "block", visibility: "visible", opacity: "1",
+    });
+    globalThis.document = {
+      body: {},
+      querySelectorAll: () => [markerHidden, markerVisible],
+      createTreeWalker: () => {
+        const nodes = [visible, offscreen]; let pos = 0;
+        return { nextNode: () => nodes[pos++] ?? null };
+      },
+      createRange: () => {
+        let node;
+        return {
+          setStart: (current) => { node = current; },
+          setEnd: () => {},
+          getClientRects: () => [node.rect],
+          detach: () => {},
+        };
+      },
+    };
+    const result = snapshotDeclaredDomState({
+      readySelector: "[data-game-phase='live']",
+      requiredText: ["Playing now", "below fold"],
+      forbiddenText: ["Loading"],
+    });
+    assert.equal(result.markerVisible, true, "second visible matching marker is valid");
+    assert.deepEqual(result.missingText, ["below fold"]);
+    assert.deepEqual(result.forbiddenTextVisible, []);
+    assert.equal(result.textTruncated, false);
+  } finally {
+    Object.assign(globalThis, old);
+  }
 });
 
 test("an unavailable browser records INCOMPLETE evidence instead of a false success", async () => {
@@ -152,6 +238,9 @@ test("contracts reject remote URLs, vague selectors and route traversal", async 
       { route: "/../private" }, { route: "//otherhost" }, { route: "/game?mode=live" },
       { contract: { ...input.contract, readySelector: "main" } },
       { contract: { ...input.contract, readySelector: "#root" } },
+      { contract: { ...input.contract, readySelector: "main:not([data-loading])" } },
+      { contract: { ...input.contract, readySelector: "[data-game-phase='live'], main" } },
+      { contract: { ...input.contract, readySelector: "body [data-game-phase='live']" } },
       { contract: { ...input.contract, stateKey: "" } },
       { contract: { ...input.contract, forbiddenText: Array(30).fill("loading") } },
     ]) {

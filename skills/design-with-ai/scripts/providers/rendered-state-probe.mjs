@@ -15,6 +15,9 @@ const arrayStrings = (v, max) =>
   Array.isArray(v) && v.length <= max && v.every((x) =>
     filled(x) && x.length <= 240 && !/[\r\n\0]/.test(x));
 const browserError = (e) => String(e?.message ?? e).slice(0, 260);
+// A positive state marker must be REQUIRED by the entire selector. Reject
+// selector lists, :not(), ancestor-only predicates and generic mounted roots.
+const POSITIVE_MARKER = /^\[data-[a-z][a-z0-9-]*(?:\s*(?:=|~=|\|=|\^=|\$=|\*=)\s*(?:"[^"]+"|'[^']+'|[a-zA-Z0-9_-]+))?\]$/i;
 
 function validateOptions({ baseUrl, route, contract, playwrightRoot, outRoot, chromePath }) {
   const url = new URL(baseUrl);
@@ -38,8 +41,8 @@ function validateOptions({ baseUrl, route, contract, playwrightRoot, outRoot, ch
   }
   // State evidence must use a positive, state-specific DOM marker. Generic
   // "page mounted" signals are insufficient for gameplay or ready-state claims.
-  if (!/\[data-[a-z0-9-]+(?:[=~|^$*])?/.test(contract.readySelector)) {
-    throw new Error("readySelector must contain a specific data-* state marker");
+  if (!POSITIVE_MARKER.test(contract.readySelector.trim())) {
+    throw new Error("readySelector must be one positive data-* state selector");
   }
   if (!filled(playwrightRoot) || !existsSync(resolve(playwrightRoot))) {
     throw new Error("An explicit existing Playwright root is required");
@@ -55,32 +58,68 @@ function validateOptions({ baseUrl, route, contract, playwrightRoot, outRoot, ch
     throw new Error("Explicit Chrome path does not exist");
   }
   return {
-    url: url.origin + route, route, contract, playwright, output,
+    url: url.origin + route, route,
+    contract: {
+      ...contract,
+      readySelector: contract.readySelector.trim(),
+      forbiddenSelectors: contract.forbiddenSelectors ?? [],
+      requiredText: contract.requiredText ?? [],
+      forbiddenText: contract.forbiddenText ?? [],
+    }, playwright, output,
     chromePath: chromePath ? resolve(chromePath) : null,
   };
 }
 
-const SNAPSHOT = ({ readySelector, forbiddenSelectors, requiredText, forbiddenText }) => {
+export const snapshotDeclaredDomState = ({ readySelector, forbiddenSelectors = [], requiredText = [], forbiddenText = [] }) => {
+  const inViewport = (r) => r.width > 0 && r.height > 0 &&
+    r.bottom > 0 && r.top < innerHeight && r.right > 0 && r.left < innerWidth;
   const shown = (element) => {
-    if (!element || !element.getBoundingClientRect) return false;
-    const r = element.getBoundingClientRect(), st = getComputedStyle(element);
-    return r.width > 0 && r.height > 0 && r.bottom > 0 && r.top < innerHeight &&
-      r.right > 0 && r.left < innerWidth && st.display !== "none" &&
-      st.visibility !== "hidden" && Number(st.opacity) > 0.05;
+    if (!element || !element.getBoundingClientRect ||
+        !inViewport(element.getBoundingClientRect())) return false;
+    for (let node = element; node; node = node.parentElement) {
+      const style = getComputedStyle(node);
+      if (style.display === "none" || style.visibility === "hidden" ||
+          Number(style.opacity) <= 0.05) return false;
+    }
+    return true;
   };
-  const visibleText = document.body?.innerText ?? "";
-  const includes = (needle) => visibleText.toLocaleLowerCase().includes(needle.toLocaleLowerCase());
+  const selectedVisible = (selector) =>
+    [...document.querySelectorAll(selector)].some(shown);
+  const visibleWords = [];
+  let textTruncated = false;
+  if (requiredText.length || forbiddenText.length) {
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    let node, nodes = 0, words = 0;
+    while ((node = walker.nextNode()) !== null) {
+      if (++nodes > 3000) { textTruncated = true; break; }
+      if (!node.parentElement || !shown(node.parentElement)) continue;
+      const text = node.nodeValue ?? "";
+      const range = document.createRange();
+      for (const match of text.matchAll(/\S+/g)) {
+        if (++words > 6000) { textTruncated = true; break; }
+        range.setStart(node, match.index);
+        range.setEnd(node, match.index + match[0].length);
+        if ([...range.getClientRects()].some(inViewport)) {
+          visibleWords.push(match[0]);
+        }
+      }
+      range.detach?.();
+      if (textTruncated) break;
+    }
+  }
+  const text = visibleWords.join(" ").toLocaleLowerCase();
+  const includes = (needle) => text.includes(needle.toLocaleLowerCase());
   return {
-    markerVisible: shown(document.querySelector(readySelector)),
-    blockersVisible: forbiddenSelectors.filter((selector) =>
-      [...document.querySelectorAll(selector)].some(shown)),
+    markerVisible: selectedVisible(readySelector),
+    blockersVisible: forbiddenSelectors.filter(selectedVisible),
     missingText: requiredText.filter((word) => !includes(word)),
     forbiddenTextVisible: forbiddenText.filter(includes),
+    textTruncated,
   };
 };
 
 function completeSample(sample) {
-  return sample && sample.markerVisible === true &&
+  return sample && sample.markerVisible === true && sample.textTruncated !== true &&
     ["blockersVisible", "missingText", "forbiddenTextVisible"].every((k) =>
       Array.isArray(sample[k]) && sample[k].length === 0);
 }
@@ -132,21 +171,35 @@ export async function probeRenderedState(input, { browserFactory = loadPlaywrigh
         page.on("pageerror", (error) => errors.push(browserError(error)));
         const response = await page.goto(opts.url, { waitUntil: "domcontentloaded", timeout: 45_000 });
         record.httpStatus = response?.status?.() ?? null;
+        record.redirectChainPresent =
+          Boolean(response?.request?.()?.redirectedFrom?.());
         const navigatedUrl = new URL(page.url());
         record.path = navigatedUrl.pathname;
         record.origin = navigatedUrl.origin;
         try {
-          await page.waitForSelector(opts.contract.readySelector,
-            { state: "visible", timeout: 15_000 });
+          await page.waitForFunction((selector) => {
+            const intersects = (rect) => rect.width > 0 && rect.height > 0 &&
+              rect.bottom > 0 && rect.top < innerHeight &&
+              rect.right > 0 && rect.left < innerWidth;
+            return [...document.querySelectorAll(selector)].some((element) => {
+              if (!intersects(element.getBoundingClientRect())) return false;
+              for (let node = element; node; node = node.parentElement) {
+                const style = getComputedStyle(node);
+                if (style.display === "none" || style.visibility === "hidden" ||
+                    Number(style.opacity) <= 0.05) return false;
+              }
+              return true;
+            });
+          }, opts.contract.readySelector, { timeout: 15_000 });
         } catch (e) { record.markerWaitError = browserError(e); }
-        const first = await page.evaluate(SNAPSHOT, opts.contract);
+        const first = await page.evaluate(snapshotDeclaredDomState, opts.contract);
         await page.waitForTimeout(750);
-        const second = await page.evaluate(SNAPSHOT, opts.contract);
+        const second = await page.evaluate(snapshotDeclaredDomState, opts.contract);
         const screenshot = join(runDir, "state-" + width + ".png");
         await page.screenshot({ path: screenshot, fullPage: false, timeout: 20_000 });
         // Sample once more AFTER screenshot so an immediately dismissed loading
         // overlay or state transition is not certified as captured evidence.
-        const afterScreenshot = await page.evaluate(SNAPSHOT, opts.contract);
+        const afterScreenshot = await page.evaluate(snapshotDeclaredDomState, opts.contract);
         const capturedUrl = new URL(page.url());
         record.finalPath = capturedUrl.pathname;
         record.finalOrigin = capturedUrl.origin;
@@ -155,7 +208,8 @@ export async function probeRenderedState(input, { browserFactory = loadPlaywrigh
         if (errors.length) record.pageErrorSamples = errors.slice(0, 3);
         record.screenshot = screenshot;
         record.screenshotSha256 = sha(readFileSync(screenshot));
-        record.status = record.httpStatus >= 200 && record.httpStatus < 400 &&
+        record.status = record.httpStatus === 200 &&
+          !record.redirectChainPresent &&
           record.path === opts.route && record.finalPath === opts.route &&
           record.origin === new URL(opts.url).origin &&
           record.finalOrigin === new URL(opts.url).origin &&
