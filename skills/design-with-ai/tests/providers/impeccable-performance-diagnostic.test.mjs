@@ -107,7 +107,7 @@ test("invalid invocation or escaped scope is rejected", async () => {
       ["--target", source, "--project-root", project, "--unknown", "yes"],
       ["--target", root, "--project-root", project],
     ]) {
-      await assert.rejects(() => compareImpeccableModes(args), /rounds|argument|scope/i);
+      await assert.rejects(() => compareImpeccableModes(args), /rounds|argument|scope|escapes project root/i);
     }
   });
 });
