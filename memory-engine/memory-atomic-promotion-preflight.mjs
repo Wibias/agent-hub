@@ -129,10 +129,20 @@ export function inspectAtomicPromotionPreflight({
     if (verifiedRefs.some(x=>x===null)) {
       return {...report,...blocked('original_spans_invalid')};
     }
+    // Draft hashes bind to the human-reviewed original source order, not
+    // the staging index's lexicographic review_ref order.
+    const orderedRefs = allSuggestions.suggestions.map(item => atomicReviewRef({
+      candidateId: source.candidate_id, evidenceId: source.evidence_id,
+      sourceHash: item.sourceHash, fragmentHash: item.fragmentHash,
+      start: item.start, end: item.end,
+    })).filter(ref => verifiedRefs.includes(ref));
+    if (orderedRefs.length !== verifiedRefs.length) {
+      return {...report,...blocked('original_spans_invalid')};
+    }
     const draft = previewAtomicRuleDraft({
       report:sourceReport,
       candidateRef:sourceReport.candidates[0].candidateRef,
-      reviewRefs:verifiedRefs,
+      reviewRefs:orderedRefs,
       draftText:ruleText,
     });
     if (draft.draftRef !== stage.draft_ref) {
