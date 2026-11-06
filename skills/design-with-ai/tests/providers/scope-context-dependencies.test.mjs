@@ -112,6 +112,31 @@ test("HTML entity-encoded stylesheet rel cannot evade the source proof", () => {
   });
 });
 
+test("data.rel cannot shadow an entity-encoded rel or bypass linked CSS proof", () => {
+  fixture(({ root, src }) => {
+    const html = join(src, "page.html");
+    const css = join(src, "site.css");
+    writeFileSync(css, "h1 { color: red; }\n");
+    const inspect = () => sourceScopeProof({
+      projectRoot: root, target: html, route: "/page", includeDetectorContext: true,
+    });
+    writeFileSync(html,
+      '<link rel="style&#115;heet" data.rel="alternate" href="site.css">');
+    assert.throws(inspect, /Entity-bearing stylesheet rel cannot be attested/,
+      "data.rel must not overwrite the real rel attribute");
+    writeFileSync(css, "h1 { color: blue; }\n");
+    assert.throws(inspect, /Entity-bearing stylesheet rel cannot be attested/);
+    writeFileSync(html,
+      '<link rel="stylesheet" data.rel="alternate" href="site.css">');
+    assert.deepEqual(inspect().manifest.linkedStylesheets.map((x) => x.path),
+      ["src/site.css"], "valid rel must still bind CSS despite data.rel");
+    writeFileSync(html,
+      '<link rel="stylesheet" rel="alternate" href="site.css">');
+    assert.throws(inspect, /Duplicate HTML link attribute cannot be attested/,
+      "ambiguous duplicate rel attributes must never be treated as a safe proof");
+  });
+});
+
 test("symlinked linked CSS and escaping local stylesheet reads cannot be attested", () => {
   fixture(({ root, src }) => {
     const html = join(src, "page.html");
