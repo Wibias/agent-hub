@@ -98,7 +98,7 @@ test("without an explicit scan cache, direct root lookup keeps normal semantics"
     assert.deepEqual(findDesignRoot(source), { dir: project, hasDesign: true });
     const direct = loadDesignSystemForTarget(join(source, "one.tsx"));
     assert.equal(direct?.sourcePath, join(project, "DESIGN.md"));
-    assert.equal(findDesignRoot(join(source, "missing")), null === null
-      ? findDesignRoot(join(source, "missing")) : null);
+    assert.deepEqual(findDesignRoot(join(source, "missing")),
+      { dir: project, hasDesign: true });
   });
 });
