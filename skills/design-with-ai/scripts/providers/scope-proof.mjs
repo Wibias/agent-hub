@@ -145,9 +145,15 @@ function linkedStylesheetFiles(root, sourceFiles) {
       if (++tagCount > 1000) throw new TypeError("Too many HTML stylesheet links to attest");
       const attributes = new Map();
       for (const match of tag[0].matchAll(
-        /\b([a-z][a-z0-9:-]*)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/gi
+        /\s([^\s"'<>\/=\x60]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/g
       )) {
-        attributes.set(match[1].toLowerCase(), match[2] ?? match[3] ?? match[4]);
+        // Anchor attribute names at whitespace and preserve dots/colons:
+        // data.rel is distinct from rel, never its suffix.
+        const name = match[1].toLowerCase();
+        if (attributes.has(name)) {
+          throw new TypeError("Duplicate HTML link attribute cannot be attested");
+        }
+        attributes.set(name, match[2] ?? match[3] ?? match[4]);
       }
       const rel = attributes.get("rel") ?? "";
       const href = attributes.get("href") ?? "";
