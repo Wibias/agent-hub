@@ -2,6 +2,11 @@ import { createHash } from 'node:crypto';
 
 import { evaluateReliance } from '../index.mjs';
 import { classifyMemoryCandidatePrompt } from '../memory-capture-policy.mjs';
+import {
+  isAtomicRuleConfirmationAttempt,
+  parseAtomicRuleConfirmationPrompt,
+  verifyCapturedAtomicConfirmationEvidence,
+} from '../memory-atomic-confirmation-capture.mjs';
 import { confirmMemoryCandidate } from '../memory-candidate-confirmation.mjs';
 import { rejectMemoryCandidate } from '../memory-candidate-rejection.mjs';
 import {
@@ -1208,6 +1213,7 @@ export function createCodexMemoryHookAdapter({
   capturePrompts = false,
   explicitMemoryRequests = false,
   candidateCapture = false,
+  atomicRuleConfirmationCapture = false,
   diagnoseRecall = null,
   healthCheck = null,
   recallRelevanceJudge = null,
@@ -1239,6 +1245,9 @@ export function createCodexMemoryHookAdapter({
   }
   if (typeof candidateCapture !== 'boolean') {
     throw new TypeError('candidateCapture must be a boolean');
+  }
+  if (typeof atomicRuleConfirmationCapture !== 'boolean') {
+    throw new TypeError('atomicRuleConfirmationCapture must be a boolean');
   }
   if (diagnoseRecall !== null && typeof diagnoseRecall !== 'function') {
     throw new TypeError('diagnoseRecall must be a function or null');
@@ -1335,6 +1344,70 @@ export function createCodexMemoryHookAdapter({
 
       try {
         const context = await gitRuntime.resolveContext({ cwd: event.cwd });
+        if (isAtomicRuleConfirmationAttempt(event.prompt)) {
+          const command = parseAtomicRuleConfirmationPrompt(event.prompt);
+          if (!explicitMemoryRequests || !atomicRuleConfirmationCapture
+            || !command || command.projectId !== projectId
+            || command.branch !== context.branch
+            || typeof memory.getEvidence !== 'function') {
+            return {
+              decision: 'block',
+              reason: 'Atomic rule confirmation not captured: disabled, malformed or out of scope.',
+            };
+          }
+          const evidenceId = 'evidence:codex:' + event.session_id + ':' + event.turn_id + ':prompt';
+          const existing = memory.getEvidence(evidenceId);
+          if (existing === null) {
+            const capture = await protocol.handle({
+              protocol: 'memory.protocol.v1',
+              operation: 'capture_evidence',
+              request_id: 'codex:' + event.session_id + ':' + event.turn_id + ':capture',
+              payload: {
+                id: evidenceId,
+                project_id: projectId,
+                harness: 'codex',
+                session_id: event.session_id,
+                source_kind: 'session',
+                source_ref: 'session:' + event.session_id,
+                captured_at: clock(),
+                branch: context.branch,
+                commit_sha: context.revisionSha,
+                path: null,
+                blob_oid: null,
+                content: event.prompt,
+                metadata: {
+                  event_type: 'user_prompt',
+                  hook_event_name: 'UserPromptSubmit',
+                  turn_id: event.turn_id,
+                  explicit_memory: true,
+                  explicit_memory_mode: 'atomic_rule_confirm',
+                  atomic_rule_draft_ref: command.draftRef,
+                },
+              },
+            });
+            if (capture?.ok !== true) {
+              return {
+                decision: 'block',
+                reason: 'Atomic rule confirmation Evidence was not captured.',
+              };
+            }
+          }
+          const stored = memory.getEvidence(evidenceId);
+          if (!verifyCapturedAtomicConfirmationEvidence(stored, {
+            command: event.prompt,
+            projectId, branch: context.branch,
+            sessionId: event.session_id, evidenceId,
+          })) {
+            return {
+              decision: 'block',
+              reason: 'Atomic rule confirmation Evidence failed provenance checks.',
+            };
+          }
+          return {
+            decision: 'block',
+            reason: 'Atomic rule confirmation Evidence captured for review. No Memory Claim or staging record was created.',
+          };
+        }
         const explicitMemory = (
           explicitMemoryRequests
             ? parseExplicitMemoryPrompt(event.prompt)
@@ -2082,6 +2155,14 @@ export function createCodexMemoryHookAdapter({
           },
         };
       } catch {
+        // Exact atomic command attempts must fail closed even if a backend
+        // read, capture or scope resolution fails unexpectedly.
+        if (isAtomicRuleConfirmationAttempt(event?.prompt)) {
+          return {
+            decision: 'block',
+            reason: 'Atomic rule confirmation unavailable: no Memory was changed intentionally.',
+          };
+        }
         return null;
       }
     },
