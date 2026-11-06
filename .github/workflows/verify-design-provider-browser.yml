@@ -46,3 +46,6 @@ jobs:
         env:
           TASTE_SKILL_ROOT: ${{ runner.temp }}/taste-skill/skills/taste-skill
         run: node skills/design-with-ai/tests/providers/browser-live-smoke.mjs
+
+      - name: Real Chrome declared DOM-state regression cases
+        run: node skills/design-with-ai/tests/providers/rendered-state-chrome-smoke.mjs
