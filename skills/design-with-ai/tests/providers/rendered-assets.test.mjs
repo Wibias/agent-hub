@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
-  mkdirSync, mkdtempSync, rmSync, symlinkSync, truncateSync, unlinkSync, writeFileSync,
+  mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, truncateSync, unlinkSync, writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -61,13 +61,19 @@ test("a CSS/JS/image/font asset changes the scoped digest without HTML changes",
   fixture((f) => {
     const initial = f.sample();
     for (const file of [f.css, f.js, f.image, f.font]) {
-      const original = initial.summary.rendered.sha256;
-      writeFileSync(file, "modified asset " + file);
+      const before = f.sample();
+      const bytes = readFileSync(file);
+      assert.ok(bytes.length > 0, "Fixture asset must not be empty");
+      bytes[0] ^= 1; // Same-length mutation, including binary font content.
+      writeFileSync(file, bytes);
       const changed = f.sample();
-      assert.equal(changed.summary.rendered.sha256, original, "HTML must be unchanged");
-      assert.notEqual(changed.summary.sourceSha256, initial.summary.sourceSha256);
+      assert.equal(changed.summary.rendered.sha256, initial.summary.rendered.sha256,
+        "HTML must be unchanged");
+      assert.notEqual(changed.summary.sourceSha256, before.summary.sourceSha256,
+        "Each individual asset mutation must change the bound source digest");
       assert.notEqual(changed.summary.rendered.assetTreeSha256,
-        initial.summary.rendered.assetTreeSha256);
+        before.summary.rendered.assetTreeSha256,
+        "Each individual asset mutation must change the asset-tree digest");
     }
   });
 });
