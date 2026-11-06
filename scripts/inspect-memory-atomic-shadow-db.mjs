@@ -94,7 +94,7 @@ export function inspectAtomicShadowDb({
       type: 'agent_hub_memory_atomic_db_shadow_v1',
       readOnly: true,
       modelInvocations: 0,
-      sourceDatabaseModified: false,
+      writesToSource: false,
       capturePolicyUnchanged: true,
       contentIncluded: false,
       scope: { projectId, branch },
