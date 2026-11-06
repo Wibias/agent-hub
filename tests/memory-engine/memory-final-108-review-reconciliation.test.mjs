@@ -52,6 +52,8 @@ function fixture(run) {
     db.prepare('INSERT INTO project_registry VALUES (?)').run(PROJECT);
     db.prepare('INSERT INTO project_registry VALUES (?)')
       .run('github.com/another/irrelevant-project');
+    // Batch synthetic fixture setup to avoid per-row fsync overhead on Windows.
+    db.exec('BEGIN');
     const evidence = db.prepare('INSERT INTO evidence VALUES (?,?,?,?,?,?,?)');
     const insertProposal = db.prepare('INSERT INTO memory_evidence_proposals VALUES (?,?,?,?,?,?)');
     const linkProposal = db.prepare('INSERT INTO memory_evidence_proposal_evidence VALUES (?,?)');
@@ -124,6 +126,7 @@ function fixture(run) {
       },
       proposals, candidates, expectedActiveClaimRefs: claimRefs,
     };
+    db.exec('COMMIT');
     return run({ db, dbPath, root, manifest });
   } finally {
     db.close();
