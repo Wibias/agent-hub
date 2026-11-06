@@ -132,7 +132,9 @@ export async function probeRenderedState(input, { browserFactory = loadPlaywrigh
         page.on("pageerror", (error) => errors.push(browserError(error)));
         const response = await page.goto(opts.url, { waitUntil: "domcontentloaded", timeout: 45_000 });
         record.httpStatus = response?.status?.() ?? null;
-        record.path = new URL(page.url()).pathname;
+        const navigatedUrl = new URL(page.url());
+        record.path = navigatedUrl.pathname;
+        record.origin = navigatedUrl.origin;
         try {
           await page.waitForSelector(opts.contract.readySelector,
             { state: "visible", timeout: 15_000 });
@@ -145,13 +147,19 @@ export async function probeRenderedState(input, { browserFactory = loadPlaywrigh
         // Sample once more AFTER screenshot so an immediately dismissed loading
         // overlay or state transition is not certified as captured evidence.
         const afterScreenshot = await page.evaluate(SNAPSHOT, opts.contract);
+        const capturedUrl = new URL(page.url());
+        record.finalPath = capturedUrl.pathname;
+        record.finalOrigin = capturedUrl.origin;
         record.signals = { first, second, afterScreenshot };
         record.pageErrorCount = errors.length;
         if (errors.length) record.pageErrorSamples = errors.slice(0, 3);
         record.screenshot = screenshot;
         record.screenshotSha256 = sha(readFileSync(screenshot));
         record.status = record.httpStatus >= 200 && record.httpStatus < 400 &&
-          record.path === opts.route && errors.length === 0 &&
+          record.path === opts.route && record.finalPath === opts.route &&
+          record.origin === new URL(opts.url).origin &&
+          record.finalOrigin === new URL(opts.url).origin &&
+          errors.length === 0 &&
           !record.markerWaitError && completeSample(first) &&
           completeSample(second) && completeSample(afterScreenshot)
           ? "DOM_SIGNALS_OBSERVED" : "INCOMPLETE";
