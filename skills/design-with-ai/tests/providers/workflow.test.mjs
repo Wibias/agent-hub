@@ -33,6 +33,7 @@ async function fixture(fn) {
   const html = join(built, "test", "index.html");
   writeFileSync(target, "export const Page = () => <h1>Test</h1>;");
   writeFileSync(html, "<!doctype html><h1>Test</h1>");
+  writeFileSync(join(root, "package.json"), "{}\n"); // Keep DESIGN.md discovery inside fixture.
   try {
     return await fn({ root, srcDir, built, target, html,
       request: { target: srcDir, projectRoot: root, route: "/test", browserRoot: built } });
