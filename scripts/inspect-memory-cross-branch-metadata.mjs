@@ -113,7 +113,8 @@ export function inspectCrossBranchMemoryIndex({
     const names = new Set([...claims, ...candidates, ...proposals].map(row => row.branch));
     const others = [...names].filter(name => name !== sourceBranch)
       .sort((a, b) => a.localeCompare(b, 'en'));
-    const slots = new Map([[sourceBranch, 'source']]);
+    const slots = new Map();
+    if (names.has(sourceBranch)) slots.set(sourceBranch, 'source');
     for (let i = 0; i < others.length; i++) {
       slots.set(others[i], 'other-' + String(i + 1).padStart(2, '0'));
     }
@@ -185,7 +186,7 @@ export function inspectCrossBranchMemoryIndex({
         'project_policy_owner_not_implemented',
       ],
       inventory: {
-        branchesWithRows: slots.size,
+        branchesWithRows: names.size,
         claims: claims.length, candidates: candidates.length, proposals: proposals.length,
         completelyEnumerated: true, truncated: false,
         selectedReturned: selected.length,
