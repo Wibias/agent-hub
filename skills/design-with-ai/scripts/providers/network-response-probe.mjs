@@ -197,6 +197,9 @@ export async function probeNetworkResponses(options, {
         let requestCount = 0;
         let responseCount = 0;
         let bodyReadsInFlight = 0;
+        // body() does not support cancellation: after one timeout, never
+        // start another read while the timed-out promise may still be alive.
+        let bodyReadTimeoutDetected = false;
         let reservedBodyBytes = 0;
         obs.bodyReadsStarted = 0;
         page.on("pageerror", () => { pageErrorCount++; });
@@ -259,7 +262,7 @@ export async function probeNetworkResponses(options, {
             return;
           }
           // Playwright may buffer internally; this is an adapter-level limit.
-          if (bodyReadsInFlight >= MAX_IN_FLIGHT_BODY_READS) {
+          if (bodyReadTimeoutDetected || bodyReadsInFlight >= MAX_IN_FLIGHT_BODY_READS) {
             recordIssue("LOCAL_RESPONSE_CONCURRENT_LIMIT");
             return;
           }
@@ -293,10 +296,15 @@ export async function probeNetworkResponses(options, {
               row.receivedSha256 = sha(body);
               row.bodyVerified = row.receivedSha256 === row.expectedSha256;
               if (!row.bodyVerified) recordIssue("LOCAL_RESPONSE_BODY_MISMATCH");
-            } catch {
+            } catch (error) {
+              if (error?.message === "Response body timed out") {
+                bodyReadTimeoutDetected = true;
+              }
               recordIssue("LOCAL_RESPONSE_BODY_UNAVAILABLE");
             } finally {
-              bodyReadsInFlight--;
+              // A timed-out response.body() can still be unresolved. Do not
+              // release its slot or permit a later wave to start more reads.
+              if (!bodyReadTimeoutDetected) bodyReadsInFlight--;
             }
           })();
           pending.push(task);

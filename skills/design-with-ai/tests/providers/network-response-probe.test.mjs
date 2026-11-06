@@ -49,6 +49,7 @@ function mockChrome({ input, htmlBytes, cssBytes }, {
   floodPageErrors = 0,
   floodResponses = 0,
   navigateDuringDrain = false,
+  lateResponsesAfterTimeout = false,
 } = {}) {
   const contexts = [];
   let closed = 0;
@@ -58,6 +59,7 @@ function mockChrome({ input, htmlBytes, cssBytes }, {
       newContext: async (opts) => {
         contexts.push(opts);
         const events = new Map();
+        let lateResponsesEmitted = false;
         const response = (resourceUrl, body, status = 200) => ({
           url: () => resourceUrl,
           status: () => status,
@@ -118,6 +120,16 @@ function mockChrome({ input, htmlBytes, cssBytes }, {
           },
           waitForTimeout: async (ms) => {
             if (navigateDuringDrain && ms === 100) currentRoute = "/settings/other.html";
+            if (lateResponsesAfterTimeout && ms === 100 && !lateResponsesEmitted) {
+              lateResponsesEmitted = true;
+              for (let i = 0; i < 5; i++) {
+                const request = {};
+                events.get("request")?.(request);
+                events.get("response")?.(response(
+                  "http://127.0.0.1:5191/settings/site.css", cssBytes));
+                events.get("requestfinished")?.(request);
+              }
+            }
           },
           screenshot: async ({ path }) => {
             if (screenshotError) throw new Error("Screenshot unavailable");
@@ -248,6 +260,25 @@ test("request and error floods remain bounded and cannot yield a false PASS", as
       o.issues.length <= 5),
     "Repeated events must not grow request retention or diagnostic arrays without bound");
     assert.equal(report.productCompletionEligible, false);
+  });
+});
+
+test("timed-out body reads retain their slot and reject a later response wave", async () => {
+  await fixture(async (f) => {
+    const chrome = mockChrome(f, {
+      hangBody: true, lateResponsesAfterTimeout: true,
+    });
+    const report = await probeNetworkResponses(f.input, {
+      browserFactory: chrome.factory, bodyReadTimeoutMs: 20,
+    });
+    assert.equal(report.status, "INCOMPLETE");
+    assert.equal(chrome.getBodyReads(), 2 * 3,
+      "The later wave must not start body reads while the first CSS body remains pending");
+    assert.ok(report.observations.every((o) =>
+      o.bodyReadsStarted === 2 &&
+      o.issues.includes("LOCAL_RESPONSE_BODY_UNAVAILABLE") &&
+      o.issues.includes("LOCAL_RESPONSE_CONCURRENT_LIMIT")),
+    "An unresolved timed-out body must hold its slot and prevent further reads");
   });
 });
 
