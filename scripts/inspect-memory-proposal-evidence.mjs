@@ -230,8 +230,9 @@ export function inspectLocalMemoryProposalEvidence({
         status: allowed(proposal.status, OPEN_STATUSES),
         linkedEvidence: rows.length,
         sourcesStructurallyReviewable: sourcesValid,
-        sourceAuthorityNeedsHumanReview: !sourcesValid || sources.some(
-          s => s.authorityClass !== 'user_direct',
+        sourceAuthorityNeedsHumanReview: true,
+        nonUserDirectEvidencePresent: sources.some(
+          s => s.exists && s.authorityClass !== 'user_direct',
         ),
         meaningNeedsHumanReview: true,
         ...(safeContent ? { localCanonicalFact: excerpt(proposal.canonical_fact, 500) } : {}),
