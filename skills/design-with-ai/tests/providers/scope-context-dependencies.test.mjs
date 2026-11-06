@@ -91,6 +91,27 @@ test("HTML-only Impeccable source proof includes linked sibling CSS bytes", () =
   });
 });
 
+test("HTML entity-encoded stylesheet rel cannot evade the source proof", () => {
+  fixture(({ root, src }) => {
+    const html = join(src, "page.html");
+    const css = join(src, "site.css");
+    writeFileSync(html, '<link rel="style&#115;heet" href="site.css">');
+    writeFileSync(css, "h1 { color: red; }\n");
+    const inspect = (includeDetectorContext) => sourceScopeProof({
+      projectRoot: root, target: html, route: "/page", includeDetectorContext,
+    });
+    assert.throws(() => inspect(true),
+      /Entity-bearing stylesheet rel cannot be attested/,
+      "An entity-decoding HTML parser would read this linked stylesheet");
+    writeFileSync(css, "h1 { color: blue; }\n");
+    assert.throws(() => inspect(true),
+      /Entity-bearing stylesheet rel cannot be attested/,
+      "Neither original nor changed CSS may receive an unsupported proof");
+    assert.equal(inspect(false).manifest.linkedStylesheets, undefined,
+      "The unrelated native-only quick profile stays unaffected");
+  });
+});
+
 test("symlinked linked CSS and escaping local stylesheet reads cannot be attested", () => {
   fixture(({ root, src }) => {
     const html = join(src, "page.html");
