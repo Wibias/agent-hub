@@ -1,0 +1,37 @@
+name: Memory Cross-branch Decision Reconciliation D12.3
+
+on:
+  pull_request:
+    paths:
+      - "scripts/reconcile-memory-cross-branch-decisions.mjs"
+      - "tests/memory-engine/memory-cross-branch-decision-reconciliation.test.mjs"
+      - "docs/memory-d12-3-cross-branch-decision-reconciliation.md"
+      - ".github/workflows/verify-memory-cross-branch-decisions.yml"
+  push:
+    branches: [main]
+    paths:
+      - "scripts/reconcile-memory-cross-branch-decisions.mjs"
+      - "tests/memory-engine/memory-cross-branch-decision-reconciliation.test.mjs"
+      - "docs/memory-d12-3-cross-branch-decision-reconciliation.md"
+      - ".github/workflows/verify-memory-cross-branch-decisions.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Verify complete read-only project decision reconciliation
+        run: |
+          node --check scripts/reconcile-memory-cross-branch-decisions.mjs
+          node --test tests/memory-engine/memory-cross-branch-decision-reconciliation.test.mjs
