@@ -28,6 +28,24 @@ test("browser server endpoint remains private and connect timeout kills its owne
   assert.equal(kills, 1);
 });
 
+test("late BrowserServer launch is killed even after the caller deadline", async () => {
+  let resolveLaunch;
+  let kills = 0;
+  const chromium = {
+    launchServer: () => new Promise((resolve) => { resolveLaunch = resolve; }),
+    connect: async () => { throw new Error("Must not connect after timeout"); },
+  };
+  const stage = (name, call) => name === "launch"
+    ? Promise.race([call(), new Promise((_, reject) =>
+      setTimeout(() => reject(new Error("Browser stage timeout: launch")), 20))])
+    : call();
+  await assert.rejects(launchOwnedBrowser(chromium, {}, stage),
+    /Browser stage timeout: launch/);
+  resolveLaunch({ kill: async () => { kills++; } });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(kills, 1);
+});
+
 test("real loader cannot silently fall back to an unsupervised Browser.launch", async () => {
   let launches = 0;
   const chromium = { launch: async () => { launches++; return {}; } };
