@@ -235,6 +235,26 @@ test("missing, duplicate, contradictory or empty source receipts never PASS", as
   });
 });
 
+test("real vendored scan-proof CLI rejects symlink file and directory targets", async () => {
+  await fixture(({ root, target }) => {
+    const sourceAlias = join(root, "source-alias.tsx");
+    const directoryAlias = join(root, "directory-alias");
+    symlinkSync(target, sourceAlias, "file");
+    symlinkSync(root, directoryAlias, "dir");
+    for (const aliased of [sourceAlias, directoryAlias]) {
+      const scan = spawnSync(process.execPath,
+        [vendoredCli, "--json", "--dwa-scan-proof", aliased],
+        { cwd: root, encoding: "utf8", timeout: 30_000 });
+      assert.equal(scan.status, 1, scan.stderr + scan.stdout);
+      assert.match(scan.stderr, /scan-proof target must not be a symbolic link/);
+      assert.ok(!scan.stderr.includes(aliased),
+        "fail-closed diagnostics must not reveal arbitrary path bytes");
+      assert.ok(!scan.stderr.includes("DWA_IMPECCABLE_SCAN_PROOF="),
+        "a rejected target must not produce a completed scan proof");
+    }
+  });
+});
+
 test("real vendored scanner reports actual eligible and completed files", async () => {
   await fixture(({ root, target }) => {
     const second = join(root, "second.tsx");

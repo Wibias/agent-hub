@@ -356,6 +356,20 @@ async function detectCli() {
 
         const resolved = path.resolve(target);
         let stat;
+        if (scanProofMode) {
+          // statSync follows symlinks: proof mode must reject an aliased
+          // target before scanning either a file or a directory.
+          let targetStat;
+          try { targetStat = fs.lstatSync(resolved); }
+          catch {
+            process.stderr.write("Error: scan-proof target is not accessible.\n");
+            process.exit(1);
+          }
+          if (targetStat.isSymbolicLink()) {
+            process.stderr.write("Error: scan-proof target must not be a symbolic link.\n");
+            process.exit(1);
+          }
+        }
         try { stat = fs.statSync(resolved); }
         catch { process.stderr.write(`Warning: cannot access ${target}\n`); continue; }
 
