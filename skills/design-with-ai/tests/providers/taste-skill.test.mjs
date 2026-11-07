@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import {
-  existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync,
+  existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -255,6 +255,38 @@ test("missing browser coverage, skipped checks, falsified counts and wrong sourc
   });
 });
 
+
+
+test("Taste output report-directory symlinks and Windows junctions cannot escape run isolation", async () => {
+  await fixture(async (fx) => {
+    const outside = join(fx.root, "CANARY_OUTSIDE_TASTE_REPORT_20261107");
+    mkdirSync(outside);
+    let invoked = 0;
+    const runner = async (command) => {
+      invoked++;
+      const out = command.args[command.args.indexOf("--out") + 1];
+      const report = sampleReport({ page: fx.page, out });
+      // The provider already created out as a real directory. Simulate an
+      // upstream process replacing that parent with an external link.
+      rmSync(out, { recursive: true, force: true });
+      writeFileSync(join(outside, "report.json"), JSON.stringify(report));
+      symlinkSync(outside, out, process.platform === "win32" ? "junction" : "dir");
+      return {
+        exitCode: 0, stdout: JSON.stringify(report), stderr: "",
+        error: null, timedOut: false, outputLimitExceeded: false,
+      };
+    };
+    const p = createTasteSkillProvider({
+      skillRoot: fx.skillRoot, nodeMajor: 22, runner,
+    });
+    const actual = await p.inspect(opts(fx));
+    assert.equal(invoked, 1);
+    assert.equal(actual.status, ProviderStatus.ERROR);
+    assert.match(actual.reason, /Taste Skill report is incomplete or invalid/);
+    assert.ok(!JSON.stringify(actual).includes("CANARY_OUTSIDE_TASTE_REPORT_20261107"));
+    assert.equal(actual.findings.length, 0);
+  });
+});
 
 test("malformed upstream Taste JSON never leaks parser-supplied credential fragments", async () => {
   await fixture(async (fx) => {
