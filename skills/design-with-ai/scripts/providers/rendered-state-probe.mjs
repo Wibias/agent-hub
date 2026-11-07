@@ -267,6 +267,7 @@ export async function probeRenderedState(input, {
       let pageErrorCount = 0;
       const pageErrorSamples = [];
       let mainFrameNavigations = 0;
+      let secondaryPageOpened = false;
       let observationSealed = false;
       let abortAfterViewport = false;
       try {
@@ -274,15 +275,23 @@ export async function probeRenderedState(input, {
           viewport: { width, height: H },
           serviceWorkers: "block", storageState: { cookies: [], origins: [] },
         });
+        // Subscribe before opening the primary page: popups and their errors
+        // belong to this viewport, even if the main page stays ready. Keep
+        // only an opaque boolean, never popup URLs or private page contents.
+        const seenPages = new Set();
+        const observePage = (candidate) => {
+          if (seenPages.has(candidate)) return;
+          if (seenPages.size > 0) secondaryPageOpened = true;
+          seenPages.add(candidate);
+          candidate.on("pageerror", (error) => {
+            if (observationSealed) return;
+            pageErrorCount++;
+            if (pageErrorSamples.length < 3) pageErrorSamples.push(browserError(error));
+          });
+        };
+        context.on("page", observePage);
         const page = await context.newPage();
-        // A hostile or broken page can emit an arbitrary number of exceptions.
-        // Preserve the count and at most three redacted examples, never all
-        // raw error strings in memory or persistent evidence.
-        page.on("pageerror", (error) => {
-          if (observationSealed) return;
-          pageErrorCount++;
-          if (pageErrorSamples.length < 3) pageErrorSamples.push(browserError(error));
-        });
+        observePage(page); // Idempotent when Playwright already emitted "page".
         // Register before goto: count main-frame navigations even when JS
         // leaves and returns to the requested route during the observation.
         const mainFrame = page.mainFrame();
@@ -365,6 +374,7 @@ export async function probeRenderedState(input, {
         observationSealed = true;
       }
       record.mainFrameNavigationCount = mainFrameNavigations;
+      record.secondaryPageOpened = secondaryPageOpened;
       record.pageErrorCount = pageErrorCount;
       if (pageErrorSamples.length) record.pageErrorSamples = pageErrorSamples;
       const { first, second, afterScreenshot } = record.signals ?? {};
@@ -374,6 +384,7 @@ export async function probeRenderedState(input, {
         mainFrameNavigations === 1 && record.path === opts.route &&
         record.finalPath === opts.route && record.origin === expectedOrigin &&
         record.finalOrigin === expectedOrigin && pageErrorCount === 0 &&
+        !secondaryPageOpened &&
         /^[0-9a-f]{64}$/.test(record.screenshotSha256 ?? "") &&
         !record.markerWaitError && !record.firstSampleError && completeSample(first) &&
         completeSample(second) && completeSample(afterScreenshot)
