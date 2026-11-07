@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import { Capability, ProviderStatus } from "../../scripts/providers/contract.mjs";
 import { createProviderRegistry, runProviders } from "../../scripts/providers/registry.mjs";
 import { createImpeccableProvider } from "../../scripts/providers/impeccable.mjs";
+import { collectStaticCssText } from "../../../impeccable/scripts/detector/engines/static-html/css-cascade.mjs";
 
 const cli = fileURLToPath(new URL("../../scripts/providers/scan.mjs", import.meta.url));
 const vendoredCli = fileURLToPath(new URL("../../../impeccable/scripts/detect.mjs", import.meta.url));
@@ -32,6 +33,41 @@ function result({ stdout = "[]", exitCode = 0, stderr = proofLine() } = {}) {
     timedOut: false, outputLimitExceeded: false,
   };
 }
+
+test("unreadable local HTML stylesheet marks source scan degraded", () => {
+  const root = mkdtempSync(join(tmpdir(), "dwa-css-degraded-"));
+  try {
+    const file = join(root, "index.html");
+    const css = join(root, "styles.css");
+    writeFileSync(file, '<link rel="stylesheet" href="styles.css">');
+    mkdirSync(css); // Directory is not a readable stylesheet on Linux/Windows.
+    const modules = {
+      selectAll: (selector) => selector === "link"
+        ? [{ attribs: { rel: "stylesheet", href: "styles.css" } }] : [],
+      domutils: { textContent: () => "" },
+    };
+    const degraded = [];
+    const text = collectStaticCssText(
+      { children: [] }, root, null, file, modules,
+      (source) => degraded.push(source),
+    );
+    assert.equal(text, "");
+    assert.deepEqual(degraded, [file],
+      "a swallowed stylesheet read must degrade the HTML source receipt");
+
+    rmSync(css, { recursive: true });
+    writeFileSync(css, "h1 { color: red; }");
+    degraded.length = 0;
+    const valid = collectStaticCssText(
+      { children: [] }, root, null, file, modules,
+      (source) => degraded.push(source),
+    );
+    assert.equal(valid, "h1 { color: red; }");
+    assert.deepEqual(degraded, [], "valid linked CSS must not report degraded");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
 
 test("normalizes primary and advisory Impeccable findings without inventing P0", async () => {
   await fixture(async ({ root, target }) => {
