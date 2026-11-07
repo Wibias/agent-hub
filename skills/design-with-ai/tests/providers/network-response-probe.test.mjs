@@ -110,7 +110,8 @@ function mockChrome({ input, htmlBytes, cssBytes }, {
           },
           waitForTimeout: async () => {},
           screenshot: async ({ path }) => {
-            if (screenshotError) throw new Error("Screenshot unavailable");
+            if (screenshotError) throw new Error(
+              typeof screenshotError === "string" ? screenshotError : "Screenshot unavailable");
             writeFileSync(path, "image");
           },
           url: () => "http://127.0.0.1:5191" + (redirected ? "/login" : "/settings"),
@@ -196,7 +197,7 @@ test("browser failures retain a per-viewport issue rather than escaping catch sc
     assert.equal(report.status, "INCOMPLETE");
     assert.equal(report.observations.length, 3);
     assert.ok(report.observations.every((o) =>
-      o.issues.some((issue) => issue.includes("BROWSER_PROBE_FAILURE: Screenshot unavailable"))),
+      o.issues.some((issue) => issue.includes("BROWSER_PROBE_FAILURE: Browser error: <details-redacted>"))),
     "Failure details must remain attached to each affected observation");
     assert.equal(report.error, undefined);
   });
@@ -255,6 +256,38 @@ test("remote URL credentials and query never enter report; external stays unveri
   });
 });
 
+
+test("relative URLs and bare credentials never persist in browser failure evidence", async () => {
+  await fixture(async (f) => {
+    const messages = [
+      "Failed request /api/auth?access_token=CANARY_RELATIVE_907",
+      "Blocked //internal.example/api?token=CANARY_PROTOCOL_907",
+      "Browser failed token=CANARY_BARE_907",
+    ];
+    for (const message of messages) {
+      const report = await probeNetworkResponses(f.input, {
+        browserFactory: mockChrome(f, { screenshotError: message }).factory,
+      });
+      assert.equal(report.status, "INCOMPLETE");
+      assert.equal(report.productCompletionEligible, false);
+      assert.ok(report.observations.every((o) =>
+        o.issues.includes("BROWSER_PROBE_FAILURE: Browser error: <details-redacted>")));
+      const persisted = readFileSync(join(report.artifactDirectory, "network-report.json"), "utf8");
+      assert.ok(!persisted.includes("CANARY_"), "Untrusted error text must not persist");
+      assert.ok(!persisted.includes(message));
+    }
+    const thrown = await probeNetworkResponses(f.input, {
+      browserFactory: async () => {
+        throw new Error("Launch failed token=CANARY_STARTUP_907");
+      },
+    });
+    assert.equal(thrown.status, "INCOMPLETE");
+    assert.equal(thrown.error, "Browser error: <details-redacted>");
+    const persisted = readFileSync(join(thrown.artifactDirectory, "network-report.json"), "utf8");
+    assert.ok(!persisted.includes("CANARY_STARTUP_907"));
+  });
+});
+
 test("a file mutation during probe invalidates snapshot even when response bodies match", async () => {
   await fixture(async (f) => {
     const result = await probeNetworkResponses(f.input, {
@@ -292,7 +325,7 @@ test("unavailable Chrome does not claim matched network bodies", async () => {
       browserFactory: async () => { throw new Error("Browser missing"); },
     });
     assert.equal(r.status, "INCOMPLETE");
-    assert.match(r.error, /Browser missing/);
+    assert.equal(r.error, "Browser error: <details-redacted>");
     assert.equal(r.observations.length, 0);
     assert.equal(r.localAssetTreeUnchanged, true);
   });
