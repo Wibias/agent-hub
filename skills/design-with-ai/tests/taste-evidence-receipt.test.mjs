@@ -752,6 +752,18 @@ test("receipt binds child proof to exact source, snapshot and fusion channels", 
     verdict: "PASS_RENDER_EVIDENCE", hits: [], cluster: { families: [] },
   });
   const writeGate = (file, report, code = 0) => {
+    // A valid render fixture must echo the actual frozen input path supplied
+    // by the receipt's child invocation, not the mutable source identity.
+    if (file === renderGate && report.snapshot === snapshot) {
+      writeFileSync(file, [
+        "const args=process.argv.slice(2); const snapshot=args[args.indexOf('--snapshot')+1];",
+        "const report=" + JSON.stringify(report) + ";",
+        "report.snapshot=snapshot;",
+        "process.stdout.write(JSON.stringify(report));",
+        "process.exit(" + code + ");",
+      ].join("\n") + "\n");
+      return;
+    }
     writeFileSync(file, "process.stdout.write(" +
       JSON.stringify(JSON.stringify(report)) + ");\nprocess.exit(" + code + ");\n");
   };
