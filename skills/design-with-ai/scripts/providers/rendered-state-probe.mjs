@@ -75,45 +75,103 @@ export const snapshotDeclaredDomState = ({
 }) => {
   const inViewport = (r) => r.width > 0 && r.height > 0 &&
     r.bottom > 0 && r.top < innerHeight && r.right > 0 && r.left < innerWidth;
-  const shown = (element) => {
-    if (!element || !element.getBoundingClientRect ||
-        !inViewport(element.getBoundingClientRect())) return false;
+  const visibleStyle = (element) => {
+    if (!element) return false;
+    // visibility is inherited but descendants can override it with visible.
+    // display:none and opacity remain effective on the entire ancestor chain.
+    const ownVisibility = getComputedStyle(element).visibility;
+    if (ownVisibility === "hidden" || ownVisibility === "collapse") return false;
     for (let node = element; node; node = node.parentElement) {
       const style = getComputedStyle(node);
-      if (style.display === "none" || style.visibility === "hidden" ||
-          Number(style.opacity) <= 0.05) return false;
+      if (style.display === "none" || Number(style.opacity) <= 0.05) return false;
     }
     return true;
   };
+  const intersectsVisible = (rect, element) => {
+    if (!inViewport(rect)) return false;
+    let left = Math.max(0, rect.left);
+    let right = Math.min(innerWidth, rect.right);
+    let top = Math.max(0, rect.top);
+    let bottom = Math.min(innerHeight, rect.bottom);
+    // A range's unclipped CSSOM rectangle can lie inside a zero-height or
+    // scroll-clipped ancestor. Intersect with each actual clipping ancestor.
+    for (let node = element; node; node = node.parentElement) {
+      const style = getComputedStyle(node);
+      const x = style.overflowX ?? style.overflow;
+      const y = style.overflowY ?? style.overflow;
+      const clipX = /^(hidden|clip|scroll|auto|overlay)$/.test(x ?? "");
+      const clipY = /^(hidden|clip|scroll|auto|overlay)$/.test(y ?? "");
+      if ((clipX || clipY) && node.getBoundingClientRect) {
+        const clip = node.getBoundingClientRect();
+        if (clipX) { left = Math.max(left, clip.left); right = Math.min(right, clip.right); }
+        if (clipY) { top = Math.max(top, clip.top); bottom = Math.min(bottom, clip.bottom); }
+      }
+      if (right <= left || bottom <= top) return false;
+    }
+    return right > left && bottom > top;
+  };
+  const shown = (element) =>
+    visibleStyle(element) && Boolean(element.getBoundingClientRect) &&
+    intersectsVisible(element.getBoundingClientRect(), element.parentElement);
   const selectedVisible = (selector) =>
     [...document.querySelectorAll(selector)].some(shown);
   // The same serializable function is used by the browser wait and all
   // snapshots, avoiding visibility rules that can disagree across phases.
   if (markerOnly) return selectedVisible(readySelector);
-  const visibleWords = [];
+  // Keep adjacent inline text fragments adjacent: Play<span>ing</span>
+  // must count as "Playing", while a real DOM whitespace token remains a gap.
+  let visibleText = "";
+  let pendingGap = false;
+  let previousBlock = null;
   let textTruncated = false;
+  const blockAncestor = (element) => {
+    for (let node = element; node; node = node.parentElement) {
+      if (/^(block|flow-root|flex|grid|table|list-item)$/.test(
+        getComputedStyle(node).display ?? "")) return node;
+    }
+    return null;
+  };
   if (requiredText.length || forbiddenText.length) {
     const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
     let node, nodes = 0, words = 0;
     while ((node = walker.nextNode()) !== null) {
       if (++nodes > 3000) { textTruncated = true; break; }
-      if (!node.parentElement || !shown(node.parentElement)) continue;
-      const text = node.nodeValue ?? "";
+      const raw = node.nodeValue ?? "";
+      if (!node.parentElement || !visibleStyle(node.parentElement)) {
+        if (raw.trim()) pendingGap = true;
+        continue;
+      }
+      const block = blockAncestor(node.parentElement);
       const range = document.createRange();
-      for (const match of text.matchAll(/\S+/g)) {
+      let last = 0;
+      for (const match of raw.matchAll(/\S+/g)) {
         if (++words > 6000) { textTruncated = true; break; }
+        if (/\s/.test(raw.slice(last, match.index))) pendingGap = true;
         range.setStart(node, match.index);
         range.setEnd(node, match.index + match[0].length);
-        if ([...range.getClientRects()].some(inViewport)) {
-          visibleWords.push(match[0]);
+        const visible = [...range.getClientRects()].some((rect) =>
+          intersectsVisible(rect, node.parentElement));
+        if (visible) {
+          if (visibleText.length &&
+              (pendingGap || (previousBlock && block && previousBlock !== block))) {
+            visibleText += " ";
+          }
+          visibleText += match[0];
+          previousBlock = block;
+          pendingGap = false;
+        } else {
+          // Offscreen/clipped text cannot bridge two unrelated word pieces.
+          pendingGap = true;
         }
+        last = match.index + match[0].length;
       }
+      if (/\s/.test(raw.slice(last))) pendingGap = true;
       range.detach?.();
       if (textTruncated) break;
     }
   }
-  const text = visibleWords.join(" ").toLocaleLowerCase();
-  const includes = (needle) => text.includes(needle.toLocaleLowerCase());
+  const normalizedText = visibleText.toLocaleLowerCase();
+  const includes = (needle) => normalizedText.includes(needle.toLocaleLowerCase());
   return {
     markerVisible: selectedVisible(readySelector),
     blockersVisible: forbiddenSelectors.filter(selectedVisible),

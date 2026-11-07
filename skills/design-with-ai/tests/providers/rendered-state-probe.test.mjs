@@ -240,6 +240,74 @@ test("viewport text ignores off-screen content and all markers are considered", 
   }
 });
 
+test("DOM sampler checks clipping, display:contents ranges, and inline word continuity", () => {
+  const old = {
+    document: globalThis.document, getComputedStyle: globalThis.getComputedStyle,
+    NodeFilter: globalThis.NodeFilter,
+    innerWidth: globalThis.innerWidth, innerHeight: globalThis.innerHeight,
+  };
+  const box = (y, h = 20) => ({
+    top: y, bottom: y + h, left: 10, right: 200, width: 190, height: h,
+  });
+  const el = (rect, parent = null, extra = {}) => ({
+    parentElement: parent, getBoundingClientRect: () => rect, ...extra,
+  });
+  const root = el(box(10, 80));
+  const clipped = el(box(10, 0), root, { overflow: "hidden" });
+  const clippedMarker = el(box(10, 20), clipped);
+  const goodMarker = el(box(10, 20), root);
+  const contents = el(box(10, 0), root, { display: "contents" });
+  const overrideParent = el(box(10, 80), root, { visibility: "hidden" });
+  const overrideMarker = el(box(10, 20), overrideParent, { visibility: "visible" });
+  const words = [
+    { nodeValue: "Play", parentElement: goodMarker, rect: box(15) },
+    { nodeValue: "ing", parentElement: el(box(15), goodMarker, { display: "inline" }), rect: box(15) },
+    { nodeValue: " now", parentElement: goodMarker, rect: box(15) },
+    { nodeValue: "Access denied", parentElement: contents, rect: box(15) },
+    { nodeValue: "Masked", parentElement: clippedMarker, rect: box(15) },
+  ];
+  let matches = [goodMarker];
+  try {
+    globalThis.innerWidth = 390; globalThis.innerHeight = 900;
+    globalThis.NodeFilter = { SHOW_TEXT: 4 };
+    globalThis.getComputedStyle = (e) => ({
+      display: e.display ?? "block",
+      visibility: e.visibility ?? (e.parentElement?.visibility ?? "visible"),
+      opacity: "1",
+      overflow: e.overflow ?? "visible",
+    });
+    globalThis.document = {
+      body: {}, querySelectorAll: () => matches,
+      createTreeWalker: () => {
+        let i = 0; return { nextNode: () => words[i++] ?? null };
+      },
+      createRange: () => {
+        let node;
+        return {
+          setStart: (x) => { node = x; }, setEnd: () => {},
+          getClientRects: () => [node.rect], detach: () => {},
+        };
+      },
+    };
+    const run = (args = {}) => snapshotDeclaredDomState({
+      readySelector: "[data-game-phase='live']",
+      requiredText: ["Playing now", "Masked"],
+      forbiddenText: ["Access denied"], ...args,
+    });
+    const actual = run();
+    assert.deepEqual(actual.missingText, ["Masked"]);
+    assert.deepEqual(actual.forbiddenTextVisible, ["Access denied"]);
+    assert.equal(actual.markerVisible, true);
+    matches = [clippedMarker];
+    assert.equal(run({ markerOnly: true }), false);
+    matches = [overrideMarker];
+    assert.equal(run({ markerOnly: true }), true,
+      "explicit child visibility may override visibility:hidden ancestor");
+  } finally {
+    Object.assign(globalThis, old);
+  }
+});
+
 test("symlinked CLI invocation executes and rejects missing options instead of silently exiting", async () => {
   await fixture(async ({ root }) => {
     if (process.platform === "win32") return; // File symlinks need elevated rights on some Windows hosts.
