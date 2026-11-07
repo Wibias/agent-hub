@@ -173,6 +173,7 @@ export async function fetchP30ProfileCandidateSnapshot({
   url.searchParams.set('snapshot_date', 'eq.' + expectedDate);
   url.searchParams.set('order', 'asset_id.asc');
 
+  const key = publishableKey;
   const controller = new AbortController();
   let timer;
   const deadline = new Promise((_resolve, failure) => {
@@ -186,7 +187,7 @@ export async function fetchP30ProfileCandidateSnapshot({
     try {
       response = await fetchImpl(url.toString(), {
         method: 'GET',
-        headers: { apikey: publishableKey },
+        headers: { apikey: key },
         signal: controller.signal,
       });
     } catch {
