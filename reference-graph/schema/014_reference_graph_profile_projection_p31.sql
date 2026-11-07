@@ -60,6 +60,7 @@ declare
   v_date date;
   v_source_count bigint;
   v_invalid_count bigint;
+  v_metadata_invalid_count bigint;
   v_published_count bigint;
   v_source_hash text;
   v_published_hash text;
@@ -95,6 +96,41 @@ begin
 
   if v_invalid_count <> 0 then
     raise exception 'P31 source has missing or invalid primary stratum';
+  end if;
+
+  -- The P7 eligibility source may contain candidate metadata that is legal
+  -- for Quick but violates P28's stricter Standard/Deep DTO contract. Never
+  -- publish a snapshot that P30 necessarily rejects.
+  select count(*) into v_metadata_invalid_count
+  from public.reference_graph_quick_candidate_pool_p7(
+    jsonb_build_object('reference_date', v_date::text)
+  ) p
+  where p.surface_family is null
+    or p.surface_family not in (
+      'public-home', 'authenticated-home', 'operator-control',
+      'library-launcher', 'creation-setup', 'realtime-multiplayer',
+      'admin-settings', 'auth-onboarding', 'commerce-checkout',
+      'mobile-responsive', 'editorial-experimental',
+      'design-system-craft'
+    )
+    or p.platform is null
+    or p.platform not in ('web-responsive', 'native-mobile')
+    or p.evidence_class is null
+    or p.evidence_class not in (
+      'TESTED', 'OBSERVED', 'INTERPRETED', 'INSPIRATION', 'MARKETING_CLAIM'
+    )
+    or p.access_status not in ('AVAILABLE', 'PAYWALLED')
+    or p.search_text is null
+    or jsonb_typeof(p.tags) is distinct from 'array'
+    or exists (
+      select 1
+      from jsonb_array_elements(coalesce(p.tags, '[]'::jsonb)) as tag(value)
+      where jsonb_typeof(tag.value) <> 'string'
+         or btrim(tag.value #>> '{}') = ''
+    );
+
+  if v_metadata_invalid_count <> 0 then
+    raise exception 'P31 source has invalid P28 candidate metadata';
   end if;
 
   delete from public.reference_graph_profile_runtime_projection_p30_v1
