@@ -600,41 +600,68 @@ export function findDesignRoot(startDir, { cache } = {}) {
   // are created, removed or renamed. Cache the exact directory signature,
   // not just an ancestor lookup that can become stale midway through a scan.
   const directorySignature = (entry) => {
-    try {
-      const stat = fs.statSync(entry, { bigint: true });
-      if (!stat.isDirectory()) return null;
-      return `${stat.dev}:${stat.ino}:${stat.mtimeNs}:${stat.ctimeNs}`;
-    } catch {
-      // Missing or inaccessible directories invalidate a memo, not the scan.
-      return null;
-    }
+    const statKey = (location) => {
+      try {
+        const stat = fs.statSync(location, { bigint: true });
+        return stat.isDirectory()
+          ? `${stat.dev}:${stat.ino}:${stat.mtimeNs}:${stat.ctimeNs}`
+          : 'not-directory';
+      } catch {
+        return null;
+      }
+    };
+    const own = statKey(entry);
+    if (own === null || own === 'not-directory') return null;
+    // An existing docs/ or .agents/context/ can gain or lose DESIGN.md
+    // without changing the parent project's directory metadata.
+    // Track the actual fallback directories, including absence.
+    return JSON.stringify([own, ...FALLBACK_DIRS.map((rel) =>
+      statKey(path.join(entry, rel)))]);
   };
-  const cachedRootIsCurrent = (start, resolved) => {
+  // Each cached resolution needs its OWN immutable lookup-path signatures.
+  // Shared dirsig:<dir> values are updated by sibling scans, and must not
+  // make an older descendant resolution appear current after a boundary
+  // marker or DESIGN.md is added in their common parent.
+  const signatureSnapshot = (start, resolved) => {
+    const snapshot = new Map();
     let entry = start;
     while (true) {
       const signature = directorySignature(entry);
-      if (signature === null || cache.get(`dirsig:${entry}`) !== signature) {
-        cache.delete(`resolve:${entry}`);
-        cache.delete(`root:${entry}`);
-        return false;
-      }
-      if (resolved && entry === resolved.dir) return true;
+      if (signature === null) return null;
+      snapshot.set(entry, signature);
+      if (resolved && entry === resolved.dir) return snapshot;
       const parent = path.dirname(entry);
-      if (entry === homeDir || parent === entry) return resolved === null;
+      if (entry === homeDir || parent === entry) {
+        return resolved === null ? snapshot : null;
+      }
       entry = parent;
     }
   };
+  const cachedRootIsCurrent = (start, resolved) => {
+    const saved = cache.get(`resolveSig:${start}`);
+    if (saved instanceof Map && [...saved].every(([entry, signature]) =>
+      directorySignature(entry) === signature)) return true;
+    cache.delete(`resolve:${start}`);
+    cache.delete(`resolveSig:${start}`);
+    cache.delete(`dirsig:${start}`);
+    // Invalid resolution metadata must also invalidate the parsed tokens
+    // for the old root. A new fallback DESIGN.md may point to the same root.
+    if (resolved) cache.delete(`root:${resolved.dir}`);
+    return false;
+  };
   const remember = (resolved) => {
     if (cache) for (const entry of visited) {
-      const signature = directorySignature(entry);
-      if (signature === null) {
+      const snapshot = signatureSnapshot(entry, resolved);
+      if (snapshot === null) {
         cache.delete(`resolve:${entry}`);
+        cache.delete(`resolveSig:${entry}`);
         cache.delete(`root:${entry}`);
         cache.delete(`dirsig:${entry}`);
         continue;
       }
       cache.set(`resolve:${entry}`, resolved);
-      cache.set(`dirsig:${entry}`, signature);
+      cache.set(`resolveSig:${entry}`, snapshot);
+      cache.set(`dirsig:${entry}`, snapshot.get(entry));
     }
     return resolved;
   };
