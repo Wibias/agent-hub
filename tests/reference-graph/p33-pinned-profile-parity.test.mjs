@@ -94,6 +94,8 @@ test('P33 composes strict P30 response and independently pinned P27 to compare 4
   assert.equal(result.record_order_coverage_parity_exact, true);
   assert.equal(result.candidate_count, candidates.length);
   assert.equal(result.candidate_id_set_sha256, idHash);
+  assert.match(result.candidate_content_sha256, /^[0-9a-f]{64}$/);
+  assert.notEqual(result.candidate_content_sha256, idHash);
   assert.equal(result.transport_contract_verified, true);
   assert.equal(result.pinned_inputs_verified, true);
   assert.equal(result.pattern_parity_verified, false);
@@ -103,6 +105,29 @@ test('P33 composes strict P30 response and independently pinned P27 to compare 4
   assert.equal(result.deployment_authorized, false);
   assert.equal(result.eligible_for_activation, false);
   assert.doesNotMatch(JSON.stringify(result), /search_text|ref-p7-a|sb_publishable_p33_disposable|sourceReceiptJson/);
+});
+
+test('P33 full candidate digest is canonical under row property-key reordering', async () => {
+  const original = await auditP33PinnedProfileParity(fixture());
+  const reordered = rows(row => Object.fromEntries(Object.entries(row).reverse()));
+  const again = await auditP33PinnedProfileParity(fixture({}, reordered));
+  assert.match(original.candidate_content_sha256, /^[0-9a-f]{64}$/);
+  assert.equal(original.candidate_content_sha256, again.candidate_content_sha256);
+  assert.equal(original.candidate_id_set_sha256, again.candidate_id_set_sha256);
+});
+
+test('P33 content digest changes if valid metadata changes but identity and selection remain intact', async () => {
+  const original = await auditP33PinnedProfileParity(fixture());
+  const modified = rows((row, i) => i === 0
+    ? { ...row, tags: [...row.tags, 'p33-hash-probe'] }
+    : row);
+  const changed = await auditP33PinnedProfileParity(fixture({}, modified));
+  assert.equal(changed.candidate_id_set_sha256, original.candidate_id_set_sha256);
+  assert.equal(changed.record_order_coverage_parity_exact, true);
+  assert.equal(original.record_order_coverage_parity_exact, true);
+  assert.match(changed.candidate_content_sha256, /^[0-9a-f]{64}$/);
+  assert.notEqual(changed.candidate_content_sha256, original.candidate_content_sha256);
+  assert.equal(changed.deployment_authorized, false);
 });
 
 test('P33 rejects missing/self-generated pins, incorrect fixed target and arbitrary baseline before HTTP', async () => {
