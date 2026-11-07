@@ -331,6 +331,58 @@ test("cross-surface report must cover exactly the route-bound manifest snapshots
   assert.match(result.parsed.error, /cover exactly the route-bound rendered candidates/);
 });
 
+test("cross-surface verdict must agree with hits and triggered comparisons", () => {
+  const candidates = [
+    {
+      id: "home",
+      source: "export default function Home(){ return <main>Home</main>; }",
+      route: "/home",
+      snapshot: cleanSnapshot({ url: "http://localhost/home" }),
+    },
+    {
+      id: "pricing",
+      source: "export default function Pricing(){ return <main>Pricing</main>; }",
+      route: "/pricing",
+      snapshot: cleanSnapshot({ url: "http://localhost/pricing" }),
+    },
+  ];
+  const report = (snapshots, verdict, hits, comparisons) => ({
+    verdict,
+    snapshots: snapshots.map(({ path, route, snapshot }) => ({
+      path, route, viewportBand: "desktop",
+      macroFingerprint: snapshot.macroFingerprint,
+      zoneCount: snapshot.macroZones.length,
+    })),
+    hits, comparisons, note: "synthetic cross-surface evidence",
+  });
+
+  const invalid = [
+    // Both the hit and comparison report contextual evidence, but verdict lies.
+    ["PASS_CROSS_SURFACE_EVIDENCE", [{ id: "G02" }], [{ triggered: true }]],
+    // No hits, but a triggered comparison was silently discarded.
+    ["PASS_CROSS_SURFACE_EVIDENCE", [], [{ triggered: true }]],
+    // False REVIEW is also a contradictory report, not a reliable measurement.
+    ["REVIEW_CROSS_SURFACE", [], [{ triggered: false }]],
+  ];
+  for (const [verdict, hits, comparisons] of invalid) {
+    const result = runManifest({
+      candidates,
+      cross: (snapshots) => report(snapshots, verdict, hits, comparisons),
+    });
+    assert.equal(result.status, 2, result.stdout + result.stderr);
+    assert.equal(result.parsed.error, "Cross-surface report has inconsistent evidence");
+  }
+
+  // A real no-hit PASS remains a valid, fully route-bound report.
+  const clean = runManifest({
+    candidates,
+    cross: (snapshots) => report(snapshots, "PASS_CROSS_SURFACE_EVIDENCE", [], [{ triggered: false }]),
+  });
+  assert.equal(clean.status, 0, clean.stdout + clean.stderr);
+  assert.equal(clean.parsed.state, "MECHANICAL_EVIDENCE_CLEAR");
+  assert.equal(clean.parsed.crossSurfaceBinding.verified, true);
+});
+
 test("invalid cross-surface report fails closed in manifest mode", () => {
   const result = runManifest({
     candidates: [

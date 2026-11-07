@@ -28,6 +28,7 @@ function safePublicError(error) {
     "Render snapshot route mismatch",
     "Cross-surface report must cover exactly the route-bound rendered candidates in the receipt manifest",
     "Cross-surface report has unsupported verdict",
+    "Cross-surface report has inconsistent evidence",
     "--snapshot requires --route",
     "--route requires --snapshot",
   ]);
@@ -295,6 +296,18 @@ function readCrossSurface(path) {
   }
   if (!Array.isArray(value?.hits) || !Array.isArray(value?.comparisons) || !Array.isArray(value?.snapshots)) {
     throw new Error("Cross-surface report missing hits/comparisons/snapshots");
+  }
+  // The cross-surface comparator emits one hit per triggered pair and REVIEW
+  // exactly when at least one pair triggered. Never let an externally provided
+  // PASS verdict erase real evidence already present in that same report.
+  const comparisonsValid = value.comparisons.every((row) =>
+    row && typeof row === "object" && !Array.isArray(row) &&
+    typeof row.triggered === "boolean");
+  const triggeredCount = value.comparisons.filter((row) => row?.triggered === true).length;
+  const shouldReview = value.hits.length > 0;
+  if (!comparisonsValid || triggeredCount !== value.hits.length ||
+      (value.verdict === "REVIEW_CROSS_SURFACE") !== shouldReview) {
+    throw new Error("Cross-surface report has inconsistent evidence");
   }
   return { path: report.path, value };
 }
