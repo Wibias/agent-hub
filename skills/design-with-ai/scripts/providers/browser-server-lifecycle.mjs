@@ -8,9 +8,20 @@ export async function launchOwnedBrowser(chromium, options, stage, {
   if (typeof chromium?.launchServer === "function" &&
       typeof chromium?.connect === "function") {
     // Playwright selects an unguessable websocket path; bind it to loopback.
-    const server = await stage("launch", () => chromium.launchServer({
+    // A Node deadline can fire before launchServer resolves, while Playwright
+    // still creates a process. Attach cleanup to this underlying promise so a
+    // *late* successful launch cannot orphan a browser after the deadline.
+    const launching = Promise.resolve().then(() => chromium.launchServer({
       ...options, host: "127.0.0.1",
     }));
+    let server;
+    try {
+      server = await stage("launch", () => launching);
+    } catch (error) {
+      void launching.then((lateServer) =>
+        terminateOwnedBrowser(null, lateServer), () => {});
+      throw error;
+    }
     try {
       const browser = await stage("connect", () => chromium.connect(server.wsEndpoint()));
       return { browser, server };
