@@ -1114,7 +1114,7 @@ jobs:
           ready=0
           for i in $(seq 1 40); do
             status=$(curl --max-time 2 -sS -o /dev/null -w '%{http_code}' \
-              "$POSTGREST_LOCAL_URL/reference_graph_profile_runtime_projection_p30_v1?select=asset_id&limit=1" || true)
+              "${POSTGREST_LOCAL_URL}reference_graph_profile_runtime_projection_p30_v1?select=asset_id&limit=1" || true)
             if [ "$status" = "200" ] || [ "$status" = "206" ]; then ready=1; break; fi
             sleep 1
           done
@@ -1122,7 +1122,7 @@ jobs:
             echo 'P32 disposable PostgREST failed to serve the read-only projection' >&2
             echo "P32 last HTTP status: $status" >&2
             curl --max-time 3 -sS \
-              "$POSTGREST_LOCAL_URL/reference_graph_profile_runtime_projection_p30_v1?select=asset_id&limit=1" \
+              "${POSTGREST_LOCAL_URL}reference_graph_profile_runtime_projection_p30_v1?select=asset_id&limit=1" \
               | node -e "let s='';process.stdin.on('data',v=>s+=v).on('end',()=>{try{let x=JSON.parse(s);console.error('P32 PostgREST error code:',typeof x.code==='string'?x.code:'none')}catch{console.error('P32 returned non-JSON')}})" || true
             docker inspect --format 'PostgREST state: {{.State.Status}}, exit: {{.State.ExitCode}}' "$container_id" >&2 || true
             docker logs --tail 60 "$container_id" 2>&1 \
