@@ -108,6 +108,162 @@
       "disposition": "IMPROVED_BUT_OPEN",
       "reason": "Authority and Git freshness have separate semantic labels and inspector blocks; visual distinction has not been inspected in a browser.",
       "evidenceRef": "tests/memory-engine/memory-console-d12-design.test.mjs#authority"
+    },
+    {
+      "type": "FOUND",
+      "id": "D12-1-01",
+      "route": "/",
+      "kind": "VISUAL",
+      "priority": "HIGH",
+      "symptom": "Graph node labels show opaque @hex references instead of the meaning of each memory; screenshot at 390px and 760px requires opening the inspector to identify nodes.",
+      "acceptance": "For <=24 visible nodes the canvas displays readable claim-derived titles directly on each interactive node, with opaque refs only in disclosure/tooltip; no invented semantic claims.",
+      "evidenceRef": "User-supplied Memory Console screenshots 2026-11-05: desktop, 760px and 390px; D12.1 user feedback."
+    },
+    {
+      "type": "FOUND",
+      "id": "D12-1-02",
+      "route": "/",
+      "kind": "WORKFLOW",
+      "priority": "HIGH",
+      "symptom": "Relation lines show no readable semantic label; screenshots cannot show what rejects or supersedes what.",
+      "acceptance": "On selecting a node, recorded relation names are visible on its connected edges, and direction/from/to is inspectable without creating inferred relations.",
+      "evidenceRef": "User-supplied Memory Console screenshots 2026-11-05: desktop, 760px and 390px; D12.1 user feedback."
+    },
+    {
+      "type": "FOUND",
+      "id": "D12-1-03",
+      "route": "/",
+      "kind": "WORKFLOW",
+      "priority": "HIGH",
+      "symptom": "At 390px the graph is scrollable but the full inspector remains permanently stacked after a large canvas.",
+      "acceptance": "Small-screen graph displays canvas first and opens an accessible dismissible inspector only on explicit node selection; desktop inspector remains persistent.",
+      "evidenceRef": "User-supplied Memory Console screenshots 2026-11-05: desktop, 760px and 390px; D12.1 user feedback."
+    },
+    {
+      "type": "FOUND",
+      "id": "D12-1-04",
+      "route": "/",
+      "kind": "WORKFLOW",
+      "priority": "MEDIUM",
+      "symptom": "At 390px the memories list and complete inspector are stacked continuously; selected memory creates a very long page and list loses focus.",
+      "acceptance": "At mobile widths, memory details are hidden until a memory is selected and have a clear close/back action, preserving existing replace/forget gating.",
+      "evidenceRef": "User-supplied Memory Console screenshots 2026-11-05: desktop, 760px and 390px; D12.1 user feedback."
+    },
+    {
+      "type": "FOUND",
+      "id": "D12-1-05",
+      "route": "/",
+      "kind": "DETAIL",
+      "priority": "MEDIUM",
+      "symptom": "Memories inspector displays empty pipeline fields ('n/a') and no-change lifecycle/conflict sections; primary record meaning gets lost.",
+      "acceptance": "Prioritize record, state and source, suppress empty optional pipeline rows by default and keep advanced metadata accessible without fabricating values.",
+      "evidenceRef": "User-supplied Memory Console screenshots 2026-11-05: desktop, 760px and 390px; D12.1 user feedback."
+    },
+    {
+      "type": "FOUND",
+      "id": "D12-1-06",
+      "route": "/",
+      "kind": "VISUAL",
+      "priority": "MEDIUM",
+      "symptom": "Narrow graph screenshot shows tiny text, disconnected visible node labels and overlong controls; 760px screenshot wastes space on vertical scroll and inspector.",
+      "acceptance": "Graph uses readable node containers, selective relation labels, compact mobile legend and fit-for-purpose viewport sizes, with no horizontal PAGE overflow.",
+      "evidenceRef": "User-supplied Memory Console screenshots 2026-11-05: desktop, 760px and 390px; D12.1 user feedback."
+    },
+    {
+      "type": "REVIEWED",
+      "runId": "d12-1-2026-11-05-source-and-ci",
+      "id": "D12-UX-01",
+      "disposition": "IMPROVED_BUT_OPEN",
+      "reason": "Graph and Memories search restore focus and selection across DOM rerenders; a browser keyboard check is still needed.",
+      "evidenceRef": "memory-ui/app.js#restoreGraphControlFocus"
+    },
+    {
+      "type": "REVIEWED",
+      "runId": "d12-1-2026-11-05-source-and-ci",
+      "id": "D12-UX-02",
+      "disposition": "IMPROVED_BUT_OPEN",
+      "reason": "Selected SVG node focus and canvas visibility are exercised by D12 tests; browser keyboard/a11y focus still needs inspection.",
+      "evidenceRef": "tests/memory-engine/memory-console-d12-design.test.mjs#selection"
+    },
+    {
+      "type": "REVIEWED",
+      "runId": "d12-1-2026-11-05-source-and-ci",
+      "id": "D12-UX-03",
+      "disposition": "IMPROVED_BUT_OPEN",
+      "reason": "Git authority and verification remain separated and were visible on the supplied baseline screenshots; current D12.1 candidate render is not verified.",
+      "evidenceRef": "memory-ui/app.js#graphVerificationSummary"
+    },
+    {
+      "type": "REVIEWED",
+      "runId": "d12-1-2026-11-05-source-and-ci",
+      "id": "D12-UX-04",
+      "disposition": "IMPROVED_BUT_OPEN",
+      "reason": "D12.1 card titles and 1200px canvas address tiny node labels; new browser and contrast review not yet available.",
+      "evidenceRef": "memory-ui/styles.css#D12.1"
+    },
+    {
+      "type": "REVIEWED",
+      "runId": "d12-1-2026-11-05-source-and-ci",
+      "id": "D12-UX-05",
+      "disposition": "IMPROVED_BUT_OPEN",
+      "reason": "Mobile detail sheet and one-column layout implemented; user screenshot comparison of current branch remains pending.",
+      "evidenceRef": "memory-ui/styles.css#mobile-detail-heading"
+    },
+    {
+      "type": "REVIEWED",
+      "runId": "d12-1-2026-11-05-source-and-ci",
+      "id": "D12-UX-06",
+      "disposition": "IMPROVED_BUT_OPEN",
+      "reason": "Existing trust distinctions and advisory relation provenance preserved; rendered hierarchy of new relationship labels remains unverified.",
+      "evidenceRef": "memory-ui/app.js#graphRelationOriginLabel"
+    },
+    {
+      "type": "REVIEWED",
+      "runId": "d12-1-2026-11-05-source-and-ci",
+      "id": "D12-1-01",
+      "disposition": "IMPROVED_BUT_OPEN",
+      "reason": "Primary graph text now uses escaped deterministic excerpts from stored claim values and opaque IDs are restricted to technical hover/inspector; visual readability not yet checked in browser.",
+      "evidenceRef": "tests/memory-engine/memory-console-d12-1-readable.test.mjs#claim-derived-title"
+    },
+    {
+      "type": "REVIEWED",
+      "runId": "d12-1-2026-11-05-source-and-ci",
+      "id": "D12-1-02",
+      "disposition": "IMPROVED_BUT_OPEN",
+      "reason": "Selected existing edges have relation labels and mobile relation index lists actual endpoints; interactive render still needs screenshot acceptance.",
+      "evidenceRef": "memory-ui/app.js#graphSelectedRelationNote"
+    },
+    {
+      "type": "REVIEWED",
+      "runId": "d12-1-2026-11-05-source-and-ci",
+      "id": "D12-1-03",
+      "disposition": "IMPROVED_BUT_OPEN",
+      "reason": "Small-screen graph inspector is hidden until node selection and has a Close button; viewport and keyboard runtime review remain pending.",
+      "evidenceRef": "memory-ui/styles.css#mobile-detail-heading"
+    },
+    {
+      "type": "REVIEWED",
+      "runId": "d12-1-2026-11-05-source-and-ci",
+      "id": "D12-1-04",
+      "disposition": "IMPROVED_BUT_OPEN",
+      "reason": "Memories mobile details open after claim selection and can be closed; guarded actions retained. Current browser review remains pending.",
+      "evidenceRef": "memory-ui/app.js#memory-close-details"
+    },
+    {
+      "type": "REVIEWED",
+      "runId": "d12-1-2026-11-05-source-and-ci",
+      "id": "D12-1-05",
+      "disposition": "IMPROVED_BUT_OPEN",
+      "reason": "Default claim inspector no longer renders absent pipeline values; technical and recall sections are collapsible, but browser hierarchy remains pending.",
+      "evidenceRef": "memory-ui/app.js#optionalInspectorSection"
+    },
+    {
+      "type": "REVIEWED",
+      "runId": "d12-1-2026-11-05-source-and-ci",
+      "id": "D12-1-06",
+      "disposition": "UNVERIFIED",
+      "reason": "Current branch source provides full-size SVG cards, narrowed column layout and scrollable graph, but no matched post-edit 390px/760px screenshot exists.",
+      "evidenceRef": "docs/memory-console-d12-1-readable-graph.md#verification-plan"
     }
   ]
 }
