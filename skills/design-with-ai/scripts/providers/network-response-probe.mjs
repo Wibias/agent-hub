@@ -103,7 +103,12 @@ function strictInputs(options) {
   const canonicalProject = realpathSync(project);
   const canonicalRendered = realpathSync(rendered);
   const canonicalHtml = realpathSync(html);
-  const mappedRoute = staticRouteForHtml(canonicalRendered, canonicalHtml);
+  // Map filesystem path segments to canonical URL percent-encoding before
+  // comparing the declared route. A literal space in "my page.html" maps to
+  // /my%20page, never to a raw-space URL or a different decoded file.
+  const physicalRoute = staticRouteForHtml(canonicalRendered, canonicalHtml);
+  const mappedRoute = "/" + physicalRoute.slice(1).split("/")
+    .map(encodeURIComponent).join("/");
   // Static nested index pages can be served with a trailing slash. Require
   // the caller to declare the exact route rather than silently accepting a
   // redirect from a different page URL.
@@ -156,8 +161,12 @@ function localAssetPath(resourceUrl, context) {
   }
   // A static /settings route is normally served from /settings/index.html.
   // Correlate exactly the declared document route, not arbitrary SPA aliases.
-  if (path === context.route ||
-      (!context.route.endsWith("/") && path === context.route + "/")) {
+  // URL.pathname is decoded once above. The declared route remains
+  // canonically percent-encoded for URL/final-navigation comparisons, but
+  // must also be decoded once when mapping a received document to disk.
+  const routeFilePath = decodeURIComponent(context.route);
+  if (path === routeFilePath ||
+      (!context.route.endsWith("/") && path === routeFilePath + "/")) {
     return relative(context.project, context.html).split(sep).join("/");
   }
   const file = join(context.rendered, ...segments);
