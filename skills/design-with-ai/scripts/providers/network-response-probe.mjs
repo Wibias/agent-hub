@@ -188,8 +188,10 @@ export async function probeNetworkResponses(options, {
       let ctx;
       const issueSet = new Set();
       const pending = [];
+      const outstandingRequests = new Set();
       let pageErrorCount = 0;
       let finalized = false;
+      let drainComplete = false;
       const recordIssue = (issue) => {
         if (finalized) return;
         if (!issueSet.has(issue)) {
@@ -205,7 +207,6 @@ export async function probeNetworkResponses(options, {
         });
         const page = await ctx.newPage();
         const queuedBodyReads = [];
-        const outstandingRequests = new Set();
         let requestCount = 0;
         let responseCount = 0;
         let bodyReadsInFlight = 0;
@@ -269,8 +270,15 @@ export async function probeNetworkResponses(options, {
           }
         };
         page.on("pageerror", () => { if (!finalized) pageErrorCount++; });
+        const mainFrame = page.mainFrame();
+        page.on("framenavigated", (frame) => {
+          if (drainComplete && !finalized && frame === mainFrame) {
+            recordIssue("BROWSER_LATE_MAIN_FRAME_NAVIGATION");
+          }
+        });
         page.on("request", (request) => {
           if (finalized) return;
+          if (drainComplete) recordIssue("BROWSER_REQUEST_AFTER_DRAIN");
           if (++requestCount > MAX_RESPONSES) {
             recordIssue("REQUEST_COUNT_LIMIT");
             return; // Keep Playwright request objects bounded even under a request flood.
@@ -373,11 +381,9 @@ export async function probeNetworkResponses(options, {
           if (previous === pending.length) break;
         }
         obs.finalUrlMatched = obs.finalUrlMatched && page.url() === context.url;
-        // A request that was started but has not finished can still return
-        // bytes after the screenshot. A response-only listener misses it.
-        // Record only the count, never URLs or request content.
-        obs.outstandingRequestCount = outstandingRequests.size;
-        if (outstandingRequests.size > 0) recordIssue("BROWSER_REQUESTS_STILL_PENDING");
+        // Anything that starts after this drain cannot be part of the
+        // verified screenshot/session. Late requests/navigations fail closed.
+        drainComplete = true;
       } catch (error) {
         recordIssue("BROWSER_PROBE_FAILURE: " + shortError(error));
       } finally {
@@ -387,6 +393,11 @@ export async function probeNetworkResponses(options, {
         catch { recordIssue("BROWSER_CONTEXT_CLOSE_FAILURE"); }
       }
       await Promise.allSettled([...pending]);
+      // Closing the browser context can still emit requests. Inspect their
+      // final outstanding set only after context-close event callbacks.
+      // Never persist request URL, path or body in this receipt.
+      obs.outstandingRequestCount = outstandingRequests.size;
+      if (outstandingRequests.size > 0) recordIssue("BROWSER_REQUESTS_STILL_PENDING");
       obs.pageErrorCount = pageErrorCount;
       if (pageErrorCount > 0) recordIssue("BROWSER_PAGE_ERRORS");
       obs.status = obs.httpStatus === 200 && obs.finalUrlMatched === true &&

@@ -171,11 +171,12 @@ try {
     assert.equal(normalized.location.width, width);
     assert.equal(normalized.location.route, EXPECTED_TASTE_ROUTE);
     assert.equal(normalized.location.file, EXPECTED_TASTE_FILE);
-    const crop = normalized.evidence.find((e) => e.kind === "rendered-crop");
+    const crops = normalized.evidence.filter((e) => e.kind === "rendered-crop");
     if (raw.crop !== undefined) {
-      assert.equal(crop?.ref, join(dirname(taste.provenance.report), raw.crop));
+      assert.equal(crops.length, 1, "Each upstream crop needs exactly one reference");
+      assert.equal(crops[0].ref, join(dirname(taste.provenance.report), raw.crop));
     } else {
-      assert.equal(crop, undefined, "No crop can appear without an upstream crop");
+      assert.equal(crops.length, 0, "No crop can appear without an upstream crop");
     }
   }
   const rawById = new Map(taste.findings.map((f) => [f.id, f]));

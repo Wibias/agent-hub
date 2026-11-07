@@ -6,7 +6,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { renderedAssetProof } from "../../scripts/providers/rendered-assets.mjs";
-import { sourceScopeProof } from "../../scripts/providers/scope-proof.mjs";
+import { sourceScopeProof, staticRouteForHtml } from "../../scripts/providers/scope-proof.mjs";
 
 function fixture(fn) {
   const root = mkdtempSync(join(tmpdir(), "dwa-rendered-assets-"));
@@ -33,6 +33,20 @@ function fixture(fn) {
   try { return fn({ root, source, renderedRoot, html, css, js, image, font, sample }); }
   finally { rmSync(root, { recursive: true, force: true }); }
 }
+
+
+test("native Windows and POSIX nested HTML paths map to slash-normalized routes", () => {
+  fixture((f) => {
+    // staticRouteForHtml already calls the module-local normalize(), which
+    // converts Windows backslashes into forward slashes. Exercise that
+    // existing contract in the actual Windows CI job too.
+    assert.equal(staticRouteForHtml(f.renderedRoot, f.html), "/settings");
+    assert.equal(staticRouteForHtml(f.renderedRoot,
+      join(f.renderedRoot, "settings", "subpage", "index.HTML")), "/settings/subpage");
+    assert.equal(staticRouteForHtml(f.renderedRoot,
+      join(f.renderedRoot, "settings", "about.HTM")), "/settings/about");
+  });
+});
 
 test("full local rendered tree includes HTML, CSS, JavaScript, image and font", () => {
   fixture((f) => {
@@ -142,7 +156,7 @@ test("Vite-style build with 1024 hashed lazy chunks has stable cross-platform pa
     assert.equal(one.summary.rendered.assetCoverage, "COMPLETE_LOCAL_TREE_BOUNDED");
     const two = f.sample();
     assert.equal(one.summary.rendered.assetTreeSha256, two.summary.rendered.assetTreeSha256,
-      "Repeat manifest must be deterministic regardless of directory enumeration order");
+      "Repeated samples of an unchanged asset tree must have stable digests");
     assert.equal(one.summary.sourceSha256, two.summary.sourceSha256);
     const target = join(folder, "chunk-0512-a1b2c3d4.js");
     writeFileSync(target, "export const n = 512; // changed\n");

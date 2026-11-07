@@ -85,7 +85,9 @@ function mockChrome({ input, htmlBytes, cssBytes }, {
           },
         });
         let currentRoute = redirected ? "/login" : "/settings";
+        const mainFrame = {};
         const page = {
+          mainFrame: () => mainFrame,
           on: (event, handler) => { events.set(event, handler); },
           goto: async () => {
             if (!noResponses) {
@@ -174,6 +176,12 @@ function mockChrome({ input, htmlBytes, cssBytes }, {
               const request = {};
               events.get("request")?.(request);
               events.get("requestfailed")?.(request);
+            } else if (onContextClose === "request") {
+              // No response or failure event: this must remain outstanding.
+              events.get("request")?.({});
+            } else if (onContextClose === "navigation") {
+              currentRoute = "/token/CANARY_CLOSE_NAV_SECRET_20261107";
+              events.get("framenavigated")?.(mainFrame);
             } else if (onContextClose === "unmapped") {
               events.get("response")?.(response(
                 "http://127.0.0.1:5191/token/CANARY_CLOSE_PATH_20261107",
@@ -199,6 +207,8 @@ test("close-time events cannot leave a stale successful observation", async () =
   await fixture(async (f) => {
     for (const [onContextClose, issue] of [
       ["requestfailed", "BROWSER_REQUEST_FAILED"],
+      ["request", "BROWSER_REQUEST_AFTER_DRAIN"],
+      ["navigation", "BROWSER_LATE_MAIN_FRAME_NAVIGATION"],
       ["unmapped", "UNMAPPED_LOCAL_RESPONSE"],
       ["pageerror", "BROWSER_PAGE_ERRORS"],
       ["throw", "BROWSER_CONTEXT_CLOSE_FAILURE"],
@@ -213,6 +223,16 @@ test("close-time events cannot leave a stale successful observation", async () =
       "A close-time event must invalidate the viewport: " + onContextClose);
       if (onContextClose === "pageerror") {
         assert.ok(report.observations.every((obs) => obs.pageErrorCount === 1));
+      }
+      if (onContextClose === "request") {
+        assert.ok(report.observations.every((obs) =>
+          obs.outstandingRequestCount === 1 &&
+          obs.issues.includes("BROWSER_REQUESTS_STILL_PENDING")));
+      }
+      if (onContextClose === "navigation") {
+        assert.ok(report.observations.every((obs) =>
+          obs.finalUrlMatched === true &&
+          obs.issues.includes("BROWSER_LATE_MAIN_FRAME_NAVIGATION")));
       }
       const persisted = readFileSync(
         join(report.artifactDirectory, "network-report.json"), "utf8");
