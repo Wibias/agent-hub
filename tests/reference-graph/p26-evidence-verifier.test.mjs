@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rename, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -68,6 +68,8 @@ function healthySample(index, missingDiagnostics = false) {
 
 async function fixture({
   missingDiagnostics = false,
+  injectedDiagnostic = false,
+  invalidDiagnosticDuration = false,
   staleEvaluation = false,
   windowsTimestamp = false,
   repositorySha = P25_SHA,
@@ -75,6 +77,8 @@ async function fixture({
 } = {}) {
   const archiveDir = await mkdtemp(join(tmpdir(), 'p26-frozen-'));
   const samples = Array.from({ length: 25 }, (_, index) => healthySample(index, missingDiagnostics));
+  if (!missingDiagnostics && injectedDiagnostic) samples[0].diagnostics.events[0].service_role_key = 'should-be-rejected';
+  if (!missingDiagnostics && invalidDiagnosticDuration) samples[0].diagnostics.events[0].duration_ms = -500;
   const receipt = attestation();
   const evaluation = evaluateP19PromotionReadiness({ attestation: receipt, samples });
   assert.equal(evaluation.eligible, true);
@@ -185,4 +189,23 @@ test('P26 accepts the seven-digit UTC frozen_at emitted by PowerShell Date.ToStr
   const result = await verifyP26FrozenEvidence(await fixture({ windowsTimestamp: true }));
   assert.equal(result.verified, true);
   assert.equal(result.observed_samples, 25);
+});
+
+test('P26 fails closed on unexpected P25 diagnostic fields even when hashes and P19 evaluation are consistent', async () => {
+  const opts = await fixture({ injectedDiagnostic: true });
+  await assert.rejects(verifyP26FrozenEvidence(opts), /diagnostic/i);
+});
+
+test('P26 fails closed on an invalid P25 diagnostic duration even when hashes and P19 evaluation are consistent', async () => {
+  const opts = await fixture({ invalidDiagnosticDuration: true });
+  await assert.rejects(verifyP26FrozenEvidence(opts), /diagnostic/i);
+});
+
+test('P26 rejects an archived attestation symlink even when its target bytes match the approved hash', async () => {
+  const opts = await fixture();
+  const original = join(opts.archiveDir, 'p19-attestation.json');
+  const payload = join(opts.archiveDir, 'attestation-payload');
+  await rename(original, payload);
+  await symlink(payload, original);
+  await assert.rejects(verifyP26FrozenEvidence(opts), /symlink|regular|archive/i);
 });
