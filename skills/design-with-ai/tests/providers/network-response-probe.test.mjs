@@ -60,14 +60,18 @@ function mockChrome({ input, htmlBytes, cssBytes }, {
   onContextClose = null,
   popupTraffic = null,
   hangBrowserClose = false,
+  hangAt = null,
 } = {}) {
   const contexts = [];
   let closed = 0;
   let killed = 0;
   let bodyReads = 0;
-  const factory = async () => ({
-    launch: async () => ({
-      newContext: async (opts) => {
+  const factory = async () => {
+    if (hangAt === "factory") return new Promise(() => {});
+    return { launch: async () => {
+      if (hangAt === "launch") return new Promise(() => {});
+      return { newContext: async (opts) => {
+        if (hangAt === "new-context") return new Promise(() => {});
         contexts.push(opts);
         const events = new Map();
         const contextEvents = new Map();
@@ -94,6 +98,7 @@ function mockChrome({ input, htmlBytes, cssBytes }, {
           mainFrame: () => mainFrame,
           on: (event, handler) => { events.set(event, handler); },
           goto: async () => {
+            if (hangAt === "navigate") return new Promise(() => {});
             if (!noResponses) {
               const deliver = (url, body) => {
                 const request = { url: () => url };
@@ -172,6 +177,9 @@ function mockChrome({ input, htmlBytes, cssBytes }, {
             return { status: () => 200 };
           },
           waitForTimeout: async () => {
+            if (hangAt === "settle" || (hangAt === "drain-settle" && waitCount > 0)) {
+              return new Promise(() => {});
+            }
             // Model post-navigation and drain passes, not literal sleep times.
             const isDrainWait = ++waitCount > 1;
             if (remainingWaves > 0) {
@@ -198,6 +206,7 @@ function mockChrome({ input, htmlBytes, cssBytes }, {
             }
           },
           screenshot: async ({ path }) => {
+            if (hangAt === "screenshot") return new Promise(() => {});
             if (screenshotError) throw new Error(
               typeof screenshotError === "string" ? screenshotError : "Screenshot unavailable");
             writeFileSync(path, "image");
@@ -207,6 +216,7 @@ function mockChrome({ input, htmlBytes, cssBytes }, {
         return {
           on: (event, handler) => { contextEvents.set(event, handler); },
           newPage: async () => {
+            if (hangAt === "new-page") return new Promise(() => {});
             contextEvents.get("page")?.(page);
             return page;
           },
@@ -241,14 +251,44 @@ function mockChrome({ input, htmlBytes, cssBytes }, {
         closed++;
       },
       process: () => ({ kill: () => { killed++; } }),
-    }),
-  });
+      };
+    } };
+  };
   return {
     factory, contexts, getClosed: () => closed, getKilled: () => killed,
     getBodyReads: () => bodyReads,
   };
 }
 
+
+test("never-settling browser stages persist network INCOMPLETE receipts without advancing viewports", async () => {
+  await fixture(async (f) => {
+    for (const hangAt of ["factory", "launch", "new-context", "new-page",
+      "navigate", "settle", "screenshot", "drain-settle"]) {
+      const fake = mockChrome(f, { hangAt });
+      const report = await probeNetworkResponses(f.input, {
+        browserFactory: fake.factory, stageTimeoutMs: 20, shutdownTimeoutMs: 20,
+      });
+      assert.equal(report.status, "INCOMPLETE", hangAt);
+      assert.equal(report.productCompletionEligible, false, hangAt);
+      if (hangAt === "factory" || hangAt === "launch") {
+        assert.equal(report.observations.length, 0, hangAt);
+        assert.equal(report.browserStageTimeout, hangAt);
+      } else {
+        assert.equal(report.observations.length, 1, hangAt);
+        assert.equal(report.observations[0].status, "INCOMPLETE", hangAt);
+        assert.equal(report.observations[0].browserStageTimeout, hangAt);
+        assert.ok(report.observations[0].issues.includes("BROWSER_STAGE_TIMEOUT"), hangAt);
+        assert.equal(fake.getKilled(), 1, hangAt);
+      }
+      const saved = JSON.parse(readFileSync(
+        join(report.artifactDirectory, "network-report.json"), "utf8"));
+      assert.equal(saved.status, "INCOMPLETE");
+      assert.equal(saved.productCompletionEligible, false);
+      assert.equal(saved.observations.length, report.observations.length);
+    }
+  });
+});
 
 test("hung browser shutdown is bounded and persists an INCOMPLETE receipt", async () => {
   await fixture(async (f) => {
