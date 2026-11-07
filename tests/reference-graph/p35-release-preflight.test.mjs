@@ -200,6 +200,23 @@ test('P35 does not clear CHANGES_REQUESTED until the same reviewer submits a lat
   assert.equal(result.deployment_authorized, false);
 });
 
+test('P35 rejects noncanonical GitHub login identities rather than treating them as separate reviewers', () => {
+  const mutations = [
+    input => { input.githubSnapshot.prs[0].author = 'Wibias '; },
+    input => { input.githubSnapshot.prs[0].author = 'Wibias\nother'; },
+    input => { input.githubSnapshot.prs[0].reviews[0].reviewer = 'Wibias '; },
+    input => { input.githubSnapshot.prs[0].reviews[0].reviewer = 'reviewer+alias'; },
+    input => { input.githubSnapshot.prs[0].reviews[0].reviewer = '-reviewer'; },
+  ];
+  for (const mutate of mutations) {
+    const input = facts({ independentApprovals: true, targetListed: true });
+    mutate(input);
+    assert.throws(() => evaluateP35ReleasePreflight(input),
+      error => error instanceof P35ReleasePreflightError
+        && error.category === 'evidence-invalid');
+  }
+});
+
 test('P35 refuses any CI not successful on the pinned current SHA or unexpected PR/base drift', () => {
   const variations = [
     p => { p.workflows[0].conclusion = 'in_progress'; },
