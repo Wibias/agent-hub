@@ -86,6 +86,23 @@ function parseJsonOutput(result, label) {
 const SOURCE_VERDICTS = new Set(["HOLD", "REVIEW_CLUSTER", "REVIEW", "PASS_MECHANICAL"]);
 const RENDER_VERDICTS = new Set(["PASS_RENDER_EVIDENCE", "REVIEW_RENDER", "REVIEW_RENDER_CLUSTER"]);
 const FUSION_VERDICTS = new Set(["HOLD", "REVIEW_FUSED", "REVIEW_FUSED_CLUSTER", "PASS_FUSED_EVIDENCE"]);
+
+// The source gate derives counters from unsuppressed hits, not from separate
+// untrusted summaries. A falsified zero P0 must never soften a hard HOLD.
+function sourceHitCountsMatch(report) {
+  if (!Array.isArray(report.hits)) return false;
+  const counts = { P0: 0, P1: 0, P2: 0 };
+  for (const hit of report.hits) {
+    if (!hit || typeof hit !== "object" || Array.isArray(hit) ||
+        !Object.hasOwn(counts, hit.severity)) return false;
+    counts[hit.severity] += 1;
+  }
+  return counts.P0 === report.p0 && counts.P1 === report.p1 &&
+    counts.P2 === report.p2 &&
+    ["p0", "p1", "p2"].every((name) =>
+      Number.isSafeInteger(report[name]) && report[name] >= 0);
+}
+
 // Do not treat an error envelope or JSON scalar from a child with exit 0 as
 // proof that its audit completed successfully. Never echo rejected JSON.
 function assertGateOutput(parsed, kind, exitStatus, expected = {}) {
@@ -103,13 +120,16 @@ function assertGateOutput(parsed, kind, exitStatus, expected = {}) {
         RENDER_VERDICTS.has(parsed.channels.renderVerdict)
       : Array.isArray(parsed.hits)) &&
     (kind !== "source" || (
-      Number.isSafeInteger(parsed.p0) && parsed.p0 >= 0 &&
+      sourceHitCountsMatch(parsed) &&
       (parsed.p0 > 0) === (parsed.verdict === "HOLD") &&
+      (parsed.p1 === 0 || parsed.verdict !== "PASS_MECHANICAL") &&
+      (parsed.p1 > 0 || parsed.verdict !== "REVIEW") &&
       (exitStatus === 1) === (parsed.verdict === "HOLD") &&
       parsed.path === resolve(expected.sourcePath) &&
       Number.isSafeInteger(parsed.filesScanned) && parsed.filesScanned > 0
     )) &&
     (kind !== "render" || (
+      (parsed.hits.length === 0) === (parsed.verdict === "PASS_RENDER_EVIDENCE") &&
       parsed.snapshot === resolve(expected.snapshotPath) &&
       parsed.url === expected.snapshotUrl &&
       parsed.viewport && typeof parsed.viewport === "object" &&
@@ -129,7 +149,11 @@ function assertGateOutput(parsed, kind, exitStatus, expected = {}) {
       !Array.isArray(parsed.reports) &&
       parsed.reports.source === resolve(expected.sourceReportPath) &&
       parsed.reports.render === resolve(expected.renderReportPath) &&
-      (parsed.verdict === "HOLD") === (expected.sourceVerdict === "HOLD")
+      (parsed.verdict === "HOLD") === (expected.sourceVerdict === "HOLD") &&
+      (parsed.verdict !== "PASS_FUSED_EVIDENCE" ||
+        (expected.sourceHits === 0 && expected.renderHits === 0)) &&
+      (parsed.verdict === "PASS_FUSED_EVIDENCE" || parsed.verdict === "HOLD" ||
+        expected.sourceHits > 0 || expected.renderHits > 0)
     ));
   if (!valid) throw new Error("Receipt child audit emitted invalid report");
 }
@@ -339,6 +363,8 @@ function runCandidate(candidate, tools, tempRoot) {
         renderVerdict: render.parsed.verdict,
         sourceReportPath: sourcePath,
         renderReportPath: renderPath,
+        sourceHits: source.parsed.hits.length,
+        renderHits: render.parsed.hits.length,
       },
     );
   }

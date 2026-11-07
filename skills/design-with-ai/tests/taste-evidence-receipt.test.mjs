@@ -476,6 +476,15 @@ test("receipt binds child proof to exact source, snapshot and fusion channels", 
     execute();
     writeGate(sourceGate, sourceReport(source, 0));
     execute();
+    // A reported zero P0 cannot hide a P0 hit in the actual hit array.
+    writeGate(sourceGate, { ...sourceReport(source), hits: [{ severity: "P0" }] });
+    execute();
+    writeGate(sourceGate, { ...sourceReport(source), p1: 1 });
+    execute();
+    writeGate(sourceGate, { ...sourceReport(source), p2: 1 });
+    execute();
+    writeGate(sourceGate, { ...sourceReport(source), p1: 1, hits: [{ severity: "P1" }] });
+    execute();
 
     writeGate(sourceGate, sourceReport(source));
     // A render audit of a different snapshot cannot prove this viewport.
@@ -496,6 +505,8 @@ test("receipt binds child proof to exact source, snapshot and fusion channels", 
     writeGate(renderGate, renderReport(snapshot, "http://localhost/example", { width: 1440, height: 900, devicePixelRatio: 2 }));
     execute(true);
 
+    writeGate(renderGate, { ...renderReport(snapshot, "http://localhost/example"), hits: [{ id: "fake-render-hit" }] });
+    execute(true);
     writeGate(renderGate, renderReport(snapshot, "http://localhost/example"));
     // Fusion HOLD after source PASS cannot be a clear mechanical receipt.
     writeGate(fusionGate, {
@@ -527,6 +538,14 @@ test("receipt binds child proof to exact source, snapshot and fusion channels", 
       "const args=process.argv.slice(2); const arg=(key)=>args[args.indexOf(key)+1];",
       "process.stdout.write(JSON.stringify({verdict:'PASS_FUSED_EVIDENCE',channels:{sourceVerdict:'PASS_MECHANICAL',renderVerdict:'PASS_RENDER_EVIDENCE'},reports:{source:arg('--source-report'),render:arg('--render-report')},cluster:{families:[]}}));",
     ].join("\n"));
+    // A source P2-only PASS still contains contextual hits, so the fusion
+    // tool cannot claim PASS_FUSED_EVIDENCE with matching channel labels.
+    writeGate(sourceGate, {
+      ...sourceReport(source), p2: 1, hits: [{ severity: "P2" }],
+    });
+    execute(true);
+    writeGate(sourceGate, sourceReport(source));
+
     const ok = spawnSync(process.execPath, [
       localReceipt, "--path", source, "--snapshot", snapshot, "--route", "/example", "--json",
     ], { encoding: "utf8" });
