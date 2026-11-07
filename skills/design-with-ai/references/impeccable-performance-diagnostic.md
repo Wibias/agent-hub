@@ -30,7 +30,7 @@ Each scan is a fresh local Node process with fixed arguments, bounded execution 
 - An empty findings array is not proof of design quality.
 - Compare the per-mode durations **within and across rounds**, not just one pair. OS file-cache warming, JIT compilation, build activity and file system scanning can affect wall time.
 - A mode that fails or times out makes the whole comparison `INCOMPLETE`. Do not compare successful rows to a failed row as if it were a valid benchmark.
-- This diagnostic measures the vendored detector, not the DWA provider itself. Its output is **not** a provider PASS or a measured count of scanned files. The separate optional proof mechanism introduced in PR #195 addresses completed-file reporting.
+- This diagnostic measures the vendored detector, not the DWA provider itself. Each completed mode reports `filesScanned` from a validated detector completed-file receipt. A missing, invalid, or contradictory receipt makes the comparison `INCOMPLETE`. The number is a **detector-reported completed-file count**, not an independent source-coverage guarantee or a DWA provider PASS.
 - Compare results from the same immutable source snapshot. Do not compare unrelated commits or live branches.
 
 ## Phase 6.2 rationale
