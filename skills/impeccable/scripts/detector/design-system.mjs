@@ -596,13 +596,39 @@ export function findDesignRoot(startDir, { cache } = {}) {
   // probes for every source file in the same nested directory tree.
   // The caller owns this cache for ONE source scan; never reuse across runs.
   const visited = [];
+  // Directory metadata changes when markers like package.json or DESIGN.md
+  // are created, removed or renamed. Cache the exact directory signature,
+  // not just an ancestor lookup that can become stale midway through a scan.
+  const directorySignature = (entry) => {
+    const stat = fs.statSync(entry, { bigint: true });
+    return `${stat.dev}:${stat.ino}:${stat.mtimeNs}:${stat.ctimeNs}`;
+  };
+  const cachedRootIsCurrent = (start, resolved) => {
+    let entry = start;
+    while (true) {
+      if (cache.get(`dirsig:${entry}`) !== directorySignature(entry)) {
+        cache.delete(`resolve:${entry}`);
+        cache.delete(`root:${entry}`);
+        return false;
+      }
+      if (resolved && entry === resolved.dir) return true;
+      const parent = path.dirname(entry);
+      if (entry === homeDir || parent === entry) return resolved === null;
+      entry = parent;
+    }
+  };
   const remember = (resolved) => {
-    if (cache) for (const entry of visited) cache.set(`resolve:${entry}`, resolved);
+    if (cache) for (const entry of visited) {
+      cache.set(`resolve:${entry}`, resolved);
+      cache.set(`dirsig:${entry}`, directorySignature(entry));
+    }
     return resolved;
   };
   while (true) {
     const key = `resolve:${dir}`;
-    if (cache?.has(key)) return remember(cache.get(key));
+    if (cache?.has(key) && cachedRootIsCurrent(dir, cache.get(key))) {
+      return remember(cache.get(key));
+    }
     visited.push(dir);
     if (resolveDesignMdPath(dir)) return remember({ dir, hasDesign: true });
     if (PROJECT_ROOT_MARKERS.some((marker) => fs.existsSync(path.join(dir, marker)))) {
