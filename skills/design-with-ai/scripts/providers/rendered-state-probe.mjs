@@ -208,6 +208,10 @@ export const snapshotDeclaredDomState = ({
         const rects = [...range.getClientRects()];
         const visible = rects.length > 0 && rects.every((rect) =>
           intersectsVisible(rect, node.parentElement, true));
+        // If only part of a forbidden word is painted, omitting the word is
+        // not sufficient evidence of safety. Mark the whole sample uncertain.
+        if (!visible && rects.some((rect) =>
+          intersectsVisible(rect, node.parentElement))) textTruncated = true;
         if (visible) {
           if (visibleText.length &&
               (pendingGap || (previousBlock && block && previousBlock !== block))) {
