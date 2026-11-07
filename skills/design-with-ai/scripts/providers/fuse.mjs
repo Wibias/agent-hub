@@ -202,6 +202,14 @@ export function assertFusion(fusion) {
   // Recheck Taste's published class totals against retained members even if
   // a caller recomputed the hash after altering an otherwise valid class.
   for (const report of fusion.reports) {
+    // A Taste heuristic report never authenticates hydration or game state.
+    // The public fusion digest can be recomputed, so validate these fixed
+    // upstream-limit fields on every readback, not only at creation time.
+    if (report.provider === "taste-skill" &&
+        (report.renderedStateVerified !== false ||
+         report.renderedStateProof !== "NOT_PROVIDED_BY_UPSTREAM")) {
+      throw new TypeError("Fused Taste readiness proof is invalid");
+    }
     if (report.provider !== "taste-skill" ||
         report.reviewClassCounts === undefined ||
         !success.has(report.status)) continue;
