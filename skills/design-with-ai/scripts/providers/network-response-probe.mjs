@@ -336,9 +336,11 @@ export async function probeNetworkResponses(options, {
           let finish;
           const completed = new Promise((resolve) => { finish = resolve; });
           queuedBodyReads.push({ response, row, finish });
-          obs.maxBodyQueueDepth = Math.max(obs.maxBodyQueueDepth, queuedBodyReads.length);
           pending.push(completed);
           startQueuedBodyReads();
+          // Count only responses still WAITING after filling available slots.
+          // An immediately started body read must not inflate queue depth.
+          obs.maxBodyQueueDepth = Math.max(obs.maxBodyQueueDepth, queuedBodyReads.length);
         });
         const nav = await page.goto(context.url, {
           waitUntil: "load", timeout: 45_000,

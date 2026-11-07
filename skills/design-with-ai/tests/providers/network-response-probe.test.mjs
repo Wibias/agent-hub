@@ -65,6 +65,7 @@ function mockChrome({ input, htmlBytes, cssBytes }, {
         const events = new Map();
         let lateResponsesEmitted = false;
         let remainingWaves = laterResponseWaves;
+        let waitCount = 0;
         const response = (resourceUrl, body, status = 200) => ({
           url: () => resourceUrl,
           status: () => status,
@@ -127,8 +128,10 @@ function mockChrome({ input, htmlBytes, cssBytes }, {
               "body { color: red; }\n");
             return { status: () => 200 };
           },
-          waitForTimeout: async (ms) => {
-            if ((ms === 750 || ms === 100) && remainingWaves > 0) {
+          waitForTimeout: async () => {
+            // Model post-navigation and drain passes, not literal sleep times.
+            const isDrainWait = ++waitCount > 1;
+            if (remainingWaves > 0) {
               const count = Math.min(3, remainingWaves);
               remainingWaves -= count;
               for (let i = 0; i < count; i++) {
@@ -139,8 +142,8 @@ function mockChrome({ input, htmlBytes, cssBytes }, {
                 events.get("requestfinished")?.(req);
               }
             }
-            if (navigateDuringDrain && ms === 100) currentRoute = "/settings/other.html";
-            if (lateResponsesAfterTimeout && ms === 100 && !lateResponsesEmitted) {
+            if (navigateDuringDrain && isDrainWait) currentRoute = "/settings/other.html";
+            if (lateResponsesAfterTimeout && isDrainWait && !lateResponsesEmitted) {
               lateResponsesEmitted = true;
               for (let i = 0; i < 5; i++) {
                 const request = {};
@@ -181,7 +184,9 @@ test("actual response body hashes match a local two-file manifest across three w
       o.status === "LOCAL_BODY_BYTES_MATCHED" && o.local.length === 2 &&
       o.local.every((file) => file.bodyVerified === true) && o.issues.length === 0 &&
       o.outstandingRequestCount === 0 &&
-      /^[a-f0-9]{64}$/.test(o.screenshotSha256)));
+      o.maxBodyQueueDepth === 0 &&
+      /^[a-f0-9]{64}$/.test(o.screenshotSha256)),
+    "Immediately started body reads must not be counted as waiting in the queue");
     assert.equal(report.localAssetTreeUnchanged, true);
     assert.equal(report.tasteFramesVerified, false);
     assert.equal(report.productCompletionEligible, false);
