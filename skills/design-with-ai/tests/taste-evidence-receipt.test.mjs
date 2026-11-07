@@ -429,6 +429,47 @@ test("cross-surface receipt requires every actual snapshot pair exactly once", (
   assert.equal(accepted.parsed.crossSurfaceBinding.snapshotCount, 3);
 });
 
+test("cross-surface receipt rejects duplicate snapshot rows even with matching fake pairs", () => {
+  const result = runManifest({
+    candidates: [
+      {
+        id: "home",
+        source: "export default function Home(){ return <main>Home</main>; }",
+        route: "/home",
+        snapshot: cleanSnapshot({ url: "http://localhost/home" }),
+      },
+      {
+        id: "pricing",
+        source: "export default function Pricing(){ return <main>Pricing</main>; }",
+        route: "/pricing",
+        snapshot: cleanSnapshot({ url: "http://localhost/pricing" }),
+      },
+    ],
+    cross: (snapshots) => {
+      const rows = snapshots.map(({ path, route, snapshot }) => ({
+        path, route, viewportBand: "desktop",
+        macroFingerprint: snapshot.macroFingerprint,
+        zoneCount: snapshot.macroZones.length,
+      }));
+      return {
+        verdict: "PASS_CROSS_SURFACE_EVIDENCE",
+        snapshots: [...rows, { ...rows[0] }],
+        // A structurally complete comparison list for the *duplicated*
+        // three-row report previously bypassed the Set-only scope check.
+        comparisons: [
+          { left: "/home", right: "/pricing", triggered: false },
+          { left: "/home", right: "/home", triggered: false },
+          { left: "/pricing", right: "/home", triggered: false },
+        ],
+        hits: [],
+      };
+    },
+  });
+  assert.equal(result.status, 2, result.stdout + result.stderr);
+  assert.match(result.parsed.error,
+    /Cross-surface report must cover exactly the route-bound rendered candidates/);
+});
+
 test("invalid cross-surface report fails closed in manifest mode", () => {
   const result = runManifest({
     candidates: [

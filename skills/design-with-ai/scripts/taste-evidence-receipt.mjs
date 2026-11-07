@@ -333,7 +333,9 @@ function verifyCrossSurfaceBinding(cross, candidates) {
   const crossKeys = new Set(
     cross.value.snapshots.map((snapshot) => `${normalizeRoute(snapshot.route)}\n${resolve(snapshot.path)}`)
   );
-  if (crossKeys.size !== renderedCandidates.length || renderedCandidates.some((candidate) => !crossKeys.has(`${candidate.binding.declaredRoute}\n${resolve(candidate.binding.snapshotPath)}`))) {
+  if (cross.value.snapshots.length !== renderedCandidates.length ||
+      crossKeys.size !== renderedCandidates.length ||
+      renderedCandidates.some((candidate) => !crossKeys.has(`${candidate.binding.declaredRoute}\n${resolve(candidate.binding.snapshotPath)}`))) {
     throw new Error("Cross-surface report must cover exactly the route-bound rendered candidates in the receipt manifest");
   }
 
