@@ -121,6 +121,11 @@ jobs:
       - name: Windows junction-linked diagnostic CLI regression
         run: node --test --test-name-pattern="symlinked diagnostic CLI runs both bounded preflight and normal error entrypoints" skills/design-with-ai/tests/providers/impeccable-performance-diagnostic.test.mjs
 
+      # Exercise the new network probe main-entrypoint realpath fix through
+      # a real Windows directory junction with bounded INCOMPLETE evidence.
+      - name: Windows junction-linked network probe CLI fail-closed regression
+        run: node --test --test-name-pattern="symlinked network CLI validates arguments and persists an INCOMPLETE receipt" skills/design-with-ai/tests/providers/network-response-probe.test.mjs
+
       # Exercise the same fail-closed Taste report-parent guard under Windows
       # junction semantics; the full Taste provider suite already runs on Linux.
       - name: Windows Taste report-directory junction isolation
