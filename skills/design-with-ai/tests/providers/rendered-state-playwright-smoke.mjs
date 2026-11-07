@@ -24,6 +24,10 @@ const pages = {
     '<div style="display:contents">Access denied</div>'),
   '/split-forbidden': page(marker + '<p>Access den<span>i</span>ed</p>'),
   '/split-required': page('<div data-game-phase="live">Play<span>ing</span> now</div>'),
+  '/adjacent-buttons-forbidden': page(marker +
+    '<button>Access</button><button>denied</button>'),
+  '/adjacent-table-cells-forbidden': page(marker +
+    '<table><tr><td>Access</td><td>denied</td></tr></table>'),
   '/visible-override': page('<div style="visibility:hidden">' +
     '<div style="visibility:visible" data-game-phase="live">Playing now</div></div>'),
   '/blocked': page(marker + '<div data-access-blocker>Checking access</div>'),
@@ -140,6 +144,14 @@ try {
     x.signals?.first.forbiddenTextVisible?.includes('Access denied')),
   'Forbidden words split across inline spans cannot be skipped');
 
+  for (const route of ['/adjacent-buttons-forbidden', '/adjacent-table-cells-forbidden']) {
+    const adjacent = await probe(route, { forbiddenText: ['Access denied'] });
+    assertWidths(adjacent, 'INCOMPLETE');
+    assert.ok(adjacent.observations.every((x) =>
+      x.signals?.first.forbiddenTextVisible?.includes('Access denied')),
+    'Adjacent atomic boxes cannot conceal visible forbidden text: ' + route);
+  }
+
   const splitRequired = await probe('/split-required', {
     requiredText: ['Playing now'],
   });
@@ -189,7 +201,7 @@ try {
     x.mainFrameNavigationCount >= 3 && x.signals?.afterScreenshot?.markerVisible === true),
   'JS redirect away and back must fail despite an otherwise-ready same-route screenshot');
 
-  console.log('Real production Playwright transport passed: 14 scenarios at 1440/768/390, including clipped ancestors, display:contents text, split words, visibility override, redirects, context isolation and PNG hashes.');
+  console.log('Real production Playwright transport passed: 16 scenarios at 1440/768/390, including clipped ancestors, display:contents text, split words, visibility override, redirects, context isolation and PNG hashes.');
 } finally {
   await new Promise((resolve) => server.close(resolve));
   rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });

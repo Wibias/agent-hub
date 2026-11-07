@@ -26,6 +26,22 @@ function withFixtures(callback) {
   finally { rmSync(home, { recursive: true, force: true }); }
 }
 
+// Ensure cache-invalidation tests do not depend on same-tick directory
+// mtime/ctime updates on coarse-resolution Windows or network filesystems.
+function advanceDirectorySignature(dir) {
+  const before = fs.statSync(dir, { bigint: true });
+  const sleep = new Int32Array(new SharedArrayBuffer(4));
+  for (let attempt = 0; attempt < 150; attempt++) {
+    const probe = join(dir, ".dwa-test-sig-" + attempt);
+    writeFileSync(probe, "");
+    rmSync(probe);
+    const current = fs.statSync(dir, { bigint: true });
+    if (current.mtimeNs !== before.mtimeNs || current.ctimeNs !== before.ctimeNs) return;
+    Atomics.wait(sleep, 0, 0, 10);
+  }
+  throw new Error("Directory signature did not advance during the fixture");
+}
+
 test("repeated source files reuse resolved design root without new boundary probes", () => {
   withFixtures(({ project, source }) => {
     const cache = new Map();
@@ -99,9 +115,11 @@ test("cached project root invalidates when a nested package marker is added or r
     const original = loadDesignSystemForTarget(join(source, "one.tsx"), { cache });
     assert.equal(original?.sourcePath, join(project, "DESIGN.md"));
     const marker = join(source, "package.json");
+    advanceDirectorySignature(source);
     writeFileSync(marker, "{}\n");
     assert.deepEqual(findDesignRoot(source, { cache }), { dir: source, hasDesign: false });
     assert.equal(loadDesignSystemForTarget(join(source, "two.tsx"), { cache }), null);
+    advanceDirectorySignature(source);
     fs.unlinkSync(marker);
     assert.strictEqual(loadDesignSystemForTarget(join(source, "one.tsx"), { cache }), original);
   });
@@ -116,6 +134,7 @@ test("cached ancestor resolution invalidates when a nested DESIGN.md appears", (
     const cache = new Map();
     const original = loadDesignSystemForTarget(file, { cache });
     assert.equal(original?.sourcePath, join(project, "DESIGN.md"));
+    advanceDirectorySignature(nested);
     writeFileSync(join(nested, "DESIGN.md"),
       "---\ntypography:\n  body:\n    fontFamily: \"Nested Sans\"\n---\n");
     const updated = loadDesignSystemForTarget(file, { cache });
@@ -142,6 +161,7 @@ test("disappearing and recreated directories cannot poison cached design roots",
     assert.strictEqual(loadDesignSystemForTarget(leaf, { cache }), initial);
 
     mkdirSync(transient);
+    advanceDirectorySignature(transient);
     writeFileSync(join(transient, "package.json"), "{}\n");
     assert.equal(loadDesignSystemForTarget(leaf, { cache }), null,
       "a re-created nested project boundary must not inherit stale policy");

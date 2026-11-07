@@ -257,6 +257,59 @@ test("parser-dependent HTML regions fail closed on ambiguous stylesheet links", 
   });
 });
 
+test("raw closing-tag attributes and slashes cannot hide later stylesheet bytes", () => {
+  fixture(({ root, src }) => {
+    const html = join(src, "page.html");
+    const css = join(src, "site.css");
+    writeFileSync(css, "h1 { color: red; }\n");
+    const inspect = () => sourceScopeProof({
+      projectRoot: root, target: html, route: "/page", includeDetectorContext: true,
+    });
+    for (const markup of [
+      '<script>const example = 42;</script x><link rel="stylesheet" href="site.css">',
+      '<textarea>ignored</textarea/><link rel="stylesheet" href="site.css">',
+      '<title>ignored</title disabled><link rel="stylesheet" href="site.css">',
+    ]) {
+      writeFileSync(html, markup);
+      const before = inspect();
+      assert.deepEqual(before.manifest.linkedStylesheets.map((item) => item.path),
+        ["src/site.css"]);
+      writeFileSync(css, "h1 { color: blue; }\n");
+      assert.notEqual(inspect().summary.sourceSha256, before.summary.sourceSha256,
+        "CSS mutation after a raw closing tag must change the proof");
+      writeFileSync(css, "h1 { color: red; }\n");
+    }
+    writeFileSync(html,
+      '<script>literal <link rel="stylesheet" href="site.css"></scriptx>');
+    assert.deepEqual(inspect().manifest.linkedStylesheets ?? [], [],
+      "a non-closing lookalike inside script must not claim an actual CSS read");
+  });
+});
+
+test("misplaced HTML quotes cannot swallow a later stylesheet without blocking proof", () => {
+  fixture(({ root, src }) => {
+    const html = join(src, "page.html");
+    const css = join(src, "site.css");
+    writeFileSync(css, "h1 { color: red; }\n");
+    const inspect = () => sourceScopeProof({
+      projectRoot: root, target: html, route: "/page", includeDetectorContext: true,
+    });
+    for (const markup of [
+      "<div class=it's><link rel=stylesheet href=site.css>",
+      "<div class=it's><link rel=stylesheet href=site.css>' tail>",
+    ]) {
+      writeFileSync(html, markup);
+      assert.throws(inspect, /Ambiguous HTML link markup cannot be attested/);
+      writeFileSync(css, "h1 { color: blue; }\n");
+      assert.throws(inspect, /Ambiguous HTML link markup cannot be attested/,
+        "even a stylesheet-only mutation cannot certify malformed HTML");
+    }
+    writeFileSync(html, '<link rel="stylesheet" href="site.css">');
+    assert.deepEqual(inspect().manifest.linkedStylesheets.map((x) => x.path),
+      ["src/site.css"], "ordinary stylesheet tags still receive complete provenance");
+  });
+});
+
 test("symlinked linked CSS and escaping local stylesheet reads cannot be attested", () => {
   fixture(({ root, src }) => {
     const html = join(src, "page.html");

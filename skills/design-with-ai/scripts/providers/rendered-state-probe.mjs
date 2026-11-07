@@ -159,8 +159,10 @@ export const snapshotDeclaredDomState = ({
   let textTruncated = false;
   const blockAncestor = (element) => {
     for (let node = element; node; node = node.parentElement) {
-      if (/^(block|flow-root|flex|grid|table|list-item)$/.test(
-        getComputedStyle(node).display ?? "")) return node;
+      // Only ordinary inline and box-less contents can continue a word run.
+      // Buttons, inline-block, inline-flex, table cells and other boxes divide words.
+      const display = getComputedStyle(node).display ?? "";
+      if (display !== "inline" && display !== "contents") return node;
     }
     return null;
   };
