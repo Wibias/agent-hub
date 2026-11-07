@@ -38,14 +38,19 @@ function fakeBrowser({
   screenshotFailure = false,
   pageErrors = false,
   transitionAfterScreenshot = false,
+  evaluateStallAt = 0,
+  contextCloseStall = false,
+  browserCloseStall = false,
 } = {}) {
   let closes = 0;
+  let killed = 0;
   const opened = [];
   const launch = {
     newContext: async ({ viewport, serviceWorkers, storageState }) => {
       opened.push({ viewport, serviceWorkers, storageState });
       const width = viewport.width;
       let captured = false;
+      let sampleCount = 0;
       return {
         newPage: async () => ({
           on: (kind, cb) => {
@@ -65,7 +70,10 @@ function fakeBrowser({
             assert.equal(arg.markerOnly, true);
             if (waitFailure) throw new Error("Wait timed out");
           },
-          evaluate: async () => captured && transitionAfterScreenshot ? {
+          evaluate: async () => {
+            sampleCount++;
+            if (sampleCount === evaluateStallAt) return new Promise(() => {});
+            return captured && transitionAfterScreenshot ? {
             markerVisible: false, blockersVisible: [],
             missingText: [], forbiddenTextVisible: [],
           } : states[width] || {
@@ -73,6 +81,7 @@ function fakeBrowser({
             blockersVisible: [],
             missingText: [],
             forbiddenTextVisible: [],
+          };
           },
           waitForTimeout: async () => {},
           screenshot: async ({ path }) => {
@@ -81,16 +90,70 @@ function fakeBrowser({
             captured = true;
           },
         }),
-        close: async () => { closes++; },
+        close: async () => {
+          if (contextCloseStall) return new Promise(() => {});
+          closes++;
+        },
       };
     },
-    close: async () => { closes++; },
+    close: async () => {
+      if (browserCloseStall) return new Promise(() => {});
+      closes++;
+    },
+    process: () => ({ kill: () => { killed++; } }),
   };
   return {
     factory: async () => ({ launch: async () => launch }),
-    opened, getCloses: () => closes,
+    opened, getCloses: () => closes, getKills: () => killed,
   };
 }
+
+test("stalled DOM evaluation and browser cleanup persist INCOMPLETE receipts", async () => {
+  await fixture(async ({ input }) => {
+    const options = { sampleTimeoutMs: 20, cleanupTimeoutMs: 20 };
+    const persisted = (report) => JSON.parse(readFileSync(
+      join(report.artifactDirectory, "state-report.json"), "utf8"));
+    for (const evaluateStallAt of [1, 2, 3]) {
+      const fake = fakeBrowser({ evaluateStallAt });
+      const result = await probeRenderedState(input, {
+        browserFactory: fake.factory, ...options,
+      });
+      assert.equal(result.status, "INCOMPLETE");
+      assert.equal(result.declaredDomStateObserved, false);
+      assert.equal(result.productCompletionEligible, false);
+      assert.equal(result.observations.length, 1,
+        "a hung DOM evaluation must stop further viewport captures");
+      assert.equal(result.observations[0].domSampleTimedOut, true);
+      assert.equal(result.observations[0].status, "INCOMPLETE");
+      assert.equal(persisted(result).status, "INCOMPLETE");
+    }
+
+    const context = fakeBrowser({ contextCloseStall: true });
+    const contextual = await probeRenderedState(input, {
+      browserFactory: context.factory, ...options,
+    });
+    assert.equal(contextual.status, "INCOMPLETE");
+    assert.equal(contextual.observations.length, 1);
+    assert.equal(contextual.observations[0].contextCloseFailed, true);
+    assert.equal(contextual.observations[0].contextCloseTimedOut, true);
+    assert.equal(context.getKills(), 1, "hung context must kill browser transport");
+    assert.equal(persisted(contextual).status, "INCOMPLETE");
+
+    const browser = fakeBrowser({ browserCloseStall: true });
+    const shutdown = await probeRenderedState(input, {
+      browserFactory: browser.factory, ...options,
+    });
+    assert.equal(shutdown.observations.length, 3);
+    assert.ok(shutdown.observations.every((ob) => ob.status === "DOM_SIGNALS_OBSERVED"));
+    assert.equal(shutdown.browserCloseFailed, true);
+    assert.equal(shutdown.browserCloseTimedOut, true);
+    assert.equal(shutdown.status, "INCOMPLETE",
+      "a successful DOM series cannot conceal a hung final browser shutdown");
+    assert.equal(shutdown.declaredDomStateObserved, false);
+    assert.equal(browser.getKills(), 1);
+    assert.equal(persisted(shutdown).status, "INCOMPLETE");
+  });
+});
 
 test("all three declared DOM state observations need separate fresh anonymous contexts", async () => {
   await fixture(async ({ input }) => {
