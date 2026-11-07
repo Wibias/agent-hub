@@ -86,7 +86,7 @@ async function fails(category, values) {
 
 test('P33 composes strict P30 response and independently pinned P27 to compare 48/48 profile cases', async () => {
   const result = await auditP33PinnedProfileParity(fixture());
-  assert.equal(result.schema_version, 'reference-graph.p33-pinned-profile-parity.v1');
+  assert.equal(result.schema_version, 'reference-graph.p33-pinned-profile-parity.v2');
   assert.equal(result.reference_date, date);
   assert.equal(result.evaluated_cases, 48);
   assert.equal(result.exact_order_cases, 48);
