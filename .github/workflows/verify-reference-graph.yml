@@ -1089,3 +1089,55 @@ jobs:
             echo "anon unexpectedly deleted from P31 projection" >&2
             exit 1
           fi
+
+      - name: Smoke-test P32 disposable PostgREST roundtrip and default-off transport
+        env:
+          PGPASSWORD: postgres
+          POSTGREST_LOCAL_URL: http://127.0.0.1:3212/
+        run: |
+          set -euo pipefail
+          # Never connect this test to a real Supabase target. The PostgreSQL
+          # service is disposable and contains synthetic CI fixtures only.
+          export P32_SOURCE_RECEIPT="$RUNNER_TEMP/p32-source-receipt.json"
+          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            -f tests/reference-graph/p32-source-negative-smoke.sql
+
+          container_id=$(docker run -d --network host \
+            -e PGRST_DB_URI='postgres://postgres:postgres@127.0.0.1:5432/postgres' \
+            -e PGRST_DB_SCHEMAS=public \
+            -e PGRST_DB_ANON_ROLE=anon \
+            -e PGRST_SERVER_PORT=3212 \
+            -e PGRST_DB_CHANNEL_ENABLED=false \
+            postgrest/postgrest:v16.4)
+          trap 'docker rm -f "$container_id" >/dev/null 2>&1 || true' EXIT
+
+          ready=0
+          for i in $(seq 1 40); do
+            status=$(curl --max-time 2 -sS -o /dev/null -w '%{http_code}' \
+              "$POSTGREST_LOCAL_URL/reference_graph_profile_runtime_projection_p30_v1?select=asset_id&limit=1" || true)
+            if [ "$status" = "200" ]; then ready=1; break; fi
+            sleep 1
+          done
+          if [ "$ready" -ne 1 ]; then
+            echo 'P32 disposable PostgREST failed to serve the read-only projection' >&2
+            exit 1
+          fi
+
+          # P31 receipt is independently read from the CI SQL source side, not
+          # copied from the public HTTP response. Store only in runner temp.
+          psql -h localhost -U postgres -d postgres -tA -v ON_ERROR_STOP=1 \
+            -c 'select public.reference_graph_refresh_profile_runtime_projection_p31();' \
+            > "$P32_SOURCE_RECEIPT"
+
+          node tests/reference-graph/p32-postgrest-integration.mjs healthy
+
+          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            -c "update public.reference_graph_profile_runtime_projection_p30_v1 set refreshed_at = clock_timestamp() - interval '5 hours' where true;"
+          node tests/reference-graph/p32-postgrest-integration.mjs expired
+
+          psql -h localhost -U postgres -d postgres -tA -v ON_ERROR_STOP=1 \
+            -c 'select public.reference_graph_refresh_profile_runtime_projection_p31();' \
+            > "$P32_SOURCE_RECEIPT"
+          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            -c "update public.reference_graph_profile_runtime_projection_p30_v1 set snapshot_date = (statement_timestamp() at time zone 'UTC')::date - 1 where true;"
+          node tests/reference-graph/p32-postgrest-integration.mjs stale
