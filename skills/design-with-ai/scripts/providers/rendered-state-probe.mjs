@@ -5,6 +5,7 @@ import { createHash } from "node:crypto";
 import { existsSync, lstatSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { launchOwnedBrowser, terminateOwnedBrowser } from "./browser-server-lifecycle.mjs";
 import { pathToFileURL, fileURLToPath } from "node:url";
 
 const WIDTHS = Object.freeze([1440, 768, 390]);
@@ -31,10 +32,6 @@ async function boundedBrowserCall(call, timeoutMs, timeoutMessage) {
 }
 const cappedDeadline = (value, max) =>
   Number.isSafeInteger(value) && value > 0 && value <= max ? value : max;
-function stopBrowserProcess(browser) {
-  try { browser?.process?.()?.kill?.("SIGKILL"); }
-  catch { /* Ignore transport teardown errors, preserve fixed diagnostics. */ }
-}
 
 const sha = (data) => createHash("sha256").update(data).digest("hex");
 const filled = (x) => typeof x === "string" && x.trim().length > 0;
@@ -302,14 +299,16 @@ export async function probeRenderedState(input, {
     gamePhaseVerified: false, productCompletionEligible: false,
     artifactDirectory: runDir,
   };
-  let browser;
+  let browser, browserServer;
   try {
     const chromium = await stage("factory", () => browserFactory(opts.playwright));
-    browser = await stage("launch", () => chromium.launch({
+    const owned = await launchOwnedBrowser(chromium, {
       headless: true,
       ...(opts.chromePath ? { executablePath: opts.chromePath } : { channel: "chrome" }),
       args: ["--no-first-run", "--no-default-browser-check"],
-    }));
+    }, stage, { allowInjectedLaunch: browserFactory !== loadPlaywright });
+    browser = owned.browser;
+    browserServer = owned.server;
     for (const width of WIDTHS) {
       const record = { width, status: "INCOMPLETE", signals: null, screenshotSha256: null };
       report.observations.push(record);
@@ -406,7 +405,7 @@ export async function probeRenderedState(input, {
         if (typeof e?.message === "string" && e.message.startsWith(STAGE_TIMEOUT_PREFIX)) {
           record.browserStageTimeout = e.message.slice(STAGE_TIMEOUT_PREFIX.length);
           abortAfterViewport = true;
-          stopBrowserProcess(browser);
+          terminateOwnedBrowser(browser, browserServer);
         }
         if (e?.message === "DOM sample timeout") {
           record.domSampleTimedOut = true;
@@ -424,7 +423,7 @@ export async function probeRenderedState(input, {
             if (e?.message === "DOM context cleanup timeout") {
               record.contextCloseTimedOut = true;
               abortAfterViewport = true;
-              stopBrowserProcess(browser);
+              terminateOwnedBrowser(browser, browserServer);
             }
           }
         }
@@ -458,7 +457,7 @@ export async function probeRenderedState(input, {
     report.error = browserError(e);
     if (typeof e?.message === "string" && e.message.startsWith(STAGE_TIMEOUT_PREFIX)) {
       report.browserStageTimeout = e.message.slice(STAGE_TIMEOUT_PREFIX.length);
-      stopBrowserProcess(browser);
+      terminateOwnedBrowser(browser, browserServer);
     }
   } finally {
     if (browser) {
@@ -469,8 +468,20 @@ export async function probeRenderedState(input, {
         report.browserCloseFailed = true;
         if (e?.message === "DOM browser cleanup timeout") {
           report.browserCloseTimedOut = true;
-          stopBrowserProcess(browser);
+          terminateOwnedBrowser(browser, browserServer);
         }
+      }
+    }
+    if (browserServer) {
+      try {
+        await boundedBrowserCall(() => browserServer.close(), cleanupDeadline,
+          "DOM browser server cleanup timeout");
+      } catch (e) {
+        report.browserCloseFailed = true;
+        if (e?.message === "DOM browser server cleanup timeout") {
+          report.browserServerCloseTimedOut = true;
+        }
+        terminateOwnedBrowser(browser, browserServer);
       }
     }
   }
