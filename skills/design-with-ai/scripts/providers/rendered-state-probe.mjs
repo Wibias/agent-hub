@@ -184,7 +184,9 @@ export const snapshotDeclaredDomState = ({
       NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT);
     let node, nodes = 0, words = 0, charsChecked = 0;
     while ((node = walker.nextNode()) !== null) {
-      if (++nodes > 6000) { textTruncated = true; break; }
+      // Preserve the original bounded 3000-node proof limit. Element visits
+      // for visible BR boundaries also count against this limit.
+      if (++nodes > 3000) { textTruncated = true; break; }
       // nodeType=1 is the standard ELEMENT_NODE value. Do not require a
       // Node global: the same pure sampler runs in Node fixture DOM shims.
       if (node.nodeType === 1) {
