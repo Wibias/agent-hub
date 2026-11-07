@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
+import { spawnSync } from 'node:child_process';
 import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 
 import {
   P19_ATTESTATION_SCHEMA,
@@ -148,4 +150,32 @@ test('P26 rejects a healthy P19 archive without P25 diagnostic events', async ()
 test('P26 rejects another implementation SHA and unallowlisted archive filenames', async () => {
   await assert.rejects(verifyP26FrozenEvidence(await fixture({ repositorySha: 'a'.repeat(40) })), /repository.*sha|pin/i);
   await assert.rejects(verifyP26FrozenEvidence(await fixture({ extraFileKey: true })), /file|allowlist/i);
+});
+
+const verifyCli = fileURLToPath(new URL('../../reference-graph/cli/p26-verify-frozen-evidence.mjs', import.meta.url));
+
+test('P26 CLI verifies the archive without writing to the manifest or sample files', async () => {
+  const opts = await fixture();
+  const manifestBefore = await readFile(join(opts.archiveDir, 'manifest.json'));
+  const samplesBefore = await readFile(join(opts.archiveDir, 'p25-samples.jsonl'));
+  const run = spawnSync(process.execPath, [verifyCli, opts.archiveDir, opts.expectedManifestSha256], {
+    encoding: 'utf8',
+  });
+  assert.equal(run.status, 0, run.stderr);
+  const summary = JSON.parse(run.stdout);
+  assert.equal(summary.verified, true);
+  assert.equal(summary.manifest_sha256, opts.expectedManifestSha256);
+  assert.deepEqual(await readFile(join(opts.archiveDir, 'manifest.json')), manifestBefore);
+  assert.deepEqual(await readFile(join(opts.archiveDir, 'p25-samples.jsonl')), samplesBefore);
+});
+
+test('P26 CLI fails closed on unapproved hash without printing private archive path', async () => {
+  const opts = await fixture();
+  const run = spawnSync(process.execPath, [verifyCli, opts.archiveDir, '0'.repeat(64)], {
+    encoding: 'utf8',
+  });
+  assert.equal(run.status, 1);
+  assert.equal(run.stdout, '');
+  assert.match(run.stderr, /P26 verification failed/i);
+  assert.doesNotMatch(run.stderr, /p26-frozen-|p25-samples\.jsonl/);
 });
