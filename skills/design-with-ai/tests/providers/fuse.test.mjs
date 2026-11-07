@@ -301,6 +301,49 @@ test("signed fusion snapshots still reject forged Taste member metadata", () => 
   })), /Invalid Taste review class/);
 });
 
+test("re-signed fusion snapshots cannot contradict Taste member class totals", () => {
+  const item = {
+    ...finding({
+      id: "taste-count-integrity", provider: "taste-skill",
+      file: "dist/index.html", line: null, width: 390,
+      selector: ".stage", priority: "P1",
+    }),
+    reviewClass: "GEOMETRY_NEEDS_VISUAL_REVIEW",
+    upstreamSeverity: "FAIL",
+  };
+  const summary = {
+    reviewClassCounts: {
+      POTENTIAL_USABILITY: 0,
+      GEOMETRY_NEEDS_VISUAL_REVIEW: 1,
+      CONTEXTUAL_HOUSE_RULE: 0,
+      UNCLASSIFIED_HEURISTIC: 0,
+    },
+  };
+  const fusion = fuseProviderEvidence([{
+    ...report("taste-skill", [item]), summary,
+  }], { required: ["taste-skill"] });
+  assertFusion(structuredClone(fusion));
+
+  const reSign = (mutate) => {
+    const changed = structuredClone(fusion);
+    mutate(changed);
+    const { contentSha256, ...payload } = changed;
+    changed.contentSha256 = createHash("sha256")
+      .update(JSON.stringify(payload)).digest("hex");
+    return changed;
+  };
+  assert.throws(() => assertFusion(reSign((snapshot) => {
+    snapshot.groups[0].members[0].reviewClass = "CONTEXTUAL_HOUSE_RULE";
+  })), /Taste class summary does not match observations/);
+  assert.throws(() => assertFusion(reSign((snapshot) => {
+    snapshot.reports[0].reviewClassCounts.GEOMETRY_NEEDS_VISUAL_REVIEW = 0;
+    snapshot.reports[0].reviewClassCounts.CONTEXTUAL_HOUSE_RULE = 1;
+  })), /Taste class summary does not match observations/);
+  assert.throws(() => assertFusion(reSign((snapshot) => {
+    snapshot.reports[0].count = 2;
+  })), /Taste class summary does not match observations/);
+});
+
 test("tampered fusion data fails the content digest check", () => {
   const fusion = fuseProviderEvidence([report("native-dwa")], {
     required: ["native-dwa"],
