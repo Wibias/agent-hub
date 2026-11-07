@@ -9,6 +9,31 @@ import { pathToFileURL, fileURLToPath } from "node:url";
 
 const WIDTHS = Object.freeze([1440, 768, 390]);
 const H = 900;
+const SAMPLE_LIMIT_MS = 10_000;
+const CLEANUP_LIMIT_MS = 15_000;
+const MARKER_WAIT_LIMIT_MS = 16_000;
+// A blocked renderer or transport must never prevent a persisted fail-closed
+// report. Use a Node-side deadline independent of Playwright's own timeouts.
+async function boundedBrowserCall(call, timeoutMs, timeoutMessage) {
+  let timer;
+  try {
+    return await Promise.race([
+      Promise.resolve().then(call),
+      new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error(timeoutMessage)), timeoutMs);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+const cappedDeadline = (value, max) =>
+  Number.isSafeInteger(value) && value > 0 && value <= max ? value : max;
+function stopBrowserProcess(browser) {
+  try { browser?.process?.()?.kill?.("SIGKILL"); }
+  catch { /* Ignore transport teardown errors, preserve fixed diagnostics. */ }
+}
+
 const sha = (data) => createHash("sha256").update(data).digest("hex");
 const filled = (x) => typeof x === "string" && x.trim().length > 0;
 const arrayStrings = (v, max) =>
@@ -207,8 +232,13 @@ async function loadPlaywright(pkg) {
  * the declared DOM signals matched in THESE contexts. It does not establish
  * an authenticated game phase or the frames in a different Taste run.
  */
-export async function probeRenderedState(input, { browserFactory = loadPlaywright } = {}) {
+export async function probeRenderedState(input, {
+  browserFactory = loadPlaywright,
+  sampleTimeoutMs = SAMPLE_LIMIT_MS, cleanupTimeoutMs = CLEANUP_LIMIT_MS,
+} = {}) {
   const opts = validateOptions(input);
+  const sampleDeadline = cappedDeadline(sampleTimeoutMs, SAMPLE_LIMIT_MS);
+  const cleanupDeadline = cappedDeadline(cleanupTimeoutMs, CLEANUP_LIMIT_MS);
   const runDir = mkdtempSync(join(opts.output, "dwa-runtime-state-"));
   const report = {
     schemaVersion: 1, kind: "dwa/declared-dom-state-observation",
@@ -236,6 +266,7 @@ export async function probeRenderedState(input, { browserFactory = loadPlaywrigh
       const pageErrorSamples = [];
       let mainFrameNavigations = 0;
       let observationSealed = false;
+      let abortAfterViewport = false;
       try {
         context = await browser.newContext({
           viewport: { width, height: H },
@@ -269,23 +300,36 @@ export async function probeRenderedState(input, { browserFactory = loadPlaywrigh
         record.origin = navigatedUrl.origin === expectedOrigin
           ? expectedOrigin : "<unexpected-origin-redacted>";
         try {
-          await page.waitForFunction(snapshotDeclaredDomState,
+          await boundedBrowserCall(() => page.waitForFunction(snapshotDeclaredDomState,
             { readySelector: opts.contract.readySelector, markerOnly: true },
-            { timeout: 15_000 });
-        } catch (e) { record.markerWaitError = browserError(e); }
+            { timeout: 15_000 }), MARKER_WAIT_LIMIT_MS, "DOM marker wait timeout");
+        } catch (e) {
+          record.markerWaitError = browserError(e);
+          if (e?.message === "DOM marker wait timeout") {
+            abortAfterViewport = true;
+            record.markerWaitTimedOut = true;
+            throw e;
+          }
+        }
+        const sampleDom = () => boundedBrowserCall(
+          () => page.evaluate(snapshotDeclaredDomState, opts.contract),
+          sampleDeadline, "DOM sample timeout");
         // A main-frame navigation can destroy the first evaluation context.
         // Do not erase later valid observations; retain a fixed error label
         // and make this viewport INCOMPLETE even if later markers reappear.
         let first = null;
-        try { first = await page.evaluate(snapshotDeclaredDomState, opts.contract); }
-        catch (error) { record.firstSampleError = browserError(error); }
+        try { first = await sampleDom(); }
+        catch (error) {
+          record.firstSampleError = browserError(error);
+          if (error?.message === "DOM sample timeout") throw error;
+        }
         await page.waitForTimeout(750);
-        const second = await page.evaluate(snapshotDeclaredDomState, opts.contract);
+        const second = await sampleDom();
         const screenshot = join(runDir, "state-" + width + ".png");
         await page.screenshot({ path: screenshot, fullPage: false, timeout: 20_000 });
         // Sample once more AFTER screenshot so an immediately dismissed loading
         // overlay or state transition is not certified as captured evidence.
-        const afterScreenshot = await page.evaluate(snapshotDeclaredDomState, opts.contract);
+        const afterScreenshot = await sampleDom();
         const capturedUrl = new URL(page.url());
         record.finalPath = capturedUrl.pathname === opts.route
           ? opts.route : "<unexpected-path-redacted>";
@@ -296,11 +340,26 @@ export async function probeRenderedState(input, { browserFactory = loadPlaywrigh
         record.screenshotSha256 = sha(readFileSync(screenshot));
       } catch (e) {
         record.error = browserError(e);
+        if (e?.message === "DOM sample timeout") {
+          record.domSampleTimedOut = true;
+          abortAfterViewport = true;
+        }
       } finally {
         // A context can dispatch page errors and navigations during close.
         // Do not award success until those events have been observed.
-        try { await context?.close(); }
-        catch { record.contextCloseFailed = true; }
+        if (context) {
+          try {
+            await boundedBrowserCall(() => context.close(), cleanupDeadline,
+              "DOM context cleanup timeout");
+          } catch (e) {
+            record.contextCloseFailed = true;
+            if (e?.message === "DOM context cleanup timeout") {
+              record.contextCloseTimedOut = true;
+              abortAfterViewport = true;
+              stopBrowserProcess(browser);
+            }
+          }
+        }
         observationSealed = true;
       }
       record.mainFrameNavigationCount = mainFrameNavigations;
@@ -317,6 +376,7 @@ export async function probeRenderedState(input, { browserFactory = loadPlaywrigh
         !record.markerWaitError && !record.firstSampleError && completeSample(first) &&
         completeSample(second) && completeSample(afterScreenshot)
         ? "DOM_SIGNALS_OBSERVED" : "INCOMPLETE";
+      if (abortAfterViewport) break;
     }
     if (report.observations.length === WIDTHS.length &&
         report.observations.every((r) => r.status === "DOM_SIGNALS_OBSERVED" &&
@@ -327,7 +387,24 @@ export async function probeRenderedState(input, { browserFactory = loadPlaywrigh
   } catch (e) {
     report.error = browserError(e);
   } finally {
-    await browser?.close().catch(() => {});
+    if (browser) {
+      try {
+        await boundedBrowserCall(() => browser.close(), cleanupDeadline,
+          "DOM browser cleanup timeout");
+      } catch (e) {
+        report.browserCloseFailed = true;
+        if (e?.message === "DOM browser cleanup timeout") {
+          report.browserCloseTimedOut = true;
+          stopBrowserProcess(browser);
+        }
+      }
+    }
+  }
+  // The outcome is finalized only after browser shutdown: otherwise a
+  // successful three-width screenshot could conceal a hung close.
+  if (report.browserCloseFailed) {
+    report.status = "INCOMPLETE";
+    report.declaredDomStateObserved = false;
   }
   report.limitations = [
     "An observed data-* marker proves only the configured DOM signal, not game rules, backend authenticity or login.",
