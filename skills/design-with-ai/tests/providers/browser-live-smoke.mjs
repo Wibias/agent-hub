@@ -7,6 +7,8 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { runQualityAudit } from "../../scripts/providers/quality-audit.mjs";
 
+const EXPECTED_TASTE_ROUTE = "/settings";
+const EXPECTED_TASTE_FILE = "settings/index.html";
 const skillRoot = process.env.TASTE_SKILL_ROOT;
 if (!skillRoot) {
   process.stderr.write("TASTE_SKILL_ROOT must point to the reviewed Taste Skill 2.5.0 checkout\n");
@@ -167,6 +169,8 @@ try {
     assert.equal(normalized.message, raw.msg);
     assert.equal(normalized.location.selector, raw.sel);
     assert.equal(normalized.location.width, width);
+    assert.equal(normalized.location.route, EXPECTED_TASTE_ROUTE);
+    assert.equal(normalized.location.file, EXPECTED_TASTE_FILE);
     const crop = normalized.evidence.find((e) => e.kind === "rendered-crop");
     if (raw.crop !== undefined) {
       assert.equal(crop?.ref, join(dirname(taste.provenance.report), raw.crop));

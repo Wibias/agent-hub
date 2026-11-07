@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { test } from "node:test";
 import {
   mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { probeNetworkResponses } from "../../scripts/providers/network-response-probe.mjs";
 
 async function fixture(fn) {
@@ -55,6 +57,7 @@ function mockChrome({ input, htmlBytes, cssBytes }, {
   delayedBodies = false,
   contentLength,
   laterResponseWaves = 0,
+  onContextClose = null,
 } = {}) {
   const contexts = [];
   let closed = 0;
@@ -166,7 +169,23 @@ function mockChrome({ input, htmlBytes, cssBytes }, {
         };
         return {
           newPage: async () => page,
-          close: async () => { closed++; },
+          close: async () => {
+            if (onContextClose === "requestfailed") {
+              const request = {};
+              events.get("request")?.(request);
+              events.get("requestfailed")?.(request);
+            } else if (onContextClose === "unmapped") {
+              events.get("response")?.(response(
+                "http://127.0.0.1:5191/token/CANARY_CLOSE_PATH_20261107",
+                Buffer.from("unknown")));
+            } else if (onContextClose === "pageerror") {
+              events.get("pageerror")?.(new Error("CANARY_CLOSE_ERROR_20261107"));
+            }
+            closed++;
+            if (onContextClose === "throw") {
+              throw new Error("CANARY_CLOSE_FAILURE_20261107");
+            }
+          },
         };
       },
       close: async () => { closed++; },
@@ -174,6 +193,66 @@ function mockChrome({ input, htmlBytes, cssBytes }, {
   });
   return { factory, contexts, getClosed: () => closed, getBodyReads: () => bodyReads };
 }
+
+
+test("close-time events cannot leave a stale successful observation", async () => {
+  await fixture(async (f) => {
+    for (const [onContextClose, issue] of [
+      ["requestfailed", "BROWSER_REQUEST_FAILED"],
+      ["unmapped", "UNMAPPED_LOCAL_RESPONSE"],
+      ["pageerror", "BROWSER_PAGE_ERRORS"],
+      ["throw", "BROWSER_CONTEXT_CLOSE_FAILURE"],
+    ]) {
+      const report = await probeNetworkResponses(f.input, {
+        browserFactory: mockChrome(f, { onContextClose }).factory,
+      });
+      assert.equal(report.status, "INCOMPLETE", onContextClose);
+      assert.equal(report.productCompletionEligible, false);
+      assert.ok(report.observations.every((obs) =>
+        obs.status === "INCOMPLETE" && obs.issues.includes(issue)),
+      "A close-time event must invalidate the viewport: " + onContextClose);
+      if (onContextClose === "pageerror") {
+        assert.ok(report.observations.every((obs) => obs.pageErrorCount === 1));
+      }
+      const persisted = readFileSync(
+        join(report.artifactDirectory, "network-report.json"), "utf8");
+      assert.ok(!persisted.includes("CANARY_CLOSE_"),
+        "Untrusted late event details must not leak");
+    }
+  });
+});
+
+test("CLI distinguishes fixed input validation from untrusted browser errors", async () => {
+  await fixture(async (f) => {
+    const script = fileURLToPath(new URL(
+      "../../scripts/providers/network-response-probe.mjs", import.meta.url));
+    const args = [
+      "--base-url", "https://example.com",
+      "--route", "/settings",
+      "--project-root", f.input.projectRoot,
+      "--browser-root", f.input.renderedRoot,
+      "--html", f.input.html,
+      "--playwright-root", f.input.playwrightRoot,
+      "--out-root", f.input.outRoot,
+    ];
+    const invalidOrigin = spawnSync(process.execPath, [script, ...args], {
+      encoding: "utf8",
+    });
+    assert.equal(invalidOrigin.status, 2);
+    assert.match(invalidOrigin.stderr, /Only a clean loopback HTTP origin is allowed/);
+    assert.ok(!invalidOrigin.stderr.includes("Browser error:"));
+    const invalidFlag = spawnSync(process.execPath,
+      [script, "--token=CANARY_CLI_FLAG_20261107"], { encoding: "utf8" });
+    assert.equal(invalidFlag.status, 2);
+    assert.match(invalidFlag.stderr, /Invalid or repeated CLI argument/);
+    assert.ok(!invalidFlag.stderr.includes("CANARY_CLI_FLAG_20261107"));
+    const badURL = spawnSync(process.execPath,
+      [script, ...args.map((arg) => arg === "https://example.com" ? "not a URL" : arg)],
+      { encoding: "utf8" });
+    assert.equal(badURL.status, 2);
+    assert.match(badURL.stderr, /Invalid base URL/);
+  });
+});
 
 test("actual response body hashes match a local two-file manifest across three widths", async () => {
   await fixture(async (f) => {

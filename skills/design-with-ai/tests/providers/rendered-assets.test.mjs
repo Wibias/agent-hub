@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
-  mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, truncateSync, unlinkSync, writeFileSync,
+  mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, truncateSync, writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -177,7 +177,8 @@ test("too many assets are rejected rather than silently truncated", () => {
   });
 });
 
-test("symlinked build assets or directories are never trusted", (t) => {
+
+test("symlinked build asset files are never trusted", (t) => {
   fixture((f) => {
     const outside = mkdtempSync(join(tmpdir(), "dwa-rendered-external-"));
     try {
@@ -187,8 +188,7 @@ test("symlinked build assets or directories are never trusted", (t) => {
       try {
         symlinkSync(external, bad);
       } catch (error) {
-        // Windows CI runners can deny file symlink creation. Do not claim
-        // symlink rejection was tested if the fixture cannot be created.
+        // Windows may deny file symlinks without developer-mode privileges.
         if (process.platform === "win32" &&
             ["EPERM", "EACCES", "ENOSYS"].includes(error.code)) {
           t.skip("Windows runner cannot create file symlinks");
@@ -197,8 +197,19 @@ test("symlinked build assets or directories are never trusted", (t) => {
         throw error;
       }
       assert.throws(() => f.sample(), /Symlink inside rendered asset tree/);
-      unlinkSync(bad);
-      symlinkSync(outside, bad, process.platform === "win32" ? "junction" : "dir");
+    } finally {
+      rmSync(outside, { recursive: true, force: true });
+    }
+  });
+});
+
+test("symlinked build directories and Windows junctions are never trusted", () => {
+  fixture((f) => {
+    const outside = mkdtempSync(join(tmpdir(), "dwa-rendered-external-dir-"));
+    try {
+      writeFileSync(join(outside, "external.js"), "window.evil = true;\n");
+      const badDirectory = join(f.renderedRoot, "assets", "external-dir");
+      symlinkSync(outside, badDirectory, process.platform === "win32" ? "junction" : "dir");
       assert.throws(() => f.sample(), /Symlink inside rendered asset tree/);
     } finally {
       rmSync(outside, { recursive: true, force: true });

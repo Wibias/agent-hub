@@ -34,24 +34,29 @@ const shortError = (error) => {
   return ERROR_URL_SCHEME.test(message)
     ? "Browser error: <url-redacted>" : "Browser error: <details-redacted>";
 };
+// Only explicitly authored validation failures may reach CLI stderr verbatim.
+// Browser exceptions (including TypeErrors) remain fixed-label redacted.
+class ProbeInputError extends TypeError {}
 const string = (value) => typeof value === "string" && value.trim().length > 0;
 
 function strictInputs(options) {
   if (!options || ![
     options.baseUrl, options.route, options.projectRoot,
     options.renderedRoot, options.html, options.playwrightRoot,
-  ].every(string)) throw new TypeError("Explicit local page, roots, route and Playwright root required");
-  const base = new URL(options.baseUrl);
+  ].every(string)) throw new ProbeInputError("Explicit local page, roots, route and Playwright root required");
+  let base;
+  try { base = new URL(options.baseUrl); }
+  catch { throw new ProbeInputError("Invalid base URL; a clean loopback HTTP origin is required"); }
   if (base.protocol !== "http:" ||
       !["localhost", "127.0.0.1", "[::1]"].includes(base.hostname) ||
       base.username || base.password || base.pathname !== "/" ||
       base.search || base.hash) {
-    throw new TypeError("Only a clean loopback HTTP origin is allowed");
+    throw new ProbeInputError("Only a clean loopback HTTP origin is allowed");
   }
   const route = options.route;
   if (!/^\/[a-zA-Z0-9._~/%-]*$/.test(route) || route.startsWith("//") ||
       /%2f|%5c|%2e|%00/i.test(route) || route.split("/").includes("..")) {
-    throw new TypeError("Route must be an unambiguous absolute local path");
+    throw new ProbeInputError("Route must be an unambiguous absolute local path");
   }
   const project = resolve(options.projectRoot);
   const rendered = resolve(options.renderedRoot);
@@ -59,7 +64,7 @@ function strictInputs(options) {
   const playwright = resolve(options.playwrightRoot);
   for (const path of [project, rendered, html, playwright]) {
     if (!existsSync(path) || lstatSync(path).isSymbolicLink()) {
-      throw new TypeError("Roots, HTML and Playwright must exist and not be symlinks");
+      throw new ProbeInputError("Roots, HTML and Playwright must exist and not be symlinks");
     }
   }
   const canonicalProject = realpathSync(project);
@@ -69,20 +74,20 @@ function strictInputs(options) {
       !inside(canonicalRendered, canonicalHtml) ||
       canonicalRendered === canonicalProject ||
       staticRouteForHtml(canonicalRendered, canonicalHtml) !== route) {
-    throw new TypeError("HTML does not map to the declared isolated build route");
+    throw new ProbeInputError("HTML does not map to the declared isolated build route");
   }
   if (!lstatSync(playwright).isDirectory() || !existsSync(join(playwright, "index.mjs"))) {
-    throw new TypeError("Use an explicitly installed and trusted Playwright package root");
+    throw new ProbeInputError("Use an explicitly installed and trusted Playwright package root");
   }
   const outRoot = resolve(options.outRoot ?? tmpdir());
   if (!existsSync(outRoot) || !lstatSync(outRoot).isDirectory() ||
       lstatSync(outRoot).isSymbolicLink() ||
       inside(canonicalRendered, realpathSync(outRoot))) {
-    throw new TypeError("Evidence output root must be outside the served build tree");
+    throw new ProbeInputError("Evidence output root must be outside the served build tree");
   }
   if (options.chromePath !== undefined &&
       (!string(options.chromePath) || !existsSync(resolve(options.chromePath)))) {
-    throw new TypeError("Explicit browser executable does not exist");
+    throw new ProbeInputError("Explicit browser executable does not exist");
   }
   return {
     project: canonicalProject, rendered: canonicalRendered,
@@ -182,7 +187,11 @@ export async function probeNetworkResponses(options, {
       report.observations.push(obs);
       let ctx;
       const issueSet = new Set();
+      const pending = [];
+      let pageErrorCount = 0;
+      let finalized = false;
       const recordIssue = (issue) => {
+        if (finalized) return;
         if (!issueSet.has(issue)) {
           issueSet.add(issue);
           obs.issues.push(issue);
@@ -195,10 +204,8 @@ export async function probeNetworkResponses(options, {
           serviceWorkers: "block",
         });
         const page = await ctx.newPage();
-        const pending = [];
         const queuedBodyReads = [];
         const outstandingRequests = new Set();
-        let pageErrorCount = 0;
         let requestCount = 0;
         let responseCount = 0;
         let bodyReadsInFlight = 0;
@@ -261,22 +268,27 @@ export async function probeNetworkResponses(options, {
             });
           }
         };
-        page.on("pageerror", () => { pageErrorCount++; });
+        page.on("pageerror", () => { if (!finalized) pageErrorCount++; });
         page.on("request", (request) => {
+          if (finalized) return;
           if (++requestCount > MAX_RESPONSES) {
             recordIssue("REQUEST_COUNT_LIMIT");
             return; // Keep Playwright request objects bounded even under a request flood.
           }
           outstandingRequests.add(request);
         });
-        page.on("requestfinished", (request) => outstandingRequests.delete(request));
+        page.on("requestfinished", (request) => {
+          if (!finalized) outstandingRequests.delete(request);
+        });
         page.on("requestfailed", (request) => {
+          if (finalized) return;
           outstandingRequests.delete(request);
           // Failed requests must not quietly disappear from the observed set.
           // Never store URLs or request bodies, which may contain credentials.
           recordIssue("BROWSER_REQUEST_FAILED");
         });
         page.on("response", (response) => {
+          if (finalized) return;
           if (++responseCount > MAX_RESPONSES) {
             recordIssue("RESPONSE_COUNT_LIMIT");
             return;
@@ -366,17 +378,23 @@ export async function probeNetworkResponses(options, {
         // Record only the count, never URLs or request content.
         obs.outstandingRequestCount = outstandingRequests.size;
         if (outstandingRequests.size > 0) recordIssue("BROWSER_REQUESTS_STILL_PENDING");
-        obs.pageErrorCount = pageErrorCount;
-        if (pageErrorCount > 0) recordIssue("BROWSER_PAGE_ERRORS");
-        obs.status = obs.httpStatus === 200 && obs.finalUrlMatched &&
-          obs.screenshotSha256 && obs.local.length > 0 &&
-          obs.local.every((entry) => entry.bodyVerified) &&
-          obs.issues.length === 0 ? "LOCAL_BODY_BYTES_MATCHED" : "INCOMPLETE";
       } catch (error) {
         recordIssue("BROWSER_PROBE_FAILURE: " + shortError(error));
       } finally {
-        await ctx?.close().catch(() => {});
+        // Closing the context may dispatch late request/response/pageerror
+        // events. Finalize only AFTER those callbacks and body reads finish.
+        try { await ctx?.close(); }
+        catch { recordIssue("BROWSER_CONTEXT_CLOSE_FAILURE"); }
       }
+      await Promise.allSettled([...pending]);
+      obs.pageErrorCount = pageErrorCount;
+      if (pageErrorCount > 0) recordIssue("BROWSER_PAGE_ERRORS");
+      obs.status = obs.httpStatus === 200 && obs.finalUrlMatched === true &&
+        /^[a-f0-9]{64}$/.test(obs.screenshotSha256 ?? "") &&
+        obs.local.length > 0 &&
+        obs.local.every((entry) => entry.bodyVerified === true) &&
+        obs.issues.length === 0 ? "LOCAL_BODY_BYTES_MATCHED" : "INCOMPLETE";
+      finalized = true;
     }
   } catch (error) {
     report.error = shortError(error);
@@ -412,7 +430,7 @@ function parseCli(argv) {
   for (let i = 0; i < argv.length; i++) {
     if (!flags.has(argv[i]) || args.has(argv[i]) || i + 1 >= argv.length ||
         argv[i + 1].startsWith("--")) {
-      throw new TypeError("Invalid/repeated argument: " + String(argv[i]));
+      throw new ProbeInputError("Invalid or repeated CLI argument");
     }
     args.set(argv[i], argv[++i]);
   }
@@ -431,7 +449,9 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     process.stdout.write(JSON.stringify(report, null, 2) + "\n");
     if (report.status !== "LOCAL_RESPONSES_MATCHED") process.exitCode = 1;
   } catch (error) {
-    process.stderr.write("DWA network response probe: " + shortError(error) + "\n");
+    const safeReason = error instanceof ProbeInputError
+      ? error.message : shortError(error);
+    process.stderr.write("DWA network response probe: " + safeReason + "\n");
     process.exitCode = 2;
   }
 }
