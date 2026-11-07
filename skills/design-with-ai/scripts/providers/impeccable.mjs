@@ -40,8 +40,11 @@ function readScanProof(stderr) {
     throw new Error("Incomplete or contradictory source scan receipt");
   }
   if (proof.degradedFiles > 0) {
-    throw new Error("HTML parser fallback degraded " + proof.degradedFiles +
-      " file(s); full selector/cascade checks were not run");
+    // The vendored scan proof counts degraded files but does not distinguish
+    // unavailable HTML parser modules from unreadable linked local CSS.
+    // Both mean incomplete coverage; do not imply a specific cause.
+    throw new Error("HTML parser unavailable or linked local stylesheet unreadable: " +
+      proof.degradedFiles + " degraded file(s); full selector/cascade checks were not run");
   }
   return proof;
 }
