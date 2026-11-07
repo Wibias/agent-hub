@@ -137,6 +137,66 @@ test('P30 rejects mixed publication instants or duplicated pages across a pagina
   }));
 });
 
+test('P30 must not issue any GET after deadline when a fetch adapter ignores abort', async () => {
+  const calls = [];
+  let releaseFirst;
+  let firstSignal;
+  let parsedAfterTimeout = 0;
+  const fetchImpl = (url, options) => {
+    calls.push(Number(new URL(url).searchParams.get('offset')));
+    if (calls.length === 1) {
+      firstSignal = options.signal;
+      return new Promise(resolve => { releaseFirst = resolve; });
+    }
+    // Previous implementation must not reach this additional request.
+    return Promise.resolve({
+      ok: true, status: 206,
+      async json() { return snapshot.slice(500, 1000); },
+    });
+  };
+  await assert.rejects(
+    fetchP30ProfileCandidateSnapshot(input(fetchImpl, { timeoutMs: 10 })),
+    e => e instanceof P30ProfileTransportError && e.category === 'timeout',
+  );
+  assert.equal(firstSignal.aborted, true);
+  assert.deepEqual(calls, [0]);
+  // Simulate a buggy fetch adapter delivering the full first page AFTER P30
+  // has reported a timeout. Neither JSON parsing nor follow-up GETs may run.
+  releaseFirst({
+    ok: true, status: 206,
+    async json() {
+      parsedAfterTimeout++;
+      return snapshot.slice(0, 500);
+    },
+  });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(parsedAfterTimeout, 0);
+  assert.deepEqual(calls, [0]);
+});
+
+test('P30 must not continue paging after a late JSON body resolves past deadline', async () => {
+  const calls = [];
+  let resolveBody;
+  const fetchImpl = async url => {
+    calls.push(Number(new URL(url).searchParams.get('offset')));
+    if (calls.length === 1) {
+      return {
+        ok: true, status: 206,
+        json: () => new Promise(resolve => { resolveBody = resolve; }),
+      };
+    }
+    return { ok: true, status: 200, async json() { return snapshot.slice(500); } };
+  };
+  await assert.rejects(
+    fetchP30ProfileCandidateSnapshot(input(fetchImpl, { timeoutMs: 10 })),
+    e => e instanceof P30ProfileTransportError && e.category === 'timeout',
+  );
+  assert.deepEqual(calls, [0]);
+  resolveBody(snapshot.slice(0, 500));
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(calls, [0]);
+});
+
 test('P30 does not overfetch or write and keeps read-only P11 isolation', () => {
   const src = readFileSync('reference-graph/p30-profile-transport.mjs', 'utf8');
   const router = readFileSync('reference-graph/p11-runtime-router.mjs', 'utf8');
