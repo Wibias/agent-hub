@@ -44,6 +44,19 @@ function canonicalUtc(value) {
   return !Number.isNaN(date.valueOf()) && date.toISOString() === value;
 }
 
+// PowerShell Date.ToUniversalTime().ToString('o') writes seven fractional
+// second digits, while JavaScript Date.toISOString() writes three.
+function validP26FreezeTimestamp(value) {
+  if (canonicalUtc(value)) return true;
+  if (typeof value !== 'string'
+      || !/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{7}Z$/.test(value)) {
+    return false;
+  }
+  const parsed = new Date(value);
+  return !Number.isNaN(parsed.valueOf())
+    && parsed.toISOString() === value.slice(0, 23) + 'Z';
+}
+
 function parseJson(bytes, name) {
   try {
     return JSON.parse(Buffer.from(bytes).toString('utf8'));
@@ -124,7 +137,7 @@ export async function verifyP26FrozenEvidence({
   }
   if (manifest.production_target_ref !== P19_PRODUCTION_PROJECT_REF
       || manifest.repository_default_promotion_performed !== false
-      || !canonicalUtc(manifest.frozen_at)) {
+      || !validP26FreezeTimestamp(manifest.frozen_at)) {
     throw new Error('P26 manifest contains invalid production binding or state');
   }
   if (!exactKeys(manifest.files_sha256, ALLOWED_FILES)) {
