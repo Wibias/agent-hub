@@ -151,7 +151,11 @@ test("audit CLI redacts untrusted flags and filesystem failure paths", () =>
     // exception whose native message embeds the supplied path.
     const file = join(f.root, "artifact-" + token);
     writeFileSync(file, "not a directory");
-    const filesystem = invoke(f, ["--output-root", file]);
+    const filesystem = spawnSync(process.execPath, [cli,
+      "--profile", "standard", "--path", f.page,
+      "--route", "/settings", "--project-root", f.root,
+      "--output-root", file,
+    ], { encoding: "utf8", timeout: 90_000 });
     assert.equal(filesystem.status, 2);
     assert.match(filesystem.stderr, /untrusted error details redacted/);
     assert.ok(!filesystem.stderr.includes(token));
