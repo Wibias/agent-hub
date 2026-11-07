@@ -113,11 +113,6 @@ test('P30 rejects missing or injected candidate fields and invalid Standard/Deep
 
 test('P30 fails closed on count, canonical membership, ordering, version and snapshot bindings', async () => {
   await fail(rows.slice(0, 2), 'candidate-count-mismatch');
-  await fail(rows.concat({
-    ...rows[0],
-    asset_id: '00000000-0000-4000-8000-000000000099',
-    legacy_id: 'p30-extra-row',
-  }), 'candidate-count-mismatch');
   await fail(rows.map((row, i) => i === 0 ? { ...row, legacy_id: 'different' } : row), 'fingerprint-mismatch');
   await fail([...rows].reverse(), 'candidate-invalid');
   await fail(rows.map((row, i) => i === 0 ? { ...row, snapshot_date: '2026-11-06' } : row), 'snapshot-invalid');
@@ -127,6 +122,20 @@ test('P30 fails closed on count, canonical membership, ordering, version and sna
   await fail(rows.map(row => ({ ...row, refreshed_at: '2026-11-07T12:03:00.000Z' })), 'snapshot-invalid');
   await fail([], 'candidate-invalid');
   await fail({ invalid: 'body' }, 'candidate-invalid');
+});
+
+test('P30 rejects a server snapshot with more rows than the pinned candidate count', async () => {
+  const extraRows = rows.concat({
+    ...rows[0],
+    asset_id: 'ffffffff-ffff-4fff-8fff-ffffffffffff',
+    legacy_id: 'p30-extra-row',
+  });
+  await fail(extraRows, 'candidate-count-mismatch', {
+    fetchImpl: async (url) => {
+      const limit = Number(new URL(url).searchParams.get('limit'));
+      return { ok: true, status: 200, async json() { return extraRows.slice(0, limit); } };
+    },
+  });
 });
 
 test('P30 rejects HTTP failures, invalid JSON, network errors and timeouts without key disclosure', async () => {
