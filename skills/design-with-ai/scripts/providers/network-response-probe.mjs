@@ -556,8 +556,6 @@ function isCliEntry() {
 }
 if (isCliEntry()) {
   try {
-    const report = await probeNetworkResponses
-  try {
     const report = await probeNetworkResponses(parseCli(process.argv.slice(2)));
     process.stdout.write(JSON.stringify(report, null, 2) + "\n");
     if (report.status !== "LOCAL_RESPONSES_MATCHED") process.exitCode = 1;
