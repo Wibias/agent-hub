@@ -64,6 +64,9 @@ const p33Report = await auditP33PinnedProfileParity({
   fetchImpl: async () => ({ ok: true, json: async () => responseRows }),
 });
 
+let firstSelectedPatternId;
+let firstSelectedRecordId;
+
 async function publicControlFingerprints() {
   const cases = [];
   for (const template of [...templates].sort((a, b) => a.id.localeCompare(b.id))) {
@@ -78,6 +81,8 @@ async function publicControlFingerprints() {
         recordUsageEnabled: false, now,
       });
       assert.equal(control.routing.authoritative_source, 'legacy-control');
+      firstSelectedPatternId ??= control.result.patterns[0]?.id;
+      firstSelectedRecordId ??= control.result.records[0]?.id;
       cases.push({
         source_case_id: template.id, profile,
         public_output_sha256: sha(JSON.stringify(control.result)),
@@ -126,7 +131,8 @@ test('P34 independently reconstructs exact legacy pattern order and full public 
 
 test('P34 detects changed pattern output when record IDs and pattern IDs stay identical', () => {
   const mutated = patterns.map(stripInternal);
-  const first = mutated.find(row => row.reviewStatus === 'reviewed');
+  const first = mutated.find(row => row.id === firstSelectedPatternId);
+  assert.ok(first, 'Expected a P11-selected control pattern');
   first.problem += ' extra copy';
   const patternsJson = JSON.stringify(mutated);
   const result = auditP34PatternPublicOutputParity({
@@ -140,9 +146,8 @@ test('P34 detects changed pattern output when record IDs and pattern IDs stay id
 
 test('P34 detects changes to record content even with identical graph candidate identity', () => {
   const changed = records.map(stripInternal);
-  const selectedId = baseline.cases[0].ordered_record_ids_sha256;
-  assert.match(selectedId, /^[0-9a-f]{64}$/);
-  const first = changed.find(row => row.id === candidates[0].legacy_id);
+  const first = changed.find(row => row.id === firstSelectedRecordId);
+  assert.ok(first, 'Expected a P11-selected control record');
   first.title += ' changed';
   const recordsJson = JSON.stringify(changed);
   const result = auditP34PatternPublicOutputParity({
