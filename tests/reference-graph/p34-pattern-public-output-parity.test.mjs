@@ -112,7 +112,7 @@ const input = {
 
 test('P34 independently reconstructs exact legacy pattern order and full public JSON in all 48 cases', () => {
   const result = auditP34PatternPublicOutputParity(input);
-  assert.equal(result.schema_version, 'reference-graph.p34-pattern-public-output-parity.v1');
+  assert.equal(result.schema_version, 'reference-graph.p34-pattern-public-output-parity.v2');
   assert.equal(result.reference_date, date);
   assert.equal(result.evaluated_cases, 48);
   assert.equal(result.record_order_exact_cases, 48);
@@ -120,6 +120,7 @@ test('P34 independently reconstructs exact legacy pattern order and full public 
   assert.equal(result.public_output_exact_cases, 48);
   assert.equal(result.mismatch_cases, 0);
   assert.equal(result.pattern_parity_verified, true);
+  assert.equal(result.candidate_content_bound_to_p33, true);
   assert.equal(result.public_output_parity_verified, true);
   assert.equal(result.live_graph_parity_verified, false);
   assert.equal(result.deployment_authorized, false);
