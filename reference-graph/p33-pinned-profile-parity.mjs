@@ -6,6 +6,7 @@ import {
   fetchP30ProfileCandidateSnapshot,
 } from './p30-profile-transport.mjs';
 import { compareP29OfflineProfileParity } from './p29-offline-profile-parity.mjs';
+import { hashP33CandidateContent } from './p33-candidate-content-digest.mjs';
 
 const TARGET = JSON.parse(readFileSync(new URL('./target.json', import.meta.url), 'utf8'));
 const PROJECT_REF = 'vrznfnxzlxaavpqbzbzd';
@@ -184,10 +185,13 @@ export async function auditP33PinnedProfileParity({
   // Only aggregate data can escape. No candidate content/IDs, receipts,
   // raw HTTP bodies or credentials are returned or printed.
   return {
-    schema_version: 'reference-graph.p33-pinned-profile-parity.v1',
+    schema_version: 'reference-graph.p33-pinned-profile-parity.v2',
     reference_date: receipt.snapshot_date,
     candidate_count: remote.transport.candidate_count,
     candidate_id_set_sha256: remote.transport.candidate_id_set_sha256,
+    // Exact content of the P30-verified HTTP candidate snapshot. P34 must
+    // compare this to its supplied candidates before running any parity.
+    candidate_content_sha256: hashP33CandidateContent(remote.candidates),
     evaluated_cases: parity.evaluated_cases,
     exact_order_cases: parity.exact_order_cases,
     mismatch_cases: parity.mismatch_cases,
