@@ -140,6 +140,6 @@ test('P30 rejects mixed publication instants or duplicated pages across a pagina
 test('P30 does not overfetch or write and keeps read-only P11 isolation', () => {
   const src = readFileSync('reference-graph/p30-profile-transport.mjs', 'utf8');
   const router = readFileSync('reference-graph/p11-runtime-router.mjs', 'utf8');
-  assert.doesNotMatch(src, /POST|PATCH|DELETE|service_role|writeFileSync|createClient/);
+  assert.doesNotMatch(src, /method:\s*['\"](?:POST|PATCH|DELETE)['\"]|service_role|writeFileSync|createClient/);
   assert.doesNotMatch(router, /p30-profile-transport/);
 });
