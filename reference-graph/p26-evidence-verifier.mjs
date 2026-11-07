@@ -49,7 +49,7 @@ function canonicalUtc(value) {
 function validP26FreezeTimestamp(value) {
   if (canonicalUtc(value)) return true;
   if (typeof value !== 'string'
-      || !/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{7}Z$/.test(value)) {
+      || !/^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}[.][0-9]{7}Z$/.test(value)) {
     return false;
   }
   const parsed = new Date(value);
