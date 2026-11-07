@@ -8,7 +8,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import {
-  dirname, isAbsolute, join, relative, resolve, sep,
+  basename, dirname, isAbsolute, join, relative, resolve, sep,
 } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { renderedAssetProof } from "./rendered-assets.mjs";
@@ -106,10 +106,17 @@ function strictInputs(options) {
   const canonicalProject = realpathSync(project);
   const canonicalRendered = realpathSync(rendered);
   const canonicalHtml = realpathSync(html);
+  const mappedRoute = staticRouteForHtml(canonicalRendered, canonicalHtml);
+  // Static nested index pages can be served with a trailing slash. Require
+  // the caller to declare the exact route rather than silently accepting a
+  // redirect from a different page URL.
+  const nestedIndexSlash = mappedRoute !== "/" &&
+    /^index\.html?$/i.test(basename(canonicalHtml)) &&
+    route === mappedRoute + "/";
   if (!inside(canonicalProject, canonicalRendered) ||
       !inside(canonicalRendered, canonicalHtml) ||
       canonicalRendered === canonicalProject ||
-      staticRouteForHtml(canonicalRendered, canonicalHtml) !== route) {
+      (route !== mappedRoute && !nestedIndexSlash)) {
     throw new ProbeInputError("HTML does not map to the declared isolated build route");
   }
   if (!lstatSync(playwright).isDirectory() || !existsSync(join(playwright, "index.mjs"))) {
@@ -152,14 +159,15 @@ function localAssetPath(resourceUrl, context) {
   }
   // A static /settings route is normally served from /settings/index.html.
   // Correlate exactly the declared document route, not arbitrary SPA aliases.
-  if (path === context.route || path === context.route + "/") {
-    return relative(context.project, context.html).replaceAll("\\", "/");
+  if (path === context.route ||
+      (!context.route.endsWith("/") && path === context.route + "/")) {
+    return relative(context.project, context.html).split(sep).join("/");
   }
   const file = join(context.rendered, ...segments);
   if (!inside(context.rendered, file)) {
     throw new TypeError("Requested resource escapes built asset root");
   }
-  return relative(context.project, file).replaceAll("\\", "/");
+  return relative(context.project, file).split(sep).join("/");
 }
 
 async function loadBrowser(packageRoot) {
