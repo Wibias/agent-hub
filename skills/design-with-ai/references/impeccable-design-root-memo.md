@@ -55,6 +55,6 @@ Existing `root:<directory>` values continue to hold the parsed design contract. 
 
 ## Verification limits
 
-The cache assumes that filesystem project markers and DESIGN.md locations remain stable **during one CLI source scan**. It is not a persistent cache and must not be shared across independent scans. DWA's snapshot validation remains the guard against ordinary source changes during a run. This optimization does not prove full detector sensitivity, rendered coverage, correct gameplay state or acceptance.
+The cache revalidates per-resolution ancestor signatures and the existing `.agents/context` and `docs` fallback directory signatures on each lookup. This prevents an in-scan nested project marker or fallback `DESIGN.md` change from surviving through a sibling's signature refresh. It is an application-level cache check, not an OS-level immutable filesystem snapshot. The detector still has normal filesystem race limits. It is not a persistent cache and must not be shared across independent scans. DWA's snapshot validation remains the guard against ordinary source changes during a run. This optimization does not prove full detector sensitivity, rendered coverage, correct gameplay state or acceptance.
 
 The above Windows comparison is now complete and matches the pinned PR #200 source hashes. Do not extrapolate this one project's observed speedup to other repositories or release a production claim before independent review and integration validation.
