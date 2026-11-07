@@ -1115,7 +1115,7 @@ jobs:
           for i in $(seq 1 40); do
             status=$(curl --max-time 2 -sS -o /dev/null -w '%{http_code}' \
               "$POSTGREST_LOCAL_URL/reference_graph_profile_runtime_projection_p30_v1?select=asset_id&limit=1" || true)
-            if [ "$status" = "200" ]; then ready=1; break; fi
+            if [ "$status" = "200" ] || [ "$status" = "206" ]; then ready=1; break; fi
             sleep 1
           done
           if [ "$ready" -ne 1 ]; then
