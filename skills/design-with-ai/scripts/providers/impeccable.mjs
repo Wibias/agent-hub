@@ -113,7 +113,9 @@ function normalizedFile(file, root) {
   if (!inside(root, absolute)) {
     throw new Error("Impeccable finding refers outside the scanned project");
   }
-  return (relative(root, absolute) || ".").replaceAll("\\", "/");
+  // Native path separators differ from literal backslashes in Linux filenames.
+  // Match source-scope manifests without conflating src/a\\b.css and src/a/b.css.
+  return (relative(root, absolute) || ".").split(sep).join("/");
 }
 
 function parseFinding(raw, root, route, occurrences) {
