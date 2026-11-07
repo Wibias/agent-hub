@@ -10,6 +10,7 @@ import { fileURLToPath } from "node:url";
 import { Capability, ProviderStatus } from "../../scripts/providers/contract.mjs";
 import { createProviderRegistry, runProviders } from "../../scripts/providers/registry.mjs";
 import { createImpeccableProvider } from "../../scripts/providers/impeccable.mjs";
+import { sourceScopeProof } from "../../scripts/providers/scope-proof.mjs";
 import { collectStaticCssText } from "../../../impeccable/scripts/detector/engines/static-html/css-cascade.mjs";
 
 const cli = fileURLToPath(new URL("../../scripts/providers/scan.mjs", import.meta.url));
@@ -113,6 +114,53 @@ test("normalizes primary and advisory Impeccable findings without inventing P0",
     assert.equal(invocation.cwd, root);
   });
 });
+
+test("Linux literal backslashes retain distinct Impeccable finding identity and source provenance",
+  { skip: process.platform === "win32" ? "backslash is a Windows path separator" : false },
+  async () => {
+    await fixture(async ({ root }) => {
+      const source = join(root, "src");
+      mkdirSync(source);
+      const literal = join(source, "a\\\\b.css");
+      const nestedDirectory = join(source, "a");
+      mkdirSync(nestedDirectory);
+      const nested = join(nestedDirectory, "b.css");
+      writeFileSync(literal, "h1 { color: red; }\n");
+      writeFileSync(nested, "h1 { color: blue; }\n");
+      const manifest = sourceScopeProof({
+        projectRoot: root, target: source, route: "/",
+        includeDetectorContext: false,
+      });
+      assert.deepEqual(manifest.manifest.files.map((f) => f.path).sort(),
+        ["src/a/b.css", "src/a\\\\b.css"].sort(),
+        "manifest must retain the two distinct native Linux path identities");
+      const findings = [literal, nested].map((path) => ({
+        antipattern: "path-identity-test", name: "Path identity",
+        severity: "warning", file: path, line: 1, snippet: "same snippet",
+      }));
+      const provider = createImpeccableProvider({
+        runner: async () => result({
+          stdout: JSON.stringify(findings), exitCode: 2,
+          stderr: proofLine({ ...validProof,
+            candidateFiles: 2, eligibleFiles: 2, scannedFiles: 2 }),
+        }),
+      });
+      const report = await provider.inspect({
+        capability: Capability.STATIC_AUDIT, target: source,
+        route: "/", projectRoot: root,
+      });
+      assert.equal(report.status, ProviderStatus.FINDINGS, report.reason);
+      assert.equal(report.findings.length, 2);
+      assert.deepEqual(report.findings.map((f) => f.location.file).sort(),
+        ["src/a/b.css", "src/a\\\\b.css"].sort());
+      assert.equal(new Set(report.findings.map((f) => f.id)).size, 2,
+        "different real paths must not collapse into one stable finding ID");
+      for (const finding of report.findings) {
+        assert.ok(manifest.manifest.files.some((f) => f.path === finding.location.file));
+        assert.equal(finding.evidence[0].ref, finding.location.file + ":1");
+      }
+    });
+  });
 
 test("stable fingerprints deduplicate identical locations without erasing two findings", async () => {
   await fixture(async ({ root, target }) => {
