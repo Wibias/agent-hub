@@ -97,7 +97,7 @@ function auditInput(fetchImpl, overrides = {}) {
     ...overrides,
   };
 }
-function api(payload = rows, calls = []) {
+function api(payload = rows, calls = [], serverCap = 500) {
   return async (url, options) => {
     calls.push([url, options]);
     assert.equal(options.method, 'GET');
@@ -108,7 +108,7 @@ function api(payload = rows, calls = []) {
     const parsed = new URL(url);
     const limit = Number(parsed.searchParams.get('limit'));
     const offset = Number(parsed.searchParams.get('offset'));
-    const page = payload.slice(offset, offset + limit);
+    const page = payload.slice(offset, offset + Math.min(limit, serverCap));
     return {
       ok: true, status: page.length < limit ? 200 : 206,
       async json() { return page; },
@@ -134,6 +134,41 @@ test('P37 composes one GET-only verified snapshot into independent P33/P34 48/48
   ]) assert.equal(receipt[field], false, field);
   assert.doesNotMatch(JSON.stringify(receipt),
     /search_text|sb_publishable_p37_ci_only|ref-p7-a|canonicalUrl|sourceReceiptJson|recordsJson/);
+});
+
+test('P37 handles a server-capped multi-page P30 snapshot with no P34 re-fetch', async () => {
+  const calls = [];
+  const result = await auditP37SingleSnapshotPublicParity(auditInput(api(rows, calls, 2)));
+  assert.ok(calls.length > 1, 'fixture must have more than one page');
+  assert.equal(calls.length, Math.ceil(rows.length / 2));
+  assert.deepEqual(calls.map(([url]) => Number(new URL(url).searchParams.get('offset'))),
+    Array.from({ length: calls.length }, (_, i) => i * 2));
+  assert.equal(result.http_request_count, calls.length);
+  assert.equal(result.p33.exact_order_cases, 48);
+  assert.equal(result.p34.public_output_exact_cases, 48);
+  assert.equal(result.p34.candidate_content_bound_to_p33, true);
+  assert.equal(result.deployment_authorized, false);
+});
+
+test('P37 refuses mixed publication times across HTTP pages without returning candidates', async () => {
+  let calls = 0;
+  const fetchImpl = async (url, options) => {
+    calls++;
+    const response = await api(rows, [], 2)(url, options);
+    if (calls !== 2) return response;
+    return {
+      ...response,
+      async json() {
+        return (await response.json()).map(row => ({
+          ...row, refreshed_at: '2026-11-07T11:29:00+00:00',
+        }));
+      },
+    };
+  };
+  await assert.rejects(auditP37SingleSnapshotPublicParity(auditInput(fetchImpl)),
+    error => error instanceof P37SingleSnapshotAuditError
+      && error.category === 'p33-transport');
+  assert.equal(calls, 2);
 });
 
 test('P37 rejects an absent, malformed or wrong independently supplied P33 report pin', async () => {
