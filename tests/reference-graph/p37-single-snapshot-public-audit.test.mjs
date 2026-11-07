@@ -223,6 +223,36 @@ test('P37 propagates a later page or authorization failure without partial outpu
   assert.equal(calls, 1);
 });
 
+test('P37 does not continue reading or issue GETs after P30 timeout from abort-ignoring fetch', async () => {
+  let releaseLateResponse;
+  let parseCount = 0;
+  const requests = [];
+  const fetchImpl = (url, options) => {
+    requests.push({ url, method: options.method, signal: options.signal });
+    if (requests.length === 1) {
+      return new Promise(resolve => { releaseLateResponse = resolve; });
+    }
+    return api(rows)(url, options);
+  };
+  await assert.rejects(
+    auditP37SingleSnapshotPublicParity(auditInput(fetchImpl, { timeoutMs: 10 })),
+    error => error instanceof P37SingleSnapshotAuditError
+      && error.category === 'p33-transport',
+  );
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].signal.aborted, true);
+  releaseLateResponse({
+    ok: true, status: 206,
+    async json() {
+      parseCount++;
+      return rows.slice(0, 2);
+    },
+  });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(parseCount, 0, 'do not parse late response after a timeout');
+  assert.equal(requests.length, 1, 'do not start P30/P34 GETs after a timeout');
+});
+
 test('P37 does not import production routing, write to disk or connect service-role state', () => {
   const src = readFileSync('reference-graph/p37-single-snapshot-public-audit.mjs', 'utf8');
   const router = readFileSync('reference-graph/p11-runtime-router.mjs', 'utf8');
