@@ -119,6 +119,33 @@ test("only genuine HTML link elements contribute CSS proof", () => {
   });
 });
 
+test("valid quoted HTML attribute templates are inert but later stylesheet links remain bound", () => {
+  fixture(({ root, src }) => {
+    const html = join(src, "page.html");
+    const css = join(src, "site.css");
+    const inspect = () => sourceScopeProof({
+      projectRoot: root, target: html, route: "/page", includeDetectorContext: true,
+    });
+    for (const template of [
+      `<div data-template='<link rel="stylesheet" href="site.css">'></div>`,
+      `<div data-template="<link rel=stylesheet href=site.css>"></div>`,
+      `<div x-data='{"preview":"<link rel=stylesheet href=site.css>"}'></div>`,
+    ]) {
+      writeFileSync(css, "h1 { color: red; }\n");
+      writeFileSync(html, template);
+      assert.deepEqual(inspect().manifest.linkedStylesheets ?? [], [],
+        "valid quoted template text must not be misclassified as stylesheet markup");
+      writeFileSync(html, template + '<link rel="stylesheet" href="site.css">');
+      const first = inspect();
+      assert.deepEqual(first.manifest.linkedStylesheets.map((item) => item.path),
+        ["src/site.css"]);
+      writeFileSync(css, "h1 { color: blue; }\n");
+      assert.notEqual(inspect().summary.sourceSha256, first.summary.sourceSha256,
+        "genuine local stylesheet mutations must still invalidate the proof");
+    }
+  });
+});
+
 test("HTML entity-encoded stylesheet rel cannot evade the source proof", () => {
   fixture(({ root, src }) => {
     const html = join(src, "page.html");
@@ -227,6 +254,7 @@ test("parser-dependent HTML regions fail closed on ambiguous stylesheet links", 
     });
     for (const markup of [
       '<iframe><link rel="stylesheet" href="site.css"></iframe>',
+      '<xmp><link rel="stylesheet" href="site.css"></xmp>',
       '<noembed><link rel="stylesheet" href="site.css"></noembed>',
       '<noframes><link rel="stylesheet" href="site.css"></noframes>',
       '<plaintext><link rel="stylesheet" href="site.css">',
