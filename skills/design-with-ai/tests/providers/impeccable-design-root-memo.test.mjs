@@ -124,6 +124,30 @@ test("cached ancestor resolution invalidates when a nested DESIGN.md appears", (
   });
 });
 
+test("disappearing and recreated directories cannot poison cached design roots", () => {
+  withFixtures(({ project, source }) => {
+    const transient = join(source, "temporary");
+    mkdirSync(transient);
+    const leaf = join(transient, "page.css");
+    writeFileSync(leaf, "body { color: #111; }\n");
+    const cache = new Map();
+    const initial = loadDesignSystemForTarget(leaf, { cache });
+    assert.equal(initial?.sourcePath, join(project, "DESIGN.md"));
+    assert.ok(cache.has("dirsig:" + resolve(transient)));
+
+    rmSync(transient, { recursive: true, force: true });
+    assert.doesNotThrow(() => findDesignRoot(transient, { cache }));
+    assert.equal(cache.has("dirsig:" + resolve(transient)), false);
+    assert.equal(cache.has("resolve:" + resolve(transient)), false);
+    assert.strictEqual(loadDesignSystemForTarget(leaf, { cache }), initial);
+
+    mkdirSync(transient);
+    writeFileSync(join(transient, "package.json"), "{}\n");
+    assert.equal(loadDesignSystemForTarget(leaf, { cache }), null,
+      "a re-created nested project boundary must not inherit stale policy");
+  });
+});
+
 test("without an explicit scan cache, direct root lookup keeps normal semantics", () => {
   withFixtures(({ project, source }) => {
     assert.deepEqual(findDesignRoot(source), { dir: project, hasDesign: true });

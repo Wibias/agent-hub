@@ -217,6 +217,46 @@ test("valueless link attributes retain CSS byte provenance and fail closed on du
   });
 });
 
+test("parser-dependent HTML regions fail closed on ambiguous stylesheet links", () => {
+  fixture(({ root, src }) => {
+    const html = join(src, "page.html");
+    const css = join(src, "site.css");
+    writeFileSync(css, "h1 { color: red; }\n");
+    const inspect = (includeDetectorContext = true) => sourceScopeProof({
+      projectRoot: root, target: html, route: "/page", includeDetectorContext,
+    });
+    for (const markup of [
+      '<iframe><link rel="stylesheet" href="site.css"></iframe>',
+      '<noembed><link rel="stylesheet" href="site.css"></noembed>',
+      '<noframes><link rel="stylesheet" href="site.css"></noframes>',
+      '<plaintext><link rel="stylesheet" href="site.css">',
+      '<iframe><link rel="stylesheet" href="site.css">',
+    ]) {
+      writeFileSync(html, markup);
+      assert.throws(inspect, /Parser-dependent HTML link region cannot be attested/,
+        "potential parser reads must be rejected: " + markup);
+      writeFileSync(css, "h1 { color: blue; }\n");
+      assert.throws(inspect, /Parser-dependent HTML link region cannot be attested/,
+        "a CSS-only mutation cannot establish source completeness");
+      assert.equal(inspect(false).manifest.linkedStylesheets, undefined,
+        "quick native-only mode skips optional detector dependencies");
+    }
+    for (const markup of [
+      '<iframe><link-button rel="stylesheet" href="site.css"></link-button></iframe>',
+      '<script>const example = "<link rel=stylesheet href=site.css>";</script>',
+      '<textarea><link rel="stylesheet" href="site.css"></textarea>',
+      '<!-- <link rel="stylesheet" href="site.css"> -->',
+    ]) {
+      writeFileSync(html, markup);
+      assert.deepEqual(inspect().manifest.linkedStylesheets ?? [], [],
+        "lookalikes and genuinely inert examples remain supported");
+    }
+    writeFileSync(html, '<link rel="stylesheet" href="site.css">');
+    assert.deepEqual(inspect().manifest.linkedStylesheets.map((item) => item.path),
+      ["src/site.css"], "normal stylesheet links must remain attested");
+  });
+});
+
 test("symlinked linked CSS and escaping local stylesheet reads cannot be attested", () => {
   fixture(({ root, src }) => {
     const html = join(src, "page.html");
