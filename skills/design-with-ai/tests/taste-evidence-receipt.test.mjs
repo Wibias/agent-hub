@@ -391,6 +391,34 @@ test("legacy receipt CLI redacts hostile child JSON, stderr, disk JSON and unkno
       "Receipt child audit failed",
     );
 
+    // Previously, exit 0 with a JSON error envelope could be counted as
+    // a completed source audit and serialized into a false success receipt.
+    writeFileSync(fakeGate,
+      `process.stdout.write(JSON.stringify({error:"${canary}"}));\n` +
+      "process.exit(0);\n");
+    assertPrivateError(
+      launch(isolatedReceipt, ["--path", source, "--json"]),
+      "Receipt child audit emitted invalid report",
+    );
+
+    // Valid-looking verdict text without the required audit envelope and
+    // a contradictory HOLD/exit pairing must also fail closed.
+    writeFileSync(fakeGate,
+      "process.stdout.write(JSON.stringify({verdict:'PASS_MECHANICAL',p0:0}));\n" +
+      "process.exit(0);\n");
+    assertPrivateError(
+      launch(isolatedReceipt, ["--path", source, "--json"]),
+      "Receipt child audit emitted invalid report",
+    );
+
+    writeFileSync(fakeGate,
+      "process.stdout.write(JSON.stringify({verdict:'HOLD',p0:1,hits:[],cluster:{families:[]}}));\n" +
+      "process.exit(0);\n");
+    assertPrivateError(
+      launch(isolatedReceipt, ["--path", source, "--json"]),
+      "Receipt child audit emitted invalid report",
+    );
+
     const maliciousManifest = join(dir, "manifest-" + canary + ".json");
     writeFileSync(maliciousManifest, `{"token": ${canary}}`);
     assertPrivateError(

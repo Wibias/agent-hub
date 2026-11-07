@@ -15,6 +15,7 @@ function safePublicError(error) {
     "Invalid or unexpected CLI argument",
     "Receipt child emitted invalid JSON",
     "Receipt child audit failed",
+    "Receipt child audit emitted invalid report",
     "Required receipt input file not found",
     "Receipt input contains invalid JSON",
     "Render snapshot route mismatch",
@@ -81,7 +82,37 @@ function parseJsonOutput(result, label) {
   }
 }
 
-function runNode(script, args, label, accepted = new Set([0])) {
+const SOURCE_VERDICTS = new Set(["HOLD", "REVIEW_CLUSTER", "REVIEW", "PASS_MECHANICAL"]);
+const RENDER_VERDICTS = new Set(["PASS_RENDER_EVIDENCE", "REVIEW_RENDER", "REVIEW_RENDER_CLUSTER"]);
+const FUSION_VERDICTS = new Set(["HOLD", "REVIEW_FUSED", "REVIEW_FUSED_CLUSTER", "PASS_FUSED_EVIDENCE"]);
+// Do not treat an error envelope or JSON scalar from a child with exit 0 as
+// proof that its audit completed successfully. Never echo rejected JSON.
+function assertGateOutput(parsed, kind, exitStatus) {
+  const object = parsed && typeof parsed === "object" && !Array.isArray(parsed);
+  const verdicts = kind === "source" ? SOURCE_VERDICTS
+    : kind === "render" ? RENDER_VERDICTS : FUSION_VERDICTS;
+  const cluster = parsed?.cluster;
+  const validCluster = cluster && typeof cluster === "object" &&
+    !Array.isArray(cluster) && Array.isArray(cluster.families);
+  const valid = object && !Object.hasOwn(parsed, "error") &&
+    verdicts.has(parsed.verdict) && validCluster &&
+    (kind === "fusion"
+      ? parsed.channels && typeof parsed.channels === "object" &&
+        SOURCE_VERDICTS.has(parsed.channels.sourceVerdict) &&
+        RENDER_VERDICTS.has(parsed.channels.renderVerdict)
+      : Array.isArray(parsed.hits)) &&
+    (kind !== "source" || (
+      Number.isSafeInteger(parsed.p0) && parsed.p0 >= 0 &&
+      (parsed.p0 > 0) === (parsed.verdict === "HOLD") &&
+      (exitStatus === 1) === (parsed.verdict === "HOLD")
+    )) &&
+    (kind !== "fusion" || (
+      (exitStatus === 1) === (parsed.verdict === "HOLD")
+    ));
+  if (!valid) throw new Error("Receipt child audit emitted invalid report");
+}
+
+function runNode(script, args, label, accepted = new Set([0]), kind = "source") {
   const result = spawnSync(process.execPath, [script, ...args], { encoding: "utf8" });
   const parsed = parseJsonOutput(result, label);
   if (!accepted.has(result.status)) {
@@ -89,6 +120,7 @@ function runNode(script, args, label, accepted = new Set([0])) {
     // Keep the nonzero fail-closed status without copying child JSON fields.
     throw new Error("Receipt child audit failed");
   }
+  assertGateOutput(parsed, kind, result.status);
   return { status: result.status, parsed };
 }
 
@@ -246,7 +278,7 @@ function runCandidate(candidate, tools, tempRoot) {
       tools.renderGate,
       ["--snapshot", candidate.snapshot, "--json"],
       `Rendered taste gate [${candidate.id}]`,
-      new Set([0]),
+      new Set([0]), "render",
     );
 
     const candidateTemp = join(tempRoot, candidate.id.replace(/[^a-zA-Z0-9._-]+/g, "_"));
@@ -259,7 +291,7 @@ function runCandidate(candidate, tools, tempRoot) {
       tools.fusionGate,
       ["--source-report", sourcePath, "--render-report", renderPath, "--json"],
       `Taste evidence fusion [${candidate.id}]`,
-      new Set([0, 1]),
+      new Set([0, 1]), "fusion",
     );
   }
 
