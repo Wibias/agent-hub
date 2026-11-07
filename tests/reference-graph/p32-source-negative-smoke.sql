@@ -62,6 +62,24 @@ begin
 end $$;
 rollback;
 
+-- Invalid primary_stratum is also rejected before publication.
+begin;
+update reference_graph.assets
+set metadata = jsonb_set(metadata, '{primary_stratum}', '"broken-stratum"'::jsonb, true)
+where metadata->>'legacy_id' = 'ref-p7-a';
+do $
+declare blocked boolean := false;
+begin
+  begin
+    perform public.reference_graph_refresh_profile_runtime_projection_p31();
+  exception when raise_exception then blocked := true;
+  end;
+  if not blocked then
+    raise exception 'P32 invalid primary stratum was published';
+  end if;
+end $;
+rollback;
+
 -- No rejected source may replace the healthy projection.
 select 1 / case when
   (select count(*) from public.reference_graph_profile_runtime_projection_p30_v1)
