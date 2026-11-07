@@ -434,3 +434,72 @@ test("legacy receipt CLI redacts hostile child JSON, stderr, disk JSON and unkno
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("receipt binds child proof to exact source, snapshot and fusion channels", () => {
+  const dir = mkdtempSync(join(tmpdir(), "dwa-221-scope-binding-"));
+  const source = join(dir, "source.tsx");
+  const snapshot = join(dir, "capture.json");
+  const localReceipt = join(dir, "taste-evidence-receipt.mjs");
+  const sourceGate = join(dir, "taste-gate.mjs");
+  const renderGate = join(dir, "render-taste-gate.mjs");
+  const fusionGate = join(dir, "taste-evidence-fusion.mjs");
+  const canary = "CANARY_OTHER_SCOPE_20261107";
+  const sourceReport = (path, filesScanned = 1) => ({
+    path, filesScanned, p0: 0, p1: 0, p2: 0,
+    verdict: "PASS_MECHANICAL", hits: [], cluster: { families: [] },
+  });
+  const renderReport = (path, url) => ({
+    snapshot: path, url, viewport: { width: 1440, height: 900 },
+    verdict: "PASS_RENDER_EVIDENCE", hits: [], cluster: { families: [] },
+  });
+  const writeGate = (file, report, code = 0) => {
+    writeFileSync(file, "process.stdout.write(" +
+      JSON.stringify(JSON.stringify(report)) + ");\nprocess.exit(" + code + ");\n");
+  };
+  const execute = (render = false) => {
+    const args = [localReceipt, "--path", source, "--json"];
+    if (render) args.push("--snapshot", snapshot, "--route", "/example");
+    const result = spawnSync(process.execPath, args, { encoding: "utf8" });
+    assert.equal(result.status, 2, result.stdout + result.stderr);
+    const error = JSON.parse(result.stdout).error;
+    assert.equal(error, "Receipt child audit emitted invalid report");
+    assert.ok(!result.stdout.includes(canary));
+    assert.ok(!result.stderr.includes(canary));
+  };
+  try {
+    writeFileSync(localReceipt, readFileSync(receipt, "utf8"));
+    writeFileSync(source, "export default function View(){return null;}");
+    writeFileSync(snapshot, JSON.stringify(cleanSnapshot({ url: "http://localhost/example" })));
+
+    // A convincing PASS for another file must not attest this source.
+    writeGate(sourceGate, sourceReport(join(dir, canary + ".tsx")));
+    execute();
+    writeGate(sourceGate, sourceReport(source, 0));
+    execute();
+
+    writeGate(sourceGate, sourceReport(source));
+    // A render audit of a different snapshot cannot prove this viewport.
+    writeGate(renderGate, renderReport(join(dir, canary + ".json"), "http://localhost/example"));
+    execute(true);
+    writeGate(renderGate, renderReport(snapshot, "http://localhost/" + canary));
+    execute(true);
+
+    writeGate(renderGate, renderReport(snapshot, "http://localhost/example"));
+    // Fusion HOLD after source PASS cannot be a clear mechanical receipt.
+    writeGate(fusionGate, {
+      verdict: "HOLD",
+      channels: { sourceVerdict: "PASS_MECHANICAL", renderVerdict: "PASS_RENDER_EVIDENCE" },
+      cluster: { families: [] },
+    }, 1);
+    execute(true);
+    // It must also reject a fusion report claiming different input channels.
+    writeGate(fusionGate, {
+      verdict: "PASS_FUSED_EVIDENCE",
+      channels: { sourceVerdict: "REVIEW", renderVerdict: "PASS_RENDER_EVIDENCE" },
+      cluster: { families: [] },
+    });
+    execute(true);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
