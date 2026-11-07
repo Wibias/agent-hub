@@ -21,7 +21,7 @@ function exactKeys(row) {
     && keys.every((key, index) => key === allowed[index]);
 }
 
-function orderedIdHash(candidates) {
+function candidateIdSetHash(candidates) {
   const ids = candidates
     .filter(row => row && typeof row.legacy_id === 'string')
     .map(row => row.legacy_id)
@@ -123,7 +123,7 @@ export function auditP28ProfileCandidateContract({ candidates } = {}) {
     schema_version: 'reference-graph.p28-profile-candidate-audit.v1',
     candidate_count: candidates.length,
     stratum_counts: stratumCounts,
-    ordered_candidate_ids_sha256: orderedIdHash(candidates),
+    candidate_id_set_sha256: candidateIdSetHash(candidates),
     metadata_contract_complete: blockers.size === 0,
     blockers: [...blockers].sort(),
     graph_parity_verified: false,
