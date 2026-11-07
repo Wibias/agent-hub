@@ -4,6 +4,7 @@ import {
   TAXONOMY, isFresh, overlap, recordSearchText, stripInternal, tokenize,
 } from '../knowledge/design-references/scripts/lib.mjs';
 import { auditP28ProfileCandidateContract } from './p28-profile-candidate-contract.mjs';
+import { hashP33CandidateContent } from './p33-candidate-content-digest.mjs';
 import {
   selectP29ProfileCandidateIds, compareP29OfflineProfileParity,
 } from './p29-offline-profile-parity.mjs';
@@ -21,7 +22,8 @@ const VISUAL_DIMENSIONS = Object.freeze([
 ]);
 const P33_REPORT_KEYS = Object.freeze([
   'schema_version', 'reference_date', 'candidate_count',
-  'candidate_id_set_sha256', 'evaluated_cases', 'exact_order_cases',
+  'candidate_id_set_sha256', 'candidate_content_sha256',
+  'evaluated_cases', 'exact_order_cases',
   'mismatch_cases', 'mismatch_by_profile',
   'record_order_coverage_parity_exact', 'pinned_inputs_verified',
   'transport_contract_verified', 'pattern_parity_verified',
@@ -81,7 +83,7 @@ function validatePinnedSource({
   candidates,
 }) {
   if (!exactKeys(p33Report, P33_REPORT_KEYS)
-    || p33Report.schema_version !== 'reference-graph.p33-pinned-profile-parity.v1'
+    || p33Report.schema_version !== 'reference-graph.p33-pinned-profile-parity.v2'
     || p33Report.evaluated_cases !== 48
     || p33Report.exact_order_cases !== 48
     || p33Report.mismatch_cases !== 0
@@ -100,6 +102,7 @@ function validatePinnedSource({
     || typeof p33Report.reference_date !== 'string'
     || !/^\d{4}-\d{2}-\d{2}$/.test(p33Report.reference_date)
     || !SHA256.test(p33Report.candidate_id_set_sha256)
+    || !SHA256.test(p33Report.candidate_content_sha256)
     || !Number.isInteger(p33Report.candidate_count)
     || p33Report.candidate_count < 1
     || p33Report.candidate_count > 5000) {
@@ -193,6 +196,20 @@ function validatePinnedSource({
     || audit.candidate_count !== p33Report.candidate_count
     || audit.candidate_id_set_sha256 !== p33Report.candidate_id_set_sha256) {
     fail('candidate-invalid');
+  }
+
+  // Exact metadata provenance is required. Same candidate IDs alone are
+  // insufficient: valid but changed tags/search_text/motion could otherwise
+  // pass every P34 selected-order test despite coming from a different
+  // P30 snapshot than the one P33 actually audited.
+  let actualContentHash;
+  try {
+    actualContentHash = hashP33CandidateContent(candidates);
+  } catch {
+    fail('candidate-invalid');
+  }
+  if (actualContentHash !== p33Report.candidate_content_sha256) {
+    fail('candidate-snapshot-binding');
   }
 
   return { day, publicHashes, recordById };
@@ -439,7 +456,7 @@ export function auditP34PatternPublicOutputParity({
     || p29.mismatch_cases > mismatches) fail('candidate-invalid');
 
   return {
-    schema_version: 'reference-graph.p34-pattern-public-output-parity.v1',
+    schema_version: 'reference-graph.p34-pattern-public-output-parity.v2',
     reference_date: p33Report.reference_date,
     evaluated_cases: 48,
     record_order_exact_cases: recordExact,
@@ -452,6 +469,7 @@ export function auditP34PatternPublicOutputParity({
       && patternExact === 48 && publicExact === 48,
     pinned_inputs_verified: true,
     candidate_identity_bound_to_p33: true,
+    candidate_content_bound_to_p33: true,
     live_graph_parity_verified: false,
     repository_default_graph_enabled: false,
     activation_performed: false,
