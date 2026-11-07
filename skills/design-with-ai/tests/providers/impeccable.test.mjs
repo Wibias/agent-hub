@@ -146,21 +146,30 @@ test("partial, inconsistent and malformed detector results are ERROR", async () 
   });
 });
 
-test("incomplete detector exit retains a bounded sanitized stderr suffix", async () => {
+
+test("incomplete detector exit never persists arbitrary stderr or malformed exit codes", async () => {
   await fixture(async ({ root, target }) => {
-    const stderr = "suppressed-prefix-".repeat(40) + "\nFATAL_SCANNER_EXIT\n";
-    const provider = createImpeccableProvider({
-      runner: async () => result({ exitCode: 1, stderr }),
-    });
-    const out = await provider.inspect({
-      capability: Capability.STATIC_AUDIT, target, route: "/settings", projectRoot: root,
-    });
-    assert.equal(out.status, ProviderStatus.ERROR);
-    assert.match(out.reason, /exit 1/);
-    assert.match(out.reason, /FATAL_SCANNER_EXIT/);
-    assert.ok(out.reason.length < 320, "stderr diagnostics must be bounded");
-    assert.ok(!out.reason.includes("suppressed-prefix-".repeat(20)));
-    assert.ok(!out.reason.includes("\n"), "control characters must be escaped or collapsed");
+    const stderr = "Failure at /api/token=CANARY_SCANNER_STDERR_20261107\n" +
+      "FATAL_SCANNER_EXIT https://example.test/?key=CANARY_URL_20261107\n";
+    for (const [exitCode, expected] of [
+      [1, "Impeccable detector did not complete (exit 1)"],
+      ["token=CANARY_BAD_EXIT_20261107",
+        "Impeccable detector did not complete (exit unknown)"],
+    ]) {
+      const provider = createImpeccableProvider({
+        runner: async () => result({ exitCode, stderr }),
+      });
+      const out = await provider.inspect({
+        capability: Capability.STATIC_AUDIT, target, route: "/settings",
+        projectRoot: root,
+      });
+      assert.equal(out.status, ProviderStatus.ERROR);
+      assert.equal(out.reason, expected);
+      const persisted = JSON.stringify(out);
+      assert.ok(!persisted.includes("CANARY_"));
+      assert.ok(!persisted.includes("FATAL_SCANNER_EXIT"));
+      assert.ok(!persisted.includes("example.test"));
+    }
   });
 });
 
