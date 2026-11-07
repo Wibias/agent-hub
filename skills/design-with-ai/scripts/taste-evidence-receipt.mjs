@@ -6,6 +6,8 @@ import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 
+const USAGE_MESSAGE = "Usage: taste-evidence-receipt.mjs --path <file-or-directory> [--snapshot <render-snapshot.json> --route </route>] [--intent <intent.json>] [--extensions .tsx,.css] [--json] OR --manifest <receipt-manifest.json> [--cross-surface-report <compare-render-snapshots.json>] [--json]";
+
 // This CLI joins output from independently executed audit tools. Inputs,
 // child stdout/stderr and JSON parser exceptions are untrusted and may include
 // credential-bearing file paths, URLs or arbitrary token fragments. Only
@@ -13,6 +15,10 @@ import { fileURLToPath } from "node:url";
 function safePublicError(error) {
   const message = typeof error?.message === "string" ? error.message : "";
   const allowed = new Set([
+    USAGE_MESSAGE,
+    "--manifest is mutually exclusive with --path/--snapshot/--route/--intent/--extensions",
+    "Render snapshot viewport is invalid",
+    "Receipt temporary cleanup failed",
     "Invalid or unexpected CLI argument",
     "Receipt child emitted invalid JSON",
     "Receipt child audit failed",
@@ -61,7 +67,7 @@ function parseArgs(argv) {
     throw new Error("--manifest is mutually exclusive with --path/--snapshot/--route/--intent/--extensions");
   }
   if (!args.manifest && !args.path) {
-    throw new Error("Usage: taste-evidence-receipt.mjs --path <file-or-directory> [--snapshot <render-snapshot.json> --route </route>] [--intent <intent.json>] [--extensions .tsx,.css] [--json] OR --manifest <receipt-manifest.json> [--cross-surface-report <compare-render-snapshots.json>] [--json]");
+    throw new Error(USAGE_MESSAGE);
   }
   if (args.snapshot && !args.route) {
     throw new Error("--snapshot requires --route so source/render evidence cannot be fused without an explicit candidate binding");
@@ -121,6 +127,9 @@ function assertGateOutput(parsed, kind, exitStatus, expected = {}) {
       : Array.isArray(parsed.hits)) &&
     (kind !== "source" || (
       sourceHitCountsMatch(parsed) &&
+      parsed.intent && typeof parsed.intent === "object" &&
+      !Array.isArray(parsed.intent) &&
+      parsed.intent.path === (expected.intentPath == null ? null : resolve(expected.intentPath)) &&
       (parsed.p0 > 0) === (parsed.verdict === "HOLD") &&
       (parsed.p1 === 0 || parsed.verdict !== "PASS_MECHANICAL") &&
       (parsed.p1 > 0 || parsed.verdict !== "REVIEW") &&
@@ -328,7 +337,9 @@ function runCandidate(candidate, tools, tempRoot) {
   if (candidate.extensions) sourceArgs.push("--extensions", candidate.extensions);
 
   const source = runNode(tools.sourceGate, sourceArgs, `Source taste gate [${candidate.id}]`,
-    new Set([0, 1]), "source", { sourcePath: candidate.path });
+    new Set([0, 1]), "source", {
+      sourcePath: candidate.path, intentPath: candidate.intent,
+    });
 
   let render = null;
   let fused = null;
@@ -521,6 +532,8 @@ function main() {
   const argv = process.argv.slice(2);
   let args = { json: argv.includes("--json") };
   let tempDir = null;
+  let output;
+  let failure = null;
   try {
     args = parseArgs(argv);
     const scriptDir = dirname(fileURLToPath(import.meta.url));
@@ -531,7 +544,6 @@ function main() {
     };
     tempDir = mkdtempSync(join(tmpdir(), "taste-evidence-receipt-"));
 
-    let output;
     if (args.manifest) {
       const manifest = readManifest(args.manifest);
       const crossPath = args.crossSurfaceReport || manifest.crossSurfaceReport;
@@ -556,6 +568,29 @@ function main() {
       output = singleCandidateReceipt(candidate, null);
     }
 
+  } catch (error) {
+    failure = error;
+  } finally {
+    // Cleanup happens before the success receipt is emitted. Even an OS-level
+    // EACCES/EPERM failure may contain private temp paths, so never echo it.
+    if (tempDir) {
+      try {
+        rmSync(tempDir, { recursive: true, force: true });
+      } catch {
+        failure = new Error("Receipt temporary cleanup failed");
+      }
+    }
+  }
+
+  if (failure) {
+    const message = safePublicError(failure);
+    if (args?.json) process.stdout.write(`${JSON.stringify({ error: message }, null, 2)}\n`);
+    else console.error(message);
+    process.exitCode = 2;
+    return;
+  }
+
+  try {
     if (args.json) {
       process.stdout.write(`${JSON.stringify(output.receipt, null, 2)}\n`);
     } else {
@@ -567,15 +602,12 @@ function main() {
       console.log(` cross-surface: ${output.receipt.coverage.crossSurface}`);
       console.log(` ${output.receipt.note}`);
     }
-
     process.exitCode = output.sourceHold ? 1 : 0;
   } catch (error) {
     const message = safePublicError(error);
     if (args?.json) process.stdout.write(`${JSON.stringify({ error: message }, null, 2)}\n`);
     else console.error(message);
     process.exitCode = 2;
-  } finally {
-    if (tempDir) rmSync(tempDir, { recursive: true, force: true });
   }
 }
 

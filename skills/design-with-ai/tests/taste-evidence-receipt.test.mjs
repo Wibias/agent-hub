@@ -412,7 +412,7 @@ test("legacy receipt CLI redacts hostile child JSON, stderr, disk JSON and unkno
     );
 
     writeFileSync(fakeGate,
-      "process.stdout.write(JSON.stringify({verdict:'HOLD',p0:1,hits:[],cluster:{families:[]}}));\n" +
+      `process.stdout.write(JSON.stringify({path:${JSON.stringify(resolve(source))},filesScanned:1,intent:{path:null},verdict:'HOLD',p0:1,p1:0,p2:0,hits:[{severity:'P0'}],cluster:{families:[]}}));\n` +
       "process.exit(0);\n");
     assertPrivateError(
       launch(isolatedReceipt, ["--path", source, "--json"]),
@@ -430,6 +430,36 @@ test("legacy receipt CLI redacts hostile child JSON, stderr, disk JSON and unkno
       launch(receipt, ["--path", source, "--unexpected-" + canary, "--json"]),
       "Invalid or unexpected CLI argument",
     );
+
+    const usageResult = launch(receipt, ["--json"]);
+    assert.equal(usageResult.status, 2);
+    assert.match(JSON.parse(usageResult.stdout).error, /^Usage: taste-evidence-receipt\.mjs /);
+    assertPrivateError(
+      launch(receipt, ["--manifest", maliciousManifest, "--path", source, "--json"]),
+      "--manifest is mutually exclusive with --path/--snapshot/--route/--intent/--extensions",
+    );
+    const badViewport = join(dir, "viewport-" + canary + ".json");
+    writeFileSync(badViewport, JSON.stringify(cleanSnapshot({
+      viewport: { width: 0, height: 900, devicePixelRatio: 1 },
+    })));
+    assertPrivateError(
+      launch(receipt, ["--path", source, "--snapshot", badViewport, "--route", "/example", "--json"]),
+      "Render snapshot viewport is invalid",
+    );
+
+    // Inject an OS-style cleanup exception after removing the test temp dir.
+    // The public failure must be redacted and no success receipt emitted.
+    const pristine = readFileSync(receipt, "utf8");
+    const cleanupCall = "rmSync(tempDir, { recursive: true, force: true });";
+    assert.ok(pristine.includes(cleanupCall));
+    writeFileSync(isolatedReceipt, pristine.replace(cleanupCall,
+      cleanupCall + ` throw new Error("${canary}");`));
+    writeFileSync(fakeGate,
+      `process.stdout.write(JSON.stringify({path:${JSON.stringify(resolve(source))},filesScanned:1,intent:{path:null},p0:0,p1:0,p2:0,verdict:'PASS_MECHANICAL',hits:[],cluster:{families:[]}}));\n`);
+    assertPrivateError(
+      launch(isolatedReceipt, ["--path", source, "--json"]),
+      "Receipt temporary cleanup failed",
+    );
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -445,7 +475,7 @@ test("receipt binds child proof to exact source, snapshot and fusion channels", 
   const fusionGate = join(dir, "taste-evidence-fusion.mjs");
   const canary = "CANARY_OTHER_SCOPE_20261107";
   const sourceReport = (path, filesScanned = 1) => ({
-    path, filesScanned, p0: 0, p1: 0, p2: 0,
+    path, filesScanned, intent: { path: null }, p0: 0, p1: 0, p2: 0,
     verdict: "PASS_MECHANICAL", hits: [], cluster: { families: [] },
   });
   const renderReport = (path, url, viewport = { width: 1440, height: 900, devicePixelRatio: 1 }) => ({
@@ -456,8 +486,17 @@ test("receipt binds child proof to exact source, snapshot and fusion channels", 
     writeFileSync(file, "process.stdout.write(" +
       JSON.stringify(JSON.stringify(report)) + ");\nprocess.exit(" + code + ");\n");
   };
-  const execute = (render = false) => {
-    const args = [localReceipt, "--path", source, "--json"];
+  const writeFusionGate = (report, code = 0) => {
+    writeFileSync(fusionGate, [
+      "const args=process.argv.slice(2); const arg=(key)=>args[args.indexOf(key)+1];",
+      `const report=${JSON.stringify(report)};`,
+      "report.reports={source:arg('--source-report'),render:arg('--render-report')};",
+      "process.stdout.write(JSON.stringify(report));",
+      `process.exit(${code});`,
+    ].join("\n"));
+  };
+  const execute = (render = false, extraArgs = []) => {
+    const args = [localReceipt, "--path", source, "--json", ...extraArgs];
     if (render) args.push("--snapshot", snapshot, "--route", "/example");
     const result = spawnSync(process.execPath, args, { encoding: "utf8" });
     assert.equal(result.status, 2, result.stdout + result.stderr);
@@ -476,6 +515,18 @@ test("receipt binds child proof to exact source, snapshot and fusion channels", 
     execute();
     writeGate(sourceGate, sourceReport(source, 0));
     execute();
+    writeGate(sourceGate, { ...sourceReport(source), intent: { path: join(dir, canary + ".json") } });
+    execute();
+    const intentPath = join(dir, "intent.json");
+    writeFileSync(intentPath, "{}");
+    writeGate(sourceGate, sourceReport(source));
+    execute(false, ["--intent", intentPath]);
+    writeGate(sourceGate, { ...sourceReport(source), intent: { path: intentPath } });
+    const intentOk = spawnSync(process.execPath,
+      [localReceipt, "--path", source, "--intent", intentPath, "--json"],
+      { encoding: "utf8" });
+    assert.equal(intentOk.status, 0, intentOk.stdout + intentOk.stderr);
+    writeGate(sourceGate, sourceReport(source));
     // A reported zero P0 cannot hide a P0 hit in the actual hit array.
     writeGate(sourceGate, { ...sourceReport(source), hits: [{ severity: "P0" }] });
     execute();
@@ -494,9 +545,9 @@ test("receipt binds child proof to exact source, snapshot and fusion channels", 
     execute(true);
 
     // A correct snapshot path and URL cannot conceal a different viewport.
-    writeGate(renderGate, renderReport(snapshot, "http://localhost/example", { width: 390, height: 844 }));
+    writeGate(renderGate, renderReport(snapshot, "http://localhost/example", { width: 390, height: 900, devicePixelRatio: 1 }));
     execute(true);
-    writeGate(renderGate, renderReport(snapshot, "http://localhost/example", { width: 1440, height: 768 }));
+    writeGate(renderGate, renderReport(snapshot, "http://localhost/example", { width: 1440, height: 768, devicePixelRatio: 1 }));
     execute(true);
     writeGate(renderGate, renderReport(snapshot, "http://localhost/example", { width: 1440 }));
     execute(true);
@@ -509,14 +560,14 @@ test("receipt binds child proof to exact source, snapshot and fusion channels", 
     execute(true);
     writeGate(renderGate, renderReport(snapshot, "http://localhost/example"));
     // Fusion HOLD after source PASS cannot be a clear mechanical receipt.
-    writeGate(fusionGate, {
+    writeFusionGate({
       verdict: "HOLD",
       channels: { sourceVerdict: "PASS_MECHANICAL", renderVerdict: "PASS_RENDER_EVIDENCE" },
       cluster: { families: [] },
     }, 1);
     execute(true);
     // It must also reject a fusion report claiming different input channels.
-    writeGate(fusionGate, {
+    writeFusionGate({
       verdict: "PASS_FUSED_EVIDENCE",
       channels: { sourceVerdict: "REVIEW", renderVerdict: "PASS_RENDER_EVIDENCE" },
       cluster: { families: [] },
@@ -534,10 +585,9 @@ test("receipt binds child proof to exact source, snapshot and fusion channels", 
     execute(true);
 
     // Compatible positive example, with actual input paths from the fusion CLI.
-    writeFileSync(fusionGate, [
-      "const args=process.argv.slice(2); const arg=(key)=>args[args.indexOf(key)+1];",
-      "process.stdout.write(JSON.stringify({verdict:'PASS_FUSED_EVIDENCE',channels:{sourceVerdict:'PASS_MECHANICAL',renderVerdict:'PASS_RENDER_EVIDENCE'},reports:{source:arg('--source-report'),render:arg('--render-report')},cluster:{families:[]}}));",
-    ].join("\n"));
+    writeFusionGate({
+      verdict: "PASS_FUSED_EVIDENCE", channels: correctChannels, cluster: { families: [] },
+    });
     // A source P2-only PASS still contains contextual hits, so the fusion
     // tool cannot claim PASS_FUSED_EVIDENCE with matching channel labels.
     writeGate(sourceGate, {
