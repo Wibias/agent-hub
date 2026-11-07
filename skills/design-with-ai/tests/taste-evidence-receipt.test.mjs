@@ -257,7 +257,7 @@ test("manifest receipt binds two routes and attaches exact cross-surface snapsho
         zoneCount: item.snapshot.macroZones.length,
       })),
       hits: [{ id: "G02", family: "macro-reuse" }],
-      comparisons: [{ eligible: true, triggered: true, similarity: 0.93 }],
+      comparisons: [{ left: "/home", right: "/pricing", eligible: true, triggered: true, similarity: 0.93 }],
       note: "contextual",
     }),
   });
@@ -353,7 +353,9 @@ test("cross-surface verdict must agree with hits and triggered comparisons", () 
       macroFingerprint: snapshot.macroFingerprint,
       zoneCount: snapshot.macroZones.length,
     })),
-    hits, comparisons, note: "synthetic cross-surface evidence",
+    hits, comparisons: comparisons.map((pair) => ({
+      left: snapshots[0].route, right: snapshots[1].route, ...pair,
+    })), note: "synthetic cross-surface evidence",
   });
 
   const invalid = [
@@ -381,6 +383,50 @@ test("cross-surface verdict must agree with hits and triggered comparisons", () 
   assert.equal(clean.status, 0, clean.stdout + clean.stderr);
   assert.equal(clean.parsed.state, "MECHANICAL_EVIDENCE_CLEAR");
   assert.equal(clean.parsed.crossSurfaceBinding.verified, true);
+});
+
+test("cross-surface receipt requires every actual snapshot pair exactly once", () => {
+  const candidates = ["/home", "/pricing", "/settings"].map((route, i) => ({
+    id: `surface-${i}`,
+    route,
+    source: "export default function Page(){ return <main>Clean content</main>; }",
+    snapshot: cleanSnapshot({ url: `http://localhost${route}` }),
+  }));
+  const cross = (snapshots, comparisons) => ({
+    verdict: "PASS_CROSS_SURFACE_EVIDENCE",
+    snapshots: snapshots.map(({ path, route, snapshot }) => ({
+      path, route, viewportBand: "desktop",
+      macroFingerprint: snapshot.macroFingerprint,
+      zoneCount: snapshot.macroZones.length,
+    })),
+    comparisons,
+    hits: [],
+  });
+  const pairs = [
+    { left: "/home", right: "/pricing", triggered: false },
+    { left: "/home", right: "/settings", triggered: false },
+    { left: "/pricing", right: "/settings", triggered: false },
+  ];
+  for (const altered of [
+    [], // Two+ snapshots with no comparisons cannot be certified.
+    pairs.slice(0, 2), // Missing a pair even with all snapshots listed.
+    [pairs[0], pairs[0], pairs[2]], // Duplicate pair conceals missing pair.
+    [pairs[2], pairs[1], pairs[0]], // Incorrect comparison order.
+  ]) {
+    const result = runManifest({
+      candidates,
+      cross: (snapshots) => cross(snapshots, altered),
+    });
+    assert.equal(result.status, 2, result.stdout + result.stderr);
+    assert.equal(result.parsed.error, "Cross-surface report has inconsistent evidence");
+  }
+  const accepted = runManifest({
+    candidates,
+    cross: (snapshots) => cross(snapshots, pairs),
+  });
+  assert.equal(accepted.status, 0, accepted.stdout + accepted.stderr);
+  assert.equal(accepted.parsed.state, "MECHANICAL_EVIDENCE_CLEAR");
+  assert.equal(accepted.parsed.crossSurfaceBinding.snapshotCount, 3);
 });
 
 test("invalid cross-surface report fails closed in manifest mode", () => {

@@ -337,6 +337,24 @@ function verifyCrossSurfaceBinding(cross, candidates) {
     throw new Error("Cross-surface report must cover exactly the route-bound rendered candidates in the receipt manifest");
   }
 
+  // The comparator must emit every i < j snapshot pair, in snapshot order.
+  // Missing, repeated or misattributed pairs cannot count as cross-surface
+  // coverage even when the snapshot list itself is complete.
+  const snapshots = cross.value.snapshots;
+  const comparisons = cross.value.comparisons;
+  if (comparisons.length !== (snapshots.length * (snapshots.length - 1)) / 2) {
+    throw new Error("Cross-surface report has inconsistent evidence");
+  }
+  let comparisonIndex = 0;
+  for (let i = 0; i < snapshots.length; i += 1) {
+    for (let j = i + 1; j < snapshots.length; j += 1) {
+      const pair = comparisons[comparisonIndex++];
+      if (pair.left !== snapshots[i].route || pair.right !== snapshots[j].route) {
+        throw new Error("Cross-surface report has inconsistent evidence");
+      }
+    }
+  }
+
   return {
     verified: true,
     candidateCount: renderedCandidates.length,
