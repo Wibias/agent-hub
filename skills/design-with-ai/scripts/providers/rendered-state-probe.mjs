@@ -9,6 +9,31 @@ import { pathToFileURL, fileURLToPath } from "node:url";
 
 const WIDTHS = Object.freeze([1440, 768, 390]);
 const H = 900;
+const SAMPLE_LIMIT_MS = 10_000;
+const CLEANUP_LIMIT_MS = 15_000;
+const MARKER_WAIT_LIMIT_MS = 16_000;
+// A blocked renderer or transport must never prevent a persisted fail-closed
+// report. Use a Node-side deadline independent of Playwright's own timeouts.
+async function boundedBrowserCall(call, timeoutMs, timeoutMessage) {
+  let timer;
+  try {
+    return await Promise.race([
+      Promise.resolve().then(call),
+      new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error(timeoutMessage)), timeoutMs);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+const cappedDeadline = (value, max) =>
+  Number.isSafeInteger(value) && value > 0 && value <= max ? value : max;
+function stopBrowserProcess(browser) {
+  try { browser?.process?.()?.kill?.("SIGKILL"); }
+  catch { /* Ignore transport teardown errors, preserve fixed diagnostics. */ }
+}
+
 const sha = (data) => createHash("sha256").update(data).digest("hex");
 const filled = (x) => typeof x === "string" && x.trim().length > 0;
 const arrayStrings = (v, max) =>
@@ -83,45 +108,103 @@ export const snapshotDeclaredDomState = ({
 }) => {
   const inViewport = (r) => r.width > 0 && r.height > 0 &&
     r.bottom > 0 && r.top < innerHeight && r.right > 0 && r.left < innerWidth;
-  const shown = (element) => {
-    if (!element || !element.getBoundingClientRect ||
-        !inViewport(element.getBoundingClientRect())) return false;
+  const visibleStyle = (element) => {
+    if (!element) return false;
+    // visibility is inherited but descendants can override it with visible.
+    // display:none and opacity remain effective on the entire ancestor chain.
+    const ownVisibility = getComputedStyle(element).visibility;
+    if (ownVisibility === "hidden" || ownVisibility === "collapse") return false;
     for (let node = element; node; node = node.parentElement) {
       const style = getComputedStyle(node);
-      if (style.display === "none" || style.visibility === "hidden" ||
-          Number(style.opacity) <= 0.05) return false;
+      if (style.display === "none" || Number(style.opacity) <= 0.05) return false;
     }
     return true;
   };
+  const intersectsVisible = (rect, element) => {
+    if (!inViewport(rect)) return false;
+    let left = Math.max(0, rect.left);
+    let right = Math.min(innerWidth, rect.right);
+    let top = Math.max(0, rect.top);
+    let bottom = Math.min(innerHeight, rect.bottom);
+    // A range's unclipped CSSOM rectangle can lie inside a zero-height or
+    // scroll-clipped ancestor. Intersect with each actual clipping ancestor.
+    for (let node = element; node; node = node.parentElement) {
+      const style = getComputedStyle(node);
+      const x = style.overflowX ?? style.overflow;
+      const y = style.overflowY ?? style.overflow;
+      const clipX = /^(hidden|clip|scroll|auto|overlay)$/.test(x ?? "");
+      const clipY = /^(hidden|clip|scroll|auto|overlay)$/.test(y ?? "");
+      if ((clipX || clipY) && node.getBoundingClientRect) {
+        const clip = node.getBoundingClientRect();
+        if (clipX) { left = Math.max(left, clip.left); right = Math.min(right, clip.right); }
+        if (clipY) { top = Math.max(top, clip.top); bottom = Math.min(bottom, clip.bottom); }
+      }
+      if (right <= left || bottom <= top) return false;
+    }
+    return right > left && bottom > top;
+  };
+  const shown = (element) =>
+    visibleStyle(element) && Boolean(element.getBoundingClientRect) &&
+    intersectsVisible(element.getBoundingClientRect(), element.parentElement);
   const selectedVisible = (selector) =>
     [...document.querySelectorAll(selector)].some(shown);
   // The same serializable function is used by the browser wait and all
   // snapshots, avoiding visibility rules that can disagree across phases.
   if (markerOnly) return selectedVisible(readySelector);
-  const visibleWords = [];
+  // Keep adjacent inline text fragments adjacent: Play<span>ing</span>
+  // must count as "Playing", while a real DOM whitespace token remains a gap.
+  let visibleText = "";
+  let pendingGap = false;
+  let previousBlock = null;
   let textTruncated = false;
+  const blockAncestor = (element) => {
+    for (let node = element; node; node = node.parentElement) {
+      if (/^(block|flow-root|flex|grid|table|list-item)$/.test(
+        getComputedStyle(node).display ?? "")) return node;
+    }
+    return null;
+  };
   if (requiredText.length || forbiddenText.length) {
     const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
     let node, nodes = 0, words = 0;
     while ((node = walker.nextNode()) !== null) {
       if (++nodes > 3000) { textTruncated = true; break; }
-      if (!node.parentElement || !shown(node.parentElement)) continue;
-      const text = node.nodeValue ?? "";
+      const raw = node.nodeValue ?? "";
+      if (!node.parentElement || !visibleStyle(node.parentElement)) {
+        if (raw.trim()) pendingGap = true;
+        continue;
+      }
+      const block = blockAncestor(node.parentElement);
       const range = document.createRange();
-      for (const match of text.matchAll(/\S+/g)) {
+      let last = 0;
+      for (const match of raw.matchAll(/\S+/g)) {
         if (++words > 6000) { textTruncated = true; break; }
+        if (/\s/.test(raw.slice(last, match.index))) pendingGap = true;
         range.setStart(node, match.index);
         range.setEnd(node, match.index + match[0].length);
-        if ([...range.getClientRects()].some(inViewport)) {
-          visibleWords.push(match[0]);
+        const visible = [...range.getClientRects()].some((rect) =>
+          intersectsVisible(rect, node.parentElement));
+        if (visible) {
+          if (visibleText.length &&
+              (pendingGap || (previousBlock && block && previousBlock !== block))) {
+            visibleText += " ";
+          }
+          visibleText += match[0];
+          previousBlock = block;
+          pendingGap = false;
+        } else {
+          // Offscreen/clipped text cannot bridge two unrelated word pieces.
+          pendingGap = true;
         }
+        last = match.index + match[0].length;
       }
+      if (/\s/.test(raw.slice(last))) pendingGap = true;
       range.detach?.();
       if (textTruncated) break;
     }
   }
-  const text = visibleWords.join(" ").toLocaleLowerCase();
-  const includes = (needle) => text.includes(needle.toLocaleLowerCase());
+  const normalizedText = visibleText.toLocaleLowerCase();
+  const includes = (needle) => normalizedText.includes(needle.toLocaleLowerCase());
   return {
     markerVisible: selectedVisible(readySelector),
     blockersVisible: forbiddenSelectors.filter(selectedVisible),
@@ -149,8 +232,13 @@ async function loadPlaywright(pkg) {
  * the declared DOM signals matched in THESE contexts. It does not establish
  * an authenticated game phase or the frames in a different Taste run.
  */
-export async function probeRenderedState(input, { browserFactory = loadPlaywright } = {}) {
+export async function probeRenderedState(input, {
+  browserFactory = loadPlaywright,
+  sampleTimeoutMs = SAMPLE_LIMIT_MS, cleanupTimeoutMs = CLEANUP_LIMIT_MS,
+} = {}) {
   const opts = validateOptions(input);
+  const sampleDeadline = cappedDeadline(sampleTimeoutMs, SAMPLE_LIMIT_MS);
+  const cleanupDeadline = cappedDeadline(cleanupTimeoutMs, CLEANUP_LIMIT_MS);
   const runDir = mkdtempSync(join(opts.output, "dwa-runtime-state-"));
   const report = {
     schemaVersion: 1, kind: "dwa/declared-dom-state-observation",
@@ -178,6 +266,7 @@ export async function probeRenderedState(input, { browserFactory = loadPlaywrigh
       const pageErrorSamples = [];
       let mainFrameNavigations = 0;
       let observationSealed = false;
+      let abortAfterViewport = false;
       try {
         context = await browser.newContext({
           viewport: { width, height: H },
@@ -211,23 +300,36 @@ export async function probeRenderedState(input, { browserFactory = loadPlaywrigh
         record.origin = navigatedUrl.origin === expectedOrigin
           ? expectedOrigin : "<unexpected-origin-redacted>";
         try {
-          await page.waitForFunction(snapshotDeclaredDomState,
+          await boundedBrowserCall(() => page.waitForFunction(snapshotDeclaredDomState,
             { readySelector: opts.contract.readySelector, markerOnly: true },
-            { timeout: 15_000 });
-        } catch (e) { record.markerWaitError = browserError(e); }
+            { timeout: 15_000 }), MARKER_WAIT_LIMIT_MS, "DOM marker wait timeout");
+        } catch (e) {
+          record.markerWaitError = browserError(e);
+          if (e?.message === "DOM marker wait timeout") {
+            abortAfterViewport = true;
+            record.markerWaitTimedOut = true;
+            throw e;
+          }
+        }
+        const sampleDom = () => boundedBrowserCall(
+          () => page.evaluate(snapshotDeclaredDomState, opts.contract),
+          sampleDeadline, "DOM sample timeout");
         // A main-frame navigation can destroy the first evaluation context.
         // Do not erase later valid observations; retain a fixed error label
         // and make this viewport INCOMPLETE even if later markers reappear.
         let first = null;
-        try { first = await page.evaluate(snapshotDeclaredDomState, opts.contract); }
-        catch (error) { record.firstSampleError = browserError(error); }
+        try { first = await sampleDom(); }
+        catch (error) {
+          record.firstSampleError = browserError(error);
+          if (error?.message === "DOM sample timeout") throw error;
+        }
         await page.waitForTimeout(750);
-        const second = await page.evaluate(snapshotDeclaredDomState, opts.contract);
+        const second = await sampleDom();
         const screenshot = join(runDir, "state-" + width + ".png");
         await page.screenshot({ path: screenshot, fullPage: false, timeout: 20_000 });
         // Sample once more AFTER screenshot so an immediately dismissed loading
         // overlay or state transition is not certified as captured evidence.
-        const afterScreenshot = await page.evaluate(snapshotDeclaredDomState, opts.contract);
+        const afterScreenshot = await sampleDom();
         const capturedUrl = new URL(page.url());
         record.finalPath = capturedUrl.pathname === opts.route
           ? opts.route : "<unexpected-path-redacted>";
@@ -238,11 +340,26 @@ export async function probeRenderedState(input, { browserFactory = loadPlaywrigh
         record.screenshotSha256 = sha(readFileSync(screenshot));
       } catch (e) {
         record.error = browserError(e);
+        if (e?.message === "DOM sample timeout") {
+          record.domSampleTimedOut = true;
+          abortAfterViewport = true;
+        }
       } finally {
         // A context can dispatch page errors and navigations during close.
         // Do not award success until those events have been observed.
-        try { await context?.close(); }
-        catch { record.contextCloseFailed = true; }
+        if (context) {
+          try {
+            await boundedBrowserCall(() => context.close(), cleanupDeadline,
+              "DOM context cleanup timeout");
+          } catch (e) {
+            record.contextCloseFailed = true;
+            if (e?.message === "DOM context cleanup timeout") {
+              record.contextCloseTimedOut = true;
+              abortAfterViewport = true;
+              stopBrowserProcess(browser);
+            }
+          }
+        }
         observationSealed = true;
       }
       record.mainFrameNavigationCount = mainFrameNavigations;
@@ -259,6 +376,7 @@ export async function probeRenderedState(input, { browserFactory = loadPlaywrigh
         !record.markerWaitError && !record.firstSampleError && completeSample(first) &&
         completeSample(second) && completeSample(afterScreenshot)
         ? "DOM_SIGNALS_OBSERVED" : "INCOMPLETE";
+      if (abortAfterViewport) break;
     }
     if (report.observations.length === WIDTHS.length &&
         report.observations.every((r) => r.status === "DOM_SIGNALS_OBSERVED" &&
@@ -269,7 +387,24 @@ export async function probeRenderedState(input, { browserFactory = loadPlaywrigh
   } catch (e) {
     report.error = browserError(e);
   } finally {
-    await browser?.close().catch(() => {});
+    if (browser) {
+      try {
+        await boundedBrowserCall(() => browser.close(), cleanupDeadline,
+          "DOM browser cleanup timeout");
+      } catch (e) {
+        report.browserCloseFailed = true;
+        if (e?.message === "DOM browser cleanup timeout") {
+          report.browserCloseTimedOut = true;
+          stopBrowserProcess(browser);
+        }
+      }
+    }
+  }
+  // The outcome is finalized only after browser shutdown: otherwise a
+  // successful three-width screenshot could conceal a hung close.
+  if (report.browserCloseFailed) {
+    report.status = "INCOMPLETE";
+    report.declaredDomStateObserved = false;
   }
   report.limitations = [
     "An observed data-* marker proves only the configured DOM signal, not game rules, backend authenticity or login.",

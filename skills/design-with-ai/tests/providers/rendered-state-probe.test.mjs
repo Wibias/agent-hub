@@ -44,8 +44,12 @@ function fakeBrowser({
   closePageError = false,
   closeNavigation = false,
   closeFailure = false,
+  evaluateStallAt = 0,
+  contextCloseStall = false,
+  browserCloseStall = false,
 } = {}) {
   let closes = 0;
+  let killed = 0;
   const opened = [];
   const launch = {
     newContext: async ({ viewport, serviceWorkers, storageState }) => {
@@ -91,7 +95,9 @@ function fakeBrowser({
             if (waitFailure) throw new Error("Wait timed out");
           },
           evaluate: async () => {
-            if (++sampleCount === 1 && firstSampleFailure) {
+            sampleCount++;
+            if (sampleCount === evaluateStallAt) return new Promise(() => {});
+            if (sampleCount === 1 && firstSampleFailure) {
               onNavigation(frame);
               throw new Error("Execution context destroyed: token=CANARY_FIRST_SAMPLE_20261107");
             }
@@ -117,6 +123,7 @@ function fakeBrowser({
           };
         },
         close: async () => {
+          if (contextCloseStall) return new Promise(() => {});
           if (closePageError) emitClosePageError();
           if (closeNavigation) emitCloseNavigation();
           closes++;
@@ -124,13 +131,64 @@ function fakeBrowser({
         },
       };
     },
-    close: async () => { closes++; },
+    close: async () => {
+      if (browserCloseStall) return new Promise(() => {});
+      closes++;
+    },
+    process: () => ({ kill: () => { killed++; } }),
   };
   return {
     factory: async () => ({ launch: async () => launch }),
-    opened, getCloses: () => closes,
+    opened, getCloses: () => closes, getKills: () => killed,
   };
 }
+
+test("stalled DOM evaluation and browser cleanup persist INCOMPLETE receipts", async () => {
+  await fixture(async ({ input }) => {
+    const options = { sampleTimeoutMs: 20, cleanupTimeoutMs: 20 };
+    const persisted = (report) => JSON.parse(readFileSync(
+      join(report.artifactDirectory, "state-report.json"), "utf8"));
+    for (const evaluateStallAt of [1, 2, 3]) {
+      const fake = fakeBrowser({ evaluateStallAt });
+      const result = await probeRenderedState(input, {
+        browserFactory: fake.factory, ...options,
+      });
+      assert.equal(result.status, "INCOMPLETE");
+      assert.equal(result.declaredDomStateObserved, false);
+      assert.equal(result.productCompletionEligible, false);
+      assert.equal(result.observations.length, 1,
+        "a hung DOM evaluation must stop further viewport captures");
+      assert.equal(result.observations[0].domSampleTimedOut, true);
+      assert.equal(result.observations[0].status, "INCOMPLETE");
+      assert.equal(persisted(result).status, "INCOMPLETE");
+    }
+
+    const context = fakeBrowser({ contextCloseStall: true });
+    const contextual = await probeRenderedState(input, {
+      browserFactory: context.factory, ...options,
+    });
+    assert.equal(contextual.status, "INCOMPLETE");
+    assert.equal(contextual.observations.length, 1);
+    assert.equal(contextual.observations[0].contextCloseFailed, true);
+    assert.equal(contextual.observations[0].contextCloseTimedOut, true);
+    assert.equal(context.getKills(), 1, "hung context must kill browser transport");
+    assert.equal(persisted(contextual).status, "INCOMPLETE");
+
+    const browser = fakeBrowser({ browserCloseStall: true });
+    const shutdown = await probeRenderedState(input, {
+      browserFactory: browser.factory, ...options,
+    });
+    assert.equal(shutdown.observations.length, 3);
+    assert.ok(shutdown.observations.every((ob) => ob.status === "DOM_SIGNALS_OBSERVED"));
+    assert.equal(shutdown.browserCloseFailed, true);
+    assert.equal(shutdown.browserCloseTimedOut, true);
+    assert.equal(shutdown.status, "INCOMPLETE",
+      "a successful DOM series cannot conceal a hung final browser shutdown");
+    assert.equal(shutdown.declaredDomStateObserved, false);
+    assert.equal(browser.getKills(), 1);
+    assert.equal(persisted(shutdown).status, "INCOMPLETE");
+  });
+});
 
 test("all three declared DOM state observations need separate fresh anonymous contexts", async () => {
   await fixture(async ({ input }) => {
@@ -456,6 +514,74 @@ test("viewport text ignores off-screen content and all markers are considered", 
     markerCandidates = [markerVisible];
     markerVisible.parentElement = hiddenWrapper;
     assert.equal(markerOnly(), false, "hidden ancestors cannot release the wait");
+  } finally {
+    Object.assign(globalThis, old);
+  }
+});
+
+test("DOM sampler checks clipping, display:contents ranges, and inline word continuity", () => {
+  const old = {
+    document: globalThis.document, getComputedStyle: globalThis.getComputedStyle,
+    NodeFilter: globalThis.NodeFilter,
+    innerWidth: globalThis.innerWidth, innerHeight: globalThis.innerHeight,
+  };
+  const box = (y, h = 20) => ({
+    top: y, bottom: y + h, left: 10, right: 200, width: 190, height: h,
+  });
+  const el = (rect, parent = null, extra = {}) => ({
+    parentElement: parent, getBoundingClientRect: () => rect, ...extra,
+  });
+  const root = el(box(10, 80));
+  const clipped = el(box(10, 0), root, { overflow: "hidden" });
+  const clippedMarker = el(box(10, 20), clipped);
+  const goodMarker = el(box(10, 20), root);
+  const contents = el(box(10, 0), root, { display: "contents" });
+  const overrideParent = el(box(10, 80), root, { visibility: "hidden" });
+  const overrideMarker = el(box(10, 20), overrideParent, { visibility: "visible" });
+  const words = [
+    { nodeValue: "Play", parentElement: goodMarker, rect: box(15) },
+    { nodeValue: "ing", parentElement: el(box(15), goodMarker, { display: "inline" }), rect: box(15) },
+    { nodeValue: " now", parentElement: goodMarker, rect: box(15) },
+    { nodeValue: "Access denied", parentElement: contents, rect: box(15) },
+    { nodeValue: "Masked", parentElement: clippedMarker, rect: box(15) },
+  ];
+  let matches = [goodMarker];
+  try {
+    globalThis.innerWidth = 390; globalThis.innerHeight = 900;
+    globalThis.NodeFilter = { SHOW_TEXT: 4 };
+    globalThis.getComputedStyle = (e) => ({
+      display: e.display ?? "block",
+      visibility: e.visibility ?? (e.parentElement?.visibility ?? "visible"),
+      opacity: "1",
+      overflow: e.overflow ?? "visible",
+    });
+    globalThis.document = {
+      body: {}, querySelectorAll: () => matches,
+      createTreeWalker: () => {
+        let i = 0; return { nextNode: () => words[i++] ?? null };
+      },
+      createRange: () => {
+        let node;
+        return {
+          setStart: (x) => { node = x; }, setEnd: () => {},
+          getClientRects: () => [node.rect], detach: () => {},
+        };
+      },
+    };
+    const run = (args = {}) => snapshotDeclaredDomState({
+      readySelector: "[data-game-phase='live']",
+      requiredText: ["Playing now", "Masked"],
+      forbiddenText: ["Access denied"], ...args,
+    });
+    const actual = run();
+    assert.deepEqual(actual.missingText, ["Masked"]);
+    assert.deepEqual(actual.forbiddenTextVisible, ["Access denied"]);
+    assert.equal(actual.markerVisible, true);
+    matches = [clippedMarker];
+    assert.equal(run({ markerOnly: true }), false);
+    matches = [overrideMarker];
+    assert.equal(run({ markerOnly: true }), true,
+      "explicit child visibility may override visibility:hidden ancestor");
   } finally {
     Object.assign(globalThis, old);
   }
