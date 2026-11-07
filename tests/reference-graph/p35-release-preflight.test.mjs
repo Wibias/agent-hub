@@ -69,7 +69,7 @@ test('P35 current-like evidence: 13/13 CI on 10 PRs does not replace reviews, me
     'live_graph_parity_verified', 'deployment_authorized',
     'activation_authorized', 'repository_default_graph_enabled',
   ]) assert.equal(report[flag], false, flag);
-  assert.doesNotMatch(JSON.stringify(report), /sb_secret_|search_text|service_role_key|author|reviewer/);
+  assert.doesNotMatch(JSON.stringify(report), /sb_secret_|search_text|service_role_key|\"author\":|\"reviewer\":|Wibias|independent-reviewer/);
 });
 
 test('P35 independently approved current SHA completes only the code review gate, not release approval', () => {
