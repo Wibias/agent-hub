@@ -169,6 +169,33 @@ test('P34 detects separately pinned P27 pattern-ID divergence without hiding rec
   assert.equal(result.pattern_parity_verified, false);
 });
 
+test('P34 binds the exact candidate metadata seen by P33, not only their identity set', () => {
+  // This extra tag is P28-valid but is not used in P29 ranking: legacy
+  // 48/48 record/pattern/public results would still match without binding.
+  const changed = candidates.map((candidate, i) => i === 0
+    ? { ...candidate, tags: [...candidate.tags, 'p33-hash-probe'] }
+    : candidate);
+  assert.throws(
+    () => auditP34PatternPublicOutputParity({ ...input, candidates: changed }),
+    error => error instanceof P34PublicOutputParityError
+      && error.category === 'candidate-snapshot-binding',
+  );
+});
+
+test('P34 rejects an altered reported candidate-content fingerprint even with valid JSON byte pin', () => {
+  const changed = {
+    ...p33Report, candidate_content_sha256: '0'.repeat(64),
+  };
+  const p33ReportJson = JSON.stringify(changed);
+  assert.throws(
+    () => auditP34PatternPublicOutputParity({
+      ...input, p33ReportJson, p33ReportSha256: sha(p33ReportJson),
+    }),
+    error => error instanceof P34PublicOutputParityError
+      && error.category === 'candidate-snapshot-binding',
+  );
+});
+
 test('P34 fails closed on missing or self-inconsistent pins and untrusted P33 report', () => {
   const variants = [
     { baselineSha256: undefined },
