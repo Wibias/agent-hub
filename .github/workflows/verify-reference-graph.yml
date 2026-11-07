@@ -1139,7 +1139,7 @@ jobs:
           node tests/reference-graph/p32-postgrest-integration.mjs healthy
 
           psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 \
-            -c "update public.reference_graph_profile_runtime_projection_p30_v1 set refreshed_at = clock_timestamp() - interval '5 hours' where true;"
+            -c "update public.reference_graph_profile_runtime_projection_p30_v1 set refreshed_at = statement_timestamp() - interval '5 hours' where true;"
           node tests/reference-graph/p32-postgrest-integration.mjs expired
 
           psql -h localhost -U postgres -d postgres -tA -v ON_ERROR_STOP=1 \
