@@ -9,7 +9,8 @@ import {
 
 const lock = JSON.parse(readFileSync('reference-graph/p35-pr-stack-lock.json', 'utf8'));
 const asOf = '2026-11-07T19:00:00.000Z';
-const observedAt = '2026-11-07T18:59:00.000Z';
+const observedAt = '2026-11-07T18:59:40.000Z';
+const approvalAt = '2026-11-07T18:59:00.000Z';
 const target = 'vrznfnxzlxaavpqbzbzd';
 
 function facts({ independentApprovals = false, targetListed = false, allMerged = false } = {}) {
@@ -25,7 +26,7 @@ function facts({ independentApprovals = false, targetListed = false, allMerged =
     unresolved_review_threads: 0,
     reviews: independentApprovals ? [{
       reviewer: 'independent-reviewer', state: 'APPROVED',
-      commit_sha: p.head_sha, submitted_at: observedAt,
+      commit_sha: p.head_sha, submitted_at: approvalAt,
     }] : [],
     workflows: lock.expected_ci_workflow_names.map(name => ({
       name, head_sha: p.head_sha, conclusion: 'success',
