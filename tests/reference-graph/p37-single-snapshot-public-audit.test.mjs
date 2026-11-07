@@ -168,7 +168,10 @@ test('P37 refuses mixed publication times across HTTP pages without returning ca
   await assert.rejects(auditP37SingleSnapshotPublicParity(auditInput(fetchImpl)),
     error => error instanceof P37SingleSnapshotAuditError
       && error.category === 'p33-transport');
-  assert.equal(calls, 2);
+  // P30 validates cross-page refreshed_at during whole-snapshot normalization.
+  // It must fail closed after the complete bounded retrieval, never return
+  // a partial P37 result or make an extra P34 network read.
+  assert.equal(calls, Math.ceil(rows.length / 2));
 });
 
 test('P37 rejects an absent, malformed or wrong independently supplied P33 report pin', async () => {
