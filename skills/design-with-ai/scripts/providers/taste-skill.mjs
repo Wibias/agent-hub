@@ -255,7 +255,7 @@ export function createTasteSkillProvider({ skillRoot, runner = runProcess, nodeM
         ({ page, project } = resolvePage(target, projectRoot));
         output = outputRoot ? checkedDirectory(outputRoot, "outputRoot") : tmpdir();
       } catch (error) {
-        return fail(ProviderStatus.BLOCKED, String(error.message ?? error));
+        return fail(ProviderStatus.BLOCKED, "Taste Skill input scope validation failed");
       }
       // Each check gets a separate directory, so upstream cleanup cannot erase an earlier run.
       let runDir;
@@ -264,8 +264,7 @@ export function createTasteSkillProvider({ skillRoot, runner = runProcess, nodeM
         mkdirSync(join(runDir, "report"));
         mkdirSync(join(runDir, "chrome"));
       } catch (error) {
-        return fail(ProviderStatus.ERROR, "Could not allocate isolated Taste Skill artifacts: " +
-          String(error.message ?? error));
+        return fail(ProviderStatus.ERROR, "Could not allocate isolated Taste Skill artifacts");
       }
       const reportPath = join(runDir, "report", "report.json");
       const args = [
@@ -301,8 +300,7 @@ export function createTasteSkillProvider({ skillRoot, runner = runProcess, nodeM
         });
       } catch (error) {
         return fail(ProviderStatus.ERROR,
-          "Taste Skill report is incomplete or invalid: " + String(error.message ?? error) +
-          "; evidence directory: " + runDir);
+          "Taste Skill report is incomplete or invalid; evidence directory: " + runDir);
       }
     },
   };

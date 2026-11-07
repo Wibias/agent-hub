@@ -255,6 +255,41 @@ test("missing browser coverage, skipped checks, falsified counts and wrong sourc
   });
 });
 
+
+test("malformed upstream Taste JSON never leaks parser-supplied credential fragments", async () => {
+  await fixture(async (fx) => {
+    const secret = "CANARY_TASTE_JSON_PARSER_TOKEN_20261107";
+    const malformed = '{"token": ' + secret + "}";
+    // Node 22 SyntaxError messages can include snippets from malformed JSON.
+    assert.ok((() => { try { JSON.parse(malformed); } catch (e) {
+      return String(e.message).includes("CANARY_TASTE");
+    } return false; })(), "The synthetic parser canary must exercise a real disclosure path");
+    const diskRunner = async (command) => {
+      const out = command.args[command.args.indexOf("--out") + 1];
+      mkdirSync(out, { recursive: true });
+      writeFileSync(join(out, "report.json"), malformed);
+      return {
+        exitCode: 0, stdout: malformed, stderr: "",
+        error: null, timedOut: false, outputLimitExceeded: false,
+      };
+    };
+    const harness = mockRunner(fx);
+    const stdoutRunner = async (command) => ({
+      ...(await harness.runner(command)), stdout: malformed,
+    });
+    for (const runner of [diskRunner, stdoutRunner]) {
+      const p = createTasteSkillProvider({
+        skillRoot: fx.skillRoot, nodeMajor: 22, runner,
+      });
+      const out = await p.inspect(opts(fx));
+      assert.equal(out.status, ProviderStatus.ERROR);
+      assert.ok(out.reason.startsWith("Taste Skill report is incomplete or invalid"));
+      assert.ok(!JSON.stringify(out).includes(secret));
+      assert.ok(!JSON.stringify(out).includes("CANARY_TASTE"));
+    }
+  });
+});
+
 test("remote page, non-HTML target, path escape and unsupported page kind are blocked before runner", async () => {
   await fixture(async (fx) => {
     let executed = 0;
