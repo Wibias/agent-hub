@@ -67,7 +67,7 @@ begin;
 update reference_graph.assets
 set metadata = jsonb_set(metadata, '{primary_stratum}', '"broken-stratum"'::jsonb, true)
 where metadata->>'legacy_id' = 'ref-p7-a';
-do $
+do $$
 declare blocked boolean := false;
 begin
   begin
@@ -77,7 +77,7 @@ begin
   if not blocked then
     raise exception 'P32 invalid primary stratum was published';
   end if;
-end $;
+end $$;
 rollback;
 
 -- No rejected source may replace the healthy projection.
