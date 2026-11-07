@@ -17,6 +17,9 @@ const ROW_KEYS = Object.freeze([
   ...CANDIDATE_KEYS, 'projection_version', 'snapshot_date', 'refreshed_at',
 ]);
 const MAX_CANDIDATES = 5000;
+// Bound each PostgREST page below hosted Data API max-row defaults.
+// The client verifies the full, independently pinned pool before returning.
+const PAGE_LIMIT = 500;
 const MAX_FRESHNESS_MS = 4 * 60 * 60 * 1000;
 const FUTURE_SKEW_MS = 60 * 1000;
 const HEX64 = /^[a-f0-9]{64}$/;
@@ -201,24 +204,48 @@ export async function fetchP30ProfileCandidateSnapshot({
     }, timeoutMs);
   });
   const attempt = (async () => {
-    let response;
-    try {
-      response = await fetchImpl(url.toString(), {
-        method: 'GET',
-        headers: { apikey: key },
-        signal: controller.signal,
-      });
-    } catch {
-      reject(controller.signal.aborted ? 'timeout' : 'network');
+    const pages = [];
+    // Total work is bounded by independently pinned count <= 5000 and the
+    // single global deadline. Each page has the same stable asset ordering,
+    // snapshot date, requested fields, method and publishable-only headers.
+    while (pages.length < expectedCandidateCount) {
+      const remaining = expectedCandidateCount - pages.length;
+      const pageSize = Math.min(PAGE_LIMIT, remaining);
+      const pageUrl = new URL(url);
+      pageUrl.searchParams.set('limit', String(pageSize));
+      pageUrl.searchParams.set('offset', String(pages.length));
+
+      let response;
+      try {
+        response = await fetchImpl(pageUrl.toString(), {
+          method: 'GET',
+          headers: { apikey: key },
+          signal: controller.signal,
+        });
+      } catch {
+        reject(controller.signal.aborted ? 'timeout' : 'network');
+      }
+      if (!response?.ok) reject('http');
+
+      let payload;
+      try {
+        payload = await response.json();
+      } catch {
+        reject(controller.signal.aborted ? 'timeout' : 'invalid-json');
+      }
+      if (!Array.isArray(payload)) reject('candidate-invalid');
+      if (payload.length === 0) {
+        reject(pages.length === 0 ? 'candidate-invalid' : 'candidate-count-mismatch');
+      }
+      if (payload.length > pageSize || payload.length > remaining) {
+        reject('candidate-count-mismatch');
+      }
+      // Do not trust row metadata or issue a partial result yet. Validate
+      // every row's version, strict order, UTC date, refresh instant and
+      // complete canonical ID-set SHA-256 after the final page.
+      pages.push(...payload);
     }
-    if (!response?.ok) reject('http');
-    let payload;
-    try {
-      payload = await response.json();
-    } catch {
-      reject(controller.signal.aborted ? 'timeout' : 'invalid-json');
-    }
-    return normalizeRows(payload, {
+    return normalizeRows(pages, {
       expectedDate, asOf, expectedCandidateCount, expectedCandidateIdSetSha256,
     });
   })();
