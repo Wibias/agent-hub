@@ -94,16 +94,50 @@ function designContextFor(directory, cache) {
   }
 }
 
+// Keep the policy-toggle decision independent of the optional Impeccable
+// provider import. Mirror readDetectionConfig's shared/local + hook/detector
+// section precedence; still hash and validate BOTH config inputs when present.
+function detectorDesignPoliciesEnabled(root) {
+  let enabled = true;
+  for (const name of DETECTOR_CONFIG_NAMES) {
+    const file = join(root, name);
+    if (!existsSync(file)) continue;
+    const st = lstatSync(file);
+    const canonical = realpathSync(file);
+    if (!st.isFile() || st.isSymbolicLink() ||
+        canonical !== resolve(file) || !isInside(root, canonical)) {
+      throw new TypeError("Detector context dependency must be a regular in-project file");
+    }
+    let raw;
+    try { raw = JSON.parse(readFileSync(file, "utf8")); }
+    catch { continue; } // Vendored config loader ignores malformed JSON.
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) continue;
+    for (const sectionName of ["hook", "detector"]) {
+      const section = raw[sectionName];
+      if (!section || typeof section !== "object" || Array.isArray(section)) continue;
+      const design = section.designSystem;
+      if (design && typeof design === "object" && !Array.isArray(design)) {
+        enabled = design.enabled === false ? false : true;
+      }
+    }
+  }
+  return enabled;
+}
+
 function detectorContextEvidence(root, sourceFiles) {
   const contextPaths = new Set();
   const cache = new Map();
   const bindings = [];
+  const designPoliciesEnabled = detectorDesignPoliciesEnabled(root);
   for (const name of DETECTOR_CONFIG_NAMES) {
     const file = join(root, name);
     if (existsSync(file)) contextPaths.add(file);
   }
   for (const file of sourceFiles) {
-    const design = designContextFor(dirname(file), cache);
+    // When design-system policy is disabled by the effective config, the
+    // detector does not resolve DESIGN.md. Still retain the config itself,
+    // linked CSS, and a deterministic per-source null design binding.
+    const design = designPoliciesEnabled ? designContextFor(dirname(file), cache) : null;
     // The union of policy bytes is insufficient. A newly created package
     // marker can change ONE source file's inherited design policy while
     // another file still retains the same outer DESIGN.md in the union.
