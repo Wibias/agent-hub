@@ -142,7 +142,7 @@ function htmlLinkStartTags(html) {
   const rawText = new Set(["script", "style", "textarea", "title", "xmp", "iframe", "noembed", "noframes"]);
   // htmlparser2 can parse links inside these parser-dependent regions and
   // after plaintext, whereas the conservative scanner ignores them.
-  const ambiguousRaw = new Set(["iframe", "noembed", "noframes"]);
+  const ambiguousRaw = new Set(["xmp", "iframe", "noembed", "noframes"]);
   const candidateLink = /<link(?=[\s/>])/i;
   let offset = 0;
   let raw = null;
@@ -194,10 +194,25 @@ function htmlLinkStartTags(html) {
       }
       break;
     }
-    // An unmatched or misplaced quote can swallow later real markup. Reject
-    // possible link start tags inside any non-link tag span rather than omit CSS.
+    // HTML permits literal "<link ...>" examples inside correctly quoted
+    // attribute values. Accept those inert examples, but fail closed if a
+    // malformed/unquoted attribute can consume a real following link tag.
     if (kind !== "link" && candidateLink.test(html.slice(start + named[0].length, pos))) {
-      throw new TypeError("Ambiguous HTML link markup cannot be attested");
+      const body = html.slice(start + named[0].length, pos);
+      const attribute = /\s+[^\s"'<>\/=\x60]+(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s"'<> =\x60]+))?/gy;
+      let consumed = 0;
+      while (consumed < body.length) {
+        if (/^\s*\/?\s*$/.test(body.slice(consumed))) {
+          consumed = body.length;
+          break;
+        }
+        attribute.lastIndex = consumed;
+        const match = attribute.exec(body);
+        if (!match) {
+          throw new TypeError("Ambiguous HTML link markup cannot be attested");
+        }
+        consumed = attribute.lastIndex;
+      }
     }
     if (!named[1]) {
       if (kind === "link") tags.push(html.slice(start, pos + 1));
