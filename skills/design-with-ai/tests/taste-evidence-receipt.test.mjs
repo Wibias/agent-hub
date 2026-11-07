@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -351,4 +351,58 @@ test("invalid cross-surface report fails closed in manifest mode", () => {
   });
   assert.equal(result.status, 2);
   assert.match(result.parsed.error, /Cross-surface report has unsupported verdict/);
+});
+
+test("legacy receipt CLI redacts hostile child JSON, stderr, disk JSON and unknown argv", () => {
+  const dir = mkdtempSync(join(tmpdir(), "dwa-221-redaction-"));
+  const canary = "CANARY_RECEIPT_SECRET_20261107";
+  const source = join(dir, "source.tsx");
+  const isolatedReceipt = join(dir, "taste-evidence-receipt.mjs");
+  const fakeGate = join(dir, "taste-gate.mjs");
+  writeFileSync(source, "export default function View() { return null; }\n");
+  writeFileSync(isolatedReceipt, readFileSync(receipt, "utf8"));
+
+  const launch = (entry, args) =>
+    spawnSync(process.execPath, [entry, ...args], { encoding: "utf8" });
+  const assertPrivateError = (result, expected) => {
+    assert.equal(result.status, 2, result.stderr);
+    const body = JSON.parse(result.stdout);
+    assert.equal(body.error, expected);
+    assert.ok(!result.stdout.includes(canary));
+    assert.ok(!result.stderr.includes(canary));
+  };
+  try {
+    // The receipt runs a sibling source gate, so this isolated copy supplies
+    // synthetic invalid output without altering any repository source gate.
+    writeFileSync(fakeGate,
+      `process.stdout.write('{"token": ${canary}}');\n` +
+      `process.stderr.write('stderr_token=${canary}');\n` +
+      "process.exit(2);\n");
+    assertPrivateError(
+      launch(isolatedReceipt, ["--path", source, "--json"]),
+      "Receipt child emitted invalid JSON",
+    );
+
+    writeFileSync(fakeGate,
+      `process.stdout.write(JSON.stringify({error:"${canary}"}));\n` +
+      "process.exit(2);\n");
+    assertPrivateError(
+      launch(isolatedReceipt, ["--path", source, "--json"]),
+      "Receipt child audit failed",
+    );
+
+    const maliciousManifest = join(dir, "manifest-" + canary + ".json");
+    writeFileSync(maliciousManifest, `{"token": ${canary}}`);
+    assertPrivateError(
+      launch(receipt, ["--manifest", maliciousManifest, "--json"]),
+      "Receipt input contains invalid JSON",
+    );
+
+    assertPrivateError(
+      launch(receipt, ["--path", source, "--unexpected-" + canary, "--json"]),
+      "Invalid or unexpected CLI argument",
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

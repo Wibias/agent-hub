@@ -5,6 +5,31 @@ import { dirname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
+// This CLI joins output from independently executed audit tools. Inputs,
+// child stdout/stderr and JSON parser exceptions are untrusted and may include
+// credential-bearing file paths, URLs or arbitrary token fragments. Only
+// explicitly fixed, authored error categories may leave the process.
+function safePublicError(error) {
+  const message = typeof error?.message === "string" ? error.message : "";
+  const allowed = new Set([
+    "Invalid or unexpected CLI argument",
+    "Receipt child emitted invalid JSON",
+    "Receipt child audit failed",
+    "Required receipt input file not found",
+    "Receipt input contains invalid JSON",
+    "Render snapshot route mismatch",
+    "Cross-surface report must cover exactly the route-bound rendered candidates in the receipt manifest",
+    "Cross-surface report has unsupported verdict",
+    "--snapshot requires --route",
+    "--route requires --snapshot",
+  ]);
+  if (allowed.has(message)) return message;
+  if (message.startsWith("--snapshot requires --route")) return "--snapshot requires --route";
+  if (message.startsWith("--route requires --snapshot")) return "--route requires --snapshot";
+  if (message.startsWith("Render snapshot route mismatch:")) return "Render snapshot route mismatch";
+  return "Taste evidence receipt failed; untrusted details redacted";
+}
+
 function parseArgs(argv) {
   const args = {
     path: null,
@@ -27,7 +52,7 @@ function parseArgs(argv) {
     else if (token === "--extensions") args.extensions = argv[++i];
     else if (token === "--cross-surface-report") args.crossSurfaceReport = argv[++i];
     else if (!token.startsWith("-") && !args.path && !args.manifest) args.path = token;
-    else throw new Error(`Unknown argument: ${token}`);
+    else throw new Error("Invalid or unexpected CLI argument");
   }
 
   if (args.manifest && (args.path || args.snapshot || args.route || args.intent || args.extensions)) {
@@ -52,7 +77,7 @@ function parseJsonOutput(result, label) {
   try {
     return JSON.parse(result.stdout);
   } catch {
-    throw new Error(`${label} did not emit valid JSON. stdout=${result.stdout}\nstderr=${result.stderr}`);
+    throw new Error("Receipt child emitted invalid JSON");
   }
 }
 
@@ -60,19 +85,21 @@ function runNode(script, args, label, accepted = new Set([0])) {
   const result = spawnSync(process.execPath, [script, ...args], { encoding: "utf8" });
   const parsed = parseJsonOutput(result, label);
   if (!accepted.has(result.status)) {
-    const detail = parsed?.error ? `: ${parsed.error}` : "";
-    throw new Error(`${label} failed with exit ${result.status}${detail}`);
+    // Child-reported errors are not trusted diagnostic text.
+    // Keep the nonzero fail-closed status without copying child JSON fields.
+    throw new Error("Receipt child audit failed");
   }
   return { status: result.status, parsed };
 }
 
 function readJsonFile(path, label) {
   const absolute = resolve(path);
-  if (!existsSync(absolute)) throw new Error(`${label} path not found: ${absolute}`);
+  if (!existsSync(absolute)) throw new Error("Required receipt input file not found");
   try {
     return { path: absolute, value: JSON.parse(readFileSync(absolute, "utf8")) };
-  } catch (error) {
-    throw new Error(`${label} is invalid JSON: ${absolute}: ${error.message}`);
+  } catch {
+    // Node parser errors can embed untrusted JSON bytes and physical paths.
+    throw new Error("Receipt input contains invalid JSON");
   }
 }
 
@@ -437,7 +464,7 @@ function main() {
 
     process.exitCode = output.sourceHold ? 1 : 0;
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = safePublicError(error);
     if (args?.json) process.stdout.write(`${JSON.stringify({ error: message }, null, 2)}\n`);
     else console.error(message);
     process.exitCode = 2;
