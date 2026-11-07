@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 
 import { loadPatterns, loadRecords } from '../../knowledge/design-references/scripts/lib.mjs';
@@ -114,4 +116,34 @@ test('P29 rejects a comparison without an independently pinned reference date', 
   assert.throws(() => compareP29OfflineProfileParity({
     templates, candidates, baseline,
   }), /expected.*date|reference.*date|pinned/i);
+});
+
+const cli = fileURLToPath(new URL('../../reference-graph/cli/p29-offline-profile-parity.mjs', import.meta.url));
+
+test('P29 CLI compares 48 local Standard/Deep cases without claiming live routing parity', () => {
+  const run = spawnSync(process.execPath, [cli, '--date', '2026-11-07'], {
+    encoding: 'utf8', timeout: 30_000,
+  });
+  assert.equal(run.status, 0, run.stderr);
+  const report = JSON.parse(run.stdout);
+  assert.equal(report.evaluated_cases, 48);
+  assert.equal(report.exact_order_cases, 48);
+  assert.equal(report.mismatch_cases, 0);
+  assert.equal(report.pattern_parity_verified, false);
+  assert.equal(report.live_graph_parity_verified, false);
+  assert.equal(report.repository_default_graph_enabled, false);
+  assert.equal(report.activation_performed, false);
+  assert.doesNotMatch(run.stdout, /canonicalUrl|search_text|service_role_key|\\"ids\\"/);
+});
+
+test('P29 CLI rejects absent or unpinned dates and activation switches', () => {
+  for (const argv of [[], ['--date', '2026-02-30'], ['--date', '2026-11-07', '--activate']]) {
+    const run = spawnSync(process.execPath, [cli, ...argv], {
+      encoding: 'utf8', timeout: 30_000,
+    });
+    assert.equal(run.status, 1);
+    assert.equal(run.stdout, '');
+    assert.match(run.stderr, /P29 offline parity failed/i);
+    assert.doesNotMatch(run.stderr, /canonicalUrl|search_text|service_role_key|\\.agents/);
+  }
 });
