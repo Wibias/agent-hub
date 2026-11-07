@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -283,9 +284,82 @@ test("manifest receipt binds two routes and attaches exact cross-surface snapsho
   assert.equal(result.parsed.crossSurfaceBinding.verified, true);
   assert.equal(result.parsed.candidates.length, 2);
   assert.ok(result.parsed.candidates.every((candidate) => candidate.binding.verified));
+  for (const candidate of result.parsed.candidates) {
+    assert.match(candidate.binding.snapshotSha256, /^[0-9a-f]{64}$/);
+    // Audits read immutable private bytes, but all public evidence references
+    // retain the originally supplied snapshot path, not temporary copy paths.
+    assert.equal(candidate.reports.render.snapshot, candidate.binding.snapshotPath);
+    assert.ok(candidate.binding.snapshotPath.endsWith(".snapshot.json"));
+  }
   assert.equal(result.parsed.reports.crossSurface.verdict, "REVIEW_CROSS_SURFACE");
   for (const reports of Object.values(result.parsed.reports.candidates)) {
     assert.equal(reports.fused.cluster.score, 0);
+  }
+});
+
+test("mutation after a render audit cannot be certified by cross-surface replay", () => {
+  const dir = mkdtempSync(join(tmpdir(), "dwa-frozen-snapshots-"));
+  try {
+    const entry = join(dir, "taste-evidence-receipt.mjs");
+    writeFileSync(entry, readFileSync(receipt, "utf8"));
+    const records = ["/home", "/pricing"].map((route, i) => {
+      const sourcePath = join(dir, "source-" + i + ".tsx");
+      const snapshotPath = join(dir, "capture-" + i + ".json");
+      writeFileSync(sourcePath, "export default function Page(){return <main>Plain product content</main>; }");
+      const snapshot = cleanSnapshot({ url: "http://localhost" + route });
+      writeFileSync(snapshotPath, JSON.stringify(snapshot, null, 2));
+      return { sourcePath, snapshotPath, snapshot, route };
+    });
+    const cross = comparatorReport(records.map((r) => ({
+      path: r.snapshotPath, route: r.route, snapshot: r.snapshot,
+    })));
+    const crossPath = join(dir, "cross.json");
+    writeFileSync(crossPath, JSON.stringify(cross));
+    const manifest = join(dir, "manifest.json");
+    writeFileSync(manifest, JSON.stringify({
+      schemaVersion: 1,
+      candidates: records.map((r, i) => ({
+        id: "surface-" + i, path: r.sourcePath,
+        snapshot: r.snapshotPath, route: r.route,
+      })),
+    }));
+    const root = dirname(receipt);
+    for (const name of ["taste-gate.mjs", "render-taste-gate.mjs",
+      "taste-evidence-fusion.mjs", "compare-render-snapshots.mjs"]) {
+      const real = join(root, name);
+      const mutates = name === "render-taste-gate.mjs";
+      const wrapper = [
+        'import { spawnSync } from "node:child_process";',
+        'import { appendFileSync } from "node:fs";',
+        'const argv = process.argv.slice(2);',
+        'const child = spawnSync(process.execPath, [' + JSON.stringify(real) +
+          ', ...argv], { encoding: "utf8" });',
+        'process.stdout.write(child.stdout ?? "");',
+        'process.stderr.write(child.stderr ?? "");',
+        ...(mutates ? [
+          'if (argv.some((arg) => arg.includes("frozen-snapshot-0-"))) {',
+          '  appendFileSync(' + JSON.stringify(records[0].snapshotPath) +
+            ', "\\n");',
+          '}',
+        ] : []),
+        'process.exitCode = child.status ?? 2;',
+      ].join("\n") + "\n";
+      writeFileSync(join(dir, name), wrapper);
+    }
+    const result = spawnSync(process.execPath, [entry,
+      "--manifest", manifest, "--cross-surface-report", crossPath, "--json",
+    ], { encoding: "utf8", timeout: 120_000 });
+    assert.equal(result.status, 2, result.stdout + result.stderr);
+    assert.equal(JSON.parse(result.stdout).error, "Cross-surface report has inconsistent evidence");
+    // The mutation is JSON-whitespace-only: comparator semantics stay equal,
+    // but the original snapshot bytes no longer match their frozen receipt.
+    assert.equal(JSON.parse(readFileSync(records[0].snapshotPath, "utf8")).url,
+      "http://localhost/home");
+    assert.notEqual(createHash("sha256").update(readFileSync(records[0].snapshotPath))
+      .digest("hex"), createHash("sha256").update(
+        Buffer.from(JSON.stringify(records[0].snapshot, null, 2))).digest("hex"));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
   }
 });
 
@@ -678,6 +752,18 @@ test("receipt binds child proof to exact source, snapshot and fusion channels", 
     verdict: "PASS_RENDER_EVIDENCE", hits: [], cluster: { families: [] },
   });
   const writeGate = (file, report, code = 0) => {
+    // A valid render fixture must echo the actual frozen input path supplied
+    // by the receipt's child invocation, not the mutable source identity.
+    if (file === renderGate && report.snapshot === snapshot) {
+      writeFileSync(file, [
+        "const args=process.argv.slice(2); const snapshot=args[args.indexOf('--snapshot')+1];",
+        "const report=" + JSON.stringify(report) + ";",
+        "report.snapshot=snapshot;",
+        "process.stdout.write(JSON.stringify(report));",
+        "process.exit(" + code + ");",
+      ].join("\n") + "\n");
+      return;
+    }
     writeFileSync(file, "process.stdout.write(" +
       JSON.stringify(JSON.stringify(report)) + ");\nprocess.exit(" + code + ");\n");
   };
