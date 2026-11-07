@@ -72,6 +72,28 @@ test("unreadable local HTML stylesheet marks source scan degraded", () => {
   }
 });
 
+test("degraded receipt reports both potential HTML coverage failures without leaking paths", async () => {
+  await fixture(async ({ root, target }) => {
+    const privateDetails = "CANARY_DEGRADED_STYLESHEET_PATH_20261107";
+    const provider = createImpeccableProvider({
+      runner: async () => result({
+        stderr: proofLine({ ...validProof, scannedFiles: 0, degradedFiles: 1 }) +
+          "/private/" + privateDetails + "/site.css\n",
+      }),
+    });
+    const report = await provider.inspect({
+      capability: Capability.STATIC_AUDIT, target, route: "/",
+      projectRoot: root,
+    });
+    assert.equal(report.status, ProviderStatus.ERROR);
+    assert.match(report.reason,
+      /HTML parser unavailable or linked local stylesheet unreadable: 1 degraded file/);
+    assert.match(report.reason, /full selector\/cascade checks were not run/);
+    assert.ok(!JSON.stringify(report).includes(privateDetails),
+      "scan stderr and private stylesheet paths must not persist in provider reports");
+  });
+});
+
 test("normalizes primary and advisory Impeccable findings without inventing P0", async () => {
   await fixture(async ({ root, target }) => {
     const raw = [
