@@ -27,6 +27,8 @@ const pages = {
   '/br-forbidden': page(marker + '<p>Access<br>denied</p>'),
   '/partially-clipped-required': page('<div data-game-phase="live">Playing ' +
     '<span style="display:inline-block;width:3px;overflow:hidden;white-space:nowrap">now</span></div>'),
+  '/partially-clipped-forbidden': page(marker +
+    '<p style="width:5px;overflow:hidden;white-space:nowrap">Access denied</p>'),
   '/split-required': page('<div data-game-phase="live">Play<span>ing</span> now</div>'),
   '/adjacent-buttons-forbidden': page(marker +
     '<button>Access</button><button>denied</button>'),
@@ -180,6 +182,14 @@ try {
   assert.ok(partiallyClippedRequired.observations.every((x) =>
     x.signals?.first.missingText?.includes('Playing now')),
   'A few visible pixels of a required word cannot certify the full label');
+
+  const partiallyClippedForbidden = await probe('/partially-clipped-forbidden', {
+    forbiddenText: ['Access denied'],
+  });
+  assertWidths(partiallyClippedForbidden, 'INCOMPLETE');
+  assert.ok(partiallyClippedForbidden.observations.every((x) =>
+    x.signals?.first.textTruncated === true),
+  'A partially visible forbidden word must make the entire DOM sample uncertain');
 
   const splitRequired = await probe('/split-required', {
     requiredText: ['Playing now'],
