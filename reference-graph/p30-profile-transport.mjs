@@ -205,6 +205,7 @@ export async function fetchP30ProfileCandidateSnapshot({
   });
   const attempt = (async () => {
     const pages = [];
+    let previousAssetId = null;
     // Total work is bounded by independently pinned count <= 5000 and the
     // single global deadline. Each page has the same stable asset ordering,
     // snapshot date, requested fields, method and publishable-only headers.
@@ -239,6 +240,17 @@ export async function fetchP30ProfileCandidateSnapshot({
       }
       if (payload.length > pageSize || payload.length > remaining) {
         reject('candidate-count-mismatch');
+      }
+      // Validate stable identity order immediately, including the transition
+      // between page boundaries. Repeated or out-of-order asset IDs must be
+      // rejected as invalid candidates, not misreported as truncation.
+      for (const item of payload) {
+        if (!item || typeof item !== 'object' || Array.isArray(item)
+          || typeof item.asset_id !== 'string'
+          || (previousAssetId !== null && item.asset_id <= previousAssetId)) {
+          reject('candidate-invalid');
+        }
+        previousAssetId = item.asset_id;
       }
       // Do not trust row metadata or issue a partial result yet. Validate
       // every row's version, strict order, UTC date, refresh instant and
