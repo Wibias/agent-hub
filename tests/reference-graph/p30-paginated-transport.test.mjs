@@ -83,7 +83,7 @@ test('P30 pages a 1201-candidate snapshot past the default 1000-row API cap', as
   assert.equal(report.transport.candidate_id_set_sha256, idSha);
   assert.equal(report.transport.refreshed_at, '2026-11-07T11:30:00.000Z');
   assert.deepEqual(calls.map(x => x.offset), [0, 500, 1000]);
-  assert.deepEqual(calls.map(x => x.limit), [500, 500, 201]);
+  assert.deepEqual(calls.map(x => x.limit), [500, 500, 202]);
   assert.equal(report.transport.live_graph_parity_verified, false);
   assert.equal(report.transport.activation_performed, false);
 });
@@ -96,7 +96,8 @@ test('P30 remains correct when Supabase caps pages smaller than requested', asyn
   assert.ok(calls.length > 10);
   assert.equal(calls[0].offset, 0);
   assert.equal(calls[1].offset, 117);
-  assert.equal(calls.at(-1).offset + Math.min(calls.at(-1).limit, 117), ROW_COUNT);
+  assert.equal(calls.at(-1).offset, 1170);
+  assert.equal(calls.at(-1).limit, 32);
 });
 
 test('P30 rejects a missing later page rather than accepting a partial candidate set', async () => {

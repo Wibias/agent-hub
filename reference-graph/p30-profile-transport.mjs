@@ -215,8 +215,12 @@ export async function fetchP30ProfileCandidateSnapshot({
       if (controller.signal.aborted) reject('timeout');
       const remaining = expectedCandidateCount - pages.length;
       const pageSize = Math.min(PAGE_LIMIT, remaining);
+      // On the final page, look one row past the pinned count. A server that
+      // holds extra rows must not be accepted as a complete pinned snapshot.
+      const isFinalPage = remaining <= PAGE_LIMIT;
+      const requestLimit = isFinalPage ? pageSize + 1 : pageSize;
       const pageUrl = new URL(url);
-      pageUrl.searchParams.set('limit', String(pageSize));
+      pageUrl.searchParams.set('limit', String(requestLimit));
       pageUrl.searchParams.set('offset', String(pages.length));
 
       let response;
@@ -246,7 +250,8 @@ export async function fetchP30ProfileCandidateSnapshot({
       if (payload.length === 0) {
         reject(pages.length === 0 ? 'candidate-invalid' : 'candidate-count-mismatch');
       }
-      if (payload.length > pageSize || payload.length > remaining) {
+      if (payload.length > requestLimit
+          || (isFinalPage && payload.length > remaining)) {
         reject('candidate-count-mismatch');
       }
       // Validate stable identity order immediately, including the transition

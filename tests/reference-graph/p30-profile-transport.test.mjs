@@ -113,6 +113,11 @@ test('P30 rejects missing or injected candidate fields and invalid Standard/Deep
 
 test('P30 fails closed on count, canonical membership, ordering, version and snapshot bindings', async () => {
   await fail(rows.slice(0, 2), 'candidate-count-mismatch');
+  await fail(rows.concat({
+    ...rows[0],
+    asset_id: '00000000-0000-4000-8000-000000000099',
+    legacy_id: 'p30-extra-row',
+  }), 'candidate-count-mismatch');
   await fail(rows.map((row, i) => i === 0 ? { ...row, legacy_id: 'different' } : row), 'fingerprint-mismatch');
   await fail([...rows].reverse(), 'candidate-invalid');
   await fail(rows.map((row, i) => i === 0 ? { ...row, snapshot_date: '2026-11-06' } : row), 'snapshot-invalid');
