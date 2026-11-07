@@ -263,6 +263,8 @@ test("relative URLs and bare credentials never persist in browser failure eviden
       "Failed request /api/auth?access_token=CANARY_RELATIVE_907",
       "Blocked //internal.example/api?token=CANARY_PROTOCOL_907",
       "Browser failed token=CANARY_BARE_907",
+      "Authorization: Bearer CANARY_HEADER_907",
+      "Cookie: session=CANARY_COOKIE_907",
     ];
     for (const message of messages) {
       const report = await probeNetworkResponses(f.input, {
