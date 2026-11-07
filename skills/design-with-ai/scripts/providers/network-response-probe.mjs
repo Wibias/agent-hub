@@ -512,7 +512,17 @@ function parseCli(argv) {
   };
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+// Node retains a symlinked CLI spelling in argv[1] while import.meta.url
+// normally resolves to the real module. Compare canonical filesystem paths.
+function isCliEntry() {
+  if (!process.argv[1]) return false;
+  try {
+    return realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url));
+  } catch {
+    return false;
+  }
+}
+if (isCliEntry()) {
   try {
     const report = await probeNetworkResponses(parseCli(process.argv.slice(2)));
     process.stdout.write(JSON.stringify(report, null, 2) + "\n");
