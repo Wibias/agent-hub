@@ -55,6 +55,11 @@ jobs:
       - name: Bounded and redacted DOM-state browser errors
         run: node --test skills/design-with-ai/tests/providers/rendered-state-probe.test.mjs
 
+      # Explicitly exercise the latest #205 scanner-failure evidence contract
+      # against this PR's actual synthetic merge with the moving base.
+      - name: Impeccable scanner failure redaction regression
+        run: node --test skills/design-with-ai/tests/providers/impeccable.test.mjs
+
       # Test-only dependency. The real production probe dynamically loads
       # Playwright from the explicit path, never from a global package.
       # No browser download, postinstall scripts, package.json or product changes.
