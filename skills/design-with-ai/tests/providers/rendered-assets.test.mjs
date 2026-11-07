@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
-  mkdirSync, mkdtempSync, rmSync, symlinkSync, truncateSync, unlinkSync, writeFileSync,
+  mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, truncateSync, unlinkSync, writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { renderedAssetProof } from "../../scripts/providers/rendered-assets.mjs";
-import { sourceScopeProof } from "../../scripts/providers/scope-proof.mjs";
+import { sourceScopeProof, staticRouteForHtml } from "../../scripts/providers/scope-proof.mjs";
 
 function fixture(fn) {
   const root = mkdtempSync(join(tmpdir(), "dwa-rendered-assets-"));
@@ -35,6 +35,20 @@ function fixture(fn) {
   finally { rmSync(root, { recursive: true, force: true }); }
 }
 
+
+test("native Windows and POSIX nested HTML paths map to slash-normalized routes", () => {
+  fixture((f) => {
+    // staticRouteForHtml already calls the module-local normalize(), which
+    // converts Windows backslashes into forward slashes. Exercise that
+    // existing contract in the actual Windows CI job too.
+    assert.equal(staticRouteForHtml(f.renderedRoot, f.html), "/settings");
+    assert.equal(staticRouteForHtml(f.renderedRoot,
+      join(f.renderedRoot, "settings", "subpage", "index.HTML")), "/settings/subpage");
+    assert.equal(staticRouteForHtml(f.renderedRoot,
+      join(f.renderedRoot, "settings", "about.HTM")), "/settings/about");
+  });
+});
+
 test("full local rendered tree includes HTML, CSS, JavaScript, image and font", () => {
   fixture((f) => {
     const proof = renderedAssetProof({
@@ -62,13 +76,19 @@ test("a CSS/JS/image/font asset changes the scoped digest without HTML changes",
   fixture((f) => {
     const initial = f.sample();
     for (const file of [f.css, f.js, f.image, f.font]) {
-      const original = initial.summary.rendered.sha256;
-      writeFileSync(file, "modified asset " + file);
+      const before = f.sample();
+      const bytes = readFileSync(file);
+      assert.ok(bytes.length > 0, "Fixture asset must not be empty");
+      bytes[bytes.length - 1] ^= 1; // Same-length trailing-byte mutation, including binary fonts.
+      writeFileSync(file, bytes);
       const changed = f.sample();
-      assert.equal(changed.summary.rendered.sha256, original, "HTML must be unchanged");
-      assert.notEqual(changed.summary.sourceSha256, initial.summary.sourceSha256);
+      assert.equal(changed.summary.rendered.sha256, initial.summary.rendered.sha256,
+        "HTML must be unchanged");
+      assert.notEqual(changed.summary.sourceSha256, before.summary.sourceSha256,
+        "Each individual asset mutation must change the bound source digest");
       assert.notEqual(changed.summary.rendered.assetTreeSha256,
-        initial.summary.rendered.assetTreeSha256);
+        before.summary.rendered.assetTreeSha256,
+        "Each individual asset mutation must change the asset-tree digest");
     }
   });
 });
@@ -81,7 +101,7 @@ test("mixed canonical HTML and aliased project ancestor resolve the same page di
       // directory entry, as required by renderedAssetProof's strict lstat.
       const actualParent = join(f.root, "..");
       const linkedParent = join(aliasHome, "linked-parent");
-      symlinkSync(actualParent, linkedParent, "dir");
+      symlinkSync(actualParent, linkedParent, process.platform === "win32" ? "junction" : "dir");
       const aliasRoot = join(linkedParent, f.root.split(/[\\/]/).at(-1));
       const result = sourceScopeProof({
         projectRoot: aliasRoot,
@@ -119,6 +139,37 @@ test("adding and removing previously unseen local assets changes the digest", ()
   });
 });
 
+test("Vite-style build with 1024 hashed lazy chunks has stable cross-platform paths and complete SHA coverage", () => {
+  fixture((f) => {
+    const folder = join(f.renderedRoot, "assets", "chunks");
+    mkdirSync(folder);
+    const count = 1024;
+    for (let i = 0; i < count; i++) {
+      const file = join(folder, "chunk-" + String(i).padStart(4, "0") + "-a1b2c3d4.js");
+      writeFileSync(file, "export const n = " + i + ";\n");
+    }
+    const one = f.sample();
+    assert.equal(one.manifest.renderedAssets.fileCount, count + 5);
+    assert.equal(one.manifest.renderedAssets.files.length, count + 5);
+    assert.ok(one.manifest.renderedAssets.files.every((entry) =>
+      !entry.path.includes("\\") && entry.path.startsWith("dist/") &&
+      /^[a-f0-9]{64}$/.test(entry.sha256)));
+    assert.equal(one.summary.rendered.assetCoverage, "COMPLETE_LOCAL_TREE_BOUNDED");
+    const two = f.sample();
+    assert.equal(one.summary.rendered.assetTreeSha256, two.summary.rendered.assetTreeSha256,
+      "Repeated samples of an unchanged asset tree must have stable digests");
+    assert.equal(one.summary.sourceSha256, two.summary.sourceSha256);
+    const target = join(folder, "chunk-0512-a1b2c3d4.js");
+    writeFileSync(target, "export const n = 512; // changed\n");
+    const changed = f.sample();
+    assert.notEqual(changed.summary.sourceSha256, one.summary.sourceSha256);
+    assert.notEqual(changed.summary.rendered.assetTreeSha256,
+      one.summary.rendered.assetTreeSha256);
+    assert.equal(changed.manifest.rendered.sha256, one.manifest.rendered.sha256,
+      "Stable entry HTML cannot mask a mutated lazy Vite-style chunk");
+  });
+});
+
 test("byte limits fail closed for oversized files and unexpected special entries", () => {
   fixture((f) => {
     const huge = join(f.renderedRoot, "assets", "large.binary");
@@ -141,17 +192,39 @@ test("too many assets are rejected rather than silently truncated", () => {
   });
 });
 
-test("symlinked build assets or directories are never trusted", () => {
+
+test("symlinked build asset files are never trusted", (t) => {
   fixture((f) => {
     const outside = mkdtempSync(join(tmpdir(), "dwa-rendered-external-"));
     try {
       const external = join(outside, "external.js");
       writeFileSync(external, "window.evil = true;\n");
       const bad = join(f.renderedRoot, "assets", "external.js");
-      symlinkSync(external, bad);
+      try {
+        symlinkSync(external, bad);
+      } catch (error) {
+        // Windows may deny file symlinks without developer-mode privileges.
+        if (process.platform === "win32" &&
+            ["EPERM", "EACCES", "ENOSYS"].includes(error.code)) {
+          t.skip("Windows runner cannot create file symlinks");
+          return;
+        }
+        throw error;
+      }
       assert.throws(() => f.sample(), /Symlink inside rendered asset tree/);
-      unlinkSync(bad);
-      symlinkSync(outside, bad, "dir");
+    } finally {
+      rmSync(outside, { recursive: true, force: true });
+    }
+  });
+});
+
+test("symlinked build directories and Windows junctions are never trusted", () => {
+  fixture((f) => {
+    const outside = mkdtempSync(join(tmpdir(), "dwa-rendered-external-dir-"));
+    try {
+      writeFileSync(join(outside, "external.js"), "window.evil = true;\n");
+      const badDirectory = join(f.renderedRoot, "assets", "external-dir");
+      symlinkSync(outside, badDirectory, process.platform === "win32" ? "junction" : "dir");
       assert.throws(() => f.sample(), /Symlink inside rendered asset tree/);
     } finally {
       rmSync(outside, { recursive: true, force: true });
