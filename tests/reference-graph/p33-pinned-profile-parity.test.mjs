@@ -47,12 +47,12 @@ const templatesJson = JSON.stringify(templates);
 const receiptJson = JSON.stringify(sourceReceipt);
 
 function rows(transform = x => x) {
-  return sorted.map(row => transform({
+  return sorted.map((row, index) => transform({
     ...row,
     projection_version: sourceReceipt.projection_version,
     snapshot_date: date,
     refreshed_at: '2026-11-07T11:30:00+00:00',
-  }));
+  }, index));
 }
 function fixture(extra = {}, payload = rows()) {
   return {
