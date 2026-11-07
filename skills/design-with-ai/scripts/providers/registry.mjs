@@ -1,5 +1,14 @@
 import { assertProvider, assertProviderReport, Capability, ProviderStatus, providerFailure } from "./contract.mjs";
 
+// Taste probe reasons are fixed, known strings. Never echo paths or arbitrary
+// third-party probe errors into persisted status reports.
+const SAFE_TASTE_PROBE_REASONS = new Set([
+  "Taste Skill 2.5.0 needs Node 22+",
+  "An explicit locally installed Taste Skill root is required",
+  "Taste Skill v2.5.0 consistency.mjs is not installed",
+  "Taste Skill root cannot be read",
+]);
+
 export function createProviderRegistry(providers = []) {
   const items = new Map();
   for (const provider of providers) {
@@ -52,7 +61,8 @@ export async function runProviders(registry, {
       if (!probe || probe.available !== true) {
         reports.push(providerFailure(id, capability,
           isRequired ? ProviderStatus.BLOCKED : ProviderStatus.UNAVAILABLE,
-          "Provider runtime unavailable"));
+          id === "taste-skill" && SAFE_TASTE_PROBE_REASONS.has(probe?.reason)
+            ? probe.reason : "Provider runtime unavailable"));
         continue;
       }
       try {

@@ -163,6 +163,31 @@ test("audit CLI redacts untrusted flags and filesystem failure paths", () =>
     assert.equal(filesystem.stdout, "");
   }));
 
+test("audit CLI retains only fixed safe parser diagnostics", () => fixture((f) => {
+  const original = [
+    "--path", f.page, "--route", "/settings", "--project-root", f.root,
+  ];
+  const cases = [
+    [original.filter((_, i) => i !== 2 && i !== 3), "--route is required"],
+    [original.filter((_, i) => i !== 0 && i !== 1), "--path is required"],
+    [original.filter((_, i) => i !== 4 && i !== 5), "--project-root is required"],
+    [[...original, "--with-taste"], "--with-taste requires --html (a local built page)"],
+    [[...original, "--journal", join(f.root, "CANARY_JOURNAL_SECRET_20261107")],
+      "Journal capture requires --journal, --ledger and --run-id together"],
+    [[...original, "--page-kind", "review"], "Taste-specific options require --with-taste"],
+    [[...original, "--with-taste", "--with-taste"], "Repeated flag --with-taste"],
+  ];
+  for (const [args, expected] of cases) {
+    const run = spawnSync(process.execPath, [cli, ...args], {
+      encoding: "utf8", timeout: 10_000,
+    });
+    assert.equal(run.status, 2, run.stderr);
+    assert.equal(run.stderr.trim(), "DWA provider audit: " + expected);
+    assert.equal(run.stdout, "");
+    assert.ok(!run.stderr.includes("CANARY_"));
+  }
+}));
+
 test("invalid profile/source options stop with error without executing tools", () =>
   fixture((f) => {
     const run = invoke(f, ["--profile", "quick", "--with-taste", "--html", f.page]);
