@@ -128,14 +128,14 @@ test('P26 independently verifies frozen file hashes, P25 diagnostics and officia
 test('P26 rejects a tampered sample file even if P19 would otherwise accept it', async () => {
   const opts = await fixture();
   await writeFile(join(opts.archiveDir, 'p25-samples.jsonl'), '{}\n');
-  await assert.rejects(verifyP26FrozenEvidence(opts), /hash|digest/i);
+  await assert.rejects(verifyP26FrozenEvidence(opts), /SHA256|hash|digest/i);
 });
 
 test('P26 rejects a manifest that differs from the independently approved SHA', async () => {
   const opts = await fixture();
   await assert.rejects(
     verifyP26FrozenEvidence({ ...opts, expectedManifestSha256: '0'.repeat(64) }),
-    /manifest.*hash|digest/i,
+    /manifest.*(?:SHA256|hash|digest)/i,
   );
 });
 
