@@ -198,6 +198,35 @@ export function assertFusion(fusion) {
       }
     }
   }
+  // A content hash is an integrity checksum, not a semantic signature.
+  // Recheck Taste's published class totals against retained members even if
+  // a caller recomputed the hash after altering an otherwise valid class.
+  for (const report of fusion.reports) {
+    if (report.provider !== "taste-skill" ||
+        report.reviewClassCounts === undefined ||
+        !success.has(report.status)) continue;
+    const counts = report.reviewClassCounts;
+    if (!counts || typeof counts !== "object" || Array.isArray(counts) ||
+        Object.keys(counts).length !== TASTE_CLASSES.size ||
+        Object.keys(counts).some((key) => !TASTE_CLASSES.has(key) ||
+          !Number.isSafeInteger(counts[key]) || counts[key] < 0)) {
+      throw new TypeError("Invalid fused Taste class summary");
+    }
+    const observed = Object.fromEntries([...TASTE_CLASSES].map((key) => [key, 0]));
+    for (const group of fusion.groups) {
+      for (const member of group.members) {
+        if (member.provider !== "taste-skill") continue;
+        if (!TASTE_CLASSES.has(member.reviewClass)) {
+          throw new TypeError("Fused Taste class summary does not match observations");
+        }
+        observed[member.reviewClass]++;
+      }
+    }
+    if ([...TASTE_CLASSES].some((key) => observed[key] !== counts[key]) ||
+        report.count !== Object.values(observed).reduce((sum, n) => sum + n, 0)) {
+      throw new TypeError("Fused Taste class summary does not match observations");
+    }
+  }
   return fusion;
 }
 
