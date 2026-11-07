@@ -644,9 +644,14 @@ export function findDesignRoot(startDir, { cache } = {}) {
     cache.delete(`resolve:${start}`);
     cache.delete(`resolveSig:${start}`);
     cache.delete(`dirsig:${start}`);
-    // Invalid resolution metadata must also invalidate the parsed tokens
-    // for the old root. A new fallback DESIGN.md may point to the same root.
-    if (resolved) cache.delete(`root:${resolved.dir}`);
+    // An invalidated descendant resolution does not imply its previously
+    // resolved root's parsed DESIGN.md changed. Keep that root object when
+    // the root directory itself is unchanged (existing memo identity
+    // contract); invalidate it when its own fallback/design directory
+    // signature changed, so a changed policy can never reuse stale tokens.
+    if (resolved && saved?.get(resolved.dir) !== directorySignature(resolved.dir)) {
+      cache.delete(`root:${resolved.dir}`);
+    }
     return false;
   };
   const remember = (resolved) => {
