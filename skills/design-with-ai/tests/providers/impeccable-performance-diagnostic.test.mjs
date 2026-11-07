@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, mkdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 import { compareImpeccableModes } from "../../scripts/providers/impeccable-performance-diagnostic.mjs";
 
@@ -29,6 +31,29 @@ async function fixture(fn) {
   try { return await fn({ root, project, source }); }
   finally { rmSync(root, { recursive: true, force: true }); }
 }
+
+test("symlinked diagnostic CLI runs both bounded preflight and normal error entrypoints", async () => {
+  await fixture(({ root, project, source }) => {
+    const script = fileURLToPath(new URL(
+      "../../scripts/providers/impeccable-performance-diagnostic.mjs", import.meta.url));
+    const linkDirectory = join(root, "linked-provider-scripts");
+    symlinkSync(dirname(script), linkDirectory,
+      process.platform === "win32" ? "junction" : "dir");
+    const linked = join(linkDirectory, "impeccable-performance-diagnostic.mjs");
+    const preflight = spawnSync(process.execPath, [linked,
+      "--internal-scope-preflight", "--target", source, "--project-root", project],
+    { encoding: "utf8", timeout: 15_000 });
+    assert.equal(preflight.status, 0, preflight.stderr);
+    const scoped = JSON.parse(preflight.stdout);
+    assert.equal(scoped.target, realpathSync(source));
+    assert.equal(scoped.root, realpathSync(project));
+    const invalid = spawnSync(process.execPath, [linked, "--unknown"],
+      { encoding: "utf8", timeout: 15_000 });
+    assert.equal(invalid.status, 2,
+      "a symlinked normal invocation must not exit zero with no report");
+    assert.match(invalid.stderr, /Invalid\/repeated argument/);
+  });
+});
 
 test("four independent modes preserve configured and isolated ignore/design flags", async () => {
   await fixture(async ({ project, source, root }) => {

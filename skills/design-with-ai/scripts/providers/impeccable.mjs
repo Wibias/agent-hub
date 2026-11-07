@@ -172,8 +172,12 @@ export function createImpeccableProvider({ script = DEFAULT_SCRIPT, runner = run
       try {
         location = scanLocation({ target, projectRoot });
       } catch (error) {
+        // Filesystem errors include private absolute paths in their messages.
+        // Our own validation errors contain only fixed, path-free labels.
         return providerFailure("impeccable", capability, ProviderStatus.BLOCKED,
-          String(error.message ?? error));
+          error && typeof error === "object" && "code" in error
+            ? "Source scope preflight failed"
+            : String(error?.message ?? error));
       }
 
       // Do not invoke scripts/impeccable, npx, an installer or an arbitrary PATH binary.

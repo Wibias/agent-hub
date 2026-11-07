@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import { syncBuiltinESMExports } from "node:module";
 import { mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -346,6 +348,39 @@ test("URL, missing target, symlink and escaped project scope are blocked before 
 });
 
 
+
+test("filesystem preflight errors redact private paths from BLOCKED reports", async () => {
+  await fixture(async ({ root }) => {
+    const canary = "CANARY_PRIVATE_DIRECTORY_20261107";
+    const originalReaddir = fs.readdirSync;
+    let invoked = 0;
+    const provider = createImpeccableProvider({
+      runner: async () => { invoked++; return result(); },
+    });
+    try {
+      fs.readdirSync = (...args) => {
+        if (args[0] === root) {
+          const error = new Error("EACCES: permission denied, scandir '/" + canary + "'");
+          error.code = "EACCES";
+          throw error;
+        }
+        return originalReaddir(...args);
+      };
+      syncBuiltinESMExports();
+      const report = await provider.inspect({
+        capability: Capability.STATIC_AUDIT,
+        target: root, projectRoot: root, route: "/settings",
+      });
+      assert.equal(report.status, ProviderStatus.BLOCKED);
+      assert.equal(report.reason, "Source scope preflight failed");
+      assert.ok(!JSON.stringify(report).includes(canary));
+      assert.equal(invoked, 0, "a failed preflight must not start the detector");
+    } finally {
+      fs.readdirSync = originalReaddir;
+      syncBuiltinESMExports();
+    }
+  });
+});
 
 test("scannable symlink paths never leak into blocked Impeccable evidence", async () => {
   await fixture(async ({ root, target }) => {

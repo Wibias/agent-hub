@@ -148,7 +148,9 @@ function htmlLinkStartTags(html) {
   let raw = null;
   while (offset < html.length) {
     if (raw) {
-      const endTag = new RegExp(`</${raw}\\s*>`, "gi");
+      // The detector parser closes on whitespace, slash, or > after the raw tag name.
+      // Otherwise a real stylesheet link after </script x> could be omitted.
+      const endTag = new RegExp(`</${raw}(?=[\\s/>])[^>]*>`, "gi");
       endTag.lastIndex = offset;
       const end = endTag.exec(html);
       if (ambiguousRaw.has(raw) &&
@@ -186,10 +188,16 @@ function htmlLinkStartTags(html) {
     }
     const kind = named[2].toLowerCase();
     if (pos === html.length) {
-      if (!named[1] && kind === "link") {
+      if ((!named[1] && kind === "link") ||
+          candidateLink.test(html.slice(start + named[0].length))) {
         throw new TypeError("Ambiguous HTML link markup cannot be attested");
       }
       break;
+    }
+    // An unmatched or misplaced quote can swallow later real markup. Reject
+    // possible link start tags inside any non-link tag span rather than omit CSS.
+    if (kind !== "link" && candidateLink.test(html.slice(start + named[0].length, pos))) {
+      throw new TypeError("Ambiguous HTML link markup cannot be attested");
     }
     if (!named[1]) {
       if (kind === "link") tags.push(html.slice(start, pos + 1));

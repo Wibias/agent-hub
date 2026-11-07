@@ -7,7 +7,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { test } from "node:test";
 import { createImpeccableProvider } from "../../scripts/providers/impeccable.mjs";
 import { Capability } from "../../scripts/providers/contract.mjs";
@@ -90,7 +90,7 @@ test("forced missing HTML parsers in the real child process cannot create green 
     ].join("\n"));
     const runner = async ({ args, cwd }) => {
       const run = spawnSync(process.execPath,
-        ["--no-warnings", "--experimental-loader", loader, ...args],
+        ["--no-warnings", "--experimental-loader", pathToFileURL(loader).href, ...args],
         { cwd, encoding: "utf8", timeout: 30_000 });
       return {
         stdout: run.stdout ?? "", stderr: run.stderr ?? "",

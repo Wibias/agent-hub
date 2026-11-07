@@ -9,6 +9,12 @@ import { runProcess } from "./process-runner.mjs";
 
 const SCRIPT = fileURLToPath(new URL("../../../impeccable/scripts/detect.mjs", import.meta.url));
 const SELF = fileURLToPath(import.meta.url);
+// Node resolves ESM import.meta.url through symlinks; argv[1] may retain its
+// symlink spelling. Compare canonical paths for both command entrypoints.
+const isMain = (() => {
+  try { return Boolean(process.argv[1]) && realpathSync(process.argv[1]) === realpathSync(SELF); }
+  catch { return false; }
+})();
 const SCOPE_PREFLIGHT_FLAG = "--internal-scope-preflight";
 const SCOPE_PREFLIGHT_TIMEOUT_MS = 15_000;
 const MODES = Object.freeze([
@@ -268,8 +274,7 @@ export async function compareImpeccableModes(argv, {
   };
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === SELF &&
-    process.argv[2] === SCOPE_PREFLIGHT_FLAG) {
+if (isMain && process.argv[2] === SCOPE_PREFLIGHT_FLAG) {
   try {
     const scope = trustedScope(argsFrom(process.argv.slice(3)));
     process.stdout.write(JSON.stringify(scope) + "\n");
@@ -278,7 +283,7 @@ if (process.argv[1] && resolve(process.argv[1]) === SELF &&
     process.stderr.write("Source-scope preflight failed\n");
     process.exitCode = 2;
   }
-} else if (process.argv[1] && resolve(process.argv[1]) === SELF) {
+} else if (isMain) {
   try {
     const report = await compareImpeccableModes(process.argv.slice(2));
     process.stdout.write(JSON.stringify(report, null, 2) + "\n");
