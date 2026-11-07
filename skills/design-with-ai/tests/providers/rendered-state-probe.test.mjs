@@ -35,6 +35,7 @@ function fakeBrowser({
   postCaptureRoute = null,
   waitFailure = false,
   navigationFailure = false,
+  firstSampleFailure = false,
   screenshotFailure = false,
   pageErrors = false,
   pageErrorMessage = "Fixture page exception",
@@ -57,6 +58,7 @@ function fakeBrowser({
         newPage: async () => {
           const frame = {};
           let onNavigation = () => {};
+          let sampleCount = 0;
           return {
           mainFrame: () => frame,
           on: (kind, cb) => {
@@ -88,14 +90,20 @@ function fakeBrowser({
             assert.equal(arg.markerOnly, true);
             if (waitFailure) throw new Error("Wait timed out");
           },
-          evaluate: async () => captured && transitionAfterScreenshot ? {
-            markerVisible: false, blockersVisible: [],
-            missingText: [], forbiddenTextVisible: [],
-          } : states[width] || {
-            markerVisible: true,
-            blockersVisible: [],
-            missingText: [],
-            forbiddenTextVisible: [],
+          evaluate: async () => {
+            if (++sampleCount === 1 && firstSampleFailure) {
+              onNavigation(frame);
+              throw new Error("Execution context destroyed: token=CANARY_FIRST_SAMPLE_20261107");
+            }
+            return captured && transitionAfterScreenshot ? {
+              markerVisible: false, blockersVisible: [],
+              missingText: [], forbiddenTextVisible: [],
+            } : states[width] || {
+              markerVisible: true,
+              blockersVisible: [],
+              missingText: [],
+              forbiddenTextVisible: [],
+            };
           },
           waitForTimeout: async () => {
             if (clientRedirectBounce) { onNavigation(frame); onNavigation(frame); }
@@ -146,6 +154,29 @@ test("all three declared DOM state observations need separate fresh anonymous co
   });
 });
 
+
+
+test("navigation-interrupted first sample retains later DOM evidence but fails closed", async () => {
+  await fixture(async ({ input }) => {
+    const out = await probeRenderedState(input, {
+      browserFactory: fakeBrowser({ firstSampleFailure: true }).factory,
+    });
+    assert.equal(out.status, "INCOMPLETE");
+    assert.equal(out.declaredDomStateObserved, false);
+    assert.equal(out.productCompletionEligible, false);
+    for (const observation of out.observations) {
+      assert.equal(observation.status, "INCOMPLETE");
+      assert.equal(observation.mainFrameNavigationCount, 2);
+      assert.equal(observation.signals?.first, null);
+      assert.equal(observation.signals?.second?.markerVisible, true);
+      assert.equal(observation.signals?.afterScreenshot?.markerVisible, true);
+      assert.equal(observation.firstSampleError, "Browser error: <details-redacted>");
+      assert.equal(observation.error, undefined);
+    }
+    const persisted = readFileSync(join(out.artifactDirectory, "state-report.json"), "utf8");
+    assert.ok(!persisted.includes("CANARY_FIRST_SAMPLE_20261107"));
+  });
+});
 
 test("close-time page errors, navigations and close failures cannot preserve a stale DOM PASS", async () => {
   await fixture(async ({ input }) => {

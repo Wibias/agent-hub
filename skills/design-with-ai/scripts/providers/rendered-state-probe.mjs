@@ -215,7 +215,12 @@ export async function probeRenderedState(input, { browserFactory = loadPlaywrigh
             { readySelector: opts.contract.readySelector, markerOnly: true },
             { timeout: 15_000 });
         } catch (e) { record.markerWaitError = browserError(e); }
-        const first = await page.evaluate(snapshotDeclaredDomState, opts.contract);
+        // A main-frame navigation can destroy the first evaluation context.
+        // Do not erase later valid observations; retain a fixed error label
+        // and make this viewport INCOMPLETE even if later markers reappear.
+        let first = null;
+        try { first = await page.evaluate(snapshotDeclaredDomState, opts.contract); }
+        catch (error) { record.firstSampleError = browserError(error); }
         await page.waitForTimeout(750);
         const second = await page.evaluate(snapshotDeclaredDomState, opts.contract);
         const screenshot = join(runDir, "state-" + width + ".png");
@@ -251,7 +256,7 @@ export async function probeRenderedState(input, { browserFactory = loadPlaywrigh
         record.finalPath === opts.route && record.origin === expectedOrigin &&
         record.finalOrigin === expectedOrigin && pageErrorCount === 0 &&
         /^[0-9a-f]{64}$/.test(record.screenshotSha256 ?? "") &&
-        !record.markerWaitError && completeSample(first) &&
+        !record.markerWaitError && !record.firstSampleError && completeSample(first) &&
         completeSample(second) && completeSample(afterScreenshot)
         ? "DOM_SIGNALS_OBSERVED" : "INCOMPLETE";
     }
