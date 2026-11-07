@@ -21,6 +21,8 @@ The DWA snapshot includes only the digest, not policy contents. Files already pr
 
 The resolver is deliberately independent of the optional Impeccable plugin. The DWA native quick profile must still work when Impeccable is unavailable.
 
+When the effective shared/local detection config explicitly sets `detector.designSystem.enabled=false`, source-scope proof skips DESIGN.md and sidecar discovery (the detector itself does not consume them). It still validates, fingerprints and attests both present config files, preserves the per-source `null` design bindings, and separately binds linked HTML stylesheets. Local config overrides the shared config. A new config re-enabling design policy restores full DESIGN.md validation, including strict symlink/out-of-root rejection. This is an application-level matching of the vendored config precedence; it must remain synchronized with `readDetectionConfig()`.
+
 ## HTML-linked stylesheet dependencies
 
 A selected **single HTML source file**, with Impeccable enabled and without Taste,
