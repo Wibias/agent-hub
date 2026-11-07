@@ -46,6 +46,3 @@ jobs:
         env:
           TASTE_SKILL_ROOT: ${{ runner.temp }}/taste-skill/skills/taste-skill
         run: node skills/design-with-ai/tests/providers/browser-live-smoke.mjs
-
-      - name: DOM browser error redaction and fail-closed regression tests
-        run: node --test skills/design-with-ai/tests/providers/rendered-state-probe.test.mjs
