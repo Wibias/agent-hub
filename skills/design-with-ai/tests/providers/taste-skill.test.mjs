@@ -4,7 +4,7 @@ import {
   existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { Capability, ProviderStatus } from "../../scripts/providers/contract.mjs";
@@ -256,6 +256,36 @@ test("missing browser coverage, skipped checks, falsified counts and wrong sourc
 });
 
 
+
+test("replacing allocated run ancestor with a junction or symlink fails closed", async () => {
+  await fixture(async (fx) => {
+    const outside = join(fx.root, "CANARY_RELOCATED_TASTE_RUN_20261107");
+    mkdirSync(outside);
+    const runner = async (command) => {
+      const out = command.args[command.args.indexOf("--out") + 1];
+      const relocatedRun = join(outside, basename(dirname(out)));
+      const relocatedReport = join(relocatedRun, "report");
+      mkdirSync(relocatedReport, { recursive: true });
+      const report = sampleReport({ page: fx.page, out });
+      writeFileSync(join(relocatedReport, "report.json"), JSON.stringify(report));
+      // The run and report still appear to be regular directories when
+      // checked via their lexical paths. Only their ancestor becomes a link.
+      rmSync(fx.outputRoot, { recursive: true, force: true });
+      symlinkSync(outside, fx.outputRoot, process.platform === "win32" ? "junction" : "dir");
+      return {
+        exitCode: 0, stdout: JSON.stringify(report), stderr: "",
+        error: null, timedOut: false, outputLimitExceeded: false,
+      };
+    };
+    const provider = createTasteSkillProvider({
+      skillRoot: fx.skillRoot, runner, nodeMajor: 22,
+    });
+    const result = await provider.inspect(opts(fx));
+    assert.equal(result.status, ProviderStatus.ERROR);
+    assert.equal(result.findings.length, 0);
+    assert.ok(!JSON.stringify(result).includes("CANARY_RELOCATED_TASTE_RUN_20261107"));
+  });
+});
 
 test("Taste output report-directory symlinks and Windows junctions cannot escape run isolation", async () => {
   await fixture(async (fx) => {
