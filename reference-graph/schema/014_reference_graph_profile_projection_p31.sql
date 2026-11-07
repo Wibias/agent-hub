@@ -119,6 +119,7 @@ begin
     or p.evidence_class not in (
       'TESTED', 'OBSERVED', 'INTERPRETED', 'INSPIRATION', 'MARKETING_CLAIM'
     )
+    or p.access_status is null
     or p.access_status not in ('AVAILABLE', 'PAYWALLED')
     or p.search_text is null
     or jsonb_typeof(p.tags) is distinct from 'array'
