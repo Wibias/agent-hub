@@ -210,6 +210,9 @@ export async function fetchP30ProfileCandidateSnapshot({
     // single global deadline. Each page has the same stable asset ordering,
     // snapshot date, requested fields, method and publishable-only headers.
     while (pages.length < expectedCandidateCount) {
+      // The deadline may already have expired while a prior page ignored
+      // AbortSignal. Never issue another network request after timeout.
+      if (controller.signal.aborted) reject('timeout');
       const remaining = expectedCandidateCount - pages.length;
       const pageSize = Math.min(PAGE_LIMIT, remaining);
       const pageUrl = new URL(url);
@@ -226,6 +229,9 @@ export async function fetchP30ProfileCandidateSnapshot({
       } catch {
         reject(controller.signal.aborted ? 'timeout' : 'network');
       }
+      // The network adapter may resolve after abort instead of throwing.
+      // Do not parse a late body or start further GETs.
+      if (controller.signal.aborted) reject('timeout');
       if (!response?.ok) reject('http');
 
       let payload;
@@ -234,6 +240,8 @@ export async function fetchP30ProfileCandidateSnapshot({
       } catch {
         reject(controller.signal.aborted ? 'timeout' : 'invalid-json');
       }
+      // A response.json() implementation may ignore abort as well.
+      if (controller.signal.aborted) reject('timeout');
       if (!Array.isArray(payload)) reject('candidate-invalid');
       if (payload.length === 0) {
         reject(pages.length === 0 ? 'candidate-invalid' : 'candidate-count-mismatch');
