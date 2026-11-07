@@ -50,7 +50,7 @@ test('P31 refresh fails closed on source metadata before replacement and verifie
   assert.match(sql, /reference_graph\.current_assets/i);
   // SQL NOT IN evaluates to UNKNOWN for NULL and does not flag a WHERE row.
   // Guard the documented P28 null rejection even if the P7 source changes.
-  assert.match(sql, /or p\\.access_status is null\\s+or p\\.access_status not in\\s*\\(\\s*'AVAILABLE'\\s*,\\s*'PAYWALLED'\\s*\\)/i);
+  assert.match(sql, /or p\.access_status is null\s+or p\.access_status not in\s*\(\s*'AVAILABLE'\s*,\s*'PAYWALLED'\s*\)/i);
 
   assert.match(sql, /metadata->>'primary_stratum'/i);
   assert.match(sql, /v_invalid_count/i);
