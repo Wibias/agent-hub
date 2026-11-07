@@ -216,6 +216,7 @@ async function detectCli() {
     configEnabled: !args.includes('--no-config'),
     inlineIgnoresEnabled: !args.includes('--no-config') && !args.includes('--no-inline-ignores'),
     designSystemEnabled: false,
+    designSystemResolvedFiles: 0,
   };
   const jsonMode = args.includes('--json');
   const quietMode = args.includes('--quiet');
@@ -305,6 +306,7 @@ async function detectCli() {
   const scanOptionsFor = (localPath) => {
     if (!designSystemEnabled || !localPath) return baseScanOptions;
     const designSystem = loadDesignSystemForTarget(localPath, { cache: designSystemCache });
+    if (scanProofMode && designSystem) scanProof.designSystemResolvedFiles++;
     return designSystem ? { ...baseScanOptions, designSystem } : baseScanOptions;
   };
   const targets = args.filter(a => !a.startsWith('--'));
@@ -354,6 +356,20 @@ async function detectCli() {
 
         const resolved = path.resolve(target);
         let stat;
+        if (scanProofMode) {
+          // statSync follows symlinks: proof mode must reject an aliased
+          // target before scanning either a file or a directory.
+          let targetStat;
+          try { targetStat = fs.lstatSync(resolved); }
+          catch {
+            process.stderr.write("Error: scan-proof target is not accessible.\n");
+            process.exit(1);
+          }
+          if (targetStat.isSymbolicLink()) {
+            process.stderr.write("Error: scan-proof target must not be a symbolic link.\n");
+            process.exit(1);
+          }
+        }
         try { stat = fs.statSync(resolved); }
         catch { process.stderr.write(`Warning: cannot access ${target}\n`); continue; }
 

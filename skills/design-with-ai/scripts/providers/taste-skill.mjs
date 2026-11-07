@@ -72,6 +72,24 @@ function resolvePage(target, projectRoot) {
   return { project, page };
 }
 
+// The untrusted upstream process can replace its output directory with a
+// symlink/junction before returning. Verify physical containment in addition
+// to lexical paths; never follow a linked report parent into external storage.
+function safeTasteReportDirectory(runDir, reportPath) {
+  const reportDir = dirname(reportPath);
+  if (!existsSync(runDir) || !existsSync(reportDir) ||
+      lstatSync(runDir).isSymbolicLink() || !lstatSync(runDir).isDirectory() ||
+      lstatSync(reportDir).isSymbolicLink() || !lstatSync(reportDir).isDirectory()) {
+    throw new Error("Taste Skill output directories are unsafe");
+  }
+  const canonicalRun = realpathSync(runDir);
+  const canonicalReport = realpathSync(reportDir);
+  if (!inside(canonicalRun, canonicalReport) || canonicalRun === canonicalReport) {
+    throw new Error("Taste Skill report directory escapes isolated run");
+  }
+  return canonicalReport;
+}
+
 function validatedFinding(raw, { width, route, file, reportPath, pointer, runDir, occurrences }) {
   if (!isObject(raw) || !filled(raw.check) ||
       !["FAIL", "WARN"].includes(raw.sev) || !filled(raw.msg) ||
@@ -89,8 +107,10 @@ function validatedFinding(raw, { width, route, file, reportPath, pointer, runDir
       throw new Error("Unsafe Taste Skill screenshot reference");
     }
     const screenshot = join(dirname(reportPath), raw.crop);
+    const canonicalReportDir = safeTasteReportDirectory(runDir, reportPath);
     if (!inside(runDir, screenshot) || !existsSync(screenshot) ||
-        lstatSync(screenshot).isSymbolicLink() || !lstatSync(screenshot).isFile()) {
+        lstatSync(screenshot).isSymbolicLink() || !lstatSync(screenshot).isFile() ||
+        !inside(canonicalReportDir, realpathSync(screenshot))) {
       throw new Error("Taste Skill referenced screenshot is missing or unsafe");
     }
     evidence.push({ kind: "rendered-crop", ref: screenshot });
@@ -255,7 +275,7 @@ export function createTasteSkillProvider({ skillRoot, runner = runProcess, nodeM
         ({ page, project } = resolvePage(target, projectRoot));
         output = outputRoot ? checkedDirectory(outputRoot, "outputRoot") : tmpdir();
       } catch (error) {
-        return fail(ProviderStatus.BLOCKED, String(error.message ?? error));
+        return fail(ProviderStatus.BLOCKED, "Taste Skill input scope validation failed");
       }
       // Each check gets a separate directory, so upstream cleanup cannot erase an earlier run.
       let runDir;
@@ -264,8 +284,7 @@ export function createTasteSkillProvider({ skillRoot, runner = runProcess, nodeM
         mkdirSync(join(runDir, "report"));
         mkdirSync(join(runDir, "chrome"));
       } catch (error) {
-        return fail(ProviderStatus.ERROR, "Could not allocate isolated Taste Skill artifacts: " +
-          String(error.message ?? error));
+        return fail(ProviderStatus.ERROR, "Could not allocate isolated Taste Skill artifacts");
       }
       const reportPath = join(runDir, "report", "report.json");
       const args = [
@@ -287,8 +306,10 @@ export function createTasteSkillProvider({ skillRoot, runner = runProcess, nodeM
           "Taste Skill browser check failed or could not finish; evidence directory: " + runDir);
       }
       try {
+        const canonicalReportDir = safeTasteReportDirectory(runDir, reportPath);
         if (!existsSync(reportPath) || !lstatSync(reportPath).isFile() ||
-            lstatSync(reportPath).isSymbolicLink()) {
+            lstatSync(reportPath).isSymbolicLink() ||
+            !inside(canonicalReportDir, realpathSync(reportPath))) {
           throw new Error("Browser report.json is missing or unsafe");
         }
         const disk = readFileSync(reportPath, "utf8");
@@ -301,8 +322,7 @@ export function createTasteSkillProvider({ skillRoot, runner = runProcess, nodeM
         });
       } catch (error) {
         return fail(ProviderStatus.ERROR,
-          "Taste Skill report is incomplete or invalid: " + String(error.message ?? error) +
-          "; evidence directory: " + runDir);
+          "Taste Skill report is incomplete or invalid; evidence directory: " + runDir);
       }
     },
   };

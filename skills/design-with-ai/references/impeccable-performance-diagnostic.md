@@ -14,21 +14,23 @@ Specify `--rounds 2` to run the four modes twice with the second pass in reverse
 
 | Mode | Relevant behavior |
 | --- | --- |
-| `configured` | Honors project filters, inline suppressions, and design-system context |
-| `no-inline-ignores` | Keeps project filters and DESIGN.md, disables only inline suppressions |
+| `configured` | Honors project filters and inline suppressions; uses DESIGN.md only when enabled and resolved |
+| `no-inline-ignores` | Keeps project filters and available DESIGN.md when enabled, disables only inline suppressions |
 | `no-design-system` | Keeps project filters and inline suppressions, disables only DESIGN.md analysis |
 | `no-config` | Disables project filters, inline suppressions **and** design-system context |
 
 This separation matters because `--no-config` alone cannot identify the cause of a configured-vs-raw duration difference.
 
-Each scan is a fresh local Node process with fixed arguments, bounded execution (120 seconds per mode) and a bounded output buffer. Output contains **counts grouped by rule**, durations and explicit completion status; no source snippets, file contents or detector stdout are copied into the summary.
+The source-scope symlink preflight runs in a separate bounded Node process (15 seconds plus a small parent guard). A failed, stalled or timed-out preflight returns an `INCOMPLETE` JSON report with no measured rows; it cannot claim a successful benchmark. Each subsequent detector mode is a fresh local Node process with fixed arguments, bounded execution (120 seconds per mode) and a bounded output buffer. Output contains **counts grouped by rule**, durations and explicit completion status; no source snippets, file contents or detector stdout are copied into the summary.
 
 ## Reading the results
+
+`designSystemComparison` is `ESTABLISHED` only when both configured modes actually resolved a DESIGN.md for every scanned file. If project configuration disables it, no file resolves it, or only some files do, the scan may still be `COMPLETE` but the comparison is `NOT_ESTABLISHED`. Each mode reports `designSystemEnabled` and `designSystemResolvedFiles`; a complete scan is not itself proof that DESIGN.md was used.
 
 - An empty findings array is not proof of design quality.
 - Compare the per-mode durations **within and across rounds**, not just one pair. OS file-cache warming, JIT compilation, build activity and file system scanning can affect wall time.
 - A mode that fails or times out makes the whole comparison `INCOMPLETE`. Do not compare successful rows to a failed row as if it were a valid benchmark.
-- This diagnostic measures the vendored detector, not the DWA provider itself. Its output is **not** a provider PASS or a measured count of scanned files. The separate optional proof mechanism introduced in PR #195 addresses completed-file reporting.
+- This diagnostic measures the vendored detector, not the DWA provider itself. Each completed mode reports `filesScanned` from a validated detector completed-file receipt. A missing, invalid, or contradictory receipt makes the comparison `INCOMPLETE`. The number is a **detector-reported completed-file count**, not an independent source-coverage guarantee or a DWA provider PASS.
 - Compare results from the same immutable source snapshot. Do not compare unrelated commits or live branches.
 
 ## Phase 6.2 rationale

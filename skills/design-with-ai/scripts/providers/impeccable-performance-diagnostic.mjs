@@ -8,6 +8,9 @@ import { performance } from "node:perf_hooks";
 import { runProcess } from "./process-runner.mjs";
 
 const SCRIPT = fileURLToPath(new URL("../../../impeccable/scripts/detect.mjs", import.meta.url));
+const SELF = fileURLToPath(import.meta.url);
+const SCOPE_PREFLIGHT_FLAG = "--internal-scope-preflight";
+const SCOPE_PREFLIGHT_TIMEOUT_MS = 15_000;
 const MODES = Object.freeze([
   { id: "configured", flags: [] },
   { id: "no-inline-ignores", flags: ["--no-inline-ignores"] },
@@ -74,6 +77,48 @@ function trustedScope({ target, projectRoot }) {
   return { root: realRoot, target: realSource };
 }
 
+// The recursive symlink scope walk must never execute in the parent event
+// loop. Run it as a bounded subprocess before any measured detector mode.
+// A separate deadline guarantees an INCOMPLETE JSON report even when a
+// mocked/broken process transport never settles.
+async function runBoundedScopePreflight(opts, {
+  preflightRunner = runProcess,
+  preflightTimeoutMs = SCOPE_PREFLIGHT_TIMEOUT_MS,
+} = {}) {
+  if (!Number.isInteger(preflightTimeoutMs) ||
+      preflightTimeoutMs < 1 || preflightTimeoutMs > 60_000) {
+    throw new TypeError("Invalid scope preflight deadline");
+  }
+  let timer;
+  try {
+    const result = await Promise.race([
+      preflightRunner({
+        executable: process.execPath,
+        args: [SELF, SCOPE_PREFLIGHT_FLAG, "--target", opts.target,
+          "--project-root", opts.projectRoot],
+        cwd: process.cwd(),
+        timeoutMs: preflightTimeoutMs,
+        maxOutputBytes: 8_192,
+      }),
+      new Promise((resolve) => {
+        timer = setTimeout(() => resolve({ timedOut: true }), preflightTimeoutMs + 500);
+      }),
+    ]);
+    if (result?.error || result?.timedOut || result?.outputLimitExceeded ||
+        result?.exitCode !== 0 || result?.stderr?.trim()) return null;
+    const scope = JSON.parse(result.stdout);
+    if (!scope || typeof scope.root !== "string" ||
+        typeof scope.target !== "string" ||
+        !isAbsolute(scope.root) || !isAbsolute(scope.target) ||
+        !isInside(scope.root, scope.target)) return null;
+    return scope;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 const SCAN_PROOF_PREFIX = "DWA_IMPECCABLE_SCAN_PROOF=";
 
 function readCompleteProof(stderr, mode) {
@@ -86,7 +131,7 @@ function readCompleteProof(stderr, mode) {
   try { proof = JSON.parse(receipts[0].slice(SCAN_PROOF_PREFIX.length)); }
   catch { throw new Error("Invalid Impeccable scan receipt JSON"); }
   const numbers = ["candidateFiles", "eligibleFiles", "ignoredFiles",
-    "scannedFiles", "degradedFiles", "durationMs"];
+    "scannedFiles", "degradedFiles", "durationMs", "designSystemResolvedFiles"];
   if (!proof || typeof proof !== "object" || Array.isArray(proof) ||
       proof.schemaVersion !== 1 ||
       numbers.some((key) => !Number.isSafeInteger(proof[key]) || proof[key] < 0) ||
@@ -94,6 +139,7 @@ function readCompleteProof(stderr, mode) {
       proof.candidateFiles !== proof.eligibleFiles + proof.ignoredFiles ||
       proof.scannedFiles !== proof.eligibleFiles ||
       proof.degradedFiles !== 0 ||
+      proof.designSystemResolvedFiles > proof.scannedFiles ||
       !["configEnabled", "inlineIgnoresEnabled", "designSystemEnabled"]
         .every((key) => typeof proof[key] === "boolean")) {
     throw new Error("Incomplete, degraded or contradictory Impeccable source coverage");
@@ -103,7 +149,8 @@ function readCompleteProof(stderr, mode) {
   if (proof.configEnabled !== configured ||
       proof.inlineIgnoresEnabled !== inline ||
       (!configured && proof.designSystemEnabled) ||
-      (mode.id === "no-design-system" && proof.designSystemEnabled)) {
+      (mode.id === "no-design-system" && proof.designSystemEnabled) ||
+      (!proof.designSystemEnabled && proof.designSystemResolvedFiles !== 0)) {
     throw new Error("Impeccable receipt contradicts benchmark scan mode");
   }
   return proof;
@@ -134,6 +181,8 @@ function validateDetectorResult(result, mode) {
     candidateFiles: proof.candidateFiles,
     ignoredFiles: proof.ignoredFiles,
     degradedFiles: proof.degradedFiles,
+    designSystemEnabled: proof.designSystemEnabled,
+    designSystemResolvedFiles: proof.designSystemResolvedFiles,
     findings: findings.length,
     primary: primary.length,
     advisory: findings.length - primary.length,
@@ -142,9 +191,26 @@ function validateDetectorResult(result, mode) {
   };
 }
 
-export async function compareImpeccableModes(argv, { runner = runProcess, script = SCRIPT } = {}) {
+export async function compareImpeccableModes(argv, {
+  runner = runProcess, script = SCRIPT,
+  preflightRunner = runProcess,
+  preflightTimeoutMs = SCOPE_PREFLIGHT_TIMEOUT_MS,
+} = {}) {
   const opts = argsFrom(argv);
-  const scope = trustedScope(opts);
+  const scope = await runBoundedScopePreflight(opts, {
+    preflightRunner, preflightTimeoutMs,
+  });
+  if (!scope) {
+    return {
+      schemaVersion: 1,
+      kind: "dwa/impeccable-performance-diagnostic",
+      status: "INCOMPLETE",
+      target: resolve(opts.target),
+      roundsRequested: opts.rounds,
+      runs: [],
+      note: "Source-scope preflight failed or timed out; no measured detector runs started.",
+    };
+  }
   if (!existsSync(script) || !lstatSync(script).isFile() || lstatSync(script).isSymbolicLink()) {
     throw new Error("Vendored detector script does not exist");
   }
@@ -183,18 +249,36 @@ export async function compareImpeccableModes(argv, { runner = runProcess, script
       runs.push(row);
     }
   }
+  const designSystemComparison = runs
+    .filter((r) => ["configured", "no-inline-ignores"].includes(r.mode))
+    .every((r) => r.designSystemEnabled && r.designSystemResolvedFiles === r.filesScanned)
+    ? "ESTABLISHED" : "NOT_ESTABLISHED";
   return {
     schemaVersion: 1,
     kind: "dwa/impeccable-performance-diagnostic",
     status: "COMPLETE",
+    designSystemComparison,
     target: scope.target,
     roundsRequested: opts.rounds,
     runs,
-    note: "Modes isolate inline exceptions and DESIGN.md interpretation. Wall-clock differences can still reflect JIT, file caches, OS scheduling and run order. This is not a rendered UI audit or a DWA completion proof.",
+    note: (designSystemComparison === "ESTABLISHED"
+      ? "Modes isolate inline exceptions and resolved DESIGN.md interpretation. "
+      : "DESIGN.md comparison NOT ESTABLISHED: design-system disabled, unresolved or only partially resolved. Inline ignores remain isolated. ") +
+      "Wall-clock differences can still reflect JIT, file caches, OS scheduling and run order. This is not a rendered UI audit or a DWA completion proof.",
   };
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (process.argv[1] && resolve(process.argv[1]) === SELF &&
+    process.argv[2] === SCOPE_PREFLIGHT_FLAG) {
+  try {
+    const scope = trustedScope(argsFrom(process.argv.slice(3)));
+    process.stdout.write(JSON.stringify(scope) + "\n");
+  } catch {
+    // Untrusted paths and filesystem errors never enter the parent report.
+    process.stderr.write("Source-scope preflight failed\n");
+    process.exitCode = 2;
+  }
+} else if (process.argv[1] && resolve(process.argv[1]) === SELF) {
   try {
     const report = await compareImpeccableModes(process.argv.slice(2));
     process.stdout.write(JSON.stringify(report, null, 2) + "\n");

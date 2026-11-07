@@ -35,9 +35,15 @@ function fakeBrowser({
   postCaptureRoute = null,
   waitFailure = false,
   navigationFailure = false,
+  firstSampleFailure = false,
   screenshotFailure = false,
   pageErrors = false,
+  pageErrorMessage = "Fixture page exception",
   transitionAfterScreenshot = false,
+  clientRedirectBounce = false,
+  closePageError = false,
+  closeNavigation = false,
+  closeFailure = false,
   evaluateStallAt = 0,
   contextCloseStall = false,
   browserCloseStall = false,
@@ -50,14 +56,32 @@ function fakeBrowser({
       opened.push({ viewport, serviceWorkers, storageState });
       const width = viewport.width;
       let captured = false;
-      let sampleCount = 0;
+      let emitClosePageError = () => {};
+      let emitCloseNavigation = () => {};
       return {
-        newPage: async () => ({
+        newPage: async () => {
+          const frame = {};
+          let onNavigation = () => {};
+          let sampleCount = 0;
+          return {
+          mainFrame: () => frame,
           on: (kind, cb) => {
-            if (pageErrors && kind === "pageerror") cb(new Error("Fixture page exception"));
+            if (kind === "framenavigated") {
+              onNavigation = cb;
+              emitCloseNavigation = () => cb(frame);
+            }
+            if (kind === "pageerror") {
+              emitClosePageError = () =>
+                cb(new Error("token=CANARY_CLOSE_PAGE_ERROR_20261107"));
+            }
+            if (pageErrors && kind === "pageerror") {
+              const count = pageErrors === true ? 1 : pageErrors;
+              for (let i = 0; i < count; i++) cb(new Error(pageErrorMessage));
+            }
           },
           goto: async () => {
             if (navigationFailure) throw new Error("Navigation timeout");
+            onNavigation(frame);
             return {
               status: () => status,
               request: () => ({ redirectedFrom: () => redirected ? { url: "/entry" } : null }),
@@ -73,26 +97,37 @@ function fakeBrowser({
           evaluate: async () => {
             sampleCount++;
             if (sampleCount === evaluateStallAt) return new Promise(() => {});
+            if (sampleCount === 1 && firstSampleFailure) {
+              onNavigation(frame);
+              throw new Error("Execution context destroyed: token=CANARY_FIRST_SAMPLE_20261107");
+            }
             return captured && transitionAfterScreenshot ? {
-            markerVisible: false, blockersVisible: [],
-            missingText: [], forbiddenTextVisible: [],
-          } : states[width] || {
-            markerVisible: true,
-            blockersVisible: [],
-            missingText: [],
-            forbiddenTextVisible: [],
-          };
+              markerVisible: false, blockersVisible: [],
+              missingText: [], forbiddenTextVisible: [],
+            } : states[width] || {
+              markerVisible: true,
+              blockersVisible: [],
+              missingText: [],
+              forbiddenTextVisible: [],
+            };
           },
-          waitForTimeout: async () => {},
+          waitForTimeout: async () => {
+            if (clientRedirectBounce) { onNavigation(frame); onNavigation(frame); }
+          },
           screenshot: async ({ path }) => {
-            if (screenshotFailure) throw new Error("Capture failed");
+            if (screenshotFailure) throw new Error(
+              typeof screenshotFailure === "string" ? screenshotFailure : "Capture failed");
             writeFileSync(path, "screenshot-" + width);
             captured = true;
           },
-        }),
+          };
+        },
         close: async () => {
           if (contextCloseStall) return new Promise(() => {});
+          if (closePageError) emitClosePageError();
+          if (closeNavigation) emitCloseNavigation();
           closes++;
+          if (closeFailure) throw new Error("CANARY_CONTEXT_CLOSE_20261107");
         },
       };
     },
@@ -177,6 +212,64 @@ test("all three declared DOM state observations need separate fresh anonymous co
   });
 });
 
+
+
+test("navigation-interrupted first sample retains later DOM evidence but fails closed", async () => {
+  await fixture(async ({ input }) => {
+    const out = await probeRenderedState(input, {
+      browserFactory: fakeBrowser({ firstSampleFailure: true }).factory,
+    });
+    assert.equal(out.status, "INCOMPLETE");
+    assert.equal(out.declaredDomStateObserved, false);
+    assert.equal(out.productCompletionEligible, false);
+    for (const observation of out.observations) {
+      assert.equal(observation.status, "INCOMPLETE");
+      assert.equal(observation.mainFrameNavigationCount, 2);
+      assert.equal(observation.signals?.first, null);
+      assert.equal(observation.signals?.second?.markerVisible, true);
+      assert.equal(observation.signals?.afterScreenshot?.markerVisible, true);
+      assert.equal(observation.firstSampleError, "Browser error: <details-redacted>");
+      assert.equal(observation.error, undefined);
+    }
+    const persisted = readFileSync(join(out.artifactDirectory, "state-report.json"), "utf8");
+    assert.ok(!persisted.includes("CANARY_FIRST_SAMPLE_20261107"));
+  });
+});
+
+test("close-time page errors, navigations and close failures cannot preserve a stale DOM PASS", async () => {
+  await fixture(async ({ input }) => {
+    for (const scenario of [
+      { closePageError: true },
+      { closeNavigation: true },
+      { closeFailure: true },
+    ]) {
+      const out = await probeRenderedState(input, {
+        browserFactory: fakeBrowser(scenario).factory,
+      });
+      assert.equal(out.status, "INCOMPLETE", JSON.stringify(scenario));
+      assert.equal(out.declaredDomStateObserved, false);
+      assert.equal(out.productCompletionEligible, false);
+      for (const observation of out.observations) {
+        assert.equal(observation.status, "INCOMPLETE");
+        if (scenario.closePageError) {
+          assert.equal(observation.pageErrorCount, 1);
+          assert.deepEqual(observation.pageErrorSamples,
+            ["Browser error: <details-redacted>"]);
+        }
+        if (scenario.closeNavigation) {
+          assert.equal(observation.mainFrameNavigationCount, 2);
+        }
+        if (scenario.closeFailure) {
+          assert.equal(observation.contextCloseFailed, true);
+        }
+      }
+      const persisted = readFileSync(
+        join(out.artifactDirectory, "state-report.json"), "utf8");
+      assert.ok(!persisted.includes("CANARY_CLOSE_"));
+    }
+  });
+});
+
 test("loading, empty, redirected, failed or unscreened state cannot be observed", async () => {
   await fixture(async ({ input }) => {
     const bad = {
@@ -190,16 +283,139 @@ test("loading, empty, redirected, failed or unscreened state cannot be observed"
       { postCaptureRoute: "/login" },
       { waitFailure: true }, { screenshotFailure: true },
       { navigationFailure: true }, { pageErrors: true },
-      { transitionAfterScreenshot: true },
+      { transitionAfterScreenshot: true }, { clientRedirectBounce: true },
     ]) {
       const out = await probeRenderedState(input, {
         browserFactory: fakeBrowser(scenario).factory,
       });
       assert.equal(out.status, "INCOMPLETE", JSON.stringify(scenario));
       assert.equal(out.declaredDomStateObserved, false);
+      if (scenario.clientRedirectBounce) {
+        assert.ok(out.observations.every((r) => r.mainFrameNavigationCount === 3),
+          "Away-and-back JS redirects must be rejected even with matching final route");
+      }
       assert.equal(out.tasteFramesVerified, false);
       assert.ok(existsSync(join(out.artifactDirectory, "state-report.json")));
     }
+  });
+});
+
+
+test("unexpected navigation paths and origins never persist secret URL components", async () => {
+  await fixture(async ({ input }) => {
+    const canary = "CANARY_REDIRECT_SECRET_20261107";
+    for (const scenario of [
+      { route: "/session/" + canary + "/login" },
+      { postCaptureRoute: "/session/" + canary + "/login" },
+      { origin: "https://" + canary.toLowerCase() + ".example.test" },
+    ]) {
+      const out = await probeRenderedState(input, {
+        browserFactory: fakeBrowser(scenario).factory,
+      });
+      assert.equal(out.status, "INCOMPLETE");
+      assert.equal(out.productCompletionEligible, false);
+      const persisted = readFileSync(join(out.artifactDirectory, "state-report.json"), "utf8");
+      assert.ok(!persisted.toLowerCase().includes(canary.toLowerCase()));
+      assert.ok(out.observations.every((o) =>
+        o.status === "INCOMPLETE" &&
+        (!scenario.route || o.path === "<unexpected-path-redacted>") &&
+        (!scenario.postCaptureRoute || o.finalPath === "<unexpected-path-redacted>") &&
+        (!scenario.origin || o.origin === "<unexpected-origin-redacted>")));
+    }
+  });
+});
+
+test("pageerror flood retains only bounded URL-redacted samples and fails closed", async () => {
+  await fixture(async ({ input }) => {
+    const secret = "do-not-persist-this-query-token";
+    const rawUrl = "http://127.0.0.1:5191/game/live?access=" + secret;
+    const out = await probeRenderedState(input, {
+      browserFactory: fakeBrowser({
+        pageErrors: 2_500,
+        pageErrorMessage: "Browser failure at " + rawUrl + " with extra details",
+      }).factory,
+    });
+    assert.equal(out.status, "INCOMPLETE");
+    assert.equal(out.declaredDomStateObserved, false);
+    assert.equal(out.productCompletionEligible, false);
+    assert.equal(out.observations.length, 3);
+    for (const observation of out.observations) {
+      assert.equal(observation.status, "INCOMPLETE");
+      assert.equal(observation.pageErrorCount, 2_500);
+      assert.equal(observation.pageErrorSamples.length, 3);
+      assert.ok(observation.pageErrorSamples.every((s) =>
+        s.includes("<url-redacted>") && s.length <= 260));
+    }
+    const persisted = readFileSync(join(out.artifactDirectory, "state-report.json"), "utf8");
+    assert.ok(!persisted.includes(secret));
+    assert.ok(!persisted.includes(rawUrl));
+    assert.ok(persisted.includes("<url-redacted>"));
+  });
+});
+
+test("URL-bearing browser errors never persist WebSocket tokens or split query fragments", async () => {
+  await fixture(async ({ input }) => {
+    const tokens = ["wss-token-do-not-persist", "split-token-do-not-persist"];
+    for (const message of [
+      "WebSocket connection to 'wss://api.test/game?token=" + tokens[0] + "' failed",
+      "Network error: https://api.test/?mode=red'&token=" + tokens[1],
+    ]) {
+      const out = await probeRenderedState(input, {
+        browserFactory: fakeBrowser({
+          pageErrors: true, pageErrorMessage: message,
+        }).factory,
+      });
+      assert.equal(out.status, "INCOMPLETE");
+      assert.ok(out.observations.every((o) =>
+        o.pageErrorCount === 1 &&
+        o.pageErrorSamples.length === 1 &&
+        o.pageErrorSamples[0] === "Browser error: <url-redacted>"));
+      const report = readFileSync(join(out.artifactDirectory, "state-report.json"), "utf8");
+      for (const token of tokens) assert.ok(!report.includes(token));
+      assert.ok(!report.includes("wss://api.test"));
+    }
+  });
+});
+
+
+test("relative URLs and bare credentials never persist in state browser evidence", async () => {
+  await fixture(async ({ input }) => {
+    const messages = [
+      "Fetch failed: /api/auth?access_token=CANARY_RELATIVE_906",
+      "Blocked //internal.example/api?token=CANARY_PROTOCOL_906",
+      "Request token=CANARY_BARE_906",
+    ];
+    for (const message of messages) {
+      const report = await probeRenderedState(input, {
+        browserFactory: fakeBrowser({ pageErrors: true, pageErrorMessage: message }).factory,
+      });
+      assert.equal(report.status, "INCOMPLETE");
+      assert.equal(report.productCompletionEligible, false);
+      assert.ok(report.observations.every((o) =>
+        o.pageErrorCount === 1 &&
+        o.pageErrorSamples.length === 1 &&
+        o.pageErrorSamples[0] === "Browser error: <details-redacted>"));
+      const persisted = readFileSync(join(report.artifactDirectory, "state-report.json"), "utf8");
+      assert.ok(!persisted.includes("CANARY_"), "Untrusted error text must not persist");
+      assert.ok(!persisted.includes(message));
+    }
+    const capture = await probeRenderedState(input, {
+      browserFactory: fakeBrowser({
+        screenshotFailure: "Screenshot failed token=CANARY_CAPTURE_906",
+      }).factory,
+    });
+    assert.equal(capture.status, "INCOMPLETE");
+    assert.ok(capture.observations.every((o) =>
+      o.error === "Browser error: <details-redacted>"));
+    const captureFile = readFileSync(join(capture.artifactDirectory, "state-report.json"), "utf8");
+    assert.ok(!captureFile.includes("CANARY_CAPTURE_906"));
+    const launch = await probeRenderedState(input, {
+      browserFactory: async () => { throw new Error("Launch token=CANARY_LAUNCH_906"); },
+    });
+    assert.equal(launch.status, "INCOMPLETE");
+    assert.equal(launch.error, "Browser error: <details-redacted>");
+    const launchFile = readFileSync(join(launch.artifactDirectory, "state-report.json"), "utf8");
+    assert.ok(!launchFile.includes("CANARY_LAUNCH_906"));
   });
 });
 
@@ -438,7 +654,7 @@ test("an unavailable browser records INCOMPLETE evidence instead of a false succ
       browserFactory: async () => { throw new Error("Chrome absent"); },
     });
     assert.equal(out.status, "INCOMPLETE");
-    assert.match(out.error, /Chrome absent/);
+    assert.equal(out.error, "Browser error: <details-redacted>");
     assert.equal(out.declaredDomStateObserved, false);
     assert.equal(out.observations.length, 0);
   });

@@ -32,6 +32,7 @@ async function fixture(fn) {
   ].join("\n"));
   const page = join(srcDir, "source.css");
   writeFileSync(page, ".panel { padding: 12px; color: #222; }\n");
+  writeFileSync(join(root, "package.json"), "{}\n");
   try { return await fn({ root, page, htmlPage, srcDir, built, renderedPage }); }
   finally { rmSync(root, { force: true, recursive: true }); }
 }
@@ -134,6 +135,57 @@ test("explicitly required missing Taste runtime blocks", () => fixture((f) => {
   const summary = JSON.parse(run.stdout);
   assert.equal(summary.status, "BLOCKED");
   assert.equal(summary.coverage.complete, false);
+}));
+
+
+test("audit CLI redacts untrusted flags and filesystem failure paths", () =>
+  fixture((f) => {
+    const token = "CANARY_QUALITY_AUDIT_CLI_SECRET_20261107";
+    const option = invoke(f, ["--unknown-" + token, "bad"]);
+    assert.equal(option.status, 2);
+    assert.match(option.stderr, /Unknown, repeated or missing option/);
+    assert.ok(!option.stderr.includes(token));
+    assert.equal(option.stdout, "");
+
+    // A file incorrectly supplied as output root causes a real ENOTDIR
+    // exception whose native message embeds the supplied path.
+    const file = join(f.root, "artifact-" + token);
+    writeFileSync(file, "not a directory");
+    const filesystem = spawnSync(process.execPath, [cli,
+      "--profile", "standard", "--path", f.page,
+      "--route", "/settings", "--project-root", f.root,
+      "--output-root", file,
+    ], { encoding: "utf8", timeout: 90_000 });
+    assert.equal(filesystem.status, 2);
+    assert.match(filesystem.stderr, /untrusted error details redacted/);
+    assert.ok(!filesystem.stderr.includes(token));
+    assert.ok(!filesystem.stderr.includes(file));
+    assert.equal(filesystem.stdout, "");
+  }));
+
+test("audit CLI retains only fixed safe parser diagnostics", () => fixture((f) => {
+  const original = [
+    "--path", f.page, "--route", "/settings", "--project-root", f.root,
+  ];
+  const cases = [
+    [original.filter((_, i) => i !== 2 && i !== 3), "--route is required"],
+    [original.filter((_, i) => i !== 0 && i !== 1), "--path is required"],
+    [original.filter((_, i) => i !== 4 && i !== 5), "--project-root is required"],
+    [[...original, "--with-taste"], "--with-taste requires --html (a local built page)"],
+    [[...original, "--journal", join(f.root, "CANARY_JOURNAL_SECRET_20261107")],
+      "Journal capture requires --journal, --ledger and --run-id together"],
+    [[...original, "--page-kind", "review"], "Taste-specific options require --with-taste"],
+    [[...original, "--with-taste", "--with-taste"], "Repeated flag --with-taste"],
+  ];
+  for (const [args, expected] of cases) {
+    const run = spawnSync(process.execPath, [cli, ...args], {
+      encoding: "utf8", timeout: 10_000,
+    });
+    assert.equal(run.status, 2, run.stderr);
+    assert.equal(run.stderr.trim(), "DWA provider audit: " + expected);
+    assert.equal(run.stdout, "");
+    assert.ok(!run.stderr.includes("CANARY_"));
+  }
 }));
 
 test("invalid profile/source options stop with error without executing tools", () =>

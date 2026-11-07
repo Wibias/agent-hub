@@ -20,6 +20,7 @@ function fixture(fn) {
   mkdirSync(join(root, "src"), { recursive: true });
   mkdirSync(join(renderedRoot, "settings"), { recursive: true });
   mkdirSync(join(renderedRoot, "assets"), { recursive: true });
+  writeFileSync(join(root, "package.json"), "{}\n");
   writeFileSync(source, "export const Page = 1;\n");
   writeFileSync(html, '<!doctype html><link rel="stylesheet" href="../assets/app.css"><script src="../assets/app.js"></script>');
   writeFileSync(css, "body { color: red; }\n");
@@ -33,7 +34,6 @@ function fixture(fn) {
   try { return fn({ root, source, renderedRoot, html, css, js, image, font, sample }); }
   finally { rmSync(root, { recursive: true, force: true }); }
 }
-
 
 test("native Windows and POSIX nested HTML paths map to slash-normalized routes", () => {
   fixture((f) => {
@@ -71,6 +71,41 @@ test("full local rendered tree includes HTML, CSS, JavaScript, image and font", 
   });
 });
 
+test("literal Linux backslashes remain distinct from directory separators", {
+  skip: process.platform === "win32",
+}, () => {
+  fixture((f) => {
+    const escapedName = join(f.renderedRoot, "assets", "a\\b.css");
+    const nestedDir = join(f.renderedRoot, "assets", "a");
+    mkdirSync(nestedDir);
+    writeFileSync(escapedName, "body { color: blue; }\\n");
+    writeFileSync(join(nestedDir, "b.css"), "body { color: red; }\\n");
+
+    const proof = renderedAssetProof({
+      projectRoot: f.root, renderedRoot: f.renderedRoot, html: f.html,
+    });
+    const literal = proof.files.find((file) => file.path === "dist/assets/a\\b.css");
+    const nested = proof.files.find((file) => file.path === "dist/assets/a/b.css");
+    assert.ok(literal, "literal backslash file must keep its exact key");
+    assert.ok(nested, "nested file must keep its actual separator");
+    assert.notEqual(literal.sha256, nested.sha256);
+    assert.equal(new Set(proof.files.map((file) => file.path)).size, proof.fileCount);
+    const scope = f.sample();
+    assert.ok(scope.manifest.renderedAssets.files.some((file) =>
+      file.path === "dist/assets/a\\b.css"));
+    assert.equal(scope.summary.rendered.assetCount, proof.fileCount,
+      "scope-proof must resolve both distinct files for observed input attestation");
+
+    const literalSource = join(f.root, "src", "a\\b.tsx");
+    writeFileSync(literalSource, "export default () => null;\\n");
+    const scopedSource = sourceScopeProof({
+      projectRoot: f.root, target: literalSource, route: "/literal",
+    });
+    assert.equal(scopedSource.manifest.files[0].path, "src/a\\b.tsx",
+      "source file identity must not collapse native Linux backslashes");
+  });
+});
+
 test("a CSS/JS/image/font asset changes the scoped digest without HTML changes", () => {
   fixture((f) => {
     const initial = f.sample();
@@ -100,7 +135,7 @@ test("mixed canonical HTML and aliased project ancestor resolve the same page di
       // directory entry, as required by renderedAssetProof's strict lstat.
       const actualParent = join(f.root, "..");
       const linkedParent = join(aliasHome, "linked-parent");
-      symlinkSync(actualParent, linkedParent, process.platform === "win32" ? "junction" : "dir");
+      symlinkSync(actualParent, linkedParent, "dir");
       const aliasRoot = join(linkedParent, f.root.split(/[\\/]/).at(-1));
       const result = sourceScopeProof({
         projectRoot: aliasRoot,
@@ -190,7 +225,6 @@ test("too many assets are rejected rather than silently truncated", () => {
     assert.throws(() => f.sample(), /count limit|entry count limit/);
   });
 });
-
 
 test("symlinked build asset files are never trusted", (t) => {
   fixture((f) => {

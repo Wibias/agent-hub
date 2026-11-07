@@ -171,10 +171,40 @@ test("invalid invocation or escaped scope is rejected", async () => {
       ["--target", source, "--project-root", project, "--rounds", "0"],
       ["--target", source, "--project-root", project, "--rounds", "4"],
       ["--target", source, "--project-root", project, "--unknown", "yes"],
-      ["--target", root, "--project-root", project],
     ]) {
-      await assert.rejects(() => compareImpeccableModes(args), /rounds|argument|scope|escapes project root/i);
+      await assert.rejects(() => compareImpeccableModes(args), /rounds|argument/i);
     }
+    const escaped = await compareImpeccableModes(
+      ["--target", root, "--project-root", project]);
+    assert.equal(escaped.status, "INCOMPLETE");
+    assert.deepEqual(escaped.runs, []);
+    assert.match(escaped.note, /preflight/);
+  });
+});
+
+test("scope preflight failure, timeout and stalled transport stay INCOMPLETE", async () => {
+  await fixture(async ({ project, source, root }) => {
+    const script = join(root, "fake-detector.mjs");
+    writeFileSync(script, "// must not run\n");
+    let detectorCalls = 0;
+    for (const preflightRunner of [
+      async () => ({ timedOut: true }),
+      async () => ({ exitCode: 2, stdout: "", stderr: "CANARY_SCOPE_SECRET_20261107" }),
+      () => new Promise(() => {}),
+    ]) {
+      const result = await compareImpeccableModes(
+        ["--target", source, "--project-root", project], {
+          script,
+          preflightRunner,
+          preflightTimeoutMs: 25,
+          runner: async () => { detectorCalls++; throw new Error("detector should not run"); },
+        });
+      assert.equal(result.status, "INCOMPLETE");
+      assert.deepEqual(result.runs, []);
+      assert.match(result.note, /preflight/);
+      assert.ok(!JSON.stringify(result).includes("CANARY_"));
+    }
+    assert.equal(detectorCalls, 0);
   });
 });
 

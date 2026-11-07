@@ -17,7 +17,8 @@ const eligible = (name) => {
 };
 const skipped = new Set(["node_modules", ".git", "dist", "build", ".next"]);
 const hash = (value) => createHash("sha256").update(value).digest("hex");
-const normalize = (value) => value.replaceAll("\\", "/");
+// Do not collapse distinct Linux filenames containing literal backslashes.
+const normalize = (value) => value.split(sep).join("/");
 const isInside = (root, path) => {
   const rel = relative(root, path);
   return rel !== ".." && !rel.startsWith(".." + sep) && !isAbsolute(rel);
@@ -133,13 +134,85 @@ function detectorContextFiles(root, sourceFiles) {
 // files even when the selected source target is just one HTML file. Bind
 // those additional bytes to the same before/after provenance as DESIGN.md.
 // This standalone resolver must not import the optional Impeccable provider.
+// Recognize actual HTML tags; do not treat <link-button> custom elements
+// or <link> samples in comments, raw-text blocks and RCDATA as stylesheets.
+// Quote-aware boundaries preserve > characters in attribute values.
+function htmlLinkStartTags(html) {
+  const tags = [];
+  const rawText = new Set(["script", "style", "textarea", "title", "xmp", "iframe", "noembed", "noframes"]);
+  // htmlparser2 can parse links inside these parser-dependent regions and
+  // after plaintext, whereas the conservative scanner ignores them.
+  const ambiguousRaw = new Set(["iframe", "noembed", "noframes"]);
+  const candidateLink = /<link(?=[\s/>])/i;
+  let offset = 0;
+  let raw = null;
+  while (offset < html.length) {
+    if (raw) {
+      const endTag = new RegExp(`</${raw}\\s*>`, "gi");
+      endTag.lastIndex = offset;
+      const end = endTag.exec(html);
+      if (ambiguousRaw.has(raw) &&
+          candidateLink.test(html.slice(offset, end?.index ?? html.length))) {
+        throw new TypeError("Parser-dependent HTML link region cannot be attested");
+      }
+      if (!end) break;
+      offset = endTag.lastIndex;
+      raw = null;
+      continue;
+    }
+    const start = html.indexOf("<", offset);
+    if (start < 0) break;
+    if (html.startsWith("<!--", start)) {
+      const end = html.indexOf("-->", start + 4);
+      if (end < 0) break;
+      offset = end + 3;
+      continue;
+    }
+    if (html.startsWith("<!", start) || html.startsWith("<?", start)) {
+      const end = html.indexOf(">", start + 2);
+      if (end < 0) break;
+      offset = end + 1;
+      continue;
+    }
+    const named = /^<(\/?)([a-z][a-z0-9:._-]*)/i.exec(html.slice(start));
+    if (!named) { offset = start + 1; continue; }
+    let quote = null;
+    let pos = start + named[0].length;
+    for (; pos < html.length; pos += 1) {
+      const ch = html[pos];
+      if (quote && ch === quote) quote = null;
+      else if (!quote && (ch === "'" || ch === '"')) quote = ch;
+      else if (!quote && ch === ">") break;
+    }
+    const kind = named[2].toLowerCase();
+    if (pos === html.length) {
+      if (!named[1] && kind === "link") {
+        throw new TypeError("Ambiguous HTML link markup cannot be attested");
+      }
+      break;
+    }
+    if (!named[1]) {
+      if (kind === "link") tags.push(html.slice(start, pos + 1));
+      if (kind === "plaintext") {
+        if (candidateLink.test(html.slice(pos + 1))) {
+          throw new TypeError("Parser-dependent HTML link region cannot be attested");
+        }
+        break;
+      }
+      if (rawText.has(kind) && !/\/\s*>$/.test(html.slice(start, pos + 1))) raw = kind;
+    }
+    offset = pos + 1;
+  }
+  return tags;
+}
+
 function linkedStylesheetFiles(root, sourceFiles) {
   const paths = new Set();
   const selected = new Set(sourceFiles);
   for (const htmlFile of sourceFiles) {
     if (!/\.html?$/i.test(htmlFile)) continue;
     const html = readFileSync(htmlFile, "utf8");
-    const linkTags = html.matchAll(/<link\b(?:[^>"']|"[^"]*"|'[^']*')*>/gi);
+    const linkTags = htmlLinkStartTags(html);
     let tagCount = 0;
     for (const tag of linkTags) {
       if (++tagCount > 1000) throw new TypeError("Too many HTML stylesheet links to attest");
@@ -147,21 +220,25 @@ function linkedStylesheetFiles(root, sourceFiles) {
       // The detector accepts some HTML syntax our conservative tokenizer does
       // not (e.g. adjacent quoted attributes and slash-separated attributes).
       // Never attest a partial parse: all tag bytes must be accounted for.
-      const attributePattern = /\s([^\s"'<>\/=\x60]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/g;
-      const tagBody = tag[0].slice(5, -1);
-      const matches = [...tagBody.matchAll(attributePattern)];
-      const unparsed = tagBody.replace(attributePattern, "").trim();
-      if (unparsed && unparsed !== "/") {
-        throw new TypeError("Ambiguous HTML link attributes cannot be attested");
-      }
-      for (const match of matches) {
-        // Anchor attribute names at whitespace and preserve dots/colons:
-        // data.rel is distinct from rel, never its suffix.
-        const name = match[1].toLowerCase();
+      const tagBody = tag.slice(5, -1);
+      // Advance over the ENTIRE tag, including standard valueless attributes
+      // (e.g. crossorigin). Whitespace is mandatory between attributes.
+      // A partial parse must never certify a stylesheet dependency.
+      const attributePattern = /(\s+)([^\s"'<>\/=\x60]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'<> =\x60]+)))?/gy;
+      let offset = 0;
+      while (offset < tagBody.length) {
+        if (/^\s*\/?\s*$/.test(tagBody.slice(offset))) break;
+        attributePattern.lastIndex = offset;
+        const match = attributePattern.exec(tagBody);
+        if (!match) {
+          throw new TypeError("Ambiguous HTML link attributes cannot be attested");
+        }
+        const name = match[2].toLowerCase();
         if (attributes.has(name)) {
           throw new TypeError("Duplicate HTML link attribute cannot be attested");
         }
-        attributes.set(name, match[2] ?? match[3] ?? match[4]);
+        attributes.set(name, match[3] ?? match[4] ?? match[5] ?? "");
+        offset = attributePattern.lastIndex;
       }
       const rel = attributes.get("rel") ?? "";
       const href = attributes.get("href") ?? "";
@@ -193,9 +270,6 @@ function linkedStylesheetFiles(root, sourceFiles) {
         throw new TypeError("Linked stylesheet must be a regular in-project file");
       }
       if (!selected.has(css)) paths.add(css);
-    }
-    if (tagCount !== [...html.matchAll(/<link\b/gi)].length) {
-      throw new TypeError("Ambiguous HTML link markup cannot be attested");
     }
   }
   return [...paths].sort();
