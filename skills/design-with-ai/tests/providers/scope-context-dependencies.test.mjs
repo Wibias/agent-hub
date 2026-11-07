@@ -382,6 +382,60 @@ test("nested design documents stay isolated across source directories", () => {
   });
 });
 
+test("per-source DESIGN boundary changes fingerprint even when shared DESIGN bytes are unchanged", () => {
+  fixture(({ root, src, inspect }) => {
+    const policy = join(root, "DESIGN.md");
+    writeFileSync(policy, "---\ncolors:\n  ink: '#111111'\n---\n");
+    const leftDir = join(src, "left");
+    const rightDir = join(src, "right");
+    mkdirSync(leftDir);
+    mkdirSync(rightDir);
+    const leftFile = join(leftDir, "left.css");
+    const rightFile = join(rightDir, "right.css");
+    writeFileSync(leftFile, ".left { color: #111; }\n");
+    writeFileSync(rightFile, ".right { color: #111; }\n");
+    const before = inspect(src);
+    assert.deepEqual(before.manifest.detectorContext.map((x) => x.path), ["DESIGN.md"]);
+    assert.deepEqual(before.manifest.detectorBindings.find((x) =>
+      x.source === "src/right/right.css"), {
+      source: "src/right/right.css", designRoot: ".", designFile: "DESIGN.md",
+    });
+    const quickBefore = sourceScopeProof({
+      projectRoot: root, target: src, route: "/test", includeDetectorContext: false,
+    });
+    assert.equal(quickBefore.manifest.detectorBindings, undefined);
+
+    // package.json is not an eligible source extension. Other selected CSS
+    // files still use the unchanged outer DESIGN.md, so a union-only
+    // manifest sees no design-file change.
+    const boundary = join(rightDir, "package.json");
+    writeFileSync(boundary, "{}\n");
+    const after = inspect(src);
+    assert.deepEqual(after.manifest.files, before.manifest.files,
+      "a new project marker does not change any selected source bytes");
+    assert.deepEqual(after.manifest.detectorContext, before.manifest.detectorContext,
+      "the same outer DESIGN.md remains used by the sibling subtree");
+    assert.deepEqual(after.manifest.detectorBindings.find((x) =>
+      x.source === "src/right/right.css"), {
+      source: "src/right/right.css", designRoot: null, designFile: null,
+    });
+    assert.deepEqual(after.manifest.detectorBindings.find((x) =>
+      x.source === "src/left/left.css"), {
+      source: "src/left/left.css", designRoot: ".", designFile: "DESIGN.md",
+    });
+    assert.notEqual(after.summary.sourceSha256, before.summary.sourceSha256,
+      "a changed per-file policy boundary must invalidate the audit fingerprint");
+    const quickAfter = sourceScopeProof({
+      projectRoot: root, target: src, route: "/test", includeDetectorContext: false,
+    });
+    assert.equal(quickAfter.summary.sourceSha256, quickBefore.summary.sourceSha256,
+      "native-only profiles must not gain optional design-policy dependencies");
+    rmSync(boundary);
+    assert.equal(inspect(src).summary.sourceSha256, before.summary.sourceSha256,
+      "restoring the previous design policy mapping restores the original digest");
+  });
+});
+
 test("nested independent project boundary does not inherit outer DESIGN.md", () => {
   fixture(({ root, src, inspect }) => {
     writeFileSync(join(root, "DESIGN.md"), "---\ncolors:\n  ink: '#111111'\n---\n");
