@@ -47,12 +47,14 @@ function fakeBrowser({
   evaluateStallAt = 0,
   contextCloseStall = false,
   browserCloseStall = false,
+  hangAt = null,
 } = {}) {
   let closes = 0;
   let killed = 0;
   const opened = [];
   const launch = {
     newContext: async ({ viewport, serviceWorkers, storageState }) => {
+      if (hangAt === "new-context") return new Promise(() => {});
       opened.push({ viewport, serviceWorkers, storageState });
       const width = viewport.width;
       let captured = false;
@@ -60,6 +62,7 @@ function fakeBrowser({
       let emitCloseNavigation = () => {};
       return {
         newPage: async () => {
+          if (hangAt === "new-page") return new Promise(() => {});
           const frame = {};
           let onNavigation = () => {};
           let sampleCount = 0;
@@ -80,6 +83,7 @@ function fakeBrowser({
             }
           },
           goto: async () => {
+            if (hangAt === "navigate") return new Promise(() => {});
             if (navigationFailure) throw new Error("Navigation timeout");
             onNavigation(frame);
             return {
@@ -112,9 +116,11 @@ function fakeBrowser({
             };
           },
           waitForTimeout: async () => {
+            if (hangAt === "settle") return new Promise(() => {});
             if (clientRedirectBounce) { onNavigation(frame); onNavigation(frame); }
           },
           screenshot: async ({ path }) => {
+            if (hangAt === "screenshot") return new Promise(() => {});
             if (screenshotFailure) throw new Error(
               typeof screenshotFailure === "string" ? screenshotFailure : "Capture failed");
             writeFileSync(path, "screenshot-" + width);
@@ -138,10 +144,45 @@ function fakeBrowser({
     process: () => ({ kill: () => { killed++; } }),
   };
   return {
-    factory: async () => ({ launch: async () => launch }),
+    factory: async () => {
+      if (hangAt === "factory") return new Promise(() => {});
+      return { launch: async () => {
+        if (hangAt === "launch") return new Promise(() => {});
+        return launch;
+      } };
+    },
     opened, getCloses: () => closes, getKills: () => killed,
   };
 }
+
+test("never-settling browser setup, navigation and screenshots persist fail-closed state receipts", async () => {
+  await fixture(async ({ input }) => {
+    for (const hangAt of ["factory", "launch", "new-context", "new-page",
+      "navigate", "settle", "screenshot"]) {
+      const fake = fakeBrowser({ hangAt });
+      const report = await probeRenderedState(input, {
+        browserFactory: fake.factory, stageTimeoutMs: 20, cleanupTimeoutMs: 20,
+      });
+      assert.equal(report.status, "INCOMPLETE", hangAt);
+      assert.equal(report.declaredDomStateObserved, false, hangAt);
+      assert.equal(report.productCompletionEligible, false, hangAt);
+      const observation = report.observations[0];
+      if (hangAt === "factory" || hangAt === "launch") {
+        assert.equal(report.browserStageTimeout, hangAt);
+        assert.equal(report.observations.length, 0);
+      } else {
+        assert.equal(observation.browserStageTimeout, hangAt);
+        assert.equal(report.observations.length, 1);
+        assert.equal(observation.status, "INCOMPLETE");
+      }
+      const saved = JSON.parse(readFileSync(
+        join(report.artifactDirectory, "state-report.json"), "utf8"));
+      assert.equal(saved.status, "INCOMPLETE");
+      assert.equal(saved.productCompletionEligible, false);
+      assert.equal(saved.observations.length, report.observations.length);
+    }
+  });
+});
 
 test("stalled DOM evaluation and browser cleanup persist INCOMPLETE receipts", async () => {
   await fixture(async ({ input }) => {
