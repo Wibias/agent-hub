@@ -270,7 +270,7 @@ export function compareP29OfflineProfileParity({
     exact_order_cases: exactOrderCases,
     mismatch_cases: mismatchCases,
     mismatch_by_profile: mismatchByProfile,
-    legacy_record_selection_invoked: false,
+    candidate_selector_uses_legacy_selection: false,
     pattern_parity_verified: false,
     live_graph_parity_verified: false,
     repository_default_graph_enabled: false,
