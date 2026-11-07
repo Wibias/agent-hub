@@ -69,6 +69,7 @@ function healthySample(index, missingDiagnostics = false) {
 async function fixture({
   missingDiagnostics = false,
   staleEvaluation = false,
+  windowsTimestamp = false,
   repositorySha = P25_SHA,
   extraFileKey = false,
 } = {}) {
@@ -88,7 +89,7 @@ async function fixture({
   }
   const manifest = {
     schema_version: 'reference-graph.p26-evidence-freeze-manifest.v1',
-    frozen_at: '2026-11-07T05:22:58.000Z',
+    frozen_at: windowsTimestamp ? '2026-11-07T05:22:58.1234567Z' : '2026-11-07T05:22:58.000Z',
     repository_sha: repositorySha,
     production_target_ref: P19_PRODUCTION_PROJECT_REF,
     observed_samples: evaluation.observed_samples,
@@ -178,4 +179,10 @@ test('P26 CLI fails closed on unapproved hash without printing private archive p
   assert.equal(run.stdout, '');
   assert.match(run.stderr, /P26 verification failed/i);
   assert.doesNotMatch(run.stderr, /p26-frozen-|p25-samples\.jsonl/);
+});
+
+test('P26 accepts the seven-digit UTC frozen_at emitted by PowerShell Date.ToString(o)', async () => {
+  const result = await verifyP26FrozenEvidence(await fixture({ windowsTimestamp: true }));
+  assert.equal(result.verified, true);
+  assert.equal(result.observed_samples, 25);
 });
