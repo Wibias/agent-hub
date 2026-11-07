@@ -171,10 +171,10 @@ function validateGitHub(snapshot, asOf, expectedPins, expectedWorkflows) {
         || !HEX40.test(review.commit_sha)
         || !instant(review.submitted_at)
         || Date.parse(review.submitted_at) > observed
-        || reviewSeen.has(review.reviewer + ':' + review.submitted_at)) {
+        || reviewSeen.has(review.reviewer.toLowerCase() + ':' + review.submitted_at)) {
         fail('evidence-invalid');
       }
-      reviewSeen.add(review.reviewer + ':' + review.submitted_at);
+      reviewSeen.add(review.reviewer.toLowerCase() + ':' + review.submitted_at);
     }
     const workflowSeen = new Set();
     for (const flow of row.workflows) {
