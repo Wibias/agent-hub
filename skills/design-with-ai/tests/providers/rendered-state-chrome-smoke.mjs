@@ -106,6 +106,17 @@ async function connect(url) {
   return new Cdp(socket);
 }
 
+// A failed spawn does not have a PID and may never emit 'exit'. Close
+// cleanup on actual child processes also needs a finite deadline.
+async function stopChromeChild(child) {
+  if (!child?.pid || child.exitCode !== null || child.signalCode !== null) return;
+  try { child.kill('SIGKILL'); } catch { /* Process may already be gone. */ }
+  await Promise.race([
+    new Promise((resolve) => child.once('close', resolve)),
+    sleep(2_000),
+  ]);
+}
+
 async function startChrome(executable, root) {
   const profile = join(root, 'chrome-profile');
   mkdirSync(profile);
@@ -115,6 +126,12 @@ async function startChrome(executable, root) {
     '--disable-extensions', '--no-sandbox',
     '--remote-debugging-port=0', '--user-data-dir=' + profile, 'about:blank',
   ], { stdio: 'ignore' });
+  // Register immediately: ENOENT/permissions may emit 'error', not 'exit'.
+  // Consume rejection even if Chrome reaches its DevTools port first.
+  const spawnFailure = new Promise((_, reject) => {
+    child.once('error', () => reject(new Error('Chrome spawn failed')));
+  });
+  spawnFailure.catch(() => {});
   let cdp;
   try {
     const path = join(profile, 'DevToolsActivePort');
@@ -131,27 +148,19 @@ async function startChrome(executable, root) {
           break;
         }
       }
-      await sleep(100);
+      await Promise.race([sleep(100), spawnFailure]);
     }
     assert.ok(lines?.[0] && lines?.[1], 'Chrome debugging endpoint unavailable');
     cdp = await connect('ws://127.0.0.1:' + lines[0] + lines[1]);
   } catch (error) {
-    child.kill('SIGKILL');
-    await new Promise((resolve) => {
-      if (child.exitCode !== null || child.signalCode !== null) resolve();
-      else child.once('exit', resolve);
-    });
+    await stopChromeChild(child);
     throw error;
   }
   return {
     cdp,
     async close() {
       cdp.close();
-      child.kill('SIGKILL');
-      await new Promise((resolve) => {
-        if (child.exitCode !== null || child.signalCode !== null) resolve();
-        else child.once('exit', resolve);
-      });
+      await stopChromeChild(child);
     },
   };
 }
@@ -296,6 +305,13 @@ async function main() {
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   let chrome;
   try {
+    // ENOENT must reject promptly, without an unhandled child error or
+    // waiting forever for an exit event from a process that never started.
+    const missing = join(root, 'missing-chrome-test');
+    mkdirSync(missing);
+    await assert.rejects(
+      startChrome(join(missing, 'nonexistent-chrome'), missing),
+      /Chrome spawn failed/);
     chrome = await startChrome(process.env.CHROME_PATH ?? 'google-chrome', root);
     const baseUrl = 'http://127.0.0.1:' + server.address().port;
     const playwrightRoot = join(root, 'test-playwright-stub');
