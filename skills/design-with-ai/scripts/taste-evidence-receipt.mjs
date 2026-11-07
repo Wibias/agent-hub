@@ -5,6 +5,7 @@ import { dirname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
+import { isDeepStrictEqual } from "node:util";
 
 const USAGE_MESSAGE = "Usage: taste-evidence-receipt.mjs --path <file-or-directory> [--snapshot <render-snapshot.json> --route </route>] [--intent <intent.json>] [--extensions .tsx,.css] [--json] OR --manifest <receipt-manifest.json> [--cross-surface-report <compare-render-snapshots.json>] [--json]";
 
@@ -355,6 +356,29 @@ function verifyCrossSurfaceBinding(cross, candidates) {
         throw new Error("Cross-surface report has inconsistent evidence");
       }
     }
+  }
+
+  // This is externally supplied evidence. Re-run the trusted local comparator
+  // on the exact candidate-bound snapshot files; structurally complete rows
+  // alone cannot prove similarity, eligibility, thresholds or hit provenance.
+  // Never echo child stdout, stderr, argv or filesystem errors.
+  const comparator = resolve(dirname(fileURLToPath(import.meta.url)), "compare-render-snapshots.mjs");
+  const comparatorArgs = snapshots.flatMap((snapshot) => ["--snapshot", resolve(snapshot.path)]);
+  const computed = spawnSync(process.execPath, [comparator, ...comparatorArgs, "--json"], {
+    encoding: "utf8", timeout: 60_000, maxBuffer: 8 * 1024 * 1024,
+  });
+  if (computed.error || computed.status !== 0) {
+    throw new Error("Cross-surface report has inconsistent evidence");
+  }
+  let trusted;
+  try {
+    trusted = JSON.parse(computed.stdout);
+  } catch {
+    throw new Error("Cross-surface report has inconsistent evidence");
+  }
+  if (["verdict", "snapshots", "comparisons", "hits"].some((field) =>
+    !isDeepStrictEqual(cross.value[field], trusted?.[field]))) {
+    throw new Error("Cross-surface report has inconsistent evidence");
   }
 
   return {

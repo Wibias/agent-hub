@@ -8,6 +8,18 @@ import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const receipt = resolve(here, "../scripts/taste-evidence-receipt.mjs");
+const comparator = resolve(here, "../scripts/compare-render-snapshots.mjs");
+
+// Generate genuine comparator output, then mutate one invariant per negative
+// control. A hand-written partial "valid" report would hide missing checks.
+function comparatorReport(snapshots) {
+  const args = snapshots.flatMap((snapshot) => ["--snapshot", snapshot.path]);
+  const result = spawnSync(process.execPath, [comparator, ...args, "--json"], {
+    encoding: "utf8", timeout: 60_000,
+  });
+  assert.equal(result.status, 0, result.stderr);
+  return JSON.parse(result.stdout);
+}
 
 function cleanSnapshot({ url = "http://localhost/example", ...overrides } = {}) {
   return {
@@ -247,19 +259,7 @@ test("manifest receipt binds two routes and attaches exact cross-surface snapsho
         snapshot: cleanSnapshot({ url: "http://localhost/pricing" }),
       },
     ],
-    cross: (snapshots) => ({
-      verdict: "REVIEW_CROSS_SURFACE",
-      snapshots: snapshots.map((item) => ({
-        path: item.path,
-        route: item.route,
-        viewportBand: "desktop",
-        macroFingerprint: item.snapshot.macroFingerprint,
-        zoneCount: item.snapshot.macroZones.length,
-      })),
-      hits: [{ id: "G02", family: "macro-reuse" }],
-      comparisons: [{ left: "/home", right: "/pricing", eligible: true, triggered: true, similarity: 0.93 }],
-      note: "contextual",
-    }),
+    cross: (snapshots) => comparatorReport(snapshots),
   });
 
   assert.equal(result.status, 0);
@@ -343,7 +343,10 @@ test("cross-surface verdict must agree with hits and triggered comparisons", () 
       id: "pricing",
       source: "export default function Pricing(){ return <main>Pricing</main>; }",
       route: "/pricing",
-      snapshot: cleanSnapshot({ url: "http://localhost/pricing" }),
+      snapshot: cleanSnapshot({
+        url: "http://localhost/pricing",
+        viewport: { width: 390, height: 900, devicePixelRatio: 1 },
+      }),
     },
   ];
   const report = (snapshots, verdict, hits, comparisons) => ({
@@ -378,7 +381,7 @@ test("cross-surface verdict must agree with hits and triggered comparisons", () 
   // A real no-hit PASS remains a valid, fully route-bound report.
   const clean = runManifest({
     candidates,
-    cross: (snapshots) => report(snapshots, "PASS_CROSS_SURFACE_EVIDENCE", [], [{ triggered: false }]),
+    cross: (snapshots) => comparatorReport(snapshots),
   });
   assert.equal(clean.status, 0, clean.stdout + clean.stderr);
   assert.equal(clean.parsed.state, "MECHANICAL_EVIDENCE_CLEAR");
@@ -386,47 +389,86 @@ test("cross-surface verdict must agree with hits and triggered comparisons", () 
 });
 
 test("cross-surface receipt requires every actual snapshot pair exactly once", () => {
+  const widths = [1440, 768, 390]; // Different comparator bands: genuine no-hit PASS.
   const candidates = ["/home", "/pricing", "/settings"].map((route, i) => ({
+    id: `surface-${i}`,
+    route,
+    source: "export default function Page(){ return <main>Clean content</main>; }",
+    snapshot: cleanSnapshot({
+      url: `http://localhost${route}`,
+      viewport: { width: widths[i], height: 900, devicePixelRatio: 1 },
+    }),
+  }));
+  const invalidPairs = [
+    (report) => [],
+    (report) => report.comparisons.slice(0, 2),
+    (report) => [report.comparisons[0], report.comparisons[0], report.comparisons[2]],
+    (report) => [...report.comparisons].reverse(),
+  ];
+  for (const alter of invalidPairs) {
+    const result = runManifest({
+      candidates,
+      cross: (snapshots) => {
+        const report = comparatorReport(snapshots);
+        return { ...report, comparisons: alter(report) };
+      },
+    });
+    assert.equal(result.status, 2, result.stdout + result.stderr);
+    assert.equal(result.parsed.error, "Cross-surface report has inconsistent evidence");
+  }
+  const accepted = runManifest({ candidates, cross: comparatorReport });
+  assert.equal(accepted.status, 0, accepted.stdout + accepted.stderr);
+  assert.equal(accepted.parsed.state, "MECHANICAL_EVIDENCE_CLEAR");
+  assert.equal(accepted.parsed.crossSurfaceBinding.snapshotCount, 3);
+});
+
+test("cross-surface receipt rechecks comparator metrics and hit attribution", () => {
+  const candidates = ["/home", "/pricing"].map((route, i) => ({
     id: `surface-${i}`,
     route,
     source: "export default function Page(){ return <main>Clean content</main>; }",
     snapshot: cleanSnapshot({ url: `http://localhost${route}` }),
   }));
-  const cross = (snapshots, comparisons) => ({
-    verdict: "PASS_CROSS_SURFACE_EVIDENCE",
-    snapshots: snapshots.map(({ path, route, snapshot }) => ({
-      path, route, viewportBand: "desktop",
-      macroFingerprint: snapshot.macroFingerprint,
-      zoneCount: snapshot.macroZones.length,
-    })),
-    comparisons,
-    hits: [],
-  });
-  const pairs = [
-    { left: "/home", right: "/pricing", triggered: false },
-    { left: "/home", right: "/settings", triggered: false },
-    { left: "/pricing", right: "/settings", triggered: false },
+  const invalid = [
+    // Internally self-consistent false PASS, previously accepted as clearance.
+    (report) => ({
+      ...report, verdict: "PASS_CROSS_SURFACE_EVIDENCE", hits: [],
+      comparisons: report.comparisons.map((p) => ({ ...p, triggered: false })),
+    }),
+    // Lower the reported metric to conceal the actual triggered G02.
+    (report) => ({
+      ...report, verdict: "PASS_CROSS_SURFACE_EVIDENCE", hits: [],
+      comparisons: report.comparisons.map((p) => ({
+        ...p, similarity: 0.01, triggered: false,
+      })),
+    }),
+    // Mismatch hit route attribution without changing the hit count.
+    (report) => ({ ...report, hits: report.hits.map((h) => ({ ...h, left: "/forged" })) }),
+    // The snapshot summary must be derived from the bound snapshot bytes.
+    (report) => ({
+      ...report, snapshots: report.snapshots.map((s, i) =>
+        i === 1 ? { ...s, macroFingerprint: "forged" } : s),
+    }),
+    // Threshold changes cannot suppress a real contextual comparison.
+    (report) => ({
+      ...report, verdict: "PASS_CROSS_SURFACE_EVIDENCE", hits: [],
+      comparisons: report.comparisons.map((p) => ({
+        ...p, minimumSimilarity: 10, triggered: false,
+      })),
+    }),
   ];
-  for (const altered of [
-    [], // Two+ snapshots with no comparisons cannot be certified.
-    pairs.slice(0, 2), // Missing a pair even with all snapshots listed.
-    [pairs[0], pairs[0], pairs[2]], // Duplicate pair conceals missing pair.
-    [pairs[2], pairs[1], pairs[0]], // Incorrect comparison order.
-  ]) {
+  for (const alter of invalid) {
     const result = runManifest({
       candidates,
-      cross: (snapshots) => cross(snapshots, altered),
+      cross: (snapshots) => alter(comparatorReport(snapshots)),
     });
     assert.equal(result.status, 2, result.stdout + result.stderr);
     assert.equal(result.parsed.error, "Cross-surface report has inconsistent evidence");
   }
-  const accepted = runManifest({
-    candidates,
-    cross: (snapshots) => cross(snapshots, pairs),
-  });
+  const accepted = runManifest({ candidates, cross: comparatorReport });
   assert.equal(accepted.status, 0, accepted.stdout + accepted.stderr);
-  assert.equal(accepted.parsed.state, "MECHANICAL_EVIDENCE_CLEAR");
-  assert.equal(accepted.parsed.crossSurfaceBinding.snapshotCount, 3);
+  assert.equal(accepted.parsed.state, "REVIEW_CONTEXTUAL_EVIDENCE");
+  assert.equal(accepted.parsed.crossSurfaceBinding.verified, true);
 });
 
 test("cross-surface receipt rejects duplicate snapshot rows even with matching fake pairs", () => {
