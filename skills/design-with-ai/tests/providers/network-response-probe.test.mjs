@@ -59,9 +59,11 @@ function mockChrome({ input, htmlBytes, cssBytes }, {
   laterResponseWaves = 0,
   onContextClose = null,
   popupTraffic = null,
+  hangBrowserClose = false,
 } = {}) {
   const contexts = [];
   let closed = 0;
+  let killed = 0;
   let bodyReads = 0;
   const factory = async () => ({
     launch: async () => ({
@@ -209,6 +211,7 @@ function mockChrome({ input, htmlBytes, cssBytes }, {
             return page;
           },
           close: async () => {
+            if (onContextClose === "hang") return new Promise(() => {});
             if (onContextClose === "requestfailed") {
               const request = {};
               contextEvents.get("request")?.(request);
@@ -233,12 +236,51 @@ function mockChrome({ input, htmlBytes, cssBytes }, {
           },
         };
       },
-      close: async () => { closed++; },
+      close: async () => {
+        if (hangBrowserClose) return new Promise(() => {});
+        closed++;
+      },
+      process: () => ({ kill: () => { killed++; } }),
     }),
   });
-  return { factory, contexts, getClosed: () => closed, getBodyReads: () => bodyReads };
+  return {
+    factory, contexts, getClosed: () => closed, getKilled: () => killed,
+    getBodyReads: () => bodyReads,
+  };
 }
 
+
+test("hung browser shutdown is bounded and persists an INCOMPLETE receipt", async () => {
+  await fixture(async (f) => {
+    const contextHang = mockChrome(f, { onContextClose: "hang" });
+    const first = await probeNetworkResponses(f.input, {
+      browserFactory: contextHang.factory, shutdownTimeoutMs: 20,
+    });
+    assert.equal(first.status, "INCOMPLETE");
+    assert.equal(first.observations.length, 1,
+      "a failed context close must stop later viewport captures");
+    assert.ok(first.observations[0].issues.includes("BROWSER_CONTEXT_CLOSE_TIMEOUT"));
+    assert.equal(first.observations[0].status, "INCOMPLETE");
+    assert.equal(contextHang.getKilled(), 1, "kill the hung browser transport");
+    assert.equal(JSON.parse(readFileSync(
+      join(first.artifactDirectory, "network-report.json"), "utf8")).status, "INCOMPLETE");
+
+    const browserHang = mockChrome(f, { hangBrowserClose: true });
+    const second = await probeNetworkResponses(f.input, {
+      browserFactory: browserHang.factory, shutdownTimeoutMs: 20,
+    });
+    assert.equal(second.observations.length, 3);
+    assert.ok(second.observations.every((o) => o.status === "LOCAL_BODY_BYTES_MATCHED"));
+    assert.equal(second.browserShutdownIssue, "BROWSER_CLOSE_TIMEOUT");
+    assert.equal(second.status, "INCOMPLETE",
+      "all matched responses cannot override a failed browser shutdown");
+    assert.equal(browserHang.getKilled(), 1);
+    const persisted = JSON.parse(readFileSync(
+      join(second.artifactDirectory, "network-report.json"), "utf8"));
+    assert.equal(persisted.browserShutdownIssue, "BROWSER_CLOSE_TIMEOUT");
+    assert.equal(persisted.status, "INCOMPLETE");
+  });
+});
 
 test("popup traffic is context-scoped and never certifies main-page screenshot", async () => {
   await fixture(async (f) => {

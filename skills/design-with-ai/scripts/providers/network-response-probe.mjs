@@ -21,6 +21,27 @@ const MAX_CAPTURE_BYTES = 128 * 1024 * 1024;
 const MAX_IN_FLIGHT_BODY_READS = 4;
 const MAX_QUEUED_BODY_READS = 64;
 const MAX_BODY_WAIT_MS = 15_000;
+const MAX_SHUTDOWN_WAIT_MS = 15_000;
+// Never await Playwright transport shutdown indefinitely. Its connection may
+// stall after a timed-out body read, and the INCOMPLETE report must be written.
+async function boundedShutdown(close, timeoutMs) {
+  let timer;
+  try {
+    return await Promise.race([
+      Promise.resolve().then(close).then(
+        () => ({ ok: true }), () => ({ ok: false, timedOut: false })),
+      new Promise((resolve) => {
+        timer = setTimeout(() => resolve({ ok: false, timedOut: true }), timeoutMs);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+function terminateBrowser(browser) {
+  try { browser?.process?.()?.kill?.("SIGKILL"); }
+  catch { /* Transport may already have exited; never leak process errors. */ }
+}
 const sha = (value) => createHash("sha256").update(value).digest("hex");
 const inside = (root, value) => {
   const rel = relative(root, value);
@@ -141,11 +162,15 @@ async function loadBrowser(packageRoot) {
  */
 export async function probeNetworkResponses(options, {
   browserFactory = loadBrowser, bodyReadTimeoutMs = MAX_BODY_WAIT_MS,
+  shutdownTimeoutMs = MAX_SHUTDOWN_WAIT_MS,
 } = {}) {
   const context = strictInputs(options);
   const bodyDeadline = Number.isSafeInteger(bodyReadTimeoutMs) &&
     bodyReadTimeoutMs > 0 && bodyReadTimeoutMs <= MAX_BODY_WAIT_MS
     ? bodyReadTimeoutMs : MAX_BODY_WAIT_MS;
+  const shutdownDeadline = Number.isSafeInteger(shutdownTimeoutMs) &&
+    shutdownTimeoutMs > 0 && shutdownTimeoutMs <= MAX_SHUTDOWN_WAIT_MS
+    ? shutdownTimeoutMs : MAX_SHUTDOWN_WAIT_MS;
   const before = renderedAssetProof({
     projectRoot: context.project, renderedRoot: context.rendered, html: context.html,
   });
@@ -192,6 +217,7 @@ export async function probeNetworkResponses(options, {
       let pageErrorCount = 0;
       let finalized = false;
       let drainComplete = false;
+      let shutdownFailed = false;
       const recordIssue = (issue) => {
         if (finalized) return;
         if (!issueSet.has(issue)) {
@@ -401,10 +427,17 @@ export async function probeNetworkResponses(options, {
       } catch (error) {
         recordIssue("BROWSER_PROBE_FAILURE: " + shortError(error));
       } finally {
-        // Closing the context may dispatch late request/response/pageerror
-        // events. Finalize only AFTER those callbacks and body reads finish.
-        try { await ctx?.close(); }
-        catch { recordIssue("BROWSER_CONTEXT_CLOSE_FAILURE"); }
+        // Close before finalization to capture late events, but bound transport
+        // shutdown independently: a hung close cannot prevent INCOMPLETE output.
+        if (ctx) {
+          const closed = await boundedShutdown(() => ctx.close(), shutdownDeadline);
+          if (!closed.ok) {
+            recordIssue(closed.timedOut
+              ? "BROWSER_CONTEXT_CLOSE_TIMEOUT" : "BROWSER_CONTEXT_CLOSE_FAILURE");
+            shutdownFailed = true;
+            if (closed.timedOut) terminateBrowser(browser);
+          }
+        }
       }
       await Promise.allSettled([...pending]);
       // Closing the browser context can still emit requests. Inspect their
@@ -420,11 +453,21 @@ export async function probeNetworkResponses(options, {
         obs.local.every((entry) => entry.bodyVerified === true) &&
         obs.issues.length === 0 ? "LOCAL_BODY_BYTES_MATCHED" : "INCOMPLETE";
       finalized = true;
+      // Once a context fails to close, no later viewport on that transport
+      // can be trusted. A three-width success must not be fabricated.
+      if (shutdownFailed) break;
     }
   } catch (error) {
     report.error = shortError(error);
   } finally {
-    await browser?.close().catch(() => {});
+    if (browser) {
+      const closed = await boundedShutdown(() => browser.close(), shutdownDeadline);
+      if (!closed.ok) {
+        report.browserShutdownIssue = closed.timedOut
+          ? "BROWSER_CLOSE_TIMEOUT" : "BROWSER_CLOSE_FAILURE";
+        if (closed.timedOut) terminateBrowser(browser);
+      }
+    }
   }
   try {
     const after = renderedAssetProof({
@@ -435,7 +478,8 @@ export async function probeNetworkResponses(options, {
     report.localAssetTreeUnchanged = false;
     report.assetRescanError = shortError(error);
   }
-  if (report.localAssetTreeUnchanged && report.observations.length === 3 &&
+  if (!report.browserShutdownIssue &&
+      report.localAssetTreeUnchanged && report.observations.length === 3 &&
       report.observations.every((o) => o.status === "LOCAL_BODY_BYTES_MATCHED")) {
     report.status = report.observations.some((o) => o.external.length > 0)
       ? "LOCAL_MATCHED_EXTERNAL_UNVERIFIED"
