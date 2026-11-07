@@ -89,7 +89,8 @@ function fakeBrowser({
             if (clientRedirectBounce) { onNavigation(frame); onNavigation(frame); }
           },
           screenshot: async ({ path }) => {
-            if (screenshotFailure) throw new Error("Capture failed");
+            if (screenshotFailure) throw new Error(
+              typeof screenshotFailure === "string" ? screenshotFailure : "Capture failed");
             writeFileSync(path, "screenshot-" + width);
             captured = true;
           },
@@ -207,6 +208,48 @@ test("URL-bearing browser errors never persist WebSocket tokens or split query f
       for (const token of tokens) assert.ok(!report.includes(token));
       assert.ok(!report.includes("wss://api.test"));
     }
+  });
+});
+
+
+test("relative URLs and bare credentials never persist in state browser evidence", async () => {
+  await fixture(async ({ input }) => {
+    const messages = [
+      "Fetch failed: /api/auth?access_token=CANARY_RELATIVE_906",
+      "Blocked //internal.example/api?token=CANARY_PROTOCOL_906",
+      "Request token=CANARY_BARE_906",
+    ];
+    for (const message of messages) {
+      const report = await probeRenderedState(input, {
+        browserFactory: fakeBrowser({ pageErrors: true, pageErrorMessage: message }).factory,
+      });
+      assert.equal(report.status, "INCOMPLETE");
+      assert.equal(report.productCompletionEligible, false);
+      assert.ok(report.observations.every((o) =>
+        o.pageErrorCount === 1 &&
+        o.pageErrorSamples.length === 1 &&
+        o.pageErrorSamples[0] === "Browser error: <details-redacted>"));
+      const persisted = readFileSync(join(report.artifactDirectory, "state-report.json"), "utf8");
+      assert.ok(!persisted.includes("CANARY_"), "Untrusted error text must not persist");
+      assert.ok(!persisted.includes(message));
+    }
+    const capture = await probeRenderedState(input, {
+      browserFactory: fakeBrowser({
+        screenshotFailure: "Screenshot failed token=CANARY_CAPTURE_906",
+      }).factory,
+    });
+    assert.equal(capture.status, "INCOMPLETE");
+    assert.ok(capture.observations.every((o) =>
+      o.error === "Browser error: <details-redacted>"));
+    const captureFile = readFileSync(join(capture.artifactDirectory, "state-report.json"), "utf8");
+    assert.ok(!captureFile.includes("CANARY_CAPTURE_906"));
+    const launch = await probeRenderedState(input, {
+      browserFactory: async () => { throw new Error("Launch token=CANARY_LAUNCH_906"); },
+    });
+    assert.equal(launch.status, "INCOMPLETE");
+    assert.equal(launch.error, "Browser error: <details-redacted>");
+    const launchFile = readFileSync(join(launch.artifactDirectory, "state-report.json"), "utf8");
+    assert.ok(!launchFile.includes("CANARY_LAUNCH_906"));
   });
 });
 
@@ -377,7 +420,7 @@ test("an unavailable browser records INCOMPLETE evidence instead of a false succ
       browserFactory: async () => { throw new Error("Chrome absent"); },
     });
     assert.equal(out.status, "INCOMPLETE");
-    assert.match(out.error, /Chrome absent/);
+    assert.equal(out.error, "Browser error: <details-redacted>");
     assert.equal(out.declaredDomStateObserved, false);
     assert.equal(out.observations.length, 0);
   });
