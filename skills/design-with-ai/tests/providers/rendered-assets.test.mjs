@@ -131,13 +131,13 @@ test("Vite-style build with 1024 hashed lazy chunks has stable cross-platform pa
     const count = 1024;
     for (let i = 0; i < count; i++) {
       const file = join(folder, "chunk-" + String(i).padStart(4, "0") + "-a1b2c3d4.js");
-      writeFileSync(file, "export const n = " + i + ";\\n");
+      writeFileSync(file, "export const n = " + i + ";\n");
     }
     const one = f.sample();
     assert.equal(one.manifest.renderedAssets.fileCount, count + 5);
     assert.equal(one.manifest.renderedAssets.files.length, count + 5);
     assert.ok(one.manifest.renderedAssets.files.every((entry) =>
-      !entry.path.includes("\\\\") && entry.path.startsWith("dist/") &&
+      !entry.path.includes("\\") && entry.path.startsWith("dist/") &&
       /^[a-f0-9]{64}$/.test(entry.sha256)));
     assert.equal(one.summary.rendered.assetCoverage, "COMPLETE_LOCAL_TREE_BOUNDED");
     const two = f.sample();
@@ -145,7 +145,7 @@ test("Vite-style build with 1024 hashed lazy chunks has stable cross-platform pa
       "Repeat manifest must be deterministic regardless of directory enumeration order");
     assert.equal(one.summary.sourceSha256, two.summary.sourceSha256);
     const target = join(folder, "chunk-0512-a1b2c3d4.js");
-    writeFileSync(target, "export const n = 512; // changed\\n");
+    writeFileSync(target, "export const n = 512; // changed\n");
     const changed = f.sample();
     assert.notEqual(changed.summary.sourceSha256, one.summary.sourceSha256);
     assert.notEqual(changed.summary.rendered.assetTreeSha256,
