@@ -68,6 +68,25 @@ $$;
 select 1 / case when count(*) = 0 then 1 else 0 end as p31_failed_refresh_no_publish
 from public.reference_graph_profile_runtime_projection_p30_v1;
 
+-- P32 disposable fixture taxonomy alignment (NOT a production rewrite).
+-- Legacy P4/P7 CI examples use 'auth', outside the stricter P28 vocabulary.
+-- Repair these synthetic examples only, preserving P7 candidate membership.
+update reference_graph.assets a
+set metadata = jsonb_set(
+  jsonb_set(
+    jsonb_set(a.metadata, '{surface_family}', '"public-home"'::jsonb, true),
+    '{platform}', '"web-responsive"'::jsonb, true
+  ),
+  '{evidence_class}', '"TESTED"'::jsonb, true
+)
+where a.id in (
+  select p.asset_id
+  from public.reference_graph_quick_candidate_pool_p7(
+    jsonb_build_object('reference_date',
+      (statement_timestamp() at time zone 'UTC')::date::text)
+  ) p
+);
+
 -- CI-only fixture repair: source metadata is not modified in production.
 -- Use exact P7 IDs; P31 must not manufacture stratum values from text.
 update reference_graph.assets a
