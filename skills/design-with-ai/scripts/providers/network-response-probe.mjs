@@ -292,13 +292,17 @@ export async function probeNetworkResponses(options, {
             });
             return;
           }
+          // An unknown same-origin URL may embed secrets in its path.
+          // Persist only a hash unless it matches a trusted build asset.
+          const asset = expected.get(path);
           const row = {
-            path, status: response.status(),
-            expectedSha256: expected.get(path)?.sha256 ?? null,
+            ...(asset ? { path } : { pathSha256: sha(path) }),
+            status: response.status(),
+            expectedSha256: asset?.sha256 ?? null,
             receivedSha256: null, bodyVerified: false,
           };
           obs.local.push(row);
-          if (!expected.has(path)) {
+          if (!asset) {
             recordIssue("UNMAPPED_LOCAL_RESPONSE");
             return;
           }
@@ -313,7 +317,7 @@ export async function probeNetworkResponses(options, {
           }
           // Pre-reserve known body bytes and cap the number of reads BEFORE
           // asking Playwright for any response body.
-          const reservation = Math.max(expected.get(path).bytes,
+          const reservation = Math.max(asset.bytes,
             Number.isFinite(indicatedLength) && indicatedLength > 0 ? indicatedLength : 0);
           if (reservation > MAX_BODY_BYTES ||
               reservedBodyBytes + reservation > MAX_CAPTURE_BYTES) {

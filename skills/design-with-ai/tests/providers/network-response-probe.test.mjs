@@ -37,6 +37,7 @@ function mockChrome({ input, htmlBytes, cssBytes }, {
   omitCss = false,
   wrongCss = false,
   missing = false,
+  unmappedSecretPath = null,
   failRequest = false,
   redirected = false,
   noResponses = false,
@@ -100,6 +101,8 @@ function mockChrome({ input, htmlBytes, cssBytes }, {
               }
               if (remote) deliver(
                 "https://cdn.example.test/file.js?secret-do-not-log", Buffer.from("external"));
+              if (unmappedSecretPath) deliver(
+                "http://127.0.0.1:5191/" + unmappedSecretPath, Buffer.from("unknown"));
               for (let i = 0; i < parallelResponses; i++) {
                 deliver("http://127.0.0.1:5191/settings/site.css", cssBytes);
               }
@@ -197,6 +200,31 @@ test("actual response body hashes match a local two-file manifest across three w
     assert.equal(JSON.parse(readFileSync(
       join(report.artifactDirectory, "network-report.json"), "utf8")).status,
       "LOCAL_RESPONSES_MATCHED");
+  });
+});
+
+
+test("unmapped same-origin URL paths are hashed without leaking path credentials", async () => {
+  await fixture(async (f) => {
+    const canary = "CANARY_PATH_SECRET_20261107";
+    const report = await probeNetworkResponses(f.input, {
+      browserFactory: mockChrome(f, {
+        unmappedSecretPath: "sessions/" + canary + "/callback",
+      }).factory,
+    });
+    assert.equal(report.status, "INCOMPLETE");
+    assert.equal(report.productCompletionEligible, false);
+    for (const observation of report.observations) {
+      assert.ok(observation.issues.includes("UNMAPPED_LOCAL_RESPONSE"));
+      const unknown = observation.local.filter((r) => r.expectedSha256 === null);
+      assert.equal(unknown.length, 1);
+      assert.equal(unknown[0].path, undefined);
+      assert.match(unknown[0].pathSha256, /^[a-f0-9]{64}$/);
+      assert.equal(unknown[0].bodyVerified, false);
+    }
+    const evidence = readFileSync(join(report.artifactDirectory, "network-report.json"), "utf8");
+    assert.ok(!evidence.includes(canary), "Unmapped URL path credential must never be saved");
+    assert.ok(!evidence.includes("/sessions/"));
   });
 });
 
