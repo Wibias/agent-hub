@@ -60,6 +60,11 @@ jobs:
       - name: Impeccable scanner failure redaction regression
         run: node --test skills/design-with-ai/tests/providers/impeccable.test.mjs
 
+      # Verify untrusted provider exceptions and native subprocess payloads on
+      # the exact combined PR merge, not only on the base PR in isolation.
+      - name: Provider dispatch and native failure redaction regressions
+        run: node --test skills/design-with-ai/tests/providers/workflow.test.mjs
+
       # Test-only dependency. The real production probe dynamically loads
       # Playwright from the explicit path, never from a global package.
       # No browser download, postinstall scripts, package.json or product changes.
