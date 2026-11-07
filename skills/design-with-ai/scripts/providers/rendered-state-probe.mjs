@@ -185,7 +185,9 @@ export const snapshotDeclaredDomState = ({
     let node, nodes = 0, words = 0, charsChecked = 0;
     while ((node = walker.nextNode()) !== null) {
       if (++nodes > 6000) { textTruncated = true; break; }
-      if (node.nodeType === Node.ELEMENT_NODE) {
+      // nodeType=1 is the standard ELEMENT_NODE value. Do not require a
+      // Node global: the same pure sampler runs in Node fixture DOM shims.
+      if (node.nodeType === 1) {
         // A visible <br> separates words even without a literal text node.
         // Adjacent inline spans without a break still form one word.
         if (node.tagName === "BR" && visibleStyle(node) &&
