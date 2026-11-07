@@ -46,6 +46,22 @@ function validTimestamp(value) {
   return Number.isFinite(parsed.valueOf()) && parsed.toISOString() === value;
 }
 
+// PostgREST serializes timestamptz in UTC with +00:00 and may emit
+// microseconds; P30's pinned asOf remains strict millisecond-UTC ISO.
+const POSTGREST_UTC = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|\+00:00)$/;
+
+function normalizeProjectionTimestamp(value) {
+  if (typeof value !== 'string' || !POSTGREST_UTC.test(value)) {
+    reject('snapshot-invalid');
+  }
+  const parsed = new Date(value);
+  if (!Number.isFinite(parsed.valueOf())
+    || parsed.toISOString().slice(0, 19) !== value.slice(0, 19)) {
+    reject('snapshot-invalid');
+  }
+  return parsed.toISOString();
+}
+
 function isPublishableKey(key) {
   if (typeof key !== 'string' || !key.trim()) return false;
   if (/^sb_publishable_[a-zA-Z0-9_-]+$/.test(key)) return true;
@@ -97,6 +113,7 @@ function normalizeRows(payload, { expectedDate, asOf, expectedCandidateCount, ex
   const candidates = [];
   let previousAsset = null;
   let firstRefreshedAt = null;
+  let firstRawRefreshedAt = null;
   for (const raw of payload) {
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)
       || JSON.stringify(Object.keys(raw).sort()) !== JSON.stringify(expectedKeys)) {
@@ -104,11 +121,12 @@ function normalizeRows(payload, { expectedDate, asOf, expectedCandidateCount, ex
     }
     if (raw.projection_version !== VERSION) reject('projection-version-mismatch');
     if (raw.snapshot_date !== expectedDate) reject('snapshot-invalid');
-    if (!validTimestamp(raw.refreshed_at)) reject('snapshot-invalid');
-    if (firstRefreshedAt !== null && raw.refreshed_at !== firstRefreshedAt) {
+    const normalizedRefreshedAt = normalizeProjectionTimestamp(raw.refreshed_at);
+    if (firstRawRefreshedAt !== null && raw.refreshed_at !== firstRawRefreshedAt) {
       reject('snapshot-invalid');
     }
-    firstRefreshedAt = raw.refreshed_at;
+    firstRawRefreshedAt = raw.refreshed_at;
+    firstRefreshedAt = normalizedRefreshedAt;
 
     const { projection_version, snapshot_date, refreshed_at, ...candidate } = raw;
     if (typeof candidate.asset_id !== 'string'
