@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -448,8 +448,8 @@ test("receipt binds child proof to exact source, snapshot and fusion channels", 
     path, filesScanned, p0: 0, p1: 0, p2: 0,
     verdict: "PASS_MECHANICAL", hits: [], cluster: { families: [] },
   });
-  const renderReport = (path, url) => ({
-    snapshot: path, url, viewport: { width: 1440, height: 900 },
+  const renderReport = (path, url, viewport = { width: 1440, height: 900 }) => ({
+    snapshot: path, url, viewport,
     verdict: "PASS_RENDER_EVIDENCE", hits: [], cluster: { families: [] },
   });
   const writeGate = (file, report, code = 0) => {
@@ -484,6 +484,14 @@ test("receipt binds child proof to exact source, snapshot and fusion channels", 
     writeGate(renderGate, renderReport(snapshot, "http://localhost/" + canary));
     execute(true);
 
+    // A correct snapshot path and URL cannot conceal a different viewport.
+    writeGate(renderGate, renderReport(snapshot, "http://localhost/example", { width: 390, height: 844 }));
+    execute(true);
+    writeGate(renderGate, renderReport(snapshot, "http://localhost/example", { width: 1440, height: 768 }));
+    execute(true);
+    writeGate(renderGate, renderReport(snapshot, "http://localhost/example", { width: 1440 }));
+    execute(true);
+
     writeGate(renderGate, renderReport(snapshot, "http://localhost/example"));
     // Fusion HOLD after source PASS cannot be a clear mechanical receipt.
     writeGate(fusionGate, {
@@ -499,7 +507,59 @@ test("receipt binds child proof to exact source, snapshot and fusion channels", 
       cluster: { families: [] },
     });
     execute(true);
+    const correctChannels = { sourceVerdict: "PASS_MECHANICAL", renderVerdict: "PASS_RENDER_EVIDENCE" };
+    writeGate(fusionGate, {
+      verdict: "PASS_FUSED_EVIDENCE", channels: correctChannels, cluster: { families: [] },
+    });
+    execute(true);
+    writeGate(fusionGate, {
+      verdict: "PASS_FUSED_EVIDENCE", channels: correctChannels, cluster: { families: [] },
+      reports: { source: join(dir, canary + ".json"), render: join(dir, "other.json") },
+    });
+    execute(true);
+
+    // Compatible positive example, with actual input paths from the fusion CLI.
+    writeFileSync(fusionGate, [
+      "const args=process.argv.slice(2); const arg=(key)=>args[args.indexOf(key)+1];",
+      "process.stdout.write(JSON.stringify({verdict:'PASS_FUSED_EVIDENCE',channels:{sourceVerdict:'PASS_MECHANICAL',renderVerdict:'PASS_RENDER_EVIDENCE'},reports:{source:arg('--source-report'),render:arg('--render-report')},cluster:{families:[]}}));",
+    ].join("\n"));
+    const ok = spawnSync(process.execPath, [
+      localReceipt, "--path", source, "--snapshot", snapshot, "--route", "/example", "--json",
+    ], { encoding: "utf8" });
+    assert.equal(ok.status, 0, ok.stdout + ok.stderr);
+    assert.equal(JSON.parse(ok.stdout).state, "MECHANICAL_EVIDENCE_CLEAR");
   } finally {
     rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("manifest dot IDs cannot leave intermediate fusion reports outside cleanup root", () => {
+  const dir = mkdtempSync(join(tmpdir(), "dwa-221-dot-id-"));
+  const childTmp = join(dir, "child-tmp");
+  mkdirSync(childTmp);
+  try {
+    writeFileSync(join(dir, "source.tsx"), "export default function View(){return <main>Plain content</main>;}");
+    writeFileSync(join(dir, "snapshot.json"), JSON.stringify(cleanSnapshot()));
+    writeFileSync(join(dir, "manifest.json"), JSON.stringify({
+      schemaVersion: 1,
+      candidates: [".", ".."].map((id) => ({
+        id, path: "source.tsx", snapshot: "snapshot.json", route: "/example",
+      })),
+    }));
+    const result = spawnSync(process.execPath, [
+      receipt, "--manifest", join(dir, "manifest.json"), "--json",
+    ], {
+      encoding: "utf8",
+      env: { ...process.env, TMPDIR: childTmp, TMP: childTmp, TEMP: childTmp },
+    });
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.equal(JSON.parse(result.stdout).state, "MECHANICAL_EVIDENCE_CLEAR");
+    assert.deepEqual(readdirSync(childTmp), [], "receipt temp root must be fully cleaned");
+    assert.equal(existsSync(childTmp + "-source.json"), false);
+    assert.equal(existsSync(childTmp + "-render.json"), false);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(childTmp + "-source.json", { force: true });
+    rmSync(childTmp + "-render.json", { force: true });
   }
 });

@@ -3,6 +3,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "no
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 
 // This CLI joins output from independently executed audit tools. Inputs,
@@ -111,13 +112,23 @@ function assertGateOutput(parsed, kind, exitStatus, expected = {}) {
     (kind !== "render" || (
       parsed.snapshot === resolve(expected.snapshotPath) &&
       parsed.url === expected.snapshotUrl &&
-      parsed.viewport && Number.isFinite(parsed.viewport.width) &&
-      parsed.viewport.width > 0
+      parsed.viewport && typeof parsed.viewport === "object" &&
+      !Array.isArray(parsed.viewport) &&
+      Number.isFinite(parsed.viewport.width) &&
+      Number.isFinite(parsed.viewport.height) &&
+      parsed.viewport.width === expected.viewport.width &&
+      parsed.viewport.height === expected.viewport.height &&
+      (expected.viewport.devicePixelRatio === undefined ||
+        parsed.viewport.devicePixelRatio === expected.viewport.devicePixelRatio)
     )) &&
     (kind !== "fusion" || (
       (exitStatus === 1) === (parsed.verdict === "HOLD") &&
       parsed.channels.sourceVerdict === expected.sourceVerdict &&
       parsed.channels.renderVerdict === expected.renderVerdict &&
+      parsed.reports && typeof parsed.reports === "object" &&
+      !Array.isArray(parsed.reports) &&
+      parsed.reports.source === resolve(expected.sourceReportPath) &&
+      parsed.reports.render === resolve(expected.renderReportPath) &&
       (parsed.verdict === "HOLD") === (expected.sourceVerdict === "HOLD")
     ));
   if (!valid) throw new Error("Receipt child audit emitted invalid report");
@@ -168,17 +179,31 @@ function readSnapshotBinding(path, declaredRoute) {
   if (typeof snapshot.value?.url !== "string" || !snapshot.value.url.trim()) {
     throw new Error(`Render snapshot is missing url for route binding: ${snapshot.path}`);
   }
+  const viewport = snapshot.value.viewport;
+  if (!Number.isFinite(viewport?.width) || viewport.width <= 0 ||
+      !Number.isFinite(viewport?.height) || viewport.height <= 0) {
+    throw new Error("Render snapshot viewport is invalid");
+  }
+  const expectedViewport = {
+    width: viewport.width,
+    height: viewport.height,
+    ...(viewport.devicePixelRatio === undefined
+      ? {} : { devicePixelRatio: viewport.devicePixelRatio }),
+  };
   const expectedRoute = normalizeRoute(declaredRoute);
   const snapshotRoute = normalizeRoute(snapshot.value.url);
   if (snapshotRoute !== expectedRoute) {
     throw new Error(`Render snapshot route mismatch: declared ${expectedRoute}, snapshot ${snapshotRoute} (${snapshot.path})`);
   }
   return {
-    snapshotPath: snapshot.path,
-    snapshotUrl: snapshot.value.url,
-    declaredRoute: expectedRoute,
-    snapshotRoute,
-    verified: true,
+    binding: {
+      snapshotPath: snapshot.path,
+      snapshotUrl: snapshot.value.url,
+      declaredRoute: expectedRoute,
+      snapshotRoute,
+      verified: true,
+    },
+    expectedViewport,
   };
 }
 
@@ -285,17 +310,21 @@ function runCandidate(candidate, tools, tempRoot) {
   let fused = null;
   let binding = null;
   if (candidate.snapshot) {
-    binding = readSnapshotBinding(candidate.snapshot, candidate.route);
+    const snapshotInfo = readSnapshotBinding(candidate.snapshot, candidate.route);
+    binding = snapshotInfo.binding;
     render = runNode(
       tools.renderGate,
       ["--snapshot", candidate.snapshot, "--json"],
       `Rendered taste gate [${candidate.id}]`,
       new Set([0]), "render", {
         snapshotPath: candidate.snapshot, snapshotUrl: binding.snapshotUrl,
+        viewport: snapshotInfo.expectedViewport,
       },
     );
 
-    const candidateTemp = join(tempRoot, candidate.id.replace(/[^a-zA-Z0-9._-]+/g, "_"));
+    // Manifest ids "." and ".." must not escape the temporary directory.
+    const safeId = createHash("sha256").update(candidate.id).digest("hex");
+    const candidateTemp = join(tempRoot, `candidate-${safeId}`);
     const sourcePath = `${candidateTemp}-source.json`;
     const renderPath = `${candidateTemp}-render.json`;
     writeFileSync(sourcePath, JSON.stringify(source.parsed, null, 2), "utf8");
@@ -308,6 +337,8 @@ function runCandidate(candidate, tools, tempRoot) {
       new Set([0, 1]), "fusion", {
         sourceVerdict: source.parsed.verdict,
         renderVerdict: render.parsed.verdict,
+        sourceReportPath: sourcePath,
+        renderReportPath: renderPath,
       },
     );
   }
