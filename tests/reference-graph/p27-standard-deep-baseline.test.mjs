@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
+import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 
 import {
   loadPatterns, loadRecords, TAXONOMY,
@@ -95,4 +97,30 @@ test('P27 rejects duplicate template ids, invalid profiles, unexpected fields an
   assert.throws(() => evaluateP27StandardDeepBaseline({
     templates: fixtureCases, records, patterns, now: new Date('bad'),
   }), /date|now/i);
+});
+
+const cli = fileURLToPath(new URL('../../reference-graph/cli/p27-standard-deep-baseline.mjs', import.meta.url));
+
+test('P27 CLI produces a read-only 24-template 48-profile baseline at a pinned UTC date', () => {
+  const run = spawnSync(process.execPath, [cli, '--date', '2026-11-07'], { encoding: 'utf8', timeout: 30_000 });
+  assert.equal(run.status, 0, run.stderr);
+  const report = JSON.parse(run.stdout);
+  assert.equal(report.source_case_count, allQuickCases.length);
+  assert.equal(report.total_profile_cases, allQuickCases.length * 2);
+  assert.equal(report.reference_date, '2026-11-07');
+  assert.equal(report.repository_default_graph_enabled, false);
+  assert.equal(report.activation_performed, false);
+  assert.equal(Object.hasOwn(report, 'eligible'), false);
+  assert.equal(Object.hasOwn(report, 'activation_authorized'), false);
+  assert.equal(report.cases.length, allQuickCases.length * 2);
+});
+
+test('P27 CLI rejects unpinned date or unknown arguments without exposing raw records', () => {
+  for (const argv of [[], ['--date', '2026-02-30'], ['--date', '2026-11-07', '--activate']]) {
+    const run = spawnSync(process.execPath, [cli, ...argv], { encoding: 'utf8', timeout: 30_000 });
+    assert.equal(run.status, 1);
+    assert.equal(run.stdout, '');
+    assert.match(run.stderr, /P27 baseline failed/i);
+    assert.doesNotMatch(run.stderr, /canonicalUrl|records.*selected|service_role|\\.agents/i);
+  }
 });
