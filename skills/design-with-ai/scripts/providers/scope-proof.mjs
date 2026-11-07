@@ -94,21 +94,28 @@ function designContextFor(directory, cache) {
   }
 }
 
-function detectorContextFiles(root, sourceFiles) {
+function detectorContextEvidence(root, sourceFiles) {
   const contextPaths = new Set();
   const cache = new Map();
+  const bindings = [];
   for (const name of DETECTOR_CONFIG_NAMES) {
     const file = join(root, name);
     if (existsSync(file)) contextPaths.add(file);
   }
   for (const file of sourceFiles) {
     const design = designContextFor(dirname(file), cache);
-    if (!design) continue;
-    // A design policy outside the declared project boundary can influence
-    // this scan but cannot honestly be claimed as in-scope provenance.
-    if (!isInside(root, design.root)) {
+    // The union of policy bytes is insufficient. A newly created package
+    // marker can change ONE source file's inherited design policy while
+    // another file still retains the same outer DESIGN.md in the union.
+    if (design && !isInside(root, design.root)) {
       throw new TypeError("Detector DESIGN.md resolves outside projectRoot");
     }
+    bindings.push({
+      source: normalize(relative(root, file)),
+      designRoot: design ? normalize(relative(root, design.root)) || "." : null,
+      designFile: design ? normalize(relative(root, design.file)) : null,
+    });
+    if (!design) continue;
     contextPaths.add(design.file);
     const sidecar = [
       join(design.root, ".impeccable/design.json"),
@@ -119,7 +126,7 @@ function detectorContextFiles(root, sourceFiles) {
   }
 
   const actual = new Set(sourceFiles);
-  return [...contextPaths].sort().filter((path) => !actual.has(path)).map((file) => {
+  const files = [...contextPaths].sort().filter((path) => !actual.has(path)).map((file) => {
     const st = lstatSync(file);
     const canonical = realpathSync(file);
     if (!st.isFile() || st.isSymbolicLink() ||
@@ -128,6 +135,7 @@ function detectorContextFiles(root, sourceFiles) {
     }
     return file;
   });
+  return { files, bindings };
 }
 
 // Impeccable's static-HTML engine reads local <link rel="stylesheet">
@@ -318,7 +326,9 @@ export function sourceScopeProof({
   const sourceFiles = collectedFiles(source);
   // Quick/native-only audits must not fail on unrelated Impeccable policy
   // files. Caller opts into these dependencies only when selecting Impeccable.
-  const contextFiles = includeDetectorContext ? detectorContextFiles(root, sourceFiles) : [];
+  const contextEvidence = includeDetectorContext
+    ? detectorContextEvidence(root, sourceFiles) : { files: [], bindings: null };
+  const contextFiles = contextEvidence.files;
   const linkedStylesheets = includeDetectorContext ? linkedStylesheetFiles(root, sourceFiles) : [];
   const inputStat = (file) => {
     const st = statSync(file, { bigint: true });
@@ -374,6 +384,7 @@ export function sourceScopeProof({
     route,
     gitHead: gitHead(root),
     files,
+    ...(includeDetectorContext ? { detectorBindings: contextEvidence.bindings } : {}),
     ...(detectorContext.length ? { detectorContext } : {}),
     ...(linkedStylesheetProof.length ? { linkedStylesheets: linkedStylesheetProof } : {}),
     ...(renderedAssets ? { renderedAssets } : {}),
