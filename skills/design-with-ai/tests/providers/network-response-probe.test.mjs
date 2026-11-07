@@ -505,7 +505,7 @@ test("nested index trailing-slash route matches only when explicitly declared", 
 
 test("percent-encoded static HTML routes bind the same decoded document bytes", async () => {
   await fixture(async (f) => {
-    const html = join(f.renderedRoot, "settings", "my page.html");
+    const html = join(f.input.renderedRoot, "settings", "my page.html");
     writeFileSync(html, f.htmlBytes);
     const route = "/settings/my%20page";
     const input = { ...f.input, html, route };
