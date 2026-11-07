@@ -75,7 +75,7 @@ function resolvePage(target, projectRoot) {
 // The untrusted upstream process can replace its output directory with a
 // symlink/junction before returning. Verify physical containment in addition
 // to lexical paths; never follow a linked report parent into external storage.
-function safeTasteReportDirectory(runDir, reportPath) {
+function safeTasteReportDirectory(runDir, reportPath, trustedRun) {
   const reportDir = dirname(reportPath);
   if (!existsSync(runDir) || !existsSync(reportDir) ||
       lstatSync(runDir).isSymbolicLink() || !lstatSync(runDir).isDirectory() ||
@@ -84,13 +84,16 @@ function safeTasteReportDirectory(runDir, reportPath) {
   }
   const canonicalRun = realpathSync(runDir);
   const canonicalReport = realpathSync(reportDir);
-  if (!inside(canonicalRun, canonicalReport) || canonicalRun === canonicalReport) {
+  // Ensure the untrusted child did not redirect an ancestor of the allocated
+  // run to another physical location before output validation.
+  if (canonicalRun !== trustedRun ||
+      !inside(canonicalRun, canonicalReport) || canonicalRun === canonicalReport) {
     throw new Error("Taste Skill report directory escapes isolated run");
   }
   return canonicalReport;
 }
 
-function validatedFinding(raw, { width, route, file, reportPath, pointer, runDir, occurrences }) {
+function validatedFinding(raw, { width, route, file, reportPath, pointer, runDir, trustedRun, occurrences }) {
   if (!isObject(raw) || !filled(raw.check) ||
       !["FAIL", "WARN"].includes(raw.sev) || !filled(raw.msg) ||
       !filled(raw.sel)) {
@@ -107,7 +110,7 @@ function validatedFinding(raw, { width, route, file, reportPath, pointer, runDir
       throw new Error("Unsafe Taste Skill screenshot reference");
     }
     const screenshot = join(dirname(reportPath), raw.crop);
-    const canonicalReportDir = safeTasteReportDirectory(runDir, reportPath);
+    const canonicalReportDir = safeTasteReportDirectory(runDir, reportPath, trustedRun);
     if (!inside(runDir, screenshot) || !existsSync(screenshot) ||
         lstatSync(screenshot).isSymbolicLink() || !lstatSync(screenshot).isFile() ||
         !inside(canonicalReportDir, realpathSync(screenshot))) {
@@ -129,7 +132,7 @@ function validatedFinding(raw, { width, route, file, reportPath, pointer, runDir
   };
 }
 
-function parseReport(report, { exitCode, route, page, project, runDir }) {
+function parseReport(report, { exitCode, route, page, project, runDir, trustedRun }) {
   const reportPath = join(runDir, "report", "report.json");
   if (!isObject(report) || resolve(String(report.page ?? "")) !== page ||
       resolve(String(report.out ?? "")) !== dirname(reportPath)) {
@@ -170,7 +173,7 @@ function parseReport(report, { exitCode, route, page, project, runDir }) {
       if (finding?.sev === "FAIL" || finding?.sev === "WARN") counters[finding.sev]++;
       normalized.push(validatedFinding(finding, {
         width: w.width, route, file, reportPath,
-        pointer: "/widths/" + windex + "/findings/" + index, runDir, occurrences,
+        pointer: "/widths/" + windex + "/findings/" + index, runDir, trustedRun, occurrences,
       }));
     }
   }
@@ -178,7 +181,7 @@ function parseReport(report, { exitCode, route, page, project, runDir }) {
     if (finding?.sev === "FAIL" || finding?.sev === "WARN") counters[finding.sev]++;
     normalized.push(validatedFinding(finding, {
       width: finding.width || 0, route, file, reportPath,
-      pointer: "/sweep/findings/" + index, runDir, occurrences,
+      pointer: "/sweep/findings/" + index, runDir, trustedRun, occurrences,
     }));
   }
   if (!isObject(report.counts) || report.counts.FAIL !== counters.FAIL ||
@@ -278,11 +281,13 @@ export function createTasteSkillProvider({ skillRoot, runner = runProcess, nodeM
         return fail(ProviderStatus.BLOCKED, "Taste Skill input scope validation failed");
       }
       // Each check gets a separate directory, so upstream cleanup cannot erase an earlier run.
-      let runDir;
+      let runDir, trustedRun;
       try {
         runDir = mkdtempSync(join(output, "dwa-taste-"));
         mkdirSync(join(runDir, "report"));
         mkdirSync(join(runDir, "chrome"));
+        // Capture the physical run location before invoking untrusted code.
+        trustedRun = realpathSync(runDir);
       } catch (error) {
         return fail(ProviderStatus.ERROR, "Could not allocate isolated Taste Skill artifacts");
       }
@@ -306,7 +311,7 @@ export function createTasteSkillProvider({ skillRoot, runner = runProcess, nodeM
           "Taste Skill browser check failed or could not finish; evidence directory: " + runDir);
       }
       try {
-        const canonicalReportDir = safeTasteReportDirectory(runDir, reportPath);
+        const canonicalReportDir = safeTasteReportDirectory(runDir, reportPath, trustedRun);
         if (!existsSync(reportPath) || !lstatSync(reportPath).isFile() ||
             lstatSync(reportPath).isSymbolicLink() ||
             !inside(canonicalReportDir, realpathSync(reportPath))) {
@@ -318,7 +323,7 @@ export function createTasteSkillProvider({ skillRoot, runner = runProcess, nodeM
           throw new Error("Browser stdout and on-disk report disagree");
         }
         return parseReport(report, {
-          exitCode: processResult.exitCode, route, page, project, runDir,
+          exitCode: processResult.exitCode, route, page, project, runDir, trustedRun,
         });
       } catch (error) {
         return fail(ProviderStatus.ERROR,
