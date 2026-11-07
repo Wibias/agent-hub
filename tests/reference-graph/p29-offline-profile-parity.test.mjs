@@ -29,7 +29,7 @@ function requestFor(template, profile) {
 }
 
 test('P29 independent candidate selector matches P27 Standard and Deep output on canonical scenarios', () => {
-  const report = compareP29OfflineProfileParity({ templates, candidates, baseline });
+  const report = compareP29OfflineProfileParity({ templates, candidates, baseline, expectedReferenceDate: '2026-11-07' });
   assert.equal(report.schema_version, 'reference-graph.p29-offline-profile-parity.v1');
   assert.equal(report.reference_date, '2026-11-07');
   assert.equal(report.evaluated_cases, 48);
@@ -68,7 +68,7 @@ test('P29 independent selector preserves request sizes and quotas, and is order 
 
 test('P29 records mismatches when a valid but wrong primary stratum is supplied', () => {
   const changed = candidates.map(row => ({ ...row, primary_stratum: 'direct-domain' }));
-  const report = compareP29OfflineProfileParity({ templates, candidates: changed, baseline });
+  const report = compareP29OfflineProfileParity({ templates, candidates: changed, baseline, expectedReferenceDate: '2026-11-07' });
   assert.ok(report.mismatch_cases > 0);
   assert.ok(report.exact_order_cases < report.evaluated_cases);
   assert.equal(report.live_graph_parity_verified, false);
@@ -97,15 +97,21 @@ test('P29 rejects Quick, malformed requests, duplicated candidate ids and inject
 test('P29 fails closed on inconsistent or untrusted baseline cases', () => {
   const invalid = structuredClone(baseline);
   invalid.cases.pop();
-  assert.throws(() => compareP29OfflineProfileParity({ templates, candidates, baseline: invalid }),
+  assert.throws(() => compareP29OfflineProfileParity({ templates, candidates, baseline: invalid, expectedReferenceDate: '2026-11-07' }),
     /baseline|cases|missing/i);
   assert.throws(() => compareP29OfflineProfileParity({
-    templates, candidates, baseline: { ...baseline, reference_date: '2026-11-06' },
+    templates, candidates, expectedReferenceDate: '2026-11-07', baseline: { ...baseline, reference_date: '2026-11-06' },
   }), /date|baseline/i);
   assert.throws(() => compareP29OfflineProfileParity({
-    templates, candidates, baseline: {
+    templates, candidates, expectedReferenceDate: '2026-11-07', baseline: {
       ...baseline,
       cases: [{ ...baseline.cases[0], profile: 'quick' }, ...baseline.cases.slice(1)],
     },
   }), /baseline|profile|case/i);
+});
+
+test('P29 rejects a comparison without an independently pinned reference date', () => {
+  assert.throws(() => compareP29OfflineProfileParity({
+    templates, candidates, baseline,
+  }), /expected.*date|reference.*date|pinned/i);
 });
