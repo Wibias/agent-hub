@@ -10,6 +10,29 @@ import { runProcess } from "./process-runner.mjs";
 
 const WIDTHS = [1440, 768, 390];
 const PAGE_KINDS = new Set(["software", "gaming", "tech", "product", "service", "place"]);
+// Conservative *review* hints for the pinned Taste Skill 2.5.0 check IDs.
+// Never suppress, downgrade, approve or turn an upstream FAIL into DWA P0.
+const CONTEXTUAL_TASTE_RULES = new Set([
+  "visual-caption", "section-height", "one-section", "hero-screen", "hero-fill",
+  "photo-set", "photo-upscale", "nav-family", "cta", "hover",
+  "one-heading", "heading-scale", "copy-headline", "copy-headings",
+  "copy-buttons", "copy-length", "section-air", "section-tile",
+]);
+const GEOMETRY_REVIEW_RULES = new Set([
+  "spill", "container-edges", "section-gaps", "row-lines",
+  "off-grid", "centre-axis", "tilt", "stagger",
+]);
+const POTENTIAL_USABILITY_RULES = new Set([
+  "contrast", "cut-text", "off-viewport", "overlap-text", "fold-cut", "forms",
+  "links", "assets", "empty-visual", "visual-empty", "no-visual",
+  "busy-ground", "nav-covers", "fake-button", "broken-image",
+]);
+function tasteReviewClass(check) {
+  if (POTENTIAL_USABILITY_RULES.has(check)) return "POTENTIAL_USABILITY";
+  if (GEOMETRY_REVIEW_RULES.has(check)) return "GEOMETRY_NEEDS_VISUAL_REVIEW";
+  if (CONTEXTUAL_TASTE_RULES.has(check)) return "CONTEXTUAL_HOUSE_RULE";
+  return "UNCLASSIFIED_HEURISTIC";
+}
 const ENV_KEYS = [
   "PATH", "Path", "SystemRoot", "WINDIR", "HOME", "USERPROFILE", "TMP", "TEMP", "TMPDIR",
   "CHROME_PATH", "LOCALAPPDATA", "PROGRAMFILES",
@@ -49,6 +72,24 @@ function resolvePage(target, projectRoot) {
   return { project, page };
 }
 
+// The untrusted upstream process can replace its output directory with a
+// symlink/junction before returning. Verify physical containment in addition
+// to lexical paths; never follow a linked report parent into external storage.
+function safeTasteReportDirectory(runDir, reportPath) {
+  const reportDir = dirname(reportPath);
+  if (!existsSync(runDir) || !existsSync(reportDir) ||
+      lstatSync(runDir).isSymbolicLink() || !lstatSync(runDir).isDirectory() ||
+      lstatSync(reportDir).isSymbolicLink() || !lstatSync(reportDir).isDirectory()) {
+    throw new Error("Taste Skill output directories are unsafe");
+  }
+  const canonicalRun = realpathSync(runDir);
+  const canonicalReport = realpathSync(reportDir);
+  if (!inside(canonicalRun, canonicalReport) || canonicalRun === canonicalReport) {
+    throw new Error("Taste Skill report directory escapes isolated run");
+  }
+  return canonicalReport;
+}
+
 function validatedFinding(raw, { width, route, file, reportPath, pointer, runDir, occurrences }) {
   if (!isObject(raw) || !filled(raw.check) ||
       !["FAIL", "WARN"].includes(raw.sev) || !filled(raw.msg) ||
@@ -66,8 +107,10 @@ function validatedFinding(raw, { width, route, file, reportPath, pointer, runDir
       throw new Error("Unsafe Taste Skill screenshot reference");
     }
     const screenshot = join(dirname(reportPath), raw.crop);
+    const canonicalReportDir = safeTasteReportDirectory(runDir, reportPath);
     if (!inside(runDir, screenshot) || !existsSync(screenshot) ||
-        lstatSync(screenshot).isSymbolicLink() || !lstatSync(screenshot).isFile()) {
+        lstatSync(screenshot).isSymbolicLink() || !lstatSync(screenshot).isFile() ||
+        !inside(canonicalReportDir, realpathSync(screenshot))) {
       throw new Error("Taste Skill referenced screenshot is missing or unsafe");
     }
     evidence.push({ kind: "rendered-crop", ref: screenshot });
@@ -78,6 +121,8 @@ function validatedFinding(raw, { width, route, file, reportPath, pointer, runDir
     category: "rendered",
     priority: raw.sev === "FAIL" ? "P1" : "P2",
     confidence: "heuristic",
+    upstreamSeverity: raw.sev,
+    reviewClass: tasteReviewClass(raw.check),
     message: raw.msg,
     location: { route, file, width, selector: raw.sel },
     evidence,
@@ -142,6 +187,12 @@ function parseReport(report, { exitCode, route, page, project, runDir }) {
       (exitCode === 1 && counters.FAIL === 0)) {
     throw new Error("Taste Skill exit status and reported finding counts disagree");
   }
+  const reviewClassCounts = {
+    POTENTIAL_USABILITY: 0, GEOMETRY_NEEDS_VISUAL_REVIEW: 0,
+    CONTEXTUAL_HOUSE_RULE: 0, UNCLASSIFIED_HEURISTIC: 0,
+  };
+  for (const finding of normalized) reviewClassCounts[finding.reviewClass]++;
+
   return assertProviderReport({
     provider: "taste-skill",
     capability: Capability.RENDERED_AUDIT,
@@ -158,11 +209,16 @@ function parseReport(report, { exitCode, route, page, project, runDir }) {
     },
     summary: {
       counts: counters,
+      reviewClassCounts,
       widths: [...WIDTHS],
       sweepWidths: report.sweep.widths,
       requiresAdjudication: true,
       productCompletionEligible: false,
-      note: "Taste Skill house rules are contextual evidence, not DWA blockers.",
+      renderedStateVerified: false,
+      // The upstream checker waits for its own kit's data-ready convention,
+      // not arbitrary React/game session state or backend hydration.
+      renderedStateProof: "NOT_PROVIDED_BY_UPSTREAM",
+      note: "Raw FAIL/WARN are retained as contextual evidence. A completed Taste scan is not proof the intended runtime state loaded.",
     },
     findings: normalized,
   }, { providerId: "taste-skill", capability: Capability.RENDERED_AUDIT });
@@ -219,7 +275,7 @@ export function createTasteSkillProvider({ skillRoot, runner = runProcess, nodeM
         ({ page, project } = resolvePage(target, projectRoot));
         output = outputRoot ? checkedDirectory(outputRoot, "outputRoot") : tmpdir();
       } catch (error) {
-        return fail(ProviderStatus.BLOCKED, String(error.message ?? error));
+        return fail(ProviderStatus.BLOCKED, "Taste Skill input scope validation failed");
       }
       // Each check gets a separate directory, so upstream cleanup cannot erase an earlier run.
       let runDir;
@@ -228,8 +284,7 @@ export function createTasteSkillProvider({ skillRoot, runner = runProcess, nodeM
         mkdirSync(join(runDir, "report"));
         mkdirSync(join(runDir, "chrome"));
       } catch (error) {
-        return fail(ProviderStatus.ERROR, "Could not allocate isolated Taste Skill artifacts: " +
-          String(error.message ?? error));
+        return fail(ProviderStatus.ERROR, "Could not allocate isolated Taste Skill artifacts");
       }
       const reportPath = join(runDir, "report", "report.json");
       const args = [
@@ -251,8 +306,10 @@ export function createTasteSkillProvider({ skillRoot, runner = runProcess, nodeM
           "Taste Skill browser check failed or could not finish; evidence directory: " + runDir);
       }
       try {
+        const canonicalReportDir = safeTasteReportDirectory(runDir, reportPath);
         if (!existsSync(reportPath) || !lstatSync(reportPath).isFile() ||
-            lstatSync(reportPath).isSymbolicLink()) {
+            lstatSync(reportPath).isSymbolicLink() ||
+            !inside(canonicalReportDir, realpathSync(reportPath))) {
           throw new Error("Browser report.json is missing or unsafe");
         }
         const disk = readFileSync(reportPath, "utf8");
@@ -265,8 +322,7 @@ export function createTasteSkillProvider({ skillRoot, runner = runProcess, nodeM
         });
       } catch (error) {
         return fail(ProviderStatus.ERROR,
-          "Taste Skill report is incomplete or invalid: " + String(error.message ?? error) +
-          "; evidence directory: " + runDir);
+          "Taste Skill report is incomplete or invalid; evidence directory: " + runDir);
       }
     },
   };

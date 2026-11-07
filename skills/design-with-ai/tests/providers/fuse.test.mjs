@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { test } from "node:test";
 import { assertFusion, fuseProviderEvidence } from "../../scripts/providers/fuse.mjs";
 import { Capability, ProviderStatus } from "../../scripts/providers/contract.mjs";
@@ -127,6 +128,98 @@ test("repeated rendered rule at same DOM selector groups widths, keeping each vi
   assert.equal(fusion.groups[0].priority, "P1");
 });
 
+test("Taste FAIL/P2 and WARN/P1 contradictions are rejected before evidence grouping", () => {
+  for (const [severity, priority] of [
+    ["FAIL", "P2"], ["WARN", "P1"], ["FAIL", "P0"],
+  ]) {
+    const raw = {
+      ...finding({
+        id: "taste-" + severity + "-" + priority,
+        provider: "taste-skill", rule: "spill", file: "dist/index.html",
+        line: null, width: 390, selector: ".stage", priority,
+      }),
+      upstreamSeverity: severity,
+      reviewClass: "GEOMETRY_NEEDS_VISUAL_REVIEW",
+    };
+    assert.throws(() => fuseProviderEvidence([
+      report("taste-skill", [raw]),
+    ], { required: ["taste-skill"] }), /severity contradicts normalized priority/);
+  }
+  const valid = {
+    ...finding({
+      id: "taste-valid", provider: "taste-skill",
+      file: "dist/index.html", line: null, width: 390,
+      selector: ".stage", priority: "P1",
+    }),
+    upstreamSeverity: "FAIL",
+  };
+  const fused = fuseProviderEvidence([
+    report("taste-skill", [valid]),
+  ], { required: ["taste-skill"] });
+  assert.equal(fused.groups[0].priority, "P1");
+  assert.equal(fused.groups[0].members[0].upstreamSeverity, "FAIL");
+});
+
+test("Taste triage and unverified game state survive fusion without severity downgrades", () => {
+  const a = {
+    ...finding({
+      id: "taste-spill", provider: "taste-skill", rule: "spill",
+      file: "dist/index.html", line: null, selector: ".scene", width: 390,
+      priority: "P1",
+    }),
+    reviewClass: "GEOMETRY_NEEDS_VISUAL_REVIEW",
+    upstreamSeverity: "FAIL",
+  };
+  const b = {
+    ...finding({
+      id: "taste-caption", provider: "taste-skill", rule: "visual-caption",
+      file: "dist/index.html", line: null, selector: "figure", width: 768,
+      priority: "P2",
+    }),
+    reviewClass: "CONTEXTUAL_HOUSE_RULE",
+    upstreamSeverity: "WARN",
+  };
+  const taste = {
+    ...report("taste-skill", [a, b]),
+    summary: {
+      renderedStateVerified: false,
+      reviewClassCounts: {
+        POTENTIAL_USABILITY: 0,
+        GEOMETRY_NEEDS_VISUAL_REVIEW: 1,
+        CONTEXTUAL_HOUSE_RULE: 1,
+        UNCLASSIFIED_HEURISTIC: 0,
+      },
+    },
+  };
+  const fusion = fuseProviderEvidence([taste], { required: ["taste-skill"] });
+  assert.equal(fusion.status, "REVIEW");
+  assert.equal(fusion.completionEligible, false);
+  const merged = fusion.groups.flatMap((g) => g.members);
+  assert.equal(merged.length, 2);
+  assert.equal(merged.find((x) => x.id === "taste-spill").reviewClass,
+    "GEOMETRY_NEEDS_VISUAL_REVIEW");
+  assert.equal(merged.find((x) => x.id === "taste-spill").upstreamSeverity, "FAIL");
+  assert.equal(merged.find((x) => x.id === "taste-spill").priority, "P1");
+  assert.equal(merged.find((x) => x.id === "taste-caption").priority, "P2");
+  assert.equal(fusion.reports[0].renderedStateVerified, false);
+  assert.equal(fusion.reports[0].renderedStateProof, "NOT_PROVIDED_BY_UPSTREAM");
+  assert.deepEqual(fusion.reports[0].reviewClassCounts,
+    taste.summary.reviewClassCounts);
+  assertFusion(JSON.parse(JSON.stringify(fusion)));
+
+  const corruptCounts = structuredClone(taste);
+  corruptCounts.summary.reviewClassCounts.CONTEXTUAL_HOUSE_RULE = 0;
+  assert.throws(() => fuseProviderEvidence([corruptCounts], {
+    required: ["taste-skill"],
+  }), /Taste class summary/);
+
+  const unknownTag = structuredClone(taste);
+  unknownTag.findings[0].reviewClass = "ACCEPTED_PRODUCT_DEFECT";
+  assert.throws(() => fuseProviderEvidence([unknownTag], {
+    required: ["taste-skill"],
+  }), /Taste class summary|Invalid Taste review class/);
+});
+
 test("same rule and selector on different routes or pages is not merged", () => {
   const fusion = fuseProviderEvidence([
     report("taste-skill", [
@@ -169,6 +262,43 @@ test("unselected, duplicate, malformed and overly many reports fail closed", () 
   assert.throws(() => fuseProviderEvidence([], {
     optional: [], required: [],
   }), /nonempty/);
+});
+
+test("signed fusion snapshots still reject forged Taste member metadata", () => {
+  const valid = {
+    ...finding({
+      id: "taste-integrity", provider: "taste-skill",
+      file: "dist/index.html", line: null, width: 390,
+      selector: ".stage", priority: "P1",
+    }),
+    upstreamSeverity: "FAIL",
+    reviewClass: "GEOMETRY_NEEDS_VISUAL_REVIEW",
+  };
+  const fusion = fuseProviderEvidence([
+    report("taste-skill", [valid]),
+  ], { required: ["taste-skill"] });
+  assertFusion(structuredClone(fusion));
+
+  const signed = (change) => {
+    const mutated = structuredClone(fusion);
+    change(mutated.groups[0].members[0]);
+    const { contentSha256, ...payload } = mutated;
+    mutated.contentSha256 = createHash("sha256")
+      .update(JSON.stringify(payload)).digest("hex");
+    return mutated;
+  };
+  const cases = [
+    [(m) => { m.priority = "P2"; }, /severity contradicts normalized priority/],
+    [(m) => { m.upstreamSeverity = "WARN"; }, /severity contradicts normalized priority/],
+    [(m) => { m.upstreamSeverity = "ACCEPT"; }, /Invalid Taste upstream severity/],
+    [(m) => { m.reviewClass = "APPROVED"; }, /Invalid Taste review class/],
+  ];
+  for (const [change, error] of cases) {
+    assert.throws(() => assertFusion(signed(change)), error);
+  }
+  assert.throws(() => assertFusion(signed((m) => {
+    m.reviewClass = null;
+  })), /Invalid Taste review class/);
 });
 
 test("tampered fusion data fails the content digest check", () => {

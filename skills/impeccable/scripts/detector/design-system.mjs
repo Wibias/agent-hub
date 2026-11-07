@@ -588,17 +588,69 @@ function designSystemStartDir(targetPath, cwd = process.cwd()) {
 //
 // Returns { dir, hasDesign } for the stopping directory, or null when the walk
 // runs out. This is the fix for cross-project contamination.
-export function findDesignRoot(startDir) {
+export function findDesignRoot(startDir, { cache } = {}) {
   let dir = path.resolve(startDir);
   const homeDir = path.resolve(os.homedir());
-  while (true) {
-    if (resolveDesignMdPath(dir)) return { dir, hasDesign: true };
-    if (PROJECT_ROOT_MARKERS.some((marker) => fs.existsSync(path.join(dir, marker)))) {
-      return { dir, hasDesign: false };
+  // Existing root:<path> entries memoize parsed design tokens only. Separate
+  // resolve:<path> entries prevent repeating DESIGN.md / boundary filesystem
+  // probes for every source file in the same nested directory tree.
+  // The caller owns this cache for ONE source scan; never reuse across runs.
+  const visited = [];
+  // Directory metadata changes when markers like package.json or DESIGN.md
+  // are created, removed or renamed. Cache the exact directory signature,
+  // not just an ancestor lookup that can become stale midway through a scan.
+  const directorySignature = (entry) => {
+    try {
+      const stat = fs.statSync(entry, { bigint: true });
+      if (!stat.isDirectory()) return null;
+      return `${stat.dev}:${stat.ino}:${stat.mtimeNs}:${stat.ctimeNs}`;
+    } catch {
+      // Missing or inaccessible directories invalidate a memo, not the scan.
+      return null;
     }
-    if (dir === homeDir) return null;
+  };
+  const cachedRootIsCurrent = (start, resolved) => {
+    let entry = start;
+    while (true) {
+      const signature = directorySignature(entry);
+      if (signature === null || cache.get(`dirsig:${entry}`) !== signature) {
+        cache.delete(`resolve:${entry}`);
+        cache.delete(`root:${entry}`);
+        return false;
+      }
+      if (resolved && entry === resolved.dir) return true;
+      const parent = path.dirname(entry);
+      if (entry === homeDir || parent === entry) return resolved === null;
+      entry = parent;
+    }
+  };
+  const remember = (resolved) => {
+    if (cache) for (const entry of visited) {
+      const signature = directorySignature(entry);
+      if (signature === null) {
+        cache.delete(`resolve:${entry}`);
+        cache.delete(`root:${entry}`);
+        cache.delete(`dirsig:${entry}`);
+        continue;
+      }
+      cache.set(`resolve:${entry}`, resolved);
+      cache.set(`dirsig:${entry}`, signature);
+    }
+    return resolved;
+  };
+  while (true) {
+    const key = `resolve:${dir}`;
+    if (cache?.has(key) && cachedRootIsCurrent(dir, cache.get(key))) {
+      return remember(cache.get(key));
+    }
+    visited.push(dir);
+    if (resolveDesignMdPath(dir)) return remember({ dir, hasDesign: true });
+    if (PROJECT_ROOT_MARKERS.some((marker) => fs.existsSync(path.join(dir, marker)))) {
+      return remember({ dir, hasDesign: false });
+    }
+    if (dir === homeDir) return remember(null);
     const parent = path.dirname(dir);
-    if (parent === dir) return null;
+    if (parent === dir) return remember(null);
     dir = parent;
   }
 }
@@ -611,7 +663,7 @@ export function findDesignRoot(startDir) {
 // scan; a target with no design root above it resolves to null.
 export function loadDesignSystemForTarget(targetPath, { cache, cwd = process.cwd() } = {}) {
   const startDir = designSystemStartDir(targetPath, cwd);
-  const found = findDesignRoot(startDir);
+  const found = findDesignRoot(startDir, { cache });
   const key = found ? `root:${found.dir}` : '\0none';
   if (cache && cache.has(key)) return cache.get(key);
   const loaded = found?.hasDesign ? loadDesignSystemForCwd(found.dir) : null;

@@ -46,3 +46,71 @@ jobs:
         env:
           TASTE_SKILL_ROOT: ${{ runner.temp }}/taste-skill/skills/taste-skill
         run: node skills/design-with-ai/tests/providers/browser-live-smoke.mjs
+
+      - name: Real Chrome declared DOM-state regression cases
+        run: node skills/design-with-ai/tests/providers/rendered-state-chrome-smoke.mjs
+
+      # Exercise the corrected #205 moving-base error-evidence contract as
+      # part of the joint test/CI integration, not solely in base-branch CI.
+      # Includes close-time pageerror/navigation/close-failure negative controls
+      # inherited from the latest #205 provider-base branch.
+      - name: DOM-state error, redirect and close-time fail-closed regressions
+        run: node --test skills/design-with-ai/tests/providers/rendered-state-probe.test.mjs
+
+      # Explicitly exercise the latest #205 scanner-failure evidence contract
+      # against this PR's actual synthetic merge with the moving base.
+      - name: Impeccable scanner and rejected-symlink path privacy regressions
+        run: node --test skills/design-with-ai/tests/providers/impeccable.test.mjs
+
+      # Verify untrusted provider exceptions and native subprocess payloads on
+      # the exact combined PR merge, not only on the base PR in isolation.
+      - name: Provider dispatch and native failure redaction regressions
+        run: node --test skills/design-with-ai/tests/providers/workflow.test.mjs
+
+      - name: Quality-audit CLI redaction negative controls
+        run: node --test --test-name-pattern="audit CLI redacts untrusted flags and filesystem failure paths" skills/design-with-ai/tests/providers/workflow-e2e.test.mjs
+
+      - name: Taste parser failure redaction regressions
+        run: node --test skills/design-with-ai/tests/providers/taste-skill.test.mjs
+
+      # Test-only dependency. The real production probe dynamically loads
+      # Playwright from the explicit path, never from a global package.
+      # No browser download, postinstall scripts, package.json or product changes.
+      - name: Install exact Playwright transport for integration smoke
+        run: |
+          set -euo pipefail
+          npm install --prefix "$RUNNER_TEMP/dwa-playwright-test" --no-save --no-audit --no-fund --ignore-scripts --package-lock=false playwright-core@1.64.1
+          node -e "const p=require(process.env.RUNNER_TEMP+'/dwa-playwright-test/node_modules/playwright-core/package.json'); if(p.version !== '1.64.1') process.exit(1)"
+          test -f "$RUNNER_TEMP/dwa-playwright-test/node_modules/playwright-core/index.mjs"
+          echo "DWA_PLAYWRIGHT_ROOT=$RUNNER_TEMP/dwa-playwright-test/node_modules/playwright-core" >> "$GITHUB_ENV"
+
+      - name: Real Playwright transport DOM-state regression cases
+        run: node skills/design-with-ai/tests/providers/rendered-state-playwright-smoke.mjs
+
+      - name: Real Chrome received-body SHA match, tamper and stalled-response detection
+        run: node skills/design-with-ai/tests/providers/network-response-live-smoke.mjs
+
+      - name: Network browser error redaction and fail-closed regression tests
+        run: node --test skills/design-with-ai/tests/providers/network-response-probe.test.mjs
+
+  # Separate from Chrome/Taste. Windows specifically validates canonical path
+  # handling and bounded full-tree SHA evidence on a large Vite-style build.
+  rendered-assets-windows:
+    runs-on: windows-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Windows rendered-tree and Vite-style provenance regressions
+        run: node --test skills/design-with-ai/tests/providers/rendered-assets.test.mjs
+
+      # Exercise the same fail-closed Taste report-parent guard under Windows
+      # junction semantics; the full Taste provider suite already runs on Linux.
+      - name: Windows Taste report-directory junction isolation
+        run: node --test --test-name-pattern="Taste output report-directory symlinks and Windows junctions cannot escape run isolation" skills/design-with-ai/tests/providers/taste-skill.test.mjs
