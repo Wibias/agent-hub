@@ -2,6 +2,9 @@ import { readFileSync } from 'node:fs';
 
 const TARGET = JSON.parse(readFileSync(new URL('./target.json', import.meta.url), 'utf8'));
 const HEX40 = /^[a-f0-9]{40}$/;
+// Canonical GitHub account login: one to 39 ASCII alnum/hyphen characters,
+// no leading/trailing hyphens, whitespace or case aliases.
+const GITHUB_LOGIN = /^[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,37}[a-zA-Z0-9])?$/;
 const PROJECT_REF = /^[a-z0-9]{20}$/;
 const UTC_MILLIS = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 const MAX_EVIDENCE_AGE_MS = 15 * 60 * 1000;
@@ -145,7 +148,7 @@ function validateGitHub(snapshot, asOf, expectedPins, expectedWorkflows) {
       || !Number.isInteger(row.number)
       || seen.has(row.number)
       || !expectedPins.some(pin => pin.number === row.number)
-      || typeof row.author !== 'string' || !row.author.trim()
+      || typeof row.author !== 'string' || !GITHUB_LOGIN.test(row.author)
       || !HEX40.test(row.head_sha)
       || !HEX40.test(row.base_sha)
       || typeof row.base_branch !== 'string'
@@ -163,7 +166,7 @@ function validateGitHub(snapshot, asOf, expectedPins, expectedWorkflows) {
     const reviewSeen = new Set();
     for (const review of row.reviews) {
       if (!exactKeys(review, REVIEW_FIELDS)
-        || typeof review.reviewer !== 'string' || !review.reviewer.trim()
+        || typeof review.reviewer !== 'string' || !GITHUB_LOGIN.test(review.reviewer)
         || !['APPROVED', 'CHANGES_REQUESTED', 'COMMENTED', 'DISMISSED'].includes(review.state)
         || !HEX40.test(review.commit_sha)
         || !instant(review.submitted_at)
