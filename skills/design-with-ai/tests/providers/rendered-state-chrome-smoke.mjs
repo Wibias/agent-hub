@@ -322,9 +322,16 @@ async function main() {
         assert.equal(serviceWorkers, 'block');
         assert.deepEqual(storageState, { cookies: [], origins: [] });
         let page;
+        let notifyPage = () => {};
         return {
+          on: (event, listener) => {
+            if (event === 'page') notifyPage = listener;
+          },
           newPage: async () => {
             page = await openPage(chrome.cdp, viewport.width, viewport.height);
+            // Simulate Playwright BrowserContext's primary "page" event.
+            // The probe must not classify that primary page as a popup.
+            notifyPage(page);
             return page;
           },
           close: async () => { await page?.close(); },

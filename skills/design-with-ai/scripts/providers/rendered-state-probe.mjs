@@ -12,6 +12,8 @@ const H = 900;
 const SAMPLE_LIMIT_MS = 10_000;
 const CLEANUP_LIMIT_MS = 15_000;
 const MARKER_WAIT_LIMIT_MS = 16_000;
+const STAGE_LIMIT_MS = 50_000;
+const STAGE_TIMEOUT_PREFIX = "Browser stage timeout: ";
 // A blocked renderer or transport must never prevent a persisted fail-closed
 // report. Use a Node-side deadline independent of Playwright's own timeouts.
 async function boundedBrowserCall(call, timeoutMs, timeoutMessage) {
@@ -237,10 +239,14 @@ async function loadPlaywright(pkg) {
 export async function probeRenderedState(input, {
   browserFactory = loadPlaywright,
   sampleTimeoutMs = SAMPLE_LIMIT_MS, cleanupTimeoutMs = CLEANUP_LIMIT_MS,
+  stageTimeoutMs = STAGE_LIMIT_MS,
 } = {}) {
   const opts = validateOptions(input);
   const sampleDeadline = cappedDeadline(sampleTimeoutMs, SAMPLE_LIMIT_MS);
   const cleanupDeadline = cappedDeadline(cleanupTimeoutMs, CLEANUP_LIMIT_MS);
+  const stageDeadline = cappedDeadline(stageTimeoutMs, STAGE_LIMIT_MS);
+  const stage = (name, call) => boundedBrowserCall(call, stageDeadline,
+    STAGE_TIMEOUT_PREFIX + name);
   const runDir = mkdtempSync(join(opts.output, "dwa-runtime-state-"));
   const report = {
     schemaVersion: 1, kind: "dwa/declared-dom-state-observation",
@@ -254,12 +260,12 @@ export async function probeRenderedState(input, {
   };
   let browser;
   try {
-    const chromium = await browserFactory(opts.playwright);
-    browser = await chromium.launch({
+    const chromium = await stage("factory", () => browserFactory(opts.playwright));
+    browser = await stage("launch", () => chromium.launch({
       headless: true,
       ...(opts.chromePath ? { executablePath: opts.chromePath } : { channel: "chrome" }),
       args: ["--no-first-run", "--no-default-browser-check"],
-    });
+    }));
     for (const width of WIDTHS) {
       const record = { width, status: "INCOMPLETE", signals: null, screenshotSha256: null };
       report.observations.push(record);
@@ -267,29 +273,39 @@ export async function probeRenderedState(input, {
       let pageErrorCount = 0;
       const pageErrorSamples = [];
       let mainFrameNavigations = 0;
+      let secondaryPageOpened = false;
       let observationSealed = false;
       let abortAfterViewport = false;
       try {
-        context = await browser.newContext({
+        context = await stage("new-context", () => browser.newContext({
           viewport: { width, height: H },
           serviceWorkers: "block", storageState: { cookies: [], origins: [] },
-        });
-        const page = await context.newPage();
-        // A hostile or broken page can emit an arbitrary number of exceptions.
-        // Preserve the count and at most three redacted examples, never all
-        // raw error strings in memory or persistent evidence.
-        page.on("pageerror", (error) => {
-          if (observationSealed) return;
-          pageErrorCount++;
-          if (pageErrorSamples.length < 3) pageErrorSamples.push(browserError(error));
-        });
+        }));
+        // Subscribe before opening the primary page: popups and their errors
+        // belong to this viewport, even if the main page stays ready. Keep
+        // only an opaque boolean, never popup URLs or private page contents.
+        const seenPages = new Set();
+        const observePage = (candidate) => {
+          if (seenPages.has(candidate)) return;
+          if (seenPages.size > 0) secondaryPageOpened = true;
+          seenPages.add(candidate);
+          candidate.on("pageerror", (error) => {
+            if (observationSealed) return;
+            pageErrorCount++;
+            if (pageErrorSamples.length < 3) pageErrorSamples.push(browserError(error));
+          });
+        };
+        context.on("page", observePage);
+        const page = await stage("new-page", () => context.newPage());
+        observePage(page); // Idempotent when Playwright already emitted "page".
         // Register before goto: count main-frame navigations even when JS
         // leaves and returns to the requested route during the observation.
         const mainFrame = page.mainFrame();
         page.on("framenavigated", (frame) => {
           if (!observationSealed && frame === mainFrame) mainFrameNavigations++;
         });
-        const response = await page.goto(opts.url, { waitUntil: "domcontentloaded", timeout: 45_000 });
+        const response = await stage("navigate", () => page.goto(opts.url,
+          { waitUntil: "domcontentloaded", timeout: 45_000 }));
         record.httpStatus = response?.status?.() ?? null;
         record.redirectChainPresent =
           Boolean(response?.request?.()?.redirectedFrom?.());
@@ -325,10 +341,11 @@ export async function probeRenderedState(input, {
           record.firstSampleError = browserError(error);
           if (error?.message === "DOM sample timeout") throw error;
         }
-        await page.waitForTimeout(750);
+        await stage("settle", () => page.waitForTimeout(750));
         const second = await sampleDom();
         const screenshot = join(runDir, "state-" + width + ".png");
-        await page.screenshot({ path: screenshot, fullPage: false, timeout: 20_000 });
+        await stage("screenshot", () => page.screenshot(
+          { path: screenshot, fullPage: false, timeout: 20_000 }));
         // Sample once more AFTER screenshot so an immediately dismissed loading
         // overlay or state transition is not certified as captured evidence.
         const afterScreenshot = await sampleDom();
@@ -342,6 +359,11 @@ export async function probeRenderedState(input, {
         record.screenshotSha256 = sha(readFileSync(screenshot));
       } catch (e) {
         record.error = browserError(e);
+        if (typeof e?.message === "string" && e.message.startsWith(STAGE_TIMEOUT_PREFIX)) {
+          record.browserStageTimeout = e.message.slice(STAGE_TIMEOUT_PREFIX.length);
+          abortAfterViewport = true;
+          stopBrowserProcess(browser);
+        }
         if (e?.message === "DOM sample timeout") {
           record.domSampleTimedOut = true;
           abortAfterViewport = true;
@@ -365,6 +387,7 @@ export async function probeRenderedState(input, {
         observationSealed = true;
       }
       record.mainFrameNavigationCount = mainFrameNavigations;
+      record.secondaryPageOpened = secondaryPageOpened;
       record.pageErrorCount = pageErrorCount;
       if (pageErrorSamples.length) record.pageErrorSamples = pageErrorSamples;
       const { first, second, afterScreenshot } = record.signals ?? {};
@@ -374,6 +397,7 @@ export async function probeRenderedState(input, {
         mainFrameNavigations === 1 && record.path === opts.route &&
         record.finalPath === opts.route && record.origin === expectedOrigin &&
         record.finalOrigin === expectedOrigin && pageErrorCount === 0 &&
+        !secondaryPageOpened &&
         /^[0-9a-f]{64}$/.test(record.screenshotSha256 ?? "") &&
         !record.markerWaitError && !record.firstSampleError && completeSample(first) &&
         completeSample(second) && completeSample(afterScreenshot)
@@ -388,6 +412,10 @@ export async function probeRenderedState(input, {
     }
   } catch (e) {
     report.error = browserError(e);
+    if (typeof e?.message === "string" && e.message.startsWith(STAGE_TIMEOUT_PREFIX)) {
+      report.browserStageTimeout = e.message.slice(STAGE_TIMEOUT_PREFIX.length);
+      stopBrowserProcess(browser);
+    }
   } finally {
     if (browser) {
       try {

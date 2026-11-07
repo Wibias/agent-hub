@@ -47,23 +47,37 @@ function fakeBrowser({
   evaluateStallAt = 0,
   contextCloseStall = false,
   browserCloseStall = false,
+  hangAt = null,
+  secondaryPageAt = null,
+  secondaryPageError = false,
 } = {}) {
   let closes = 0;
   let killed = 0;
   const opened = [];
   const launch = {
     newContext: async ({ viewport, serviceWorkers, storageState }) => {
+      if (hangAt === "new-context") return new Promise(() => {});
       opened.push({ viewport, serviceWorkers, storageState });
       const width = viewport.width;
       let captured = false;
       let emitClosePageError = () => {};
       let emitCloseNavigation = () => {};
+      let emitContextPage = () => {};
+      const emitSecondaryPage = () => emitContextPage({
+        on: (kind, callback) => {
+          if (kind === "pageerror" && secondaryPageError) {
+            callback(new Error("popup url=/token/CANARY_POPUP_SECRET_20261107"));
+          }
+        },
+      });
       return {
+        on: (kind, cb) => { if (kind === "page") emitContextPage = cb; },
         newPage: async () => {
+          if (hangAt === "new-page") return new Promise(() => {});
           const frame = {};
           let onNavigation = () => {};
           let sampleCount = 0;
-          return {
+          const page = {
           mainFrame: () => frame,
           on: (kind, cb) => {
             if (kind === "framenavigated") {
@@ -80,6 +94,8 @@ function fakeBrowser({
             }
           },
           goto: async () => {
+            if (secondaryPageAt === "navigate") emitSecondaryPage();
+            if (hangAt === "navigate") return new Promise(() => {});
             if (navigationFailure) throw new Error("Navigation timeout");
             onNavigation(frame);
             return {
@@ -112,18 +128,24 @@ function fakeBrowser({
             };
           },
           waitForTimeout: async () => {
+            if (hangAt === "settle") return new Promise(() => {});
             if (clientRedirectBounce) { onNavigation(frame); onNavigation(frame); }
           },
           screenshot: async ({ path }) => {
+            if (secondaryPageAt === "screenshot") emitSecondaryPage();
+            if (hangAt === "screenshot") return new Promise(() => {});
             if (screenshotFailure) throw new Error(
               typeof screenshotFailure === "string" ? screenshotFailure : "Capture failed");
             writeFileSync(path, "screenshot-" + width);
             captured = true;
           },
           };
+          emitContextPage(page);
+          return page;
         },
         close: async () => {
           if (contextCloseStall) return new Promise(() => {});
+          if (secondaryPageAt === "close") emitSecondaryPage();
           if (closePageError) emitClosePageError();
           if (closeNavigation) emitCloseNavigation();
           closes++;
@@ -138,10 +160,77 @@ function fakeBrowser({
     process: () => ({ kill: () => { killed++; } }),
   };
   return {
-    factory: async () => ({ launch: async () => launch }),
+    factory: async () => {
+      if (hangAt === "factory") return new Promise(() => {});
+      return { launch: async () => {
+        if (hangAt === "launch") return new Promise(() => {});
+        return launch;
+      } };
+    },
     opened, getCloses: () => closes, getKills: () => killed,
   };
 }
+
+test("never-settling browser setup, navigation and screenshots persist fail-closed state receipts", async () => {
+  await fixture(async ({ input }) => {
+    for (const hangAt of ["factory", "launch", "new-context", "new-page",
+      "navigate", "settle", "screenshot"]) {
+      const fake = fakeBrowser({ hangAt });
+      const report = await probeRenderedState(input, {
+        browserFactory: fake.factory, stageTimeoutMs: 20, cleanupTimeoutMs: 20,
+      });
+      assert.equal(report.status, "INCOMPLETE", hangAt);
+      assert.equal(report.declaredDomStateObserved, false, hangAt);
+      assert.equal(report.productCompletionEligible, false, hangAt);
+      const observation = report.observations[0];
+      if (hangAt === "factory" || hangAt === "launch") {
+        assert.equal(report.browserStageTimeout, hangAt);
+        assert.equal(report.observations.length, 0);
+      } else {
+        assert.equal(observation.browserStageTimeout, hangAt);
+        assert.equal(report.observations.length, 1);
+        assert.equal(observation.status, "INCOMPLETE");
+      }
+      const saved = JSON.parse(readFileSync(
+        join(report.artifactDirectory, "state-report.json"), "utf8"));
+      assert.equal(saved.status, "INCOMPLETE");
+      assert.equal(saved.productCompletionEligible, false);
+      assert.equal(saved.observations.length, report.observations.length);
+    }
+  });
+});
+
+test("secondary pages at navigation, capture or cleanup fail closed with redacted errors", async () => {
+  await fixture(async ({ input }) => {
+    for (const secondaryPageAt of ["navigate", "screenshot", "close"]) {
+      const fake = fakeBrowser({ secondaryPageAt, secondaryPageError: true });
+      const report = await probeRenderedState(input, { browserFactory: fake.factory });
+      assert.equal(report.status, "INCOMPLETE", secondaryPageAt);
+      assert.equal(report.declaredDomStateObserved, false);
+      assert.equal(report.productCompletionEligible, false);
+      assert.deepEqual(report.observations.map((r) => r.width), [1440, 768, 390]);
+      for (const observation of report.observations) {
+        assert.equal(observation.secondaryPageOpened, true, secondaryPageAt);
+        assert.equal(observation.status, "INCOMPLETE", secondaryPageAt);
+        assert.equal(observation.pageErrorCount, 1);
+        assert.equal(observation.pageErrorSamples[0], "Browser error: <details-redacted>");
+        assert.equal(observation.signals.first.markerVisible, true,
+          "a ready primary page must never override secondary-page activity");
+      }
+      const evidence = readFileSync(
+        join(report.artifactDirectory, "state-report.json"), "utf8");
+      assert.ok(!evidence.includes("CANARY_POPUP_SECRET_20261107"));
+      assert.ok(!evidence.includes("/token/"));
+    }
+    const popupWithoutError = await probeRenderedState(input, {
+      browserFactory: fakeBrowser({ secondaryPageAt: "screenshot" }).factory,
+    });
+    assert.equal(popupWithoutError.status, "INCOMPLETE",
+      "a secondary page invalidates the viewport even without any exception");
+    assert.ok(popupWithoutError.observations.every((r) =>
+      r.secondaryPageOpened && r.pageErrorCount === 0));
+  });
+});
 
 test("stalled DOM evaluation and browser cleanup persist INCOMPLETE receipts", async () => {
   await fixture(async ({ input }) => {

@@ -22,6 +22,21 @@ const MAX_IN_FLIGHT_BODY_READS = 4;
 const MAX_QUEUED_BODY_READS = 64;
 const MAX_BODY_WAIT_MS = 15_000;
 const MAX_SHUTDOWN_WAIT_MS = 15_000;
+const MAX_STAGE_WAIT_MS = 50_000;
+const STAGE_TIMEOUT_PREFIX = "Browser stage timeout: ";
+async function boundedStage(call, timeoutMs, name) {
+  let timer;
+  try {
+    return await Promise.race([
+      Promise.resolve().then(call),
+      new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error(STAGE_TIMEOUT_PREFIX + name)), timeoutMs);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
 // Never await Playwright transport shutdown indefinitely. Its connection may
 // stall after a timed-out body read, and the INCOMPLETE report must be written.
 async function boundedShutdown(close, timeoutMs) {
@@ -162,7 +177,7 @@ async function loadBrowser(packageRoot) {
  */
 export async function probeNetworkResponses(options, {
   browserFactory = loadBrowser, bodyReadTimeoutMs = MAX_BODY_WAIT_MS,
-  shutdownTimeoutMs = MAX_SHUTDOWN_WAIT_MS,
+  shutdownTimeoutMs = MAX_SHUTDOWN_WAIT_MS, stageTimeoutMs = MAX_STAGE_WAIT_MS,
 } = {}) {
   const context = strictInputs(options);
   const bodyDeadline = Number.isSafeInteger(bodyReadTimeoutMs) &&
@@ -171,6 +186,10 @@ export async function probeNetworkResponses(options, {
   const shutdownDeadline = Number.isSafeInteger(shutdownTimeoutMs) &&
     shutdownTimeoutMs > 0 && shutdownTimeoutMs <= MAX_SHUTDOWN_WAIT_MS
     ? shutdownTimeoutMs : MAX_SHUTDOWN_WAIT_MS;
+  const stageDeadline = Number.isSafeInteger(stageTimeoutMs) &&
+    stageTimeoutMs > 0 && stageTimeoutMs <= MAX_STAGE_WAIT_MS
+    ? stageTimeoutMs : MAX_STAGE_WAIT_MS;
+  const stage = (name, call) => boundedStage(call, stageDeadline, name);
   const before = renderedAssetProof({
     projectRoot: context.project, renderedRoot: context.rendered, html: context.html,
   });
@@ -197,13 +216,13 @@ export async function probeNetworkResponses(options, {
   };
   let browser;
   try {
-    const chromium = await browserFactory(context.playwright);
-    browser = await chromium.launch({
+    const chromium = await stage("factory", () => browserFactory(context.playwright));
+    browser = await stage("launch", () => chromium.launch({
       headless: true,
       ...(context.chromePath
         ? { executablePath: context.chromePath } : { channel: "chrome" }),
       args: ["--no-first-run", "--no-default-browser-check"],
-    });
+    }));
     for (const width of WIDTHS) {
       const obs = {
         width, status: "INCOMPLETE", local: [], external: [],
@@ -226,11 +245,11 @@ export async function probeNetworkResponses(options, {
         }
       };
       try {
-        ctx = await browser.newContext({
+        ctx = await stage("new-context", () => browser.newContext({
           viewport: { width, height: 900 },
           storageState: { cookies: [], origins: [] },
           serviceWorkers: "block",
-        });
+        }));
         // BrowserContext emits network events for every page, including
         // popups whose first request may precede the Page popup event.
         // A popup is not represented in the main screenshot: fail closed.
@@ -251,7 +270,7 @@ export async function probeNetworkResponses(options, {
           }
         };
         ctx.on("page", observePage);
-        const page = await ctx.newPage();
+        const page = await stage("new-page", () => ctx.newPage());
         observePage(page);
         const queuedBodyReads = [];
         let requestCount = 0;
@@ -405,19 +424,20 @@ export async function probeNetworkResponses(options, {
           // An immediately started body read must not inflate queue depth.
           obs.maxBodyQueueDepth = Math.max(obs.maxBodyQueueDepth, queuedBodyReads.length);
         });
-        const nav = await page.goto(context.url, {
+        const nav = await stage("navigate", () => page.goto(context.url, {
           waitUntil: "load", timeout: 45_000,
-        });
+        }));
         obs.httpStatus = nav?.status?.() ?? null;
-        await page.waitForTimeout(750);
+        await stage("settle", () => page.waitForTimeout(750));
         const screenshotFile = join(runDir, "network-" + width + ".png");
-        await page.screenshot({ path: screenshotFile, fullPage: false, timeout: 20_000 });
+        await stage("screenshot", () => page.screenshot(
+          { path: screenshotFile, fullPage: false, timeout: 20_000 }));
         obs.screenshotSha256 = sha(readFileSync(screenshotFile));
         obs.finalUrlMatched = page.url() === context.url;
         for (let round = 0; round < 3; round++) {
           const previous = pending.length;
-          await Promise.allSettled([...pending]);
-          await page.waitForTimeout(100);
+          await stage("body-drain", () => Promise.allSettled([...pending]));
+          await stage("drain-settle", () => page.waitForTimeout(100));
           if (previous === pending.length) break;
         }
         obs.finalUrlMatched = obs.finalUrlMatched && page.url() === context.url;
@@ -426,6 +446,13 @@ export async function probeNetworkResponses(options, {
         drainComplete = true;
       } catch (error) {
         recordIssue("BROWSER_PROBE_FAILURE: " + shortError(error));
+        if (typeof error?.message === "string" &&
+            error.message.startsWith(STAGE_TIMEOUT_PREFIX)) {
+          recordIssue("BROWSER_STAGE_TIMEOUT");
+          obs.browserStageTimeout = error.message.slice(STAGE_TIMEOUT_PREFIX.length);
+          shutdownFailed = true;
+          terminateBrowser(browser);
+        }
       } finally {
         // Close before finalization to capture late events, but bound transport
         // shutdown independently: a hung close cannot prevent INCOMPLETE output.
@@ -459,6 +486,11 @@ export async function probeNetworkResponses(options, {
     }
   } catch (error) {
     report.error = shortError(error);
+    if (typeof error?.message === "string" &&
+        error.message.startsWith(STAGE_TIMEOUT_PREFIX)) {
+      report.browserStageTimeout = error.message.slice(STAGE_TIMEOUT_PREFIX.length);
+      terminateBrowser(browser);
+    }
   } finally {
     if (browser) {
       const closed = await boundedShutdown(() => browser.close(), shutdownDeadline);
@@ -512,7 +544,19 @@ function parseCli(argv) {
   };
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+// Node retains a symlinked CLI spelling in argv[1] while import.meta.url
+// normally resolves to the real module. Compare canonical filesystem paths.
+function isCliEntry() {
+  if (!process.argv[1]) return false;
+  try {
+    return realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url));
+  } catch {
+    return false;
+  }
+}
+if (isCliEntry()) {
+  try {
+    const report = await probeNetworkResponses
   try {
     const report = await probeNetworkResponses(parseCli(process.argv.slice(2)));
     process.stdout.write(JSON.stringify(report, null, 2) + "\n");

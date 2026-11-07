@@ -17,6 +17,7 @@ const isMain = (() => {
 })();
 const SCOPE_PREFLIGHT_FLAG = "--internal-scope-preflight";
 const SCOPE_PREFLIGHT_TIMEOUT_MS = 15_000;
+const MEASURED_RUNNER_TIMEOUT_MS = 120_500;
 const MODES = Object.freeze([
   { id: "configured", flags: [] },
   { id: "no-inline-ignores", flags: ["--no-inline-ignores"] },
@@ -37,7 +38,7 @@ function argsFrom(argv) {
     if (!["--target", "--project-root", "--rounds"].includes(key) ||
         options.has(key) || i + 1 >= argv.length ||
         argv[i + 1].startsWith("--")) {
-      throw new Error("Invalid/repeated argument: " + String(key));
+      throw new Error("Invalid/repeated argument");
     }
     options.set(key, argv[++i]);
   }
@@ -197,11 +198,33 @@ function validateDetectorResult(result, mode) {
   };
 }
 
+// The child runner has a process timeout, but the caller must also return
+// when a mocked or broken runner never settles. Avoid persisting exception text.
+async function boundedMeasuredRun(runner, options, deadline) {
+  let timer;
+  try {
+    return await Promise.race([
+      Promise.resolve().then(() => runner(options)),
+      new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error("Detector runner deadline expired")),
+          deadline);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export async function compareImpeccableModes(argv, {
   runner = runProcess, script = SCRIPT,
   preflightRunner = runProcess,
   preflightTimeoutMs = SCOPE_PREFLIGHT_TIMEOUT_MS,
+  runnerTimeoutMs = MEASURED_RUNNER_TIMEOUT_MS,
 } = {}) {
+  if (!Number.isSafeInteger(runnerTimeoutMs) || runnerTimeoutMs < 1 ||
+      runnerTimeoutMs > MEASURED_RUNNER_TIMEOUT_MS) {
+    throw new TypeError("Invalid measured runner deadline");
+  }
   const opts = argsFrom(argv);
   const scope = await runBoundedScopePreflight(opts, {
     preflightRunner, preflightTimeoutMs,
@@ -226,16 +249,23 @@ export async function compareImpeccableModes(argv, {
     const order = round % 2 ? [...MODES].reverse() : [...MODES];
     for (const mode of order) {
       const started = performance.now();
-      const run = await runner({
-        executable: process.execPath,
-        args: [resolve(script), "--json", "--dwa-scan-proof", ...mode.flags, scope.target],
-        cwd: scope.root,
-        timeoutMs: 120_000,
-        maxOutputBytes: 4_194_304,
-      });
+      let run;
+      let runnerFailed = false;
+      try {
+        run = await boundedMeasuredRun(runner, {
+          executable: process.execPath,
+          args: [resolve(script), "--json", "--dwa-scan-proof", ...mode.flags, scope.target],
+          cwd: scope.root,
+          timeoutMs: 120_000,
+          maxOutputBytes: 4_194_304,
+        }, runnerTimeoutMs);
+      } catch {
+        runnerFailed = true;
+      }
       const elapsedMs = Math.round(performance.now() - started);
       const row = { round: round + 1, mode: mode.id, elapsedMs };
       try {
+        if (runnerFailed) throw new Error("Detector runner failed or did not settle");
         Object.assign(row, validateDetectorResult(run, mode));
         row.status = "COMPLETE";
       } catch (error) {
@@ -289,8 +319,17 @@ if (isMain && process.argv[2] === SCOPE_PREFLIGHT_FLAG) {
     process.stdout.write(JSON.stringify(report, null, 2) + "\n");
     if (report.status !== "COMPLETE") process.exitCode = 1;
   } catch (error) {
-    process.stderr.write("Impeccable performance diagnostic: " +
-      String(error.message ?? error) + "\n");
+    // Never repeat an unknown CLI token, path or child-process exception.
+    const safe = new Set([
+      "Invalid/repeated argument",
+      "--target and --project-root are required",
+      "--rounds must be an integer from 1 to 3",
+      "Vendored detector script does not exist",
+      "Invalid measured runner deadline",
+    ]);
+    const message = safe.has(error?.message) ? error.message :
+      "Diagnostic failed; untrusted details redacted";
+    process.stderr.write("Impeccable performance diagnostic: " + message + "\n");
     process.exitCode = 2;
   }
 }
