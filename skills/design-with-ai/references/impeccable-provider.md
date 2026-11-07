@@ -28,6 +28,6 @@ The 2026-11-06 Phase 6.2 case study showed a synthetic positive control (2/2), a
 
 ## Rollout limits
 
-This update changes only the vendored detector's opt-in internal audit-receipt mode and the DWA adapter. It does not change public routing, hook installation, the normal Impeccable CLI output format, or the durable ledger schema. The adapter is enabled only when selected through `scan.mjs` or the internal registry. Integration with normal DWA workflows, browser evidence, cross-provider deduplication, and ledger migration remain separate, test-gated PRs.
+The detector's internal audit receipt remains opt-in; public routing, hook installation, ordinary Impeccable CLI output and the durable ledger schema are unchanged. The integrated `quality-audit.mjs` selects the bundled Impeccable detector by default for **standard** and **deep** profiles (unless `--no-impeccable` is supplied); **quick** remains native-only. Taste browser evidence can be included in standard/deep only with explicit `--with-taste` and the required local browser inputs. Provider selection and successful synthetic checks do **not** imply authenticated product acceptance; cross-provider deduplication and durable ledger migration remain separately gated.
 
 The scanner source-extension and excluded-directory policy is mirrored in the adapter preflight, with a CI regression checking parity against the vendored helper module. A missing Impeccable install cannot make the `quick` native-only workflow module fail during import; the optional detector is loaded only when selected.

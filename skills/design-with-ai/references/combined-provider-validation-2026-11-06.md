@@ -1,6 +1,6 @@
 # Combined Design-With-AI provider validation (2026-11-06)
 
-This **non-mergeable integration candidate** combines five independent, unmerged Agent Hub Draft PR heads, followed by the policy-provenance fix #206 and rendered-asset provenance fix #208:
+This is a **historical test-only validation note for the earlier 2026-11-06 integration candidate**, not a review or CI statement about the current #205 or #224 trees. That candidate combined five independent, unmerged Agent Hub Draft PR heads, followed by the policy-provenance fix #206 and rendered-asset provenance fix #208:
 
 | Component | PR | Pinned head |
 | --- | --- | --- |
@@ -12,7 +12,7 @@ This **non-mergeable integration candidate** combines five independent, unmerged
 | External Impeccable policy inputs in DWA source fingerprint | #206 | `f1fbc19b967d4fc37afa168f604fb6a16f57e504` |
 | Complete bounded local rendered build-tree fingerprints | #208 | `b957d85af46389878647fe57fd73bf3e5725d02e` |
 
-The seven feature PRs were each 14/14 CI-green independently. A manual CodeRabbit review of the combined candidate subsequently raised **13 actionable threads**. Independent corrective Drafts #212 (`d5bf742a61bb8746470ecdc2b7d71e352daa1d5d`) and #213 (`8365d8a5a927910072311d4dbad90c1654b934ca`) were each 14/14 CI-green; their 13 non-overlapping changed files are now overlaid on the integration candidate. **Ten** review findings are addressed by those fixes; **three** remain to be resolved or explicitly justified. PRs #206 and #208 both touch `scope-proof.mjs` and `workflow.test.mjs`; their changes are **integrated explicitly and checked for retention of both safeguards**. CI on the combined branch is separately required; individual green CI runs do not prove the combination works.
+At that time the seven feature PRs were each 14/14 CI-green independently. CodeRabbit's manual review of the **earlier integration candidate** raised **13 actionable threads**. Independent corrective Drafts #212 (`d5bf742a61bb8746470ecdc2b7d71e352daa1d5d`) and #213 (`8365d8a5a927910072311d4dbad90c1654b934ca`) were each 14/14 CI-green and addressed ten findings. The other three received implementation fixes in Draft #214 (`9caef61bafe9537d4b3526a4049950166f2ce2d8`) as described below; **none of these historical responses is a fresh independent review of the current #205 or #224 heads**. PRs #206 and #208 both touch `scope-proof.mjs` and `workflow.test.mjs`; their safeguards must be retained together and checked in integration CI. Independent green feature-PR checks do not prove the combination works.
 
 ## Joint real Chrome/Taste/Impeccable regression
 
@@ -30,7 +30,7 @@ It additionally asserts:
 
 ## Release limitations and review findings
 
-This branch is a **test candidate only**; do not merge it as a substitute for merging and reviewing the constituent changes individually. The upstream Taste run currently cannot attest an authenticated game phase or that standalone DOM-state-probe screenshots match its own browser contexts. The separate DOM-state probe in PR #198 has only deterministic contract/failure tests in CI and has not yet demonstrated a live game backend.
+That historical branch was a **test candidate only**; do not merge it as a substitute for merging and reviewing the constituent changes individually. The upstream Taste run currently cannot attest an authenticated game phase or that standalone DOM-state-probe screenshots match its own browser contexts. The separate DOM-state probe in PR #198 has only deterministic contract/failure tests in CI and has not yet demonstrated a live game backend.
 
 **Policy and local build provenance fixes included:** #206 binds out-of-target `DESIGN.md`, its sidecar and shared/local `.impeccable` detector configs. #208 binds the full isolated regular-file build subtree to the shared source fingerprint and before/after stat checks, with explicit file/byte/depth limits and fail-closed symlink handling. Tests cover creation, deletion, mutation and path safety. The combined Chrome smoke checks both the external policy digest and the locally linked CSS's own hash. Neither fix proves remote CDN bytes, service-worker caches, authenticated room state or every dynamic network response. A completed file receipt is separate from these provenance guarantees.
 
