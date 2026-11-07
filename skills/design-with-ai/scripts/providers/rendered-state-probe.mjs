@@ -302,7 +302,13 @@ if (isCliEntry()) {
     process.stdout.write(JSON.stringify(report, null, 2) + "\n");
     if (report.status !== "DOM_SIGNALS_OBSERVED") process.exitCode = 1;
   } catch (e) {
-    process.stderr.write("Rendered state probe: " + browserError(e) + "\n");
+    // Only known, fixed CLI usage errors may be shown verbatim. All other
+    // exception details remain redacted, even if the failure occurs before a browser starts.
+    const knownMissingOption = ["--base-url", "--route", "--contract", "--playwright-root"]
+      .find((key) => e?.message === "Required option " + key);
+    const safeMessage = knownMissingOption
+      ? "Required option " + knownMissingOption : browserError(e);
+    process.stderr.write("Rendered state probe: " + safeMessage + "\n");
     process.exitCode = 2;
   }
 }
