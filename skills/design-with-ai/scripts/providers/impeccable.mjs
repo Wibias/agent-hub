@@ -72,7 +72,9 @@ function rejectScannableSymlinks(target) {
           !HIDDEN_SOURCE_DIRS.has(entry.name)) continue;
       const child = join(current, entry.name);
       if (entry.isSymbolicLink() && SOURCE_EXTENSION.test(entry.name)) {
-        throw new Error("Symlinked UI source is outside the trusted scan scope: " + child);
+        // Local filenames can contain credentials or other private data.
+        // Keep the fail-closed decision without exposing the offending path.
+        throw new Error("Symlinked UI source is outside the trusted scan scope");
       }
       if (entry.isDirectory()) stack.push(child);
     }

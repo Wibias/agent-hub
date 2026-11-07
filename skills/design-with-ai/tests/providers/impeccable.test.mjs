@@ -290,6 +290,28 @@ test("URL, missing target, symlink and escaped project scope are blocked before 
 });
 
 
+
+test("scannable symlink paths never leak into blocked Impeccable evidence", async () => {
+  await fixture(async ({ root, target }) => {
+    const canary = "CANARY_SCANNABLE_SYMLINK_SECRET_20261107";
+    const injectedPath = join(root, canary + ".tsx");
+    symlinkSync(target, injectedPath, "file");
+    let invoked = 0;
+    const provider = createImpeccableProvider({
+      runner: async () => { invoked++; return result(); },
+    });
+    const report = await provider.inspect({
+      capability: Capability.STATIC_AUDIT,
+      target: root, projectRoot: root, route: "/settings",
+    });
+    assert.equal(invoked, 0, "Symlink must be blocked before the detector runs");
+    assert.equal(report.status, ProviderStatus.BLOCKED);
+    assert.equal(report.reason, "Symlinked UI source is outside the trusted scan scope");
+    assert.ok(!JSON.stringify(report).includes(canary));
+    assert.ok(!JSON.stringify(report).includes(injectedPath));
+  });
+});
+
 test("vendored walker extension policy matches the source symlink preflight", async () => {
   const { SCANNABLE_EXTENSIONS, SKIP_DIRS } = await import(
     "../../../impeccable/scripts/detector/node/file-system.mjs");
