@@ -21,7 +21,7 @@ Specify `--rounds 2` to run the four modes twice with the second pass in reverse
 
 This separation matters because `--no-config` alone cannot identify the cause of a configured-vs-raw duration difference.
 
-Each scan is a fresh local Node process with fixed arguments, bounded execution (120 seconds per mode) and a bounded output buffer. Output contains **counts grouped by rule**, durations and explicit completion status; no source snippets, file contents or detector stdout are copied into the summary.
+The source-scope symlink preflight runs in a separate bounded Node process (15 seconds plus a small parent guard). A failed, stalled or timed-out preflight returns an `INCOMPLETE` JSON report with no measured rows; it cannot claim a successful benchmark. Each subsequent detector mode is a fresh local Node process with fixed arguments, bounded execution (120 seconds per mode) and a bounded output buffer. Output contains **counts grouped by rule**, durations and explicit completion status; no source snippets, file contents or detector stdout are copied into the summary.
 
 ## Reading the results
 

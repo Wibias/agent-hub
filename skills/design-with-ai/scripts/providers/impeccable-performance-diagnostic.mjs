@@ -8,6 +8,9 @@ import { performance } from "node:perf_hooks";
 import { runProcess } from "./process-runner.mjs";
 
 const SCRIPT = fileURLToPath(new URL("../../../impeccable/scripts/detect.mjs", import.meta.url));
+const SELF = fileURLToPath(import.meta.url);
+const SCOPE_PREFLIGHT_FLAG = "--internal-scope-preflight";
+const SCOPE_PREFLIGHT_TIMEOUT_MS = 15_000;
 const MODES = Object.freeze([
   { id: "configured", flags: [] },
   { id: "no-inline-ignores", flags: ["--no-inline-ignores"] },
@@ -72,6 +75,48 @@ function trustedScope({ target, projectRoot }) {
   if (!isInside(realRoot, realSource)) throw new Error("Target escapes project root");
   rejectScannableSymlinks(realSource);
   return { root: realRoot, target: realSource };
+}
+
+// The recursive symlink scope walk must never execute in the parent event
+// loop. Run it as a bounded subprocess before any measured detector mode.
+// A separate deadline guarantees an INCOMPLETE JSON report even when a
+// mocked/broken process transport never settles.
+async function runBoundedScopePreflight(opts, {
+  preflightRunner = runProcess,
+  preflightTimeoutMs = SCOPE_PREFLIGHT_TIMEOUT_MS,
+} = {}) {
+  if (!Number.isInteger(preflightTimeoutMs) ||
+      preflightTimeoutMs < 1 || preflightTimeoutMs > 60_000) {
+    throw new TypeError("Invalid scope preflight deadline");
+  }
+  let timer;
+  try {
+    const result = await Promise.race([
+      preflightRunner({
+        executable: process.execPath,
+        args: [SELF, SCOPE_PREFLIGHT_FLAG, "--target", opts.target,
+          "--project-root", opts.projectRoot],
+        cwd: process.cwd(),
+        timeoutMs: preflightTimeoutMs,
+        maxOutputBytes: 8_192,
+      }),
+      new Promise((resolve) => {
+        timer = setTimeout(() => resolve({ timedOut: true }), preflightTimeoutMs + 500);
+      }),
+    ]);
+    if (result?.error || result?.timedOut || result?.outputLimitExceeded ||
+        result?.exitCode !== 0 || result?.stderr?.trim()) return null;
+    const scope = JSON.parse(result.stdout);
+    if (!scope || typeof scope.root !== "string" ||
+        typeof scope.target !== "string" ||
+        !isAbsolute(scope.root) || !isAbsolute(scope.target) ||
+        !isInside(scope.root, scope.target)) return null;
+    return scope;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 const SCAN_PROOF_PREFIX = "DWA_IMPECCABLE_SCAN_PROOF=";
@@ -146,9 +191,26 @@ function validateDetectorResult(result, mode) {
   };
 }
 
-export async function compareImpeccableModes(argv, { runner = runProcess, script = SCRIPT } = {}) {
+export async function compareImpeccableModes(argv, {
+  runner = runProcess, script = SCRIPT,
+  preflightRunner = runProcess,
+  preflightTimeoutMs = SCOPE_PREFLIGHT_TIMEOUT_MS,
+} = {}) {
   const opts = argsFrom(argv);
-  const scope = trustedScope(opts);
+  const scope = await runBoundedScopePreflight(opts, {
+    preflightRunner, preflightTimeoutMs,
+  });
+  if (!scope) {
+    return {
+      schemaVersion: 1,
+      kind: "dwa/impeccable-performance-diagnostic",
+      status: "INCOMPLETE",
+      target: resolve(opts.target),
+      roundsRequested: opts.rounds,
+      runs: [],
+      note: "Source-scope preflight failed or timed out; no measured detector runs started.",
+    };
+  }
   if (!existsSync(script) || !lstatSync(script).isFile() || lstatSync(script).isSymbolicLink()) {
     throw new Error("Vendored detector script does not exist");
   }
@@ -206,7 +268,17 @@ export async function compareImpeccableModes(argv, { runner = runProcess, script
   };
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (process.argv[1] && resolve(process.argv[1]) === SELF &&
+    process.argv[2] === SCOPE_PREFLIGHT_FLAG) {
+  try {
+    const scope = trustedScope(argsFrom(process.argv.slice(3)));
+    process.stdout.write(JSON.stringify(scope) + "\n");
+  } catch {
+    // Untrusted paths and filesystem errors never enter the parent report.
+    process.stderr.write("Source-scope preflight failed\n");
+    process.exitCode = 2;
+  }
+} else if (process.argv[1] && resolve(process.argv[1]) === SELF) {
   try {
     const report = await compareImpeccableModes(process.argv.slice(2));
     process.stdout.write(JSON.stringify(report, null, 2) + "\n");
