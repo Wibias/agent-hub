@@ -112,7 +112,16 @@ export function auditP28ProfileCandidateContract({ candidates } = {}) {
       }
     }
 
-    if (typeof row.search_text !== 'string' || !Array.isArray(row.tags)
+    const nullableString = value => value === null || typeof value === 'string';
+    if (typeof row.search_text !== 'string'
+        || !Array.isArray(row.tags)
+        || row.tags.some(tag => typeof tag !== 'string' || !tag.trim())
+        || !Object.hasOwn(TAXONOMY.surfaceFamilies, row.surface_family)
+        || !Object.hasOwn(TAXONOMY.platformTargets, row.platform)
+        || !TAXONOMY.accessStatuses.includes(row.access_status)
+        || !TAXONOMY.evidenceClasses.includes(row.evidence_class)
+        || !['product', 'page_role', 'motion', 'source_family', 'topology']
+          .every(key => nullableString(row[key]))
         || typeof row.ordinary_or_failure_prone !== 'boolean'
         || typeof row.multi_state_flow !== 'boolean') {
       blockers.add('invalid-candidate-metadata');
