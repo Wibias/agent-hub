@@ -2,10 +2,10 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { test } from "node:test";
 import {
-  mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync,
+  mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { probeNetworkResponses } from "../../scripts/providers/network-response-probe.mjs";
 
@@ -249,6 +249,43 @@ function mockChrome({ input, htmlBytes, cssBytes }, {
   };
 }
 
+
+test("symlinked network CLI validates arguments and persists an INCOMPLETE receipt", async () => {
+  await fixture(async (f) => {
+    const script = fileURLToPath(new URL(
+      "../../scripts/providers/network-response-probe.mjs", import.meta.url));
+    const linkedDir = join(f.root, "linked-network-providers");
+    symlinkSync(dirname(script), linkedDir, process.platform === "win32" ? "junction" : "dir");
+    const linked = join(linkedDir, "network-response-probe.mjs");
+    const invalid = spawnSync(process.execPath, [linked, "--unrecognized-option"],
+      { encoding: "utf8", timeout: 15_000 });
+    assert.equal(invalid.status, 2, invalid.stderr);
+    assert.match(invalid.stderr, /Invalid or repeated CLI argument/);
+    assert.ok(!invalid.stderr.includes("unrecognized-option"));
+    assert.equal(invalid.stdout, "");
+
+    // The fixture intentionally provides a trusted-looking but nonfunctional
+    // Playwright stub. The entrypoint must still validate and save a bounded,
+    // fail-closed runtime report, rather than silently returning process exit 0.
+    const valid = spawnSync(process.execPath, [
+      linked,
+      "--base-url", f.input.baseUrl, "--route", f.input.route,
+      "--project-root", f.input.projectRoot,
+      "--browser-root", f.input.renderedRoot, "--html", f.input.html,
+      "--playwright-root", f.input.playwrightRoot, "--out-root", f.input.outRoot,
+    ], { encoding: "utf8", timeout: 15_000 });
+    assert.equal(valid.status, 1, valid.stderr);
+    const report = JSON.parse(valid.stdout);
+    assert.equal(report.status, "INCOMPLETE");
+    assert.equal(report.productCompletionEligible, false);
+    assert.equal(report.authenticatedSessionVerified, false);
+    assert.equal(report.error, "Browser error: <details-redacted>");
+    const saved = JSON.parse(readFileSync(
+      join(report.artifactDirectory, "network-report.json"), "utf8"));
+    assert.equal(saved.status, "INCOMPLETE");
+    assert.equal(saved.productCompletionEligible, false);
+  });
+});
 
 test("hung browser shutdown is bounded and persists an INCOMPLETE receipt", async () => {
   await fixture(async (f) => {
