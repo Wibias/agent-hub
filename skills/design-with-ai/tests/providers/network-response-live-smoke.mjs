@@ -64,6 +64,7 @@ const server = createServer((req, res) => {
   }
   const files = new Map([
     ["/settings", { data: servedHtmlBytes, type: "text/html; charset=utf-8" }],
+    ["/settings/", { data: servedHtmlBytes, type: "text/html; charset=utf-8" }],
     ["/settings/site.css", {
       data: tamperCss ? Buffer.from("body { color: red; }\n") : cssBytes,
       type: "text/css",
@@ -125,6 +126,16 @@ try {
     assert.ok(o.local.every((entry) => entry.bodyVerified));
     assert.equal(o.pageErrorCount, 0);
   }
+
+  // A real HTTP server may use the slash form for a nested index page.
+  // Request it explicitly, and bind its response to the same declared HTML.
+  const trailing = await probeNetworkResponses({ ...input, route: "/settings/" });
+  assert.equal(trailing.status, "LOCAL_RESPONSES_MATCHED", JSON.stringify(trailing));
+  assert.ok(trailing.observations.every((o) =>
+    o.finalUrlMatched && o.status === "LOCAL_BODY_BYTES_MATCHED" &&
+    o.local.some((row) => row.path === "dist/settings/index.html" &&
+      row.bodyVerified)));
+  assert.equal(trailing.productCompletionEligible, false);
 
   // Modify the HTTP response only, not the on-disk file. The on-disk tree is
   // unchanged and must not be mistaken for proof of what Chrome received.
