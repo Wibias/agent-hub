@@ -1120,6 +1120,9 @@ jobs:
           done
           if [ "$ready" -ne 1 ]; then
             echo 'P32 disposable PostgREST failed to serve the read-only projection' >&2
+            docker inspect --format 'PostgREST state: {{.State.Status}}, exit: {{.State.ExitCode}}' "$container_id" >&2 || true
+            docker logs --tail 60 "$container_id" 2>&1 \
+              | sed -E 's#postgres://[^[:space:]]+#postgres://[redacted]#g' >&2 || true
             exit 1
           fi
 
