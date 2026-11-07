@@ -203,6 +203,20 @@ test("rendered single-candidate receipt fails closed on route mismatch", () => {
   assert.match(result.parsed.error, /route mismatch/);
 });
 
+test("rendered receipt rejects nonpositive and invalid device pixel ratios", () => {
+  for (const devicePixelRatio of [0, -1, null, "invalid"]) {
+    const result = runSingle({
+      source: "export default function Example(){ return <main>Plain content</main>; }",
+      snapshot: cleanSnapshot({
+        viewport: { width: 1440, height: 900, devicePixelRatio },
+      }),
+      route: "/example",
+    });
+    assert.equal(result.status, 2, result.stdout + result.stderr);
+    assert.equal(result.parsed.error, "Render snapshot viewport is invalid");
+  }
+});
+
 test("clean source plus route-bound clean render produces clear mechanical evidence", () => {
   const result = runSingle({
     source: "export default function Example(){ return <main>Plain product content</main>; }",

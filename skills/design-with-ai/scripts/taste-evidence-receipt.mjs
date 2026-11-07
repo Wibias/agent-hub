@@ -216,7 +216,10 @@ function readSnapshotBinding(path, declaredRoute) {
   }
   const viewport = snapshot.value.viewport;
   if (!Number.isFinite(viewport?.width) || viewport.width <= 0 ||
-      !Number.isFinite(viewport?.height) || viewport.height <= 0) {
+      !Number.isFinite(viewport?.height) || viewport.height <= 0 ||
+      (viewport.devicePixelRatio !== undefined &&
+        (!Number.isFinite(viewport.devicePixelRatio) ||
+         viewport.devicePixelRatio <= 0))) {
     throw new Error("Render snapshot viewport is invalid");
   }
   const expectedViewport = {
