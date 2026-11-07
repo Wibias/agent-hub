@@ -109,3 +109,8 @@ jobs:
 
       - name: Windows rendered-tree and Vite-style provenance regressions
         run: node --test skills/design-with-ai/tests/providers/rendered-assets.test.mjs
+
+      # Exercise the same fail-closed Taste report-parent guard under Windows
+      # junction semantics; the full Taste provider suite already runs on Linux.
+      - name: Windows Taste report-directory junction isolation
+        run: node --test --test-name-pattern="Taste output report-directory symlinks and Windows junctions cannot escape run isolation" skills/design-with-ai/tests/providers/taste-skill.test.mjs
