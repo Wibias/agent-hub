@@ -1055,3 +1055,37 @@ jobs:
             echo "authenticated unexpectedly executed P10 refresh" >&2
             exit 1
           fi
+
+      - name: Smoke-test P31 proposed profile projection in disposable Postgres
+        env:
+          PGPASSWORD: postgres
+        run: |
+          # This is local GitHub Actions Postgres, never a linked Supabase project.
+          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f reference-graph/schema/014_reference_graph_profile_projection_p31.sql
+          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f tests/reference-graph/p31-profile-projection-smoke.sql
+
+          if psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            -c "set role anon; select public.reference_graph_refresh_profile_runtime_projection_p31();"; then
+            echo "anon unexpectedly executed P31 privileged refresh" >&2
+            exit 1
+          fi
+          if psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            -c "set role authenticated; select public.reference_graph_refresh_profile_runtime_projection_p31();"; then
+            echo "authenticated unexpectedly executed P31 privileged refresh" >&2
+            exit 1
+          fi
+          if psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            -c "set role anon; insert into public.reference_graph_profile_runtime_projection_p30_v1(asset_id,legacy_id,search_text,ordinary_or_failure_prone,multi_state_flow,tags,primary_stratum,projection_version,snapshot_date,refreshed_at) values ('a0000000-0000-5000-8000-000000000199','forbidden','x',false,false,'[]','direct-domain','reference-graph.profile-runtime.p30.v1',current_date,now());"; then
+            echo "anon unexpectedly inserted into P31 projection" >&2
+            exit 1
+          fi
+          if psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            -c "set role authenticated; update public.reference_graph_profile_runtime_projection_p30_v1 set search_text='forbidden';"; then
+            echo "authenticated unexpectedly updated P31 projection" >&2
+            exit 1
+          fi
+          if psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            -c "set role anon; delete from public.reference_graph_profile_runtime_projection_p30_v1;"; then
+            echo "anon unexpectedly deleted from P31 projection" >&2
+            exit 1
+          fi
