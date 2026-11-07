@@ -52,7 +52,9 @@ jobs:
 
       # Exercise the corrected #205 moving-base error-evidence contract as
       # part of the joint test/CI integration, not solely in base-branch CI.
-      - name: Bounded and redacted DOM-state browser errors
+      # Includes close-time pageerror/navigation/close-failure negative controls
+      # inherited from the latest #205 provider-base branch.
+      - name: DOM-state error, redirect and close-time fail-closed regressions
         run: node --test skills/design-with-ai/tests/providers/rendered-state-probe.test.mjs
 
       # Explicitly exercise the latest #205 scanner-failure evidence contract
