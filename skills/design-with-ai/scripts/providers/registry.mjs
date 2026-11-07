@@ -9,6 +9,20 @@ const SAFE_TASTE_PROBE_REASONS = new Set([
   "Taste Skill root cannot be read",
 ]);
 
+// Only these exact messages are authored by bundled providers and contain no
+// input-dependent paths, browser URLs or third-party exception text.
+const SAFE_BUNDLED_PROBE_REASONS = new Map([
+  ["native-dwa", new Set(["DWA taste-gate script is missing"])],
+  ["impeccable", new Set(["Pinned, bundled Impeccable JS detector is unavailable"])],
+]);
+function safeProbeReason(id, reason) {
+  if ((id === "taste-skill" && SAFE_TASTE_PROBE_REASONS.has(reason)) ||
+      SAFE_BUNDLED_PROBE_REASONS.get(id)?.has(reason)) {
+    return reason;
+  }
+  return "Provider runtime unavailable";
+}
+
 export function createProviderRegistry(providers = []) {
   const items = new Map();
   for (const provider of providers) {
@@ -61,8 +75,7 @@ export async function runProviders(registry, {
       if (!probe || probe.available !== true) {
         reports.push(providerFailure(id, capability,
           isRequired ? ProviderStatus.BLOCKED : ProviderStatus.UNAVAILABLE,
-          id === "taste-skill" && SAFE_TASTE_PROBE_REASONS.has(probe?.reason)
-            ? probe.reason : "Provider runtime unavailable"));
+          safeProbeReason(id, probe?.reason)));
         continue;
       }
       try {

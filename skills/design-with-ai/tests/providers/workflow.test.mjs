@@ -8,6 +8,7 @@ import { join } from "node:path";
 import { Capability, ProviderStatus } from "../../scripts/providers/contract.mjs";
 import { createProviderRegistry, runProviders } from "../../scripts/providers/registry.mjs";
 import { createNativeDwaProvider } from "../../scripts/providers/native-dwa.mjs";
+import { createImpeccableProvider } from "../../scripts/providers/impeccable.mjs";
 import {
   selectProfileProviders, runProfileProviders,
 } from "../../scripts/providers/workflow.mjs";
@@ -98,6 +99,48 @@ test("untrusted provider and native gate failures never persist canary credentia
   assert.equal(malformed.status, "ERROR");
   assert.equal(malformed.reason, "Source gate returned invalid result");
   assert.ok(!JSON.stringify([failed, malformed]).includes("CANARY_"));
+});
+
+test("bundled runtime availability reports fixed pathsafe reasons only", async () => {
+  await fixture(async (f) => {
+    const native = createNativeDwaProvider({
+      script: join(f.root, "missing-native-gate.mjs"),
+    });
+    const impeccable = createImpeccableProvider({
+      script: join(f.root, "missing-impeccable-detector.mjs"),
+    });
+    const reports = await runProviders(createProviderRegistry([native, impeccable]), {
+      capability: src, required: ["native-dwa"], optional: ["impeccable"],
+    });
+    assert.deepEqual(reports.map((r) => r.status), ["BLOCKED", "UNAVAILABLE"]);
+    assert.deepEqual(reports.map((r) => r.reason), [
+      "DWA taste-gate script is missing",
+      "Pinned, bundled Impeccable JS detector is unavailable",
+    ]);
+    assert.deepEqual(reports.map((r) => r.findings), [[], []]);
+    const privateText = "/private/CANARY_BUNDLED_SECRET_20261107";
+    const forge = ["native-dwa", "impeccable", "third-party"].map((id) => ({
+      id, capabilities: [src],
+      async probe() { return { available: false, reason: privateText }; },
+      async inspect() { throw new Error("must not inspect"); },
+    }));
+    const untrusted = await runProviders(createProviderRegistry(forge), {
+      capability: src, required: forge.map((x) => x.id),
+    });
+    assert.ok(untrusted.every((r) =>
+      r.status === "BLOCKED" && r.reason === "Provider runtime unavailable"));
+    const spoof = createProviderRegistry([{
+      id: "third-party", capabilities: [src],
+      async probe() { return { available: false,
+        reason: "DWA taste-gate script is missing" }; },
+      async inspect() { throw new Error("must not inspect"); },
+    }]);
+    const [spoofed] = await runProviders(spoof, {
+      capability: src, required: ["third-party"],
+    });
+    assert.equal(spoofed.reason, "Provider runtime unavailable");
+    assert.ok(!JSON.stringify(untrusted).includes("CANARY_BUNDLED_SECRET_20261107"));
+  });
 });
 
 test("Taste probe reports fixed availability hints but never untrusted details", async () => {

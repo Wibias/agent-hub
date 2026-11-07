@@ -10,6 +10,7 @@ import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { test } from "node:test";
 import { createImpeccableProvider } from "../../scripts/providers/impeccable.mjs";
+import { safeQualityAuditError } from "../../scripts/providers/quality-audit.mjs";
 import { Capability } from "../../scripts/providers/contract.mjs";
 
 const cli = fileURLToPath(new URL("../../scripts/providers/quality-audit.mjs", import.meta.url));
@@ -137,6 +138,32 @@ test("explicitly required missing Taste runtime blocks", () => fixture((f) => {
   assert.equal(summary.coverage.complete, false);
 }));
 
+
+test("safe workflow and scope errors stay specific; untrusted lookalikes remain redacted", () =>
+  fixture((f) => {
+    const exact = [
+      "Audited source changed during provider execution; evidence invalid",
+      "Project root and source must exist without symlink targets",
+      "Source target is outside the project scope",
+      "Requested route does not match the built HTML path; SPA routes require verified route-specific HTML",
+      "Detector context dependency must be a regular in-project file",
+    ];
+    for (const label of exact) {
+      assert.equal(safeQualityAuditError(new Error(label)), label);
+      assert.equal(safeQualityAuditError(new Error(label +
+        " token=CANARY_WORKFLOW_SECRET_20261107")),
+      "Audit failed; untrusted error details redacted");
+    }
+    assert.equal(safeQualityAuditError(new Error(
+      "Filesystem ENOENT: /private/path/CANARY_WORKFLOW_SECRET_20261107")),
+    "Audit failed; untrusted error details redacted");
+    const missing = invoke(f, [], join(f.root, "CANARY_MISSING_SOURCE_20261107.tsx"));
+    assert.equal(missing.status, 2, missing.stderr);
+    assert.equal(missing.stderr.trim(),
+      "DWA provider audit: Project root and source must exist without symlink targets");
+    assert.equal(missing.stdout, "");
+    assert.ok(!missing.stderr.includes("CANARY_MISSING_SOURCE_20261107"));
+  }));
 
 test("audit CLI redacts untrusted flags and filesystem failure paths", () =>
   fixture((f) => {

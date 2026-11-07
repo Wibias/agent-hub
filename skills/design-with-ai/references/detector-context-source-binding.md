@@ -15,6 +15,8 @@ Policy dependencies covered:
 - The nearest applicable `DESIGN.md` (case variants and the existing `.agents/context`/`docs` fallbacks) per source-file directory.
 - The corresponding `.impeccable/design.json` or `DESIGN.json` sidecar, if present, according to detector precedence.
 
+The manifest also binds every selected source file to a deterministic `detectorBindings` entry (`source`, `designRoot`, `designFile`). An absent applicable policy is represented by `null`. This prevents a new nested `package.json` / project boundary from silently changing only one source file's inherited `DESIGN.md` while the same outer policy remains in use by sibling files. The mapping is stored only for audits with Impeccable detector-context tracking enabled, not native-only quick scans. Each binding uses project-relative paths; the full per-file resolution array participates in `sourceSha256`.
+
 The DWA snapshot includes only the digest, not policy contents. Files already present in the ordinary source manifest are not double-counted. A config created or changed between the before and after source proofs changes `sourceSha256`, making the workflow fail closed. Symlinks and policies resolving outside the declared project root are rejected.
 
 The resolver is deliberately independent of the optional Impeccable plugin. The DWA native quick profile must still work when Impeccable is unavailable.

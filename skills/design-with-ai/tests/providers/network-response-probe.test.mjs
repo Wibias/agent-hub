@@ -92,7 +92,7 @@ function mockChrome({ input, htmlBytes, cssBytes }, {
             return body;
           },
         });
-        let currentRoute = redirected ? "/login" : "/settings";
+        let currentRoute = redirected ? "/login" : input.route;
         const mainFrame = {};
         const page = {
           mainFrame: () => mainFrame,
@@ -106,7 +106,7 @@ function mockChrome({ input, htmlBytes, cssBytes }, {
                 contextEvents.get("response")?.(response(url, body));
                 contextEvents.get("requestfinished")?.(request);
               };
-              deliver("http://127.0.0.1:5191/settings", htmlBytes);
+              deliver(input.baseUrl + input.route, htmlBytes);
               if (!omitCss) {
                 deliver(
                   missing ? "http://127.0.0.1:5191/settings/not-in-manifest.css" :
@@ -472,6 +472,71 @@ test("CLI distinguishes fixed input validation from untrusted browser errors", a
     assert.match(badURL.stderr, /Invalid base URL/);
   });
 });
+
+test("nested index trailing-slash route matches only when explicitly declared", async () => {
+  await fixture(async (f) => {
+    const declared = { ...f.input, route: "/settings/" };
+    const ok = await probeNetworkResponses(declared, {
+      browserFactory: mockChrome({ ...f, input: declared }).factory,
+    });
+    assert.equal(ok.status, "LOCAL_RESPONSES_MATCHED", JSON.stringify(ok));
+    assert.equal(ok.productCompletionEligible, false);
+    assert.deepEqual(ok.observations.map((o) => o.width), [1440, 768, 390]);
+    assert.ok(ok.observations.every((o) =>
+      o.finalUrlMatched === true && o.local.length === 2 &&
+      o.local.every((entry) => entry.bodyVerified === true &&
+        ["dist/settings/index.html", "dist/settings/site.css"].includes(entry.path))));
+    for (const route of ["/settings//", "/settings/other/", "/settings/%2f",
+      "/settings/%2e", "//settings/"]) {
+      await assert.rejects(
+        () => probeNetworkResponses({ ...f.input, route }),
+        /unambiguous absolute local path|HTML does not map to the declared isolated build route/,
+        route);
+    }
+    const redirected = await probeNetworkResponses(declared, {
+      browserFactory: mockChrome({ ...f, input: declared },
+        { redirected: true }).factory,
+    });
+    assert.equal(redirected.status, "INCOMPLETE",
+      "a declared trailing-slash route cannot certify a different destination");
+    assert.ok(redirected.observations.every((o) => o.finalUrlMatched === false));
+  });
+});
+
+test("Linux literal backslash in rendered directory retains distinct manifest asset keys",
+  { skip: process.platform === "win32" ? "backslash is a Windows separator" : false },
+  async () => {
+    await fixture(async (f) => {
+      const renderedRoot = join(f.root, "dist\\fixture");
+      const nested = join(renderedRoot, "settings");
+      mkdirSync(nested, { recursive: true });
+      const html = join(nested, "index.html");
+      writeFileSync(html, f.htmlBytes);
+      writeFileSync(join(nested, "site.css"), f.cssBytes);
+      const input = { ...f.input, renderedRoot, html };
+      const expected = ["dist\\fixture/settings/index.html",
+        "dist\\fixture/settings/site.css"];
+      const normal = await probeNetworkResponses(input, {
+        browserFactory: mockChrome({ ...f, input }).factory,
+      });
+      assert.equal(normal.status, "LOCAL_RESPONSES_MATCHED", JSON.stringify(normal));
+      assert.equal(normal.expectedLocalFileCount, 2);
+      assert.ok(normal.observations.every((o) => {
+        const received = o.local.map((entry) => entry.path).sort();
+        return o.status === "LOCAL_BODY_BYTES_MATCHED" &&
+          received.length === 2 &&
+          received.every((path, i) => path === expected.slice().sort()[i]) &&
+          o.local.every((entry) => entry.bodyVerified);
+      }), "manifest keys with literal Linux backslashes must match response mappings");
+      const tampered = await probeNetworkResponses(input, {
+        browserFactory: mockChrome({ ...f, input },
+          { wrongCss: true }).factory,
+      });
+      assert.equal(tampered.status, "INCOMPLETE");
+      assert.ok(tampered.observations.every((o) =>
+        o.issues.includes("LOCAL_RESPONSE_BODY_MISMATCH")));
+    });
+  });
 
 test("actual response body hashes match a local two-file manifest across three widths", async () => {
   await fixture(async (f) => {
