@@ -18,11 +18,15 @@ const pages = {
     marker + '<div style="margin-top:1400px">Loading below fold</div>'),
   '/hidden': page('<div style="opacity:0">' + marker + '</div>'),
   '/clipped-marker': page('<div style="height:0;overflow:hidden">' + marker + '</div>'),
+  '/clip-path-marker': page('<div style="clip-path:inset(100%)">' + marker + '</div>'),
   '/clipped-forbidden': page(marker +
     '<div style="height:0;overflow:hidden"><p>Access denied</p></div>'),
   '/contents-forbidden': page(marker +
     '<div style="display:contents">Access denied</div>'),
   '/split-forbidden': page(marker + '<p>Access den<span>i</span>ed</p>'),
+  '/br-forbidden': page(marker + '<p>Access<br>denied</p>'),
+  '/partially-clipped-required': page('<div data-game-phase="live">Playing ' +
+    '<span style="display:inline-block;width:3px;overflow:hidden;white-space:nowrap">now</span></div>'),
   '/split-required': page('<div data-game-phase="live">Play<span>ing</span> now</div>'),
   '/adjacent-buttons-forbidden': page(marker +
     '<button>Access</button><button>denied</button>'),
@@ -123,6 +127,15 @@ try {
     x.signals?.first.missingText?.includes('Playing now')),
   'A zero-height overflow:hidden ancestor cannot attest readiness or text');
 
+  const clipPathMarker = await probe('/clip-path-marker', {
+    requiredText: ['Playing now'], forbiddenText: [],
+  });
+  assertWidths(clipPathMarker, 'INCOMPLETE');
+  assert.ok(clipPathMarker.observations.every((x) =>
+    x.signals?.first.markerVisible === false &&
+    x.signals?.first.missingText?.includes('Playing now')),
+  'clip-path:inset(100%) cannot certify a hidden ready marker or its text');
+
   const clippedForbidden = await probe('/clipped-forbidden', {
     forbiddenText: ['Access denied'],
   });
@@ -151,6 +164,22 @@ try {
       x.signals?.first.forbiddenTextVisible?.includes('Access denied')),
     'Adjacent atomic boxes cannot conceal visible forbidden text: ' + route);
   }
+
+  const lineBreakForbidden = await probe('/br-forbidden', {
+    forbiddenText: ['Access denied'],
+  });
+  assertWidths(lineBreakForbidden, 'INCOMPLETE');
+  assert.ok(lineBreakForbidden.observations.every((x) =>
+    x.signals?.first.forbiddenTextVisible?.includes('Access denied')),
+  'Visible <br> must separate forbidden words, unlike adjacent inline spans');
+
+  const partiallyClippedRequired = await probe('/partially-clipped-required', {
+    requiredText: ['Playing now'], forbiddenText: [],
+  });
+  assertWidths(partiallyClippedRequired, 'INCOMPLETE');
+  assert.ok(partiallyClippedRequired.observations.every((x) =>
+    x.signals?.first.missingText?.includes('Playing now')),
+  'A few visible pixels of a required word cannot certify the full label');
 
   const splitRequired = await probe('/split-required', {
     requiredText: ['Playing now'],
