@@ -174,6 +174,10 @@ export async function probeRenderedState(input, { browserFactory = loadPlaywrigh
       const record = { width, status: "INCOMPLETE", signals: null, screenshotSha256: null };
       report.observations.push(record);
       let context;
+      let pageErrorCount = 0;
+      const pageErrorSamples = [];
+      let mainFrameNavigations = 0;
+      let observationSealed = false;
       try {
         context = await browser.newContext({
           viewport: { width, height: H },
@@ -183,18 +187,16 @@ export async function probeRenderedState(input, { browserFactory = loadPlaywrigh
         // A hostile or broken page can emit an arbitrary number of exceptions.
         // Preserve the count and at most three redacted examples, never all
         // raw error strings in memory or persistent evidence.
-        let pageErrorCount = 0;
-        const pageErrorSamples = [];
         page.on("pageerror", (error) => {
+          if (observationSealed) return;
           pageErrorCount++;
           if (pageErrorSamples.length < 3) pageErrorSamples.push(browserError(error));
         });
         // Register before goto: count main-frame navigations even when JS
         // leaves and returns to the requested route during the observation.
         const mainFrame = page.mainFrame();
-        let mainFrameNavigations = 0;
         page.on("framenavigated", (frame) => {
-          if (frame === mainFrame) mainFrameNavigations++;
+          if (!observationSealed && frame === mainFrame) mainFrameNavigations++;
         });
         const response = await page.goto(opts.url, { waitUntil: "domcontentloaded", timeout: 45_000 });
         record.httpStatus = response?.status?.() ?? null;
@@ -226,27 +228,32 @@ export async function probeRenderedState(input, { browserFactory = loadPlaywrigh
           ? opts.route : "<unexpected-path-redacted>";
         record.finalOrigin = capturedUrl.origin === expectedOrigin
           ? expectedOrigin : "<unexpected-origin-redacted>";
-        record.mainFrameNavigationCount = mainFrameNavigations;
         record.signals = { first, second, afterScreenshot };
-        record.pageErrorCount = pageErrorCount;
-        if (pageErrorSamples.length) record.pageErrorSamples = pageErrorSamples;
         record.screenshot = screenshot;
         record.screenshotSha256 = sha(readFileSync(screenshot));
-        record.status = record.httpStatus === 200 &&
-          !record.redirectChainPresent && mainFrameNavigations === 1 &&
-          record.path === opts.route && record.finalPath === opts.route &&
-          record.origin === new URL(opts.url).origin &&
-          record.finalOrigin === new URL(opts.url).origin &&
-          pageErrorCount === 0 &&
-          !record.markerWaitError && completeSample(first) &&
-          completeSample(second) && completeSample(afterScreenshot)
-          ? "DOM_SIGNALS_OBSERVED" : "INCOMPLETE";
       } catch (e) {
-        record.status = "INCOMPLETE";
         record.error = browserError(e);
       } finally {
-        await context?.close().catch(() => {});
+        // A context can dispatch page errors and navigations during close.
+        // Do not award success until those events have been observed.
+        try { await context?.close(); }
+        catch { record.contextCloseFailed = true; }
+        observationSealed = true;
       }
+      record.mainFrameNavigationCount = mainFrameNavigations;
+      record.pageErrorCount = pageErrorCount;
+      if (pageErrorSamples.length) record.pageErrorSamples = pageErrorSamples;
+      const { first, second, afterScreenshot } = record.signals ?? {};
+      const expectedOrigin = new URL(opts.url).origin;
+      record.status = !record.error && !record.contextCloseFailed &&
+        record.httpStatus === 200 && !record.redirectChainPresent &&
+        mainFrameNavigations === 1 && record.path === opts.route &&
+        record.finalPath === opts.route && record.origin === expectedOrigin &&
+        record.finalOrigin === expectedOrigin && pageErrorCount === 0 &&
+        /^[0-9a-f]{64}$/.test(record.screenshotSha256 ?? "") &&
+        !record.markerWaitError && completeSample(first) &&
+        completeSample(second) && completeSample(afterScreenshot)
+        ? "DOM_SIGNALS_OBSERVED" : "INCOMPLETE";
     }
     if (report.observations.length === WIDTHS.length &&
         report.observations.every((r) => r.status === "DOM_SIGNALS_OBSERVED" &&

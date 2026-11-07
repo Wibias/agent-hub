@@ -40,6 +40,9 @@ function fakeBrowser({
   pageErrorMessage = "Fixture page exception",
   transitionAfterScreenshot = false,
   clientRedirectBounce = false,
+  closePageError = false,
+  closeNavigation = false,
+  closeFailure = false,
 } = {}) {
   let closes = 0;
   const opened = [];
@@ -48,6 +51,8 @@ function fakeBrowser({
       opened.push({ viewport, serviceWorkers, storageState });
       const width = viewport.width;
       let captured = false;
+      let emitClosePageError = () => {};
+      let emitCloseNavigation = () => {};
       return {
         newPage: async () => {
           const frame = {};
@@ -55,7 +60,14 @@ function fakeBrowser({
           return {
           mainFrame: () => frame,
           on: (kind, cb) => {
-            if (kind === "framenavigated") onNavigation = cb;
+            if (kind === "framenavigated") {
+              onNavigation = cb;
+              emitCloseNavigation = () => cb(frame);
+            }
+            if (kind === "pageerror") {
+              emitClosePageError = () =>
+                cb(new Error("token=CANARY_CLOSE_PAGE_ERROR_20261107"));
+            }
             if (pageErrors && kind === "pageerror") {
               const count = pageErrors === true ? 1 : pageErrors;
               for (let i = 0; i < count; i++) cb(new Error(pageErrorMessage));
@@ -96,7 +108,12 @@ function fakeBrowser({
           },
           };
         },
-        close: async () => { closes++; },
+        close: async () => {
+          if (closePageError) emitClosePageError();
+          if (closeNavigation) emitCloseNavigation();
+          closes++;
+          if (closeFailure) throw new Error("CANARY_CONTEXT_CLOSE_20261107");
+        },
       };
     },
     close: async () => { closes++; },
@@ -126,6 +143,41 @@ test("all three declared DOM state observations need separate fresh anonymous co
       c.storageState.cookies.length === 0 && c.storageState.origins.length === 0));
     assert.equal(JSON.parse(readFileSync(join(out.artifactDirectory, "state-report.json"), "utf8"))
       .status, "DOM_SIGNALS_OBSERVED");
+  });
+});
+
+
+test("close-time page errors, navigations and close failures cannot preserve a stale DOM PASS", async () => {
+  await fixture(async ({ input }) => {
+    for (const scenario of [
+      { closePageError: true },
+      { closeNavigation: true },
+      { closeFailure: true },
+    ]) {
+      const out = await probeRenderedState(input, {
+        browserFactory: fakeBrowser(scenario).factory,
+      });
+      assert.equal(out.status, "INCOMPLETE", JSON.stringify(scenario));
+      assert.equal(out.declaredDomStateObserved, false);
+      assert.equal(out.productCompletionEligible, false);
+      for (const observation of out.observations) {
+        assert.equal(observation.status, "INCOMPLETE");
+        if (scenario.closePageError) {
+          assert.equal(observation.pageErrorCount, 1);
+          assert.deepEqual(observation.pageErrorSamples,
+            ["Browser error: <details-redacted>"]);
+        }
+        if (scenario.closeNavigation) {
+          assert.equal(observation.mainFrameNavigationCount, 2);
+        }
+        if (scenario.closeFailure) {
+          assert.equal(observation.contextCloseFailed, true);
+        }
+      }
+      const persisted = readFileSync(
+        join(out.artifactDirectory, "state-report.json"), "utf8");
+      assert.ok(!persisted.includes("CANARY_CLOSE_"));
+    }
   });
 });
 
