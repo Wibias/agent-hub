@@ -190,6 +190,13 @@ export function assertFusion(fusion) {
         !Array.isArray(g.evidence) || !g.evidence.length ||
         ids.has(g.id)) throw new TypeError("Malformed or duplicate fused group");
     ids.add(g.id);
+    // The JSON digest protects accidental corruption, not a writer who can
+    // recompute it. Revalidate externally supplied Taste members here, too.
+    for (const member of g.members) {
+      if (member?.provider === "taste-skill") {
+        tasteMemberMetadata({ provider: "taste-skill" }, member);
+      }
+    }
   }
   return fusion;
 }

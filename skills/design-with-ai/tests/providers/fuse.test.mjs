@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { test } from "node:test";
 import { assertFusion, fuseProviderEvidence } from "../../scripts/providers/fuse.mjs";
 import { Capability, ProviderStatus } from "../../scripts/providers/contract.mjs";
@@ -261,6 +262,43 @@ test("unselected, duplicate, malformed and overly many reports fail closed", () 
   assert.throws(() => fuseProviderEvidence([], {
     optional: [], required: [],
   }), /nonempty/);
+});
+
+test("signed fusion snapshots still reject forged Taste member metadata", () => {
+  const valid = {
+    ...finding({
+      id: "taste-integrity", provider: "taste-skill",
+      file: "dist/index.html", line: null, width: 390,
+      selector: ".stage", priority: "P1",
+    }),
+    upstreamSeverity: "FAIL",
+    reviewClass: "GEOMETRY_NEEDS_VISUAL_REVIEW",
+  };
+  const fusion = fuseProviderEvidence([
+    report("taste-skill", [valid]),
+  ], { required: ["taste-skill"] });
+  assertFusion(structuredClone(fusion));
+
+  const signed = (change) => {
+    const mutated = structuredClone(fusion);
+    change(mutated.groups[0].members[0]);
+    const { contentSha256, ...payload } = mutated;
+    mutated.contentSha256 = createHash("sha256")
+      .update(JSON.stringify(payload)).digest("hex");
+    return mutated;
+  };
+  const cases = [
+    [(m) => { m.priority = "P2"; }, /severity contradicts normalized priority/],
+    [(m) => { m.upstreamSeverity = "WARN"; }, /severity contradicts normalized priority/],
+    [(m) => { m.upstreamSeverity = "ACCEPT"; }, /Invalid Taste upstream severity/],
+    [(m) => { m.reviewClass = "APPROVED"; }, /Invalid Taste review class/],
+  ];
+  for (const [change, error] of cases) {
+    assert.throws(() => assertFusion(signed(change)), error);
+  }
+  assert.throws(() => assertFusion(signed((m) => {
+    m.reviewClass = null;
+  })), /Invalid Taste review class/);
 });
 
 test("tampered fusion data fails the content digest check", () => {
