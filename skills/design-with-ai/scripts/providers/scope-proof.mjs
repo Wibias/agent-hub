@@ -17,7 +17,8 @@ const eligible = (name) => {
 };
 const skipped = new Set(["node_modules", ".git", "dist", "build", ".next"]);
 const hash = (value) => createHash("sha256").update(value).digest("hex");
-const normalize = (value) => value.replaceAll("\\", "/");
+// Do not collapse distinct Linux filenames containing literal backslashes.
+const normalize = (value) => value.split(sep).join("/");
 const isInside = (root, path) => {
   const rel = relative(root, path);
   return rel !== ".." && !rel.startsWith(".." + sep) && !isAbsolute(rel);

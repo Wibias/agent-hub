@@ -58,6 +58,41 @@ test("full local rendered tree includes HTML, CSS, JavaScript, image and font", 
   });
 });
 
+test("literal Linux backslashes remain distinct from directory separators", {
+  skip: process.platform === "win32",
+}, () => {
+  fixture((f) => {
+    const escapedName = join(f.renderedRoot, "assets", "a\\b.css");
+    const nestedDir = join(f.renderedRoot, "assets", "a");
+    mkdirSync(nestedDir);
+    writeFileSync(escapedName, "body { color: blue; }\\n");
+    writeFileSync(join(nestedDir, "b.css"), "body { color: red; }\\n");
+
+    const proof = renderedAssetProof({
+      projectRoot: f.root, renderedRoot: f.renderedRoot, html: f.html,
+    });
+    const literal = proof.files.find((file) => file.path === "dist/assets/a\\b.css");
+    const nested = proof.files.find((file) => file.path === "dist/assets/a/b.css");
+    assert.ok(literal, "literal backslash file must keep its exact key");
+    assert.ok(nested, "nested file must keep its actual separator");
+    assert.notEqual(literal.sha256, nested.sha256);
+    assert.equal(new Set(proof.files.map((file) => file.path)).size, proof.fileCount);
+    const scope = f.sample();
+    assert.ok(scope.manifest.renderedAssets.files.some((file) =>
+      file.path === "dist/assets/a\\b.css"));
+    assert.equal(scope.summary.rendered.assetCount, proof.fileCount,
+      "scope-proof must resolve both distinct files for observed input attestation");
+
+    const literalSource = join(f.root, "src", "a\\b.tsx");
+    writeFileSync(literalSource, "export default () => null;\\n");
+    const scopedSource = sourceScopeProof({
+      projectRoot: f.root, target: literalSource, route: "/literal",
+    });
+    assert.equal(scopedSource.manifest.files[0].path, "src/a\\b.tsx",
+      "source file identity must not collapse native Linux backslashes");
+  });
+});
+
 test("a CSS/JS/image/font asset changes the scoped digest without HTML changes", () => {
   fixture((f) => {
     const initial = f.sample();

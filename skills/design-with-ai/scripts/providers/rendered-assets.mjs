@@ -16,7 +16,8 @@ const MAX_TOTAL_BYTES = 512 * 1024 * 1024;
 const BUFFER_BYTES = 64 * 1024;
 
 const sha = (input) => createHash("sha256").update(input).digest("hex");
-const pathSlashes = (value) => value.replaceAll("\\", "/");
+// Convert only OS path separators; backslashes are valid literal Linux filenames.
+const pathSlashes = (value) => value.split(sep).join("/");
 const within = (root, path) => {
   const rel = relative(root, path);
   return rel !== ".." && !rel.startsWith(".." + sep) && !isAbsolute(rel);
