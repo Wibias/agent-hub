@@ -213,13 +213,21 @@ function validateProjects(inventory, asOf) {
 
 function latestReviews(pr) {
   const byReviewer = new Map();
+  const authorLogin = pr.author.toLowerCase();
   for (const review of [...pr.reviews].sort((a, b) =>
     a.submitted_at.localeCompare(b.submitted_at))) {
-    byReviewer.set(review.reviewer, review);
+    // GitHub logins are case-insensitive. COMMENTED is not a change in
+    // review disposition and must never clear an outstanding request for
+    // changes, dismiss an approval, or count as approval itself.
+    const reviewerLogin = review.reviewer.toLowerCase();
+    if (reviewerLogin === authorLogin || review.state === 'COMMENTED') {
+      continue;
+    }
+    // Only later APPROVED, CHANGES_REQUESTED or DISMISSED states supersede
+    // the prior controlling disposition of the same independent reviewer.
+    byReviewer.set(reviewerLogin, review);
   }
-  return [...byReviewer.entries()]
-    .filter(([reviewer]) => reviewer !== pr.author)
-    .map(([, review]) => review);
+  return [...byReviewer.values()];
 }
 
 /**
