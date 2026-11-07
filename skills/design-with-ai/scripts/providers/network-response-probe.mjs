@@ -229,13 +229,17 @@ export async function probeNetworkResponses(options, {
             });
             return;
           }
+          // An unknown same-origin URL may embed secrets in its path.
+          // Persist only a hash unless it matches a trusted build asset.
+          const asset = expected.get(path);
           const row = {
-            path, status: response.status(),
-            expectedSha256: expected.get(path)?.sha256 ?? null,
+            ...(asset ? { path } : { pathSha256: sha(path) }),
+            status: response.status(),
+            expectedSha256: asset?.sha256 ?? null,
             receivedSha256: null, bodyVerified: false,
           };
           obs.local.push(row);
-          if (!expected.has(path)) {
+          if (!asset) {
             recordIssue("UNMAPPED_LOCAL_RESPONSE");
             return;
           }
