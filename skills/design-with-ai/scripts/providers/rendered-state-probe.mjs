@@ -201,8 +201,13 @@ export async function probeRenderedState(input, { browserFactory = loadPlaywrigh
         record.redirectChainPresent =
           Boolean(response?.request?.()?.redirectedFrom?.());
         const navigatedUrl = new URL(page.url());
-        record.path = navigatedUrl.pathname;
-        record.origin = navigatedUrl.origin;
+        // Untrusted redirects may contain path or hostname credentials.
+        // Only the declared destination can appear in persisted evidence.
+        const expectedOrigin = new URL(opts.url).origin;
+        record.path = navigatedUrl.pathname === opts.route
+          ? opts.route : "<unexpected-path-redacted>";
+        record.origin = navigatedUrl.origin === expectedOrigin
+          ? expectedOrigin : "<unexpected-origin-redacted>";
         try {
           await page.waitForFunction(snapshotDeclaredDomState,
             { readySelector: opts.contract.readySelector, markerOnly: true },
@@ -217,8 +222,10 @@ export async function probeRenderedState(input, { browserFactory = loadPlaywrigh
         // overlay or state transition is not certified as captured evidence.
         const afterScreenshot = await page.evaluate(snapshotDeclaredDomState, opts.contract);
         const capturedUrl = new URL(page.url());
-        record.finalPath = capturedUrl.pathname;
-        record.finalOrigin = capturedUrl.origin;
+        record.finalPath = capturedUrl.pathname === opts.route
+          ? opts.route : "<unexpected-path-redacted>";
+        record.finalOrigin = capturedUrl.origin === expectedOrigin
+          ? expectedOrigin : "<unexpected-origin-redacted>";
         record.mainFrameNavigationCount = mainFrameNavigations;
         record.signals = { first, second, afterScreenshot };
         record.pageErrorCount = pageErrorCount;

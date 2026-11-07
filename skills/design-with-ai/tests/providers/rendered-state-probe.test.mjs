@@ -159,6 +159,31 @@ test("loading, empty, redirected, failed or unscreened state cannot be observed"
   });
 });
 
+
+test("unexpected navigation paths and origins never persist secret URL components", async () => {
+  await fixture(async ({ input }) => {
+    const canary = "CANARY_REDIRECT_SECRET_20261107";
+    for (const scenario of [
+      { route: "/session/" + canary + "/login" },
+      { postCaptureRoute: "/session/" + canary + "/login" },
+      { origin: "https://" + canary.toLowerCase() + ".example.test" },
+    ]) {
+      const out = await probeRenderedState(input, {
+        browserFactory: fakeBrowser(scenario).factory,
+      });
+      assert.equal(out.status, "INCOMPLETE");
+      assert.equal(out.productCompletionEligible, false);
+      const persisted = readFileSync(join(out.artifactDirectory, "state-report.json"), "utf8");
+      assert.ok(!persisted.toLowerCase().includes(canary.toLowerCase()));
+      assert.ok(out.observations.every((o) =>
+        o.status === "INCOMPLETE" &&
+        (!scenario.route || o.path === "<unexpected-path-redacted>") &&
+        (!scenario.postCaptureRoute || o.finalPath === "<unexpected-path-redacted>") &&
+        (!scenario.origin || o.origin === "<unexpected-origin-redacted>")));
+    }
+  });
+});
+
 test("pageerror flood retains only bounded URL-redacted samples and fails closed", async () => {
   await fixture(async ({ input }) => {
     const secret = "do-not-persist-this-query-token";

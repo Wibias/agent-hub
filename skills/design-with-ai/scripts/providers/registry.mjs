@@ -44,23 +44,23 @@ export async function runProviders(registry, {
       let probe;
       try {
         probe = await provider.probe({ capability, request });
-      } catch (error) {
+      } catch {
         reports.push(providerFailure(id, capability, ProviderStatus.ERROR,
-          "Provider probe failed: " + String(error.message ?? error)));
+          "Provider probe failed"));
         continue;
       }
       if (!probe || probe.available !== true) {
         reports.push(providerFailure(id, capability,
           isRequired ? ProviderStatus.BLOCKED : ProviderStatus.UNAVAILABLE,
-          typeof probe?.reason === "string" && probe.reason ? probe.reason : "Provider runtime unavailable"));
+          "Provider runtime unavailable"));
         continue;
       }
       try {
         reports.push(assertProviderReport(await provider.inspect({ ...request, capability }),
           { providerId: id, capability }));
-      } catch (error) {
+      } catch {
         reports.push(providerFailure(id, capability, ProviderStatus.ERROR,
-          "Provider inspection failed: " + String(error.message ?? error)));
+          "Provider inspection failed"));
       }
     }
   }
