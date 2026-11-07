@@ -600,13 +600,20 @@ export function findDesignRoot(startDir, { cache } = {}) {
   // are created, removed or renamed. Cache the exact directory signature,
   // not just an ancestor lookup that can become stale midway through a scan.
   const directorySignature = (entry) => {
-    const stat = fs.statSync(entry, { bigint: true });
-    return `${stat.dev}:${stat.ino}:${stat.mtimeNs}:${stat.ctimeNs}`;
+    try {
+      const stat = fs.statSync(entry, { bigint: true });
+      if (!stat.isDirectory()) return null;
+      return `${stat.dev}:${stat.ino}:${stat.mtimeNs}:${stat.ctimeNs}`;
+    } catch {
+      // Missing or inaccessible directories invalidate a memo, not the scan.
+      return null;
+    }
   };
   const cachedRootIsCurrent = (start, resolved) => {
     let entry = start;
     while (true) {
-      if (cache.get(`dirsig:${entry}`) !== directorySignature(entry)) {
+      const signature = directorySignature(entry);
+      if (signature === null || cache.get(`dirsig:${entry}`) !== signature) {
         cache.delete(`resolve:${entry}`);
         cache.delete(`root:${entry}`);
         return false;
@@ -619,8 +626,15 @@ export function findDesignRoot(startDir, { cache } = {}) {
   };
   const remember = (resolved) => {
     if (cache) for (const entry of visited) {
+      const signature = directorySignature(entry);
+      if (signature === null) {
+        cache.delete(`resolve:${entry}`);
+        cache.delete(`root:${entry}`);
+        cache.delete(`dirsig:${entry}`);
+        continue;
+      }
       cache.set(`resolve:${entry}`, resolved);
-      cache.set(`dirsig:${entry}`, directorySignature(entry));
+      cache.set(`dirsig:${entry}`, signature);
     }
     return resolved;
   };

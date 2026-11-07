@@ -140,6 +140,10 @@ function detectorContextFiles(root, sourceFiles) {
 function htmlLinkStartTags(html) {
   const tags = [];
   const rawText = new Set(["script", "style", "textarea", "title", "xmp", "iframe", "noembed", "noframes"]);
+  // htmlparser2 can parse links inside these parser-dependent regions and
+  // after plaintext, whereas the conservative scanner ignores them.
+  const ambiguousRaw = new Set(["iframe", "noembed", "noframes"]);
+  const candidateLink = /<link(?=[\s/>])/i;
   let offset = 0;
   let raw = null;
   while (offset < html.length) {
@@ -147,6 +151,10 @@ function htmlLinkStartTags(html) {
       const endTag = new RegExp(`</${raw}\\s*>`, "gi");
       endTag.lastIndex = offset;
       const end = endTag.exec(html);
+      if (ambiguousRaw.has(raw) &&
+          candidateLink.test(html.slice(offset, end?.index ?? html.length))) {
+        throw new TypeError("Parser-dependent HTML link region cannot be attested");
+      }
       if (!end) break;
       offset = endTag.lastIndex;
       raw = null;
@@ -185,7 +193,12 @@ function htmlLinkStartTags(html) {
     }
     if (!named[1]) {
       if (kind === "link") tags.push(html.slice(start, pos + 1));
-      if (kind === "plaintext") break;
+      if (kind === "plaintext") {
+        if (candidateLink.test(html.slice(pos + 1))) {
+          throw new TypeError("Parser-dependent HTML link region cannot be attested");
+        }
+        break;
+      }
       if (rawText.has(kind) && !/\/\s*>$/.test(html.slice(start, pos + 1))) raw = kind;
     }
     offset = pos + 1;
