@@ -14,7 +14,15 @@ const filled = (x) => typeof x === "string" && x.trim().length > 0;
 const arrayStrings = (v, max) =>
   Array.isArray(v) && v.length <= max && v.every((x) =>
     filled(x) && x.length <= 240 && !/[\r\n\0]/.test(x));
-const browserError = (e) => String(e?.message ?? e).slice(0, 260);
+// Never persist untrusted browser exception messages. URL schemes can be
+// recognized for diagnostics, but relative paths and bare credentials have
+// no reliable syntactic boundary. Store fixed categories only.
+const ERROR_URL_SCHEME = /\b(?:[a-z][a-z0-9+.-]*:\/\/|data:|blob:|file:|javascript:)/i;
+const browserError = (error) => {
+  const message = String(error?.message ?? error);
+  return ERROR_URL_SCHEME.test(message)
+    ? "Browser error: <url-redacted>" : "Browser error: <details-redacted>";
+};
 // A positive state marker must be REQUIRED by the entire selector. Reject
 // selector lists, :not(), ancestor-only predicates and generic mounted roots.
 const POSITIVE_MARKER = /^\[data-[a-z][a-z0-9-]*(?:\s*(?:=|~=|\|=|\^=|\$=|\*=)\s*(?:"[^"]+"|'[^']+'|[a-zA-Z0-9_-]+))?\]$/i;
@@ -224,27 +232,53 @@ export async function probeRenderedState(input, { browserFactory = loadPlaywrigh
       const record = { width, status: "INCOMPLETE", signals: null, screenshotSha256: null };
       report.observations.push(record);
       let context;
+      let pageErrorCount = 0;
+      const pageErrorSamples = [];
+      let mainFrameNavigations = 0;
+      let observationSealed = false;
       try {
         context = await browser.newContext({
           viewport: { width, height: H },
           serviceWorkers: "block", storageState: { cookies: [], origins: [] },
         });
         const page = await context.newPage();
-        const errors = [];
-        page.on("pageerror", (error) => errors.push(browserError(error)));
+        // A hostile or broken page can emit an arbitrary number of exceptions.
+        // Preserve the count and at most three redacted examples, never all
+        // raw error strings in memory or persistent evidence.
+        page.on("pageerror", (error) => {
+          if (observationSealed) return;
+          pageErrorCount++;
+          if (pageErrorSamples.length < 3) pageErrorSamples.push(browserError(error));
+        });
+        // Register before goto: count main-frame navigations even when JS
+        // leaves and returns to the requested route during the observation.
+        const mainFrame = page.mainFrame();
+        page.on("framenavigated", (frame) => {
+          if (!observationSealed && frame === mainFrame) mainFrameNavigations++;
+        });
         const response = await page.goto(opts.url, { waitUntil: "domcontentloaded", timeout: 45_000 });
         record.httpStatus = response?.status?.() ?? null;
         record.redirectChainPresent =
           Boolean(response?.request?.()?.redirectedFrom?.());
         const navigatedUrl = new URL(page.url());
-        record.path = navigatedUrl.pathname;
-        record.origin = navigatedUrl.origin;
+        // Untrusted redirects may contain path or hostname credentials.
+        // Only the declared destination can appear in persisted evidence.
+        const expectedOrigin = new URL(opts.url).origin;
+        record.path = navigatedUrl.pathname === opts.route
+          ? opts.route : "<unexpected-path-redacted>";
+        record.origin = navigatedUrl.origin === expectedOrigin
+          ? expectedOrigin : "<unexpected-origin-redacted>";
         try {
           await page.waitForFunction(snapshotDeclaredDomState,
             { readySelector: opts.contract.readySelector, markerOnly: true },
             { timeout: 15_000 });
         } catch (e) { record.markerWaitError = browserError(e); }
-        const first = await page.evaluate(snapshotDeclaredDomState, opts.contract);
+        // A main-frame navigation can destroy the first evaluation context.
+        // Do not erase later valid observations; retain a fixed error label
+        // and make this viewport INCOMPLETE even if later markers reappear.
+        let first = null;
+        try { first = await page.evaluate(snapshotDeclaredDomState, opts.contract); }
+        catch (error) { record.firstSampleError = browserError(error); }
         await page.waitForTimeout(750);
         const second = await page.evaluate(snapshotDeclaredDomState, opts.contract);
         const screenshot = join(runDir, "state-" + width + ".png");
@@ -253,28 +287,36 @@ export async function probeRenderedState(input, { browserFactory = loadPlaywrigh
         // overlay or state transition is not certified as captured evidence.
         const afterScreenshot = await page.evaluate(snapshotDeclaredDomState, opts.contract);
         const capturedUrl = new URL(page.url());
-        record.finalPath = capturedUrl.pathname;
-        record.finalOrigin = capturedUrl.origin;
+        record.finalPath = capturedUrl.pathname === opts.route
+          ? opts.route : "<unexpected-path-redacted>";
+        record.finalOrigin = capturedUrl.origin === expectedOrigin
+          ? expectedOrigin : "<unexpected-origin-redacted>";
         record.signals = { first, second, afterScreenshot };
-        record.pageErrorCount = errors.length;
-        if (errors.length) record.pageErrorSamples = errors.slice(0, 3);
         record.screenshot = screenshot;
         record.screenshotSha256 = sha(readFileSync(screenshot));
-        record.status = record.httpStatus === 200 &&
-          !record.redirectChainPresent &&
-          record.path === opts.route && record.finalPath === opts.route &&
-          record.origin === new URL(opts.url).origin &&
-          record.finalOrigin === new URL(opts.url).origin &&
-          errors.length === 0 &&
-          !record.markerWaitError && completeSample(first) &&
-          completeSample(second) && completeSample(afterScreenshot)
-          ? "DOM_SIGNALS_OBSERVED" : "INCOMPLETE";
       } catch (e) {
-        record.status = "INCOMPLETE";
         record.error = browserError(e);
       } finally {
-        await context?.close().catch(() => {});
+        // A context can dispatch page errors and navigations during close.
+        // Do not award success until those events have been observed.
+        try { await context?.close(); }
+        catch { record.contextCloseFailed = true; }
+        observationSealed = true;
       }
+      record.mainFrameNavigationCount = mainFrameNavigations;
+      record.pageErrorCount = pageErrorCount;
+      if (pageErrorSamples.length) record.pageErrorSamples = pageErrorSamples;
+      const { first, second, afterScreenshot } = record.signals ?? {};
+      const expectedOrigin = new URL(opts.url).origin;
+      record.status = !record.error && !record.contextCloseFailed &&
+        record.httpStatus === 200 && !record.redirectChainPresent &&
+        mainFrameNavigations === 1 && record.path === opts.route &&
+        record.finalPath === opts.route && record.origin === expectedOrigin &&
+        record.finalOrigin === expectedOrigin && pageErrorCount === 0 &&
+        /^[0-9a-f]{64}$/.test(record.screenshotSha256 ?? "") &&
+        !record.markerWaitError && !record.firstSampleError && completeSample(first) &&
+        completeSample(second) && completeSample(afterScreenshot)
+        ? "DOM_SIGNALS_OBSERVED" : "INCOMPLETE";
     }
     if (report.observations.length === WIDTHS.length &&
         report.observations.every((r) => r.status === "DOM_SIGNALS_OBSERVED" &&
@@ -337,7 +379,13 @@ if (isCliEntry()) {
     process.stdout.write(JSON.stringify(report, null, 2) + "\n");
     if (report.status !== "DOM_SIGNALS_OBSERVED") process.exitCode = 1;
   } catch (e) {
-    process.stderr.write("Rendered state probe: " + browserError(e) + "\n");
+    // Only known, fixed CLI usage errors may be shown verbatim. All other
+    // exception details remain redacted, even if the failure occurs before a browser starts.
+    const knownMissingOption = ["--base-url", "--route", "--contract", "--playwright-root"]
+      .find((key) => e?.message === "Required option " + key);
+    const safeMessage = knownMissingOption
+      ? "Required option " + knownMissingOption : browserError(e);
+    process.stderr.write("Rendered state probe: " + safeMessage + "\n");
     process.exitCode = 2;
   }
 }
