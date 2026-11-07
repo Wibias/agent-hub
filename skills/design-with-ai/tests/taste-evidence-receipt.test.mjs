@@ -448,7 +448,7 @@ test("receipt binds child proof to exact source, snapshot and fusion channels", 
     path, filesScanned, p0: 0, p1: 0, p2: 0,
     verdict: "PASS_MECHANICAL", hits: [], cluster: { families: [] },
   });
-  const renderReport = (path, url, viewport = { width: 1440, height: 900 }) => ({
+  const renderReport = (path, url, viewport = { width: 1440, height: 900, devicePixelRatio: 1 }) => ({
     snapshot: path, url, viewport,
     verdict: "PASS_RENDER_EVIDENCE", hits: [], cluster: { families: [] },
   });
@@ -490,6 +490,10 @@ test("receipt binds child proof to exact source, snapshot and fusion channels", 
     writeGate(renderGate, renderReport(snapshot, "http://localhost/example", { width: 1440, height: 768 }));
     execute(true);
     writeGate(renderGate, renderReport(snapshot, "http://localhost/example", { width: 1440 }));
+    execute(true);
+    writeGate(renderGate, renderReport(snapshot, "http://localhost/example", { width: 1440, height: 900 }));
+    execute(true);
+    writeGate(renderGate, renderReport(snapshot, "http://localhost/example", { width: 1440, height: 900, devicePixelRatio: 2 }));
     execute(true);
 
     writeGate(renderGate, renderReport(snapshot, "http://localhost/example"));
