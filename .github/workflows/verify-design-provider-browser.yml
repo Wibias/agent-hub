@@ -58,3 +58,6 @@ jobs:
         env:
           DWA_PLAYWRIGHT_ROOT: ${{ runner.temp }}/dwa-playwright/node_modules/playwright-core
         run: node skills/design-with-ai/tests/providers/network-response-live-smoke.mjs
+
+      - name: Network browser error redaction and fail-closed regression tests
+        run: node --test skills/design-with-ai/tests/providers/network-response-probe.test.mjs
