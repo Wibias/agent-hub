@@ -175,12 +175,18 @@ export function selectP29ProfileCandidateIds({ candidates, request } = {}) {
   };
 }
 
-function validateBaseline(baseline, templates) {
+function validateBaseline(baseline, templates, expectedReferenceDate) {
+  if (typeof expectedReferenceDate !== 'string'
+      || !/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(expectedReferenceDate)
+      || Number.isNaN(new Date(expectedReferenceDate + 'T00:00:00.000Z').valueOf())
+      || new Date(expectedReferenceDate + 'T00:00:00.000Z').toISOString().slice(0, 10) !== expectedReferenceDate) {
+    throw new Error('P29 requires an independently pinned expected reference date');
+  }
   if (!baseline || baseline.schema_version !== 'reference-graph.p27-standard-deep-baseline.v1'
       || baseline.repository_default_graph_enabled !== false
       || baseline.activation_performed !== false
       || typeof baseline.reference_date !== 'string'
-      || !/^\\d{4}-\\d{2}-\\d{2}$/.test(baseline.reference_date)
+      || baseline.reference_date !== expectedReferenceDate
       || !Array.isArray(baseline.cases)
       || baseline.source_case_count !== templates.length
       || baseline.total_profile_cases !== templates.length * 2
@@ -226,11 +232,12 @@ export function compareP29OfflineProfileParity({
   templates,
   candidates,
   baseline,
+  expectedReferenceDate,
 } = {}) {
   if (!Array.isArray(templates) || templates.length === 0) {
     throw new TypeError('P29 templates must be non-empty');
   }
-  const byKey = validateBaseline(baseline, templates);
+  const byKey = validateBaseline(baseline, templates, expectedReferenceDate);
   let exactOrderCases = 0;
   let mismatchCases = 0;
   const mismatchByProfile = { standard: 0, deep: 0 };
