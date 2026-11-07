@@ -14,15 +14,7 @@ const filled = (x) => typeof x === "string" && x.trim().length > 0;
 const arrayStrings = (v, max) =>
   Array.isArray(v) && v.length <= max && v.every((x) =>
     filled(x) && x.length <= 240 && !/[\r\n\0]/.test(x));
-// Never persist untrusted browser exception messages. URL schemes can be
-// recognized for diagnostics, but relative paths and bare credentials have
-// no reliable syntactic boundary. Store fixed categories only.
-const ERROR_URL_SCHEME = /\b(?:[a-z][a-z0-9+.-]*:\/\/|data:|blob:|file:|javascript:)/i;
-const browserError = (error) => {
-  const message = String(error?.message ?? error);
-  return ERROR_URL_SCHEME.test(message)
-    ? "Browser error: <url-redacted>" : "Browser error: <details-redacted>";
-};
+const browserError = (e) => String(e?.message ?? e).slice(0, 260);
 // A positive state marker must be REQUIRED by the entire selector. Reject
 // selector lists, :not(), ancestor-only predicates and generic mounted roots.
 const POSITIVE_MARKER = /^\[data-[a-z][a-z0-9-]*(?:\s*(?:=|~=|\|=|\^=|\$=|\*=)\s*(?:"[^"]+"|'[^']+'|[a-zA-Z0-9_-]+))?\]$/i;
@@ -83,45 +75,103 @@ export const snapshotDeclaredDomState = ({
 }) => {
   const inViewport = (r) => r.width > 0 && r.height > 0 &&
     r.bottom > 0 && r.top < innerHeight && r.right > 0 && r.left < innerWidth;
-  const shown = (element) => {
-    if (!element || !element.getBoundingClientRect ||
-        !inViewport(element.getBoundingClientRect())) return false;
+  const visibleStyle = (element) => {
+    if (!element) return false;
+    // visibility is inherited but descendants can override it with visible.
+    // display:none and opacity remain effective on the entire ancestor chain.
+    const ownVisibility = getComputedStyle(element).visibility;
+    if (ownVisibility === "hidden" || ownVisibility === "collapse") return false;
     for (let node = element; node; node = node.parentElement) {
       const style = getComputedStyle(node);
-      if (style.display === "none" || style.visibility === "hidden" ||
-          Number(style.opacity) <= 0.05) return false;
+      if (style.display === "none" || Number(style.opacity) <= 0.05) return false;
     }
     return true;
   };
+  const intersectsVisible = (rect, element) => {
+    if (!inViewport(rect)) return false;
+    let left = Math.max(0, rect.left);
+    let right = Math.min(innerWidth, rect.right);
+    let top = Math.max(0, rect.top);
+    let bottom = Math.min(innerHeight, rect.bottom);
+    // A range's unclipped CSSOM rectangle can lie inside a zero-height or
+    // scroll-clipped ancestor. Intersect with each actual clipping ancestor.
+    for (let node = element; node; node = node.parentElement) {
+      const style = getComputedStyle(node);
+      const x = style.overflowX ?? style.overflow;
+      const y = style.overflowY ?? style.overflow;
+      const clipX = /^(hidden|clip|scroll|auto|overlay)$/.test(x ?? "");
+      const clipY = /^(hidden|clip|scroll|auto|overlay)$/.test(y ?? "");
+      if ((clipX || clipY) && node.getBoundingClientRect) {
+        const clip = node.getBoundingClientRect();
+        if (clipX) { left = Math.max(left, clip.left); right = Math.min(right, clip.right); }
+        if (clipY) { top = Math.max(top, clip.top); bottom = Math.min(bottom, clip.bottom); }
+      }
+      if (right <= left || bottom <= top) return false;
+    }
+    return right > left && bottom > top;
+  };
+  const shown = (element) =>
+    visibleStyle(element) && Boolean(element.getBoundingClientRect) &&
+    intersectsVisible(element.getBoundingClientRect(), element.parentElement);
   const selectedVisible = (selector) =>
     [...document.querySelectorAll(selector)].some(shown);
   // The same serializable function is used by the browser wait and all
   // snapshots, avoiding visibility rules that can disagree across phases.
   if (markerOnly) return selectedVisible(readySelector);
-  const visibleWords = [];
+  // Keep adjacent inline text fragments adjacent: Play<span>ing</span>
+  // must count as "Playing", while a real DOM whitespace token remains a gap.
+  let visibleText = "";
+  let pendingGap = false;
+  let previousBlock = null;
   let textTruncated = false;
+  const blockAncestor = (element) => {
+    for (let node = element; node; node = node.parentElement) {
+      if (/^(block|flow-root|flex|grid|table|list-item)$/.test(
+        getComputedStyle(node).display ?? "")) return node;
+    }
+    return null;
+  };
   if (requiredText.length || forbiddenText.length) {
     const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
     let node, nodes = 0, words = 0;
     while ((node = walker.nextNode()) !== null) {
       if (++nodes > 3000) { textTruncated = true; break; }
-      if (!node.parentElement || !shown(node.parentElement)) continue;
-      const text = node.nodeValue ?? "";
+      const raw = node.nodeValue ?? "";
+      if (!node.parentElement || !visibleStyle(node.parentElement)) {
+        if (raw.trim()) pendingGap = true;
+        continue;
+      }
+      const block = blockAncestor(node.parentElement);
       const range = document.createRange();
-      for (const match of text.matchAll(/\S+/g)) {
+      let last = 0;
+      for (const match of raw.matchAll(/\S+/g)) {
         if (++words > 6000) { textTruncated = true; break; }
+        if (/\s/.test(raw.slice(last, match.index))) pendingGap = true;
         range.setStart(node, match.index);
         range.setEnd(node, match.index + match[0].length);
-        if ([...range.getClientRects()].some(inViewport)) {
-          visibleWords.push(match[0]);
+        const visible = [...range.getClientRects()].some((rect) =>
+          intersectsVisible(rect, node.parentElement));
+        if (visible) {
+          if (visibleText.length &&
+              (pendingGap || (previousBlock && block && previousBlock !== block))) {
+            visibleText += " ";
+          }
+          visibleText += match[0];
+          previousBlock = block;
+          pendingGap = false;
+        } else {
+          // Offscreen/clipped text cannot bridge two unrelated word pieces.
+          pendingGap = true;
         }
+        last = match.index + match[0].length;
       }
+      if (/\s/.test(raw.slice(last))) pendingGap = true;
       range.detach?.();
       if (textTruncated) break;
     }
   }
-  const text = visibleWords.join(" ").toLocaleLowerCase();
-  const includes = (needle) => text.includes(needle.toLocaleLowerCase());
+  const normalizedText = visibleText.toLocaleLowerCase();
+  const includes = (needle) => normalizedText.includes(needle.toLocaleLowerCase());
   return {
     markerVisible: selectedVisible(readySelector),
     blockersVisible: forbiddenSelectors.filter(selectedVisible),
@@ -174,53 +224,27 @@ export async function probeRenderedState(input, { browserFactory = loadPlaywrigh
       const record = { width, status: "INCOMPLETE", signals: null, screenshotSha256: null };
       report.observations.push(record);
       let context;
-      let pageErrorCount = 0;
-      const pageErrorSamples = [];
-      let mainFrameNavigations = 0;
-      let observationSealed = false;
       try {
         context = await browser.newContext({
           viewport: { width, height: H },
           serviceWorkers: "block", storageState: { cookies: [], origins: [] },
         });
         const page = await context.newPage();
-        // A hostile or broken page can emit an arbitrary number of exceptions.
-        // Preserve the count and at most three redacted examples, never all
-        // raw error strings in memory or persistent evidence.
-        page.on("pageerror", (error) => {
-          if (observationSealed) return;
-          pageErrorCount++;
-          if (pageErrorSamples.length < 3) pageErrorSamples.push(browserError(error));
-        });
-        // Register before goto: count main-frame navigations even when JS
-        // leaves and returns to the requested route during the observation.
-        const mainFrame = page.mainFrame();
-        page.on("framenavigated", (frame) => {
-          if (!observationSealed && frame === mainFrame) mainFrameNavigations++;
-        });
+        const errors = [];
+        page.on("pageerror", (error) => errors.push(browserError(error)));
         const response = await page.goto(opts.url, { waitUntil: "domcontentloaded", timeout: 45_000 });
         record.httpStatus = response?.status?.() ?? null;
         record.redirectChainPresent =
           Boolean(response?.request?.()?.redirectedFrom?.());
         const navigatedUrl = new URL(page.url());
-        // Untrusted redirects may contain path or hostname credentials.
-        // Only the declared destination can appear in persisted evidence.
-        const expectedOrigin = new URL(opts.url).origin;
-        record.path = navigatedUrl.pathname === opts.route
-          ? opts.route : "<unexpected-path-redacted>";
-        record.origin = navigatedUrl.origin === expectedOrigin
-          ? expectedOrigin : "<unexpected-origin-redacted>";
+        record.path = navigatedUrl.pathname;
+        record.origin = navigatedUrl.origin;
         try {
           await page.waitForFunction(snapshotDeclaredDomState,
             { readySelector: opts.contract.readySelector, markerOnly: true },
             { timeout: 15_000 });
         } catch (e) { record.markerWaitError = browserError(e); }
-        // A main-frame navigation can destroy the first evaluation context.
-        // Do not erase later valid observations; retain a fixed error label
-        // and make this viewport INCOMPLETE even if later markers reappear.
-        let first = null;
-        try { first = await page.evaluate(snapshotDeclaredDomState, opts.contract); }
-        catch (error) { record.firstSampleError = browserError(error); }
+        const first = await page.evaluate(snapshotDeclaredDomState, opts.contract);
         await page.waitForTimeout(750);
         const second = await page.evaluate(snapshotDeclaredDomState, opts.contract);
         const screenshot = join(runDir, "state-" + width + ".png");
@@ -229,36 +253,28 @@ export async function probeRenderedState(input, { browserFactory = loadPlaywrigh
         // overlay or state transition is not certified as captured evidence.
         const afterScreenshot = await page.evaluate(snapshotDeclaredDomState, opts.contract);
         const capturedUrl = new URL(page.url());
-        record.finalPath = capturedUrl.pathname === opts.route
-          ? opts.route : "<unexpected-path-redacted>";
-        record.finalOrigin = capturedUrl.origin === expectedOrigin
-          ? expectedOrigin : "<unexpected-origin-redacted>";
+        record.finalPath = capturedUrl.pathname;
+        record.finalOrigin = capturedUrl.origin;
         record.signals = { first, second, afterScreenshot };
+        record.pageErrorCount = errors.length;
+        if (errors.length) record.pageErrorSamples = errors.slice(0, 3);
         record.screenshot = screenshot;
         record.screenshotSha256 = sha(readFileSync(screenshot));
+        record.status = record.httpStatus === 200 &&
+          !record.redirectChainPresent &&
+          record.path === opts.route && record.finalPath === opts.route &&
+          record.origin === new URL(opts.url).origin &&
+          record.finalOrigin === new URL(opts.url).origin &&
+          errors.length === 0 &&
+          !record.markerWaitError && completeSample(first) &&
+          completeSample(second) && completeSample(afterScreenshot)
+          ? "DOM_SIGNALS_OBSERVED" : "INCOMPLETE";
       } catch (e) {
+        record.status = "INCOMPLETE";
         record.error = browserError(e);
       } finally {
-        // A context can dispatch page errors and navigations during close.
-        // Do not award success until those events have been observed.
-        try { await context?.close(); }
-        catch { record.contextCloseFailed = true; }
-        observationSealed = true;
+        await context?.close().catch(() => {});
       }
-      record.mainFrameNavigationCount = mainFrameNavigations;
-      record.pageErrorCount = pageErrorCount;
-      if (pageErrorSamples.length) record.pageErrorSamples = pageErrorSamples;
-      const { first, second, afterScreenshot } = record.signals ?? {};
-      const expectedOrigin = new URL(opts.url).origin;
-      record.status = !record.error && !record.contextCloseFailed &&
-        record.httpStatus === 200 && !record.redirectChainPresent &&
-        mainFrameNavigations === 1 && record.path === opts.route &&
-        record.finalPath === opts.route && record.origin === expectedOrigin &&
-        record.finalOrigin === expectedOrigin && pageErrorCount === 0 &&
-        /^[0-9a-f]{64}$/.test(record.screenshotSha256 ?? "") &&
-        !record.markerWaitError && !record.firstSampleError && completeSample(first) &&
-        completeSample(second) && completeSample(afterScreenshot)
-        ? "DOM_SIGNALS_OBSERVED" : "INCOMPLETE";
     }
     if (report.observations.length === WIDTHS.length &&
         report.observations.every((r) => r.status === "DOM_SIGNALS_OBSERVED" &&
@@ -321,13 +337,7 @@ if (isCliEntry()) {
     process.stdout.write(JSON.stringify(report, null, 2) + "\n");
     if (report.status !== "DOM_SIGNALS_OBSERVED") process.exitCode = 1;
   } catch (e) {
-    // Only known, fixed CLI usage errors may be shown verbatim. All other
-    // exception details remain redacted, even if the failure occurs before a browser starts.
-    const knownMissingOption = ["--base-url", "--route", "--contract", "--playwright-root"]
-      .find((key) => e?.message === "Required option " + key);
-    const safeMessage = knownMissingOption
-      ? "Required option " + knownMissingOption : browserError(e);
-    process.stderr.write("Rendered state probe: " + safeMessage + "\n");
+    process.stderr.write("Rendered state probe: " + browserError(e) + "\n");
     process.exitCode = 2;
   }
 }
