@@ -119,10 +119,14 @@ export const snapshotDeclaredDomState = ({
     for (let node = element; node; node = node.parentElement) {
       const style = getComputedStyle(node);
       if (style.display === "none" || Number(style.opacity) <= 0.05) return false;
+      // Conservative readiness proof: any nontrivial CSS clip-path could
+      // hide all or part of a marker/text while its box remains in-view.
+      // Do not certify a frame whose painted visibility is unproven.
+      if (style.clipPath && style.clipPath !== "none") return false;
     }
     return true;
   };
-  const intersectsVisible = (rect, element) => {
+  const intersectsVisible = (rect, element, requireFull = false) => {
     if (!inViewport(rect)) return false;
     let left = Math.max(0, rect.left);
     let right = Math.min(innerWidth, rect.right);
@@ -142,6 +146,14 @@ export const snapshotDeclaredDomState = ({
         if (clipY) { top = Math.max(top, clip.top); bottom = Math.min(bottom, clip.bottom); }
       }
       if (right <= left || bottom <= top) return false;
+    }
+    // A word counts only if all of its measured glyph-line rectangles fit
+    // inside the viewport and every clipping ancestor. Merely exposing 2 px
+    // of "Playing" must not be accepted as a fully visible required label.
+    if (requireFull) {
+      const epsilon = 0.5; // Ignore subpixel layout rounding, not clipping.
+      return left <= rect.left + epsilon && right >= rect.right - epsilon &&
+        top <= rect.top + epsilon && bottom >= rect.bottom - epsilon;
     }
     return right > left && bottom > top;
   };
@@ -169,10 +181,17 @@ export const snapshotDeclaredDomState = ({
     return null;
   };
   if (requiredText.length || forbiddenText.length) {
-    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    // Include <br> nodes as deliberate word separators, without splitting
+    // inline spans such as Play<span>ing</span>.
+    const walker = document.createTreeWalker(
+      document.body, NodeFilter.SHOW_TEXT | (NodeFilter.SHOW_ELEMENT ?? 0));
     let node, nodes = 0, words = 0;
     while ((node = walker.nextNode()) !== null) {
       if (++nodes > 3000) { textTruncated = true; break; }
+      if (node.nodeType === 1) {
+        if (node.tagName === "BR" && visibleStyle(node)) pendingGap = true;
+        continue;
+      }
       const raw = node.nodeValue ?? "";
       if (!node.parentElement || !visibleStyle(node.parentElement)) {
         if (raw.trim()) pendingGap = true;
@@ -186,8 +205,9 @@ export const snapshotDeclaredDomState = ({
         if (/\s/.test(raw.slice(last, match.index))) pendingGap = true;
         range.setStart(node, match.index);
         range.setEnd(node, match.index + match[0].length);
-        const visible = [...range.getClientRects()].some((rect) =>
-          intersectsVisible(rect, node.parentElement));
+        const rects = [...range.getClientRects()];
+        const visible = rects.length > 0 && rects.every((rect) =>
+          intersectsVisible(rect, node.parentElement, true));
         if (visible) {
           if (visibleText.length &&
               (pendingGap || (previousBlock && block && previousBlock !== block))) {
