@@ -49,7 +49,8 @@ test('P28 extended offline projection retains all P8 candidates and adds exact s
   assert.equal(report.graph_parity_verified, false);
   assert.equal(report.activation_performed, false);
   assert.equal(report.repository_default_graph_enabled, false);
-  assert.match(report.ordered_candidate_ids_sha256, /^[0-9a-f]{64}$/);
+  assert.match(report.candidate_id_set_sha256, /^[0-9a-f]{64}$/);
+  assert.equal(Object.hasOwn(report, 'ordered_candidate_ids_sha256'), false);
   assert.equal(
     Object.values(report.stratum_counts).reduce((total, count) => total + count, 0),
     result.length,
