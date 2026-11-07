@@ -52,6 +52,35 @@ test("symlinked diagnostic CLI runs both bounded preflight and normal error entr
     assert.equal(invalid.status, 2,
       "a symlinked normal invocation must not exit zero with no report");
     assert.match(invalid.stderr, /Invalid\/repeated argument/);
+    const canary = "CANARY_SECRET_UNKNOWN_OPTION_20261107";
+    const rejected = spawnSync(process.execPath, [linked, canary],
+      { encoding: "utf8", timeout: 15_000 });
+    assert.equal(rejected.status, 2);
+    assert.match(rejected.stderr, /Invalid\/repeated argument/);
+    assert.ok(!rejected.stderr.includes(canary),
+      "unrecognized argument values must not reach process stderr");
+  });
+});
+
+test("measured runner rejection and transport stalls finalize INCOMPLETE without secret errors", async () => {
+  await fixture(async ({ root, project, source }) => {
+    const fake = join(root, "fake-detector.mjs");
+    writeFileSync(fake, "// fake\n");
+    for (const runner of [
+      async () => { throw new Error("CANARY_RUNNER_SECRET_20261107"); },
+      async () => new Promise(() => {}),
+    ]) {
+      const report = await compareImpeccableModes(
+        ["--target", source, "--project-root", project],
+        { script: fake, runner, runnerTimeoutMs: 20 },
+      );
+      assert.equal(report.status, "INCOMPLETE");
+      assert.equal(report.runs.length, 1);
+      assert.equal(report.runs[0].status, "ERROR");
+      assert.equal(report.runs[0].mode, "configured");
+      assert.equal(report.runs[0].error, "Detector runner failed or did not settle");
+      assert.ok(!JSON.stringify(report).includes("CANARY_RUNNER_SECRET_20261107"));
+    }
   });
 });
 
