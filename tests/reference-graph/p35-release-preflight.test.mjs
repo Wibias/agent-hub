@@ -107,6 +107,99 @@ test('P35 rejects stale or mismatched review SHA, self-approvals, dismissals and
   }
 });
 
+
+test('P35 never treats COMMENTED as clearing an outstanding CHANGES_REQUESTED review', () => {
+  const input = facts({ independentApprovals: true, targetListed: true });
+  const targetPr = input.githubSnapshot.prs[0];
+  targetPr.reviews = [
+    {
+      reviewer: 'reviewer-two', state: 'CHANGES_REQUESTED',
+      commit_sha: targetPr.head_sha, submitted_at: '2026-11-07T18:58:00.000Z',
+    },
+    {
+      reviewer: 'reviewer-two', state: 'COMMENTED',
+      commit_sha: targetPr.head_sha, submitted_at: '2026-11-07T18:58:30.000Z',
+    },
+    {
+      reviewer: 'independent-reviewer', state: 'APPROVED',
+      commit_sha: targetPr.head_sha, submitted_at: '2026-11-07T18:59:00.000Z',
+    },
+  ];
+  const result = evaluateP35ReleasePreflight(input);
+  assert.equal(result.review_gate_satisfied, false);
+  assert.ok(result.blockers.includes('changes-requested'));
+  assert.ok(result.blocked_pr_numbers.includes(targetPr.number));
+  assert.equal(result.deployment_authorized, false);
+});
+
+test('P35 preserves an approval after a later COMMENTED review by the same reviewer', () => {
+  const input = facts({ independentApprovals: true, targetListed: true });
+  const targetPr = input.githubSnapshot.prs[0];
+  targetPr.reviews.push({
+    reviewer: 'independent-reviewer', state: 'COMMENTED',
+    commit_sha: targetPr.head_sha, submitted_at: '2026-11-07T18:59:15.000Z',
+  });
+  const result = evaluateP35ReleasePreflight(input);
+  assert.equal(result.independently_approved_prs, 10);
+  assert.equal(result.review_gate_satisfied, true);
+  assert.equal(result.deployment_authorized, false);
+});
+
+test('P35 treats GitHub logins case-insensitively to prevent self-review aliases', () => {
+  const input = facts({ independentApprovals: true, targetListed: true });
+  input.githubSnapshot.prs[0].reviews = [{
+    reviewer: 'wibias', state: 'APPROVED',
+    commit_sha: input.githubSnapshot.prs[0].head_sha,
+    submitted_at: '2026-11-07T18:59:00.000Z',
+  }];
+  const result = evaluateP35ReleasePreflight(input);
+  assert.equal(result.review_gate_satisfied, false);
+  assert.equal(result.independently_approved_prs, 9);
+  assert.ok(result.blockers.includes('independent-reviews-missing'));
+});
+
+test('P35 groups differently cased reviewer logins as one reviewer', () => {
+  const input = facts({ independentApprovals: true, targetListed: true });
+  const targetPr = input.githubSnapshot.prs[0];
+  targetPr.reviews = [
+    {
+      reviewer: 'Reviewer-Two', state: 'APPROVED',
+      commit_sha: targetPr.head_sha, submitted_at: '2026-11-07T18:58:00.000Z',
+    },
+    {
+      reviewer: 'reviewer-two', state: 'CHANGES_REQUESTED',
+      commit_sha: targetPr.head_sha, submitted_at: '2026-11-07T18:59:00.000Z',
+    },
+  ];
+  const result = evaluateP35ReleasePreflight(input);
+  assert.equal(result.review_gate_satisfied, false);
+  assert.ok(result.blockers.includes('changes-requested'));
+  assert.ok(result.blockers.includes('independent-reviews-missing'));
+});
+
+test('P35 does not clear CHANGES_REQUESTED until the same reviewer submits a later approval', () => {
+  const input = facts({ independentApprovals: true, targetListed: true });
+  const targetPr = input.githubSnapshot.prs[0];
+  targetPr.reviews = [
+    {
+      reviewer: 'reviewer-two', state: 'CHANGES_REQUESTED',
+      commit_sha: targetPr.head_sha, submitted_at: '2026-11-07T18:58:00.000Z',
+    },
+    {
+      reviewer: 'reviewer-two', state: 'COMMENTED',
+      commit_sha: targetPr.head_sha, submitted_at: '2026-11-07T18:58:15.000Z',
+    },
+    {
+      reviewer: 'reviewer-two', state: 'APPROVED',
+      commit_sha: targetPr.head_sha, submitted_at: '2026-11-07T18:58:30.000Z',
+    },
+  ];
+  const result = evaluateP35ReleasePreflight(input);
+  assert.equal(result.review_gate_satisfied, true);
+  assert.equal(result.independently_approved_prs, 10);
+  assert.equal(result.deployment_authorized, false);
+});
+
 test('P35 refuses any CI not successful on the pinned current SHA or unexpected PR/base drift', () => {
   const variations = [
     p => { p.workflows[0].conclusion = 'in_progress'; },
