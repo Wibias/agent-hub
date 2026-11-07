@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -257,7 +257,7 @@ test("manifest receipt binds two routes and attaches exact cross-surface snapsho
         zoneCount: item.snapshot.macroZones.length,
       })),
       hits: [{ id: "G02", family: "macro-reuse" }],
-      comparisons: [{ eligible: true, triggered: true, similarity: 0.93 }],
+      comparisons: [{ left: "/home", right: "/pricing", eligible: true, triggered: true, similarity: 0.93 }],
       note: "contextual",
     }),
   });
@@ -331,6 +331,104 @@ test("cross-surface report must cover exactly the route-bound manifest snapshots
   assert.match(result.parsed.error, /cover exactly the route-bound rendered candidates/);
 });
 
+test("cross-surface verdict must agree with hits and triggered comparisons", () => {
+  const candidates = [
+    {
+      id: "home",
+      source: "export default function Home(){ return <main>Home</main>; }",
+      route: "/home",
+      snapshot: cleanSnapshot({ url: "http://localhost/home" }),
+    },
+    {
+      id: "pricing",
+      source: "export default function Pricing(){ return <main>Pricing</main>; }",
+      route: "/pricing",
+      snapshot: cleanSnapshot({ url: "http://localhost/pricing" }),
+    },
+  ];
+  const report = (snapshots, verdict, hits, comparisons) => ({
+    verdict,
+    snapshots: snapshots.map(({ path, route, snapshot }) => ({
+      path, route, viewportBand: "desktop",
+      macroFingerprint: snapshot.macroFingerprint,
+      zoneCount: snapshot.macroZones.length,
+    })),
+    hits, comparisons: comparisons.map((pair) => ({
+      left: snapshots[0].route, right: snapshots[1].route, ...pair,
+    })), note: "synthetic cross-surface evidence",
+  });
+
+  const invalid = [
+    // Both the hit and comparison report contextual evidence, but verdict lies.
+    ["PASS_CROSS_SURFACE_EVIDENCE", [{ id: "G02" }], [{ triggered: true }]],
+    // No hits, but a triggered comparison was silently discarded.
+    ["PASS_CROSS_SURFACE_EVIDENCE", [], [{ triggered: true }]],
+    // False REVIEW is also a contradictory report, not a reliable measurement.
+    ["REVIEW_CROSS_SURFACE", [], [{ triggered: false }]],
+  ];
+  for (const [verdict, hits, comparisons] of invalid) {
+    const result = runManifest({
+      candidates,
+      cross: (snapshots) => report(snapshots, verdict, hits, comparisons),
+    });
+    assert.equal(result.status, 2, result.stdout + result.stderr);
+    assert.equal(result.parsed.error, "Cross-surface report has inconsistent evidence");
+  }
+
+  // A real no-hit PASS remains a valid, fully route-bound report.
+  const clean = runManifest({
+    candidates,
+    cross: (snapshots) => report(snapshots, "PASS_CROSS_SURFACE_EVIDENCE", [], [{ triggered: false }]),
+  });
+  assert.equal(clean.status, 0, clean.stdout + clean.stderr);
+  assert.equal(clean.parsed.state, "MECHANICAL_EVIDENCE_CLEAR");
+  assert.equal(clean.parsed.crossSurfaceBinding.verified, true);
+});
+
+test("cross-surface receipt requires every actual snapshot pair exactly once", () => {
+  const candidates = ["/home", "/pricing", "/settings"].map((route, i) => ({
+    id: `surface-${i}`,
+    route,
+    source: "export default function Page(){ return <main>Clean content</main>; }",
+    snapshot: cleanSnapshot({ url: `http://localhost${route}` }),
+  }));
+  const cross = (snapshots, comparisons) => ({
+    verdict: "PASS_CROSS_SURFACE_EVIDENCE",
+    snapshots: snapshots.map(({ path, route, snapshot }) => ({
+      path, route, viewportBand: "desktop",
+      macroFingerprint: snapshot.macroFingerprint,
+      zoneCount: snapshot.macroZones.length,
+    })),
+    comparisons,
+    hits: [],
+  });
+  const pairs = [
+    { left: "/home", right: "/pricing", triggered: false },
+    { left: "/home", right: "/settings", triggered: false },
+    { left: "/pricing", right: "/settings", triggered: false },
+  ];
+  for (const altered of [
+    [], // Two+ snapshots with no comparisons cannot be certified.
+    pairs.slice(0, 2), // Missing a pair even with all snapshots listed.
+    [pairs[0], pairs[0], pairs[2]], // Duplicate pair conceals missing pair.
+    [pairs[2], pairs[1], pairs[0]], // Incorrect comparison order.
+  ]) {
+    const result = runManifest({
+      candidates,
+      cross: (snapshots) => cross(snapshots, altered),
+    });
+    assert.equal(result.status, 2, result.stdout + result.stderr);
+    assert.equal(result.parsed.error, "Cross-surface report has inconsistent evidence");
+  }
+  const accepted = runManifest({
+    candidates,
+    cross: (snapshots) => cross(snapshots, pairs),
+  });
+  assert.equal(accepted.status, 0, accepted.stdout + accepted.stderr);
+  assert.equal(accepted.parsed.state, "MECHANICAL_EVIDENCE_CLEAR");
+  assert.equal(accepted.parsed.crossSurfaceBinding.snapshotCount, 3);
+});
+
 test("invalid cross-surface report fails closed in manifest mode", () => {
   const result = runManifest({
     candidates: [
@@ -351,4 +449,288 @@ test("invalid cross-surface report fails closed in manifest mode", () => {
   });
   assert.equal(result.status, 2);
   assert.match(result.parsed.error, /Cross-surface report has unsupported verdict/);
+});
+
+test("legacy receipt CLI redacts hostile child JSON, stderr, disk JSON and unknown argv", () => {
+  const dir = mkdtempSync(join(tmpdir(), "dwa-221-redaction-"));
+  const canary = "CANARY_RECEIPT_SECRET_20261107";
+  const source = join(dir, "source.tsx");
+  const isolatedReceipt = join(dir, "taste-evidence-receipt.mjs");
+  const fakeGate = join(dir, "taste-gate.mjs");
+  writeFileSync(source, "export default function View() { return null; }\n");
+  writeFileSync(isolatedReceipt, readFileSync(receipt, "utf8"));
+
+  const launch = (entry, args) =>
+    spawnSync(process.execPath, [entry, ...args], { encoding: "utf8" });
+  const assertPrivateError = (result, expected) => {
+    assert.equal(result.status, 2, result.stderr);
+    const body = JSON.parse(result.stdout);
+    assert.equal(body.error, expected);
+    assert.ok(!result.stdout.includes(canary));
+    assert.ok(!result.stderr.includes(canary));
+  };
+  try {
+    // The receipt runs a sibling source gate, so this isolated copy supplies
+    // synthetic invalid output without altering any repository source gate.
+    writeFileSync(fakeGate,
+      `process.stdout.write('{"token": ${canary}}');\n` +
+      `process.stderr.write('stderr_token=${canary}');\n` +
+      "process.exit(2);\n");
+    assertPrivateError(
+      launch(isolatedReceipt, ["--path", source, "--json"]),
+      "Receipt child emitted invalid JSON",
+    );
+
+    writeFileSync(fakeGate,
+      `process.stdout.write(JSON.stringify({error:"${canary}"}));\n` +
+      "process.exit(2);\n");
+    assertPrivateError(
+      launch(isolatedReceipt, ["--path", source, "--json"]),
+      "Receipt child audit failed",
+    );
+
+    // Previously, exit 0 with a JSON error envelope could be counted as
+    // a completed source audit and serialized into a false success receipt.
+    writeFileSync(fakeGate,
+      `process.stdout.write(JSON.stringify({error:"${canary}"}));\n` +
+      "process.exit(0);\n");
+    assertPrivateError(
+      launch(isolatedReceipt, ["--path", source, "--json"]),
+      "Receipt child audit emitted invalid report",
+    );
+
+    // Valid-looking verdict text without the required audit envelope and
+    // a contradictory HOLD/exit pairing must also fail closed.
+    writeFileSync(fakeGate,
+      "process.stdout.write(JSON.stringify({verdict:'PASS_MECHANICAL',p0:0}));\n" +
+      "process.exit(0);\n");
+    assertPrivateError(
+      launch(isolatedReceipt, ["--path", source, "--json"]),
+      "Receipt child audit emitted invalid report",
+    );
+
+    writeFileSync(fakeGate,
+      `process.stdout.write(JSON.stringify({path:${JSON.stringify(resolve(source))},filesScanned:1,intent:{path:null},verdict:'HOLD',p0:1,p1:0,p2:0,hits:[{severity:'P0'}],cluster:{families:[]}}));\n` +
+      "process.exit(0);\n");
+    assertPrivateError(
+      launch(isolatedReceipt, ["--path", source, "--json"]),
+      "Receipt child audit emitted invalid report",
+    );
+
+    const maliciousManifest = join(dir, "manifest-" + canary + ".json");
+    writeFileSync(maliciousManifest, `{"token": ${canary}}`);
+    assertPrivateError(
+      launch(receipt, ["--manifest", maliciousManifest, "--json"]),
+      "Receipt input contains invalid JSON",
+    );
+
+    assertPrivateError(
+      launch(receipt, ["--path", source, "--unexpected-" + canary, "--json"]),
+      "Invalid or unexpected CLI argument",
+    );
+
+    const usageResult = launch(receipt, ["--json"]);
+    assert.equal(usageResult.status, 2);
+    assert.match(JSON.parse(usageResult.stdout).error, /^Usage: taste-evidence-receipt\.mjs /);
+    assertPrivateError(
+      launch(receipt, ["--manifest", maliciousManifest, "--path", source, "--json"]),
+      "--manifest is mutually exclusive with --path/--snapshot/--route/--intent/--extensions",
+    );
+    const badViewport = join(dir, "viewport-" + canary + ".json");
+    writeFileSync(badViewport, JSON.stringify(cleanSnapshot({
+      viewport: { width: 0, height: 900, devicePixelRatio: 1 },
+    })));
+    assertPrivateError(
+      launch(receipt, ["--path", source, "--snapshot", badViewport, "--route", "/example", "--json"]),
+      "Render snapshot viewport is invalid",
+    );
+
+    // Inject an OS-style cleanup exception after removing the test temp dir.
+    // The public failure must be redacted and no success receipt emitted.
+    const pristine = readFileSync(receipt, "utf8");
+    const cleanupCall = "rmSync(tempDir, { recursive: true, force: true });";
+    assert.ok(pristine.includes(cleanupCall));
+    writeFileSync(isolatedReceipt, pristine.replace(cleanupCall,
+      cleanupCall + ` throw new Error("${canary}");`));
+    writeFileSync(fakeGate,
+      `process.stdout.write(JSON.stringify({path:${JSON.stringify(resolve(source))},filesScanned:1,intent:{path:null},p0:0,p1:0,p2:0,verdict:'PASS_MECHANICAL',hits:[],cluster:{families:[]}}));\n`);
+    assertPrivateError(
+      launch(isolatedReceipt, ["--path", source, "--json"]),
+      "Receipt temporary cleanup failed",
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("receipt binds child proof to exact source, snapshot and fusion channels", () => {
+  const dir = mkdtempSync(join(tmpdir(), "dwa-221-scope-binding-"));
+  const source = join(dir, "source.tsx");
+  const snapshot = join(dir, "capture.json");
+  const localReceipt = join(dir, "taste-evidence-receipt.mjs");
+  const sourceGate = join(dir, "taste-gate.mjs");
+  const renderGate = join(dir, "render-taste-gate.mjs");
+  const fusionGate = join(dir, "taste-evidence-fusion.mjs");
+  const canary = "CANARY_OTHER_SCOPE_20261107";
+  const sourceReport = (path, filesScanned = 1) => ({
+    path, filesScanned, intent: { path: null }, p0: 0, p1: 0, p2: 0,
+    verdict: "PASS_MECHANICAL", hits: [], cluster: { families: [] },
+  });
+  const renderReport = (path, url, viewport = { width: 1440, height: 900, devicePixelRatio: 1 }) => ({
+    snapshot: path, url, viewport,
+    verdict: "PASS_RENDER_EVIDENCE", hits: [], cluster: { families: [] },
+  });
+  const writeGate = (file, report, code = 0) => {
+    writeFileSync(file, "process.stdout.write(" +
+      JSON.stringify(JSON.stringify(report)) + ");\nprocess.exit(" + code + ");\n");
+  };
+  const writeFusionGate = (report, code = 0) => {
+    writeFileSync(fusionGate, [
+      "const args=process.argv.slice(2); const arg=(key)=>args[args.indexOf(key)+1];",
+      `const report=${JSON.stringify(report)};`,
+      "report.reports={source:arg('--source-report'),render:arg('--render-report')};",
+      "process.stdout.write(JSON.stringify(report));",
+      `process.exit(${code});`,
+    ].join("\n"));
+  };
+  const execute = (render = false, extraArgs = []) => {
+    const args = [localReceipt, "--path", source, "--json", ...extraArgs];
+    if (render) args.push("--snapshot", snapshot, "--route", "/example");
+    const result = spawnSync(process.execPath, args, { encoding: "utf8" });
+    assert.equal(result.status, 2, result.stdout + result.stderr);
+    const error = JSON.parse(result.stdout).error;
+    assert.equal(error, "Receipt child audit emitted invalid report");
+    assert.ok(!result.stdout.includes(canary));
+    assert.ok(!result.stderr.includes(canary));
+  };
+  try {
+    writeFileSync(localReceipt, readFileSync(receipt, "utf8"));
+    writeFileSync(source, "export default function View(){return null;}");
+    writeFileSync(snapshot, JSON.stringify(cleanSnapshot({ url: "http://localhost/example" })));
+
+    // A convincing PASS for another file must not attest this source.
+    writeGate(sourceGate, sourceReport(join(dir, canary + ".tsx")));
+    execute();
+    writeGate(sourceGate, sourceReport(source, 0));
+    execute();
+    writeGate(sourceGate, { ...sourceReport(source), intent: { path: join(dir, canary + ".json") } });
+    execute();
+    const intentPath = join(dir, "intent.json");
+    writeFileSync(intentPath, "{}");
+    writeGate(sourceGate, sourceReport(source));
+    execute(false, ["--intent", intentPath]);
+    writeGate(sourceGate, { ...sourceReport(source), intent: { path: intentPath } });
+    const intentOk = spawnSync(process.execPath,
+      [localReceipt, "--path", source, "--intent", intentPath, "--json"],
+      { encoding: "utf8" });
+    assert.equal(intentOk.status, 0, intentOk.stdout + intentOk.stderr);
+    writeGate(sourceGate, sourceReport(source));
+    // A reported zero P0 cannot hide a P0 hit in the actual hit array.
+    writeGate(sourceGate, { ...sourceReport(source), hits: [{ severity: "P0" }] });
+    execute();
+    writeGate(sourceGate, { ...sourceReport(source), p1: 1 });
+    execute();
+    writeGate(sourceGate, { ...sourceReport(source), p2: 1 });
+    execute();
+    writeGate(sourceGate, { ...sourceReport(source), p1: 1, hits: [{ severity: "P1" }] });
+    execute();
+
+    writeGate(sourceGate, sourceReport(source));
+    // A render audit of a different snapshot cannot prove this viewport.
+    writeGate(renderGate, renderReport(join(dir, canary + ".json"), "http://localhost/example"));
+    execute(true);
+    writeGate(renderGate, renderReport(snapshot, "http://localhost/" + canary));
+    execute(true);
+
+    // A correct snapshot path and URL cannot conceal a different viewport.
+    writeGate(renderGate, renderReport(snapshot, "http://localhost/example", { width: 390, height: 900, devicePixelRatio: 1 }));
+    execute(true);
+    writeGate(renderGate, renderReport(snapshot, "http://localhost/example", { width: 1440, height: 768, devicePixelRatio: 1 }));
+    execute(true);
+    writeGate(renderGate, renderReport(snapshot, "http://localhost/example", { width: 1440 }));
+    execute(true);
+    writeGate(renderGate, renderReport(snapshot, "http://localhost/example", { width: 1440, height: 900 }));
+    execute(true);
+    writeGate(renderGate, renderReport(snapshot, "http://localhost/example", { width: 1440, height: 900, devicePixelRatio: 2 }));
+    execute(true);
+
+    writeGate(renderGate, { ...renderReport(snapshot, "http://localhost/example"), hits: [{ id: "fake-render-hit" }] });
+    execute(true);
+    writeGate(renderGate, renderReport(snapshot, "http://localhost/example"));
+    // Fusion HOLD after source PASS cannot be a clear mechanical receipt.
+    writeFusionGate({
+      verdict: "HOLD",
+      channels: { sourceVerdict: "PASS_MECHANICAL", renderVerdict: "PASS_RENDER_EVIDENCE" },
+      cluster: { families: [] },
+    }, 1);
+    execute(true);
+    // It must also reject a fusion report claiming different input channels.
+    writeFusionGate({
+      verdict: "PASS_FUSED_EVIDENCE",
+      channels: { sourceVerdict: "REVIEW", renderVerdict: "PASS_RENDER_EVIDENCE" },
+      cluster: { families: [] },
+    });
+    execute(true);
+    const correctChannels = { sourceVerdict: "PASS_MECHANICAL", renderVerdict: "PASS_RENDER_EVIDENCE" };
+    writeGate(fusionGate, {
+      verdict: "PASS_FUSED_EVIDENCE", channels: correctChannels, cluster: { families: [] },
+    });
+    execute(true);
+    writeGate(fusionGate, {
+      verdict: "PASS_FUSED_EVIDENCE", channels: correctChannels, cluster: { families: [] },
+      reports: { source: join(dir, canary + ".json"), render: join(dir, "other.json") },
+    });
+    execute(true);
+
+    // Compatible positive example, with actual input paths from the fusion CLI.
+    writeFusionGate({
+      verdict: "PASS_FUSED_EVIDENCE", channels: correctChannels, cluster: { families: [] },
+    });
+    // A source P2-only PASS still contains contextual hits, so the fusion
+    // tool cannot claim PASS_FUSED_EVIDENCE with matching channel labels.
+    writeGate(sourceGate, {
+      ...sourceReport(source), p2: 1, hits: [{ severity: "P2" }],
+    });
+    execute(true);
+    writeGate(sourceGate, sourceReport(source));
+
+    const ok = spawnSync(process.execPath, [
+      localReceipt, "--path", source, "--snapshot", snapshot, "--route", "/example", "--json",
+    ], { encoding: "utf8" });
+    assert.equal(ok.status, 0, ok.stdout + ok.stderr);
+    assert.equal(JSON.parse(ok.stdout).state, "MECHANICAL_EVIDENCE_CLEAR");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("manifest dot IDs cannot leave intermediate fusion reports outside cleanup root", () => {
+  const dir = mkdtempSync(join(tmpdir(), "dwa-221-dot-id-"));
+  const childTmp = join(dir, "child-tmp");
+  mkdirSync(childTmp);
+  try {
+    writeFileSync(join(dir, "source.tsx"), "export default function View(){return <main>Plain content</main>;}");
+    writeFileSync(join(dir, "snapshot.json"), JSON.stringify(cleanSnapshot()));
+    writeFileSync(join(dir, "manifest.json"), JSON.stringify({
+      schemaVersion: 1,
+      candidates: [".", ".."].map((id) => ({
+        id, path: "source.tsx", snapshot: "snapshot.json", route: "/example",
+      })),
+    }));
+    const result = spawnSync(process.execPath, [
+      receipt, "--manifest", join(dir, "manifest.json"), "--json",
+    ], {
+      encoding: "utf8",
+      env: { ...process.env, TMPDIR: childTmp, TMP: childTmp, TEMP: childTmp },
+    });
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.equal(JSON.parse(result.stdout).state, "MECHANICAL_EVIDENCE_CLEAR");
+    assert.deepEqual(readdirSync(childTmp), [], "receipt temp root must be fully cleaned");
+    assert.equal(existsSync(childTmp + "-source.json"), false);
+    assert.equal(existsSync(childTmp + "-render.json"), false);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(childTmp + "-source.json", { force: true });
+    rmSync(childTmp + "-render.json", { force: true });
+  }
 });
