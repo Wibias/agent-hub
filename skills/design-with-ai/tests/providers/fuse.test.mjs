@@ -342,6 +342,12 @@ test("re-signed fusion snapshots cannot contradict Taste member class totals", (
   assert.throws(() => assertFusion(reSign((snapshot) => {
     snapshot.reports[0].count = 2;
   })), /Taste class summary does not match observations/);
+  assert.throws(() => assertFusion(reSign((snapshot) => {
+    snapshot.reports[0].renderedStateVerified = true;
+  })), /Taste readiness proof is invalid/);
+  assert.throws(() => assertFusion(reSign((snapshot) => {
+    snapshot.reports[0].renderedStateProof = "VERIFIED_AUTHENTICATED_GAME";
+  })), /Taste readiness proof is invalid/);
 });
 
 test("tampered fusion data fails the content digest check", () => {
