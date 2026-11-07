@@ -37,7 +37,8 @@ test('P29 independent candidate selector matches P27 Standard and Deep output on
   assert.equal(report.evaluated_cases, 48);
   assert.equal(report.exact_order_cases, 48);
   assert.equal(report.mismatch_cases, 0);
-  assert.equal(report.legacy_record_selection_invoked, false);
+  assert.equal(report.candidate_selector_uses_legacy_selection, false);
+  assert.equal(Object.hasOwn(report, 'legacy_record_selection_invoked'), false);
   assert.equal(report.pattern_parity_verified, false);
   assert.equal(report.live_graph_parity_verified, false);
   assert.equal(report.repository_default_graph_enabled, false);
