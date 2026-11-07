@@ -68,6 +68,11 @@ test("real CLI never emits a completed-file receipt for an unsafe source tree", 
       const run = spawnSync(process.execPath,
         [detector, "--json", "--dwa-scan-proof", root],
         { cwd: root, encoding: "utf8", timeout: 20_000 });
+      // spawnSync returns a null status if the child timed out or was killed.
+      // A null exit status is NOT proof that the unsafe tree was rejected.
+      assert.equal(run.error, undefined, "scanner must not time out or fail to spawn");
+      assert.equal(run.signal, null, "scanner must not be terminated by a signal");
+      assert.ok(Number.isInteger(run.status), "scanner must exit normally");
       assert.notEqual(run.status, 0);
       assert.doesNotMatch(run.stderr, /DWA_IMPECCABLE_SCAN_PROOF=/);
     } finally {

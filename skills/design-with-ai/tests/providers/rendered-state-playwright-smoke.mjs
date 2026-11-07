@@ -18,6 +18,13 @@ const pages = {
     marker + '<div style="margin-top:1400px">Loading below fold</div>'),
   '/hidden': page('<div style="opacity:0">' + marker + '</div>'),
   '/clipped-marker': page('<div style="height:0;overflow:hidden">' + marker + '</div>'),
+  '/clip-path-marker': page('<div style="clip-path:inset(100%)">' + marker + '</div>'),
+  '/clip-path-forbidden': page(marker +
+    '<p style="clip-path:inset(100%)">Access denied</p>'),
+  '/linebreak-forbidden': page(marker + '<p>Access<br>denied</p>'),
+  '/partial-required': page('<div data-game-phase="live">Ready</div>' +
+    '<div style="width:12px;overflow:hidden;white-space:nowrap">' +
+    '<span>Playing now</span></div>'),
   '/clipped-forbidden': page(marker +
     '<div style="height:0;overflow:hidden"><p>Access denied</p></div>'),
   '/contents-forbidden': page(marker +
@@ -123,6 +130,40 @@ try {
     x.signals?.first.missingText?.includes('Playing now')),
   'A zero-height overflow:hidden ancestor cannot attest readiness or text');
 
+  const clipPathMarker = await probe('/clip-path-marker', {
+    requiredText: ['Playing now'], forbiddenText: [],
+  });
+  assertWidths(clipPathMarker, 'INCOMPLETE');
+  assert.ok(clipPathMarker.observations.every((x) =>
+    x.signals?.first.markerVisible === false &&
+    x.signals?.first.missingText?.includes('Playing now')),
+  'Fully clipped marker and its text must not be attested');
+
+  const clipPathForbidden = await probe('/clip-path-forbidden', {
+    forbiddenText: ['Access denied'],
+  });
+  assertWidths(clipPathForbidden, 'DOM_SIGNALS_OBSERVED');
+  assert.ok(clipPathForbidden.observations.every((x) =>
+    x.signals?.first.forbiddenTextVisible?.length === 0),
+  'Fully clipped forbidden text is not painted and must not be reported visible');
+
+  const linebreakForbidden = await probe('/linebreak-forbidden', {
+    forbiddenText: ['Access denied'],
+  });
+  assertWidths(linebreakForbidden, 'INCOMPLETE');
+  assert.ok(linebreakForbidden.observations.every((x) =>
+    x.signals?.first.forbiddenTextVisible?.includes('Access denied')),
+  'Visible BR must create a word boundary between adjacent text nodes');
+
+  const partialRequired = await probe('/partial-required', {
+    requiredText: ['Playing now'], forbiddenText: [],
+  });
+  assertWidths(partialRequired, 'INCOMPLETE');
+  assert.ok(partialRequired.observations.every((x) =>
+    x.signals?.first.textTruncated === true ||
+    x.signals?.first.missingText?.includes('Playing now')),
+  'Partially clipped glyphs must never prove the complete required phrase');
+
   const clippedForbidden = await probe('/clipped-forbidden', {
     forbiddenText: ['Access denied'],
   });
@@ -201,7 +242,7 @@ try {
     x.mainFrameNavigationCount >= 3 && x.signals?.afterScreenshot?.markerVisible === true),
   'JS redirect away and back must fail despite an otherwise-ready same-route screenshot');
 
-  console.log('Real production Playwright transport passed: 16 scenarios at 1440/768/390, including clipped ancestors, display:contents text, split words, visibility override, redirects, context isolation and PNG hashes.');
+  console.log('Real production Playwright transport passed: 20 scenarios at 1440/768/390, including clip paths, BR text boundaries, partial glyph visibility, redirects, context isolation and PNG hashes.');
 } finally {
   await new Promise((resolve) => server.close(resolve));
   rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });

@@ -168,6 +168,69 @@ test("disappearing and recreated directories cannot poison cached design roots",
   });
 });
 
+test("pre-existing fallback directories invalidate memoized roots when DESIGN.md appears", () => {
+  for (const rel of ["docs", ".agents/context"]) {
+    withFixtures(({ project, source }) => {
+      const nested = join(source, "with-fallback");
+      const fallback = join(nested, rel);
+      mkdirSync(fallback, { recursive: true });
+      const page = join(nested, "view.css");
+      writeFileSync(page, ".page { color: #111; }\n");
+      const cache = new Map();
+      const inherited = loadDesignSystemForTarget(page, { cache });
+      assert.equal(inherited?.sourcePath, join(project, "DESIGN.md"));
+      assert.equal(cache.get("resolve:" + resolve(nested))?.dir, resolve(project));
+      // Creating the policy inside an EXISTING fallback directory changes
+      // no metadata of nested/ itself. A parent-only signature is stale.
+      const inner = join(fallback, "DESIGN.md");
+      advanceDirectorySignature(fallback);
+      writeFileSync(inner,
+        '---\ntypography:\n  body:\n    fontFamily: "Fallback Sans"\n---\n');
+      const updated = loadDesignSystemForTarget(page, { cache });
+      assert.equal(updated?.sourcePath, inner,
+        "new " + rel + " policy must override the memoized outer DESIGN.md");
+      assert.notStrictEqual(updated, inherited);
+      // A disappearance must not retain an obsolete parsed contract.
+      fs.unlinkSync(inner);
+      const restored = loadDesignSystemForTarget(page, { cache });
+      assert.equal(restored?.sourcePath, join(project, "DESIGN.md"));
+    });
+  }
+});
+
+test("sibling cache refresh cannot silently revalidate stale descendant resolutions", () => {
+  withFixtures(({ project, source }) => {
+    const olderDir = join(source, "older");
+    const siblingDir = join(source, "sibling");
+    mkdirSync(olderDir);
+    mkdirSync(siblingDir);
+    const older = join(olderDir, "older.css");
+    const sibling = join(siblingDir, "sibling.css");
+    writeFileSync(older, "body { color: red; }\n");
+    writeFileSync(sibling, "body { color: blue; }\n");
+    const cache = new Map();
+    const initial = loadDesignSystemForTarget(older, { cache });
+    assert.equal(initial?.sourcePath, join(project, "DESIGN.md"));
+    const olderKey = "resolve:" + resolve(olderDir);
+    assert.equal(cache.get(olderKey)?.dir, resolve(project));
+
+    advanceDirectorySignature(source);
+    writeFileSync(join(source, "package.json"), "{}\n");
+    const refreshedSibling = loadDesignSystemForTarget(sibling, { cache });
+    assert.equal(refreshedSibling, null,
+      "sibling must detect the new project boundary");
+    const olderAfterSibling = loadDesignSystemForTarget(older, { cache });
+    assert.equal(olderAfterSibling, null,
+      "an ancestor signature refreshed by a sibling must not validate stale older roots");
+    assert.equal(cache.get(olderKey)?.dir, resolve(source));
+
+    fs.unlinkSync(join(source, "package.json"));
+    const recovered = loadDesignSystemForTarget(older, { cache });
+    assert.equal(recovered?.sourcePath, join(project, "DESIGN.md"),
+      "removing the boundary must restore outer policy for old descendants");
+  });
+});
+
 test("without an explicit scan cache, direct root lookup keeps normal semantics", () => {
   withFixtures(({ project, source }) => {
     assert.deepEqual(findDesignRoot(source), { dir: project, hasDesign: true });
