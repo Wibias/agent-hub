@@ -26,11 +26,15 @@ const inside = (root, value) => {
   const rel = relative(root, value);
   return rel !== ".." && !rel.startsWith(".." + sep) && !isAbsolute(rel);
 };
-// Browser/navigation errors may include full URLs with query secrets. Retain
-// only a short redacted explanation in persistent diagnostic evidence.
-const shortError = (error) => String(error?.message ?? error)
-  .replace(/https?:\/\/[^\s'"<>]+/gi, "<url-redacted>")
-  .slice(0, 220);
+// Browser/navigation errors may contain secrets in WebSocket URLs, arbitrary
+// URI schemes, or quote-delimited query fragments. Drop the entire message on
+// a URL-like protocol instead of redacting only its first substring.
+const ERROR_URL_SCHEME = /\b(?:[a-z][a-z0-9+.-]*:\/\/|data:|blob:|file:|javascript:)/i;
+const shortError = (error) => {
+  const message = String(error?.message ?? error);
+  return ERROR_URL_SCHEME.test(message)
+    ? "Browser error: <url-redacted>" : message.slice(0, 220);
+};
 const string = (value) => typeof value === "string" && value.trim().length > 0;
 
 function strictInputs(options) {

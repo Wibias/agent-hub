@@ -152,7 +152,8 @@ function mockChrome({ input, htmlBytes, cssBytes }, {
             }
           },
           screenshot: async ({ path }) => {
-            if (screenshotError) throw new Error("Screenshot unavailable");
+            if (screenshotError) throw new Error(
+              typeof screenshotError === "string" ? screenshotError : "Screenshot unavailable");
             writeFileSync(path, "image");
           },
           url: () => "http://127.0.0.1:5191" + currentRoute,
@@ -384,6 +385,27 @@ test("remote URL credentials and query never enter report; external stays unveri
     const json = JSON.stringify(result);
     assert.ok(!json.includes("cdn.example.test"));
     assert.ok(!json.includes("secret-do-not-log"));
+  });
+});
+
+test("browser failure evidence redacts full WebSocket URLs and quote-split query tokens", async () => {
+  await fixture(async (f) => {
+    const secrets = ["wss-bearer-secret-abc", "split-query-secret-xyz"];
+    for (const errorMessage of [
+      "Page screenshot failed for 'wss://api.example.test/live?token=" + secrets[0] + "'",
+      "Page screenshot failed for https://api.example.test/?mode=ready'&token=" + secrets[1],
+    ]) {
+      const report = await probeNetworkResponses(f.input, {
+        browserFactory: mockChrome(f, { screenshotError: errorMessage }).factory,
+      });
+      assert.equal(report.status, "INCOMPLETE");
+      assert.equal(report.productCompletionEligible, false);
+      assert.ok(report.observations.every((o) =>
+        o.issues.includes("BROWSER_PROBE_FAILURE: Browser error: <url-redacted>")));
+      const evidence = readFileSync(join(report.artifactDirectory, "network-report.json"), "utf8");
+      for (const secret of secrets) assert.ok(!evidence.includes(secret));
+      assert.ok(!evidence.includes("wss://api.example.test"));
+    }
   });
 });
 
