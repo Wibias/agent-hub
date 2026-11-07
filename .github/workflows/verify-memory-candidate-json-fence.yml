@@ -1,0 +1,31 @@
+name: Memory Candidate JSON Fences
+
+on:
+  pull_request:
+    paths:
+      - "memory-engine/memory-candidate-judge.mjs"
+      - "tests/memory-engine/memory-candidate-judge.test.mjs"
+      - ".github/workflows/verify-memory-candidate-json-fence.yml"
+  push:
+    branches: [main]
+    paths:
+      - "memory-engine/memory-candidate-judge.mjs"
+      - "tests/memory-engine/memory-candidate-judge.test.mjs"
+      - ".github/workflows/verify-memory-candidate-json-fence.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Validate memory candidate judgments
+        run: |
+          node --check memory-engine/memory-candidate-judge.mjs
+          node --test tests/memory-engine/memory-candidate-judge.test.mjs
