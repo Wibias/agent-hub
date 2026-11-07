@@ -122,7 +122,7 @@ export const snapshotDeclaredDomState = ({
     }
     return true;
   };
-  const intersectsVisible = (rect, element) => {
+  const intersectsVisible = (rect, element, requireFullRect = false) => {
     if (!inViewport(rect)) return false;
     let left = Math.max(0, rect.left);
     let right = Math.min(innerWidth, rect.right);
@@ -132,6 +132,12 @@ export const snapshotDeclaredDomState = ({
     // scroll-clipped ancestor. Intersect with each actual clipping ancestor.
     for (let node = element; node; node = node.parentElement) {
       const style = getComputedStyle(node);
+      const clipPath = style.clipPath ?? style.webkitClipPath;
+      // Arbitrary CSS clip geometry (circles, polygons, inset, SVG paths)
+      // cannot be proved by CSSOM rectangles. Abstain rather than accepting
+      // a DOM marker or a text glyph hidden outside the painted clip region.
+      if (clipPath && clipPath !== "none" &&
+          !/^inset\(\s*0(?:px|%)?\s*\)$/i.test(clipPath)) return false;
       const x = style.overflowX ?? style.overflow;
       const y = style.overflowY ?? style.overflow;
       const clipX = /^(hidden|clip|scroll|auto|overlay)$/.test(x ?? "");
@@ -143,11 +149,16 @@ export const snapshotDeclaredDomState = ({
       }
       if (right <= left || bottom <= top) return false;
     }
+    if (requireFullRect) {
+      const tolerance = 0.5;
+      return left <= rect.left + tolerance && right >= rect.right - tolerance &&
+        top <= rect.top + tolerance && bottom >= rect.bottom - tolerance;
+    }
     return right > left && bottom > top;
   };
   const shown = (element) =>
     visibleStyle(element) && Boolean(element.getBoundingClientRect) &&
-    intersectsVisible(element.getBoundingClientRect(), element.parentElement);
+    intersectsVisible(element.getBoundingClientRect(), element);
   const selectedVisible = (selector) =>
     [...document.querySelectorAll(selector)].some(shown);
   // The same serializable function is used by the browser wait and all
@@ -169,10 +180,20 @@ export const snapshotDeclaredDomState = ({
     return null;
   };
   if (requiredText.length || forbiddenText.length) {
-    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
-    let node, nodes = 0, words = 0;
+    const walker = document.createTreeWalker(document.body,
+      NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT);
+    let node, nodes = 0, words = 0, charsChecked = 0;
     while ((node = walker.nextNode()) !== null) {
-      if (++nodes > 3000) { textTruncated = true; break; }
+      if (++nodes > 6000) { textTruncated = true; break; }
+      if (node.nodeType === Node.ELEMENT_NODE) {
+        // A visible <br> separates words even without a literal text node.
+        // Adjacent inline spans without a break still form one word.
+        if (node.tagName === "BR" && visibleStyle(node) &&
+            node.parentElement?.getBoundingClientRect &&
+            intersectsVisible(node.parentElement.getBoundingClientRect(),
+              node.parentElement)) pendingGap = true;
+        continue;
+      }
       const raw = node.nodeValue ?? "";
       if (!node.parentElement || !visibleStyle(node.parentElement)) {
         if (raw.trim()) pendingGap = true;
@@ -184,11 +205,30 @@ export const snapshotDeclaredDomState = ({
       for (const match of raw.matchAll(/\S+/g)) {
         if (++words > 6000) { textTruncated = true; break; }
         if (/\s/.test(raw.slice(last, match.index))) pendingGap = true;
-        range.setStart(node, match.index);
-        range.setEnd(node, match.index + match[0].length);
-        const visible = [...range.getClientRects()].some((rect) =>
-          intersectsVisible(rect, node.parentElement));
-        if (visible) {
+        // A token-range rectangle can intersect the viewport even when
+        // all but one glyph is clipped. Require every glyph range to fit
+        // the visible viewport/overflow geometry; ambiguous partial text
+        // fails the whole observation closed, including forbidden phrases.
+        if (match[0].length > 1024 || charsChecked + match[0].length > 30_000) {
+          textTruncated = true;
+          break;
+        }
+        charsChecked += match[0].length;
+        let anyVisible = false;
+        let allVisible = true;
+        for (let offset = match.index; offset < match.index + match[0].length; offset++) {
+          range.setStart(node, offset);
+          range.setEnd(node, offset + 1);
+          const glyphRects = [...range.getClientRects()];
+          const glyphVisible = glyphRects.some((rect) =>
+            intersectsVisible(rect, node.parentElement));
+          const glyphFullyVisible = glyphRects.some((rect) =>
+            intersectsVisible(rect, node.parentElement, true));
+          if (glyphVisible) anyVisible = true;
+          if (!glyphFullyVisible) allVisible = false;
+        }
+        if (anyVisible && !allVisible) textTruncated = true;
+        if (allVisible) {
           if (visibleText.length &&
               (pendingGap || (previousBlock && block && previousBlock !== block))) {
             visibleText += " ";
