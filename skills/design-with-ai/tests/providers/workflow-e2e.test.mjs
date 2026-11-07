@@ -106,7 +106,8 @@ test("forced missing HTML parsers in the real child process cannot create green 
       target: f.htmlPage, projectRoot: f.root, route: "/settings",
     });
     assert.equal(report.status, "ERROR", JSON.stringify(report));
-    assert.match(report.reason, /HTML parser fallback degraded/);
+    assert.match(report.reason,
+      /HTML parser unavailable or linked local stylesheet unreadable/);
   }));
 
 test("quick preserves only the DWA native provider", () => fixture((f) => {
