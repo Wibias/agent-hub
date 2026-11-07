@@ -82,6 +82,23 @@ test('P28 audit rejects unknown or malformed strata, duplicate ids, and injected
   }
 });
 
+test('P28 rejects invalid candidate platform, access status, and tag types', () => {
+  const base = buildP28OfflineProfileCandidatePool({ records, now });
+  const variants = [
+    { platform: 'unknown-platform' },
+    { surface_family: 'unknown-surface' },
+    { access_status: 'PRIVATE' },
+    { evidence_class: 'UNVERIFIED' },
+    { tags: ['valid', null] },
+  ];
+  for (const patch of variants) {
+    const candidates = [{ ...base[0], ...patch }, ...base.slice(1)];
+    const result = auditP28ProfileCandidateContract({ candidates });
+    assert.equal(result.metadata_contract_complete, false);
+    assert.ok(result.blockers.includes('invalid-candidate-metadata'));
+  }
+});
+
 test('P28 rejects non-arrays, duplicate record id provenance and invalid dates before projection', () => {
   assert.throws(() => auditP28ProfileCandidateContract({ candidates: null }), /candidates/i);
   assert.throws(() => auditP28ProfileCandidateContract({ candidates: [] }), /non.empty|candidate/i);
