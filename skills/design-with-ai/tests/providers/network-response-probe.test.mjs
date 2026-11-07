@@ -58,6 +58,7 @@ function mockChrome({ input, htmlBytes, cssBytes }, {
   contentLength,
   laterResponseWaves = 0,
   onContextClose = null,
+  popupTraffic = null,
 } = {}) {
   const contexts = [];
   let closed = 0;
@@ -67,6 +68,7 @@ function mockChrome({ input, htmlBytes, cssBytes }, {
       newContext: async (opts) => {
         contexts.push(opts);
         const events = new Map();
+        const contextEvents = new Map();
         let lateResponsesEmitted = false;
         let remainingWaves = laterResponseWaves;
         let waitCount = 0;
@@ -93,9 +95,9 @@ function mockChrome({ input, htmlBytes, cssBytes }, {
             if (!noResponses) {
               const deliver = (url, body) => {
                 const request = { url: () => url };
-                events.get("request")?.(request);
-                events.get("response")?.(response(url, body));
-                events.get("requestfinished")?.(request);
+                contextEvents.get("request")?.(request);
+                contextEvents.get("response")?.(response(url, body));
+                contextEvents.get("requestfinished")?.(request);
               };
               deliver("http://127.0.0.1:5191/settings", htmlBytes);
               if (!omitCss) {
@@ -106,6 +108,37 @@ function mockChrome({ input, htmlBytes, cssBytes }, {
               }
               if (remote) deliver(
                 "https://cdn.example.test/file.js?secret-do-not-log", Buffer.from("external"));
+              if (popupTraffic) {
+                // The first request can precede BrowserContext's page event.
+                const popupRequest = {};
+                contextEvents.get("request")?.(popupRequest);
+                if (popupTraffic === "pending") {
+                  // No requestfinished or requestfailed: outstanding on close.
+                } else {
+                  if (popupTraffic === "tampered") {
+                    contextEvents.get("response")?.(response(
+                      "http://127.0.0.1:5191/settings/site.css", Buffer.from("tampered")));
+                  } else if (popupTraffic === "external") {
+                    contextEvents.get("response")?.(response(
+                      "https://cdn.example.test/popup.js?token=CANARY_POPUP_SECRET_20261107",
+                      Buffer.from("external")));
+                  } else if (popupTraffic === "matching" || popupTraffic === "pageerror") {
+                    contextEvents.get("response")?.(response(
+                      "http://127.0.0.1:5191/settings/site.css", cssBytes));
+                  }
+                  contextEvents.get("requestfinished")?.(popupRequest);
+                }
+                const popupEvents = new Map();
+                const popup = {
+                  on: (event, handler) => { popupEvents.set(event, handler); },
+                  mainFrame: () => ({}),
+                };
+                contextEvents.get("page")?.(popup);
+                if (popupTraffic === "pageerror") {
+                  popupEvents.get("pageerror")?.(
+                    new Error("CANARY_POPUP_ERROR_SECRET_20261107"));
+                }
+              }
               if (unmappedSecretPath) deliver(
                 "http://127.0.0.1:5191/" + unmappedSecretPath, Buffer.from("unknown"));
               for (let i = 0; i < parallelResponses; i++) {
@@ -116,17 +149,17 @@ function mockChrome({ input, htmlBytes, cssBytes }, {
               }
               if (failRequest) {
                 const request = {};
-                events.get("request")?.(request);
-                events.get("requestfailed")?.(request);
+                contextEvents.get("request")?.(request);
+                contextEvents.get("requestfailed")?.(request);
               }
-              if (pendingRequest) events.get("request")?.({});
+              if (pendingRequest) contextEvents.get("request")?.({});
               for (let i = 0; i < floodRequests; i++) {
-                events.get("request")?.({}); // No response: bounded tracking, fail closed.
+                contextEvents.get("request")?.({}); // No response: bounded tracking, fail closed.
               }
               for (let i = 0; i < floodFailedRequests; i++) {
                 const request = {};
-                events.get("request")?.(request);
-                events.get("requestfailed")?.(request);
+                contextEvents.get("request")?.(request);
+                contextEvents.get("requestfailed")?.(request);
               }
               for (let i = 0; i < floodPageErrors; i++) {
                 events.get("pageerror")?.(new Error("Repeated page failure"));
@@ -144,10 +177,10 @@ function mockChrome({ input, htmlBytes, cssBytes }, {
               remainingWaves -= count;
               for (let i = 0; i < count; i++) {
                 const req = {};
-                events.get("request")?.(req);
-                events.get("response")?.(response(
+                contextEvents.get("request")?.(req);
+                contextEvents.get("response")?.(response(
                   "http://127.0.0.1:5191/settings/site.css", cssBytes));
-                events.get("requestfinished")?.(req);
+                contextEvents.get("requestfinished")?.(req);
               }
             }
             if (navigateDuringDrain && isDrainWait) currentRoute = "/settings/other.html";
@@ -155,10 +188,10 @@ function mockChrome({ input, htmlBytes, cssBytes }, {
               lateResponsesEmitted = true;
               for (let i = 0; i < 5; i++) {
                 const request = {};
-                events.get("request")?.(request);
-                events.get("response")?.(response(
+                contextEvents.get("request")?.(request);
+                contextEvents.get("response")?.(response(
                   "http://127.0.0.1:5191/settings/site.css", cssBytes));
-                events.get("requestfinished")?.(request);
+                contextEvents.get("requestfinished")?.(request);
               }
             }
           },
@@ -170,20 +203,24 @@ function mockChrome({ input, htmlBytes, cssBytes }, {
           url: () => "http://127.0.0.1:5191" + currentRoute,
         };
         return {
-          newPage: async () => page,
+          on: (event, handler) => { contextEvents.set(event, handler); },
+          newPage: async () => {
+            contextEvents.get("page")?.(page);
+            return page;
+          },
           close: async () => {
             if (onContextClose === "requestfailed") {
               const request = {};
-              events.get("request")?.(request);
-              events.get("requestfailed")?.(request);
+              contextEvents.get("request")?.(request);
+              contextEvents.get("requestfailed")?.(request);
             } else if (onContextClose === "request") {
               // No response or failure event: this must remain outstanding.
-              events.get("request")?.({});
+              contextEvents.get("request")?.({});
             } else if (onContextClose === "navigation") {
               currentRoute = "/token/CANARY_CLOSE_NAV_SECRET_20261107";
               events.get("framenavigated")?.(mainFrame);
             } else if (onContextClose === "unmapped") {
-              events.get("response")?.(response(
+              contextEvents.get("response")?.(response(
                 "http://127.0.0.1:5191/token/CANARY_CLOSE_PATH_20261107",
                 Buffer.from("unknown")));
             } else if (onContextClose === "pageerror") {
@@ -202,6 +239,49 @@ function mockChrome({ input, htmlBytes, cssBytes }, {
   return { factory, contexts, getClosed: () => closed, getBodyReads: () => bodyReads };
 }
 
+
+test("popup traffic is context-scoped and never certifies main-page screenshot", async () => {
+  await fixture(async (f) => {
+    const scenarios = [
+      ["matching", "BROWSER_POPUP_OPENED"],
+      ["tampered", "LOCAL_RESPONSE_BODY_MISMATCH"],
+      ["external", "BROWSER_POPUP_OPENED"],
+      ["pending", "BROWSER_REQUESTS_STILL_PENDING"],
+      ["pageerror", "BROWSER_PAGE_ERRORS"],
+    ];
+    for (const [popupTraffic, issue] of scenarios) {
+      const report = await probeNetworkResponses(f.input, {
+        browserFactory: mockChrome(f, { popupTraffic }).factory,
+      });
+      assert.equal(report.status, "INCOMPLETE", popupTraffic);
+      assert.equal(report.productCompletionEligible, false);
+      assert.ok(report.observations.every((obs) =>
+        obs.issues.includes(issue) && obs.issues.includes("BROWSER_POPUP_OPENED")),
+      "Popup must invalidate the screenshot and report its own traffic: " + popupTraffic);
+      if (popupTraffic === "tampered") {
+        assert.ok(report.observations.every((obs) =>
+          obs.local.some((row) => row.bodyVerified === false &&
+            row.path?.endsWith("/site.css"))));
+      }
+      if (popupTraffic === "external") {
+        assert.ok(report.observations.every((obs) =>
+          obs.external.length === 1 && obs.external[0].bodyVerified === false));
+      }
+      if (popupTraffic === "pending") {
+        assert.ok(report.observations.every((obs) =>
+          obs.outstandingRequestCount === 1));
+      }
+      if (popupTraffic === "pageerror") {
+        assert.ok(report.observations.every((obs) =>
+          obs.pageErrorCount === 1));
+      }
+      const evidence = readFileSync(
+        join(report.artifactDirectory, "network-report.json"), "utf8");
+      assert.ok(!evidence.includes("CANARY_POPUP_SECRET_20261107"));
+      assert.ok(!evidence.includes("CANARY_POPUP_ERROR_SECRET_20261107"));
+    }
+  });
+});
 
 test("close-time events cannot leave a stale successful observation", async () => {
   await fixture(async (f) => {

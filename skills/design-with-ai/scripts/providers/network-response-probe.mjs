@@ -205,7 +205,28 @@ export async function probeNetworkResponses(options, {
           storageState: { cookies: [], origins: [] },
           serviceWorkers: "block",
         });
+        // BrowserContext emits network events for every page, including
+        // popups whose first request may precede the Page popup event.
+        // A popup is not represented in the main screenshot: fail closed.
+        const observedPages = new Set();
+        const observePage = (observed) => {
+          if (observedPages.has(observed)) return;
+          if (observedPages.size > 0) recordIssue("BROWSER_POPUP_OPENED");
+          const primary = observedPages.size === 0;
+          observedPages.add(observed);
+          observed.on("pageerror", () => { if (!finalized) pageErrorCount++; });
+          if (primary) {
+            const mainFrame = observed.mainFrame();
+            observed.on("framenavigated", (frame) => {
+              if (drainComplete && !finalized && frame === mainFrame) {
+                recordIssue("BROWSER_LATE_MAIN_FRAME_NAVIGATION");
+              }
+            });
+          }
+        };
+        ctx.on("page", observePage);
         const page = await ctx.newPage();
+        observePage(page);
         const queuedBodyReads = [];
         let requestCount = 0;
         let responseCount = 0;
@@ -269,14 +290,7 @@ export async function probeNetworkResponses(options, {
             });
           }
         };
-        page.on("pageerror", () => { if (!finalized) pageErrorCount++; });
-        const mainFrame = page.mainFrame();
-        page.on("framenavigated", (frame) => {
-          if (drainComplete && !finalized && frame === mainFrame) {
-            recordIssue("BROWSER_LATE_MAIN_FRAME_NAVIGATION");
-          }
-        });
-        page.on("request", (request) => {
+        ctx.on("request", (request) => {
           if (finalized) return;
           if (drainComplete) recordIssue("BROWSER_REQUEST_AFTER_DRAIN");
           if (++requestCount > MAX_RESPONSES) {
@@ -285,17 +299,17 @@ export async function probeNetworkResponses(options, {
           }
           outstandingRequests.add(request);
         });
-        page.on("requestfinished", (request) => {
+        ctx.on("requestfinished", (request) => {
           if (!finalized) outstandingRequests.delete(request);
         });
-        page.on("requestfailed", (request) => {
+        ctx.on("requestfailed", (request) => {
           if (finalized) return;
           outstandingRequests.delete(request);
           // Failed requests must not quietly disappear from the observed set.
           // Never store URLs or request bodies, which may contain credentials.
           recordIssue("BROWSER_REQUEST_FAILED");
         });
-        page.on("response", (response) => {
+        ctx.on("response", (response) => {
           if (finalized) return;
           if (++responseCount > MAX_RESPONSES) {
             recordIssue("RESPONSE_COUNT_LIMIT");
