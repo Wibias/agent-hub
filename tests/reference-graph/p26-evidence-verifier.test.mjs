@@ -59,7 +59,14 @@ function healthySample(index, missingDiagnostics = false) {
   if (!missingDiagnostics) {
     sample.diagnostics = {
       schema_version: 'reference-graph.p25-probe-diagnostics.v1',
-      events: [{ phase: 'p17-stage', stage: 'profile-quick', duration_ms: 13 }],
+      events: [
+        {
+          phase: 'p10-attempt', attempt: 1, outcome: 'ok', category: 'none',
+          duration_ms: 11, timeout_budget_ms: 1500, timeout_overrun_ms: 0,
+        },
+        { phase: 'p11-route', outcome: 'graph', category: 'none', duration_ms: 12 },
+        { phase: 'p17-stage', stage: 'profile-quick', duration_ms: 13 },
+      ],
       event_loop_delay_max_ms: 0,
     };
   }
