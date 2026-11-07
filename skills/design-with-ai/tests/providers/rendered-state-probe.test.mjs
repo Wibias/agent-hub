@@ -186,6 +186,30 @@ test("pageerror flood retains only bounded URL-redacted samples and fails closed
   });
 });
 
+test("URL-bearing browser errors never persist WebSocket tokens or split query fragments", async () => {
+  await fixture(async ({ input }) => {
+    const tokens = ["wss-token-do-not-persist", "split-token-do-not-persist"];
+    for (const message of [
+      "WebSocket connection to 'wss://api.test/game?token=" + tokens[0] + "' failed",
+      "Network error: https://api.test/?mode=red'&token=" + tokens[1],
+    ]) {
+      const out = await probeRenderedState(input, {
+        browserFactory: fakeBrowser({
+          pageErrors: true, pageErrorMessage: message,
+        }).factory,
+      });
+      assert.equal(out.status, "INCOMPLETE");
+      assert.ok(out.observations.every((o) =>
+        o.pageErrorCount === 1 &&
+        o.pageErrorSamples.length === 1 &&
+        o.pageErrorSamples[0] === "Browser error: <url-redacted>"));
+      const report = readFileSync(join(out.artifactDirectory, "state-report.json"), "utf8");
+      for (const token of tokens) assert.ok(!report.includes(token));
+      assert.ok(!report.includes("wss://api.test"));
+    }
+  });
+});
+
 test("omitted optional lists are normalized and truncated viewport text cannot certify state", async () => {
   await fixture(async ({ input }) => {
     const noLists = {

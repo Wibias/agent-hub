@@ -14,10 +14,15 @@ const filled = (x) => typeof x === "string" && x.trim().length > 0;
 const arrayStrings = (v, max) =>
   Array.isArray(v) && v.length <= max && v.every((x) =>
     filled(x) && x.length <= 240 && !/[\r\n\0]/.test(x));
-// Browser and JavaScript failures can contain full URLs, including query secrets.
-const browserError = (e) => String(e?.message ?? e)
-  .replace(/https?:\/\/[^\s'"<>]+/gi, "<url-redacted>")
-  .slice(0, 260);
+// A URL can contain quote delimiters or carry secrets in ws(s), data or
+// custom-scheme payloads. Redacting only a URL substring can leave credential
+// fragments behind. Drop the whole message on any URL-like protocol.
+const ERROR_URL_SCHEME = /\b(?:[a-z][a-z0-9+.-]*:\/\/|data:|blob:|file:|javascript:)/i;
+const browserError = (e) => {
+  const message = String(e?.message ?? e);
+  return ERROR_URL_SCHEME.test(message)
+    ? "Browser error: <url-redacted>" : message.slice(0, 260);
+};
 // A positive state marker must be REQUIRED by the entire selector. Reject
 // selector lists, :not(), ancestor-only predicates and generic mounted roots.
 const POSITIVE_MARKER = /^\[data-[a-z][a-z0-9-]*(?:\s*(?:=|~=|\|=|\^=|\$=|\*=)\s*(?:"[^"]+"|'[^']+'|[a-zA-Z0-9_-]+))?\]$/i;
