@@ -14,6 +14,16 @@ const allowedOptions = new Set([
   "--primary", "--journal", "--ledger", "--run-id",
 ]);
 const allowedFlags = new Set(["--with-taste", "--require-taste", "--no-impeccable"]);
+// Most audit failures originate in files, child processes or optional tools.
+// Their raw messages can contain arbitrary paths, URLs or credentials.
+// Keep only explicitly recognized, fixed public diagnostics.
+const PUBLIC_CLI_ERRORS = new Set([
+  "Quick profile cannot initiate a browser provider",
+  "Output root must already exist",
+  "Invalid DWA provider profile or selection",
+  "A required Taste Skill scan must be explicitly enabled",
+  "Unknown, repeated or missing option",
+]);
 
 function parseArgs(argv) {
   const values = new Map(), flags = new Set();
@@ -27,7 +37,7 @@ function parseArgs(argv) {
     if (!allowedOptions.has(arg) || values.has(arg) ||
         i + 1 >= argv.length || argv[i + 1].startsWith("--") ||
         !argv[i + 1].trim()) {
-      throw new Error("Unknown, repeated or missing option " + String(arg));
+      throw new Error("Unknown, repeated or missing option");
     }
     values.set(arg, argv[++i]);
   }
@@ -124,7 +134,9 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     process.stdout.write(JSON.stringify(result, null, 2) + "\n");
     process.exitCode = ["BLOCKED", "INCOMPLETE"].includes(result.status) ? 1 : 0;
   } catch (error) {
-    process.stderr.write("DWA provider audit: " + String(error.message ?? error) + "\n");
+    const reason = PUBLIC_CLI_ERRORS.has(error?.message)
+      ? error.message : "Audit failed; untrusted error details redacted";
+    process.stderr.write("DWA provider audit: " + reason + "\n");
     process.exitCode = 2;
   }
 }

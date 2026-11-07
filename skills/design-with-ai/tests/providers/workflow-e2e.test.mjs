@@ -137,6 +137,28 @@ test("explicitly required missing Taste runtime blocks", () => fixture((f) => {
   assert.equal(summary.coverage.complete, false);
 }));
 
+
+test("audit CLI redacts untrusted flags and filesystem failure paths", () =>
+  fixture((f) => {
+    const token = "CANARY_QUALITY_AUDIT_CLI_SECRET_20261107";
+    const option = invoke(f, ["--unknown-" + token, "bad"]);
+    assert.equal(option.status, 2);
+    assert.match(option.stderr, /Unknown, repeated or missing option/);
+    assert.ok(!option.stderr.includes(token));
+    assert.equal(option.stdout, "");
+
+    // A file incorrectly supplied as output root causes a real ENOTDIR
+    // exception whose native message embeds the supplied path.
+    const file = join(f.root, "artifact-" + token);
+    writeFileSync(file, "not a directory");
+    const filesystem = invoke(f, ["--output-root", file]);
+    assert.equal(filesystem.status, 2);
+    assert.match(filesystem.stderr, /untrusted error details redacted/);
+    assert.ok(!filesystem.stderr.includes(token));
+    assert.ok(!filesystem.stderr.includes(file));
+    assert.equal(filesystem.stdout, "");
+  }));
+
 test("invalid profile/source options stop with error without executing tools", () =>
   fixture((f) => {
     const run = invoke(f, ["--profile", "quick", "--with-taste", "--html", f.page]);
