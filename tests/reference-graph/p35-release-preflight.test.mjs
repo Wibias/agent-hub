@@ -217,6 +217,46 @@ test('P35 rejects noncanonical GitHub login identities rather than treating them
   }
 });
 
+
+test('P35 rejects same-instant contradictory reviews even if GitHub login casing differs', () => {
+  for (const states of [
+    ['APPROVED', 'CHANGES_REQUESTED'],
+    ['CHANGES_REQUESTED', 'APPROVED'],
+    ['APPROVED', 'DISMISSED'],
+    ['DISMISSED', 'APPROVED'],
+  ]) {
+    const input = facts({ independentApprovals: true, targetListed: true });
+    const pr = input.githubSnapshot.prs[0];
+    pr.reviews = [
+      { reviewer: 'Independent-Reviewer', state: states[0],
+        commit_sha: pr.head_sha, submitted_at: '2026-11-07T18:59:00.000Z' },
+      { reviewer: 'independent-reviewer', state: states[1],
+        commit_sha: pr.head_sha, submitted_at: '2026-11-07T18:59:00.000Z' },
+    ];
+    assert.throws(
+      () => evaluateP35ReleasePreflight(input),
+      error => error instanceof P35ReleasePreflightError
+        && error.category === 'evidence-invalid',
+      states.join(' -> '),
+    );
+  }
+});
+
+test('P35 keeps legitimately later same-user disposition transitions valid', () => {
+  const input = facts({ independentApprovals: true, targetListed: true });
+  const pr = input.githubSnapshot.prs[0];
+  pr.reviews = [
+    { reviewer: 'Independent-Reviewer', state: 'CHANGES_REQUESTED',
+      commit_sha: pr.head_sha, submitted_at: '2026-11-07T18:58:59.000Z' },
+    { reviewer: 'independent-reviewer', state: 'APPROVED',
+      commit_sha: pr.head_sha, submitted_at: '2026-11-07T18:59:00.000Z' },
+  ];
+  const report = evaluateP35ReleasePreflight(input);
+  assert.equal(report.review_gate_satisfied, true);
+  assert.equal(report.independently_approved_prs, 10);
+  assert.equal(report.deployment_authorized, false);
+});
+
 test('P35 refuses any CI not successful on the pinned current SHA or unexpected PR/base drift', () => {
   const variations = [
     p => { p.workflows[0].conclusion = 'in_progress'; },
