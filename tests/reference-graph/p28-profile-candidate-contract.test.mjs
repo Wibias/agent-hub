@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 
 import { loadRecords, TAXONOMY } from '../../knowledge/design-references/scripts/lib.mjs';
@@ -95,4 +97,37 @@ test('P28 documents the real P10 migration gap, without changing P10 implementat
   assert.match(ddl, /reference_graph_quick_runtime_projection_p10/);
   assert.doesNotMatch(ddl, /\bprimary_stratum\b/);
   assert.doesNotMatch(client, /['"]primary_stratum['"]/);
+});
+
+const cliPath = fileURLToPath(new URL('../../reference-graph/cli/p28-profile-candidate-contract.mjs', import.meta.url));
+
+test('P28 CLI reports current P10 metadata blocker and proposed offline metadata completeness without a rollout', () => {
+  const run = spawnSync(process.execPath, [cliPath, '--date', '2026-11-07'], {
+    encoding: 'utf8', timeout: 30_000,
+  });
+  assert.equal(run.status, 0, run.stderr);
+  const report = JSON.parse(run.stdout);
+  assert.equal(report.schema_version, 'reference-graph.p28-profile-candidate-review.v1');
+  assert.equal(report.reference_date, '2026-11-07');
+  assert.equal(report.current_p10_equivalent.metadata_contract_complete, false);
+  assert.deepEqual(report.current_p10_equivalent.blockers, ['missing-primary-stratum']);
+  assert.equal(report.proposed_offline.metadata_contract_complete, true);
+  assert.equal(report.proposed_offline.candidate_count, report.current_p10_equivalent.candidate_count);
+  assert.deepEqual(report.proposed_offline.blockers, []);
+  assert.equal(report.graph_parity_verified, false);
+  assert.equal(report.repository_default_graph_enabled, false);
+  assert.equal(report.activation_performed, false);
+  assert.doesNotMatch(run.stdout, /service_role_key|canonicalUrl|search_text/);
+});
+
+test('P28 CLI rejects unknown switches and missing or invalid pinned dates', () => {
+  for (const argv of [[], ['--date', '2026-02-30'], ['--date', '2026-11-07', '--activate']]) {
+    const run = spawnSync(process.execPath, [cliPath, ...argv], {
+      encoding: 'utf8', timeout: 30_000,
+    });
+    assert.equal(run.status, 1);
+    assert.equal(run.stdout, '');
+    assert.match(run.stderr, /P28 audit failed/i);
+    assert.doesNotMatch(run.stderr, /service_role_key|canonicalUrl|search_text|\\.agents/);
+  }
 });
