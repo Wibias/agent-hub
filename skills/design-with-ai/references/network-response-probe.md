@@ -25,6 +25,8 @@ node skills/design-with-ai/scripts/providers/network-response-probe.mjs \
   --out-root /safe/evidence
 ```
 
+For a nested `index.html` page served at `/settings/`, pass `--route /settings/` explicitly. The probe accepts both that route and the canonical `/settings` mapping, but it does not silently certify redirects between them. Other ambiguous routes remain rejected.
+
 If Chrome is not on the default Playwright channel, add `--chrome /absolute/path/to/chrome`.
 
 Output is a unique evidence directory with `network-report.json` plus three screenshots. A missing Playwright/Chrome install fails; the script does **not** download or install a browser.
