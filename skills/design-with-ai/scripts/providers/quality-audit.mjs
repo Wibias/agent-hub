@@ -17,7 +17,26 @@ const allowedFlags = new Set(["--with-taste", "--require-taste", "--no-impeccabl
 // Most audit failures originate in files, child processes or optional tools.
 // Their raw messages can contain arbitrary paths, URLs or credentials.
 // Keep only explicitly recognized, fixed public diagnostics.
+// Safe, path-free labels from our own workflow and scope-validation code.
+// Never forward a generic filesystem, browser, detector or provider exception.
+const SAFE_WORKFLOW_ERRORS = Object.freeze([
+  "Local source target, /route and project root are required",
+  "Project root and source must exist without symlink targets",
+  "Source target is outside the project scope",
+  "A local built HTML page is required when Taste Skill is selected",
+  "Browser target must be a local regular HTML file",
+  "Browser asset root must be an existing regular directory",
+  "Use an isolated built-site subtree inside projectRoot for browser assets",
+  "Requested route does not match the built HTML path; SPA routes require verified route-specific HTML",
+  "Browser output cannot reside inside the served asset root",
+  "Source scope escapes project",
+  "Source scope has no eligible files",
+  "Detector DESIGN.md resolves outside projectRoot",
+  "Detector context dependency must be a regular in-project file",
+  "Audited source changed during provider execution; evidence invalid",
+]);
 const PUBLIC_CLI_ERRORS = new Set([
+  ...SAFE_WORKFLOW_ERRORS,
   "Quick profile cannot initiate a browser provider",
   "Output root must already exist",
   "Invalid DWA provider profile or selection",
@@ -135,14 +154,21 @@ export async function runQualityAudit(argv = process.argv.slice(2)) {
   return summary;
 }
 
+// A public diagnostic must match one complete, authored label. A similar
+// untrusted error with extra paths/tokens is never surfaced verbatim.
+export function safeQualityAuditError(error) {
+  const message = error?.message;
+  return typeof message === "string" && PUBLIC_CLI_ERRORS.has(message)
+    ? message : "Audit failed; untrusted error details redacted";
+}
+
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
     const result = await runQualityAudit();
     process.stdout.write(JSON.stringify(result, null, 2) + "\n");
     process.exitCode = ["BLOCKED", "INCOMPLETE"].includes(result.status) ? 1 : 0;
   } catch (error) {
-    const reason = PUBLIC_CLI_ERRORS.has(error?.message)
-      ? error.message : "Audit failed; untrusted error details redacted";
+    const reason = safeQualityAuditError(error);
     process.stderr.write("DWA provider audit: " + reason + "\n");
     process.exitCode = 2;
   }
