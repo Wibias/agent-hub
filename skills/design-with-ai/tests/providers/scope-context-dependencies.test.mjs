@@ -91,6 +91,34 @@ test("HTML-only Impeccable source proof includes linked sibling CSS bytes", () =
   });
 });
 
+test("only genuine HTML link elements contribute CSS proof", () => {
+  fixture(({ root, src }) => {
+    const html = join(src, "page.html");
+    const css = join(src, "site.css");
+    writeFileSync(css, "h1 { color: red; }\n");
+    writeFileSync(html, [
+      "<!doctype html>",
+      "<link-button>Custom element, not a stylesheet</link-button>",
+      "<link_widget>Another non-link element</link_widget>",
+      '<!-- <link rel="style&#115;heet" href="wrong.css"> -->',
+      '<script>const example = "<link rel=stylesheet href=wrong.css>";</script>',
+      '<style>.sample:after { content: "<link rel=stylesheet href=wrong.css>" }</style>',
+      '<textarea><link rel="style&#115;heet" href="wrong.css"></textarea>',
+      '<link rel="stylesheet" href="site.css">',
+    ].join("\n"));
+    const inspect = () => sourceScopeProof({
+      projectRoot: root, target: html, route: "/page", includeDetectorContext: true,
+    });
+    const first = inspect();
+    assert.deepEqual(first.manifest.linkedStylesheets.map((asset) => asset.path), ["src/site.css"]);
+    writeFileSync(css, "h1 { color: blue; }\n");
+    assert.notEqual(inspect().summary.sourceSha256, first.summary.sourceSha256,
+      "real link CSS changes remain fingerprint-bound");
+    writeFileSync(html, '<link rel="style&#115;heet" href="site.css">');
+    assert.throws(inspect, /Entity-bearing stylesheet rel cannot be attested/);
+  });
+});
+
 test("HTML entity-encoded stylesheet rel cannot evade the source proof", () => {
   fixture(({ root, src }) => {
     const html = join(src, "page.html");
