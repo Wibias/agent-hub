@@ -23,6 +23,13 @@ const PUBLIC_CLI_ERRORS = new Set([
   "Invalid DWA provider profile or selection",
   "A required Taste Skill scan must be explicitly enabled",
   "Unknown, repeated or missing option",
+  "--path is required",
+  "--route is required",
+  "--project-root is required",
+  "Taste-specific options require --with-taste",
+  "--with-taste requires --html (a local built page)",
+  "Journal capture requires --journal, --ledger and --run-id together",
+  ...[...allowedFlags].map((flag) => "Repeated flag " + flag),
 ]);
 
 function parseArgs(argv) {

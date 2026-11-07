@@ -100,6 +100,42 @@ test("untrusted provider and native gate failures never persist canary credentia
   assert.ok(!JSON.stringify([failed, malformed]).includes("CANARY_"));
 });
 
+test("Taste probe reports fixed availability hints but never untrusted details", async () => {
+  for (const reason of [
+    "Taste Skill 2.5.0 needs Node 22+",
+    "An explicit locally installed Taste Skill root is required",
+    "Taste Skill v2.5.0 consistency.mjs is not installed",
+    "Taste Skill root cannot be read",
+  ]) {
+    const registered = createProviderRegistry([{
+      id: "taste-skill", capabilities: [rendered],
+      async probe() { return { available: false, reason }; },
+      async inspect() { throw new Error("must not inspect"); },
+    }]);
+    const [found] = await runProviders(registered, {
+      capability: rendered, optional: ["taste-skill"],
+    });
+    assert.equal(found.status, "UNAVAILABLE");
+    assert.equal(found.reason, reason);
+  }
+  for (const [id, reason] of [
+    ["taste-skill", "Taste root /api?token=CANARY_TASTE_SECRET_20261107 missing"],
+    ["other-provider", "Taste Skill 2.5.0 needs Node 22+"],
+  ]) {
+    const registered = createProviderRegistry([{
+      id, capabilities: [rendered],
+      async probe() { return { available: false, reason }; },
+      async inspect() { throw new Error("must not inspect"); },
+    }]);
+    const [found] = await runProviders(registered, {
+      capability: rendered, required: [id],
+    });
+    assert.equal(found.status, "BLOCKED");
+    assert.equal(found.reason, "Provider runtime unavailable");
+    assert.ok(!JSON.stringify(found).includes("CANARY_"));
+  }
+});
+
 test("quick profile selects only DWA native; no external provider executes", async () => {
   await fixture(async (f) => {
     const seen = [];
