@@ -451,6 +451,61 @@ test("nested independent project boundary does not inherit outer DESIGN.md", () 
   });
 });
 
+test("disabled design-system config skips unsafe DESIGN.md while retaining config and linked CSS proof", () => {
+  fixture(({ root, src }) => {
+    const external = mkdtempSync(join(tmpdir(), "dwa-disabled-design-external-"));
+    try {
+      const configDir = join(root, ".impeccable");
+      mkdirSync(configDir);
+      const shared = join(configDir, "config.json");
+      const local = join(configDir, "config.local.json");
+      writeFileSync(shared, JSON.stringify({
+        detector: { designSystem: { enabled: false } },
+      }));
+      const outsidePolicy = join(external, "DESIGN.md");
+      writeFileSync(outsidePolicy, "---\ncolors:\n  ink: '#111111'\n---\n");
+      symlinkSync(outsidePolicy, join(root, "DESIGN.md"));
+      const html = join(src, "page.html");
+      const css = join(src, "sibling.css");
+      writeFileSync(html, '<link rel="stylesheet" href="sibling.css"><main>Safe</main>');
+      writeFileSync(css, "body { color: #111; }\n");
+      const inspect = (includeDetectorContext = true) => sourceScopeProof({
+        projectRoot: root, target: html, route: "/page", includeDetectorContext,
+      });
+      const off = inspect();
+      assert.deepEqual(off.manifest.detectorContext.map((x) => x.path),
+        [".impeccable/config.json"]);
+      assert.deepEqual(off.manifest.detectorBindings, [{
+        source: "src/page.html", designRoot: null, designFile: null,
+      }]);
+      assert.deepEqual(off.manifest.linkedStylesheets.map((x) => x.path),
+        ["src/sibling.css"]);
+      assert.equal(inspect(false).manifest.detectorContext, undefined,
+        "native-only scope must not gain detector dependencies");
+      writeFileSync(css, "body { color: red; }\n");
+      const changedCSS = inspect();
+      assert.notEqual(changedCSS.summary.sourceSha256, off.summary.sourceSha256,
+        "disabled design rules must not disable linked CSS provenance");
+      // A higher-priority local config that enables design policy must
+      // re-enable the symlink validation and fail closed.
+      writeFileSync(local, JSON.stringify({
+        detector: { designSystem: { enabled: true } },
+      }));
+      assert.throws(inspect, /Detector context dependency must be a regular in-project file/);
+      writeFileSync(local, JSON.stringify({
+        detector: { designSystem: { enabled: false } },
+      }));
+      const offAgain = inspect();
+      assert.deepEqual(offAgain.manifest.detectorContext.map((x) => x.path),
+        [".impeccable/config.json", ".impeccable/config.local.json"]);
+      assert.notEqual(offAgain.summary.sourceSha256, changedCSS.summary.sourceSha256,
+        "effective local config must stay bound to the source digest");
+    } finally {
+      rmSync(external, { recursive: true, force: true });
+    }
+  });
+});
+
 test("a symlinked policy dependency cannot be treated as an in-project proof", () => {
   fixture(({ root, inspect }) => {
     const outside = mkdtempSync(join(tmpdir(), "dwa-context-external-"));
