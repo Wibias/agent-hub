@@ -71,3 +71,20 @@ jobs:
 
       - name: Real Chrome received-body SHA match, tamper and stalled-response detection
         run: node skills/design-with-ai/tests/providers/network-response-live-smoke.mjs
+
+  # Separate from Chrome/Taste. Windows specifically validates canonical path
+  # handling and bounded full-tree SHA evidence on a large Vite-style build.
+  rendered-assets-windows:
+    runs-on: windows-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Windows rendered-tree and Vite-style provenance regressions
+        run: node --test skills/design-with-ai/tests/providers/rendered-assets.test.mjs
