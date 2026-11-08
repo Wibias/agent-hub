@@ -26,6 +26,21 @@ const expectedSetHash = createHash('sha256')
   .update(pool.map(row => row.legacy_id).sort().join('\n'), 'utf8')
   .digest('hex');
 
+function withCount(payload, total = rows.length, start = 0) {
+  return {
+    ok: true,
+    status: 200,
+    headers: {
+      get(name) {
+        return name.toLowerCase() === 'content-range'
+          ? `${start}-${start + Math.max(0, payload.length - 1)}/${total}`
+          : null;
+      },
+    },
+    async json() { return payload; },
+  };
+}
+
 function args(payload = rows, overrides = {}) {
   return {
     supabaseUrl: 'https://example.supabase.co/',
@@ -34,11 +49,7 @@ function args(payload = rows, overrides = {}) {
     asOf,
     expectedCandidateCount: rows.length,
     expectedCandidateIdSetSha256: expectedSetHash,
-    fetchImpl: async () => ({
-      ok: true,
-      status: 200,
-      async json() { return payload; },
-    }),
+    fetchImpl: async () => withCount(payload),
     ...overrides,
   };
 }
@@ -55,7 +66,7 @@ test('P30 fetches distinct versioned projection read-only with publishable key a
   const result = await fetchP30ProfileCandidateSnapshot(args(rows, {
     fetchImpl: async (url, options) => {
       calls.push([url, options]);
-      return { ok: true, status: 200, async json() { return rows; } };
+      return withCount(rows);
     },
   }));
   assert.equal(calls.length, 1);
@@ -67,7 +78,10 @@ test('P30 fetches distinct versioned projection read-only with publishable key a
     assert.ok(url.searchParams.get('select').split(',').includes(column));
   }
   assert.equal(calls[0][1].method, 'GET');
-  assert.deepEqual(calls[0][1].headers, { apikey: 'sb_publishable_p30-test' });
+  assert.deepEqual(calls[0][1].headers, {
+    apikey: 'sb_publishable_p30-test',
+    Prefer: 'count=exact',
+  });
   assert.equal(calls[0][1].body, undefined);
   assert.ok(calls[0][1].signal instanceof AbortSignal);
   assert.deepEqual(result.candidates, pool);
@@ -102,13 +116,13 @@ test('P30 requires independently pinned date, as-of clock, set hash and candidat
 });
 
 test('P30 rejects missing or injected candidate fields and invalid Standard/Deep strata', async () => {
-  await fail([{ ...rows[0], primary_stratum: 'invalid-stratum' }], 'candidate-invalid');
-  await fail([{ ...rows[0], extra_secret: 'leak' }], 'candidate-invalid');
+  await fail([{ ...rows[0], primary_stratum: 'invalid-stratum' }, rows[1], rows[2]], 'candidate-invalid');
+  await fail([{ ...rows[0], extra_secret: 'leak' }, rows[1], rows[2]], 'candidate-invalid');
   const { primary_stratum: _ignored, ...missing } = rows[0];
-  await fail([missing], 'candidate-invalid');
-  await fail([{ ...rows[0], tags: 'bad' }], 'candidate-invalid');
-  await fail([{ ...rows[0], platform: 'unknown' }], 'candidate-invalid');
-  await fail([rows[0], { ...rows[0] }], 'candidate-invalid');
+  await fail([missing, rows[1], rows[2]], 'candidate-invalid');
+  await fail([{ ...rows[0], tags: 'bad' }, rows[1], rows[2]], 'candidate-invalid');
+  await fail([{ ...rows[0], platform: 'unknown' }, rows[1], rows[2]], 'candidate-invalid');
+  await fail([rows[0], { ...rows[0] }, rows[1]], 'candidate-invalid');
 });
 
 test('P30 fails closed on count, canonical membership, ordering, version and snapshot bindings', async () => {
@@ -133,9 +147,35 @@ test('P30 rejects a server snapshot with more rows than the pinned candidate cou
   await fail(extraRows, 'candidate-count-mismatch', {
     fetchImpl: async (url) => {
       const limit = Number(new URL(url).searchParams.get('limit'));
-      return { ok: true, status: 200, async json() { return extraRows.slice(0, limit); } };
+      return withCount(extraRows.slice(0, limit), extraRows.length);
     },
   });
+});
+
+test('P30 requires an exact Content-Range total', async () => {
+  const cases = [
+    async () => ({ ok: true, status: 200, async json() { return rows; } }),
+    async () => ({
+      ok: true,
+      status: 200,
+      headers: { get: () => '0-2/*' },
+      async json() { return rows; },
+    }),
+    async () => ({
+      ok: true,
+      status: 200,
+      headers: { get: () => '1-3/3' },
+      async json() { return rows; },
+    }),
+    async () => withCount(rows, 4),
+  ];
+  for (const fetchImpl of cases) {
+    await assert.rejects(
+      fetchP30ProfileCandidateSnapshot(args(rows, { fetchImpl })),
+      error => error instanceof P30ProfileTransportError
+        && error.category === 'candidate-count-mismatch',
+    );
+  }
 });
 
 test('P30 rejects HTTP failures, invalid JSON, network errors and timeouts without key disclosure', async () => {

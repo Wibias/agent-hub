@@ -84,7 +84,18 @@ const connection = {
 // CI-generated pins and stubbed HTTP: NOT independent evidence or real Supabase.
 const pinnedP33 = await auditP33PinnedProfileParity({
   ...connection, ...strings, ...digestPins,
-  fetchImpl: async () => ({ ok: true, async json() { return rows; } }),
+  fetchImpl: async () => ({
+    ok: true,
+    status: 200,
+    headers: {
+      get(name) {
+        return name.toLowerCase() === 'content-range'
+          ? `0-${rows.length - 1}/${rows.length}`
+          : null;
+      },
+    },
+    async json() { return rows; },
+  }),
 });
 assert.equal(pinnedP33.record_order_coverage_parity_exact, true);
 const approvedP33Sha = hash(JSON.stringify(pinnedP33));
@@ -102,7 +113,10 @@ function api(payload = rows, calls = [], serverCap = 500) {
     calls.push([url, options]);
     assert.equal(options.method, 'GET');
     assert.equal(options.body, undefined);
-    assert.deepEqual(options.headers, { apikey: connection.publishableKey });
+    assert.deepEqual(options.headers, {
+      apikey: connection.publishableKey,
+      Prefer: 'count=exact',
+    });
     assert.equal(new URL(url).pathname,
       '/rest/v1/reference_graph_profile_runtime_projection_p30_v1');
     const parsed = new URL(url);
@@ -111,6 +125,13 @@ function api(payload = rows, calls = [], serverCap = 500) {
     const page = payload.slice(offset, offset + Math.min(limit, serverCap));
     return {
       ok: true, status: page.length < limit ? 200 : 206,
+      headers: {
+        get(name) {
+          return name.toLowerCase() === 'content-range'
+            ? `${offset}-${offset + Math.max(0, page.length - 1)}/${payload.length}`
+            : null;
+        },
+      },
       async json() { return page; },
     };
   };

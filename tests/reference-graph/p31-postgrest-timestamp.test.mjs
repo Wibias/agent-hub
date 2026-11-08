@@ -28,6 +28,13 @@ async function readWithTimestamp(timestamp) {
     fetchImpl: async () => ({
       ok: true,
       status: 200,
+      headers: {
+        get(name) {
+          return name.toLowerCase() === 'content-range'
+            ? `0-${candidates.length - 1}/${candidates.length}`
+            : null;
+        },
+      },
       json: async () => candidates.map(row => ({
         ...row,
         projection_version: 'reference-graph.profile-runtime.p30.v1',

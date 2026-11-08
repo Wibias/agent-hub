@@ -89,6 +89,7 @@ export async function auditP37SingleSnapshotPublicParity(input = {}) {
     return {
       ok: response?.ok,
       status: response?.status,
+      headers: response?.headers,
       async json() {
         const payload = await response.json();
         if (Array.isArray(payload)) pages.push(payload);

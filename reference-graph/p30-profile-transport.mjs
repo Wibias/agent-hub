@@ -24,6 +24,7 @@ const MAX_FRESHNESS_MS = 4 * 60 * 60 * 1000;
 const FUTURE_SKEW_MS = 60 * 1000;
 const HEX64 = /^[a-f0-9]{64}$/;
 const ISO_UTC = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
+const CONTENT_RANGE = /^(\d+)-(\d+)\/(\d+)$/;
 
 export class P30ProfileTransportError extends Error {
   constructor(category) {
@@ -215,19 +216,17 @@ export async function fetchP30ProfileCandidateSnapshot({
       if (controller.signal.aborted) reject('timeout');
       const remaining = expectedCandidateCount - pages.length;
       const pageSize = Math.min(PAGE_LIMIT, remaining);
-      // On the final page, look one row past the pinned count. A server that
-      // holds extra rows must not be accepted as a complete pinned snapshot.
-      const isFinalPage = remaining <= PAGE_LIMIT;
-      const requestLimit = isFinalPage ? pageSize + 1 : pageSize;
       const pageUrl = new URL(url);
-      pageUrl.searchParams.set('limit', String(requestLimit));
+      pageUrl.searchParams.set('limit', String(pageSize));
       pageUrl.searchParams.set('offset', String(pages.length));
 
       let response;
       try {
         response = await fetchImpl(pageUrl.toString(), {
           method: 'GET',
-          headers: { apikey: key },
+          // PostgREST returns the exact total in Content-Range. This detects
+          // extra rows even when the server caps the response at pageSize.
+          headers: { apikey: key, Prefer: 'count=exact' },
           signal: controller.signal,
         });
       } catch {
@@ -250,8 +249,20 @@ export async function fetchP30ProfileCandidateSnapshot({
       if (payload.length === 0) {
         reject(pages.length === 0 ? 'candidate-invalid' : 'candidate-count-mismatch');
       }
-      if (payload.length > requestLimit
-          || (isFinalPage && payload.length > remaining)) {
+      const contentRange = response?.headers?.get?.('content-range');
+      const range = typeof contentRange === 'string'
+        ? CONTENT_RANGE.exec(contentRange)
+        : null;
+      if (!range) reject('candidate-count-mismatch');
+      const rangeStart = Number(range[1]);
+      const rangeEnd = Number(range[2]);
+      const exactTotal = Number(range[3]);
+      if (rangeStart !== pages.length
+          || rangeEnd !== rangeStart + payload.length - 1
+          || exactTotal !== expectedCandidateCount) {
+        reject('candidate-count-mismatch');
+      }
+      if (payload.length > pageSize) {
         reject('candidate-count-mismatch');
       }
       // Validate stable identity order immediately, including the transition

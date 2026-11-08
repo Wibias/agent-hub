@@ -69,7 +69,18 @@ function fixture(extra = {}, payload = rows()) {
       assert.equal(options.method, 'GET');
       assert.equal(new URL(url).pathname,
         '/rest/v1/reference_graph_profile_runtime_projection_p30_v1');
-      return { ok: true, status: 200, async json() { return payload; } };
+      return {
+        ok: true,
+        status: 200,
+        headers: {
+          get(name) {
+            return name.toLowerCase() === 'content-range'
+              ? `0-${Math.max(0, payload.length - 1)}/${payload.length}`
+              : null;
+          },
+        },
+        async json() { return payload; },
+      };
     },
     ...extra,
   };

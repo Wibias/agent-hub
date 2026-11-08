@@ -61,7 +61,18 @@ const p33Report = await auditP33PinnedProfileParity({
   templatesSha256: sha(strings.templatesJson),
   sourceReceiptJson: receiptJson,
   sourceReceiptSha256: sha(receiptJson),
-  fetchImpl: async () => ({ ok: true, json: async () => responseRows }),
+  fetchImpl: async () => ({
+    ok: true,
+    status: 200,
+    headers: {
+      get(name) {
+        return name.toLowerCase() === 'content-range'
+          ? `0-${responseRows.length - 1}/${responseRows.length}`
+          : null;
+      },
+    },
+    json: async () => responseRows,
+  }),
 });
 
 let firstSelectedPatternId;

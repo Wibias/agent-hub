@@ -44,13 +44,26 @@ function input(fetchImpl, overrides = {}) {
   };
 }
 
+function contentRange(start, length, total) {
+  return {
+    get(name) {
+      return name.toLowerCase() === 'content-range'
+        ? `${start}-${start + Math.max(0, length - 1)}/${total}`
+        : null;
+    },
+  };
+}
+
 // Simulates a hosted API that caps each response at 1000 or fewer rows,
 // regardless of the client's requested size.
 function cappedApi({ rows = snapshot, cap = 1000, failures = {}, calls = [] } = {}) {
   return async (url, options) => {
     assert.equal(options.method, 'GET');
     assert.equal(options.body, undefined);
-    assert.deepEqual(options.headers, { apikey: 'sb_publishable_p30_paginated_test' });
+    assert.deepEqual(options.headers, {
+      apikey: 'sb_publishable_p30_paginated_test',
+      Prefer: 'count=exact',
+    });
     const u = new URL(url);
     assert.equal(u.pathname, '/rest/v1/reference_graph_profile_runtime_projection_p30_v1');
     assert.equal(u.searchParams.get('snapshot_date'), 'eq.2026-11-07');
@@ -63,9 +76,13 @@ function cappedApi({ rows = snapshot, cap = 1000, failures = {}, calls = [] } = 
     assert.ok(Number.isInteger(offset) && offset >= 0);
     calls.push({ limit, offset });
     const page = rows.slice(offset, offset + Math.min(limit, cap));
-    return failures[offset]
+    const response = failures[offset]
       ? failures[offset](page)
       : { ok: true, status: page.length < limit ? 200 : 206, async json() { return page; } };
+    if (response?.ok === true && response.headers === undefined) {
+      response.headers = contentRange(offset, page.length, rows.length);
+    }
+    return response;
   };
 }
 
@@ -83,7 +100,7 @@ test('P30 pages a 1201-candidate snapshot past the default 1000-row API cap', as
   assert.equal(report.transport.candidate_id_set_sha256, idSha);
   assert.equal(report.transport.refreshed_at, '2026-11-07T11:30:00.000Z');
   assert.deepEqual(calls.map(x => x.offset), [0, 500, 1000]);
-  assert.deepEqual(calls.map(x => x.limit), [500, 500, 202]);
+  assert.deepEqual(calls.map(x => x.limit), [500, 500, 201]);
   assert.equal(report.transport.live_graph_parity_verified, false);
   assert.equal(report.transport.activation_performed, false);
 });
@@ -97,7 +114,37 @@ test('P30 remains correct when Supabase caps pages smaller than requested', asyn
   assert.equal(calls[0].offset, 0);
   assert.equal(calls[1].offset, 117);
   assert.equal(calls.at(-1).offset, 1170);
-  assert.equal(calls.at(-1).limit, 32);
+  assert.equal(calls.at(-1).limit, 31);
+});
+
+test('P30 rejects 501 server rows when the pin is 500 and the server caps pages at 500', async () => {
+  const rows501 = snapshot.slice(0, 501);
+  const expectedHash = createHash('sha256')
+    .update(rows501.slice(0, 500).map(row => row.legacy_id).sort().join('\n'), 'utf8')
+    .digest('hex');
+  const calls = [];
+  const fetchImpl = async (url) => {
+    const u = new URL(url);
+    const limit = Number(u.searchParams.get('limit'));
+    const offset = Number(u.searchParams.get('offset'));
+    calls.push({ offset, limit });
+    const page = rows501.slice(offset, offset + Math.min(limit, 500));
+    return {
+      ok: true,
+      status: 200,
+      headers: contentRange(offset, page.length, rows501.length),
+      async json() { return page; },
+    };
+  };
+  await assert.rejects(
+    fetchP30ProfileCandidateSnapshot(input(fetchImpl, {
+      expectedCandidateCount: 500,
+      expectedCandidateIdSetSha256: expectedHash,
+    })),
+    error => error instanceof P30ProfileTransportError
+      && error.category === 'candidate-count-mismatch',
+  );
+  assert.deepEqual(calls, [{ offset: 0, limit: 500 }]);
 });
 
 test('P30 rejects a missing later page rather than accepting a partial candidate set', async () => {
