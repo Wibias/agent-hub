@@ -62,9 +62,9 @@ grant select on public.reference_graph_profile_public_p30_v1
 comment on view public.reference_graph_profile_public_p30_v1 is
   'P39 public P38 freshness metadata only; no product, source text, tags or IDs';
 
--- No public view is created in this migration. There is no proven public
--- consumer, and product/source classification plus an opaque-ID design are
--- not yet approved. A future public surface must be a separately reviewed
--- migration with an explicit column classification and non-reversible IDs.
+-- A broader public view is deliberately not created. There is no proven
+-- consumer for product/IDs, and product/source classification plus an
+-- opaque-ID design are not yet approved. Any broader public surface must be a
+-- separately reviewed migration with explicit classification and opaque IDs.
 
 commit;
