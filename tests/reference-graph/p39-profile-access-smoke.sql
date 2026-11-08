@@ -26,10 +26,15 @@ where snapshot_date = (statement_timestamp() at time zone 'UTC')::date
 \gset
 
 select 1 / case when
-  not has_table_privilege('anon', 'public.reference_graph_profile_runtime_projection_p30_v1', 'SELECT')
-  and not has_table_privilege('authenticated', 'public.reference_graph_profile_runtime_projection_p30_v1', 'SELECT')
-  and not has_table_privilege('service_role', 'public.reference_graph_profile_runtime_projection_p30_v1', 'SELECT')
-then 1 else 0 end as p39_base_table_closed;
+  has_any_column_privilege('anon', 'public.reference_graph_profile_runtime_projection_p30_v1', 'SELECT')
+  and has_column_privilege('anon', 'public.reference_graph_profile_runtime_projection_p30_v1', 'snapshot_date', 'SELECT')
+  and has_column_privilege('authenticated', 'public.reference_graph_profile_runtime_projection_p30_v1', 'refreshed_at', 'SELECT')
+  and not has_column_privilege('anon', 'public.reference_graph_profile_runtime_projection_p30_v1', 'search_text', 'SELECT')
+  and not has_column_privilege('anon', 'public.reference_graph_profile_runtime_projection_p30_v1', 'product', 'SELECT')
+  and not has_column_privilege('authenticated', 'public.reference_graph_profile_runtime_projection_p30_v1', 'tags', 'SELECT')
+  and not has_column_privilege('authenticated', 'public.reference_graph_profile_runtime_projection_p30_v1', 'asset_id', 'SELECT')
+  and has_table_privilege('service_role', 'public.reference_graph_profile_runtime_projection_p30_v1', 'SELECT')
+then 1 else 0 end as p39_base_sensitive_columns_closed;
 
 select 1 / case when
   has_table_privilege('service_role', 'public.reference_graph_profile_candidates_server_p30_v1', 'SELECT')
@@ -75,11 +80,16 @@ select 1 / case when
    where n.nspname = 'public' and c.relname = 'reference_graph_profile_runtime_projection_p30_v1')
   and exists (select 1 from pg_class c join pg_namespace n on n.oid = c.relnamespace
    where n.nspname = 'public' and c.relname = 'reference_graph_profile_candidates_server_p30_v1'
-     and c.reloptions @> array['security_barrier=true'])
+     and c.reloptions @> array['security_barrier=true','security_invoker=true'])
   and exists (select 1 from pg_class c join pg_namespace n on n.oid = c.relnamespace
    where n.nspname = 'public' and c.relname = 'reference_graph_profile_public_p30_v1'
-     and c.reloptions @> array['security_barrier=true'])
-then 1 else 0 end as p39_rls_and_barrier;
+     and c.reloptions @> array['security_barrier=true','security_invoker=true'])
+  and exists (select 1 from pg_policies
+   where schemaname = 'public'
+     and tablename = 'reference_graph_profile_runtime_projection_p30_v1'
+     and policyname = 'reference_graph_profile_runtime_p31_service_snapshot'
+     and 'service_role' = any(roles))
+then 1 else 0 end as p39_rls_and_security_invoker;
 
 set role anon;
 select 1 / case when count(*) = :p39_current_count
@@ -89,8 +99,8 @@ from public.reference_graph_profile_public_p30_v1;
 do $$
 begin
   begin
-    execute 'select count(*) from public.reference_graph_profile_runtime_projection_p30_v1';
-    raise exception 'anon base table read unexpectedly allowed';
+    execute 'select search_text from public.reference_graph_profile_runtime_projection_p30_v1 limit 1';
+    raise exception 'anon sensitive base column read unexpectedly allowed';
   exception when insufficient_privilege then null;
   end;
 end;
@@ -115,8 +125,8 @@ from public.reference_graph_profile_public_p30_v1;
 do $$
 begin
   begin
-    execute 'select count(*) from public.reference_graph_profile_runtime_projection_p30_v1';
-    raise exception 'authenticated base table read unexpectedly allowed';
+    execute 'select search_text from public.reference_graph_profile_runtime_projection_p30_v1 limit 1';
+    raise exception 'authenticated sensitive base column read unexpectedly allowed';
   exception when insufficient_privilege then null;
   end;
 end;
@@ -138,21 +148,15 @@ select 1 / case when count(*) = :p39_current_count
   then 1 else 0 end as p39_service_current_server_rows
 from public.reference_graph_profile_candidates_server_p30_v1;
 
+select 1 / case when count(*) = :p39_current_count
+  then 1 else 0 end as p39_service_current_base_rows
+from public.reference_graph_profile_runtime_projection_p30_v1;
+
 do $$
 begin
   begin
     execute 'select count(*) from public.reference_graph_profile_public_p30_v1';
     raise exception 'service_role public view read unexpectedly allowed';
-  exception when insufficient_privilege then null;
-  end;
-end;
-$$;
-
-do $$
-begin
-  begin
-    execute 'select count(*) from public.reference_graph_profile_runtime_projection_p30_v1';
-    raise exception 'service_role base table read unexpectedly allowed';
   exception when insufficient_privilege then null;
   end;
 end;

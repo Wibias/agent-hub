@@ -30,22 +30,32 @@ test('P39 server view contains the full candidate surface and is service-only', 
     assert.ok(src.includes(field), 'server view missing ' + field);
   }
   assert.match(src, /create view public\.reference_graph_profile_candidates_server_p30_v1/i);
-  assert.match(src, /security_barrier = true/i);
+  assert.match(src, /security_barrier = true, security_invoker = true/i);
   assert.match(src, /grant select on public\.reference_graph_profile_candidates_server_p30_v1\s+to service_role/i);
   assert.match(src, /revoke all on public\.reference_graph_profile_candidates_server_p30_v1\s+from public, anon, authenticated, service_role/i);
   assert.match(src, /snapshot_date = \(statement_timestamp\(\) at time zone 'UTC'\)::date/i);
-  assert.doesNotMatch(src, /security_invoker/i);
 });
 
 test('P39 public view exposes only operational freshness metadata', () => {
   const src = sql();
   assert.match(src, /create view public\.reference_graph_profile_public_p30_v1/i);
   assert.doesNotMatch(src, /public_id/i);
+  assert.match(src, /security_barrier = true, security_invoker = true/i);
   assert.match(src, /select projection_version, snapshot_date, refreshed_at/i);
   assert.match(src, /grant select on public\.reference_graph_profile_public_p30_v1\s+to anon, authenticated/i);
   assert.match(doc(), /public view/i);
   assert.match(doc(), /product/i);
   assert.match(doc(), /opaque|randomized|salted/i);
+});
+
+test('P39 least-privilege column grants and service RLS support security-invoker views', () => {
+  const src = sql();
+  assert.match(src, /grant select \(projection_version, snapshot_date, refreshed_at\)/i);
+  assert.match(src, /to anon, authenticated/i);
+  assert.match(src, /grant select on table public\.reference_graph_profile_runtime_projection_p30_v1\s+to service_role/i);
+  assert.match(src, /create policy reference_graph_profile_runtime_p31_service_snapshot/i);
+  assert.match(src, /to service_role\s+using \(snapshot_date = \(statement_timestamp\(\) at time zone 'UTC'\)::date\)/i);
+  assert.doesNotMatch(src, /security definer/i);
 });
 
 test('P39 does not reapply P31/P38 or touch Quick/P10 cron state', () => {
@@ -103,12 +113,12 @@ test('P39 P38 monitor is fixture-only, read-only and non-activating', () => {
   assert.match(doc(), /two independent healthy/i);
 });
 
-test('P39 documents security-definer views, RLS boundary and advisor gate', () => {
+test('P39 documents security-invoker views, RLS boundary and advisor gate', () => {
   const text = doc();
-  assert.match(text, /security-definer view review/i);
+  assert.match(text, /security-invoker view review/i);
   assert.match(text, /security_invoker/i);
-  assert.match(text, /bypass base-table RLS|bypass.*RLS/i);
+  assert.match(text, /caller's privileges|invoker/i);
   assert.match(text, /Supabase Security Advisor/i);
-  assert.match(text, /owner/i);
-  assert.match(text, /security-definer view warning is acceptable/i);
+  assert.match(text, /security_definer_view/i);
+  assert.match(text, /column-level SELECT/i);
 });
