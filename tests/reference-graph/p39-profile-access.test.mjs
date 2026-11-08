@@ -65,6 +65,8 @@ test('P39 does not reapply P31/P38 or touch Quick/P10 cron state', () => {
   assert.match(doc(), /already installed/i);
   assert.match(doc(), /Rollback/i);
   assert.match(doc(), /grant select on public\.reference_graph_profile_runtime_projection_p30_v1/i);
+  assert.match(doc(), /revoke all on table public\.reference_graph_profile_runtime_projection_p30_v1/i);
+  assert.match(doc(), /drop policy if exists reference_graph_profile_runtime_p31_service_snapshot/i);
   assert.match(doc(), /break-glass/i);
 });
 
