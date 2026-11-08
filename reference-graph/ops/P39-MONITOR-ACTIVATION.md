@@ -45,6 +45,10 @@ Do not modify either existing task. The prepared task is separate:
   minutes is recovered; an active lock makes the run fail closed.
 - Alert delivery failure does not advance state, so the next five-minute run
   retries the same page/resolve event.
+- Branch/head/dirty-worktree guard mismatches exit with process code **3** and
+  write a `WATCH_GUARD_FAIL` run record; they do not create state, alert or lock
+  files. The guard has no built-in branch or commit default: the approved
+  `ExpectedBranch` and `ExpectedHead` must be supplied explicitly.
 
 ## Files
 
@@ -90,8 +94,8 @@ try {
 $RepoRoot = (Resolve-Path '.').Path
 & (Join-Path $RepoRoot 'reference-graph\ops\register-p39-p38-monitor.ps1') `
   -Apply `
-  -ExpectedBranch "codex/p39-profile-access-monitoring-20261108" `
-  -ExpectedHead "0fb1e28267f5ae7e4e99bcd7d864e2e8d93d8f04"
+  -ExpectedBranch "<APPROVED_BRANCH>" `
+  -ExpectedHead "<APPROVED_COMMIT_SHA>"
 ```
 
 5. Verify the task, next run, state, and redacted logs:

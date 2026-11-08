@@ -1,8 +1,8 @@
 #requires -Version 7.0
 param(
     [string]$RepoPath = '',
-    [string]$ExpectedBranch = 'codex/p39-profile-access-monitoring-20261108',
-    [string]$ExpectedHead = '0fb1e28267f5ae7e4e99bcd7d864e2e8d93d8f04',
+    [string]$ExpectedBranch = '',
+    [string]$ExpectedHead = '',
     [string]$ConfigPath = (Join-Path $env:LOCALAPPDATA 'agent-hub\reference-graph\p19-soak-hourly-config.json'),
     [string]$StatePath = (Join-Path $env:LOCALAPPDATA 'agent-hub\reference-graph\p39-p38-monitor-state.json'),
     [string]$LogPath = (Join-Path $env:LOCALAPPDATA 'agent-hub\reference-graph\p39-p38-monitor-alerts.jsonl'),
@@ -14,6 +14,9 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 $exitCode = 4
 if ([string]::IsNullOrWhiteSpace($RepoPath)) { throw 'RepoPath is required' }
+if ([string]::IsNullOrWhiteSpace($ExpectedBranch) -or [string]::IsNullOrWhiteSpace($ExpectedHead)) {
+    throw 'ExpectedBranch and ExpectedHead are required'
+}
 
 function Write-RunLog([string]$Status, [int]$Code, $Output = $null) {
     New-Item -ItemType Directory -Force -Path (Split-Path $RunLogPath) | Out-Null
@@ -38,7 +41,7 @@ try {
     if ($branch -ne $ExpectedBranch -or $head -ne $ExpectedHead -or $dirty.Count -ne 0) {
         Write-RunLog 'WATCH_GUARD_FAIL' 3 ([ordered]@{ branch = $branch; head = $head; dirty_count = $dirty.Count })
         $exitCode = 3
-        return
+        throw 'P39_WATCH_GUARD_FAIL'
     }
 
     $config = Get-Content -LiteralPath $ConfigPath -Raw | ConvertFrom-Json
@@ -70,8 +73,12 @@ try {
         }
     }
 } catch {
-    Write-RunLog 'MONITOR_ERROR' 4 ([ordered]@{ error_type = $_.Exception.GetType().Name })
-    $exitCode = 4
+    if ($_.Exception.Message -eq 'P39_WATCH_GUARD_FAIL') {
+        $exitCode = 3
+    } else {
+        Write-RunLog 'MONITOR_ERROR' 4 ([ordered]@{ error_type = $_.Exception.GetType().Name })
+        $exitCode = 4
+    }
 } finally {
     Remove-Item Env:SUPABASE_PUBLISHABLE_KEY -ErrorAction SilentlyContinue
     Remove-Item Env:SUPABASE_SECRET_KEY -ErrorAction SilentlyContinue

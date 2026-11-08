@@ -2,8 +2,8 @@
 param(
     [switch]$Apply,
     [string]$RepoPath = '',
-    [string]$ExpectedBranch = 'codex/p39-profile-access-monitoring-20261108',
-    [string]$ExpectedHead = '0fb1e28267f5ae7e4e99bcd7d864e2e8d93d8f04',
+    [string]$ExpectedBranch = '',
+    [string]$ExpectedHead = '',
     [string]$RunnerPath = (Join-Path $env:LOCALAPPDATA 'agent-hub\reference-graph\p39-p38-monitor-runner.ps1'),
     [string]$ConfigPath = (Join-Path $env:LOCALAPPDATA 'agent-hub\reference-graph\p19-soak-hourly-config.json'),
     [string]$StatePath = (Join-Path $env:LOCALAPPDATA 'agent-hub\reference-graph\p39-p38-monitor-state.json'),
@@ -15,6 +15,9 @@ param(
 $ErrorActionPreference = 'Stop'
 if ([string]::IsNullOrWhiteSpace($RepoPath)) {
     $RepoPath = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
+}
+if ([string]::IsNullOrWhiteSpace($ExpectedBranch) -or [string]::IsNullOrWhiteSpace($ExpectedHead)) {
+    throw 'ExpectedBranch and ExpectedHead are required'
 }
 $taskName = 'AgentHub Reference Graph P38 Monitor'
 $pwsh = (Get-Command pwsh.exe -ErrorAction Stop).Source
