@@ -32,6 +32,13 @@ If the browser cannot execute read-only JavaScript, skip this mechanical assist
 and continue with screenshot/live-render review; label DOM-derived claims
 `not measured`.
 
+Structural slop evidence is not accessibility or state evidence. For the empty
+control, tablist, and selected+hover checks, capture
+`scripts/audit-surface-probe.js` and run
+`scripts/render-surface-a11y-gate.mjs` from `audit-surface-evidence.md`. Those
+checks use the same read-only page-evaluation boundary and do not upgrade a
+geometric lead into a WCAG verdict.
+
 ## What the detector may report
 
 - **G03**: a viewport-scale centered hero with kicker and CTA evidence.

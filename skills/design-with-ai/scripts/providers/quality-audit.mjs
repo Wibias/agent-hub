@@ -146,6 +146,7 @@ export async function runQualityAudit(argv = process.argv.slice(2)) {
     scope: evaluated.scope,
     coverage: evaluated.fusion.coverage,
     counts: evaluated.fusion.counts,
+    surface: evaluated.surface,
     artifacts: { directory: runDir, reports: paths, fusion: fusionPath, sourceScope: scopePath, reportSha256: hashes },
     ...(journalCapture ? { journalCapture } : {}),
     next: evaluated.next,

@@ -43,3 +43,10 @@ Turn off Taste Skill by omitting `--with-taste`, turn off the extra static detec
 ## Review gate before merging
 
 The sample CI page is a controlled fixture, not a production acceptance cohort. A P1/P2 from Impeccable or Taste Skill remains a *review hypothesis*. Impeccable's regular configured pass includes project-specific inline waivers; `--no-config` disables waivers **and** DESIGN.md, so a raw-vs-configured delta alone does not identify its source. Run controlled modes separately when investigating a difference. In particular, Taste Skill's layout/imagery house rules and Impeccable's font/palette preferences can be false positives against a deliberately approved design world. A reviewer must compare the reported rule, screenshot/source evidence, and project design brief before accepting a proposed visual change. P0 from the native DWA source gate is not downgraded. Never compute a scanner's quality from raw warning counts alone; quantify accepted findings, false positive rate and time overhead on representative product routes before enabling external checks more broadly.
+
+The integrated quality audit now adds a static route/import closure to each
+finding. Treat `CONTEXT` findings as genuine observations about another surface,
+not as route coverage, and do not reward a scanner for producing more warnings.
+`SHARED` findings still need rendered confirmation; `UNBOUND` findings expose a
+binding limitation rather than a false claim. The detailed protocol is in
+`audit-surface-evidence.md`.

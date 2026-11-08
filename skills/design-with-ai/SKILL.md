@@ -76,6 +76,10 @@ or dense settings, apply the task-first acceptance in `references/baseline-ui.md
 quality-stack flows reuse it in Baseline. This is a separate render-grounded
 product/usability verdict, never inferred from a passing mechanical slop scan.
 
+For `audit-surface` standard/deep, also load
+`references/audit-surface-evidence.md` before treating provider output as
+route evidence or making an accessibility claim.
+
 `design-spec` is a bounded spec/prompt route after direction is known; it does
 not automatically reopen the full design workflow.
 
@@ -180,6 +184,7 @@ host-specific guide for ordinary cross-host design work.
 - `references/hard-invariants.md`: always-on routing and authority invariants
 - `references/design-methods.md`: method selection and vague-request routing
 - `references/existing-ui-workflows.md`: audit/improve/restyle/redesign contracts
+- `references/audit-surface-evidence.md`: route relevance, state matrix, non-text contrast, widget/keyboard and claim calibration
 - `references/new-product-surface.md`: new visible product surfaces
 - `references/core-design-workflow.md`: common non-motion design artifacts
 - `references/source-evidence.md`: evidence discipline
@@ -214,6 +219,7 @@ host-specific guide for ordinary cross-host design work.
 - references/hard-invariants.md -- when to read: after target resolution and before acting on any design-with-ai workflow
 - references/design-methods.md -- when to read: no command or vague look-better request
 - references/existing-ui-workflows.md -- when to read: audit-surface; improve-existing; restyle-existing; redesign-existing
+- references/audit-surface-evidence.md -- when to read: audit-surface standard/deep; provider finding relevance; non-text contrast or widget/keyboard claims
 - references/new-product-surface.md -- when to read: build-product-surface
 - references/core-design-workflow.md -- when to read: all non-motion surface workflows except design-spec
 - references/source-evidence.md -- when to read: standard/deep non-motion surface workflows
