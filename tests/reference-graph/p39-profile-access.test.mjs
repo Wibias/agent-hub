@@ -34,20 +34,18 @@ test('P39 server view contains the full candidate surface and is service-only', 
   assert.match(src, /grant select on public\.reference_graph_profile_candidates_server_p30_v1\s+to service_role/i);
   assert.match(src, /revoke all on public\.reference_graph_profile_candidates_server_p30_v1\s+from public, anon, authenticated, service_role/i);
   assert.match(src, /snapshot_date = \(statement_timestamp\(\) at time zone 'UTC'\)::date/i);
+  assert.doesNotMatch(src, /security_invoker/i);
 });
 
-test('P39 public view exposes pseudonymous, non-sensitive metadata only', () => {
+test('P39 public view exposes only operational freshness metadata', () => {
   const src = sql();
   assert.match(src, /create view public\.reference_graph_profile_public_p30_v1/i);
-  assert.match(src, /encode\(sha256\(convert_to\(legacy_id, 'UTF8'\)\), 'hex'\) as public_id/i);
-  for (const forbidden of ['search_text', 'tags', 'asset_id', 'source_family', 'topology']) {
-    assert.ok(!new RegExp(`\\b${forbidden}\\b`).test(src.split('create view public.reference_graph_profile_public_p30_v1')[1]
-      .split('comment on view')[0]), 'public view leaked ' + forbidden);
-  }
-  assert.match(src.split('create view public.reference_graph_profile_public_p30_v1')[1]
-    .split('comment on view')[0], /encode\(sha256\(convert_to\(legacy_id/i);
+  assert.doesNotMatch(src, /public_id/i);
+  assert.match(src, /select projection_version, snapshot_date, refreshed_at/i);
   assert.match(src, /grant select on public\.reference_graph_profile_public_p30_v1\s+to anon, authenticated/i);
-  assert.match(src, /revoke all on public\.reference_graph_profile_public_p30_v1\s+from public, anon, authenticated, service_role/i);
+  assert.match(doc(), /public view/i);
+  assert.match(doc(), /product/i);
+  assert.match(doc(), /opaque|randomized|salted/i);
 });
 
 test('P39 does not reapply P31/P38 or touch Quick/P10 cron state', () => {
@@ -80,7 +78,7 @@ test('P39 CI applies the additive access migration and runs the negative access 
   assert.match(smoke, /set role authenticated/i);
   assert.match(smoke, /set role service_role/i);
   assert.match(smoke, /insufficient_privilege/i);
-  assert.match(smoke, /public_id/i);
+  assert.match(smoke, /p39_public_view_columns/i);
   assert.match(smoke, /search_text/i);
 });
 
@@ -92,4 +90,25 @@ test('P39 P38 monitor is fixture-only, read-only and non-activating', () => {
   assert.match(monitor, /activation_performed: false/);
   assert.match(cli, /evaluateP38Health/);
   assert.match(cli, /planP38Alerts/);
+  assert.match(monitor, /p39-p38-health\.v2/);
+  assert.match(monitor, /consecutive_failed/);
+  assert.match(monitor, /evaluateP38Soak/);
+  assert.match(monitor, /HEALTHY_PROBE_SEPARATION_MS/);
+  assert.match(cli, /--state-out/);
+  const cycleProducer = read('reference-graph/p39-p38-health-snapshot.sql');
+  assert.match(cycleProducer, /cron\.job_run_details/);
+  assert.match(cycleProducer, /consecutive_failed/);
+  assert.match(cycleProducer, /last_cycle_status/);
+  assert.match(doc(), /12 two-hour cycles/i);
+  assert.match(doc(), /two independent healthy/i);
+});
+
+test('P39 documents security-definer views, RLS boundary and advisor gate', () => {
+  const text = doc();
+  assert.match(text, /security-definer view review/i);
+  assert.match(text, /security_invoker/i);
+  assert.match(text, /bypass base-table RLS|bypass.*RLS/i);
+  assert.match(text, /Supabase Security Advisor/i);
+  assert.match(text, /owner/i);
+  assert.match(text, /security-definer view warning is acceptable/i);
 });

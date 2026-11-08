@@ -3,7 +3,7 @@ const ISO_UTC = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const SNAPSHOT_KEYS = [
   'schema_version', 'observed_at', 'job', 'last_run', 'last_success',
-  'projection', 'source', 'api',
+  'cycles', 'projection', 'source', 'api',
 ];
 const WARN_AGE_MS = 2 * 60 * 60 * 1000 + 15 * 60 * 1000;
 const CRITICAL_AGE_MS = 4 * 60 * 60 * 1000;
@@ -11,9 +11,20 @@ const STALE_SNAPSHOT_MS = 10 * 60 * 1000;
 const FUTURE_SKEW_MS = 60 * 1000;
 const REPEAT_WARN_MS = 60 * 60 * 1000;
 const REPEAT_CRITICAL_MS = 30 * 60 * 1000;
+const HEALTHY_PROBE_SEPARATION_MS = 5 * 60 * 1000;
+const SOAK_CYCLE_MS = 2 * 60 * 60 * 1000;
+const SOAK_WINDOW_MS = 24 * 60 * 60 * 1000;
+const SOAK_MAX_GAP_MS = WARN_AGE_MS;
 
-export const P39_P38_HEALTH_SCHEMA = 'reference-graph.p39-p38-health.v1';
-export const P39_P38_ALERT_SCHEMA = 'reference-graph.p39-p38-alert-plan.v1';
+export const P39_P38_HEALTH_SCHEMA = 'reference-graph.p39-p38-health.v2';
+export const P39_P38_ALERT_SCHEMA = 'reference-graph.p39-p38-alert-plan.v2';
+export const P39_P38_STATE_SCHEMA = 'reference-graph.p39-p38-alert-state.v2';
+export const P39_P38_SOAK = Object.freeze({
+  required_cycles: 12,
+  cycle_ms: SOAK_CYCLE_MS,
+  window_ms: SOAK_WINDOW_MS,
+  max_gap_ms: SOAK_MAX_GAP_MS,
+});
 export const P39_P38_SCHEDULE = '0,5 */2 * * *';
 export const P39_P38_COMMAND =
   'select public.reference_graph_refresh_profile_runtime_projection_p31();';
@@ -77,6 +88,13 @@ function validateSnapshot(value) {
       || !validInstant(value.last_success.start_time))) {
     reject('last-success-shape');
   }
+  if (!exactKeys(value.cycles, ['consecutive_failed', 'last_cycle_start', 'last_cycle_status'])
+    || !Number.isInteger(value.cycles.consecutive_failed)
+    || value.cycles.consecutive_failed < 0
+    || !['succeeded', 'failed', 'unknown'].includes(value.cycles.last_cycle_status)
+    || (value.cycles.last_cycle_start !== null && !validInstant(value.cycles.last_cycle_start))) {
+    reject('cycles-shape');
+  }
   if (!exactKeys(value.projection, [
     'row_count', 'snapshot_date', 'refreshed_at', 'distinct_refreshed_at',
     'candidate_id_set_sha256',
@@ -113,6 +131,8 @@ function message(code) {
     'command-mismatch': 'P38 cron command differs from the reviewed command',
     'no-run-observed': 'P38 has no recorded cron run',
     'last-run-failed': 'P38 last cron run failed',
+    'failed-cycle': 'P38 has one failed two-hour cycle',
+    'two-failed-cycles': 'P38 has two or more consecutive failed cycles',
     'no-successful-run': 'P38 has no successful cron run',
     'no-success-4h': 'P38 has no success within four hours',
     'no-success-2h15m': 'P38 has no success within 2h15m',
@@ -153,6 +173,13 @@ export function evaluateP38Health(snapshot, { now = new Date() } = {}) {
     add(findings, 'no-run-observed', 'warn');
   } else if (value.last_run.status !== 'succeeded') {
     add(findings, 'last-run-failed', 'warn');
+  }
+
+  if (value.cycles.consecutive_failed >= 2) {
+    add(findings, 'two-failed-cycles', 'critical');
+  } else if (value.cycles.consecutive_failed === 1
+    || value.cycles.last_cycle_status === 'failed') {
+    add(findings, 'failed-cycle', 'warn');
   }
 
   if (value.last_success === null) {
@@ -216,18 +243,41 @@ export function planP38Alerts(previous, report, { now = new Date() } = {}) {
   if (!(now instanceof Date) || Number.isNaN(now.valueOf())) reject('invalid-now');
   if (!report || report.schema_version !== P39_P38_ALERT_SCHEMA
     || !['ok', 'warn', 'critical'].includes(report.severity)
-    || !Array.isArray(report.codes)) {
+    || !Array.isArray(report.codes) || !validInstant(report.observed_at)) {
     reject('report-shape');
   }
   const alertKey = report.severity + ':' + report.codes.join(',');
   if (report.severity === 'ok') {
+    const previousSeverity = previous?.severity ?? 'ok';
+    const wasActive = previousSeverity !== 'ok';
+    const previousCount = Number.isInteger(previous?.healthy_probe_count)
+      ? Math.max(0, previous.healthy_probe_count) : 0;
+    const previousHealthyAt = previous?.last_healthy_at && validInstant(previous.last_healthy_at)
+      ? Date.parse(previous.last_healthy_at) : null;
+    const observedMs = Date.parse(report.observed_at);
+    const separated = previousHealthyAt === null
+      || observedMs - previousHealthyAt >= HEALTHY_PROBE_SEPARATION_MS;
+    const count = separated ? Math.min(2, previousCount + 1) : Math.max(1, previousCount);
+    const resolved = wasActive && count >= 2;
+    const active = wasActive && !resolved;
     return {
       schema_version: P39_P38_ALERT_SCHEMA,
-      action: previous && previous.severity && previous.severity !== 'ok' ? 'resolve' : 'none',
-      severity: 'ok',
-      codes: [],
-      alert_key: alertKey,
+      action: resolved ? 'resolve' : 'none',
+      severity: active ? previousSeverity : 'ok',
+      codes: active ? previous.codes ?? [] : [],
+      alert_key: active ? previous.alert_key ?? alertKey : 'ok:',
+      healthy_probe_count: count,
       auto_remediation: false,
+      next_state: {
+        schema_version: P39_P38_STATE_SCHEMA,
+        severity: active ? previousSeverity : 'ok',
+        alert_key: active ? previous.alert_key ?? alertKey : 'ok:',
+        last_alert_at: active ? previous.last_alert_at ?? null : null,
+        healthy_probe_count: resolved ? 2 : count,
+        last_healthy_at: separated ? report.observed_at : previousHealthyAt
+          ? new Date(previousHealthyAt).toISOString() : report.observed_at,
+        observed_at: report.observed_at,
+      },
     };
   }
   const lastAlertAt = previous?.last_alert_at && validInstant(previous.last_alert_at)
@@ -243,5 +293,70 @@ export function planP38Alerts(previous, report, { now = new Date() } = {}) {
     alert_key: alertKey,
     repeat_after_ms: repeatMs,
     auto_remediation: false,
+    next_state: {
+      schema_version: P39_P38_STATE_SCHEMA,
+      severity: report.severity,
+      alert_key: alertKey,
+      last_alert_at: same && !due
+        ? previous?.last_alert_at ?? null : report.observed_at,
+      healthy_probe_count: 0,
+      last_healthy_at: null,
+      observed_at: report.observed_at,
+    },
+  };
+}
+
+export function evaluateP38Soak(cycles) {
+  if (!Array.isArray(cycles) || cycles.length < P39_P38_SOAK.required_cycles) {
+    return {
+      schema_version: 'reference-graph.p39-p38-soak.v1',
+      eligible: false,
+      required_cycles: P39_P38_SOAK.required_cycles,
+      observed_cycles: Array.isArray(cycles) ? cycles.length : 0,
+      blockers: ['insufficient-cycles'],
+      activation_performed: false,
+    };
+  }
+  const normalized = [];
+  for (const [index, cycle] of cycles.entries()) {
+    if (!exactKeys(cycle, ['cycle_start', 'invocations', 'succeeded'])
+      || !validInstant(cycle.cycle_start)
+      || !Number.isInteger(cycle.invocations) || cycle.invocations < 0
+      || !Number.isInteger(cycle.succeeded)
+      || cycle.succeeded < 0 || cycle.succeeded > cycle.invocations) {
+      reject('cycle-shape-' + index);
+    }
+    normalized.push({ ...cycle, start: Date.parse(cycle.cycle_start) });
+  }
+  normalized.sort((a, b) => a.start - b.start);
+  const windowCycles = normalized.slice(-P39_P38_SOAK.required_cycles);
+  const blockers = [];
+  if (new Set(windowCycles.map(cycle => cycle.cycle_start)).size !== windowCycles.length) {
+    blockers.push('duplicate-cycle');
+  }
+  // Twelve cycles cover 24h when the final cycle's two-hour window is included.
+  const span = windowCycles.at(-1).start + SOAK_CYCLE_MS - windowCycles[0].start;
+  if (span < P39_P38_SOAK.window_ms) blockers.push('insufficient-window');
+  let maxGap = 0;
+  for (let i = 1; i < windowCycles.length; i++) {
+    maxGap = Math.max(maxGap, windowCycles[i].start - windowCycles[i - 1].start);
+  }
+  if (maxGap > P39_P38_SOAK.max_gap_ms) blockers.push('cycle-gap');
+  for (const cycle of windowCycles) {
+    if (cycle.invocations < 2) blockers.push('insufficient-invocations');
+    if (cycle.succeeded < 1) blockers.push('failed-cycle');
+  }
+  const uniqueBlockers = [...new Set(blockers)];
+  return {
+    schema_version: 'reference-graph.p39-p38-soak.v1',
+    eligible: uniqueBlockers.length === 0,
+    required_cycles: P39_P38_SOAK.required_cycles,
+    observed_cycles: windowCycles.length,
+    healthy_cycles: windowCycles.filter(cycle => cycle.succeeded >= 1
+      && cycle.invocations >= 2).length,
+    span_hours: Number((span / 3600000).toFixed(3)),
+    max_gap_minutes: Number((maxGap / 60000).toFixed(3)),
+    blockers: uniqueBlockers,
+    activation_performed: false,
   };
 }
