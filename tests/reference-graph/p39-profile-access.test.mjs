@@ -126,3 +126,25 @@ test('P39 documents security-invoker views, RLS boundary and advisor gate', () =
   assert.match(text, /security_definer_view/i);
   assert.match(text, /column-level SELECT/i);
 });
+
+test('P39 production monitoring is prepared without a service credential or activation', () => {
+  const publicMonitor = read('reference-graph/p39-p38-public-health.mjs');
+  const publicCli = read('reference-graph/cli/p39-p38-public-monitor.mjs');
+  const runtime = read('reference-graph/p39-p38-runtime.mjs');
+  const runner = read('reference-graph/ops/p39-p38-monitor-runner.ps1');
+  const registration = read('reference-graph/ops/register-p39-p38-monitor.ps1');
+  const activation = read('reference-graph/ops/P39-MONITOR-ACTIVATION.md');
+  assert.match(publicCli, /SUPABASE_PUBLISHABLE_KEY/);
+  assert.doesNotMatch(publicCli, /SUPABASE_SECRET_KEY/);
+  assert.match(publicMonitor, /public-freshness-only/);
+  assert.match(runtime, /writeP38AlertStateAtomic/);
+  assert.match(runtime, /state-locked/);
+  assert.match(runner, /Remove-Item Env:SUPABASE_SECRET_KEY/);
+  assert.match(runner, /Remove-Item Env:SUPABASE_SERVICE_ROLE_KEY/);
+  assert.match(registration, /-Apply/);
+  assert.match(registration, /DRY-RUN ONLY/);
+  assert.doesNotMatch(registration, /SUPABASE_SECRET_KEY|SUPABASE_SERVICE_ROLE_KEY/);
+  assert.match(activation, /PREPARED \/ NOT ACTIVATED/);
+  assert.match(activation, /database_changes|database, cron or routing/i);
+  assert.match(doc(), /full P38 monitor remains \*\*BLOCKED\*\*/i);
+});
