@@ -20,6 +20,73 @@ test("G27 excludes functional join-code inputs including multiline JSX", () => {
   assert.equal(match("G27", ['<span className="uppercase tracking-widest">01 • STEP</span>'], "test.tsx"), true);
 });
 
+test("G27 respects JSX arrow handlers, quoted > and comparisons inside controls", () => {
+  const jsx = [
+    "const field = (",
+    "  <input",
+    "    onChange={(event) => setCode(event.target.value)}",
+    '    title="Use > to compare"',
+    '    value={score > 0 ? "yes" : "no"}',
+    '    className="uppercase tracking-widest"',
+    "  />",
+    ");",
+  ];
+  assert.equal(match("G27", jsx, "test.tsx", 6), false);
+  assert.equal(match("G27", [
+    "<textarea",
+    "  onChange={(event) => update(event.target.value)}",
+    '  className="uppercase tracking-widest"',
+  ], "test.tsx"), false);
+  assert.equal(match("G27", [
+    '<input onChange={(e) => update(e.target.value)} className="uppercase tracking-widest" />',
+    '<span className="uppercase tracking-widest">ROUND</span>',
+  ], "test.tsx", 2), true);
+  assert.equal(match("G27", [
+    '<input onChange={(e) => update(e.target.value)} /><span className="uppercase tracking-widest">ROUND</span>',
+  ], "test.tsx"), true);
+});
+
+test("G27 keeps quoted and braced attribute state across source lines", () => {
+  const quoted = [
+    '<input title="Before',
+    '// > still a literal value',
+    '" className="uppercase tracking-widest" />',
+  ];
+  const braced = [
+    "<input value={score >",
+    '  1 ? "yes" : "no"} className="uppercase tracking-widest" />',
+  ];
+  for (const lines of [quoted, braced]) {
+    assert.equal(match("G27", lines, "test.tsx"), false);
+    assert.equal(match("G27", [
+      ...lines,
+      '<span className="uppercase tracking-widest">REAL LABEL</span>',
+    ], "test.tsx"), true);
+  }
+});
+
+test("G27 does not lose siblings after nested templates, JSX quotes, comments, or regex", () => {
+  const tick = String.fromCharCode(96);
+  const examples = [
+    ['<input title={' + tick + "outer $" + "{" + tick + "{" + tick + "}" + tick + '} />'],
+    ['<input title="end\\\" />'],
+    [
+      "<input onChange={(event) => { // don't close it",
+      "  update(event);",
+      "}} />",
+    ],
+    ['<input pattern={/[{]/.source} />'],
+    ['<input value={amount / 3} />'],
+  ];
+  for (const lines of examples) {
+    assert.equal(match("G27", lines, "test.tsx"), false);
+    assert.equal(match("G27", [
+      ...lines.slice(0, -1),
+      lines.at(-1) + '<span className="uppercase tracking-widest">REAL LABEL</span>',
+    ], "test.tsx"), true);
+  }
+});
+
 test("G32 requires hover rather than keyframe scaling", () => {
   assert.equal(match("G32", ["@keyframes pulse {", "  50% { transform: scale(1.05); }"]), false);
   assert.equal(match("G32", [".button:hover {", "  transform: scale(1.05);"]), true);
