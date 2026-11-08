@@ -503,6 +503,41 @@ test("nested index trailing-slash route matches only when explicitly declared", 
   });
 });
 
+test("percent-encoded static HTML routes bind the same decoded document bytes", async () => {
+  await fixture(async (f) => {
+    const html = join(f.input.renderedRoot, "settings", "my page.html");
+    writeFileSync(html, f.htmlBytes);
+    const route = "/settings/my%20page";
+    const input = { ...f.input, html, route };
+    const normal = await probeNetworkResponses(input, {
+      browserFactory: mockChrome({ ...f, input }).factory,
+    });
+    assert.equal(normal.status, "LOCAL_RESPONSES_MATCHED", JSON.stringify(normal));
+    assert.equal(normal.productCompletionEligible, false);
+    assert.deepEqual(normal.observations.map((o) => o.width), [1440, 768, 390]);
+    assert.ok(normal.observations.every((o) =>
+      o.finalUrlMatched === true &&
+      o.local.some((entry) =>
+        entry.path === "dist/settings/my page.html" && entry.bodyVerified === true) &&
+      o.local.some((entry) =>
+        entry.path === "dist/settings/site.css" && entry.bodyVerified === true)),
+    "encoded route must map back to exact received local HTML and CSS bytes");
+    for (const bad of ["/settings/my page", "/settings/my%2520page",
+      "/settings/my%2fpage", "/settings/my%2epage",
+      "/settings/my%20page/", "/settings/my%zzpage"]) {
+      await assert.rejects(
+        () => probeNetworkResponses({ ...input, route: bad }),
+        /unambiguous absolute local path|HTML does not map to the declared isolated build route/,
+        bad);
+    }
+    const misdirected = await probeNetworkResponses(input, {
+      browserFactory: mockChrome({ ...f, input }, { redirected: true }).factory,
+    });
+    assert.equal(misdirected.status, "INCOMPLETE");
+    assert.ok(misdirected.observations.every((o) => o.finalUrlMatched === false));
+  });
+});
+
 test("Linux literal backslash in rendered directory retains distinct manifest asset keys",
   { skip: process.platform === "win32" ? "backslash is a Windows separator" : false },
   async () => {

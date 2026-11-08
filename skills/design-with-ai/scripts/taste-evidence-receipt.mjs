@@ -206,6 +206,30 @@ function normalizeRoute(value) {
   return pathname || "/";
 }
 
+function sha256Bytes(bytes) {
+  return createHash("sha256").update(bytes).digest("hex");
+}
+
+// Capture original bytes exactly once before ANY child audit is invoked.
+// Child render and comparator stages read only these private, read-only copies.
+// The original path remains an evidence identity, not a second read input.
+function freezeSnapshot(original, tempRoot, index) {
+  const inputPath = resolve(original);
+  const bytes = readFileSync(inputPath);
+  const digest = sha256Bytes(bytes);
+  const frozenPath = join(tempRoot, "frozen-snapshot-" + index + "-" +
+    sha256Bytes(Buffer.from(inputPath)).slice(0, 16) + ".json");
+  writeFileSync(frozenPath, bytes, { flag: "wx", mode: 0o400 });
+  return { original: inputPath, frozenPath, sha256: digest };
+}
+
+function verifySnapshotBytes(frozen) {
+  if (sha256Bytes(readFileSync(frozen.frozenPath)) !== frozen.sha256 ||
+      sha256Bytes(readFileSync(frozen.original)) !== frozen.sha256) {
+    throw new Error("Cross-surface report has inconsistent evidence");
+  }
+}
+
 function readSnapshotBinding(path, declaredRoute) {
   const snapshot = readJsonFile(path, "Render snapshot");
   if (snapshot.value?.schemaVersion !== 1) {
@@ -316,7 +340,7 @@ function readCrossSurface(path) {
   return { path: report.path, value };
 }
 
-function verifyCrossSurfaceBinding(cross, candidates) {
+function verifyCrossSurfaceBinding(cross, candidates, frozenSnapshots = []) {
   if (!cross) return null;
   const renderedCandidates = candidates.filter((candidate) => candidate.binding?.verified === true);
   if (renderedCandidates.length < 2) {
@@ -366,7 +390,13 @@ function verifyCrossSurfaceBinding(cross, candidates) {
   // alone cannot prove similarity, eligibility, thresholds or hit provenance.
   // Never echo child stdout, stderr, argv or filesystem errors.
   const comparator = resolve(dirname(fileURLToPath(import.meta.url)), "compare-render-snapshots.mjs");
-  const comparatorArgs = snapshots.flatMap((snapshot) => ["--snapshot", resolve(snapshot.path)]);
+  const frozenByOriginal = new Map(frozenSnapshots.filter(Boolean)
+    .map((item) => [item.original, item.frozenPath]));
+  const comparatorArgs = snapshots.flatMap((snapshot) => {
+    const frozen = frozenByOriginal.get(resolve(snapshot.path));
+    if (!frozen) throw new Error("Cross-surface report has inconsistent evidence");
+    return ["--snapshot", frozen];
+  });
   const computed = spawnSync(process.execPath, [comparator, ...comparatorArgs, "--json"], {
     encoding: "utf8", timeout: 60_000, maxBuffer: 8 * 1024 * 1024,
   });
@@ -379,6 +409,15 @@ function verifyCrossSurfaceBinding(cross, candidates) {
   } catch {
     throw new Error("Cross-surface report has inconsistent evidence");
   }
+  // The trusted comparator read frozen bytes. Restore *only* the original
+  // reported path identity, never re-read the mutable source snapshots.
+  if (!Array.isArray(trusted?.snapshots) ||
+      trusted.snapshots.length !== snapshots.length) {
+    throw new Error("Cross-surface report has inconsistent evidence");
+  }
+  trusted.snapshots.forEach((row, index) => {
+    row.path = resolve(snapshots[index].path);
+  });
   if (["verdict", "snapshots", "comparisons", "hits"].some((field) =>
     !isDeepStrictEqual(cross.value[field], trusted?.[field]))) {
     throw new Error("Cross-surface report has inconsistent evidence");
@@ -391,7 +430,7 @@ function verifyCrossSurfaceBinding(cross, candidates) {
   };
 }
 
-function runCandidate(candidate, tools, tempRoot) {
+function runCandidate(candidate, tools, tempRoot, frozenSnapshot = null) {
   const sourceArgs = ["--path", candidate.path, "--json"];
   if (candidate.intent) sourceArgs.push("--intent", candidate.intent);
   if (candidate.extensions) sourceArgs.push("--extensions", candidate.extensions);
@@ -405,18 +444,28 @@ function runCandidate(candidate, tools, tempRoot) {
   let fused = null;
   let binding = null;
   if (candidate.snapshot) {
-    const snapshotInfo = readSnapshotBinding(candidate.snapshot, candidate.route);
-    binding = snapshotInfo.binding;
+    if (!frozenSnapshot || frozenSnapshot.original !== resolve(candidate.snapshot)) {
+      throw new Error("Cross-surface report has inconsistent evidence");
+    }
+    const snapshotInfo = readSnapshotBinding(frozenSnapshot.frozenPath, candidate.route);
+    binding = {
+      ...snapshotInfo.binding,
+      snapshotPath: resolve(candidate.snapshot),
+      snapshotSha256: frozenSnapshot.sha256,
+    };
     render = runNode(
       tools.renderGate,
-      ["--snapshot", candidate.snapshot, "--json"],
+      ["--snapshot", frozenSnapshot.frozenPath, "--json"],
       `Rendered taste gate [${candidate.id}]`,
       new Set([0]), "render", {
-        snapshotPath: candidate.snapshot, snapshotUrl: binding.snapshotUrl,
+        snapshotPath: frozenSnapshot.frozenPath, snapshotUrl: binding.snapshotUrl,
         viewport: snapshotInfo.expectedViewport,
       },
     );
 
+    // All report path identities point to the original input. The render gate
+    // itself was evaluated on frozen bytes and separately validated above.
+    render.parsed.snapshot = resolve(candidate.snapshot);
     // Manifest ids "." and ".." must not escape the temporary directory.
     const safeId = createHash("sha256").update(candidate.id).digest("hex");
     const candidateTemp = join(tempRoot, `candidate-${safeId}`);
@@ -607,9 +656,14 @@ function main() {
     if (args.manifest) {
       const manifest = readManifest(args.manifest);
       const crossPath = args.crossSurfaceReport || manifest.crossSurfaceReport;
-      const candidates = manifest.candidates.map((candidate) => runCandidate(candidate, tools, tempDir));
+      const frozenSnapshots = manifest.candidates.map((candidate, index) =>
+        candidate.snapshot ? freezeSnapshot(candidate.snapshot, tempDir, index) : null);
+      const candidates = manifest.candidates.map((candidate, index) =>
+        runCandidate(candidate, tools, tempDir, frozenSnapshots[index]));
       const cross = crossPath ? readCrossSurface(crossPath) : null;
-      const crossBinding = verifyCrossSurfaceBinding(cross, candidates);
+      const crossBinding = verifyCrossSurfaceBinding(cross, candidates, frozenSnapshots);
+      // Reject any source or frozen copy mutation during render/comparison.
+      frozenSnapshots.filter(Boolean).forEach(verifySnapshotBytes);
       output = aggregateReceipt({
         target: manifest.path,
         candidates,
@@ -617,14 +671,18 @@ function main() {
         crossBinding,
       });
     } else {
-      const candidate = runCandidate({
+      const candidateInput = {
         id: "candidate",
         path: resolve(args.path),
         snapshot: args.snapshot ? resolve(args.snapshot) : null,
         route: args.route ? normalizeRoute(args.route) : null,
         intent: args.intent ? resolve(args.intent) : null,
         extensions: args.extensions,
-      }, tools, tempDir);
+      };
+      const frozen = candidateInput.snapshot
+        ? freezeSnapshot(candidateInput.snapshot, tempDir, 0) : null;
+      const candidate = runCandidate(candidateInput, tools, tempDir, frozen);
+      if (frozen) verifySnapshotBytes(frozen);
       output = singleCandidateReceipt(candidate, null);
     }
 

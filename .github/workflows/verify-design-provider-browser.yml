@@ -84,6 +84,12 @@ jobs:
           test -f "$RUNNER_TEMP/dwa-playwright-test/node_modules/playwright-core/index.mjs"
           echo "DWA_PLAYWRIGHT_ROOT=$RUNNER_TEMP/dwa-playwright-test/node_modules/playwright-core" >> "$GITHUB_ENV"
 
+      - name: BrowserServer process-control fail-closed unit regressions
+        run: node --test skills/design-with-ai/tests/providers/browser-server-lifecycle.test.mjs
+
+      - name: Real Playwright BrowserServer OS termination on stalled RPC (Linux)
+        run: node skills/design-with-ai/tests/providers/browser-server-process-smoke.mjs
+
       - name: Real Playwright transport DOM-state regression cases
         run: node skills/design-with-ai/tests/providers/rendered-state-playwright-smoke.mjs
 
@@ -130,3 +136,24 @@ jobs:
       # junction semantics; the full Taste provider suite already runs on Linux.
       - name: Windows Taste report-directory junction isolation
         run: node --test --test-name-pattern="Taste output report-directory symlinks and Windows junctions cannot escape run isolation" skills/design-with-ai/tests/providers/taste-skill.test.mjs
+
+      - name: Windows real Chrome BrowserServer process termination
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $browsers = @(
+            "C:\Program Files\Google\Chrome\Application\chrome.exe",
+            "C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+            "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
+          )
+          $browser = $browsers | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $browser) { throw "No installed Windows Chrome/Edge executable" }
+          npm install --prefix "$env:RUNNER_TEMP/dwa-playwright-test" --no-save --no-audit --no-fund --ignore-scripts --package-lock=false playwright-core@1.64.1
+          if ($LASTEXITCODE -ne 0) { throw "Exact Playwright install failed" }
+          $env:DWA_PLAYWRIGHT_ROOT = Join-Path $env:RUNNER_TEMP "dwa-playwright-test/node_modules/playwright-core"
+          $env:CHROME_PATH = $browser
+          node --test skills/design-with-ai/tests/providers/browser-server-lifecycle.test.mjs
+          if ($LASTEXITCODE -ne 0) { throw "Browser lifecycle unit tests failed" }
+          node skills/design-with-ai/tests/providers/browser-server-process-smoke.mjs
+          if ($LASTEXITCODE -ne 0) { throw "Real Windows BrowserServer termination failed" }
+

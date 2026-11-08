@@ -13,6 +13,7 @@ import {
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { renderedAssetProof } from "./rendered-assets.mjs";
 import { staticRouteForHtml } from "./scope-proof.mjs";
+import { launchOwnedBrowser, terminateOwnedBrowser } from "./browser-server-lifecycle.mjs";
 
 const WIDTHS = Object.freeze([1440, 768, 390]);
 const MAX_RESPONSES = 2_000;
@@ -52,10 +53,6 @@ async function boundedShutdown(close, timeoutMs) {
   } finally {
     clearTimeout(timer);
   }
-}
-function terminateBrowser(browser) {
-  try { browser?.process?.()?.kill?.("SIGKILL"); }
-  catch { /* Transport may already have exited; never leak process errors. */ }
 }
 const sha = (value) => createHash("sha256").update(value).digest("hex");
 const inside = (root, value) => {
@@ -106,7 +103,12 @@ function strictInputs(options) {
   const canonicalProject = realpathSync(project);
   const canonicalRendered = realpathSync(rendered);
   const canonicalHtml = realpathSync(html);
-  const mappedRoute = staticRouteForHtml(canonicalRendered, canonicalHtml);
+  // Map filesystem path segments to canonical URL percent-encoding before
+  // comparing the declared route. A literal space in "my page.html" maps to
+  // /my%20page, never to a raw-space URL or a different decoded file.
+  const physicalRoute = staticRouteForHtml(canonicalRendered, canonicalHtml);
+  const mappedRoute = "/" + physicalRoute.slice(1).split("/")
+    .map(encodeURIComponent).join("/");
   // Static nested index pages can be served with a trailing slash. Require
   // the caller to declare the exact route rather than silently accepting a
   // redirect from a different page URL.
@@ -159,8 +161,12 @@ function localAssetPath(resourceUrl, context) {
   }
   // A static /settings route is normally served from /settings/index.html.
   // Correlate exactly the declared document route, not arbitrary SPA aliases.
-  if (path === context.route ||
-      (!context.route.endsWith("/") && path === context.route + "/")) {
+  // URL.pathname is decoded once above. The declared route remains
+  // canonically percent-encoded for URL/final-navigation comparisons, but
+  // must also be decoded once when mapping a received document to disk.
+  const routeFilePath = decodeURIComponent(context.route);
+  if (path === routeFilePath ||
+      (!context.route.endsWith("/") && path === routeFilePath + "/")) {
     return relative(context.project, context.html).split(sep).join("/");
   }
   const file = join(context.rendered, ...segments);
@@ -222,15 +228,17 @@ export async function probeNetworkResponses(options, {
     ],
     artifactDirectory: runDir,
   };
-  let browser;
+  let browser, browserServer;
   try {
     const chromium = await stage("factory", () => browserFactory(context.playwright));
-    browser = await stage("launch", () => chromium.launch({
+    const owned = await launchOwnedBrowser(chromium, {
       headless: true,
       ...(context.chromePath
         ? { executablePath: context.chromePath } : { channel: "chrome" }),
       args: ["--no-first-run", "--no-default-browser-check"],
-    }));
+    }, stage, { allowInjectedLaunch: browserFactory !== loadBrowser });
+    browser = owned.browser;
+    browserServer = owned.server;
     for (const width of WIDTHS) {
       const obs = {
         width, status: "INCOMPLETE", local: [], external: [],
@@ -459,7 +467,7 @@ export async function probeNetworkResponses(options, {
           recordIssue("BROWSER_STAGE_TIMEOUT");
           obs.browserStageTimeout = error.message.slice(STAGE_TIMEOUT_PREFIX.length);
           shutdownFailed = true;
-          terminateBrowser(browser);
+          terminateOwnedBrowser(browser, browserServer);
         }
       } finally {
         // Close before finalization to capture late events, but bound transport
@@ -470,7 +478,7 @@ export async function probeNetworkResponses(options, {
             recordIssue(closed.timedOut
               ? "BROWSER_CONTEXT_CLOSE_TIMEOUT" : "BROWSER_CONTEXT_CLOSE_FAILURE");
             shutdownFailed = true;
-            if (closed.timedOut) terminateBrowser(browser);
+            if (closed.timedOut) terminateOwnedBrowser(browser, browserServer);
           }
         }
       }
@@ -497,7 +505,7 @@ export async function probeNetworkResponses(options, {
     if (typeof error?.message === "string" &&
         error.message.startsWith(STAGE_TIMEOUT_PREFIX)) {
       report.browserStageTimeout = error.message.slice(STAGE_TIMEOUT_PREFIX.length);
-      terminateBrowser(browser);
+      terminateOwnedBrowser(browser, browserServer);
     }
   } finally {
     if (browser) {
@@ -505,7 +513,15 @@ export async function probeNetworkResponses(options, {
       if (!closed.ok) {
         report.browserShutdownIssue = closed.timedOut
           ? "BROWSER_CLOSE_TIMEOUT" : "BROWSER_CLOSE_FAILURE";
-        if (closed.timedOut) terminateBrowser(browser);
+        if (closed.timedOut) terminateOwnedBrowser(browser, browserServer);
+      }
+    }
+    if (browserServer) {
+      const serverClosed = await boundedShutdown(() => browserServer.close(), shutdownDeadline);
+      if (!serverClosed.ok) {
+        report.browserServerShutdownIssue = serverClosed.timedOut
+          ? "BROWSER_SERVER_CLOSE_TIMEOUT" : "BROWSER_SERVER_CLOSE_FAILURE";
+        terminateOwnedBrowser(browser, browserServer);
       }
     }
   }
@@ -518,7 +534,7 @@ export async function probeNetworkResponses(options, {
     report.localAssetTreeUnchanged = false;
     report.assetRescanError = shortError(error);
   }
-  if (!report.browserShutdownIssue &&
+  if (!report.browserShutdownIssue && !report.browserServerShutdownIssue &&
       report.localAssetTreeUnchanged && report.observations.length === 3 &&
       report.observations.every((o) => o.status === "LOCAL_BODY_BYTES_MATCHED")) {
     report.status = report.observations.some((o) => o.external.length > 0)
