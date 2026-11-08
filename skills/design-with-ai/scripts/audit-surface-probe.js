@@ -68,16 +68,34 @@
     return { x: round(rect.x), y: round(rect.y), width: round(rect.width), height: round(rect.height) };
   };
 
-  const cleanText = (element, max = 160) => {
-    const value = (element?.innerText || element?.textContent || "").replace(/\s+/g, " ").trim();
-    return value.length > max ? value.slice(0, max - 1) + "…" : value;
+  const MAX_VISIBLE_TEXT = 2000;
+  const redactText = (value) => {
+    let redactions = 0;
+    let text = String(value ?? "").replace(/\s+/g, " ").trim();
+    const redact = (pattern) => {
+      text = text.replace(pattern, () => { redactions += 1; return "[REDACTED]"; });
+    };
+    redact(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi);
+    redact(/\b(?:Bearer|Basic)\s+[A-Za-z0-9._~+/=-]{8,}/gi);
+    redact(/\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b/g);
+    redact(/\b(?:token|secret|password|passwd|api[_-]?key|auth|code)=[^&\s]+/gi);
+    redact(/\b[A-Za-z0-9_-]{32,}\b/g);
+    return { text, redactions };
+  };
+  const safeText = (value, max = 160) => {
+    const redacted = redactText(value);
+    return {
+      text: redacted.text.length > max ? redacted.text.slice(0, max - 1) + "…" : redacted.text,
+      redactions: redacted.redactions,
+      truncated: redacted.text.length > max,
+    };
   };
 
   const accessibleName = (element) => {
     const labelledBy = element.getAttribute("aria-labelledby");
     if (labelledBy) {
       const text = labelledBy.split(/\s+/)
-        .map((id) => cleanText(document.getElementById(id), 120))
+        .map((id) => safeText(document.getElementById(id)?.innerText || document.getElementById(id)?.textContent || "", 120).text)
         .filter(Boolean).join(" ").trim();
       if (text) return text;
     }
@@ -87,12 +105,12 @@
     if (id) {
       try {
         const label = document.querySelector(`label[for="${CSS.escape(id)}"]`);
-        if (label) return cleanText(label, 160);
+        if (label) return safeText(label.innerText || label.textContent || "", 160).text;
       } catch { /* ignore malformed ids */ }
     }
     const wrapping = element.closest("label");
-    if (wrapping) return cleanText(wrapping, 160);
-    return cleanText(element, 120);
+    if (wrapping) return safeText(wrapping.innerText || wrapping.textContent || "", 160).text;
+    return safeText(element.innerText || element.textContent || "", 120).text;
   };
 
   const backgroundStack = (element) => {
@@ -246,7 +264,7 @@
       role: element.getAttribute("role"),
       type: element.getAttribute("type"),
       name: accessibleName(element),
-      text: cleanText(element, 120),
+      text: safeText(element.innerText || element.textContent || "", 120).text,
       rect: rectOf(element),
       visible: isVisible(element),
       disabled: element.matches(":disabled") || element.getAttribute("aria-disabled") === "true",
@@ -301,7 +319,7 @@
         tabCount: tabs.length,
         tabbableCount: tabs.filter((tab) => tab.tabIndex === 0).length,
         selectedCount: selected.length,
-        selectedTab: selected.length ? cleanText(selected[0], 80) : null,
+        selectedTab: selected.length ? safeText(selected[0].innerText || selected[0].textContent || "", 80).text : null,
         controls,
         uniqueControls: new Set(controls.filter(Boolean)).size,
         controlsTargetsExist: controls.map((id) => Boolean(id && document.getElementById(id))),
@@ -327,23 +345,37 @@
   const inventory = {};
   for (const element of elements) inventory[element.kind] = (inventory[element.kind] || 0) + 1;
 
+  const bodyText = redactText(document.body?.innerText || "");
+  const visibleText = bodyText.text.slice(0, MAX_VISIBLE_TEXT);
   return {
     schemaVersion,
     kind: "dwa/audit-surface-probe",
     capturedAt: new Date().toISOString(),
-    url: location.href,
-    title: document.title,
+    route: location.pathname,
+    title: safeText(document.title, 120).text,
     viewport,
     inventory,
     elements,
     tablists,
     panels,
-    visibleText: cleanText(document.body, 20000),
+    visibleText,
+    visibleTextMeta: {
+      length: bodyText.text.length,
+      redactions: bodyText.redactions,
+      truncated: bodyText.text.length > MAX_VISIBLE_TEXT,
+      max: MAX_VISIBLE_TEXT,
+    },
+    privacy: {
+      url: "pathname-only",
+      visibleText: "redacted-truncated",
+      note: "Do not upload raw probe JSON; keep it private-local unless the project sanitizes it further.",
+    },
     limitations: [
       "Computed styles do not simulate a real hover, focus or keyboard sequence.",
       "Cross-origin stylesheets and canvas-painted controls may be unobservable.",
       "Gradients, images and backdrop filters can make the adjacent background estimate approximate.",
       "This probe measures presentation and attribute wiring, not screen-reader announcements or task success.",
+      "URL and visible text are minimized; the text sample is redacted and truncated, not a full transcript.",
     ],
   };
 })()

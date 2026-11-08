@@ -7,12 +7,13 @@ import { Capability, ProviderStatus } from "../../scripts/providers/contract.mjs
 const src = Capability.STATIC_AUDIT, rendered = Capability.RENDERED_AUDIT;
 const finding = ({ id, rule = "G05", file = "src/page.tsx", route = "/",
   line = 12, priority = "P2", msg = "Nested boxes", provider = "native-dwa",
-  width, selector } = {}) => ({
+  width, selector, surface } = {}) => ({
   id, providerRuleId: rule, priority, message: msg,
   location: { route, file, line, ...(width ? { width } : {}),
     ...(selector ? { selector } : {}) },
   evidence: [{ kind: provider === "taste-skill" ? "rendered-report" : "source",
     ref: "fixture/" + id + ".json" }],
+  ...(surface ? { surface } : {}),
 });
 const report = (provider, findings = [], {
   capability = provider === "taste-skill" ? rendered : src,
@@ -31,6 +32,46 @@ test("scoped green reports are not product-completion evidence", () => {
   assert.equal(fusion.completionEligible, false);
   assert.equal(fusion.coverage.complete, true);
   assert.equal(fusion.counts.groups, 0);
+  assertFusion(JSON.parse(JSON.stringify(fusion)));
+});
+
+test("context-only surface findings keep original P1 provenance but are not actionable route alerts", () => {
+  const contextSurface = {
+    relation: "context", relevance: "CONTEXT", visibility: "not-visible",
+    actionable: false, surfacePriority: "P3", confidence: "static",
+  };
+  const findings = Array.from({ length: 7 }, (_, index) => finding({
+    id: "ctx-" + index, rule: index < 4 ? "G29" : "G41",
+    priority: "P1", surface: contextSurface,
+  }));
+  const fusion = fuseProviderEvidence([
+    report("native-dwa", findings, { verdict: "REVIEW" }),
+  ], { required: ["native-dwa"], optional: [] });
+
+  assert.equal(fusion.groups.length, 7);
+  assert.ok(fusion.groups.every((group) => group.priority === "P1"));
+  assert.ok(fusion.groups.every((group) => group.surface.relevance === "CONTEXT"));
+  assert.ok(fusion.groups.every((group) => group.surface.actionable === false));
+  assert.ok(fusion.groups.every((group) => group.surface.surfacePriority === "P3"));
+  assert.ok(fusion.groups.every((group) => group.actionablePriority === null));
+  assert.ok(fusion.groups.every((group) => group.members[0].priority === "P1"));
+  assertFusion(JSON.parse(JSON.stringify(fusion)));
+});
+
+test("actionable surface findings retain their own priority for consumers", () => {
+  const fusion = fuseProviderEvidence([
+    report("native-dwa", [finding({
+      id: "route-p2", priority: "P2",
+      surface: {
+        relation: "direct", relevance: "ROUTE", visibility: "visible",
+        actionable: true, surfacePriority: "P2", confidence: "heuristic",
+      },
+    })], { verdict: "REVIEW" }),
+  ], { required: ["native-dwa"], optional: [] });
+  const group = fusion.groups[0];
+  assert.equal(group.priority, "P2");
+  assert.equal(group.surface.actionable, true);
+  assert.equal(group.actionablePriority, "P2");
   assertFusion(JSON.parse(JSON.stringify(fusion)));
 });
 

@@ -196,6 +196,47 @@ function evaluateContrast(elements) {
   return { leads, observations };
 }
 
+function evaluateKeyboardEvidence(evidence) {
+  if (!evidence || evidence.source !== "driven-pass") {
+    return { status: "not-supplied", failed: [], activationMode: "unknown" };
+  }
+  const before = evidence.before;
+  const after = evidence.afterArrow;
+  if (!before || !after) {
+    return { status: "unverified-missing-before-after", failed: [], activationMode: "unknown" };
+  }
+  const focusMoved = before.active !== after.active;
+  const selectionMoved = before.selected !== after.selected;
+  const automatic = focusMoved && selectionMoved && after.active === after.selected;
+  const manualCandidate = focusMoved && !selectionMoved;
+  const activation = evidence.activation;
+  const manual = Boolean(manualCandidate && activation?.before && activation?.after
+    && activation.after.active === after.active
+    && activation.after.selected === after.active);
+  const failed = [];
+  if (!focusMoved) failed.push("arrow-keys-do-not-move-focus");
+  else if (selectionMoved && after.active !== after.selected) failed.push("arrow-focus-selection-desynchronized");
+  else if (manualCandidate && !manual) failed.push("manual-activation-not-demonstrated");
+  const beforeTab = evidence.beforeTab;
+  const afterTab = evidence.afterTab;
+  if (beforeTab && afterTab && beforeTab.active !== afterTab.active
+      && afterTab.inTablist !== false
+      && afterTab.active !== afterTab.selected) {
+    failed.push("tab-moves-focus-to-unselected-tab");
+  }
+  return {
+    status: failed.length ? "failed" : automatic ? "automatic-pass" : manual ? "manual-pass" : "unverified",
+    focusMoved,
+    selectionMoved,
+    activationMode: automatic ? "automatic" : manual ? "manual" : "unknown",
+    before,
+    afterArrow: after,
+    beforeTab: beforeTab ?? null,
+    afterTab: afterTab ?? null,
+    failed,
+  };
+}
+
 function evaluateTablists(tablists, keyboardEvidence = null) {
   const leads = [];
   for (const list of tablists) {
@@ -207,14 +248,8 @@ function evaluateTablists(tablists, keyboardEvidence = null) {
       failed.push("aria-controls-not-unique-and-valid-per-tab");
     }
     if (list.selectedCount !== 1) failed.push("selected-tab-count-is-not-one");
-    if (keyboardEvidence?.afterArrow
-        && keyboardEvidence.afterArrow.active === keyboardEvidence.afterArrow.selected) {
-      failed.push("arrow-keys-do-not-move-focus-or-selection");
-    }
-    if (keyboardEvidence?.afterTab
-        && keyboardEvidence.afterTab.active !== keyboardEvidence.afterTab.selected) {
-      failed.push("tab-moves-focus-to-unselected-tab");
-    }
+    const keyboard = evaluateKeyboardEvidence(keyboardEvidence);
+    failed.push(...keyboard.failed);
     if (!failed.length) continue;
     const structural = failed.some((id) => id !== "aria-orientation-missing-for-vertical-layout" && id !== "aria-orientation-does-not-match-layout");
     leads.push({
@@ -232,11 +267,11 @@ function evaluateTablists(tablists, keyboardEvidence = null) {
         selectedCount: list.selectedCount,
         uniqueControls: list.uniqueControls,
         controlsTargetsExist: list.controlsTargetsExist,
-        keyboardEvidence: keyboardEvidence ?? null,
+        keyboard,
       },
       claim: "static_attribute_and_layout_observation_not_full_aria_conformance",
       requiresInteractionChecks: [
-        "ArrowDown/ArrowUp or ArrowLeft/ArrowRight move focus and selection according to orientation",
+        "ArrowDown/ArrowUp or ArrowLeft/ArrowRight move focus; automatic activation moves selection with focus, manual activation requires the declared activation key",
         "Home/End reach the first/last tab where the widget pattern requires them",
         "Tab exits the tablist instead of visiting the next unselected tab",
         "Panel changes are announced and focus/selection remain in sync",

@@ -80,8 +80,11 @@ test("detects weak empty-control contrast, tablist model and selected-hover coll
     ],
     tablists: [tablist()],
     keyboardEvidence: {
+      source: "driven-pass",
+      before: { active: "Interface", selected: "Interface" },
       afterArrow: { active: "Interface", selected: "Interface" },
-      afterTab: { active: "Streaming", selected: "Interface" },
+      beforeTab: { active: "Interface", selected: "Interface" },
+      afterTab: { active: "Streaming", selected: "Interface", inTablist: true },
     },
   }));
 
@@ -99,7 +102,7 @@ test("detects weak empty-control contrast, tablist model and selected-hover coll
     "aria-orientation-missing-for-vertical-layout",
     "roving-tabindex-not-implemented",
     "aria-controls-not-unique-and-valid-per-tab",
-    "arrow-keys-do-not-move-focus-or-selection",
+    "arrow-keys-do-not-move-focus",
     "tab-moves-focus-to-unselected-tab",
   ]);
   assert.ok(tabs.requiresInteractionChecks.some((check) => /ArrowDown/.test(check)));
@@ -108,6 +111,64 @@ test("detects weak empty-control contrast, tablist model and selected-hover coll
   assert.ok(state);
   assert.equal(state.observed.selectionCueLost, true);
   assert.match(state.adjudication, /another persistent cue/i);
+});
+
+test("automatic activation moves focus and selection without a keyboard lead", () => {
+  const result = evaluateSurfaceProbe(probe({
+    tablists: [tablist({ orientation: "vertical", tabbableCount: 1, uniqueControls: 8 })],
+    keyboardEvidence: {
+      source: "driven-pass",
+      before: { active: "Interface", selected: "Interface" },
+      afterArrow: { active: "Streaming", selected: "Streaming" },
+      beforeTab: { active: "Streaming", selected: "Streaming" },
+      afterTab: { active: "Theme", selected: "Streaming", inTablist: false },
+    },
+  }));
+  assert.equal(result.verdict, "PASS_SURFACE_A11Y_LIMITED");
+  assert.equal(result.leads.length, 0);
+});
+
+test("manual activation passes only when the activation key moves selection", () => {
+  const base = {
+    source: "driven-pass",
+    before: { active: "Interface", selected: "Interface" },
+    afterArrow: { active: "Streaming", selected: "Interface" },
+    activation: {
+      key: "Enter",
+      before: { active: "Streaming", selected: "Interface" },
+      after: { active: "Streaming", selected: "Streaming" },
+    },
+    beforeTab: { active: "Streaming", selected: "Streaming" },
+    afterTab: { active: "Theme", selected: "Streaming", inTablist: false },
+  };
+  const result = evaluateSurfaceProbe(probe({
+    tablists: [tablist({ orientation: "vertical", tabbableCount: 1, uniqueControls: 8 })],
+    keyboardEvidence: base,
+  }));
+  assert.equal(result.verdict, "PASS_SURFACE_A11Y_LIMITED");
+
+  const missingActivation = evaluateSurfaceProbe(probe({
+    tablists: [tablist({ orientation: "vertical", tabbableCount: 1, uniqueControls: 8 })],
+    keyboardEvidence: { ...base, activation: null },
+  }));
+  const lead = missingActivation.leads.find((item) => item.id === "A11Y-TABLIST-MODEL");
+  assert.ok(lead);
+  assert.ok(lead.failedChecks.includes("manual-activation-not-demonstrated"));
+});
+
+test("unchanged ArrowDown focus is a failure, not an automatic-activation pass", () => {
+  const result = evaluateSurfaceProbe(probe({
+    tablists: [tablist({ orientation: "vertical", tabbableCount: 1, uniqueControls: 8 })],
+    keyboardEvidence: {
+      source: "driven-pass",
+      before: { active: "Interface", selected: "Interface" },
+      afterArrow: { active: "Interface", selected: "Interface" },
+    },
+  }));
+  const lead = result.leads.find((item) => item.id === "A11Y-TABLIST-MODEL");
+  assert.ok(lead);
+  assert.ok(lead.failedChecks.includes("arrow-keys-do-not-move-focus"));
+  assert.equal(lead.observed.keyboard.activationMode, "unknown");
 });
 
 test("passes the limited gate when the measured states and model are sound", () => {

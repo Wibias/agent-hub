@@ -42,7 +42,10 @@ classify its file and its copy visibility:
 `scripts/surface-relevance.mjs` builds a bounded static route/import closure and
 annotates provider findings with `relation`, `relevance`, `visibility`,
 `surfacePriority`, and the reason. `scripts/providers/quality-audit.mjs` includes
-that annotation in its reports and summary.
+that annotation in its reports and summary. Canonical fusion keeps the original
+provider `priority` as provenance and adds `surface` plus `actionablePriority` to
+each member and group; a context-only P1 is therefore not an actionable route
+alert for a fusion consumer.
 
 Rules for using the annotation:
 
@@ -143,6 +146,38 @@ separately:
   keyboard selection, Escape;
 - dialog: name, description, initial focus, focus trap, Escape, return focus.
 
+### Driven tablist evidence
+
+The probe does not drive keys. A driven pass may attach this optional shape to
+the probe JSON; the analyzer only evaluates it when `source` is `driven-pass`:
+
+```json
+{
+  "source": "driven-pass",
+  "before": { "active": "Interface", "selected": "Interface" },
+  "afterArrow": { "active": "Streaming", "selected": "Streaming" },
+  "activation": {
+    "key": "Enter",
+    "before": { "active": "Streaming", "selected": "Interface" },
+    "after": { "active": "Streaming", "selected": "Streaming" }
+  },
+  "beforeTab": { "active": "Streaming", "selected": "Streaming" },
+  "afterTab": { "active": "Theme", "selected": "Streaming", "inTablist": false }
+}
+```
+
+Evaluate focus movement separately from activation:
+
+- automatic activation: ArrowDown moves focus and the selected state follows it;
+- manual activation: ArrowDown moves focus but selection stays, then the
+  declared activation key moves selection;
+- unchanged focus: ArrowDown leaves focus on the same tab; this is a failure;
+- Tab exit: focus leaving the tablist is valid (`inTablist: false`); focus moving
+  to another tab while a different tab stays selected is not.
+
+Without `before` and `afterArrow`, report the keyboard model as unverified. Do
+not infer activation mode from a single post-key state.
+
 Static attributes do not prove the keyboard model. A tablist can have perfect
 attributes and still fail because every tab is tabbable and ArrowDown does
 nothing. Conversely, a visually unusual rail can be a correct navigation list
@@ -198,6 +233,12 @@ node <skill-root>/scripts/render-surface-a11y-gate.mjs \
 
 The probe is read-only. Do not inject attributes, change the DOM, or ship it in
 the product.
+
+Privacy: the probe reports `location.pathname` without query or fragment, not
+`location.href`. `visibleText` is redacted and truncated to 2,000 characters;
+`visibleTextMeta` records the original length, redaction count and truncation.
+Treat probe JSON as private-local evidence. Do not upload or publish raw probes
+before project-specific sanitization, especially for authenticated surfaces.
 
 ## Before/after comparison
 

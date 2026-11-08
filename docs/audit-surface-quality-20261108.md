@@ -50,9 +50,18 @@ decision.
   tab stops, `aria-controls`, orientation, layout, visible text, and matched
   state rules without mutating the page.
 - `scripts/render-surface-a11y-gate.mjs` measures non-text contrast, evaluates the
-  tablist model (including driven keyboard evidence when supplied), and detects
+  tablist model with before/after keyboard evidence (automatic activation,
+  manual activation, unchanged focus, separate Tab exit), and detects
   selected-hover identity loss. It emits review leads with applicability and
   claim language, never an automatic WCAG verdict.
+- `fuse.mjs` keeps each provider's original `priority` and adds a bounded
+  `surface` projection to every fused member and group (`relevance`,
+  `actionable`, `surfacePriority`, `actionablePriority`). Context-only P1
+  findings therefore remain P1 provenance but cannot be consumed as actionable
+  P1 route alerts.
+- The probe reports only `location.pathname`, not `location.href`; visible text
+  is redacted and truncated to 2,000 characters, with redaction/truncation
+  metadata. Probe JSON remains private-local evidence.
 - `references/audit-surface-evidence.md` owns the route-relevance, state-matrix,
   claim-calibration, before/after, and blind-spot protocol.
 
@@ -65,7 +74,8 @@ decision.
 | False positives as route findings | 7/7 | 0/7 |
 | Real design defects detected automatically | 0 of 3 | 3 of 3 |
 | Empty checkbox contrast | manual only; 1.48:1 border, 1.17:1 fill | measured lead, grouped over 2 empty checkboxes: 1.48:1 best cue; applicability/adjudication included |
-| ARIA tabs/keyboard | manual only | static model lead plus driven evidence: 8/8 tabbable, no vertical orientation, shared `aria-controls`; ArrowDown does not move focus or selection; Tab moves focus to unselected Streaming |
+| ARIA tabs/keyboard | manual only | static model lead plus before/after evidence: 8/8 tabbable, no vertical orientation, shared `aria-controls`; ArrowDown leaves focus and selection on Interface; Tab moves focus to unselected Streaming |
+| Canonical fusion | seven P1 groups stamped to the route, no surface context | same seven P1 provider groups, each with `surface.relevance=CONTEXT`, `actionable=false`, `surfacePriority=P3`, `actionablePriority=null`; one copy lead remains ROUTE/unverified pending visible text |
 | Selected-hover identity | manual only | cascade lead: `rgba(145,71,255,.22)` becomes neutral `rgba(255,255,255,.06)`; retained at P3 because weight still carries selection |
 | WCAG language | “1.4.11 territory”, “not conform” | measured ratio + criterion + `appliesWhen` + `adjudication`; `claim: measured_below_threshold_not_a_conformance_finding` |
 
@@ -75,8 +85,10 @@ The after provider run still scans the same 189 files, but its findings are
 partitioned by route relationship instead of being presented as route coverage.
 The after rendered probe covers the 1280x880 state, three checkboxes (one checked
 and two empty), one select, eight tabs, one tablist, and the selected-hover
-combination. It does not cover light theme, native chrome, OS text scaling, a
-screen reader, or a physical keyboard.
+combination. Its `route` is `/settings/interface`; visible text is 681 characters
+with zero redactions and no truncation, but the probe still treats it as a
+bounded, private-local sample rather than a transcript. It does not cover light
+theme, native chrome, OS text scaling, a screen reader, or a physical keyboard.
 
 The checkbox and tab measurements reproduce the earlier native baseline values
 (`#3c3c3c` border on `#202020`, `#101010` fill, 8 tab stops, shared
@@ -99,6 +111,12 @@ files are unchanged.
   cross-origin sheets, SVG/canvas controls, and backdrop filters.
 - Screen-reader announcements, focus order under real assistive technology, and
   task success are outside the probe.
+- Keyboard classification depends on supplied before/after evidence. A single
+  post-key snapshot is not enough; a manual-activation widget also needs its
+  declared activation key recorded, otherwise the analyzer reports it as
+  unverified rather than passing it.
+- Visible-text redaction is a bounded safety layer, not a guarantee that every
+  project-specific secret pattern is removed. Keep probe JSON private-local.
 - WCAG applicability and exceptions still require human adjudication; the tool
   supplies the measurement, not the conformance verdict.
 
