@@ -225,9 +225,10 @@ export async function fetchP30ProfileCandidateSnapshot({
   url.searchParams.set('snapshot_date', 'eq.' + expectedDate);
   url.searchParams.set('order', 'asset_id.asc');
 
-  const headers = { apikey: input.credential, Prefer: 'count=exact' };
-  if (input.accessMode === 'server' && !input.credential.startsWith('sb_secret_')) {
-    headers.Authorization = `Bearer ${input.credential}`;
+  const credential = input.credential;
+  const headers = { apikey: credential, Prefer: 'count=exact' };
+  if (input.accessMode === 'server' && !credential.startsWith('sb_secret_')) {
+    headers.Authorization = `Bearer ${credential}`;
   }
   const controller = new AbortController();
   let timer;
