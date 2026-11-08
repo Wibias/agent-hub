@@ -15,6 +15,10 @@ begin
 end;
 $$;
 
+-- P39 disposable environment only: mirror Supabase's service_role attribute.
+-- Do not move this into shared CI setup; earlier tests use the non-bypass role.
+alter role service_role bypassrls;
+
 grant usage on schema public to anon, authenticated, service_role;
 create extension if not exists pgcrypto;
 

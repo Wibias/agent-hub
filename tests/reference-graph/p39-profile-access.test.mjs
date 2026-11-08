@@ -48,13 +48,14 @@ test('P39 public view exposes only operational freshness metadata', () => {
   assert.match(doc(), /opaque|randomized|salted/i);
 });
 
-test('P39 least-privilege column grants and service RLS support security-invoker views', () => {
+test('P39 least-privilege column grants and BYPASSRLS service boundary support security-invoker views', () => {
   const src = sql();
   assert.match(src, /grant select \(projection_version, snapshot_date, refreshed_at\)/i);
   assert.match(src, /to anon, authenticated/i);
   assert.match(src, /grant select on table public\.reference_graph_profile_runtime_projection_p30_v1\s+to service_role/i);
-  assert.match(src, /create policy reference_graph_profile_runtime_p31_service_snapshot/i);
-  assert.match(src, /to service_role\s+using \(snapshot_date = \(statement_timestamp\(\) at time zone 'UTC'\)::date\)/i);
+  assert.doesNotMatch(src, /create policy reference_graph_profile_runtime_p31_service_snapshot/i);
+  assert.match(doc(), /BYPASSRLS/i);
+  assert.match(doc(), /historical/i);
   assert.doesNotMatch(src, /security definer/i);
 });
 
@@ -66,7 +67,6 @@ test('P39 does not reapply P31/P38 or touch Quick/P10 cron state', () => {
   assert.match(doc(), /Rollback/i);
   assert.match(doc(), /grant select on public\.reference_graph_profile_runtime_projection_p30_v1/i);
   assert.match(doc(), /revoke all on table public\.reference_graph_profile_runtime_projection_p30_v1/i);
-  assert.match(doc(), /drop policy if exists reference_graph_profile_runtime_p31_service_snapshot/i);
   assert.match(doc(), /break-glass/i);
 });
 
@@ -91,6 +91,8 @@ test('P39 CI applies the additive access migration and runs the negative access 
   assert.match(smoke, /set role service_role/i);
   assert.match(smoke, /insufficient_privilege/i);
   assert.match(smoke, /p39_public_view_columns/i);
+  assert.match(smoke, /p39_service_role_bypassrls/i);
+  assert.match(read('tests/reference-graph/p39-profile-access-fixture.sql'), /alter role service_role bypassrls/i);
   assert.match(smoke, /search_text/i);
 });
 

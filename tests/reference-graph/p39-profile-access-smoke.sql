@@ -2,6 +2,14 @@
 -- Requires the installed P31 projection and migration 016.
 \set ON_ERROR_STOP on
 
+-- P39-only production-faithful attribute. The P39 CI step runs last; do not
+-- move this into shared setup or earlier workflows.
+alter role service_role bypassrls;
+
+select 1 / case when (
+  select rolbypassrls from pg_roles where rolname = 'service_role'
+) then 1 else 0 end as p39_service_role_bypassrls;
+
 delete from public.reference_graph_profile_runtime_projection_p30_v1
 where legacy_id = 'p39-stale-row';
 
@@ -23,6 +31,10 @@ insert into public.reference_graph_profile_runtime_projection_p30_v1 (
 select count(*) as p39_current_count
 from public.reference_graph_profile_runtime_projection_p30_v1
 where snapshot_date = (statement_timestamp() at time zone 'UTC')::date
+\gset
+
+select count(*) as p39_total_count
+from public.reference_graph_profile_runtime_projection_p30_v1
 \gset
 
 select 1 / case when
@@ -84,17 +96,18 @@ select 1 / case when
   and exists (select 1 from pg_class c join pg_namespace n on n.oid = c.relnamespace
    where n.nspname = 'public' and c.relname = 'reference_graph_profile_public_p30_v1'
      and c.reloptions @> array['security_barrier=true','security_invoker=true'])
-  and exists (select 1 from pg_policies
-   where schemaname = 'public'
-     and tablename = 'reference_graph_profile_runtime_projection_p30_v1'
-     and policyname = 'reference_graph_profile_runtime_p31_service_snapshot'
-     and 'service_role' = any(roles))
 then 1 else 0 end as p39_rls_and_security_invoker;
 
 set role anon;
 select 1 / case when count(*) = :p39_current_count
   then 1 else 0 end as p39_anon_current_public_rows
 from public.reference_graph_profile_public_p30_v1;
+
+select 1 / case when
+  count(*) filter (where snapshot_date = (statement_timestamp() at time zone 'UTC')::date) = :p39_current_count
+  and count(*) filter (where snapshot_date <> (statement_timestamp() at time zone 'UTC')::date) = 0
+then 1 else 0 end as p39_anon_base_rls_current_only
+from public.reference_graph_profile_runtime_projection_p30_v1;
 
 do $$
 begin
@@ -122,6 +135,12 @@ select 1 / case when count(*) = :p39_current_count
   then 1 else 0 end as p39_authenticated_current_public_rows
 from public.reference_graph_profile_public_p30_v1;
 
+select 1 / case when
+  count(*) filter (where snapshot_date = (statement_timestamp() at time zone 'UTC')::date) = :p39_current_count
+  and count(*) filter (where snapshot_date <> (statement_timestamp() at time zone 'UTC')::date) = 0
+then 1 else 0 end as p39_authenticated_base_rls_current_only
+from public.reference_graph_profile_runtime_projection_p30_v1;
+
 do $$
 begin
   begin
@@ -148,9 +167,14 @@ select 1 / case when count(*) = :p39_current_count
   then 1 else 0 end as p39_service_current_server_rows
 from public.reference_graph_profile_candidates_server_p30_v1;
 
-select 1 / case when count(*) = :p39_current_count
-  then 1 else 0 end as p39_service_current_base_rows
+select 1 / case when count(*) = :p39_total_count
+  then 1 else 0 end as p39_service_base_total_rows
 from public.reference_graph_profile_runtime_projection_p30_v1;
+
+select 1 / case when count(*) = 1
+  then 1 else 0 end as p39_service_base_stale_visible
+from public.reference_graph_profile_runtime_projection_p30_v1
+where legacy_id = 'p39-stale-row';
 
 do $$
 begin

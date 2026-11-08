@@ -1155,6 +1155,8 @@ jobs:
         run: |
           set -euo pipefail
           # Additive access migration only; never reapply 014/015 here.
+          # This P39-only smoke mirrors Supabase service_role BYPASSRLS and
+          # runs after all earlier CI tests.
           psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 \
             -c 'select public.reference_graph_refresh_profile_runtime_projection_p31();' >/dev/null
           psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 \
