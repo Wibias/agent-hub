@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import {
-  existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync,
+  existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { Capability, ProviderStatus } from "../../scripts/providers/contract.mjs";
@@ -106,6 +106,14 @@ test("scoped PASS requires 1440/768/390 plus first-screen sweep and separate pro
     assert.equal(report.status, ProviderStatus.PASS, report.reason);
     assert.deepEqual(report.summary.widths, WIDTHS);
     assert.equal(report.summary.productCompletionEligible, false);
+    assert.equal(report.summary.renderedStateVerified, false);
+    assert.equal(report.summary.renderedStateProof, "NOT_PROVIDED_BY_UPSTREAM");
+    assert.deepEqual(report.summary.reviewClassCounts, {
+      POTENTIAL_USABILITY: 0,
+      GEOMETRY_NEEDS_VISUAL_REVIEW: 0,
+      CONTEXTUAL_HOUSE_RULE: 0,
+      UNCLASSIFIED_HEURISTIC: 0,
+    });
     assert.equal(report.provenance.version, "2.5.0");
     assert.ok(existsSync(report.provenance.report));
     const cmd = harness.lastCommand();
@@ -146,11 +154,55 @@ test("FAIL and WARN remain contextual findings with inspectable crop and report 
     const report = await provider.inspect(opts(fx));
     assert.equal(report.status, ProviderStatus.FINDINGS, report.reason);
     assert.deepEqual(report.findings.map((f) => f.priority), ["P1", "P2"]);
+    assert.deepEqual(report.findings.map((f) => f.upstreamSeverity), ["FAIL", "WARN"]);
+    assert.deepEqual(report.findings.map((f) => f.reviewClass),
+      ["POTENTIAL_USABILITY", "CONTEXTUAL_HOUSE_RULE"]);
+    assert.equal(report.summary.reviewClassCounts.POTENTIAL_USABILITY, 1);
+    assert.equal(report.summary.reviewClassCounts.CONTEXTUAL_HOUSE_RULE, 1);
+    assert.equal(report.summary.renderedStateVerified, false);
     assert.equal(report.findings[0].providerRuleId, "off-viewport");
     assert.equal(report.findings[0].location.width, 1440);
     assert.ok(report.findings[0].evidence[0].ref.includes("#/widths/0/findings/0"));
     assert.ok(report.findings[0].evidence[1].ref.endsWith("1440-01-off-viewport.jpg"));
     assert.equal(report.findings[1].location.width, 1280);
+  });
+});
+
+test("pinned Taste review classes preserve raw FAILs, unknown checks and evidence counts", async () => {
+  await fixture(async (fx) => {
+    const harness = mockRunner(fx, (report) => {
+      const rows = [
+        { check: "spill", sev: "FAIL", sel: ".stage", msg: "extends beyond frame" },
+        { check: "visual-caption", sev: "FAIL", sel: "figure", msg: "caption under image" },
+        { check: "cut-text", sev: "FAIL", sel: "h1", msg: "text may be clipped" },
+        { check: "new-upstream-check", sev: "FAIL", sel: "section", msg: "unknown check" },
+      ];
+      report.widths[0].findings.push(...rows);
+      report.counts.FAIL = rows.length;
+      report.checks["spill"] = "FAIL";
+    });
+    const provider = createTasteSkillProvider({
+      skillRoot: fx.skillRoot, runner: harness.runner, nodeMajor: 22,
+    });
+    const report = await provider.inspect(opts(fx));
+    assert.equal(report.status, ProviderStatus.FINDINGS, report.reason);
+    assert.equal(report.findings.length, 4);
+    assert.deepEqual(report.findings.map((f) => f.priority),
+      ["P1", "P1", "P1", "P1"]);
+    assert.deepEqual(report.findings.map((f) => f.reviewClass), [
+      "GEOMETRY_NEEDS_VISUAL_REVIEW",
+      "CONTEXTUAL_HOUSE_RULE",
+      "POTENTIAL_USABILITY",
+      "UNCLASSIFIED_HEURISTIC",
+    ]);
+    assert.deepEqual(report.summary.reviewClassCounts, {
+      POTENTIAL_USABILITY: 1,
+      GEOMETRY_NEEDS_VISUAL_REVIEW: 1,
+      CONTEXTUAL_HOUSE_RULE: 1,
+      UNCLASSIFIED_HEURISTIC: 1,
+    });
+    assert.equal(report.summary.counts.FAIL, 4);
+    assert.equal(report.summary.renderedStateVerified, false);
   });
 });
 
@@ -199,6 +251,102 @@ test("missing browser coverage, skipped checks, falsified counts and wrong sourc
       const report = await provider.inspect(opts(fx));
       assert.equal(report.status, ProviderStatus.ERROR,
         JSON.stringify({ reason: report.reason, makeInvalid: String(makeInvalid) }));
+    }
+  });
+});
+
+
+
+test("replacing allocated run ancestor with a junction or symlink fails closed", async () => {
+  await fixture(async (fx) => {
+    const outside = join(fx.root, "CANARY_RELOCATED_TASTE_RUN_20261107");
+    mkdirSync(outside);
+    const runner = async (command) => {
+      const out = command.args[command.args.indexOf("--out") + 1];
+      const relocatedRun = join(outside, basename(dirname(out)));
+      const relocatedReport = join(relocatedRun, "report");
+      mkdirSync(relocatedReport, { recursive: true });
+      const report = sampleReport({ page: fx.page, out });
+      writeFileSync(join(relocatedReport, "report.json"), JSON.stringify(report));
+      // The run and report still appear to be regular directories when
+      // checked via their lexical paths. Only their ancestor becomes a link.
+      rmSync(fx.outputRoot, { recursive: true, force: true });
+      symlinkSync(outside, fx.outputRoot, process.platform === "win32" ? "junction" : "dir");
+      return {
+        exitCode: 0, stdout: JSON.stringify(report), stderr: "",
+        error: null, timedOut: false, outputLimitExceeded: false,
+      };
+    };
+    const provider = createTasteSkillProvider({
+      skillRoot: fx.skillRoot, runner, nodeMajor: 22,
+    });
+    const result = await provider.inspect(opts(fx));
+    assert.equal(result.status, ProviderStatus.ERROR);
+    assert.equal(result.findings.length, 0);
+    assert.ok(!JSON.stringify(result).includes("CANARY_RELOCATED_TASTE_RUN_20261107"));
+  });
+});
+
+test("Taste output report-directory symlinks and Windows junctions cannot escape run isolation", async () => {
+  await fixture(async (fx) => {
+    const outside = join(fx.root, "CANARY_OUTSIDE_TASTE_REPORT_20261107");
+    mkdirSync(outside);
+    let invoked = 0;
+    const runner = async (command) => {
+      invoked++;
+      const out = command.args[command.args.indexOf("--out") + 1];
+      const report = sampleReport({ page: fx.page, out });
+      // The provider already created out as a real directory. Simulate an
+      // upstream process replacing that parent with an external link.
+      rmSync(out, { recursive: true, force: true });
+      writeFileSync(join(outside, "report.json"), JSON.stringify(report));
+      symlinkSync(outside, out, process.platform === "win32" ? "junction" : "dir");
+      return {
+        exitCode: 0, stdout: JSON.stringify(report), stderr: "",
+        error: null, timedOut: false, outputLimitExceeded: false,
+      };
+    };
+    const p = createTasteSkillProvider({
+      skillRoot: fx.skillRoot, nodeMajor: 22, runner,
+    });
+    const actual = await p.inspect(opts(fx));
+    assert.equal(invoked, 1);
+    assert.equal(actual.status, ProviderStatus.ERROR);
+    assert.match(actual.reason, /Taste Skill report is incomplete or invalid/);
+    assert.ok(!JSON.stringify(actual).includes("CANARY_OUTSIDE_TASTE_REPORT_20261107"));
+    assert.equal(actual.findings.length, 0);
+  });
+});
+
+test("malformed upstream Taste JSON never leaks parser-supplied credential fragments", async () => {
+  await fixture(async (fx) => {
+    const secret = "CANARY_TASTE_JSON_PARSER_TOKEN_20261107";
+    const malformed = '{"token": ' + secret + "}";
+    // Parser exception formatting differs across supported Node versions.
+    // Verify only the contract: no fragment of the malformed upstream input
+    // may be persisted in the normalized provider evidence.
+    const diskRunner = async (command) => {
+      const out = command.args[command.args.indexOf("--out") + 1];
+      mkdirSync(out, { recursive: true });
+      writeFileSync(join(out, "report.json"), malformed);
+      return {
+        exitCode: 0, stdout: malformed, stderr: "",
+        error: null, timedOut: false, outputLimitExceeded: false,
+      };
+    };
+    const harness = mockRunner(fx);
+    const stdoutRunner = async (command) => ({
+      ...(await harness.runner(command)), stdout: malformed,
+    });
+    for (const runner of [diskRunner, stdoutRunner]) {
+      const p = createTasteSkillProvider({
+        skillRoot: fx.skillRoot, nodeMajor: 22, runner,
+      });
+      const out = await p.inspect(opts(fx));
+      assert.equal(out.status, ProviderStatus.ERROR);
+      assert.ok(out.reason.startsWith("Taste Skill report is incomplete or invalid"));
+      assert.ok(!JSON.stringify(out).includes(secret));
+      assert.ok(!JSON.stringify(out).includes("CANARY_TASTE"));
     }
   });
 });

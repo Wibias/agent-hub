@@ -1,5 +1,28 @@
 import { assertProvider, assertProviderReport, Capability, ProviderStatus, providerFailure } from "./contract.mjs";
 
+// Taste probe reasons are fixed, known strings. Never echo paths or arbitrary
+// third-party probe errors into persisted status reports.
+const SAFE_TASTE_PROBE_REASONS = new Set([
+  "Taste Skill 2.5.0 needs Node 22+",
+  "An explicit locally installed Taste Skill root is required",
+  "Taste Skill v2.5.0 consistency.mjs is not installed",
+  "Taste Skill root cannot be read",
+]);
+
+// Only these exact messages are authored by bundled providers and contain no
+// input-dependent paths, browser URLs or third-party exception text.
+const SAFE_BUNDLED_PROBE_REASONS = new Map([
+  ["native-dwa", new Set(["DWA taste-gate script is missing"])],
+  ["impeccable", new Set(["Pinned, bundled Impeccable JS detector is unavailable"])],
+]);
+function safeProbeReason(id, reason) {
+  if ((id === "taste-skill" && SAFE_TASTE_PROBE_REASONS.has(reason)) ||
+      SAFE_BUNDLED_PROBE_REASONS.get(id)?.has(reason)) {
+    return reason;
+  }
+  return "Provider runtime unavailable";
+}
+
 export function createProviderRegistry(providers = []) {
   const items = new Map();
   for (const provider of providers) {
@@ -44,23 +67,23 @@ export async function runProviders(registry, {
       let probe;
       try {
         probe = await provider.probe({ capability, request });
-      } catch (error) {
+      } catch {
         reports.push(providerFailure(id, capability, ProviderStatus.ERROR,
-          "Provider probe failed: " + String(error.message ?? error)));
+          "Provider probe failed"));
         continue;
       }
       if (!probe || probe.available !== true) {
         reports.push(providerFailure(id, capability,
           isRequired ? ProviderStatus.BLOCKED : ProviderStatus.UNAVAILABLE,
-          typeof probe?.reason === "string" && probe.reason ? probe.reason : "Provider runtime unavailable"));
+          safeProbeReason(id, probe?.reason)));
         continue;
       }
       try {
         reports.push(assertProviderReport(await provider.inspect({ ...request, capability }),
           { providerId: id, capability }));
-      } catch (error) {
+      } catch {
         reports.push(providerFailure(id, capability, ProviderStatus.ERROR,
-          "Provider inspection failed: " + String(error.message ?? error)));
+          "Provider inspection failed"));
       }
     }
   }

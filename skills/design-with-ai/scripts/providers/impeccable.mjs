@@ -12,6 +12,42 @@ const DEFAULT_SCRIPT = fileURLToPath(
 );
 const SCAN_MODULE = "detector/detect-antipatterns.mjs";
 const VALID_SEVERITIES = new Set(["error", "warning", "notice", "info", "advisory"]);
+const SCAN_PROOF_PREFIX = "DWA_IMPECCABLE_SCAN_PROOF=";
+const IMPECCABLE_TIMEOUT_MS = 120_000;
+
+/**
+ * The bundled CLI emits this only after every eligible static file has
+ * completed. No receipt, zero eligible files or inconsistent counts means
+ * there is no defensible source coverage claim. This is not a browser audit.
+ */
+function readScanProof(stderr) {
+  const lines = String(stderr ?? "").split(/\r?\n/)
+    .filter((line) => line.startsWith(SCAN_PROOF_PREFIX));
+  if (lines.length !== 1) throw new Error("Missing or duplicate scan receipt");
+  let proof;
+  try { proof = JSON.parse(lines[0].slice(SCAN_PROOF_PREFIX.length)); }
+  catch { throw new Error("Invalid scan receipt JSON"); }
+  if (!proof || typeof proof !== "object" || Array.isArray(proof) ||
+      proof.schemaVersion !== 1 ||
+      !["candidateFiles", "eligibleFiles", "scannedFiles", "ignoredFiles", "degradedFiles", "durationMs"]
+        .every((key) => Number.isSafeInteger(proof[key]) && proof[key] >= 0) ||
+      proof.candidateFiles !== proof.eligibleFiles + proof.ignoredFiles ||
+      proof.eligibleFiles === 0 ||
+      proof.scannedFiles + proof.degradedFiles !== proof.eligibleFiles ||
+      proof.configEnabled !== true ||
+      typeof proof.inlineIgnoresEnabled !== "boolean" ||
+      typeof proof.designSystemEnabled !== "boolean") {
+    throw new Error("Incomplete or contradictory source scan receipt");
+  }
+  if (proof.degradedFiles > 0) {
+    // The vendored scan proof counts degraded files but does not distinguish
+    // unavailable HTML parser modules from unreadable linked local CSS.
+    // Both mean incomplete coverage; do not imply a specific cause.
+    throw new Error("HTML parser unavailable or linked local stylesheet unreadable: " +
+      proof.degradedFiles + " degraded file(s); full selector/cascade checks were not run");
+  }
+  return proof;
+}
 
 function safeFile(path) {
   if (!existsSync(path)) return false;
@@ -39,7 +75,9 @@ function rejectScannableSymlinks(target) {
           !HIDDEN_SOURCE_DIRS.has(entry.name)) continue;
       const child = join(current, entry.name);
       if (entry.isSymbolicLink() && SOURCE_EXTENSION.test(entry.name)) {
-        throw new Error("Symlinked UI source is outside the trusted scan scope: " + child);
+        // Local filenames can contain credentials or other private data.
+        // Keep the fail-closed decision without exposing the offending path.
+        throw new Error("Symlinked UI source is outside the trusted scan scope");
       }
       if (entry.isDirectory()) stack.push(child);
     }
@@ -78,7 +116,9 @@ function normalizedFile(file, root) {
   if (!inside(root, absolute)) {
     throw new Error("Impeccable finding refers outside the scanned project");
   }
-  return (relative(root, absolute) || ".").replaceAll("\\", "/");
+  // Native path separators differ from literal backslashes in Linux filenames.
+  // Match source-scope manifests without conflating src/a\\b.css and src/a/b.css.
+  return (relative(root, absolute) || ".").split(sep).join("/");
 }
 
 function parseFinding(raw, root, route, occurrences) {
@@ -137,16 +177,20 @@ export function createImpeccableProvider({ script = DEFAULT_SCRIPT, runner = run
       try {
         location = scanLocation({ target, projectRoot });
       } catch (error) {
+        // Filesystem errors include private absolute paths in their messages.
+        // Our own validation errors contain only fixed, path-free labels.
         return providerFailure("impeccable", capability, ProviderStatus.BLOCKED,
-          String(error.message ?? error));
+          error && typeof error === "object" && "code" in error
+            ? "Source scope preflight failed"
+            : String(error?.message ?? error));
       }
 
       // Do not invoke scripts/impeccable, npx, an installer or an arbitrary PATH binary.
       const run = await runner({
         executable: process.execPath,
-        args: [resolve(script), "--json", location.absolute],
+        args: [resolve(script), "--json", "--dwa-scan-proof", location.absolute],
         cwd: location.root,
-        timeoutMs: 45_000,
+        timeoutMs: IMPECCABLE_TIMEOUT_MS,
         maxOutputBytes: 4_194_304,
       });
       if (run.error || run.timedOut || run.outputLimitExceeded) {
@@ -156,8 +200,13 @@ export function createImpeccableProvider({ script = DEFAULT_SCRIPT, runner = run
       if (![0, 2].includes(run.exitCode)) {
         // The released Rust engine uses exit 1 for incomplete scans, even when
         // JSON contains valid findings from other targets. Never promote that to PASS.
+        // Scanner stderr is untrusted and can contain arbitrary source paths,
+        // URLs or credentials. Never persist any part of it in provider evidence.
+        const exitLabel = Number.isInteger(run.exitCode) &&
+          run.exitCode >= 0 && run.exitCode <= 255
+          ? String(run.exitCode) : "unknown";
         return providerFailure("impeccable", capability, ProviderStatus.ERROR,
-          "Impeccable detector did not complete (exit " + String(run.exitCode) + ")");
+          "Impeccable detector did not complete (exit " + exitLabel + ")");
       }
       let raw;
       try { raw = JSON.parse(run.stdout); } catch {
@@ -169,6 +218,7 @@ export function createImpeccableProvider({ script = DEFAULT_SCRIPT, runner = run
           "Impeccable detector JSON must be a findings array");
       }
       try {
+        const proof = readScanProof(run.stderr);
         const occurrences = new Map();
         const findings = raw.map((entry) =>
           parseFinding(entry, location.root, route, occurrences));
@@ -184,7 +234,7 @@ export function createImpeccableProvider({ script = DEFAULT_SCRIPT, runner = run
           provenance: {
             distribution: "Agent Hub vendored Impeccable",
             implementation: "bundled-js",
-            command: "node scripts/detect.mjs --json <local-target>",
+            command: "node scripts/detect.mjs --json --dwa-scan-proof <local-target>",
             executable: resolve(script),
             networkRequired: false,
             externalInstall: false,
@@ -194,8 +244,18 @@ export function createImpeccableProvider({ script = DEFAULT_SCRIPT, runner = run
             advisory: findings.length - primary.length,
             sourceOnly: true,
             // Upstream findings JSON has no per-file scan-progress report.
-            filesScanned: null,
-            coverageCountVerified: false,
+            filesScanned: proof.scannedFiles,
+            eligibleFiles: proof.eligibleFiles,
+            candidateFiles: proof.candidateFiles,
+            ignoredFiles: proof.ignoredFiles,
+            degradedFiles: proof.degradedFiles,
+            coverageCountVerified: true,
+            coverageMethod: "bundled-detector-completed-source-file-count",
+            // Explicit modes, not a count of findings suppressed by waivers.
+            inlineIgnoresEnabled: proof.inlineIgnoresEnabled,
+            designSystemEnabled: proof.designSystemEnabled,
+            scanDurationMs: proof.durationMs,
+            timeoutBudgetMs: IMPECCABLE_TIMEOUT_MS,
             requiresRenderedReview: true,
             // 2 means findings, not a tool failure, per Impeccable CLI.
             detectorExitCode: run.exitCode,

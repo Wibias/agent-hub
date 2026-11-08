@@ -46,3 +46,114 @@ jobs:
         env:
           TASTE_SKILL_ROOT: ${{ runner.temp }}/taste-skill/skills/taste-skill
         run: node skills/design-with-ai/tests/providers/browser-live-smoke.mjs
+
+      - name: Real Chrome declared DOM-state regression cases
+        run: node skills/design-with-ai/tests/providers/rendered-state-chrome-smoke.mjs
+
+      # Exercise the corrected #205 moving-base error-evidence contract as
+      # part of the joint test/CI integration, not solely in base-branch CI.
+      # Includes close-time pageerror/navigation/close-failure negative controls
+      # inherited from the latest #205 provider-base branch.
+      - name: DOM-state error, redirect and close-time fail-closed regressions
+        run: node --test skills/design-with-ai/tests/providers/rendered-state-probe.test.mjs
+
+      # Explicitly exercise the latest #205 scanner-failure evidence contract
+      # against this PR's actual synthetic merge with the moving base.
+      - name: Impeccable scanner and rejected-symlink path privacy regressions
+        run: node --test skills/design-with-ai/tests/providers/impeccable.test.mjs
+
+      # Verify untrusted provider exceptions and native subprocess payloads on
+      # the exact combined PR merge, not only on the base PR in isolation.
+      - name: Provider dispatch and native failure redaction regressions
+        run: node --test skills/design-with-ai/tests/providers/workflow.test.mjs
+
+      - name: Quality-audit CLI redaction negative controls
+        run: node --test --test-name-pattern="audit CLI redacts untrusted flags and filesystem failure paths" skills/design-with-ai/tests/providers/workflow-e2e.test.mjs
+
+      - name: Taste parser failure redaction regressions
+        run: node --test skills/design-with-ai/tests/providers/taste-skill.test.mjs
+
+      # Test-only dependency. The real production probe dynamically loads
+      # Playwright from the explicit path, never from a global package.
+      # No browser download, postinstall scripts, package.json or product changes.
+      - name: Install exact Playwright transport for integration smoke
+        run: |
+          set -euo pipefail
+          npm install --prefix "$RUNNER_TEMP/dwa-playwright-test" --no-save --no-audit --no-fund --ignore-scripts --package-lock=false playwright-core@1.64.1
+          node -e "const p=require(process.env.RUNNER_TEMP+'/dwa-playwright-test/node_modules/playwright-core/package.json'); if(p.version !== '1.64.1') process.exit(1)"
+          test -f "$RUNNER_TEMP/dwa-playwright-test/node_modules/playwright-core/index.mjs"
+          echo "DWA_PLAYWRIGHT_ROOT=$RUNNER_TEMP/dwa-playwright-test/node_modules/playwright-core" >> "$GITHUB_ENV"
+
+      - name: BrowserServer process-control fail-closed unit regressions
+        run: node --test skills/design-with-ai/tests/providers/browser-server-lifecycle.test.mjs
+
+      - name: Real Playwright BrowserServer OS termination on stalled RPC (Linux)
+        run: node skills/design-with-ai/tests/providers/browser-server-process-smoke.mjs
+
+      - name: Real Playwright transport DOM-state regression cases
+        run: node skills/design-with-ai/tests/providers/rendered-state-playwright-smoke.mjs
+
+      - name: Real Chrome received-body SHA match, tamper and stalled-response detection
+        run: node skills/design-with-ai/tests/providers/network-response-live-smoke.mjs
+
+      - name: Network browser error redaction and fail-closed regression tests
+        run: node --test skills/design-with-ai/tests/providers/network-response-probe.test.mjs
+
+  # Separate from Chrome/Taste. Windows specifically validates canonical path
+  # handling and bounded full-tree SHA evidence on a large Vite-style build.
+  rendered-assets-windows:
+    runs-on: windows-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Windows rendered-tree and Vite-style provenance regressions
+        run: node --test skills/design-with-ai/tests/providers/rendered-assets.test.mjs
+
+      # Exercise the post-review portable file: ESM-loader fix on Windows.
+      # This negative-control test deliberately denies the optional parser
+      # imports; it must report ERROR, never a false complete scan.
+      - name: Windows injected ESM loader fail-closed regression
+        run: node --test --test-name-pattern="forced missing HTML parsers in the real child process cannot create green coverage" skills/design-with-ai/tests/providers/workflow-e2e.test.mjs
+
+      # Validate realpath entrypoint normalization through a Windows junction,
+      # rather than inferring Windows compatibility from Linux unit coverage.
+      - name: Windows junction-linked diagnostic CLI regression
+        run: node --test --test-name-pattern="symlinked diagnostic CLI runs both bounded preflight and normal error entrypoints" skills/design-with-ai/tests/providers/impeccable-performance-diagnostic.test.mjs
+
+      # Exercise the new network probe main-entrypoint realpath fix through
+      # a real Windows directory junction with bounded INCOMPLETE evidence.
+      - name: Windows junction-linked network probe CLI fail-closed regression
+        run: node --test --test-name-pattern="symlinked network CLI validates arguments and persists an INCOMPLETE receipt" skills/design-with-ai/tests/providers/network-response-probe.test.mjs
+
+      # Exercise the same fail-closed Taste report-parent guard under Windows
+      # junction semantics; the full Taste provider suite already runs on Linux.
+      - name: Windows Taste report-directory junction isolation
+        run: node --test --test-name-pattern="Taste output report-directory symlinks and Windows junctions cannot escape run isolation" skills/design-with-ai/tests/providers/taste-skill.test.mjs
+
+      - name: Windows real Chrome BrowserServer process termination
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $browsers = @(
+            "C:\Program Files\Google\Chrome\Application\chrome.exe",
+            "C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+            "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
+          )
+          $browser = $browsers | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $browser) { throw "No installed Windows Chrome/Edge executable" }
+          npm install --prefix "$env:RUNNER_TEMP/dwa-playwright-test" --no-save --no-audit --no-fund --ignore-scripts --package-lock=false playwright-core@1.64.1
+          if ($LASTEXITCODE -ne 0) { throw "Exact Playwright install failed" }
+          $env:DWA_PLAYWRIGHT_ROOT = Join-Path $env:RUNNER_TEMP "dwa-playwright-test/node_modules/playwright-core"
+          $env:CHROME_PATH = $browser
+          node --test skills/design-with-ai/tests/providers/browser-server-lifecycle.test.mjs
+          if ($LASTEXITCODE -ne 0) { throw "Browser lifecycle unit tests failed" }
+          node skills/design-with-ai/tests/providers/browser-server-process-smoke.mjs
+          if ($LASTEXITCODE -ne 0) { throw "Real Windows BrowserServer termination failed" }
+

@@ -55,8 +55,7 @@ export function createNativeDwaProvider({ script = SCRIPT, runner = runProcess }
       });
       if (run.error || run.timedOut || run.outputLimitExceeded) {
         return providerFailure("native-dwa", Capability.STATIC_AUDIT,
-          ProviderStatus.ERROR, "Source gate execution failed: " +
-          (run.error || (run.timedOut ? "timeout" : "output limit")));
+          ProviderStatus.ERROR, "Source gate execution failed");
       }
       let payload;
       try { payload = JSON.parse(run.stdout); }
@@ -67,7 +66,7 @@ export function createNativeDwaProvider({ script = SCRIPT, runner = runProcess }
       if ((run.exitCode !== 0 && run.exitCode !== 1) || !Array.isArray(payload.hits) ||
           !["HOLD", "REVIEW", "REVIEW_CLUSTER", "PASS_MECHANICAL"].includes(payload.verdict)) {
         return providerFailure("native-dwa", Capability.STATIC_AUDIT,
-          ProviderStatus.ERROR, String(payload.error || "Source gate returned invalid result"));
+          ProviderStatus.ERROR, "Source gate returned invalid result");
       }
       const findings = payload.hits.map((hit) => normalizeHit(hit, route, projectRoot));
       return assertProviderReport({

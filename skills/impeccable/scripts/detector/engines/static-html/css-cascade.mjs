@@ -964,7 +964,7 @@ function buildStaticWindow(staticDoc) {
   };
 }
 
-function collectStaticCssText(root, fileDir, profile, filePath, modules) {
+function collectStaticCssText(root, fileDir, profile, filePath, modules, onDegraded) {
   const styleTexts = [];
   for (const styleEl of modules.selectAll('style', root.children || [])) {
     styleTexts.push(modules.domutils.textContent(styleEl));
@@ -987,7 +987,11 @@ function collectStaticCssText(root, fileDir, profile, filePath, modules) {
         detail: href,
       }, () => fs.readFileSync(cssPath, 'utf-8'));
       styleTexts.push(css);
-    } catch { /* skip unreadable */ }
+    } catch {
+      // A missing or unreadable linked local CSS file makes static coverage
+      // incomplete; never let its absence be mistaken for a clean scan.
+      onDegraded?.(filePath);
+    }
   }
   return styleTexts.join('\n');
 }

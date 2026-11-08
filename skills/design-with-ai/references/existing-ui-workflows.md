@@ -104,12 +104,33 @@ Read-only. Analyze purpose fit, content disposition, IA/traversal, visual-world
 specificity, responsive composition, interaction states, accessibility, and
 implementation quality.
 
+Load `audit-surface-evidence.md` for every standard/deep audit. Provider output
+is source-scope evidence, not route evidence: before accepting a finding as a
+finding on the requested surface, bind it through
+`scripts/surface-relevance.mjs` (or the equivalent annotation in
+`quality-audit.mjs`) and label it `ROUTE`, `SHARED`, `CONTEXT`, or `UNBOUND`.
+Keep context findings visible but separate; never count them as route coverage.
+Copy heuristics are `P2` at most on-surface and `P3` in context unless measured
+visible evidence justifies more.
+
+When the rendered surface and browser evaluation are available, also capture
+the read-only `scripts/audit-surface-probe.js` evidence and run
+`scripts/render-surface-a11y-gate.mjs`. Measure the empty/unchecked state, the
+selected+hover state, and the declared widget's keyboard model. A missing
+measurement is `NOT_MEASURED`, not a pass and not a violation. Do not call a
+WCAG failure from a color pair alone; state the measured value, the criterion,
+and whether the criterion applies.
+
 Output:
 
 - surface classification and first-screen job;
 - contract ledger and product-role verdict;
 - findings grouped as usability, accessibility, purpose/IA, brand/taste, or
   implementation;
+- route relevance (`ROUTE`, `SHARED`, `CONTEXT`, `UNBOUND`) and the binding
+  reason for each provider finding, with context debt reported separately;
+- evidence grade (`OBSERVED`, `MEASURED`, `STATIC`, `INFERRED`,
+  `NOT_MEASURED`) and the inspected state matrix for interaction findings;
 - visible evidence and impact for each finding;
 - for applicable operator surfaces, task-first failures in priority, readability, status semantics, or containment, with observed versus unverified evidence separated;
 - for mixed workflow/state surfaces, which controls are progress, filters, results, or guarded actions, and which semantics are verified, inconsistent, or unknown;
@@ -127,6 +148,11 @@ visual grammar without a semantic reason. Compare available before/after
 screenshots; do not claim observed changes from only one version. Deep adds
 annotated usability, domain, adjacent-domain, and outside-domain references.
 Do not edit or claim a recommendation is fixed.
+
+End the audit with the remaining blind spots: states not driven, colors that
+could not be measured, route-closure limits, and claims that still require
+human applicability judgement. A clean mechanical run with unmeasured states is
+`REVIEW_CONTEXTUAL_EVIDENCE`, not `COMPLETE`.
 
 ## `improve-existing`
 

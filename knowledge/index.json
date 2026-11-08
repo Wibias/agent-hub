@@ -355,7 +355,7 @@
       ],
       "status": "active",
       "canonicalId": null,
-      "contentHash": "00758c29eca8ba0a332e3c13455ac072afeac557d24e6a0324b886d36a76d3a6"
+      "contentHash": "d0a37146b854e696fe6edfa8d9755d8b949efeb3cc491d3512db92004e346399"
     },
     {
       "id": "agents/diagnose",

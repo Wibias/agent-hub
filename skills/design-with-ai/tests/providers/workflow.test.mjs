@@ -1,12 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
-  mkdtempSync, mkdirSync, rmSync, writeFileSync,
+  mkdtempSync, mkdirSync, rmSync, symlinkSync, unlinkSync, writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Capability, ProviderStatus } from "../../scripts/providers/contract.mjs";
-import { createProviderRegistry } from "../../scripts/providers/registry.mjs";
+import { createProviderRegistry, runProviders } from "../../scripts/providers/registry.mjs";
+import { createNativeDwaProvider } from "../../scripts/providers/native-dwa.mjs";
+import { createImpeccableProvider } from "../../scripts/providers/impeccable.mjs";
 import {
   selectProfileProviders, runProfileProviders,
 } from "../../scripts/providers/workflow.mjs";
@@ -33,6 +35,7 @@ async function fixture(fn) {
   const html = join(built, "test", "index.html");
   writeFileSync(target, "export const Page = () => <h1>Test</h1>;");
   writeFileSync(html, "<!doctype html><h1>Test</h1>");
+  writeFileSync(join(root, "package.json"), "{}\n"); // Keep DESIGN.md discovery inside fixture.
   try {
     return await fn({ root, srcDir, built, target, html,
       request: { target: srcDir, projectRoot: root, route: "/test", browserRoot: built } });
@@ -43,6 +46,138 @@ const registry = () => createProviderRegistry([
   provider("impeccable", src),
   provider("taste-skill", rendered),
 ]);
+
+
+test("untrusted provider and native gate failures never persist canary credentials", async () => {
+  const providers = [
+    {
+      id: "probe-secret", capabilities: [src],
+      async probe() { throw new Error("token=CANARY_PROBE_SECRET_20261107"); },
+      async inspect() { throw new Error("unexpected"); },
+    },
+    {
+      id: "unavailable-secret", capabilities: [src],
+      async probe() { return { available: false, reason: "/api?token=CANARY_UNAVAILABLE_SECRET_20261107" }; },
+      async inspect() { throw new Error("unexpected"); },
+    },
+    {
+      id: "inspect-secret", capabilities: [src],
+      async probe() { return { available: true }; },
+      async inspect() { throw new Error("token=CANARY_INSPECT_SECRET_20261107"); },
+    },
+  ];
+  const reports = await runProviders(createProviderRegistry(providers), {
+    required: providers.map((p) => p.id), capability: src,
+  });
+  assert.deepEqual(reports.map((r) => r.status), ["ERROR", "BLOCKED", "ERROR"]);
+  assert.deepEqual(reports.map((r) => r.reason), [
+    "Provider probe failed", "Provider runtime unavailable", "Provider inspection failed",
+  ]);
+  assert.ok(!JSON.stringify(reports).includes("CANARY_"));
+  const badLaunch = createNativeDwaProvider({
+    runner: async () => ({
+      error: "CANARY_NATIVE_SPAWN_SECRET_20261107",
+      timedOut: false, outputLimitExceeded: false,
+    }),
+  });
+  const failed = await badLaunch.inspect({
+    capability: src, target: "/tmp/fake.tsx", route: "/",
+  });
+  assert.equal(failed.status, "ERROR");
+  assert.equal(failed.reason, "Source gate execution failed");
+  const badPayload = createNativeDwaProvider({
+    runner: async () => ({
+      stdout: JSON.stringify({
+        verdict: "MALFORMED", hits: [], error: "CANARY_NATIVE_PAYLOAD_20261107",
+      }),
+      exitCode: 1, error: null, timedOut: false, outputLimitExceeded: false,
+    }),
+  });
+  const malformed = await badPayload.inspect({
+    capability: src, target: "/tmp/fake.tsx", route: "/",
+  });
+  assert.equal(malformed.status, "ERROR");
+  assert.equal(malformed.reason, "Source gate returned invalid result");
+  assert.ok(!JSON.stringify([failed, malformed]).includes("CANARY_"));
+});
+
+test("bundled runtime availability reports fixed pathsafe reasons only", async () => {
+  await fixture(async (f) => {
+    const native = createNativeDwaProvider({
+      script: join(f.root, "missing-native-gate.mjs"),
+    });
+    const impeccable = createImpeccableProvider({
+      script: join(f.root, "missing-impeccable-detector.mjs"),
+    });
+    const reports = await runProviders(createProviderRegistry([native, impeccable]), {
+      capability: src, required: ["native-dwa"], optional: ["impeccable"],
+    });
+    assert.deepEqual(reports.map((r) => r.status), ["BLOCKED", "UNAVAILABLE"]);
+    assert.deepEqual(reports.map((r) => r.reason), [
+      "DWA taste-gate script is missing",
+      "Pinned, bundled Impeccable JS detector is unavailable",
+    ]);
+    assert.deepEqual(reports.map((r) => r.findings), [[], []]);
+    const privateText = "/private/CANARY_BUNDLED_SECRET_20261107";
+    const forge = ["native-dwa", "impeccable", "third-party"].map((id) => ({
+      id, capabilities: [src],
+      async probe() { return { available: false, reason: privateText }; },
+      async inspect() { throw new Error("must not inspect"); },
+    }));
+    const untrusted = await runProviders(createProviderRegistry(forge), {
+      capability: src, required: forge.map((x) => x.id),
+    });
+    assert.ok(untrusted.every((r) =>
+      r.status === "BLOCKED" && r.reason === "Provider runtime unavailable"));
+    const spoof = createProviderRegistry([{
+      id: "third-party", capabilities: [src],
+      async probe() { return { available: false,
+        reason: "DWA taste-gate script is missing" }; },
+      async inspect() { throw new Error("must not inspect"); },
+    }]);
+    const [spoofed] = await runProviders(spoof, {
+      capability: src, required: ["third-party"],
+    });
+    assert.equal(spoofed.reason, "Provider runtime unavailable");
+    assert.ok(!JSON.stringify(untrusted).includes("CANARY_BUNDLED_SECRET_20261107"));
+  });
+});
+
+test("Taste probe reports fixed availability hints but never untrusted details", async () => {
+  for (const reason of [
+    "Taste Skill 2.5.0 needs Node 22+",
+    "An explicit locally installed Taste Skill root is required",
+    "Taste Skill v2.5.0 consistency.mjs is not installed",
+    "Taste Skill root cannot be read",
+  ]) {
+    const registered = createProviderRegistry([{
+      id: "taste-skill", capabilities: [rendered],
+      async probe() { return { available: false, reason }; },
+      async inspect() { throw new Error("must not inspect"); },
+    }]);
+    const [found] = await runProviders(registered, {
+      capability: rendered, optional: ["taste-skill"],
+    });
+    assert.equal(found.status, "UNAVAILABLE");
+    assert.equal(found.reason, reason);
+  }
+  for (const [id, reason] of [
+    ["taste-skill", "Taste root /api?token=CANARY_TASTE_SECRET_20261107 missing"],
+    ["other-provider", "Taste Skill 2.5.0 needs Node 22+"],
+  ]) {
+    const registered = createProviderRegistry([{
+      id, capabilities: [rendered],
+      async probe() { return { available: false, reason }; },
+      async inspect() { throw new Error("must not inspect"); },
+    }]);
+    const [found] = await runProviders(registered, {
+      capability: rendered, required: [id],
+    });
+    assert.equal(found.status, "BLOCKED");
+    assert.equal(found.reason, "Provider runtime unavailable");
+    assert.ok(!JSON.stringify(found).includes("CANARY_"));
+  }
+});
 
 test("quick profile selects only DWA native; no external provider executes", async () => {
   await fixture(async (f) => {
@@ -222,6 +357,33 @@ test("explicit opt-out disables Impeccable without silently selecting it", async
   });
 });
 
+test("native quick and --no-impeccable ignore unrelated unsafe Impeccable configs", async () => {
+  await fixture(async (f) => {
+    const separate = mkdtempSync(join(tmpdir(), "dwa-unrelated-policy-"));
+    try {
+      const configDir = join(f.root, ".impeccable");
+      mkdirSync(configDir);
+      const externalConfig = join(separate, "config.local.json");
+      writeFileSync(externalConfig, '{"detector":{"ignoreRules":[]}}');
+      symlinkSync(externalConfig, join(configDir, "config.local.json"));
+      const quick = await runProfileProviders({
+        ...f.request, profile: "quick",
+      }, { registry: registry() });
+      assert.deepEqual(quick.reports.map((r) => r.provider), ["native-dwa"]);
+      assert.equal(quick.fusion.status, "SCOPED_CLEAR");
+      const noImpeccable = await runProfileProviders({
+        ...f.request, withImpeccable: false,
+      }, { registry: registry() });
+      assert.equal(noImpeccable.fusion.status, "SCOPED_CLEAR");
+      await assert.rejects(() => runProfileProviders({
+        ...f.request, profile: "standard", withImpeccable: true,
+      }, { registry: registry() }), /Detector context dependency must be a regular in-project file/);
+    } finally {
+      rmSync(separate, { recursive: true, force: true });
+    }
+  });
+});
+
 test("invalid profile selection cannot implicitly require unavailable capabilities", () => {
   assert.throws(() => selectProfileProviders({ profile: "quick", withTaste: true }),
     /Quick profile/);
@@ -262,6 +424,58 @@ test("a source mutation during scanning fails closed", async () => {
       ...f.request, profile: "quick",
     }, { registry: registry(), execute }), /changed during provider execution/);
   });
+});
+
+test("an out-of-target Impeccable policy mutation during scanning fails closed", async () => {
+  await fixture(async (f) => {
+    const context = join(f.root, ".impeccable");
+    mkdirSync(context);
+    const config = join(context, "config.local.json");
+    writeFileSync(config, '{"detector":{"ignoreRules":[]}}\n');
+    writeFileSync(join(f.root, "DESIGN.md"),
+      "---\ntypography:\n  body:\n    fontFamily: Arial\n---\n");
+    let changed = false;
+    const execute = async (_, input) => {
+      if (!changed) {
+        writeFileSync(config, '{"detector":{"ignoreRules":["overused-font"]}}\n');
+        changed = true;
+      }
+      return [report("native-dwa", input.capability), report("impeccable", input.capability)];
+    };
+    await assert.rejects(() => runProfileProviders({
+      ...f.request, profile: "standard",
+    }, { registry: registry(), execute }), /changed during provider execution/);
+  });
+});
+
+test("rendered CSS, JS and media changes during the Taste provider fail closed", async () => {
+  for (const scenario of ["edit-css", "edit-js", "remove-image", "add-chunk"]) {
+    await fixture(async (f) => {
+      const dir = join(f.built, "test");
+      const css = join(dir, "layout.css");
+      const js = join(dir, "screen.js");
+      const image = join(dir, "image.svg");
+      writeFileSync(css, "h1 { color: green }\n");
+      writeFileSync(js, "window.loaded = 1;\n");
+      writeFileSync(image, "<svg></svg>\n");
+      const execute = async (_, input) => {
+        if (input.capability === Capability.RENDERED_AUDIT) {
+          if (scenario === "edit-css") writeFileSync(css, "h1 { color: red }\n");
+          if (scenario === "edit-js") writeFileSync(js, "window.loaded = 2;\n");
+          if (scenario === "remove-image") unlinkSync(image);
+          if (scenario === "add-chunk") writeFileSync(join(dir, "lazy-chunk.mjs"),
+            "export const loaded = true;\n");
+          return [report("taste-skill", input.capability)];
+        }
+        return [report("native-dwa", input.capability)];
+      };
+      await assert.rejects(() => runProfileProviders({
+        ...f.request, profile: "deep", withImpeccable: false,
+        withTaste: true, html: f.html, outputRoot: f.root,
+      }, { registry: registry(), execute }), /changed during provider execution/,
+      "Must reject " + scenario);
+    });
+  }
 });
 
 test("browser route must match a real static HTML route, not an SPA label", async () => {

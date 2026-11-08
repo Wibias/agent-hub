@@ -14,6 +14,42 @@ const allowedOptions = new Set([
   "--primary", "--journal", "--ledger", "--run-id",
 ]);
 const allowedFlags = new Set(["--with-taste", "--require-taste", "--no-impeccable"]);
+// Most audit failures originate in files, child processes or optional tools.
+// Their raw messages can contain arbitrary paths, URLs or credentials.
+// Keep only explicitly recognized, fixed public diagnostics.
+// Safe, path-free labels from our own workflow and scope-validation code.
+// Never forward a generic filesystem, browser, detector or provider exception.
+const SAFE_WORKFLOW_ERRORS = Object.freeze([
+  "Local source target, /route and project root are required",
+  "Project root and source must exist without symlink targets",
+  "Source target is outside the project scope",
+  "A local built HTML page is required when Taste Skill is selected",
+  "Browser target must be a local regular HTML file",
+  "Browser asset root must be an existing regular directory",
+  "Use an isolated built-site subtree inside projectRoot for browser assets",
+  "Requested route does not match the built HTML path; SPA routes require verified route-specific HTML",
+  "Browser output cannot reside inside the served asset root",
+  "Source scope escapes project",
+  "Source scope has no eligible files",
+  "Detector DESIGN.md resolves outside projectRoot",
+  "Detector context dependency must be a regular in-project file",
+  "Audited source changed during provider execution; evidence invalid",
+]);
+const PUBLIC_CLI_ERRORS = new Set([
+  ...SAFE_WORKFLOW_ERRORS,
+  "Quick profile cannot initiate a browser provider",
+  "Output root must already exist",
+  "Invalid DWA provider profile or selection",
+  "A required Taste Skill scan must be explicitly enabled",
+  "Unknown, repeated or missing option",
+  "--path is required",
+  "--route is required",
+  "--project-root is required",
+  "Taste-specific options require --with-taste",
+  "--with-taste requires --html (a local built page)",
+  "Journal capture requires --journal, --ledger and --run-id together",
+  ...[...allowedFlags].map((flag) => "Repeated flag " + flag),
+]);
 
 function parseArgs(argv) {
   const values = new Map(), flags = new Set();
@@ -27,7 +63,7 @@ function parseArgs(argv) {
     if (!allowedOptions.has(arg) || values.has(arg) ||
         i + 1 >= argv.length || argv[i + 1].startsWith("--") ||
         !argv[i + 1].trim()) {
-      throw new Error("Unknown, repeated or missing option " + String(arg));
+      throw new Error("Unknown, repeated or missing option");
     }
     values.set(arg, argv[++i]);
   }
@@ -110,6 +146,7 @@ export async function runQualityAudit(argv = process.argv.slice(2)) {
     scope: evaluated.scope,
     coverage: evaluated.fusion.coverage,
     counts: evaluated.fusion.counts,
+    surface: evaluated.surface,
     artifacts: { directory: runDir, reports: paths, fusion: fusionPath, sourceScope: scopePath, reportSha256: hashes },
     ...(journalCapture ? { journalCapture } : {}),
     next: evaluated.next,
@@ -118,13 +155,22 @@ export async function runQualityAudit(argv = process.argv.slice(2)) {
   return summary;
 }
 
+// A public diagnostic must match one complete, authored label. A similar
+// untrusted error with extra paths/tokens is never surfaced verbatim.
+export function safeQualityAuditError(error) {
+  const message = error?.message;
+  return typeof message === "string" && PUBLIC_CLI_ERRORS.has(message)
+    ? message : "Audit failed; untrusted error details redacted";
+}
+
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
     const result = await runQualityAudit();
     process.stdout.write(JSON.stringify(result, null, 2) + "\n");
     process.exitCode = ["BLOCKED", "INCOMPLETE"].includes(result.status) ? 1 : 0;
   } catch (error) {
-    process.stderr.write("DWA provider audit: " + String(error.message ?? error) + "\n");
+    const reason = safeQualityAuditError(error);
+    process.stderr.write("DWA provider audit: " + reason + "\n");
     process.exitCode = 2;
   }
 }

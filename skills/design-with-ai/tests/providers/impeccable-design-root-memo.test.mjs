@@ -1,0 +1,242 @@
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import {
+  mkdirSync, mkdtempSync, rmSync, writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
+import { test } from "node:test";
+import {
+  findDesignRoot, loadDesignSystemForTarget,
+} from "../../../impeccable/scripts/detector/design-system.mjs";
+
+function withFixtures(callback) {
+  const home = mkdtempSync(join(tmpdir(), "dwa-impeccable-design-root-"));
+  const project = join(home, "project");
+  mkdirSync(project, { recursive: true });
+  mkdirSync(join(project, ".git"));
+  writeFileSync(join(project, "DESIGN.md"),
+    "---\ntypography:\n  body:\n    fontFamily: \"Project Sans\"\n---\n");
+  const source = join(project, "src");
+  mkdirSync(source);
+  for (const name of ["one.tsx", "two.tsx"]) {
+    writeFileSync(join(source, name), "export const a = 1;\n");
+  }
+  try { return callback({ home, project, source }); }
+  finally { rmSync(home, { recursive: true, force: true }); }
+}
+
+// Ensure cache-invalidation tests do not depend on same-tick directory
+// mtime/ctime updates on coarse-resolution Windows or network filesystems.
+function advanceDirectorySignature(dir) {
+  const before = fs.statSync(dir, { bigint: true });
+  const sleep = new Int32Array(new SharedArrayBuffer(4));
+  for (let attempt = 0; attempt < 150; attempt++) {
+    const probe = join(dir, ".dwa-test-sig-" + attempt);
+    writeFileSync(probe, "");
+    rmSync(probe);
+    const current = fs.statSync(dir, { bigint: true });
+    if (current.mtimeNs !== before.mtimeNs || current.ctimeNs !== before.ctimeNs) return;
+    Atomics.wait(sleep, 0, 0, 10);
+  }
+  throw new Error("Directory signature did not advance during the fixture");
+}
+
+test("repeated source files reuse resolved design root without new boundary probes", () => {
+  withFixtures(({ project, source }) => {
+    const cache = new Map();
+    const first = loadDesignSystemForTarget(join(source, "one.tsx"), { cache });
+    assert.equal(first?.sourcePath, join(project, "DESIGN.md"));
+    assert.equal(cache.get("resolve:" + resolve(source))?.dir, resolve(project));
+    assert.equal(cache.get("resolve:" + resolve(project))?.hasDesign, true);
+
+    const original = fs.existsSync;
+    let probes = 0;
+    try {
+      fs.existsSync = (...args) => {
+        probes++;
+        return original(...args);
+      };
+      const again = loadDesignSystemForTarget(join(source, "two.tsx"), { cache });
+      assert.strictEqual(again, first, "same loaded design contract in one scan");
+      assert.equal(probes, 0, "cached directory must not reprobe ancestors");
+    } finally {
+      fs.existsSync = original;
+    }
+  });
+});
+
+test("nested DESIGN.md wins over outer cached ancestor for a sibling subtree", () => {
+  withFixtures(({ home, project, source }) => {
+    const nested = join(source, "nested");
+    mkdirSync(nested);
+    writeFileSync(join(nested, "DESIGN.md"),
+      "---\ntypography:\n  body:\n    fontFamily: \"Nested Sans\"\n---\n");
+    const child = join(nested, "child");
+    mkdirSync(child);
+    const leaf = join(child, "one.css");
+    writeFileSync(leaf, "body { color: #111; }\n");
+
+    const cache = new Map();
+    const outer = loadDesignSystemForTarget(join(source, "one.tsx"), { cache });
+    const nestedDesign = loadDesignSystemForTarget(leaf, { cache });
+    assert.equal(outer?.sourcePath, join(project, "DESIGN.md"));
+    assert.equal(nestedDesign?.sourcePath, join(nested, "DESIGN.md"));
+    assert.notStrictEqual(nestedDesign, outer);
+    assert.deepEqual(findDesignRoot(child, { cache }), findDesignRoot(child));
+    assert.equal(loadDesignSystemForTarget(leaf, { cache }), nestedDesign);
+    assert.equal(home.startsWith(project), false);
+  });
+});
+
+test("project marker blocks outer DESIGN.md, cached no-design roots stay isolated", () => {
+  withFixtures(({ project, source }) => {
+    const separate = join(project, "packages", "separate");
+    mkdirSync(join(separate, "src"), { recursive: true });
+    writeFileSync(join(separate, "package.json"), "{}\n");
+    const nestedFile = join(separate, "src", "page.css");
+    writeFileSync(nestedFile, ".plain { padding: 1px }\n");
+    const cache = new Map();
+
+    const outer = loadDesignSystemForTarget(join(source, "one.tsx"), { cache });
+    const none = loadDesignSystemForTarget(nestedFile, { cache });
+    assert.equal(outer?.sourcePath, join(project, "DESIGN.md"));
+    assert.equal(none, null);
+    assert.deepEqual(findDesignRoot(join(separate, "src"), { cache }),
+      { dir: separate, hasDesign: false });
+    assert.equal(cache.get("resolve:" + resolve(separate))?.hasDesign, false);
+    assert.equal(loadDesignSystemForTarget(nestedFile, { cache }), null);
+  });
+});
+
+test("cached project root invalidates when a nested package marker is added or removed", () => {
+  withFixtures(({ project, source }) => {
+    const cache = new Map();
+    const original = loadDesignSystemForTarget(join(source, "one.tsx"), { cache });
+    assert.equal(original?.sourcePath, join(project, "DESIGN.md"));
+    const marker = join(source, "package.json");
+    advanceDirectorySignature(source);
+    writeFileSync(marker, "{}\n");
+    assert.deepEqual(findDesignRoot(source, { cache }), { dir: source, hasDesign: false });
+    assert.equal(loadDesignSystemForTarget(join(source, "two.tsx"), { cache }), null);
+    advanceDirectorySignature(source);
+    fs.unlinkSync(marker);
+    assert.strictEqual(loadDesignSystemForTarget(join(source, "one.tsx"), { cache }), original);
+  });
+});
+
+test("cached ancestor resolution invalidates when a nested DESIGN.md appears", () => {
+  withFixtures(({ project, source }) => {
+    const nested = join(source, "nested");
+    mkdirSync(nested);
+    const file = join(nested, "page.css");
+    writeFileSync(file, "body { color: #111; }\n");
+    const cache = new Map();
+    const original = loadDesignSystemForTarget(file, { cache });
+    assert.equal(original?.sourcePath, join(project, "DESIGN.md"));
+    advanceDirectorySignature(nested);
+    writeFileSync(join(nested, "DESIGN.md"),
+      "---\ntypography:\n  body:\n    fontFamily: \"Nested Sans\"\n---\n");
+    const updated = loadDesignSystemForTarget(file, { cache });
+    assert.equal(updated?.sourcePath, join(nested, "DESIGN.md"));
+    assert.notStrictEqual(updated, original);
+  });
+});
+
+test("disappearing and recreated directories cannot poison cached design roots", () => {
+  withFixtures(({ project, source }) => {
+    const transient = join(source, "temporary");
+    mkdirSync(transient);
+    const leaf = join(transient, "page.css");
+    writeFileSync(leaf, "body { color: #111; }\n");
+    const cache = new Map();
+    const initial = loadDesignSystemForTarget(leaf, { cache });
+    assert.equal(initial?.sourcePath, join(project, "DESIGN.md"));
+    assert.ok(cache.has("dirsig:" + resolve(transient)));
+
+    rmSync(transient, { recursive: true, force: true });
+    assert.doesNotThrow(() => findDesignRoot(transient, { cache }));
+    assert.equal(cache.has("dirsig:" + resolve(transient)), false);
+    assert.equal(cache.has("resolve:" + resolve(transient)), false);
+    assert.strictEqual(loadDesignSystemForTarget(leaf, { cache }), initial);
+
+    mkdirSync(transient);
+    advanceDirectorySignature(transient);
+    writeFileSync(join(transient, "package.json"), "{}\n");
+    assert.equal(loadDesignSystemForTarget(leaf, { cache }), null,
+      "a re-created nested project boundary must not inherit stale policy");
+  });
+});
+
+test("pre-existing fallback directories invalidate memoized roots when DESIGN.md appears", () => {
+  for (const rel of ["docs", ".agents/context"]) {
+    withFixtures(({ project, source }) => {
+      const nested = join(source, "with-fallback");
+      const fallback = join(nested, rel);
+      mkdirSync(fallback, { recursive: true });
+      const page = join(nested, "view.css");
+      writeFileSync(page, ".page { color: #111; }\n");
+      const cache = new Map();
+      const inherited = loadDesignSystemForTarget(page, { cache });
+      assert.equal(inherited?.sourcePath, join(project, "DESIGN.md"));
+      assert.equal(cache.get("resolve:" + resolve(nested))?.dir, resolve(project));
+      // Creating the policy inside an EXISTING fallback directory changes
+      // no metadata of nested/ itself. A parent-only signature is stale.
+      const inner = join(fallback, "DESIGN.md");
+      advanceDirectorySignature(fallback);
+      writeFileSync(inner,
+        '---\ntypography:\n  body:\n    fontFamily: "Fallback Sans"\n---\n');
+      const updated = loadDesignSystemForTarget(page, { cache });
+      assert.equal(updated?.sourcePath, inner,
+        "new " + rel + " policy must override the memoized outer DESIGN.md");
+      assert.notStrictEqual(updated, inherited);
+      // A disappearance must not retain an obsolete parsed contract.
+      fs.unlinkSync(inner);
+      const restored = loadDesignSystemForTarget(page, { cache });
+      assert.equal(restored?.sourcePath, join(project, "DESIGN.md"));
+    });
+  }
+});
+
+test("sibling cache refresh cannot silently revalidate stale descendant resolutions", () => {
+  withFixtures(({ project, source }) => {
+    const olderDir = join(source, "older");
+    const siblingDir = join(source, "sibling");
+    mkdirSync(olderDir);
+    mkdirSync(siblingDir);
+    const older = join(olderDir, "older.css");
+    const sibling = join(siblingDir, "sibling.css");
+    writeFileSync(older, "body { color: red; }\n");
+    writeFileSync(sibling, "body { color: blue; }\n");
+    const cache = new Map();
+    const initial = loadDesignSystemForTarget(older, { cache });
+    assert.equal(initial?.sourcePath, join(project, "DESIGN.md"));
+    const olderKey = "resolve:" + resolve(olderDir);
+    assert.equal(cache.get(olderKey)?.dir, resolve(project));
+
+    advanceDirectorySignature(source);
+    writeFileSync(join(source, "package.json"), "{}\n");
+    const refreshedSibling = loadDesignSystemForTarget(sibling, { cache });
+    assert.equal(refreshedSibling, null,
+      "sibling must detect the new project boundary");
+    const olderAfterSibling = loadDesignSystemForTarget(older, { cache });
+    assert.equal(olderAfterSibling, null,
+      "an ancestor signature refreshed by a sibling must not validate stale older roots");
+    assert.equal(cache.get(olderKey)?.dir, resolve(source));
+
+    fs.unlinkSync(join(source, "package.json"));
+    const recovered = loadDesignSystemForTarget(older, { cache });
+    assert.equal(recovered?.sourcePath, join(project, "DESIGN.md"),
+      "removing the boundary must restore outer policy for old descendants");
+  });
+});
+
+test("without an explicit scan cache, direct root lookup keeps normal semantics", () => {
+  withFixtures(({ project, source }) => {
+    assert.deepEqual(findDesignRoot(source), { dir: project, hasDesign: true });
+    const direct = loadDesignSystemForTarget(join(source, "one.tsx"));
+    assert.equal(direct?.sourcePath, join(project, "DESIGN.md"));
+    assert.deepEqual(findDesignRoot(join(source, "missing")),
+      { dir: project, hasDesign: true });
+  });
+});

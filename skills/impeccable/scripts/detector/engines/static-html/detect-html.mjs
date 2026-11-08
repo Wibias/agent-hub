@@ -124,6 +124,9 @@ async function detectHtml(filePath, options = {}) {
       ruleId: 'import-static-parser',
       target: filePath,
     }, async () => {
+      // Narrow injection hook for a deterministic parser-unavailable regression
+      // test; normal CLI scans always use the vendored dynamic imports.
+      if (options?.parserLoader) return options.parserLoader();
       const [htmlparser2, cssSelect, csstree, domutils] = await Promise.all([
         import('htmlparser2'),
         import('css-select'),
@@ -140,6 +143,9 @@ async function detectHtml(filePath, options = {}) {
       };
     });
   } catch (err) {
+  // The regex fallback is intentionally lossy: selector/cascade/contrast checks
+  // are absent. A DWA scan receipt must never call this completed coverage.
+  options?.onDegraded?.(filePath);
   if (!globalThis.__impeccableStaticHtmlWarned) {
     globalThis.__impeccableStaticHtmlWarned = true;
 
@@ -163,7 +169,7 @@ async function detectHtml(filePath, options = {}) {
     target: filePath,
   }, () => modules.parseDocument(html, { lowerCaseAttributeNames: false, lowerCaseTags: true }));
 
-  const cssText = collectStaticCssText(root, fileDir, profile, filePath, modules);
+  const cssText = collectStaticCssText(root, fileDir, profile, filePath, modules, options?.onDegraded);
   const document = new StaticDocument(root, modules);
   buildStaticStyleMap(root, document, cssText, modules, profile, filePath);
   const window = buildStaticWindow(document);

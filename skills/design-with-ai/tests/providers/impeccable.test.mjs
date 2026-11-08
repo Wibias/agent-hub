@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import { syncBuiltinESMExports } from "node:module";
 import { mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -8,8 +10,17 @@ import { fileURLToPath } from "node:url";
 import { Capability, ProviderStatus } from "../../scripts/providers/contract.mjs";
 import { createProviderRegistry, runProviders } from "../../scripts/providers/registry.mjs";
 import { createImpeccableProvider } from "../../scripts/providers/impeccable.mjs";
+import { sourceScopeProof } from "../../scripts/providers/scope-proof.mjs";
+import { collectStaticCssText } from "../../../impeccable/scripts/detector/engines/static-html/css-cascade.mjs";
 
 const cli = fileURLToPath(new URL("../../scripts/providers/scan.mjs", import.meta.url));
+const vendoredCli = fileURLToPath(new URL("../../../impeccable/scripts/detect.mjs", import.meta.url));
+const validProof = Object.freeze({
+  schemaVersion: 1, candidateFiles: 1, eligibleFiles: 1,
+  scannedFiles: 1, ignoredFiles: 0, degradedFiles: 0, durationMs: 1,
+  configEnabled: true, inlineIgnoresEnabled: true, designSystemEnabled: false,
+});
+const proofLine = (proof = validProof) => "DWA_IMPECCABLE_SCAN_PROOF=" + JSON.stringify(proof) + "\n";
 
 async function fixture(fn) {
   const root = mkdtempSync(join(tmpdir(), "dwa-impeccable-"));
@@ -19,12 +30,69 @@ async function fixture(fn) {
   finally { rmSync(root, { recursive: true, force: true }); }
 }
 
-function result({ stdout = "[]", exitCode = 0 } = {}) {
+function result({ stdout = "[]", exitCode = 0, stderr = proofLine() } = {}) {
   return {
-    stdout, stderr: "", exitCode, error: null,
+    stdout, stderr, exitCode, error: null,
     timedOut: false, outputLimitExceeded: false,
   };
 }
+
+test("unreadable local HTML stylesheet marks source scan degraded", () => {
+  const root = mkdtempSync(join(tmpdir(), "dwa-css-degraded-"));
+  try {
+    const file = join(root, "index.html");
+    const css = join(root, "styles.css");
+    writeFileSync(file, '<link rel="stylesheet" href="styles.css">');
+    mkdirSync(css); // Directory is not a readable stylesheet on Linux/Windows.
+    const modules = {
+      selectAll: (selector) => selector === "link"
+        ? [{ attribs: { rel: "stylesheet", href: "styles.css" } }] : [],
+      domutils: { textContent: () => "" },
+    };
+    const degraded = [];
+    const text = collectStaticCssText(
+      { children: [] }, root, null, file, modules,
+      (source) => degraded.push(source),
+    );
+    assert.equal(text, "");
+    assert.deepEqual(degraded, [file],
+      "a swallowed stylesheet read must degrade the HTML source receipt");
+
+    rmSync(css, { recursive: true });
+    writeFileSync(css, "h1 { color: red; }");
+    degraded.length = 0;
+    const valid = collectStaticCssText(
+      { children: [] }, root, null, file, modules,
+      (source) => degraded.push(source),
+    );
+    assert.equal(valid, "h1 { color: red; }");
+    assert.deepEqual(degraded, [], "valid linked CSS must not report degraded");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("degraded receipt reports both potential HTML coverage failures without leaking paths", async () => {
+  await fixture(async ({ root, target }) => {
+    const privateDetails = "CANARY_DEGRADED_STYLESHEET_PATH_20261107";
+    const provider = createImpeccableProvider({
+      runner: async () => result({
+        stderr: proofLine({ ...validProof, scannedFiles: 0, degradedFiles: 1 }) +
+          "/private/" + privateDetails + "/site.css\n",
+      }),
+    });
+    const report = await provider.inspect({
+      capability: Capability.STATIC_AUDIT, target, route: "/",
+      projectRoot: root,
+    });
+    assert.equal(report.status, ProviderStatus.ERROR);
+    assert.match(report.reason,
+      /HTML parser unavailable or linked local stylesheet unreadable: 1 degraded file/);
+    assert.match(report.reason, /full selector\/cascade checks were not run/);
+    assert.ok(!JSON.stringify(report).includes(privateDetails),
+      "scan stderr and private stylesheet paths must not persist in provider reports");
+  });
+});
 
 test("normalizes primary and advisory Impeccable findings without inventing P0", async () => {
   await fixture(async ({ root, target }) => {
@@ -58,11 +126,63 @@ test("normalizes primary and advisory Impeccable findings without inventing P0",
     assert.equal(report.provenance.implementation, "bundled-js");
     assert.equal(invocation.executable, process.execPath);
     assert.ok(invocation.args.includes("--json"));
+    assert.ok(invocation.args.includes("--dwa-scan-proof"));
+    assert.equal(invocation.timeoutMs, 120_000);
+    assert.equal(report.summary.filesScanned, 1);
+    assert.equal(report.summary.coverageCountVerified, true);
+    assert.equal(report.summary.coverageMethod, "bundled-detector-completed-source-file-count");
     assert.ok(invocation.args.includes(resolve(target)));
     assert.ok(!invocation.args.includes("npx"));
     assert.equal(invocation.cwd, root);
   });
 });
+
+test("Linux literal backslashes retain distinct Impeccable finding identity and source provenance",
+  { skip: process.platform === "win32" ? "backslash is a Windows path separator" : false },
+  async () => {
+    await fixture(async ({ root }) => {
+      const source = join(root, "src");
+      mkdirSync(source);
+      const literal = join(source, "a\\\\b.css");
+      const nestedDirectory = join(source, "a");
+      mkdirSync(nestedDirectory);
+      const nested = join(nestedDirectory, "b.css");
+      writeFileSync(literal, "h1 { color: red; }\n");
+      writeFileSync(nested, "h1 { color: blue; }\n");
+      const manifest = sourceScopeProof({
+        projectRoot: root, target: source, route: "/",
+        includeDetectorContext: false,
+      });
+      assert.deepEqual(manifest.manifest.files.map((f) => f.path).sort(),
+        ["src/a/b.css", "src/a\\\\b.css"].sort(),
+        "manifest must retain the two distinct native Linux path identities");
+      const findings = [literal, nested].map((path) => ({
+        antipattern: "path-identity-test", name: "Path identity",
+        severity: "warning", file: path, line: 1, snippet: "same snippet",
+      }));
+      const provider = createImpeccableProvider({
+        runner: async () => result({
+          stdout: JSON.stringify(findings), exitCode: 2,
+          stderr: proofLine({ ...validProof,
+            candidateFiles: 2, eligibleFiles: 2, scannedFiles: 2 }),
+        }),
+      });
+      const report = await provider.inspect({
+        capability: Capability.STATIC_AUDIT, target: source,
+        route: "/", projectRoot: root,
+      });
+      assert.equal(report.status, ProviderStatus.FINDINGS, report.reason);
+      assert.equal(report.findings.length, 2);
+      assert.deepEqual(report.findings.map((f) => f.location.file).sort(),
+        ["src/a/b.css", "src/a\\\\b.css"].sort());
+      assert.equal(new Set(report.findings.map((f) => f.id)).size, 2,
+        "different real paths must not collapse into one stable finding ID");
+      for (const finding of report.findings) {
+        assert.ok(manifest.manifest.files.some((f) => f.path === finding.location.file));
+        assert.equal(finding.evidence[0].ref, finding.location.file + ":1");
+      }
+    });
+  });
 
 test("stable fingerprints deduplicate identical locations without erasing two findings", async () => {
   await fixture(async ({ root, target }) => {
@@ -105,6 +225,8 @@ test("empty valid detector output is a scoped PASS only", async () => {
     assert.equal(report.status, ProviderStatus.PASS);
     assert.equal(report.summary.requiresRenderedReview, true);
     assert.equal(report.summary.sourceOnly, true);
+    assert.equal(report.summary.filesScanned, 1);
+    assert.equal(report.summary.coverageCountVerified, true);
   });
 });
 
@@ -129,6 +251,143 @@ test("partial, inconsistent and malformed detector results are ERROR", async () 
       });
       assert.equal(out.status, ProviderStatus.ERROR, JSON.stringify(run));
     }
+  });
+});
+
+
+test("incomplete detector exit never persists arbitrary stderr or malformed exit codes", async () => {
+  await fixture(async ({ root, target }) => {
+    const stderr = "Failure at /api/token=CANARY_SCANNER_STDERR_20261107\n" +
+      "FATAL_SCANNER_EXIT https://example.test/?key=CANARY_URL_20261107\n";
+    for (const [exitCode, expected] of [
+      [1, "Impeccable detector did not complete (exit 1)"],
+      ["token=CANARY_BAD_EXIT_20261107",
+        "Impeccable detector did not complete (exit unknown)"],
+    ]) {
+      const provider = createImpeccableProvider({
+        runner: async () => result({ exitCode, stderr }),
+      });
+      const out = await provider.inspect({
+        capability: Capability.STATIC_AUDIT, target, route: "/settings",
+        projectRoot: root,
+      });
+      assert.equal(out.status, ProviderStatus.ERROR);
+      assert.equal(out.reason, expected);
+      const persisted = JSON.stringify(out);
+      assert.ok(!persisted.includes("CANARY_"));
+      assert.ok(!persisted.includes("FATAL_SCANNER_EXIT"));
+      assert.ok(!persisted.includes("example.test"));
+    }
+  });
+});
+
+test("missing, duplicate, contradictory or empty source receipts never PASS", async () => {
+  await fixture(async ({ root, target }) => {
+    const cases = [
+      "",
+      proofLine() + proofLine(),
+      proofLine({ ...validProof, scannedFiles: 0 }),
+      proofLine({ ...validProof, scannedFiles: 0, degradedFiles: 1 }),
+      proofLine({ ...validProof, scannedFiles: 1, degradedFiles: 1 }),
+      proofLine({ ...validProof, candidateFiles: 0 }),
+      proofLine({ ...validProof, eligibleFiles: 0, scannedFiles: 0, ignoredFiles: 1 }),
+      proofLine({ ...validProof, scannedFiles: 3 }),
+      proofLine({ ...validProof, configEnabled: false }),
+      "DWA_IMPECCABLE_SCAN_PROOF={invalid}\n",
+    ];
+    for (const stderr of cases) {
+      const p = createImpeccableProvider({
+        runner: async () => result({ stderr }),
+      });
+      const report = await p.inspect({
+        capability: Capability.STATIC_AUDIT, target, route: "/", projectRoot: root,
+      });
+      assert.equal(report.status, ProviderStatus.ERROR, JSON.stringify({ stderr, report }));
+    }
+  });
+});
+
+test("real vendored scan-proof CLI rejects symlink file and directory targets", async () => {
+  await fixture(({ root, target }) => {
+    const sourceAlias = join(root, "source-alias.tsx");
+    const directoryAlias = join(root, "directory-alias");
+    symlinkSync(target, sourceAlias, "file");
+    symlinkSync(root, directoryAlias, "dir");
+    for (const aliased of [sourceAlias, directoryAlias]) {
+      const scan = spawnSync(process.execPath,
+        [vendoredCli, "--json", "--dwa-scan-proof", aliased],
+        { cwd: root, encoding: "utf8", timeout: 30_000 });
+      assert.equal(scan.status, 1, scan.stderr + scan.stdout);
+      assert.match(scan.stderr, /scan-proof target must not be a symbolic link/);
+      assert.ok(!scan.stderr.includes(aliased),
+        "fail-closed diagnostics must not reveal arbitrary path bytes");
+      assert.ok(!scan.stderr.includes("DWA_IMPECCABLE_SCAN_PROOF="),
+        "a rejected target must not produce a completed scan proof");
+    }
+  });
+});
+
+test("real vendored scanner reports actual eligible and completed files", async () => {
+  await fixture(({ root, target }) => {
+    const second = join(root, "second.tsx");
+    writeFileSync(target, "export const Card = () => <div className=\"rounded-lg border-l-4 animate-bounce\">hello</div>;\n");
+    writeFileSync(second, "export const Clean = () => <main>fine</main>;\n");
+    const run = spawnSync(process.execPath,
+      [vendoredCli, "--json", "--dwa-scan-proof", root],
+      { cwd: root, encoding: "utf8", timeout: 30_000 });
+    assert.equal(run.status, 2, run.stderr);
+    const findings = JSON.parse(run.stdout);
+    assert.ok(findings.some((f) => f.antipattern === "side-tab"));
+    assert.ok(findings.some((f) => f.antipattern === "bounce-easing"));
+    const marker = run.stderr.split(/\r?\n/).find((line) =>
+      line.startsWith("DWA_IMPECCABLE_SCAN_PROOF="));
+    assert.ok(marker, run.stderr);
+    const proof = JSON.parse(marker.split("=").slice(1).join("="));
+    assert.equal(proof.candidateFiles, 2);
+    assert.equal(proof.eligibleFiles, 2);
+    assert.equal(proof.scannedFiles, 2);
+    assert.equal(proof.ignoredFiles, 0);
+    assert.equal(proof.degradedFiles, 0);
+  });
+});
+
+test("inline waivers suppress findings without suppressing file coverage", async () => {
+  await fixture(({ root, target }) => {
+    writeFileSync(target, 'font-family: "Space Grotesk"; /* impeccable-disable-line overused-font: test fixture */\n');
+    // The extension must be CSS for this realistic inline-waiver control.
+    const css = join(root, "style.css");
+    writeFileSync(css, 'font-family: "Space Grotesk"; /* impeccable-disable-line overused-font: test fixture */\n');
+    const scan = (extra = []) => spawnSync(process.execPath,
+      [vendoredCli, "--json", "--dwa-scan-proof", ...extra, css],
+      { cwd: root, encoding: "utf8", timeout: 30_000 });
+    const regular = scan();
+    const raw = scan(["--no-inline-ignores"]);
+    assert.equal(regular.status, 0, regular.stderr);
+    assert.equal(JSON.parse(regular.stdout).length, 0);
+    assert.equal(raw.status, 2, raw.stderr);
+    assert.ok(JSON.parse(raw.stdout).some((f) => f.antipattern === "overused-font"));
+    for (const run of [regular, raw]) {
+      const meta = run.stderr.split(/\r?\n/)
+        .find((line) => line.startsWith("DWA_IMPECCABLE_SCAN_PROOF="));
+      assert.ok(meta, run.stderr);
+      assert.equal(JSON.parse(meta.slice("DWA_IMPECCABLE_SCAN_PROOF=".length)).scannedFiles, 1);
+    }
+  });
+});
+
+test("HTML parser fallback is explicitly degraded, not complete browser-grade evidence", async () => {
+  await fixture(async ({ root }) => {
+    const { detectHtml } = await import(
+      "../../../impeccable/scripts/detector/engines/static-html/detect-html.mjs");
+    const page = join(root, "degraded.html");
+    writeFileSync(page, "<!doctype html><html><body><main>Loaded</main></body></html>\n");
+    const degraded = [];
+    const findings = await detectHtml(page, {
+      parserLoader: async () => { throw new Error("Test-only missing parser modules"); },
+      onDegraded: (file) => degraded.push(file),
+    });
+    assert.equal(Array.isArray(findings), true);
+    assert.deepEqual(degraded, [page]);
   });
 });
 
@@ -158,6 +417,61 @@ test("URL, missing target, symlink and escaped project scope are blocked before 
   });
 });
 
+
+
+test("filesystem preflight errors redact private paths from BLOCKED reports", async () => {
+  await fixture(async ({ root }) => {
+    const canary = "CANARY_PRIVATE_DIRECTORY_20261107";
+    const originalReaddir = fs.readdirSync;
+    let invoked = 0;
+    const provider = createImpeccableProvider({
+      runner: async () => { invoked++; return result(); },
+    });
+    try {
+      fs.readdirSync = (...args) => {
+        if (args[0] === root) {
+          const error = new Error("EACCES: permission denied, scandir '/" + canary + "'");
+          error.code = "EACCES";
+          throw error;
+        }
+        return originalReaddir(...args);
+      };
+      syncBuiltinESMExports();
+      const report = await provider.inspect({
+        capability: Capability.STATIC_AUDIT,
+        target: root, projectRoot: root, route: "/settings",
+      });
+      assert.equal(report.status, ProviderStatus.BLOCKED);
+      assert.equal(report.reason, "Source scope preflight failed");
+      assert.ok(!JSON.stringify(report).includes(canary));
+      assert.equal(invoked, 0, "a failed preflight must not start the detector");
+    } finally {
+      fs.readdirSync = originalReaddir;
+      syncBuiltinESMExports();
+    }
+  });
+});
+
+test("scannable symlink paths never leak into blocked Impeccable evidence", async () => {
+  await fixture(async ({ root, target }) => {
+    const canary = "CANARY_SCANNABLE_SYMLINK_SECRET_20261107";
+    const injectedPath = join(root, canary + ".tsx");
+    symlinkSync(target, injectedPath, "file");
+    let invoked = 0;
+    const provider = createImpeccableProvider({
+      runner: async () => { invoked++; return result(); },
+    });
+    const report = await provider.inspect({
+      capability: Capability.STATIC_AUDIT,
+      target: root, projectRoot: root, route: "/settings",
+    });
+    assert.equal(invoked, 0, "Symlink must be blocked before the detector runs");
+    assert.equal(report.status, ProviderStatus.BLOCKED);
+    assert.equal(report.reason, "Symlinked UI source is outside the trusted scan scope");
+    assert.ok(!JSON.stringify(report).includes(canary));
+    assert.ok(!JSON.stringify(report).includes(injectedPath));
+  });
+});
 
 test("vendored walker extension policy matches the source symlink preflight", async () => {
   const { SCANNABLE_EXTENSIONS, SKIP_DIRS } = await import(

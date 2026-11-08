@@ -9,6 +9,7 @@ import { createImpeccableProvider } from "./impeccable.mjs";
 import { createTasteSkillProvider } from "./taste-skill.mjs";
 import { fuseProviderEvidence } from "./fuse.mjs";
 import { sourceScopeProof, staticRouteForHtml } from "./scope-proof.mjs";
+import { classifySurfaceFindings } from "../surface-relevance.mjs";
 
 const profiles = new Set(["quick", "standard", "deep"]);
 const filled = (s) => typeof s === "string" && s.trim().length > 0;
@@ -113,6 +114,7 @@ export async function runProfileProviders({
     projectRoot: location.projectRoot, target: location.target, route,
     renderedRoot: location.renderedRoot, html: withTaste ? resolve(html) : null,
     intentPath,
+    includeDetectorContext: selection.static.optional.includes("impeccable"),
   });
   const actualRegistry = registry ?? createProviderRegistry([
     createNativeDwaProvider(),
@@ -142,13 +144,51 @@ export async function runProfileProviders({
     projectRoot: location.projectRoot, target: location.target, route,
     renderedRoot: location.renderedRoot, html: withTaste ? resolve(html) : null,
     intentPath,
+    includeDetectorContext: selection.static.optional.includes("impeccable"),
   });
   if (before.summary.sourceSha256 !== after.summary.sourceSha256 ||
       before.observedInputsSha256 !== after.observedInputsSha256) {
     throw new Error("Audited source changed during provider execution; evidence invalid");
   }
-  const reports = [...staticReports, ...renderedReports].map((report) => ({
+  const unscopedReports = [...staticReports, ...renderedReports];
+  const targetRelative = relative(location.projectRoot, location.target).split(sep).join("/");
+  const surfaceFiles = (before.manifest.files ?? [])
+    .map((entry) => (typeof entry === "string" ? entry : entry?.path))
+    .filter((path) => typeof path === "string" && path.length > 0)
+    .filter((path) => path === targetRelative || path.startsWith(targetRelative + "/"));
+  const staticSurfaceReports = unscopedReports.filter((report) => report.capability === Capability.STATIC_AUDIT);
+  const surfaceFindings = staticSurfaceReports.flatMap((report) =>
+    report.findings.map((finding) => ({ ...finding, providerId: report.provider })));
+  const surfaceRelevance = classifySurfaceFindings({
+    projectRoot: location.projectRoot,
+    target: location.target,
+    route,
+    findings: surfaceFindings,
+    files: surfaceFiles.length ? surfaceFiles : null,
+  });
+  if (!withTaste && surfaceRelevance.binding.routeBinding === "static-route-closure") {
+    // The source label is now backed by a static route/import closure.
+    before.summary.routeBinding = "static-route-closure";
+  }
+  const surfaceByKey = new Map(surfaceRelevance.findings.map((finding) =>
+    [finding.providerId + "\0" + finding.id, finding.surface]));
+  const reports = unscopedReports.map((report) => ({
     ...report,
+    surface: report.capability === Capability.STATIC_AUDIT
+      ? {
+        routeBinding: surfaceRelevance.binding.routeBinding,
+        relevance: surfaceRelevance.counts,
+        requiredChecks: surfaceRelevance.plan.requiredChecks.map((check) => ({
+          id: check.id, states: check.states, because: check.because,
+        })),
+      }
+      : { routeBinding: "verified-rendered-route", relevance: null, requiredChecks: [] },
+    findings: report.findings.map((finding) => ({
+      ...finding,
+      surface: report.capability === Capability.STATIC_AUDIT
+        ? surfaceByKey.get(report.provider + "\0" + finding.id) ?? null
+        : null,
+    })),
     auditScope: {
       sourceSha256: before.summary.sourceSha256,
       target: before.summary.target,
@@ -163,6 +203,14 @@ export async function runProfileProviders({
     optional: selection.optional,
     scope: before.summary,
   });
+  const surface = {
+    ...surfaceRelevance.binding,
+    counts: surfaceRelevance.counts,
+    requiredChecks: surfaceRelevance.plan.requiredChecks.map((check) => ({
+      id: check.id, states: check.states, because: check.because,
+    })),
+    limitation: surfaceRelevance.limitation,
+  };
   return {
     schemaVersion: 1,
     kind: "dwa/provider-workflow-evidence",
@@ -171,6 +219,7 @@ export async function runProfileProviders({
     reports,
     fusion,
     scope: before.summary,
+    surface,
     sourceManifest: before.manifest,
     completionEligible: false,
     next: "Run the unchanged DWA rendered verification, evidence receipt, ledger reconciliation and iteration proof.",
