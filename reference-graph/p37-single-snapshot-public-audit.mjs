@@ -68,6 +68,7 @@ export async function auditP37SingleSnapshotPublicParity(input = {}) {
   const {
     fetchImpl = globalThis.fetch,
     supabaseUrl, publishableKey, asOf,
+    serviceKey, accessMode,
     baselineJson, baselineSha256,
     templatesJson, templatesSha256,
     sourceReceiptJson, sourceReceiptSha256,
@@ -102,6 +103,7 @@ export async function auditP37SingleSnapshotPublicParity(input = {}) {
   try {
     p33 = await auditP33PinnedProfileParity({
       supabaseUrl, publishableKey, asOf,
+      serviceKey, accessMode,
       baselineJson, baselineSha256, templatesJson, templatesSha256,
       sourceReceiptJson, sourceReceiptSha256,
       fetchImpl: observedFetch, timeoutMs,

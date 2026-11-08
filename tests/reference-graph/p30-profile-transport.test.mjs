@@ -96,6 +96,57 @@ test('P30 fetches distinct versioned projection read-only with publishable key a
   assert.doesNotMatch(JSON.stringify(result.transport), /sb_publishable_p30-test|legacy_id|search_text/);
 });
 
+test('P30 server mode reads the server view with a service credential', async () => {
+  const calls = [];
+  const result = await fetchP30ProfileCandidateSnapshot(args(rows, {
+    accessMode: 'server',
+    serviceKey: 'sb_secret_p30_server_test',
+    fetchImpl: async (url, options) => {
+      calls.push([url, options]);
+      return withCount(rows);
+    },
+  }));
+  assert.equal(calls.length, 1);
+  assert.equal(new URL(calls[0][0]).pathname,
+    '/rest/v1/reference_graph_profile_candidates_server_p30_v1');
+  assert.deepEqual(calls[0][1].headers, {
+    apikey: 'sb_secret_p30_server_test',
+    Prefer: 'count=exact',
+  });
+  assert.equal(result.transport.candidate_count, rows.length);
+  assert.equal(result.transport.candidate_id_set_sha256, expectedSetHash);
+});
+
+test('P30 server mode adds bearer auth only for a legacy service JWT', async () => {
+  const payload = Buffer.from(JSON.stringify({ role: 'service_role' })).toString('base64url');
+  const legacyServiceJwt = `x.${payload}.y`;
+  const calls = [];
+  await fetchP30ProfileCandidateSnapshot(args(rows, {
+    accessMode: 'server',
+    serviceKey: legacyServiceJwt,
+    fetchImpl: async (url, options) => {
+      calls.push([url, options]);
+      return withCount(rows);
+    },
+  }));
+  assert.equal(calls[0][1].headers.apikey, legacyServiceJwt);
+  assert.equal(calls[0][1].headers.Authorization, `Bearer ${legacyServiceJwt}`);
+});
+
+test('P30 keeps publishable and server credentials separated', async () => {
+  for (const overrides of [
+    { accessMode: 'server', serviceKey: 'sb_publishable_p30-test' },
+    { accessMode: 'publishable', publishableKey: 'sb_secret_p30_server_test' },
+    { accessMode: 'invalid', serviceKey: 'sb_secret_p30_server_test' },
+  ]) {
+    await assert.rejects(
+      fetchP30ProfileCandidateSnapshot(args(rows, overrides)),
+      error => error instanceof P30ProfileTransportError
+        && (error.category === 'unsafe-credential' || error.category === 'invalid-input'),
+    );
+  }
+});
+
 test('P30 requires independently pinned date, as-of clock, set hash and candidate count', async () => {
   for (const overrides of [
     { expectedDate: undefined },
@@ -205,7 +256,10 @@ test('P30 is isolated from live P10/P11 routing and P28/P29 candidate selection'
   const source = readFileSync('reference-graph/p30-profile-transport.mjs', 'utf8');
   const router = readFileSync('reference-graph/p11-runtime-router.mjs', 'utf8');
   assert.doesNotMatch(router, /p30-profile-transport|profile_runtime_projection_p30/i);
-  assert.doesNotMatch(source, /selectRecords|hydrateP8LegacyIds|service.?role|\/rest\/v1\/rpc\/|persistCapture|writeFileSync/);
+  assert.doesNotMatch(source, /selectRecords|hydrateP8LegacyIds|\/rest\/v1\/rpc\/|persistCapture|writeFileSync/);
+  assert.doesNotMatch(source, /SUPABASE_SECRET_KEY|SUPABASE_SERVICE_ROLE_KEY/);
+  assert.match(source, /reference_graph_profile_candidates_server_p30_v1/);
+  assert.match(source, /isServerKey/);
   assert.match(source, /auditP28ProfileCandidateContract/);
   assert.doesNotMatch(readFileSync('reference-graph/schema/009_reference_graph_runtime_projection.sql', 'utf8'), /profile_runtime_projection_p30/);
 });

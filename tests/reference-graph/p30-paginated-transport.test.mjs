@@ -248,6 +248,8 @@ test('P30 must not continue paging after a late JSON body resolves past deadline
 test('P30 does not overfetch or write and keeps read-only P11 isolation', () => {
   const src = readFileSync('reference-graph/p30-profile-transport.mjs', 'utf8');
   const router = readFileSync('reference-graph/p11-runtime-router.mjs', 'utf8');
-  assert.doesNotMatch(src, /method:\s*['\"](?:POST|PATCH|DELETE)['\"]|service_role|writeFileSync|createClient/);
+  assert.doesNotMatch(src, /method:\s*['\"](?:POST|PATCH|DELETE)['\"]|writeFileSync|createClient/);
+  assert.match(src, /reference_graph_profile_candidates_server_p30_v1/);
+  assert.doesNotMatch(src, /SUPABASE_SECRET_KEY|SUPABASE_SERVICE_ROLE_KEY/);
   assert.doesNotMatch(router, /p30-profile-transport/);
 });

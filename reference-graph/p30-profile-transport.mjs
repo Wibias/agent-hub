@@ -1,11 +1,14 @@
 import { auditP28ProfileCandidateContract } from './p28-profile-candidate-contract.mjs';
 
 /**
- * P30 is an opt-in, read-only, unconnected transport prototype for an
- * NOT-YET-DEPLOYED versioned projection. Never import into P11 routing.
- * A successful fetch is not live parity, pattern parity, or authorization.
+ * P30 is an opt-in, read-only, unconnected transport for the versioned
+ * profile projection. Public mode reads the P31 base relation when granted;
+ * server mode reads the service-only full-candidate view. Never import into
+ * P11 routing. A successful fetch is not live parity or authorization.
  */
 const PROJECTION = 'reference_graph_profile_runtime_projection_p30_v1';
+const SERVER_PROJECTION = 'reference_graph_profile_candidates_server_p30_v1';
+const ACCESS_MODES = Object.freeze(['publishable', 'server']);
 const VERSION = 'reference-graph.profile-runtime.p30.v1';
 const CANDIDATE_KEYS = Object.freeze([
   'asset_id', 'legacy_id', 'search_text', 'product', 'surface_family',
@@ -80,9 +83,25 @@ function isPublishableKey(key) {
   }
 }
 
+function isServerKey(key) {
+  if (typeof key !== 'string' || !key.trim()) return false;
+  if (/^sb_secret_[a-zA-Z0-9_-]+$/.test(key)) return true;
+  const parts = key.split('.');
+  if (parts.length !== 3) return false;
+  try {
+    const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'));
+    return payload && typeof payload === 'object'
+      && !Array.isArray(payload) && payload.role === 'service_role';
+  } catch {
+    return false;
+  }
+}
+
 function requireInput({
   supabaseUrl,
   publishableKey,
+  serviceKey,
+  accessMode = 'publishable',
   expectedDate,
   asOf,
   expectedCandidateCount,
@@ -97,7 +116,11 @@ function requireInput({
     || base.username || base.password
     || base.pathname !== '/'
     || base.search || base.hash) reject('invalid-input');
-  if (!isPublishableKey(publishableKey)) reject('unsafe-credential');
+  if (!ACCESS_MODES.includes(accessMode)) reject('invalid-input');
+  const credential = accessMode === 'server' ? serviceKey : publishableKey;
+  if (accessMode === 'server' ? !isServerKey(credential) : !isPublishableKey(credential)) {
+    reject('unsafe-credential');
+  }
   if (!validDate(expectedDate) || !validTimestamp(asOf)
     || asOf.slice(0, 10) !== expectedDate) reject('invalid-input');
   if (!Number.isInteger(expectedCandidateCount)
@@ -106,7 +129,12 @@ function requireInput({
     || typeof fetchImpl !== 'function'
     || !Number.isInteger(timeoutMs)
     || timeoutMs < 1 || timeoutMs > 10000) reject('invalid-input');
-  return base;
+  return {
+    base,
+    accessMode,
+    credential,
+    relation: accessMode === 'server' ? SERVER_PROJECTION : PROJECTION,
+  };
 }
 
 function normalizeRows(payload, { expectedDate, asOf, expectedCandidateCount, expectedCandidateIdSetSha256 }) {
@@ -178,6 +206,8 @@ function normalizeRows(payload, { expectedDate, asOf, expectedCandidateCount, ex
 export async function fetchP30ProfileCandidateSnapshot({
   supabaseUrl,
   publishableKey,
+  serviceKey,
+  accessMode = 'publishable',
   expectedDate,
   asOf,
   expectedCandidateCount,
@@ -185,17 +215,20 @@ export async function fetchP30ProfileCandidateSnapshot({
   fetchImpl = globalThis.fetch,
   timeoutMs = 1500,
 } = {}) {
-  const base = requireInput({
-    supabaseUrl, publishableKey, expectedDate, asOf,
+  const input = requireInput({
+    supabaseUrl, publishableKey, serviceKey, accessMode, expectedDate, asOf,
     expectedCandidateCount, expectedCandidateIdSetSha256,
     fetchImpl, timeoutMs,
   });
-  const url = new URL('rest/v1/' + PROJECTION, base);
+  const url = new URL('rest/v1/' + input.relation, input.base);
   url.searchParams.set('select', ROW_KEYS.join(','));
   url.searchParams.set('snapshot_date', 'eq.' + expectedDate);
   url.searchParams.set('order', 'asset_id.asc');
 
-  const key = publishableKey;
+  const headers = { apikey: input.credential, Prefer: 'count=exact' };
+  if (input.accessMode === 'server' && !input.credential.startsWith('sb_secret_')) {
+    headers.Authorization = `Bearer ${input.credential}`;
+  }
   const controller = new AbortController();
   let timer;
   const deadline = new Promise((_resolve, failure) => {
@@ -209,7 +242,7 @@ export async function fetchP30ProfileCandidateSnapshot({
     let previousAssetId = null;
     // Total work is bounded by independently pinned count <= 5000 and the
     // single global deadline. Each page has the same stable asset ordering,
-    // snapshot date, requested fields, method and publishable-only headers.
+    // snapshot date, requested fields, method and credential-specific headers.
     while (pages.length < expectedCandidateCount) {
       // The deadline may already have expired while a prior page ignored
       // AbortSignal. Never issue another network request after timeout.
@@ -224,9 +257,7 @@ export async function fetchP30ProfileCandidateSnapshot({
       try {
         response = await fetchImpl(pageUrl.toString(), {
           method: 'GET',
-          // PostgREST returns the exact total in Content-Range. This detects
-          // extra rows even when the server caps the response at pageSize.
-          headers: { apikey: key, Prefer: 'count=exact' },
+          headers,
           signal: controller.signal,
         });
       } catch {

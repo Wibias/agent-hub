@@ -118,6 +118,39 @@ test('P33 composes strict P30 response and independently pinned P27 to compare 4
   assert.doesNotMatch(JSON.stringify(result), /search_text|ref-p7-a|sb_publishable_p33_disposable|sourceReceiptJson/);
 });
 
+test('P33 server mode reads the service-only view without a publishable credential', async () => {
+  const payload = rows();
+  const calls = [];
+  const result = await auditP33PinnedProfileParity({
+    ...fixture(),
+    publishableKey: undefined,
+    serviceKey: 'sb_secret_p33_server_test',
+    fetchImpl: async (url, options) => {
+      calls.push([url, options]);
+      return {
+        ok: true,
+        status: 200,
+        headers: {
+          get(name) {
+            return name.toLowerCase() === 'content-range'
+              ? `0-${payload.length - 1}/${payload.length}`
+              : null;
+          },
+        },
+        async json() { return payload; },
+      };
+    },
+  });
+  assert.equal(new URL(calls[0][0]).pathname,
+    '/rest/v1/reference_graph_profile_candidates_server_p30_v1');
+  assert.deepEqual(calls[0][1].headers, {
+    apikey: 'sb_secret_p33_server_test',
+    Prefer: 'count=exact',
+  });
+  assert.equal(result.transport_contract_verified, true);
+  assert.equal(result.exact_order_cases, 48);
+});
+
 test('P33 full candidate digest is canonical under row property-key reordering', async () => {
   const original = await auditP33PinnedProfileParity(fixture());
   const reordered = rows(row => Object.fromEntries(Object.entries(row).reverse()));

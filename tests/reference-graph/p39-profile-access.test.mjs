@@ -1,0 +1,95 @@
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import test from 'node:test';
+
+const read = path => readFileSync(path, 'utf8');
+const sql = () => read('reference-graph/schema/016_reference_graph_profile_access_p39.sql');
+const doc = () => read('reference-graph/P39.md');
+const workflow = () => read('.github/workflows/verify-reference-graph.yml');
+const p30 = () => read('reference-graph/p30-profile-transport.mjs');
+const p33 = () => read('reference-graph/p33-pinned-profile-parity.mjs');
+const p37 = () => read('reference-graph/p37-single-snapshot-public-audit.mjs');
+
+test('P39 closes direct base-table access for every runtime role', () => {
+  const src = sql();
+  assert.match(src, /revoke all on table public\.reference_graph_profile_runtime_projection_p30_v1\s+from public, anon, authenticated, service_role/i);
+  assert.doesNotMatch(src, /grant select on table public\.reference_graph_profile_runtime_projection_p30_v1\s+to (?:anon|authenticated)/i);
+  assert.match(src, /to_regclass\('public\.reference_graph_profile_runtime_projection_p30_v1'\)/i);
+  assert.match(src, /to_regprocedure\('public\.reference_graph_refresh_profile_runtime_projection_p31\(\)'\)/i);
+});
+
+test('P39 server view contains the full candidate surface and is service-only', () => {
+  const src = sql();
+  for (const field of [
+    'asset_id', 'legacy_id', 'search_text', 'product', 'surface_family',
+    'platform', 'page_role', 'motion', 'source_family', 'topology',
+    'access_status', 'evidence_class', 'ordinary_or_failure_prone',
+    'multi_state_flow', 'tags', 'primary_stratum', 'projection_version',
+    'snapshot_date', 'refreshed_at',
+  ]) {
+    assert.ok(src.includes(field), 'server view missing ' + field);
+  }
+  assert.match(src, /create view public\.reference_graph_profile_candidates_server_p30_v1/i);
+  assert.match(src, /security_barrier = true/i);
+  assert.match(src, /grant select on public\.reference_graph_profile_candidates_server_p30_v1\s+to service_role/i);
+  assert.match(src, /revoke all on public\.reference_graph_profile_candidates_server_p30_v1\s+from public, anon, authenticated, service_role/i);
+  assert.match(src, /snapshot_date = \(statement_timestamp\(\) at time zone 'UTC'\)::date/i);
+});
+
+test('P39 public view exposes pseudonymous, non-sensitive metadata only', () => {
+  const src = sql();
+  assert.match(src, /create view public\.reference_graph_profile_public_p30_v1/i);
+  assert.match(src, /encode\(sha256\(convert_to\(legacy_id, 'UTF8'\)\), 'hex'\) as public_id/i);
+  for (const forbidden of ['search_text', 'tags', 'asset_id', 'source_family', 'topology']) {
+    assert.ok(!new RegExp(`\\b${forbidden}\\b`).test(src.split('create view public.reference_graph_profile_public_p30_v1')[1]
+      .split('comment on view')[0]), 'public view leaked ' + forbidden);
+  }
+  assert.match(src.split('create view public.reference_graph_profile_public_p30_v1')[1]
+    .split('comment on view')[0], /encode\(sha256\(convert_to\(legacy_id/i);
+  assert.match(src, /grant select on public\.reference_graph_profile_public_p30_v1\s+to anon, authenticated/i);
+  assert.match(src, /revoke all on public\.reference_graph_profile_public_p30_v1\s+from public, anon, authenticated, service_role/i);
+});
+
+test('P39 does not reapply P31/P38 or touch Quick/P10 cron state', () => {
+  const src = sql();
+  assert.doesNotMatch(src, /cron\.schedule|reference_graph_quick_runtime_projection_p10|reference_graph_refresh_quick_runtime_projection_p10/i);
+  assert.doesNotMatch(src, /create table public\.reference_graph_profile_runtime_projection_p30_v1/i);
+  assert.match(doc(), /already installed/i);
+  assert.match(doc(), /Rollback/i);
+  assert.match(doc(), /grant select on public\.reference_graph_profile_runtime_projection_p30_v1/i);
+  assert.match(doc(), /break-glass/i);
+});
+
+test('P39 server transport and parity callers are wired without public credentials', () => {
+  assert.match(p30(), /accessMode = 'publishable'|accessMode = 'server'/);
+  assert.match(p30(), /SERVER_PROJECTION/);
+  assert.match(p30(), /Prefer: 'count=exact'/);
+  assert.match(p33(), /serviceKey/);
+  assert.match(p33(), /accessMode/);
+  assert.match(p37(), /serviceKey/);
+  assert.match(p37(), /accessMode/);
+  assert.doesNotMatch(p30(), /SUPABASE_SECRET_KEY|SUPABASE_SERVICE_ROLE_KEY/);
+});
+
+test('P39 CI applies the additive access migration and runs the negative access smoke', () => {
+  const src = workflow();
+  assert.match(src, /016_reference_graph_profile_access_p39\.sql/);
+  assert.match(src, /p39-profile-access-smoke\.sql/);
+  const smoke = read('tests/reference-graph/p39-profile-access-smoke.sql');
+  assert.match(smoke, /set role anon/i);
+  assert.match(smoke, /set role authenticated/i);
+  assert.match(smoke, /set role service_role/i);
+  assert.match(smoke, /insufficient_privilege/i);
+  assert.match(smoke, /public_id/i);
+  assert.match(smoke, /search_text/i);
+});
+
+test('P39 P38 monitor is fixture-only, read-only and non-activating', () => {
+  const monitor = read('reference-graph/p39-p38-monitor.mjs');
+  const cli = read('reference-graph/cli/p39-p38-monitor.mjs');
+  assert.doesNotMatch(monitor + cli, /fetch\(|Supabase|SUPABASE|cron\.schedule|apply_migration|execute_sql/i);
+  assert.match(monitor, /auto_remediation: false/);
+  assert.match(monitor, /activation_performed: false/);
+  assert.match(cli, /evaluateP38Health/);
+  assert.match(cli, /planP38Alerts/);
+});

@@ -1148,3 +1148,16 @@ jobs:
           psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 \
             -c "update public.reference_graph_profile_runtime_projection_p30_v1 set snapshot_date = (statement_timestamp() at time zone 'UTC')::date - 1 where true;"
           node tests/reference-graph/p32-postgrest-integration.mjs stale
+
+      - name: Verify P39 profile access hardening
+        env:
+          PGPASSWORD: postgres
+        run: |
+          set -euo pipefail
+          # Additive access migration only; never reapply 014/015 here.
+          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            -c 'select public.reference_graph_refresh_profile_runtime_projection_p31();' >/dev/null
+          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            -f reference-graph/schema/016_reference_graph_profile_access_p39.sql
+          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            -f tests/reference-graph/p39-profile-access-smoke.sql

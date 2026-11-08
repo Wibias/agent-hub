@@ -118,6 +118,8 @@ function requireBoundTarget(url) {
 export async function auditP33PinnedProfileParity({
   supabaseUrl,
   publishableKey,
+  serviceKey,
+  accessMode,
   asOf,
   baselineJson,
   baselineSha256,
@@ -129,6 +131,7 @@ export async function auditP33PinnedProfileParity({
   timeoutMs = 1500,
 } = {}) {
   requireBoundTarget(supabaseUrl);
+  const resolvedAccessMode = accessMode ?? (serviceKey ? 'server' : 'publishable');
 
   // Byte pins and basic baseline shape are verified BEFORE network access.
   const baseline = verifyPinnedJson(baselineJson, baselineSha256, 2_000_000, 'baseline-pin');
@@ -153,6 +156,8 @@ export async function auditP33PinnedProfileParity({
     remote = await fetchP30ProfileCandidateSnapshot({
       supabaseUrl,
       publishableKey,
+      serviceKey,
+      accessMode: resolvedAccessMode,
       expectedDate: receipt.snapshot_date,
       asOf,
       expectedCandidateCount: receipt.expected_candidate_count,
