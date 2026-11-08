@@ -9,9 +9,9 @@ installation, release, or merge was changed.
 - Route: `/settings/interface`.
 - Workflow: `audit-surface standard`.
 - Baseline: provider reports and manual review from the earlier audit run under
-  `C:\Users\ws\AppData\Local\Temp\dwa-rillmux-e2e-20261108`.
+  `<TEMP>/dwa-rillmux-e2e-20261108`.
 - After: same product commit and route, provider reports plus a 1280x880 rendered
-  probe under `C:\Users\ws\AppData\Local\Temp\dwa-rillmux-after-20261108`.
+  probe under `<TEMP>/dwa-rillmux-after-20261108`.
 - Lane: the after probe is the web/Vite render, not a new native launch. The
   measured checkbox and tab values match the earlier native WebView2 evidence.
 
@@ -104,14 +104,14 @@ files are unchanged.
 
 ## Artifacts
 
-After-run directory: `C:\Users\ws\AppData\Local\Temp\dwa-rillmux-after-20261108`
+After-run directory: `<TEMP>/dwa-rillmux-after-20261108`
 
 - `quality-audit-summary.json`
 - `surface-probe.json`
 - `surface-a11y-gate.json`
 - `surface-relevance-with-probe.json`
 
-Baseline directory: `C:\Users\ws\AppData\Local\Temp\dwa-rillmux-e2e-20261108`
+Baseline directory: `<TEMP>/dwa-rillmux-e2e-20261108`
 
 - `DESIGN-AUDIT-REPORT.md`
 - `provider/native-dwa.json`
