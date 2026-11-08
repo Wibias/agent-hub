@@ -62,7 +62,8 @@ Do not modify either existing task. The prepared task is separate:
 2. Store the optional webhook URL through DPAPI:
 
 ```powershell
-& "D:\codex-worktrees\reference-graph-stability\.agents\reference-graph\ops\set-p39-alert-webhook.ps1"
+$RepoRoot = (Resolve-Path '.').Path
+& (Join-Path $RepoRoot 'reference-graph\ops\set-p39-alert-webhook.ps1')
 ```
 
 3. Dry-run the public monitor in a trusted local shell. This makes no state or
@@ -86,7 +87,8 @@ try {
    one local five-minute task and does not change Supabase cron:
 
 ```powershell
-& "D:\codex-worktrees\reference-graph-stability\.agents\reference-graph\ops\register-p39-p38-monitor.ps1" `
+$RepoRoot = (Resolve-Path '.').Path
+& (Join-Path $RepoRoot 'reference-graph\ops\register-p39-p38-monitor.ps1') `
   -Apply `
   -ExpectedBranch "codex/p39-profile-access-monitoring-20261108" `
   -ExpectedHead "0fb1e28267f5ae7e4e99bcd7d864e2e8d93d8f04"

@@ -1,7 +1,7 @@
 #requires -Version 7.0
 param(
     [switch]$Apply,
-    [string]$RepoPath = 'D:\codex-worktrees\reference-graph-stability\.agents',
+    [string]$RepoPath = '',
     [string]$ExpectedBranch = 'codex/p39-profile-access-monitoring-20261108',
     [string]$ExpectedHead = '0fb1e28267f5ae7e4e99bcd7d864e2e8d93d8f04',
     [string]$RunnerPath = (Join-Path $env:LOCALAPPDATA 'agent-hub\reference-graph\p39-p38-monitor-runner.ps1'),
@@ -13,6 +13,9 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+if ([string]::IsNullOrWhiteSpace($RepoPath)) {
+    $RepoPath = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
+}
 $taskName = 'AgentHub Reference Graph P38 Monitor'
 $pwsh = (Get-Command pwsh.exe -ErrorAction Stop).Source
 $runnerSource = Join-Path $RepoPath 'reference-graph\ops\p39-p38-monitor-runner.ps1'

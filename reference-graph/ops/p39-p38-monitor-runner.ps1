@@ -1,6 +1,6 @@
 #requires -Version 7.0
 param(
-    [string]$RepoPath = 'D:\codex-worktrees\reference-graph-stability\.agents',
+    [string]$RepoPath = '',
     [string]$ExpectedBranch = 'codex/p39-profile-access-monitoring-20261108',
     [string]$ExpectedHead = '0fb1e28267f5ae7e4e99bcd7d864e2e8d93d8f04',
     [string]$ConfigPath = (Join-Path $env:LOCALAPPDATA 'agent-hub\reference-graph\p19-soak-hourly-config.json'),
@@ -13,6 +13,7 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 $exitCode = 4
+if ([string]::IsNullOrWhiteSpace($RepoPath)) { throw 'RepoPath is required' }
 
 function Write-RunLog([string]$Status, [int]$Code, $Output = $null) {
     New-Item -ItemType Directory -Force -Path (Split-Path $RunLogPath) | Out-Null
