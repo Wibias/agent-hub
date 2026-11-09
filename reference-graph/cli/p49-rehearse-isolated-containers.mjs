@@ -14,6 +14,10 @@ import { join, resolve } from 'node:path';
 import { createP47DurableLabRevocation } from '../p47-durable-lab-revocation.mjs';
 
 const IMAGE = 'node:24-alpine'; // CI-only fixture image, not a production image
+// Preserve private 0700/0600 fixture access without giving containers DAC override.
+const CONTAINER_USER = Number.isInteger(process.getuid?.())
+  && Number.isInteger(process.getgid?.())
+  ? process.getuid()+':'+process.getgid() : null;
 const LAB = 'p49-isolated-container-rehearsal';
 const FIXED = new Date('2026-11-09T19:10:02.000Z');
 const SCOPE = Object.freeze({
@@ -68,7 +72,7 @@ function docker(args,timeout=30000) {
 function workerArgs({name,network,checkout,root,phase='once',other=false}) {
   return [
     'run','--rm','--name',name,'--network',network,
-    '--read-only','--cap-drop=ALL',
+    '--read-only','--user',CONTAINER_USER,'--cap-drop=ALL',
     '--security-opt','no-new-privileges:true',
     '--memory','192m','--pids-limit','96',
     '-e','P49_DOCKER_REHEARSAL=1',
@@ -156,7 +160,8 @@ function startPending(args) {
  */
 export async function runP49IsolatedContainers(argv=process.argv.slice(2)) {
   if(argv.length!==1 || argv[0]!=='--isolated-test'
-    || process.env.P49_ALLOW_DOCKER_REHEARSAL!=='1') {
+    || process.env.P49_ALLOW_DOCKER_REHEARSAL!=='1'
+    || !CONTAINER_USER) {
     throw Error('P49 Docker rehearsal requires explicit isolated-test opt-in');
   }
   const checkout=resolve(process.cwd());
@@ -212,7 +217,7 @@ export async function runP49IsolatedContainers(argv=process.argv.slice(2)) {
     docker([
       'run','-d','--name',serverName,
       '--network',network,'--network-alias','p49-coordinator.lab',
-      '--read-only','--cap-drop=ALL',
+      '--read-only','--user',CONTAINER_USER,'--cap-drop=ALL',
       '--security-opt','no-new-privileges:true',
       '--memory','192m','--pids-limit','96',
       '-e','P49_DOCKER_REHEARSAL=1',
