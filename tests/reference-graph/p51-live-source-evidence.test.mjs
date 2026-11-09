@@ -63,3 +63,19 @@ test('P51 fingerprint SQL is bounded to SELECT and returns aggregates, not candi
   assert.equal((cleaned.match(/;/g)||[]).length,1);
   assert.doesNotMatch(cleaned,/\b(INSERT|UPDATE|DELETE|DROP|ALTER|CREATE|GRANT|REVOKE|TRUNCATE|COPY|CALL)\b/i);
 });
+
+test('P51 historical job execution is directly corroborated, but bytes/receipt remain unavailable',()=>{
+  const h=evidence.cron_history;
+  assert.equal(h.jobs.length,2);
+  assert.deepEqual(h.jobs.map(x=>[x.jobid,x.runs,x.succeeded,x.not_succeeded]),[
+    [1,2,2,0],[2,24,24,0],
+  ]);
+  assert.equal(h.historical_p31_2026_11_08_02_05.status,'succeeded');
+  assert.equal(h.historical_p31_2026_11_08_02_05.started_at_utc,
+    '2026-11-08T02:05:00.173826Z');
+  assert.equal(h.current_p10_refresh_job.status,'succeeded');
+  assert.equal(h.current_p31_refresh_job.status,'succeeded');
+  assert.equal(h.original_p31_signed_receipt_recovered,false);
+  assert.equal(h.historical_written_row_bytes_attested,false);
+  assert.equal(h.scheduler_job_status_independently_signed,false);
+});
