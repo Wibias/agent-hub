@@ -73,7 +73,13 @@ export async function observeP61ProtectedSnapshot({
       || options.headers?.apikey !== serviceKey
       || options.headers?.Authorization !== undefined) blocked();
     httpRequests++;
-    return fetchImpl(url, options);
+    // Never forward the privileged custom apikey header across an HTTP
+    // redirect. Native fetch follows redirects by default, and a custom
+    // header is not guaranteed to be stripped on a cross-origin redirect.
+    return fetchImpl(url, {
+      ...options, redirect: 'error', cache: 'no-store',
+      credentials: 'omit', referrerPolicy: 'no-referrer',
+    });
   };
 
   let remote;
