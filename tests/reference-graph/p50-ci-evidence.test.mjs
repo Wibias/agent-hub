@@ -121,7 +121,7 @@ test('P50 privileged and unprivileged workflow actions use exact approved commit
     'actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093',
     'actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6',
   ].sort();
-  const used=[...workflow.matchAll(/^\s*-\s+uses:\s+([^\s#]+)/gm)].map(match=>match[1]).sort();
+  const used=[...workflow.matchAll(/^\s*(?:-\s*)?uses:\s+([^\s#]+)/gm)].map(match=>match[1]).sort();
   assert.deepEqual(used,expected);
   assert.ok(used.every(action=>/^actions\/[a-z-]+@[a-f0-9]{40}$/.test(action)));
 });
