@@ -1055,3 +1055,111 @@ jobs:
             echo "authenticated unexpectedly executed P10 refresh" >&2
             exit 1
           fi
+
+      - name: Smoke-test P31 proposed profile projection in disposable Postgres
+        env:
+          PGPASSWORD: postgres
+        run: |
+          # This is local GitHub Actions Postgres, never a linked Supabase project.
+          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f reference-graph/schema/014_reference_graph_profile_projection_p31.sql
+          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f tests/reference-graph/p31-profile-projection-smoke.sql
+
+          if psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            -c "set role anon; select public.reference_graph_refresh_profile_runtime_projection_p31();"; then
+            echo "anon unexpectedly executed P31 privileged refresh" >&2
+            exit 1
+          fi
+          if psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            -c "set role authenticated; select public.reference_graph_refresh_profile_runtime_projection_p31();"; then
+            echo "authenticated unexpectedly executed P31 privileged refresh" >&2
+            exit 1
+          fi
+          if psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            -c "set role anon; insert into public.reference_graph_profile_runtime_projection_p30_v1(asset_id,legacy_id,search_text,ordinary_or_failure_prone,multi_state_flow,tags,primary_stratum,projection_version,snapshot_date,refreshed_at) values ('a0000000-0000-5000-8000-000000000199','forbidden','x',false,false,'[]','direct-domain','reference-graph.profile-runtime.p30.v1',current_date,now());"; then
+            echo "anon unexpectedly inserted into P31 projection" >&2
+            exit 1
+          fi
+          if psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            -c "set role authenticated; update public.reference_graph_profile_runtime_projection_p30_v1 set search_text='forbidden';"; then
+            echo "authenticated unexpectedly updated P31 projection" >&2
+            exit 1
+          fi
+          if psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            -c "set role anon; delete from public.reference_graph_profile_runtime_projection_p30_v1;"; then
+            echo "anon unexpectedly deleted from P31 projection" >&2
+            exit 1
+          fi
+
+      - name: Smoke-test P32 disposable PostgREST roundtrip and default-off transport
+        env:
+          PGPASSWORD: postgres
+          POSTGREST_LOCAL_URL: http://127.0.0.1:3212/
+        run: |
+          set -euo pipefail
+          # Never connect this test to a real Supabase target. The PostgreSQL
+          # service is disposable and contains synthetic CI fixtures only.
+          export P32_SOURCE_RECEIPT="$RUNNER_TEMP/p32-source-receipt.json"
+          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            -f tests/reference-graph/p32-source-negative-smoke.sql
+
+          container_id=$(docker run -d --network host \
+            -e PGRST_DB_URI='postgres://postgres:postgres@127.0.0.1:5432/postgres' \
+            -e PGRST_DB_SCHEMAS=public \
+            -e PGRST_DB_ANON_ROLE=anon \
+            -e PGRST_SERVER_PORT=3212 \
+            -e PGRST_DB_CHANNEL_ENABLED=false \
+            postgrest/postgrest:v16.4)
+          trap 'docker rm -f "$container_id" >/dev/null 2>&1 || true' EXIT
+
+          ready=0
+          for i in $(seq 1 40); do
+            status=$(curl --max-time 2 -sS -o /dev/null -w '%{http_code}' \
+              "${POSTGREST_LOCAL_URL}reference_graph_profile_runtime_projection_p30_v1?select=asset_id&limit=1" || true)
+            if [ "$status" = "200" ] || [ "$status" = "206" ]; then ready=1; break; fi
+            sleep 1
+          done
+          if [ "$ready" -ne 1 ]; then
+            echo 'P32 disposable PostgREST failed to serve the read-only projection' >&2
+            echo "P32 last HTTP status: $status" >&2
+            curl --max-time 3 -sS \
+              "${POSTGREST_LOCAL_URL}reference_graph_profile_runtime_projection_p30_v1?select=asset_id&limit=1" \
+              | node -e "let s='';process.stdin.on('data',v=>s+=v).on('end',()=>{try{let x=JSON.parse(s);console.error('P32 PostgREST error code:',typeof x.code==='string'?x.code:'none')}catch{console.error('P32 returned non-JSON')}})" || true
+            docker inspect --format 'PostgREST state: {{.State.Status}}, exit: {{.State.ExitCode}}' "$container_id" >&2 || true
+            docker logs --tail 60 "$container_id" 2>&1 \
+              | sed -E 's#postgres://[^[:space:]]+#postgres://[redacted]#g' >&2 || true
+            exit 1
+          fi
+
+          # P31 receipt is independently read from the CI SQL source side, not
+          # copied from the public HTTP response. Store only in runner temp.
+          psql -h localhost -U postgres -d postgres -tA -v ON_ERROR_STOP=1 \
+            -c 'select public.reference_graph_refresh_profile_runtime_projection_p31();' \
+            > "$P32_SOURCE_RECEIPT"
+
+          node tests/reference-graph/p32-postgrest-integration.mjs healthy
+
+          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            -c "update public.reference_graph_profile_runtime_projection_p30_v1 set refreshed_at = statement_timestamp() - interval '5 hours' where true;"
+          node tests/reference-graph/p32-postgrest-integration.mjs expired
+
+          psql -h localhost -U postgres -d postgres -tA -v ON_ERROR_STOP=1 \
+            -c 'select public.reference_graph_refresh_profile_runtime_projection_p31();' \
+            > "$P32_SOURCE_RECEIPT"
+          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            -c "update public.reference_graph_profile_runtime_projection_p30_v1 set snapshot_date = (statement_timestamp() at time zone 'UTC')::date - 1 where true;"
+          node tests/reference-graph/p32-postgrest-integration.mjs stale
+
+      - name: Verify P39 profile access hardening
+        env:
+          PGPASSWORD: postgres
+        run: |
+          set -euo pipefail
+          # Additive access migration only; never reapply 014/015 here.
+          # This P39-only smoke mirrors Supabase service_role BYPASSRLS and
+          # runs after all earlier CI tests.
+          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            -c 'select public.reference_graph_refresh_profile_runtime_projection_p31();' >/dev/null
+          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            -f reference-graph/schema/016_reference_graph_profile_access_p39.sql
+          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            -f tests/reference-graph/p39-profile-access-smoke.sql

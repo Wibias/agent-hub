@@ -1,0 +1,89 @@
+{
+  "schema_version": "reference-graph.p35-pr-lock.v1",
+  "repository": "Wibias/agent-hub",
+  "target": {
+    "purpose": "agent-hub-reference-graph",
+    "project_ref": "vrznfnxzlxaavpqbzbzd",
+    "project_name": "agent-hub-reference-graph",
+    "region": "eu-central-1"
+  },
+  "expected_ci_workflow_names": [
+    "Memory Graph D11 Read-only Operations",
+    "Memory Graph D6 diagnostics",
+    "Memory Graph D7 validation",
+    "Memory Graph D8 Evidence Coverage Audit",
+    "Memory Graph D9 Explicit Repository Capture",
+    "Reference graph P16 governance",
+    "Reference graph P17 governance",
+    "Reference graph P18 governance",
+    "Reference graph P19 governance",
+    "Reference graph P20 governance",
+    "Reference graph P21 governance",
+    "Reference graph governance",
+    "Release governance"
+  ],
+  "independent_release_prs": [
+    {
+      "number": 223,
+      "head_sha": "3d4527622320384eaf4e9a25c6d123b5d9fb7c9b",
+      "base_branch": "main",
+      "base_sha": "313c5504aee23569d4ce3acab78cfffb9fa60e53"
+    },
+    {
+      "number": 225,
+      "head_sha": "f1af6b8a95d35c61b2786fcdc5564dba845666a6",
+      "base_branch": "main",
+      "base_sha": "313c5504aee23569d4ce3acab78cfffb9fa60e53"
+    }
+  ],
+  "stacked_prs": [
+    {
+      "number": 226,
+      "head_sha": "88754c4405582825dcddf587d08d18c059919590",
+      "base_branch": "main",
+      "base_sha": "313c5504aee23569d4ce3acab78cfffb9fa60e53"
+    },
+    {
+      "number": 227,
+      "head_sha": "0d49898ea50f6ad87f3c637a75e8d8229d4da397",
+      "base_branch": "feat/reference-graph-p27-standard-deep-baseline",
+      "base_sha": "88754c4405582825dcddf587d08d18c059919590"
+    },
+    {
+      "number": 228,
+      "head_sha": "f555b4561e9a2111286d4680905e0c735a75b5af",
+      "base_branch": "feat/reference-graph-p28-profile-candidate-contract",
+      "base_sha": "0d49898ea50f6ad87f3c637a75e8d8229d4da397"
+    },
+    {
+      "number": 229,
+      "head_sha": "ce9967962cfb1e5e985ac9e1d936aa10aef78da7",
+      "base_branch": "feat/reference-graph-p29-standard-deep-offline-parity",
+      "base_sha": "f555b4561e9a2111286d4680905e0c735a75b5af"
+    },
+    {
+      "number": 230,
+      "head_sha": "c0fb0e90886b787bacdcabf597e5f0f2f3430533",
+      "base_branch": "feat/reference-graph-p30-profile-transport-contract",
+      "base_sha": "ce9967962cfb1e5e985ac9e1d936aa10aef78da7"
+    },
+    {
+      "number": 231,
+      "head_sha": "27eddc6dc6b44b893a31a0b699de71b3f820445c",
+      "base_branch": "feat/reference-graph-p31-profile-projection",
+      "base_sha": "c0fb0e90886b787bacdcabf597e5f0f2f3430533"
+    },
+    {
+      "number": 232,
+      "head_sha": "f1134a1483d8320a31e22bf35b560406d8b20f25",
+      "base_branch": "feat/reference-graph-p32-postgrest-contract",
+      "base_sha": "27eddc6dc6b44b893a31a0b699de71b3f820445c"
+    },
+    {
+      "number": 233,
+      "head_sha": "0cbfbd50b84de04d85f7fff3ac495268d52279ab",
+      "base_branch": "feat/reference-graph-p33-pinned-transport-parity",
+      "base_sha": "f1134a1483d8320a31e22bf35b560406d8b20f25"
+    }
+  ]
+}
