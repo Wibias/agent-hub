@@ -1,0 +1,58 @@
+{
+  "schema_version": "reference-graph.p51-connector-direct-live-source-parity.v1",
+  "repository": "Wibias/agent-hub",
+  "project_ref": "vrznfnxzlxaavpqbzbzd",
+  "source_access": "connected-supabase-management-sql",
+  "execution_role": "postgres",
+  "observed_at_utc": "2026-11-09T21:12:24.185327Z",
+  "snapshot_date": "2026-11-09",
+  "p10": {
+    "rows": 275,
+    "distinct_assets": 275,
+    "distinct_legacy_ids": 275,
+    "refreshed_at": "2026-11-09T00:05:00.125380Z",
+    "shared_fields_sha256": "ce4c875e5029b764587dfa2b65124c42908875c89ce12bece68713bb602647db"
+  },
+  "p30": {
+    "rows": 275,
+    "distinct_assets": 275,
+    "distinct_legacy_ids": 275,
+    "refreshed_at": "2026-11-09T20:05:00.191188Z",
+    "shared_fields_sha256": "ce4c875e5029b764587dfa2b65124c42908875c89ce12bece68713bb602647db",
+    "unique_projection_versions": 1
+  },
+  "shared_field_count": 15,
+  "asset_id_set_mismatches": 0,
+  "legacy_id_mismatches": 0,
+  "shared_field_mismatches": 0,
+  "p30_server_view": {
+    "rows": 275,
+    "distinct_assets": 275,
+    "anon_can_select": false,
+    "authenticated_can_select": false,
+    "service_role_can_select": true,
+    "security_invoker": true,
+    "security_barrier": true
+  },
+  "p30_public_view": {
+    "anon_can_select": true,
+    "authenticated_can_select": true,
+    "service_role_can_select": false,
+    "security_invoker": true,
+    "security_barrier": true,
+    "columns": [
+      "projection_version",
+      "snapshot_date",
+      "refreshed_at"
+    ]
+  },
+  "direct_live_read_only_query_reported": true,
+  "refresh_timestamps_identical": false,
+  "full_source_acquisition_independently_attested": false,
+  "independent_human_review_attested": false,
+  "historic_p31_receipt_recovered": false,
+  "source_run_cryptographically_signed": false,
+  "production_rollback_rehearsed": false,
+  "owner_activation_authorized": false,
+  "repository_default_graph_enabled": false
+}
