@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import {
   validateP50Report, buildP50Evidence,
@@ -107,4 +108,20 @@ test('P50 rejects invalid, huge and truncated report bytes',()=>{
   for(const reportText of ['not-json','{}','x'.repeat(16385)]) {
     assert.throws(()=>buildP50Evidence({reportText,env,checkoutSha:sha}),/BLOCKED/);
   }
+});
+
+test('P50 privileged and unprivileged workflow actions use exact approved commit pins',()=>{
+  const workflow=readFileSync(new URL('../../.github/workflows/verify-reference-graph-p49.yml',import.meta.url),'utf8');
+  // A mutable action tag can change the source executed in the privileged job.
+  // This list is an allowlisted, independently resolved GitHub Actions v4 pin set.
+  const expected=[
+    'actions/checkout@11d5960a326750d5838078e36cf38b85af677262',
+    'actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020',
+    'actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02',
+    'actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093',
+    'actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6',
+  ].sort();
+  const used=[...workflow.matchAll(/^\s*-\s+uses:\s+([^\s#]+)/gm)].map(match=>match[1]).sort();
+  assert.deepEqual(used,expected);
+  assert.ok(used.every(action=>/^actions\/[a-z-]+@[a-f0-9]{40}$/.test(action)));
 });
