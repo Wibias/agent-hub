@@ -61,6 +61,10 @@ function fakeHttp(calls) {
     assert.equal(options.method,'GET');
     assert.equal(options.body,undefined);
     assert.equal(options.headers.apikey,key);
+    assert.equal(options.redirect,'error');
+    assert.equal(options.cache,'no-store');
+    assert.equal(options.credentials,'omit');
+    assert.equal(options.referrerPolicy,'no-referrer');
     const parsed=new URL(url);
     const offset=Number(parsed.searchParams.get('offset'));
     const limit=Number(parsed.searchParams.get('limit'));
@@ -191,4 +195,17 @@ test('P61 CLI rejects missing credentials; outputs only the sanitized report wit
   assert.deepEqual(ret,expected);
   assert.equal(output,JSON.stringify(expected)+'\n');
   assert.doesNotMatch(output,/sb_secret_|sourceWitnessJson/);
+});
+
+test('P61 forbids following a redirect that might leak the custom apikey header',async()=>{
+  const observed=[];
+  await assert.rejects(observeP61ProtectedSnapshot(input({
+    fetchImpl:async (url,options)=>{
+      observed.push({url,redirect:options.redirect});
+      return {ok:false,status:302,headers:{get:()=>null}};
+    },
+  })),/BLOCKED/);
+  assert.equal(observed.length,1);
+  assert.equal(observed[0].redirect,'error');
+  assert.equal(new URL(observed[0].url).origin,new URL(target).origin);
 });
