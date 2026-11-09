@@ -186,6 +186,12 @@ export async function runP49IsolatedContainers(argv=process.argv.slice(2)) {
           readFileSync(join(root,name+'.'+ext)),{mode:0o600});
       }
     }
+    // The unauthorized client has a different keypair signed by the SAME CA.
+    // Mount it under the normal client filenames, so the test reaches mTLS.
+    for(const ext of ['key','pem']) {
+      writeFileSync(join(root,'other','client.'+ext),
+        readFileSync(join(root,'other','other.'+ext)),{mode:0o600});
+    }
     const pair=generateKeyPairSync('ed25519');
     const publicKey=pair.publicKey.export({type:'spki',format:'pem'});
     const keyPin=digest(pair.publicKey.export({type:'spki',format:'der'}));
