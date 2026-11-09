@@ -1,0 +1,125 @@
+name: Reference graph P49 isolated mTLS containers
+
+on:
+  pull_request:
+    paths:
+      - 'reference-graph/p49-*'
+      - 'reference-graph/cli/p49-*'
+      - 'reference-graph/cli/p50-*'
+      - 'reference-graph/P50.md'
+      - 'reference-graph/p46-*'
+      - 'reference-graph/p47-*'
+      - 'tests/reference-graph/p49-*'
+      - 'tests/reference-graph/p50-*'
+      - '.github/workflows/verify-reference-graph-p49.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: reference-graph-p49-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  p49-isolated-docker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+      - name: Validate P50 evidence contracts with negative tests
+        run: node --test tests/reference-graph/p50-ci-evidence.test.mjs
+      - name: Run P49 ephemeral mTLS integration tests
+        run: node --test tests/reference-graph/p49-mtls-lab-coordinator.test.mjs
+      - name: Rehearse isolated Docker mTLS workers, revocation and partition
+        timeout-minutes: 8
+        env:
+          P49_ALLOW_DOCKER_REHEARSAL: '1'
+        run: |
+          set -euo pipefail
+          # Internal Docker bridge, no host published ports or live credentials.
+          node reference-graph/cli/p49-rehearse-isolated-containers.mjs --isolated-test > "$RUNNER_TEMP/p49-report.json"
+      - name: Create P50 strict CI-evidence artifact
+        env:
+          P50_PR_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          P50_BASE_SHA: ${{ github.event.pull_request.base.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          node reference-graph/cli/p50-create-ci-evidence.mjs --p49-report "$RUNNER_TEMP/p49-report.json" --output "$RUNNER_TEMP/p50-ci-evidence.json"
+      - name: Upload validated, nonsecret P50 evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: p50-p49-ci-evidence
+          path: ${{ runner.temp }}/p50-ci-evidence.json
+          if-no-files-found: error
+          retention-days: 30
+
+  p50-attest-evidence:
+    needs: p49-isolated-docker
+    # Fork PR code never runs in the privileged attestation job.
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+      artifact-metadata: write
+    steps:
+      - name: Download only the already-tested P50 JSON artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: p50-p49-ci-evidence
+          path: p50-download
+      - name: Independently verify non-authorizing release flags
+        env:
+          P50_EXPECTED_SHA: ${{ github.sha }}
+        run: |
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const p = 'p50-download/p50-ci-evidence.json';
+          const x = JSON.parse(fs.readFileSync(p, 'utf8'));
+          const r = x.p49_report;
+          if (x.schema_version !== 'reference-graph.p50-p49-ci-evidence.v1'
+            || x.repository !== process.env.GITHUB_REPOSITORY
+            || x.source_checkout_sha !== process.env.P50_EXPECTED_SHA
+            || x.workflow_file !== '.github/workflows/verify-reference-graph-p49.yml'
+            || x.github_run_id !== process.env.GITHUB_RUN_ID
+            || x.github_signature_created_by_this_report !== false
+            || x.independent_original_source_attested !== false
+            || x.independent_human_review_attested !== false
+            || x.production_rollback_rehearsed !== false
+            || x.owner_activation_authorized !== false
+            || x.repository_default_graph_enabled !== false
+            || r?.activation_authorized !== false
+            || r?.production_rollback_rehearsed !== false
+            || r?.runtime_image_supply_chain_attested !== false
+            || r?.runtime_image_digest_pinned !== true
+            || r?.valid_lease_in_flight_network_loss_blocked !== true
+            || r?.expired_signed_lease_blocked !== true) {
+            process.stderr.write('P50 independent attestation gate BLOCKED\n');
+            process.exit(2);
+          }
+          process.stdout.write('P50 independent non-release gate PASS\n');
+          NODE
+      - name: Sign P50 artifact digest with GitHub OIDC and Sigstore
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
+        with:
+          subject-path: p50-download/p50-ci-evidence.json
+      - name: Verify GitHub artifact attestation and repository identity
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3 4 5; do
+            if gh attestation verify p50-download/p50-ci-evidence.json -R "$GITHUB_REPOSITORY" --format json > "$RUNNER_TEMP/p50-verified.json"; then
+              echo 'P50 Sigstore/GitHub attestation verification PASS'
+              exit 0
+            fi
+            sleep 3
+          done
+          echo 'P50 attestation verification BLOCKED'
+          exit 2

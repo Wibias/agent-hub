@@ -1,0 +1,10 @@
+{
+  "schema_version": "reference-graph.p43-operator-reported-pins.v1",
+  "source_checkout_sha": "3f8c14fcce10a836747237f5dacf0f85eac541d4",
+  "reference_date": "2026-11-09",
+  "project_ref": "vrznfnxzlxaavpqbzbzd",
+  "provenance": "operator-reported-not-independently-attested",
+  "witness_sha256": "1d3bcf43957b112b52cbcb0622c28a6a6a03ad371b207d2179d6f56f893d935e",
+  "record_sha256": "ffcd5bde30ac671d1f5e4eb86591faac6ecef83dd5f6e450743eb7062e6cb446",
+  "full_sha256": "adc4df5a2e597ea32a10024e52b2b9daa5ef595d1edbfcaa4843553be49982eb"
+}
