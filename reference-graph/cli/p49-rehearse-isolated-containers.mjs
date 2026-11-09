@@ -168,10 +168,12 @@ export async function runP49IsolatedContainers(argv=process.argv.slice(2)) {
   const serverName='p49-server-'+suffix;
   const pendingName='p49-pending-'+suffix;
   let created=false,pending=null, server=false;
+  let stage='lab-setup';
   try {
     for(const dir of ['state','verify','server','client','other']) {
       mkdirSync(join(root,dir),{mode:0o700});
     }
+    stage='certificates';
     makeCertificates(root);
     for(const name of ['server','client','other']) {
       for(const ext of ['key','pem']) {
@@ -200,10 +202,13 @@ export async function runP49IsolatedContainers(argv=process.argv.slice(2)) {
       clock:()=>FIXED,
     });
     store.seedLabPermit(signed(pair.privateKey,repoSha,'shadow-probe-only',1));
+    stage='image-pull';
     docker(['pull',IMAGE],120000);
+    stage='network-create';
     docker(['network','create','--driver','bridge','--internal',network]);
     created=true;
     assert.equal(docker(['network','inspect','--format','{{.Internal}}',network]),'true');
+    stage='server-start';
     docker([
       'run','-d','--name',serverName,
       '--network',network,'--network-alias','p49-coordinator.lab',
@@ -219,29 +224,35 @@ export async function runP49IsolatedContainers(argv=process.argv.slice(2)) {
       IMAGE,'node','/repo/reference-graph/cli/p49-container-lab-server.mjs',
     ]);
     server=true;
+    stage='server-ready';
     waitForServer(serverName);
     const ports=docker(['inspect','--format','{{json .HostConfig.PortBindings}}',serverName]);
     assert.ok(ports==='null'||ports==='{}','no host ports may be published');
 
     // Two different network namespace workers, not just processes.
+    stage='permit-workers';
     for(const n of ['a','b']) {
       validReport(docker(workerArgs({
         name:'p49-worker-'+n+'-'+suffix,network,checkout,root,
       }),12000),'eligible-lab-only');
     }
     // A different leaf certificate signed by the SAME CA must fail.
+    stage='untrusted-worker';
     validReport(docker(workerArgs({
       name:'p49-untrusted-'+suffix,network,checkout,root,other:true,
     }),12000),'blocked');
 
+    stage='pending-worker';
     pending=startPending(workerArgs({
       name:pendingName,network,checkout,root,phase:'pending',
     }));
     await pending.started;
+    stage='signed-revoke';
     store.revokeWithSignedState(signed(pair.privateKey,repoSha,'revoked',2));
     validReport(await pending.done,'blocked');
 
     // Network/worker restart reads durable OFF, not an old permit cache.
+    stage='restart';
     docker(['stop','-t','2',serverName],10000);
     docker(['start',serverName],10000);
     waitForServer(serverName);
@@ -250,6 +261,7 @@ export async function runP49IsolatedContainers(argv=process.argv.slice(2)) {
     }),12000),'blocked');
 
     // An actual TLS connection loss fails closed.
+    stage='network-partition';
     docker(['stop','-t','2',serverName],10000);
     validReport(docker(workerArgs({
       name:'p49-offline-'+suffix,network,checkout,root,
@@ -271,6 +283,9 @@ export async function runP49IsolatedContainers(argv=process.argv.slice(2)) {
       activation_authorized:false,
       repository_default_graph_enabled:false,
     };
+  } catch {
+    // A fixed, authored label only. No stderr, local paths or secret bytes.
+    throw new Error('P49 isolated Docker rehearsal BLOCKED at '+stage);
   } finally {
     pending?.child.kill();
     try{docker(['rm','-f',pendingName],5000);}catch{}
@@ -284,8 +299,10 @@ if(process.argv[1]?.endsWith('p49-rehearse-isolated-containers.mjs')){
   try{
     const result=await runP49IsolatedContainers();
     process.stdout.write(JSON.stringify(result)+'\n');
-  }catch{
-    process.stderr.write('P49 isolated Docker rehearsal BLOCKED\n');
+  }catch(error){
+    const message = /^P49 isolated Docker rehearsal BLOCKED at [a-z-]+$/.test(error?.message ?? '')
+      ? error.message : 'P49 isolated Docker rehearsal BLOCKED';
+    process.stderr.write(message+'\n');
     process.exitCode=2;
   }
 }
