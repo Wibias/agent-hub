@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import test from 'node:test';
@@ -55,6 +56,52 @@ test('P42 strictly checks immutable Legacy control paths and rejects Git drift',
       return '';
     },
   }), /BLOCKED/);
+});
+
+test('P42 rejects Git-ignored JSONL consumed by the real Legacy loader', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'p42-ignored-source-'));
+  try {
+    const data = join(dir, 'knowledge/design-references/data');
+    const patterns = join(dir, 'knowledge/design-references/patterns');
+    mkdirSync(data, { recursive: true });
+    mkdirSync(patterns, { recursive: true });
+    writeFileSync(join(dir, '.gitignore'), 'knowledge/*\n');
+    writeFileSync(join(data, 'baseline.jsonl'), '{}\n');
+    const run = args => {
+      const result = spawnSync('git', args, {
+        cwd: dir, encoding: 'utf8', shell: false, timeout: 5000,
+      });
+      assert.equal(result.status, 0, result.stderr);
+      return result.stdout.trim();
+    };
+    run(['init', '--quiet']);
+    run(['add', '-f', '.gitignore', 'knowledge/design-references/data/baseline.jsonl']);
+    writeFileSync(join(data, 'injected.jsonl'), '{"id":"untracked"}\n');
+    writeFileSync(join(patterns, 'injected-pattern.jsonl'), '{"id":"untracked"}\n');
+    // Ordinary untracked checks miss ignored JSONL; the loader does not.
+    const clean = run(['ls-files', '--others', '--exclude-standard', '--',
+      'knowledge/design-references']);
+    assert.equal(clean, '');
+    const ignored = run(['ls-files', '--others', '--ignored', '--exclude-standard', '--',
+      ':(glob)knowledge/design-references/data/*.jsonl',
+      ':(glob)knowledge/design-references/patterns/*.jsonl']);
+    assert.match(ignored, /data\/injected\.jsonl/);
+    assert.match(ignored, /patterns\/injected-pattern\.jsonl/);
+
+    const command = args => {
+      if (args[0] === 'rev-parse') {
+        return args[1] === '--show-toplevel' ? dir : 'a'.repeat(40);
+      }
+      // A real #274 control SHA cannot be a parent of this temporary repo.
+      if (args[0] === 'merge-base' || args[0] === 'diff') return '';
+      return run(args);
+    };
+    assert.throws(() => verifyP42LegacyCheckout({ command, cwd: dir }), /BLOCKED/);
+    // Removing the ignored source files restores acceptance of the
+    // mocked ancestry-clean checkout, proving that was the blocker.
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test('P42 builds consistent 48-case Legacy-only P27/P34 inputs without Graph', async () => {
