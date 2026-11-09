@@ -167,6 +167,7 @@ test('P48 missing or partially persisted OFF state prevents separate daemon from
   try{
     const {manifest}=config(dir);
     d=daemon(manifest,token());
+    await assert.rejects(d.ready, /exited before listening/);
     const failed=await d.stopped;
     assert.equal(failed.code,2);
     assert.doesNotMatch(failed.output,/endpoint/);
@@ -176,6 +177,7 @@ test('P48 missing or partially persisted OFF state prevents separate daemon from
     state.seedLabPermit(envelope('shadow-probe-only',1,issued));
     writeFileSync(join(dir,'p47-revocation-intent'),'incomplete',{flag:'wx'});
     d=daemon(manifest,token());
+    await assert.rejects(d.ready, /exited before listening/);
     const after=await d.stopped;
     assert.equal(after.code,2);
     assert.doesNotMatch(after.output,/endpoint/);
