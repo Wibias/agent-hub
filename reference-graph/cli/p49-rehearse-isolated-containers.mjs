@@ -69,7 +69,7 @@ function bind(src,dest) {
 function docker(args,timeout=30000) {
   return cmd('docker',args,timeout);
 }
-function workerArgs({name,network,checkout,root,phase='once',other=false}) {
+function workerArgs({name,network,checkout,root,phase='once',other=false,imageRef}) {
   return [
     'run','--rm','--name',name,'--network',network,
     '--read-only','--user',CONTAINER_USER,'--cap-drop=ALL',
@@ -81,7 +81,7 @@ function workerArgs({name,network,checkout,root,phase='once',other=false}) {
     ...bind(join(root,'ca.pem'),'/lab/ca.pem'),
     ...bind(join(root,'verify'),'/lab/verify'),
     ...bind(join(root,other?'other':'client'),'/lab/client'),
-    IMAGE,'node','/repo/reference-graph/cli/p49-container-lab-worker.mjs',
+    imageRef,'node','/repo/reference-graph/cli/p49-container-lab-worker.mjs',
   ];
 }
 function waitForServer(name) {
@@ -215,6 +215,14 @@ export async function runP49IsolatedContainers(argv=process.argv.slice(2)) {
     store.seedLabPermit(signed(pair.privateKey,repoSha,'shadow-probe-only',1));
     stage='image-pull';
     docker(['pull',IMAGE],120000);
+    // Freeze the exact OCI manifest for every container within THIS run.
+    // The floating input tag still needs a separately reviewed immutable CI pin.
+    const imageRef=docker(['image','inspect','--format',
+      '{{index .RepoDigests 0}}',IMAGE]);
+    if(!/^(?:docker\.io\/library\/)?node@sha256:[a-f0-9]{64}$/.test(imageRef)) {
+      throw Error('P49 unresolved container image digest');
+    }
+    const worker = args => workerArgs({...args,imageRef});
     stage='network-create';
     docker(['network','create','--driver','bridge','--internal',network]);
     created=true;
@@ -232,7 +240,7 @@ export async function runP49IsolatedContainers(argv=process.argv.slice(2)) {
       ...bind(join(root,'state'),'/lab/state'),
       ...bind(join(root,'verify'),'/lab/verify'),
       ...bind(join(root,'server'),'/lab/server'),
-      IMAGE,'node','/repo/reference-graph/cli/p49-container-lab-server.mjs',
+      imageRef,'node','/repo/reference-graph/cli/p49-container-lab-server.mjs',
     ]);
     server=true;
     stage='server-ready';
@@ -243,18 +251,48 @@ export async function runP49IsolatedContainers(argv=process.argv.slice(2)) {
     // Two different network namespace workers, not just processes.
     stage='permit-workers';
     for(const n of ['a','b']) {
-      validReport(docker(workerArgs({
+      validReport(docker(worker({
         name:'p49-worker-'+n+'-'+suffix,network,checkout,root,
       }),12000),'eligible-lab-only');
     }
     // A different leaf certificate signed by the SAME CA must fail.
     stage='untrusted-worker';
-    validReport(docker(workerArgs({
+    validReport(docker(worker({
       name:'p49-untrusted-'+suffix,network,checkout,root,other:true,
     }),12000),'blocked');
 
+    // Expiry must reject an otherwise correctly signed state before any probe.
+    stage='expired-lease-worker';
+    validReport(docker(worker({
+      name:'p49-expired-'+suffix,network,checkout,root,phase:'expired',
+    }),12000),'blocked');
+
+    // IMPORTANT: partition the coordinator while the original signed permit
+    // is still valid. The earlier P49 test only disconnected AFTER revoke.
+    stage='fresh-lease-partition-in-flight';
+    pending=startPending(worker({
+      name:pendingName,network,checkout,root,phase:'pending',
+    }));
+    await pending.started;
+    docker(['stop','-t','2',serverName],10000);
+    validReport(await pending.done,'blocked');
+    pending=null;
+
+    stage='fresh-lease-partition-cold-start';
+    validReport(docker(worker({
+      name:'p49-cold-offline-'+suffix,network,checkout,root,
+    }),12000),'blocked');
+
+    stage='fresh-lease-partition-reconnect';
+    docker(['start',serverName],10000);
+    waitForServer(serverName);
+    validReport(docker(worker({
+      name:'p49-reconnected-'+suffix,network,checkout,root,
+    }),12000),'eligible-lab-only');
+
+    // A second pending worker must also be cancelled by a signed revoke.
     stage='pending-worker';
-    pending=startPending(workerArgs({
+    pending=startPending(worker({
       name:pendingName,network,checkout,root,phase:'pending',
     }));
     await pending.started;
@@ -267,14 +305,14 @@ export async function runP49IsolatedContainers(argv=process.argv.slice(2)) {
     docker(['stop','-t','2',serverName],10000);
     docker(['start',serverName],10000);
     waitForServer(serverName);
-    validReport(docker(workerArgs({
+    validReport(docker(worker({
       name:'p49-post-restart-'+suffix,network,checkout,root,
     }),12000),'blocked');
 
     // An actual TLS connection loss fails closed.
     stage='network-partition';
     docker(['stop','-t','2',serverName],10000);
-    validReport(docker(workerArgs({
+    validReport(docker(worker({
       name:'p49-offline-'+suffix,network,checkout,root,
     }),12000),'blocked');
 
@@ -283,9 +321,15 @@ export async function runP49IsolatedContainers(argv=process.argv.slice(2)) {
       distinct_container_network_namespaces:3,
       internal_bridge_network:true,host_ports_published:false,
       tls_version:'TLSv1.3',
+      runtime_image_digest_sha256:imageRef.split('@sha256:')[1],
+      runtime_image_reviewed_pin:false,
       mutual_tls_and_leaf_pins_verified:true,
       worker_permit_cases:2,
       wrong_client_cert_blocked:true,
+      expired_signed_lease_blocked:true,
+      valid_lease_in_flight_network_loss_blocked:true,
+      valid_lease_cold_start_network_loss_blocked:true,
+      valid_lease_after_reconnect_eligible:true,
       in_flight_revoke_blocked:true,
       coordinator_restart_revoke_blocked:true,
       coordinator_network_loss_blocked:true,

@@ -16,7 +16,9 @@ try {
     throw new Error('lab config invalid');
   }
   const phase = process.env.P49_LAB_PHASE;
-  if (phase !== 'once' && phase !== 'pending') throw new Error('wrong phase');
+  if (phase !== 'once' && phase !== 'pending' && phase !== 'expired') {
+    throw new Error('wrong phase');
+  }
   const tls = {
     host: 'p49-coordinator.lab', port: 8443, servername: 'p49-coordinator.lab',
     ca: readFileSync('/lab/ca.pem','utf8'),
@@ -34,7 +36,9 @@ try {
     publicKeySha256: cfg.public_key_sha256,
     expectedRepositorySha: cfg.repository_sha,
     expectedLabId: cfg.lab_id,
-    clock: () => new Date('2026-11-09T19:10:02.000Z'),
+    clock: () => new Date(
+      phase === 'expired' ? '2026-11-09T19:10:10.000Z' : '2026-11-09T19:10:02.000Z'
+    ),
     pollMs: 75, readTimeoutMs: 1600,
     shadowProbe: ({signal}) => {
       if (phase === 'pending') {
