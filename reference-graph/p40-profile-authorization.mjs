@@ -46,9 +46,9 @@ export function evaluateP40ScopedGrant({
   expectedRepositorySha,
   now = new Date(),
 } = {}) {
-  const blocked = reason => ({
+  const blocked = (reason, signatureValid = false) => ({
     schema_version: 'reference-graph.p40-scoped-grant-preflight.v1',
-    signature_valid: false,
+    signature_valid: signatureValid,
     contract_valid: false,
     reason,
     trust_anchor_independently_attested: false,
@@ -106,14 +106,14 @@ export function evaluateP40ScopedGrant({
     || !Number.isInteger(payload.canary_percent)
     || payload.canary_percent < 1 || payload.canary_percent > 5
     || payload.default_off !== true) {
-    return blocked('scope-invalid');
+    return blocked('scope-invalid', true);
   }
   const start = Date.parse(payload.not_before);
   const end = Date.parse(payload.expires_at);
   if (end <= start || end - start > MAX_WINDOW_MS
     || now.valueOf() < start - MAX_SKEW_MS
     || now.valueOf() >= end) {
-    return blocked('window-invalid');
+    return blocked('window-invalid', true);
   }
 
   return {
