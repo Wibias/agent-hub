@@ -148,8 +148,8 @@ test('P48 separate OS daemon requires token, reads persisted signed revocation a
     assert.equal(JSON.parse((await denied.json()).payload_json).decision,'revoked');
     const initialExit=await stop(first);
     assert.equal(initialExit.code,0);
-    assert.doesNotMatch(initialExit.output,bearer);
-    assert.doesNotMatch(initialExit.stderr,bearer);
+    assert.equal(initialExit.output.includes(bearer), false);
+    assert.equal(initialExit.stderr.includes(bearer), false);
     second=daemon(manifest,bearer);
     const after=await second.ready;
     const result=await fetch(after.endpoint,{headers:{Authorization:'Bearer '+bearer}});
