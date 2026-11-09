@@ -1,0 +1,357 @@
+{
+  "schema_version": "reference-graph.p35-integration-lock.v1",
+  "repository": "Wibias/agent-hub",
+  "integration_pr": 274,
+  "reviewed_head_sha": "32e4a94718a7ab3ae55c81b653a63861d2bd2203",
+  "base_branch": "main",
+  "base_sha": "3a0055651f98eda7e8cb242cf62ee1ecde427f15",
+  "changed_file_count": 73,
+  "reviewed_tree_sha256": "b02001ef904095f94d06497fee3c77f970bf517fc2ab6f49303a7dbb885333d7",
+  "historical_p35_lock": {
+    "path": "reference-graph/p35-pr-stack-lock.json",
+    "sha256": "79dc0eec6ef2b416cfdc52e31d6e7e62514e78528515c8afdac1c389a149e691",
+    "scope": "historical-p27-p34-stack-only"
+  },
+  "superseded_pr_numbers": [
+    223,
+    225,
+    226,
+    227,
+    228,
+    229,
+    230,
+    231,
+    232,
+    233,
+    234,
+    235,
+    236,
+    237,
+    250,
+    263,
+    267,
+    269,
+    270
+  ],
+  "expected_ci_workflow_names": [
+    "Memory Graph D11 Read-only Operations",
+    "Memory Graph D6 diagnostics",
+    "Memory Graph D7 validation",
+    "Memory Graph D8 Evidence Coverage Audit",
+    "Memory Graph D9 Explicit Repository Capture",
+    "Reference graph P16 governance",
+    "Reference graph P17 governance",
+    "Reference graph P18 governance",
+    "Reference graph P19 governance",
+    "Reference graph P20 governance",
+    "Reference graph P21 governance",
+    "Reference graph governance",
+    "Release governance"
+  ],
+  "metadata_only_paths": [
+    "reference-graph/P31-P33-P34-P37-PROVENANCE-AUDIT-2026-11-09.md",
+    "reference-graph/P35-INTEGRATION-274.md",
+    "reference-graph/P39.md",
+    "reference-graph/cli/p35-integration-274-preflight.mjs",
+    "reference-graph/evidence/p31-p33-p34-p37-provenance-audit-2026-11-09.json",
+    "reference-graph/p35-integration-274-lock.json",
+    "reference-graph/p35-integration-preflight.mjs",
+    "tests/reference-graph/p35-integration-preflight.test.mjs"
+  ],
+  "reviewed_files": [
+    {
+      "path": ".github/workflows/verify-reference-graph.yml",
+      "sha256": "fed6947e10528594c127b9021ccad4ab759d69f6152d5d10162c05d84027c6df"
+    },
+    {
+      "path": "docs/superpowers/plans/2026-11-07-reference-graph-p26-release-readiness.md",
+      "sha256": "2bdeace4aaeda106be32cd6ddd64a4f222ef6ffcfc7cd7e25fe0de2efb337a8b"
+    },
+    {
+      "path": "reference-graph/P26-VERIFY.md",
+      "sha256": "7cb34edf970c8020dcf3fc53836b51f69b49ae741c550c06a1284b7323aa65c5"
+    },
+    {
+      "path": "reference-graph/P26.md",
+      "sha256": "9a254af32ca23412fd6d030d0775fc72141aa03902d94f209f8c481c608b5ea8"
+    },
+    {
+      "path": "reference-graph/P27.md",
+      "sha256": "14bebe288c14e45638059e7637cb7275f37ec2b0fa2ef8bab2d2fa745212c8be"
+    },
+    {
+      "path": "reference-graph/P28.md",
+      "sha256": "9722d09a5c868784ad9a48cdd9b0616c39a48f38d1e123904de11f78f29d5171"
+    },
+    {
+      "path": "reference-graph/P29.md",
+      "sha256": "cbf939d59ae5bea41199e353008690b4c9398cfc87136023827e91d0aeb6e431"
+    },
+    {
+      "path": "reference-graph/P30.md",
+      "sha256": "6fdade2bcc148f6056aa1268eff184347a22b647e7f7871137d58db1e5321284"
+    },
+    {
+      "path": "reference-graph/P31.md",
+      "sha256": "058786c589cd819966eaf899d45363c77108ebc19a38e8a4ec8f01bad7c7fc11"
+    },
+    {
+      "path": "reference-graph/P32.md",
+      "sha256": "2b4ad6808e1cba4515c1eb9ea66ea6166656072883f19152912a4b69fe6cf5cd"
+    },
+    {
+      "path": "reference-graph/P33.md",
+      "sha256": "0a4f0f7964ff945b5286840ca46fd1b72741a84382db125678ab8b8b06542118"
+    },
+    {
+      "path": "reference-graph/P34.md",
+      "sha256": "8347f92f61058e5a4f847048cdcf16885cfc873c1c9ac6f438974cbf1312eeab"
+    },
+    {
+      "path": "reference-graph/P35-INTEGRATION-REVIEW.md",
+      "sha256": "1bb5cc910e3d4a2417e12eeaa0290d4c87a0d0ad5cd11f7d02f6200ddfcf5174"
+    },
+    {
+      "path": "reference-graph/P35.md",
+      "sha256": "1c29751b7d027aa9b46a96fca01dc5bc1d765e722bde3bcb2c5e322c5d367802"
+    },
+    {
+      "path": "reference-graph/P37.md",
+      "sha256": "a3cf31d0cfc0d0e9784addd47c588d469073fb668e620bd6051d7a593a5a8219"
+    },
+    {
+      "path": "reference-graph/P38.md",
+      "sha256": "df83d2fdd9fc89fdc7335ad07ebd2fa2ca80d87f7aad84883864ba81e172194e"
+    },
+    {
+      "path": "reference-graph/cli/p26-verify-frozen-evidence.mjs",
+      "sha256": "79029605ef94376d93bf957c6b5928e9cc5b0c6cc72e2d0ffb1b066bd2772817"
+    },
+    {
+      "path": "reference-graph/cli/p27-standard-deep-baseline.mjs",
+      "sha256": "65028fdaf182b7c225555cae9739cdb6e8d9f935988d6c129bdfecc52ab99d8d"
+    },
+    {
+      "path": "reference-graph/cli/p28-profile-candidate-contract.mjs",
+      "sha256": "3a2cd87bb8ad67ad95bd7cf8a51f8588fa319324775ba94d0a5d81b1dee006f9"
+    },
+    {
+      "path": "reference-graph/cli/p29-offline-profile-parity.mjs",
+      "sha256": "7220cd23e72d1071ba8fa3643305b5812a9f6afb8e33e231070c4816fad52285"
+    },
+    {
+      "path": "reference-graph/cli/p34-freeze-legacy-public-baseline.mjs",
+      "sha256": "292f9093a7465462824c749e3f2e02e1b428f240cbcacdefcdfdd0f856351773"
+    },
+    {
+      "path": "reference-graph/cli/p35-release-preflight.mjs",
+      "sha256": "ac8b6896ddb0e74b13adad9fff44daea97535b6199db72472784172bbc90b7e9"
+    },
+    {
+      "path": "reference-graph/cli/p39-p38-monitor.mjs",
+      "sha256": "f9b2acb9f7a8bd28adf5c7c368201494afc3aeb2212e553928e5248298ce9685"
+    },
+    {
+      "path": "reference-graph/cli/p39-p38-public-monitor.mjs",
+      "sha256": "7f946cf47008262d873f67ee52288db24785b518c4ce4b3063e7d2ea589fdacb"
+    },
+    {
+      "path": "reference-graph/ops/P39-MONITOR-ACTIVATION.md",
+      "sha256": "9b7b2926aeb5f157a5a76e751720c4214c27487bff1b086860a0bdd46a03c840"
+    },
+    {
+      "path": "reference-graph/ops/p39-p38-monitor-runner.ps1",
+      "sha256": "f18608102f728612c31e216c7a5cbccdbb544eefa8af7ad0e5d9b0122589f7a0"
+    },
+    {
+      "path": "reference-graph/ops/register-p39-p38-monitor.ps1",
+      "sha256": "5dfb506493b6d9c43fc015ae6a01cf9cd437d4f3c5eceabb9e706b30369cfc6e"
+    },
+    {
+      "path": "reference-graph/ops/set-p39-alert-webhook.ps1",
+      "sha256": "860b6f8b53295b933554776fd9b41388a0f4816ef4debc482a765d937f370445"
+    },
+    {
+      "path": "reference-graph/p26-evidence-verifier.mjs",
+      "sha256": "c9c2b0651105efbac4b1e593a8a27b96852e442a88080dab62dabd1d965ccc13"
+    },
+    {
+      "path": "reference-graph/p27-standard-deep-baseline.mjs",
+      "sha256": "38cb5474e00d9fcb47079b83ddc1b0d6f2dfe3aa55c1418d64b6a39850a76dab"
+    },
+    {
+      "path": "reference-graph/p28-profile-candidate-contract.mjs",
+      "sha256": "6b1878e51406061283d88b6a0c5318f112bacfbda13416d4023837a18612dee4"
+    },
+    {
+      "path": "reference-graph/p29-offline-profile-parity.mjs",
+      "sha256": "e4c2b1ddc32dc0a21987293b2fa26eb25fa37bee6cea572bfae14be513c1c195"
+    },
+    {
+      "path": "reference-graph/p30-profile-transport.mjs",
+      "sha256": "3a7adec5a4e112ff9da4a0332dcfb7c82d30da671682e78bce49e71210865f73"
+    },
+    {
+      "path": "reference-graph/p33-candidate-content-digest.mjs",
+      "sha256": "277a4cde884954eca93dcb27296c0fe0886928e738ddb92aabc5261a98ed8517"
+    },
+    {
+      "path": "reference-graph/p33-pinned-profile-parity.mjs",
+      "sha256": "d70b7bf2135774003f285189dcd34c4e13d47d0d01a8f2f74845eb17de964070"
+    },
+    {
+      "path": "reference-graph/p34-pattern-public-output-parity.mjs",
+      "sha256": "ad3052400c95128546e322e916c6dddc8677d706e65c88f457dd496cc10a4add"
+    },
+    {
+      "path": "reference-graph/p35-pr-stack-lock.json",
+      "sha256": "79dc0eec6ef2b416cfdc52e31d6e7e62514e78528515c8afdac1c389a149e691"
+    },
+    {
+      "path": "reference-graph/p35-release-preflight.mjs",
+      "sha256": "862b084af92ded9adde4ee9144d93dfc7583b8b2991f0a03466aba22e2ccf804"
+    },
+    {
+      "path": "reference-graph/p37-single-snapshot-public-audit.mjs",
+      "sha256": "9de461d5e5217925bdf6de163e8cdd14a222f9454d289cf6b539718fb0197798"
+    },
+    {
+      "path": "reference-graph/p39-p38-health-snapshot.sql",
+      "sha256": "19adea3d212da33157c02ac84cd6a7aa979f06a97bbfdfcca1565854b2e630cc"
+    },
+    {
+      "path": "reference-graph/p39-p38-monitor.mjs",
+      "sha256": "326929614520e875553a75723a560033305b6d5099bf67b2e118d60a899671e3"
+    },
+    {
+      "path": "reference-graph/p39-p38-public-health.mjs",
+      "sha256": "549f26d84d5791886bc96b124ce3f60be8f194159861b41e74f9b91e96720ecf"
+    },
+    {
+      "path": "reference-graph/p39-p38-runtime.mjs",
+      "sha256": "a96e681d99c8f3c1ad432b72b3c6058df8bb7fbb3d26acbfc8d483367c918b0b"
+    },
+    {
+      "path": "reference-graph/schema/014_reference_graph_profile_projection_p31.sql",
+      "sha256": "26bea6cf663ff5f1f6be8b63ad39c51e20120c37ce0e63205f446b61f2ea1b15"
+    },
+    {
+      "path": "reference-graph/schema/015_reference_graph_profile_refresh_cron_p38.sql",
+      "sha256": "db4e31e27520c9506e912a5e2540d0a542eea20ce134176812d15e0613746247"
+    },
+    {
+      "path": "reference-graph/schema/016_reference_graph_profile_access_p39.sql",
+      "sha256": "eefb1c80ecc879225b10e23194b007059667fca82e17a1faccd024a3f5a98342"
+    },
+    {
+      "path": "tests/reference-graph/p26-evidence-verifier.test.mjs",
+      "sha256": "e7d2c59b607e4120aa1127dac39ef0478ad180fe9bfae7a27d632d74ac760afb"
+    },
+    {
+      "path": "tests/reference-graph/p27-standard-deep-baseline.test.mjs",
+      "sha256": "fa1d9944e65ddb44123b279800879f0b3831d1080f140929c7c9eed196d58fbb"
+    },
+    {
+      "path": "tests/reference-graph/p28-profile-candidate-contract.test.mjs",
+      "sha256": "055ded4e7ab84bf090a8d6d6e916df339875216b43cc7aa7426bf9208571aaea"
+    },
+    {
+      "path": "tests/reference-graph/p29-offline-profile-parity.test.mjs",
+      "sha256": "02a3cc2dd77abab271660e63d3e10e99d2f696391617d5f976cd276ba4c1f486"
+    },
+    {
+      "path": "tests/reference-graph/p30-paginated-transport.test.mjs",
+      "sha256": "e43d28625ddd2244e779dd8dd49e4c52b1beb39c1b9addaf847579e907bd1e71"
+    },
+    {
+      "path": "tests/reference-graph/p30-profile-transport.test.mjs",
+      "sha256": "17d8d631fa96a65b5b5e3e4e146fccb9d6545b3a480bfdc9b9f2f949a33b7157"
+    },
+    {
+      "path": "tests/reference-graph/p31-postgrest-timestamp.test.mjs",
+      "sha256": "db74d175d75615b459ad87d5541891dbc7f1ffc2f9bda78ec39fb317efe94ad1"
+    },
+    {
+      "path": "tests/reference-graph/p31-profile-projection-smoke.sql",
+      "sha256": "4584c241b095ba8703fab64c13ffa045120954f21ee48dd88c2a4c14a10c47ef"
+    },
+    {
+      "path": "tests/reference-graph/p31-profile-projection.test.mjs",
+      "sha256": "5077a23ca21110effc92b25482b40f287ceefb139f9b18a8c709eb7809f433a5"
+    },
+    {
+      "path": "tests/reference-graph/p32-postgrest-contract.test.mjs",
+      "sha256": "9fc8356e4b94daa2fb0998f96574c1d2a84cac23829045a76d93823804967041"
+    },
+    {
+      "path": "tests/reference-graph/p32-postgrest-integration.mjs",
+      "sha256": "0a7f6d7743b3a8d9bebc5eb84b4c1e38e8513ddeb0802c119aceb52052d253b8"
+    },
+    {
+      "path": "tests/reference-graph/p32-source-negative-smoke.sql",
+      "sha256": "48e76e82f9362b518e994d08c06e830f42119e6171cd94d106e96903f562941f"
+    },
+    {
+      "path": "tests/reference-graph/p33-pinned-profile-parity.test.mjs",
+      "sha256": "abc694c9f2cfa382dac66ab9634459b7d087e1a09fc6609bdf8e885c1f19ac21"
+    },
+    {
+      "path": "tests/reference-graph/p34-legacy-public-baseline-cli.test.mjs",
+      "sha256": "828bf9125e0a89243e14531eb9ff05eebc16203de84aefc89a1593aa274193b1"
+    },
+    {
+      "path": "tests/reference-graph/p34-pattern-public-output-parity.test.mjs",
+      "sha256": "eb9d9ed5d90bb581be16e99917b1cd338281519d4229cdf8557f3f995712b5f8"
+    },
+    {
+      "path": "tests/reference-graph/p35-release-preflight-cli.test.mjs",
+      "sha256": "4ac861e4175be55f583fdb1a4de144e536c4db866678682a2f40ae86118512f7"
+    },
+    {
+      "path": "tests/reference-graph/p35-release-preflight.test.mjs",
+      "sha256": "f97e412992133c50d36b762720abf033d99e41d75643c676d4b3fa4940e6479d"
+    },
+    {
+      "path": "tests/reference-graph/p37-single-snapshot-public-audit.test.mjs",
+      "sha256": "e6368bc9c47183d8ce66b3c38ad697b3da477fd72e8b95ac76d0bc17af0529c7"
+    },
+    {
+      "path": "tests/reference-graph/p38-profile-refresh-cron.test.mjs",
+      "sha256": "ae6ec2f135802c18034091cc1dc1d927597a41382d683a3be91da55fdab08874"
+    },
+    {
+      "path": "tests/reference-graph/p39-p38-monitor-windows.test.mjs",
+      "sha256": "54c60a00d7ac0a5825964716e286c4c672bf790364a039b58669ae41f0a95ca1"
+    },
+    {
+      "path": "tests/reference-graph/p39-p38-monitor.test.mjs",
+      "sha256": "5a8a32d616f85a92d6a4dfc74110f7c871a0e05e67525614656c0869bededfb5"
+    },
+    {
+      "path": "tests/reference-graph/p39-p38-public-monitor.test.mjs",
+      "sha256": "53d660e49716c297223f612436af9f526d1e2ebe3667366469a2f7e596960d01"
+    },
+    {
+      "path": "tests/reference-graph/p39-p38-runtime.test.mjs",
+      "sha256": "1854bd7e05fc84b73a4ce75ddbdf26aa7cb57a1fb19e527f82c1d3a793183871"
+    },
+    {
+      "path": "tests/reference-graph/p39-profile-access-fixture.sql",
+      "sha256": "357805230b591a7a408172d72f18c383d2eb5c105bf2691243143d9a74afcb1f"
+    },
+    {
+      "path": "tests/reference-graph/p39-profile-access-smoke.sql",
+      "sha256": "e6f4b4934e298722a404cd76f40723449df9e0995c4036a75eaeb43ef175c5d1"
+    },
+    {
+      "path": "tests/reference-graph/p39-profile-access.test.mjs",
+      "sha256": "9392754157d351f8b148322c892931b3ba3a5fe0ef122142f818aa1f95f581bb"
+    }
+  ],
+  "documentation_files": [
+    {
+      "path": "reference-graph/P39.md",
+      "sha256": "dfef684560b0e72bec6d80cf37ce33c081fd619fddd6a83e0df171212a51ece1"
+    }
+  ]
+}

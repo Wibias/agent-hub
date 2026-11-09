@@ -1,0 +1,141 @@
+{
+  "schema_version": "reference-graph.p31-p37-provenance-audit.v1",
+  "as_of": "2026-11-09T06:34:17.000Z",
+  "target": {
+    "purpose": "agent-hub-reference-graph",
+    "project_ref": "vrznfnxzlxaavpqbzbzd"
+  },
+  "legacy_source": {
+    "source_commit": "9d31825542a1aa9531f4bd1da2ac041681f43a77",
+    "code_commit": "0fb1e28267f5ae7e4e99bcd7d864e2e8d93d8f04",
+    "artifacts_unchanged_between_commits": true
+  },
+  "freeze": {
+    "location": "local-read-only-archive-not-committed",
+    "reference_date": "2026-11-08",
+    "manifest_sha256": "3de3ad39a76b75bb2b6c602f57f32f50268c2f1fb4e013732b24ab5d400211c8",
+    "manifest_bytes": 13123,
+    "independence": "LOCAL_REPRODUCIBLE_FREEZE_NOT_INDEPENDENTLY_CONFIRMED",
+    "independent_confirmation": "BLOCKED"
+  },
+  "artifacts": [
+    {
+      "name": "templates",
+      "file": "templates.json",
+      "sha256": "cc7ac1abd1183bb9c63e167a4fe9f11e477add5f02111df0851fa737e347a6d7",
+      "bytes": 5588,
+      "kind": "frozen-source",
+      "independent_attestation": "BLOCKED"
+    },
+    {
+      "name": "records",
+      "file": "records.json",
+      "sha256": "d5469d1fc72a073aa2aa39037f690cbf8861e202dbd42ccb0b15ddb762dc7840",
+      "bytes": 1495765,
+      "kind": "frozen-source",
+      "independent_attestation": "BLOCKED"
+    },
+    {
+      "name": "patterns",
+      "file": "patterns.json",
+      "sha256": "c71c3eb5c8d5c5df7ef38d14fa36d397386fbaeba8236a38df22f45cb5c41b98",
+      "bytes": 26334,
+      "kind": "frozen-source",
+      "independent_attestation": "BLOCKED"
+    },
+    {
+      "name": "p27-baseline",
+      "file": "p27-baseline.json",
+      "sha256": "c15e3c14af946a3ea1d469b0372a83eac44cdeb95973fba7edc03be318cce868",
+      "bytes": 17951,
+      "kind": "legacy-baseline",
+      "independent_attestation": "BLOCKED"
+    },
+    {
+      "name": "p34-public-baseline",
+      "file": "p34-public-baseline.json",
+      "sha256": "3d292752515073e12c77742c31c71571fed1bcb782bd1b89382cc249d83bd3f2",
+      "bytes": 8937,
+      "kind": "legacy-baseline",
+      "independent_attestation": "BLOCKED"
+    }
+  ],
+  "p31_source_receipt": {
+    "file": "source-receipt.json",
+    "sha256": "1cc3ffa9bc9a80199969c9f07fba3ce506b203449a3ac3e4f19f628001535abe",
+    "bytes": 655,
+    "kind": "read-only-reconstruction",
+    "original_refresh_receipt_bytes": false,
+    "independent_attestation": "BLOCKED",
+    "limit": "The privileged P31 refresh return value was never archived; this file must not be described as the original receipt.",
+    "snapshot_date": "2026-11-08",
+    "refreshed_at": "2026-11-08T02:05:00.179Z",
+    "expected_candidate_count": 275,
+    "published_candidate_count": 275,
+    "candidate_id_set_sha256": "b3037425ff08c7822f695ce28c6e5fb1dbd3e245255ab33a614e96995cf2a6a2"
+  },
+  "alternate_cross_check": {
+    "kind": "documented-read-only-p7-vs-p31-observation",
+    "source": "https://github.com/Wibias/agent-hub/issues/244#issuecomment-6733447662",
+    "observed_at": "2026-11-09T06:01:09.000Z",
+    "source_count": 275,
+    "projection_count": 275,
+    "candidate_id_set_sha256": "b3037425ff08c7822f695ce28c6e5fb1dbd3e245255ab33a614e96995cf2a6a2",
+    "missing_or_extra_ids": 0,
+    "metadata_field_mismatches": 0,
+    "projection_refreshed_at": "2026-11-09T06:00:00.301897Z",
+    "security_advisor": {
+      "observed_at": "2026-11-09T06:02:00.000Z",
+      "errors": 0,
+      "warnings": 0
+    },
+    "attestation": "OPERATOR_REPORTED_NOT_INDEPENDENTLY_ATTESTED",
+    "limit": "This observation covers a later snapshot than the 2026-11-08 P33/P37 run and cannot retroactively authenticate that run's input."
+  },
+  "reports": {
+    "p33": {
+      "file": "runs/p33-report.json",
+      "sha256": "1481b2f476355c973858650bfc10d333d0a41714bc0d87fe1146bc25ebd696d8",
+      "schema_version": "reference-graph.p33-pinned-profile-parity.v2",
+      "reference_date": "2026-11-08",
+      "evaluated_cases": 48,
+      "exact_order_cases": 48,
+      "mismatch_cases": 0,
+      "pattern_parity_verified": false,
+      "live_graph_parity_verified": false,
+      "independent_attestation": "BLOCKED"
+    },
+    "p37": {
+      "file": "runs/p37-report.json",
+      "sha256": "93bebaebf8f75e09987e387ced2671de8b8497ac16c91150289c963ea22d0bef",
+      "schema_version": "reference-graph.p37-single-snapshot-public-audit.v1",
+      "reference_date": "2026-11-08",
+      "record_order_exact_cases": 48,
+      "pattern_exact_cases": 48,
+      "public_output_exact_cases": 48,
+      "mismatch_cases": 0,
+      "live_graph_parity_verified": false,
+      "independent_attestation": "BLOCKED"
+    }
+  },
+  "attestation": {
+    "independent_human_attestation": false,
+    "github_review_present": false,
+    "p35_approval_present": false,
+    "status": "BLOCKED"
+  },
+  "blockers": [
+    "p31-original-receipt-lost",
+    "freeze-not-independently-confirmed",
+    "p33-report-pin-not-independently-confirmed",
+    "p34-baseline-provenance-not-independently-confirmed",
+    "p37-report-pin-not-independently-confirmed",
+    "p35-approval-absent"
+  ],
+  "flags": {
+    "deployment_authorized": false,
+    "activation_authorized": false,
+    "repository_default_graph_enabled": false,
+    "activation_performed": false
+  }
+}
