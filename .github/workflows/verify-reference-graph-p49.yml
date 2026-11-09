@@ -1,0 +1,39 @@
+name: Reference graph P49 isolated mTLS containers
+
+on:
+  pull_request:
+    paths:
+      - 'reference-graph/p49-*'
+      - 'reference-graph/cli/p49-*'
+      - 'reference-graph/p46-*'
+      - 'reference-graph/p47-*'
+      - 'tests/reference-graph/p49-*'
+      - '.github/workflows/verify-reference-graph-p49.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: reference-graph-p49-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  p49-isolated-docker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Run P49 ephemeral mTLS integration tests
+        run: node --test tests/reference-graph/p49-mtls-lab-coordinator.test.mjs
+      - name: Rehearse isolated Docker mTLS workers, revocation and partition
+        timeout-minutes: 8
+        env:
+          P49_ALLOW_DOCKER_REHEARSAL: '1'
+        run: |
+          set -euo pipefail
+          # Internal Docker bridge, no host published ports or live credentials.
+          node reference-graph/cli/p49-rehearse-isolated-containers.mjs --isolated-test
