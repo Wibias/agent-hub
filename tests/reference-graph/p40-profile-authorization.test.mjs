@@ -40,7 +40,7 @@ function signed(payloadChanges = {}, privateKey = key.privateKey) {
 }
 function preflight(grant, options = {}) {
   return evaluateP40ScopedGrant({
-    grant, trustedPublicKeyPem, trustedPublicKeySha256,
+    grant, trustedPublicKeyPem: publicKeyPem, trustedPublicKeySha256,
     expectedRepositorySha: sha, now, ...options,
   });
 }
