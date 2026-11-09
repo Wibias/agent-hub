@@ -13,7 +13,10 @@ import { join, resolve } from 'node:path';
 
 import { createP47DurableLabRevocation } from '../p47-durable-lab-revocation.mjs';
 
-const IMAGE = 'node:24-alpine'; // CI-only fixture image, not a production image
+// This digest is the OCI manifest from a successful isolated P49 CI run.
+// It fixes the artifact version; no independent supply-chain audit is claimed.
+const EXPECTED_IMAGE_DIGEST = 'a34ab6d7f6f4813f4d0c5469d74685604b962fbdbf5793a7bc7b4998ecb867c8';
+const IMAGE = 'node:24-alpine@sha256:' + EXPECTED_IMAGE_DIGEST;
 // Preserve private 0700/0600 fixture access without giving containers DAC override.
 const CONTAINER_USER = Number.isInteger(process.getuid?.())
   && Number.isInteger(process.getgid?.())
@@ -219,8 +222,9 @@ export async function runP49IsolatedContainers(argv=process.argv.slice(2)) {
     // The floating input tag still needs a separately reviewed immutable CI pin.
     const imageRef=docker(['image','inspect','--format',
       '{{index .RepoDigests 0}}',IMAGE]);
-    if(!/^(?:docker\.io\/library\/)?node@sha256:[a-f0-9]{64}$/.test(imageRef)) {
-      throw Error('P49 unresolved container image digest');
+    if(!/^(?:docker\.io\/library\/)?node@sha256:[a-f0-9]{64}$/.test(imageRef)
+      || imageRef.split('@sha256:')[1] !== EXPECTED_IMAGE_DIGEST) {
+      throw Error('P49 container digest did not match pinned CI artifact');
     }
     const worker = args => workerArgs({...args,imageRef});
     stage='network-create';
@@ -322,7 +326,8 @@ export async function runP49IsolatedContainers(argv=process.argv.slice(2)) {
       internal_bridge_network:true,host_ports_published:false,
       tls_version:'TLSv1.3',
       runtime_image_digest_sha256:imageRef.split('@sha256:')[1],
-      runtime_image_reviewed_pin:false,
+      runtime_image_digest_pinned:true,
+      runtime_image_supply_chain_attested:false,
       mutual_tls_and_leaf_pins_verified:true,
       worker_permit_cases:2,
       wrong_client_cert_blocked:true,
