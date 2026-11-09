@@ -29,6 +29,19 @@ test('P42 strictly checks immutable Legacy control paths and rejects Git drift',
   assert.deepEqual(proof, revision);
   assert.ok(calls.some(x => x.includes('merge-base')));
   assert.ok(calls.some(x => x.includes('diff') && x.includes(CONTROL)));
+  assert.ok(calls.some(x => x[0] === 'diff' && x.includes('--cached')
+    && x.includes('--exit-code') && x.includes('--quiet')
+    && x.includes('knowledge/design-references')));
+  assert.throws(() => verifyP42LegacyCheckout({
+    command: args => {
+      if (args[0] === 'rev-parse' && args[1] === '--show-toplevel') return process.cwd();
+      if (args[0] === 'rev-parse') return 'a'.repeat(40);
+      if (args[0] === 'diff' && args.includes('--cached')) {
+        throw new Error('P42 staged Legacy control drift BLOCKED');
+      }
+      return '';
+    },
+  }), /BLOCKED/);
   assert.ok(calls.some(x => x.includes('knowledge/design-references')));
   assert.throws(() => verifyP42LegacyCheckout({
     command: args => args[0] === 'rev-parse' && args[1] === '--show-toplevel'
