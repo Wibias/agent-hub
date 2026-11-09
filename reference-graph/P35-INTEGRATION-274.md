@@ -162,6 +162,11 @@ automated merge. A merge also does not need the P31/P33/P34/P37 provenance
 audit, because those artifacts justify activating the Graph path, not compiling
 it into the repository.
 
+`main` currently has no branch protection, so GitHub enforces no review count.
+The missing review is a governance blocker on this candidate, not a platform
+one; nothing in the repository prevents a merge, which is exactly why the
+decision has to be made explicitly.
+
 A **Graph activation** additionally needs the versioned default-off authority,
 the independent source/projection evidence, a soak and monitoring receipt, a
 rollback rehearsal and explicit operator authorization. P35's historical lock,
