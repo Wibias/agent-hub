@@ -29,6 +29,7 @@ export function createP44IsolatedShadowRollbackHarness({
   let profiles = [];
   let attempts = 0;
   let killReason = null;
+  const inFlight = new Set();
 
   function status() {
     return {
@@ -50,8 +51,13 @@ export function createP44IsolatedShadowRollbackHarness({
       || decision.transport_enabled !== false) {
       throw new Error('P44 rollback boundary invalid');
     }
-    state = 'latched';
-    killReason = trigger;
+    if (state !== 'latched') {
+      state = 'latched';
+      killReason = trigger;
+      // A scoped manual revoke or any failure must cancel ALL in-flight
+      // requests, not merely suppress future ones.
+      for (const controller of inFlight) controller.abort();
+    }
   }
 
   return Object.freeze({
@@ -92,20 +98,21 @@ export function createP44IsolatedShadowRollbackHarness({
         && PROFILES.has(request?.profile)) {
         attempts++;
         const controller = new AbortController();
+        inFlight.add(controller);
         let timer;
-        const deadline = new Promise((_resolve, reject) => {
-          timer = setTimeout(() => {
-            controller.abort();
-            reject(new Error('P44 bounded timeout'));
-          }, timeoutMs);
+        const aborted = new Promise((_resolve, reject) => {
+          controller.signal.addEventListener('abort',
+            () => reject(new Error('P44 shadow cancelled')), { once: true });
         });
+        timer = setTimeout(() => latch(request.profile, 'timeout'), timeoutMs);
         try {
           const probe = await Promise.race([
             Promise.resolve().then(() => shadowProbe({
               records, patterns, request, now, signal: controller.signal,
             })),
-            deadline,
+            aborted,
           ]);
+          if (state === 'latched') throw new Error('P44 already revoked');
           if (probe?.status === 'exact' && probe.record_order_exact === true
             && probe.pattern_order_exact === true
             && probe.authoritative_source === 'legacy-control'
@@ -118,11 +125,12 @@ export function createP44IsolatedShadowRollbackHarness({
             reason = 'parity-mismatch';
           }
         } catch {
-          reason = controller.signal.aborted ? 'timeout' : 'http-error';
-          latch(request.profile, reason);
+          reason = killReason ?? (controller.signal.aborted ? 'timeout' : 'http-error');
+          if (state !== 'latched') latch(request.profile, reason);
           probeStatus = 'blocked';
         } finally {
           clearTimeout(timer);
+          inFlight.delete(controller);
         }
       }
       return {

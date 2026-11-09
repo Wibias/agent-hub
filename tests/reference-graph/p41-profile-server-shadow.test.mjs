@@ -170,3 +170,51 @@ test('P41 48-case parity does not touch production query or historical P35 pins'
   assert.doesNotMatch(query, /p41-profile-server-shadow|P40_SUPABASE_SECRET_KEY/);
   assert.doesNotMatch(src, /writeFile|recordUsageFn\(|process\.env|apply_migration/);
 });
+
+
+test('P41 externally cancelled before transport returns Legacy without any HTTP', async () => {
+  const controller = new AbortController();
+  controller.abort();
+  let calls = 0;
+  const result = await auditP41ProfileServerShadow({
+    ...base, request: requestFor(templates[0], 'standard'),
+    signal: controller.signal,
+    fetchImpl: async () => { calls++; return api()(); },
+  });
+  assert.equal(calls, 0);
+  assert.equal(result.status, 'blocked');
+  assert.equal(result.reason, 'shadow-aborted');
+  assert.equal(result.graph_runtime_activated, false);
+});
+
+test('P41 live GET combines external revocation and P30 deadline cancellation', async () => {
+  const controller = new AbortController();
+  let started;
+  const requestStarted = new Promise(resolve => { started = resolve; });
+  let cancelled = false;
+  let calls = 0;
+  const task = auditP41ProfileServerShadow({
+    ...base, request: requestFor(templates[0], 'standard'),
+    signal: controller.signal, timeoutMs: 2000,
+    fetchImpl: async (_url, options) => {
+      calls++;
+      assert.equal(options.signal.aborted, false);
+      return new Promise((_resolve, reject) => {
+        options.signal.addEventListener('abort', () => {
+          cancelled = true;
+          reject(new Error('secret not for output'));
+        }, { once: true });
+        started();
+      });
+    },
+  });
+  await requestStarted;
+  controller.abort();
+  const result = await task;
+  assert.equal(calls, 1);
+  assert.equal(cancelled, true);
+  assert.equal(result.status, 'blocked');
+  assert.equal(result.reason, 'shadow-aborted');
+  assert.equal(result.authoritative_source, 'legacy-control');
+  assert.doesNotMatch(JSON.stringify(result), /secret not for output/);
+});

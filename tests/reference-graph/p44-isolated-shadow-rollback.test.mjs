@@ -91,3 +91,68 @@ test('P44 timeout, thrown secret error and manual revoke block without retry',as
     shadowProbe:()=>exact,
   }).armForRehearsal({...scope,production_route_wiring:true}),/cannot arm/);
 });
+
+
+test('P44 manual revoke cancels an already running shadow and keeps Legacy output', async () => {
+  let reached;
+  const started = new Promise(resolve => { reached = resolve; });
+  let aborts = 0, calls = 0;
+  const h = createP44IsolatedShadowRollbackHarness({
+    timeoutMs: 2000,
+    shadowProbe: ({ signal }) => {
+      calls++;
+      return new Promise((_resolve, reject) => {
+        signal.addEventListener('abort', () => {
+          aborts++;
+          reject(new Error('cancelled'));
+        }, { once: true });
+        reached();
+      });
+    },
+  });
+  h.armForRehearsal(scope);
+  const pending = run(h);
+  await started;
+  h.revokeForRehearsal();
+  const result = await pending;
+  assert.equal(calls, 1);
+  assert.equal(aborts, 1);
+  assert.equal(result.shadow.status, 'blocked');
+  assert.equal(result.shadow.reason, 'manual-revoke');
+  assert.equal(result.shadow.local_kill_switch_latched, true);
+  assert.equal(result.routing.authoritative_source, 'legacy-control');
+  await run(h);
+  assert.equal(calls, 1);
+});
+
+test('P44 mismatch in one concurrent request cancels all other pending probes', async () => {
+  let calls = 0, firstResolve, secondStarted;
+  const started = new Promise(resolve => { secondStarted = resolve; });
+  let aborts = 0;
+  const h = createP44IsolatedShadowRollbackHarness({
+    timeoutMs: 2000,
+    shadowProbe: ({ signal }) => {
+      calls++;
+      if (calls === 1) return new Promise(resolve => { firstResolve = resolve; });
+      secondStarted();
+      return new Promise((_resolve, reject) => {
+        signal.addEventListener('abort', () => {
+          aborts++;
+          reject(new Error('cancelled after mismatch'));
+        }, { once: true });
+      });
+    },
+  });
+  h.armForRehearsal(scope);
+  const one = run(h), two = run(h);
+  await started;
+  firstResolve({ ...exact, record_order_exact: false });
+  const [a, b] = await Promise.all([one, two]);
+  assert.equal(calls, 2);
+  assert.equal(aborts, 1);
+  assert.equal(a.shadow.status, 'blocked');
+  assert.equal(b.shadow.status, 'blocked');
+  assert.equal(h.status().local_kill_switch_latched, true);
+  assert.equal(a.routing.authoritative_source, 'legacy-control');
+  assert.equal(b.routing.authoritative_source, 'legacy-control');
+});

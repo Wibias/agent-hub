@@ -78,6 +78,7 @@ export async function auditP41ProfileServerShadow({
   accessMode,
   fetchImpl = globalThis.fetch,
   timeoutMs = 5000,
+  signal,
   now = new Date(),
 } = {}) {
   const profile = request?.profile ?? null;
@@ -96,6 +97,10 @@ export async function auditP41ProfileServerShadow({
     || timeoutMs < 1 || timeoutMs > 10_000) {
     return blocked('server-transport-not-configured');
   }
+  if (signal !== undefined && !(signal instanceof AbortSignal)) {
+    return blocked('input-invalid');
+  }
+  if (signal?.aborted) return blocked('shadow-aborted');
   if (typeof sourceWitnessJson !== 'string' || !sourceWitnessJson.length
     || Buffer.byteLength(sourceWitnessJson, 'utf8') > MAX_WITNESS_BYTES
     || typeof sourceWitnessSha256 !== 'string'
@@ -131,9 +136,15 @@ export async function auditP41ProfileServerShadow({
   }
 
   let serverHttpRequests = 0;
-  const observedFetch = async (...args) => {
+  // Merge the external kill-switch signal with P30's own deadline signal.
+  // Abort BEFORE issuing a page if revocation arrived in between pages.
+  const observedFetch = async (url, options) => {
+    if (signal?.aborted) throw new Error('shadow-aborted');
+    const requestSignal = signal
+      ? AbortSignal.any([options.signal, signal])
+      : options.signal;
     serverHttpRequests += 1;
-    return fetchImpl(...args);
+    return fetchImpl(url, { ...options, signal: requestSignal });
   };
   let remote;
   try {
@@ -146,8 +157,11 @@ export async function auditP41ProfileServerShadow({
       asOf: now.toISOString(), fetchImpl: observedFetch, timeoutMs,
     });
   } catch {
-    return { ...blocked('server-fetch-failed'), server_http_requests: serverHttpRequests };
+    return { ...blocked(signal?.aborted ? 'shadow-aborted' : 'server-fetch-failed'),
+      server_http_requests: serverHttpRequests };
   }
+  if (signal?.aborted) return { ...blocked('shadow-aborted'),
+    server_http_requests: serverHttpRequests };
   if (remote.transport.refreshed_at !== expected.refreshed_at) {
     return {
       ...blocked('snapshot-refresh-mismatch'),
@@ -166,6 +180,8 @@ export async function auditP41ProfileServerShadow({
       server_http_requests: serverHttpRequests,
     };
   }
+  if (signal?.aborted) return { ...blocked('shadow-aborted'),
+    server_http_requests: serverHttpRequests };
   return {
     schema_version: 'reference-graph.p41-profile-server-shadow.v1',
     profile: request.profile,
