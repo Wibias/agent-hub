@@ -65,7 +65,10 @@ export async function startP48AuthenticatedLabCoordinator({
       respond(response, 403, 'forbidden');
       return;
     }
-    if (request.headers['content-length'] !== undefined
+    // Node's http.request may send Content-Length: 0 on a bodyless GET.
+    // Reject all nonzero lengths and any transfer-encoding.
+    if ((request.headers['content-length'] !== undefined
+        && request.headers['content-length'] !== '0')
       || request.headers['transfer-encoding'] !== undefined) {
       respond(response, 400, 'invalid-request');
       return;
