@@ -26,8 +26,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 24
       - name: Validate P50 evidence contracts with negative tests
@@ -50,7 +50,7 @@ jobs:
           set -euo pipefail
           node reference-graph/cli/p50-create-ci-evidence.mjs --p49-report "$RUNNER_TEMP/p49-report.json" --output "$RUNNER_TEMP/p50-ci-evidence.json"
       - name: Upload validated, nonsecret P50 evidence
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: p50-p49-ci-evidence
           path: ${{ runner.temp }}/p50-ci-evidence.json
@@ -70,7 +70,7 @@ jobs:
       artifact-metadata: write
     steps:
       - name: Download only the already-tested P50 JSON artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: p50-p49-ci-evidence
           path: p50-download
@@ -106,7 +106,7 @@ jobs:
           process.stdout.write('P50 independent non-release gate PASS\n');
           NODE
       - name: Sign P50 artifact digest with GitHub OIDC and Sigstore
-        uses: actions/attest@v4
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
         with:
           subject-path: p50-download/p50-ci-evidence.json
       - name: Verify GitHub artifact attestation and repository identity
