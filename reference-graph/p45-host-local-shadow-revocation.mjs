@@ -114,13 +114,16 @@ export function wrapP45HostLocalShadow({
     };
     const externalAbort = () => {
       try { revokeP45SharedShadow({ directory, reason: 'external-abort' }); }
-      finally { abort(); }
+      catch { /* An unavailable directory already reads as revoked. */ }
+      abort();
     };
     args.signal?.addEventListener('abort', externalAbort, { once: true });
     const watcher = setInterval(() => {
       if (isP45ShadowRevoked(directory)) abort();
     }, pollMs);
     try {
+      // Close the race between the initial preflight and event registration.
+      if (args.signal?.aborted) externalAbort();
       const result = await Promise.race([
         Promise.resolve().then(() => {
           if (controller.signal.aborted || isP45ShadowRevoked(directory)) {
