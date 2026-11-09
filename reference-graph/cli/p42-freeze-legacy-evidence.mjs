@@ -57,6 +57,9 @@ export function verifyP42LegacyCheckout({
   if (resolve(root) !== resolve(cwd) || !COMMIT_SHA.test(head)) reject();
   command(['merge-base', '--is-ancestor', CONTROL_SHA, head]);
   command(['diff', '--exit-code', '--quiet', CONTROL_SHA, head, '--', ...CONTROL_FILES]);
+  // git diff without --cached checks only the working tree against the index.
+  // Staged control-file edits must also be rejected before freezing evidence.
+  command(['diff', '--cached', '--exit-code', '--quiet', '--', ...CONTROL_FILES]);
   command(['diff', '--exit-code', '--quiet', '--', ...CONTROL_FILES]);
   if (command(['ls-files', '--others', '--exclude-standard', '--', ...CONTROL_FILES])) reject();
   return { checkout_sha: head, control_commit_sha: CONTROL_SHA };
