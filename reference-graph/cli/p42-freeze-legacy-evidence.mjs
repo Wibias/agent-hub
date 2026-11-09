@@ -62,6 +62,14 @@ export function verifyP42LegacyCheckout({
   command(['diff', '--cached', '--exit-code', '--quiet', '--', ...CONTROL_FILES]);
   command(['diff', '--exit-code', '--quiet', '--', ...CONTROL_FILES]);
   if (command(['ls-files', '--others', '--exclude-standard', '--', ...CONTROL_FILES])) reject();
+  // The legacy loader includes all direct data/patterns JSONL files, including
+  // Git-ignored files. The root knowledge/* ignore rule can hide those from
+  // the ordinary --others --exclude-standard check above. Never freeze such
+  // untracked source bytes as though they came from the pinned Git HEAD.
+  if (command(['ls-files', '--others', '--ignored', '--exclude-standard', '--',
+    ':(glob)knowledge/design-references/data/*.jsonl',
+    ':(glob)knowledge/design-references/patterns/*.jsonl',
+  ])) reject();
   return { checkout_sha: head, control_commit_sha: CONTROL_SHA };
 }
 
