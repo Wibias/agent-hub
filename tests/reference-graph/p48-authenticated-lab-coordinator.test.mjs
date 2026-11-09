@@ -74,10 +74,20 @@ function worker(endpoint, bearer, mode = 'exact') {
 }
 async function fetchRaw(endpoint, method, headers = []) {
   const url = new URL(endpoint);
+  // Node's http.request does not accept a flat rawHeaders array here.
+  // Convert to normal header values; preserve duplicates as arrays so the
+  // server sees two distinct Authorization entries in req.rawHeaders.
+  const requestHeaders = {};
+  for (let i = 0; i < headers.length; i += 2) {
+    const name = headers[i], value = headers[i + 1];
+    if (!Object.hasOwn(requestHeaders, name)) requestHeaders[name] = value;
+    else requestHeaders[name] = Array.isArray(requestHeaders[name])
+      ? [...requestHeaders[name], value] : [requestHeaders[name], value];
+  }
   return new Promise((resolve, reject) => {
     const request = httpRequest({
       hostname: url.hostname, port: url.port, path: url.pathname,
-      method, headers, agent: false,
+      method, headers: requestHeaders, agent: false,
     }, response => {
       let body = '';
       response.setEncoding('utf8');
