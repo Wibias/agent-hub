@@ -39,6 +39,7 @@ const REQUIRED_TRIGGERS = Object.freeze([
   'manual-revoke', 'signature-invalid', 'evidence-expired',
   'source-stale', 'http-error', 'timeout', 'parity-mismatch',
   'quality-regression', 'latency-budget', 'critical-monitor',
+  'rollback-drill',
 ]);
 
 function exact(value, keys) {
@@ -122,7 +123,10 @@ export function evaluateP62ReleaseReviewRecord({
     || !timestamp(record.expires_at)
     || typeof record.snapshot_date !== 'string'
     || !/^\d{4}-\d{2}-\d{2}$/.test(record.snapshot_date)
-    || record.snapshot_date !== record.refreshed_at.slice(0, 10)) {
+    || record.snapshot_date !== record.refreshed_at.slice(0, 10)
+    || record.snapshot_date !== now.toISOString().slice(0, 10)
+    || now.getTime() - Date.parse(record.refreshed_at) > 14_400_000
+    || Date.parse(record.refreshed_at) - now.getTime() > 60_000) {
     return result(false, 'snapshot-or-window-invalid');
   }
   const start = Date.parse(record.not_before);
