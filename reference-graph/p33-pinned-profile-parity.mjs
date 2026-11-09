@@ -7,6 +7,7 @@ import {
 } from './p30-profile-transport.mjs';
 import { compareP29OfflineProfileParity } from './p29-offline-profile-parity.mjs';
 import { hashP33CandidateContent } from './p33-candidate-content-digest.mjs';
+import { validateP40ReadOnlySourceWitness } from './p40-readonly-witness.mjs';
 
 const TARGET = JSON.parse(readFileSync(new URL('./target.json', import.meta.url), 'utf8'));
 const PROJECT_REF = 'vrznfnxzlxaavpqbzbzd';
@@ -63,6 +64,16 @@ function verifyPinnedJson(raw, sha, maxBytes, category) {
 }
 
 function verifyReceipt(receipt, asOf) {
+  // A new independently archived read-only source/projection witness may
+  // replace a FUTURE receipt, but never masquerades as the lost P31 original.
+  if (receipt?.schema_version === 'reference-graph.p40-readonly-source-witness.v1') {
+    try {
+      validateP40ReadOnlySourceWitness(receipt, { asOf });
+    } catch {
+      fail('source-receipt-invalid');
+    }
+    return;
+  }
   if (!ownExactKeys(receipt, RECEIPT_KEYS)
     || receipt.schema_version !== RECEIPT_VERSION
     || receipt.projection_version !== PROJECTION_VERSION
