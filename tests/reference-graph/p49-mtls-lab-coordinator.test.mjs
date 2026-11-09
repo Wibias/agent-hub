@@ -75,7 +75,7 @@ function envelope(decision='shadow-probe-only',sequence=1) {
 }
 function persisted(dir) {
   const state=createP47DurableLabRevocation({
-    directory:dir,scope,publicKeyPem,publicKeySha256:signerPin,
+    directory:dir,scope,publicKeyPem:publicPem,publicKeySha256:signerPin,
     expectedRepositorySha:repoSha,expectedLabId:labId,clock:now,
   });
   state.seedLabPermit(envelope());
