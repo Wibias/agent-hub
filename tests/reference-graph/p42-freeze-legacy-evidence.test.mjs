@@ -54,7 +54,7 @@ test('P42 builds consistent 48-case Legacy-only P27/P34 inputs without Graph', a
   assert.equal(JSON.parse(data.templates).length, 24);
   assert.ok(Array.isArray(JSON.parse(data.records)));
   assert.ok(Array.isArray(JSON.parse(data.patterns)));
-  assert.throws(() => buildP42LegacyInputs({ date: '2026-02-30' }), /BLOCKED/);
+  await assert.rejects(buildP42LegacyInputs({ date: '2026-02-30' }), /BLOCKED/);
 });
 
 test('P42 writes private new local files with correct byte pins; manifest cannot self-attest', async () => {

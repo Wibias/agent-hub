@@ -15,7 +15,7 @@ import { runP34FreezeLegacyPublicBaseline } from './p34-freeze-legacy-public-bas
 
 const CONTROL_SHA = '83a3794cc54d2f2d129b83e8e672e18b35f11cff';
 const PROJECT = 'vrznfnxzlxaavpqbzbzd';
-const SHA256 = /^[a-f0-9]{64}$/;
+const COMMIT_SHA = /^[a-f0-9]{40}$/;
 const CASES = fileURLToPath(new URL('../shadow-cases.json', import.meta.url));
 const CONTROL_FILES = Object.freeze([
   'knowledge/design-references',
@@ -54,7 +54,7 @@ export function verifyP42LegacyCheckout({
   if (typeof command !== 'function') reject();
   const root = command(['rev-parse', '--show-toplevel']);
   const head = command(['rev-parse', 'HEAD']);
-  if (resolve(root) !== resolve(cwd) || !SHA256.test(head)) reject();
+  if (resolve(root) !== resolve(cwd) || !COMMIT_SHA.test(head)) reject();
   command(['merge-base', '--is-ancestor', CONTROL_SHA, head]);
   command(['diff', '--exit-code', '--quiet', CONTROL_SHA, head, '--', ...CONTROL_FILES]);
   command(['diff', '--exit-code', '--quiet', '--', ...CONTROL_FILES]);
@@ -128,7 +128,7 @@ export async function freezeP42LocalEvidence({
     || !(observedAt instanceof Date) || Number.isNaN(observedAt.valueOf())
     || typeof verifyCheckout !== 'function') reject();
   const revision = verifyCheckout();
-  if (!revision || !SHA256.test(revision.checkout_sha)
+  if (!revision || !COMMIT_SHA.test(revision.checkout_sha)
     || revision.control_commit_sha !== CONTROL_SHA) reject();
   const data = await buildP42LegacyInputs({
     date, records, patterns, templatesRaw: readText(CASES),
