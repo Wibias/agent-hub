@@ -1857,36 +1857,29 @@ Official host references reviewed 2026-09-30:
 - https://developers.openai.com/docs/hooks
 - https://developers.openai.com/plugins/build/plugins
 
-## Claude Code command-hook adapter
+## Claude Code command-hook integration
 
-The second production host adapter uses Claude Code's documented
-`UserPromptSubmit` command hook.
+Claude Code uses the same production hook set as Codex:
 
-Entrypoint:
+| Event | Entrypoint | Behavior |
+|---|---|---|
+| `SessionStart` | `memory-engine/embedding-worker-launcher.mjs` | starts the pinned E5 worker |
+| `UserPromptSubmit` | `memory-engine/adapters/claude-code-full-hook-cli.mjs` | hybrid recall, explicit memory commands, candidate capture, optional auto-pipeline |
+| `Stop` | `memory-engine/adapters/claude-code-full-hook-cli.mjs` | captures root-agent decisions |
+| `SubagentStop` | `memory-engine/adapters/claude-code-full-hook-cli.mjs` | captures subagent decisions with agent provenance |
+| `Stop`, `SubagentStop` | `scripts/claude-code-agent-memory-pipeline-hook.mjs` | processes queued candidates in the background |
 
-```text
-memory-engine/adapters/claude-code-hook-cli.mjs
-```
+The full hook normalizes Claude Code's event JSON before delegating to the
+shared Codex recall/capture core. `prompt_id`, when present, becomes the shared
+`turn_id`; otherwise a deterministic hash of the session and prompt does. An
+empty `agent_type` on `SubagentStop` is recorded as `subagent`. Evidence and
+explicit-claim authorization use the harness value `claude-code`, so Claude
+memory stays distinguishable from Codex memory while sharing one database and
+one candidate pipeline.
 
-Claude Code supplies command-hook JSON on stdin, including `session_id`,
-`cwd`, `hook_event_name`, and the submitted `prompt`. Current Claude Code
-versions may also supply `prompt_id`; the adapter does not require it.
-
-The v1 Claude Code adapter is deliberately **read-only for canonical memory**.
-For each valid `UserPromptSubmit` event it:
-
-1. resolves the current Git root, branch, and revision;
-2. refreshes rebuildable repository-freshness state;
-3. calls `memory.protocol.v1` `recall` for the configured project only;
-4. applies the same `answer` reliance gate used by the Codex adapter;
-5. emits only selected bounded memory through
-   `hookSpecificOutput.additionalContext`.
-
-It does not parse `transcript_path`, capture prompt Evidence, create memory
-candidates, run the importance/relation pipeline, or accept explicit memory
-mutation commands. Missing memory, an unknown project, Git failure, a restore
-lock, recall failure, or an empty reliance-selected result returns no output
-and does not block the prompt.
+`memory-engine/adapters/claude-code-hook-cli.mjs` remains available as a
+minimal read-only lexical recall adapter. The generated user-scope
+registration uses the full hook.
 
 The adapter uses the same shared database environment as Codex:
 
@@ -1903,45 +1896,70 @@ checkout's Git `origin`. The `--ignore-memory-env` flag ignores stale
 `AGENT_HUB_MEMORY_*` overrides and uses that default database plus Git-derived
 scope.
 
-The adapter never creates a missing database or project. This keeps its first
-host integration read-only and ensures Claude Code cannot silently establish a
-new canonical scope.
-
 ### Claude Code hook registration
 
 Claude Code supports command hooks in user, project, managed, and plugin hook
-configuration. A minimal project-level `.claude/settings.json` registration is:
+configuration. `scripts/setup-claude-host.mjs --apply` writes the user-scope
+registration, removes any RTK hook, and links Hub skills into
+`~/.claude/skills`. The generated shape is:
 
 ```json
 {
   "hooks": {
-    "UserPromptSubmit": [
+    "SessionStart": [
       {
+        "matcher": "startup|resume|clear|compact",
         "hooks": [
           {
             "type": "command",
-            "command": "node /absolute/path/to/agent-hub/memory-engine/adapters/claude-code-hook-cli.mjs --ignore-memory-env",
-            "timeout": 10
+            "command": "\"node\" \"<hub>/memory-engine/embedding-worker-launcher.mjs\" \"--cache-dir\" \"<hub>/.cache/memory-engine/e5\"",
+            "timeout": 45,
+            "async": true
           }
         ]
       }
-    ]
-  }
-}
-```
-
-On Windows, use the corresponding escaped absolute path, for example:
-
-```json
-{
-  "hooks": {
+    ],
     "UserPromptSubmit": [
       {
         "hooks": [
           {
             "type": "command",
-            "command": "node C:\\absolute\\path\\to\\agent-hub\\memory-engine\\adapters\\claude-code-hook-cli.mjs --ignore-memory-env",
+            "command": "\"node\" \"<hub>/memory-engine/adapters/claude-code-full-hook-cli.mjs\" \"--ignore-memory-env\" \"--explicit-memory-requests\" \"--hybrid-recall\" \"--recall-relevance\" \"--recall-fast-path-shadow-replay\" \"--candidate-capture\" \"--auto-pipeline\"",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"node\" \"<hub>/memory-engine/adapters/claude-code-full-hook-cli.mjs\" \"--ignore-memory-env\"",
             "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "\"node\" \"<hub>/scripts/claude-code-agent-memory-pipeline-hook.mjs\" \"--ignore-memory-env\"",
+            "timeout": 300,
+            "async": true
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"node\" \"<hub>/memory-engine/adapters/claude-code-full-hook-cli.mjs\" \"--ignore-memory-env\"",
+            "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "\"node\" \"<hub>/scripts/claude-code-agent-memory-pipeline-hook.mjs\" \"--ignore-memory-env\"",
+            "timeout": 300,
+            "async": true
           }
         ]
       }
@@ -1952,12 +1970,8 @@ On Windows, use the corresponding escaped absolute path, for example:
 
 Claude Code documents `UserPromptSubmit` as a synchronous per-prompt hook:
 plain stdout or `hookSpecificOutput.additionalContext` is injected into the
-model context. This adapter uses the structured JSON form only.
-
-The first Claude Code adapter intentionally uses protocol-backed lexical recall
-only. Hybrid E5 recall, candidate capture, and explicit memory-management
-commands remain follow-up work after this read-only boundary is proven in a
-real Claude Code session.
+model context. The full hook uses the structured JSON form only. Stop and
+SubagentStop output is suppressed when it contains only `{"continue": true}`.
 
 ## Pinned E5 provider
 

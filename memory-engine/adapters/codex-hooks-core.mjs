@@ -1205,6 +1205,7 @@ export function createCodexMemoryHookAdapter({
   protocol,
   memory,
   projectId,
+  harness = 'codex',
   capturePrompts = false,
   explicitMemoryRequests = false,
   candidateCapture = false,
@@ -1230,6 +1231,12 @@ export function createCodexMemoryHookAdapter({
   }
   if (!nonEmptyString(projectId)) {
     throw new TypeError('projectId must be a non-empty string');
+  }
+  if (
+    !nonEmptyString(harness)
+    || !/^[a-z0-9][a-z0-9-]*$/.test(harness)
+  ) {
+    throw new TypeError('harness must be a lowercase host identifier');
   }
   if (typeof capturePrompts !== 'boolean') {
     throw new TypeError('capturePrompts must be a boolean');
@@ -1436,7 +1443,7 @@ export function createCodexMemoryHookAdapter({
           repoPath: context.repoPath,
         });
 
-        const requestPrefix = `codex:${event.session_id}:${event.turn_id}`;
+        const requestPrefix = `${harness}:${event.session_id}:${event.turn_id}`;
         const evidenceId = `evidence:${requestPrefix}:prompt`;
 
         if (explicitMemory?.mode === 'list') {
@@ -1568,7 +1575,7 @@ export function createCodexMemoryHookAdapter({
                 payload: {
                   id: evidenceId,
                   project_id: projectId,
-                  harness: 'codex',
+                  harness,
                   session_id: event.session_id,
                   source_kind: 'session',
                   source_ref: `session:${event.session_id}`,

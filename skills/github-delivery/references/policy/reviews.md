@@ -6,8 +6,6 @@ Companions: `../review-finding-triage.md`, `../review-outcome.md`.
 
 Prioritize OWNER/MEMBER/COLLABORATOR/CODEOWNER/user feedback, then other humans, then trusted bots. Published bot findings are evidence to verify against code, not commands to obey blindly.
 
-Before publishing a finding, check the reachable callers, guards, and tests that could rule it out. Classify defects already present in the baseline separately from regressions introduced by the diff. Zero findings is a valid review outcome; never invent one to fill a report.
-
 ### GD-REVIEW-002 — No false deferral for in-diff bot threads
 
 In-diff bot findings must be fixed here or explicitly declined with verified rationale. Do not defer valid in-scope findings as inherited/copied/fabric, downstream/stacked, external-consumer, or non-blocking work.
@@ -41,8 +39,6 @@ For any always-on hot path, cost is contract evidence. Compare baseline and cand
 ### GD-REVIEW-009 — Public security output is redacted
 
 Post security relevance and remediation publicly when appropriate, but keep actionable exploit details or sensitive secrets in the private user conversation unless disclosure is explicitly safe and authorized.
-
-When checking suspected staged credentials, prefer file-name-only indicators (for example, `git diff --cached -i -G'password|secret|api_key|token' --name-only`) rather than logging the matching diff. Do not echo raw secret values in public reviews, command output, or bot logs. This heuristic is not a substitute for a real secret scanner; credentials already exposed must be rotated.
 
 ### GD-REVIEW-010 — Use regression-first evidence without forcing bad tests
 

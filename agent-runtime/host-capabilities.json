@@ -50,8 +50,9 @@
     },
     "claude": {
       "displayName": "Claude Code",
-      "reviewed": "2026-10-03",
+      "reviewed": "2026-11-09",
       "sources": [
+        "https://code.claude.com/docs/en/skills",
         "https://code.claude.com/docs/en/hooks",
         "https://github.com/addyosmani/agent-skills/blob/main/docs/advanced-per-agent-configuration.md"
       ],
@@ -64,7 +65,7 @@
       },
       "adapter": {
         "configRenderer": "unsupported",
-        "note": "General Claude Code host-config rendering remains unsupported. Documented lifecycle command hooks are supported; the read-only memory integration uses UserPromptSubmit through the explicit Claude Code hook adapter."
+        "note": "General Claude Code host-config rendering remains unsupported. User-scope skills, the CLAUDE.md pointer, and the Codex-parity memory hook set (SessionStart, UserPromptSubmit, Stop, SubagentStop) are installed by scripts/setup-claude-host.mjs; documented lifecycle command hooks are supported."
       },
       "hooks": {
         "supported": true,

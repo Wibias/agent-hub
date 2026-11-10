@@ -2,14 +2,14 @@
   "schemaVersion": 1,
   "kind": "github-delivery/distribution-manifest",
   "name": "github-delivery",
-  "version": "1.8.5",
-  "sourceCommit": "4e682bda78e4791c7f8dcb4e01b9d792485d5c7e",
+  "version": "1.10.0",
+  "sourceCommit": "9f858bc5a0aec8e2faa5f0eedec88df37c1dd8ea",
   "files": [
     {
       "path": "CHANGELOG.md",
-      "bytes": 98651,
+      "bytes": 101729,
       "mode": "0644",
-      "sha256": "7819a90de3068f95d4da78358bcc1374971d1ca1ed02f797cb03ac218d08d1f1"
+      "sha256": "21883f0ce29717bda549e57e60d0a2db713e1d90cbf8583ad3083b8c1e735a29"
     },
     {
       "path": "INSTALL.md",
@@ -25,9 +25,9 @@
     },
     {
       "path": "README.md",
-      "bytes": 41017,
+      "bytes": 41919,
       "mode": "0644",
-      "sha256": "a1c12aa61e83278d9d5cd2724f82811ceb619a327eca5affb5a9eb6b0b529a1d"
+      "sha256": "259efb8f50e32cab2f4cd19e2cd7021a5267bc77d0e8d49befc4e2f356b2623d"
     },
     {
       "path": "SECURITY.md",
@@ -37,9 +37,9 @@
     },
     {
       "path": "SKILL.md",
-      "bytes": 13391,
+      "bytes": 13392,
       "mode": "0644",
-      "sha256": "8e62d18c20bd0713e8759af2a05ddc8b9af61457c1858998737f2c7d05d0130d"
+      "sha256": "7838f720168426b9510fc7e842089f50ee6c54ec8aa0ab837dc618fb3e1ebf40"
     },
     {
       "path": "agents/comment-inspector.md",
@@ -349,9 +349,9 @@
     },
     {
       "path": "package.json",
-      "bytes": 3572,
+      "bytes": 3650,
       "mode": "0644",
-      "sha256": "70469ace4a5d315980d4b416c1fe0b1232b29ec0d38b23332b8297eec8f1f4c2"
+      "sha256": "8a0ed2f78a22465f03719f514f5b591a1f872de5e9bb69c1b98f58b422a9eaa2"
     },
     {
       "path": "references/agent-brief.md",
@@ -445,9 +445,9 @@
     },
     {
       "path": "references/configuration.md",
-      "bytes": 3502,
+      "bytes": 5463,
       "mode": "0644",
-      "sha256": "a2320acf399050429b41c6eafde75a1d9eb5f382e8f3a219873ee290144ef417"
+      "sha256": "7766b4c001960c3d52fa17597f69153c4a968019229e317f66340ccb39fbc2b9"
     },
     {
       "path": "references/consolidate-prs.md",
@@ -463,9 +463,9 @@
     },
     {
       "path": "references/create-pr-from-local-work.md",
-      "bytes": 15442,
+      "bytes": 15589,
       "mode": "0644",
-      "sha256": "1dbb185c9c26308c448154a994714add730e4269eab031ea19253afd5a36d6a7"
+      "sha256": "0e8ac3610c42091f1c9bbe431e727813ff7320fa1ac0ac9b2ec1ee464bc10d09"
     },
     {
       "path": "references/design-quality.md",
@@ -541,9 +541,9 @@
     },
     {
       "path": "references/mutation-modes.md",
-      "bytes": 13801,
+      "bytes": 14386,
       "mode": "0644",
-      "sha256": "e168b35ab47c7ee4135761ffbebee6df2daec3e6079442bdb381753b144f4e9e"
+      "sha256": "7621fc5bfc588ea16b8bd03b1a0909bb722891f1b88cc96f55191a12327e3b8f"
     },
     {
       "path": "references/no-comments.md",
@@ -595,9 +595,9 @@
     },
     {
       "path": "references/policy/git.md",
-      "bytes": 2474,
+      "bytes": 2724,
       "mode": "0644",
-      "sha256": "81f5f105bf7e488f02ef700ab182a471234719232e74ebba9cff942dfd9e44b9"
+      "sha256": "2a62abf8f6b570094bee259b26adebb371f9cf782f2eca59d9e5b97852836873"
     },
     {
       "path": "references/policy/issues.md",
@@ -1021,9 +1021,9 @@
     },
     {
       "path": "scripts/create-pr-publication-plan.mjs",
-      "bytes": 1890,
+      "bytes": 2394,
       "mode": "0755",
-      "sha256": "9cc2f8224c5fb528367f5fc1651dff6659120e1e4904508d4974235c3e63f945"
+      "sha256": "8067c6b07c89a305bf1030debf76e160e04c1079bce7ef57f41adf2b25eaf490"
     },
     {
       "path": "scripts/cursor-debug-trace-hook.mjs",
@@ -1165,9 +1165,9 @@
     },
     {
       "path": "scripts/lib/authority-grant.mjs",
-      "bytes": 13905,
+      "bytes": 13926,
       "mode": "0755",
-      "sha256": "d9a5ca8957d3890542e47cf65d16ece0df8fe009d7dcf46e39098aed8fa6fd4a"
+      "sha256": "efbff0309a106fd0ff5c55aaaa2ee1ddf43c269c99775c977056fcca64453cf0"
     },
     {
       "path": "scripts/lib/authority-head-refresh.mjs",
@@ -1333,9 +1333,9 @@
     },
     {
       "path": "scripts/lib/config-command.mjs",
-      "bytes": 1422,
+      "bytes": 2742,
       "mode": "0755",
-      "sha256": "a5e1ff5e8b282ddac3d9ca317aaa234ab12743013e31e5a25245cee93beacc2a"
+      "sha256": "6132618d561fcd931782a90fa51cc4b07cf8ac0ad4eda35382922bd78bfe191e"
     },
     {
       "path": "scripts/lib/content-preserving-rewrite.mjs",
@@ -1351,15 +1351,15 @@
     },
     {
       "path": "scripts/lib/create-pr-publication-plan.mjs",
-      "bytes": 1157,
+      "bytes": 3326,
       "mode": "0755",
-      "sha256": "b35d7bf481f236f04c01f304acc22210bb77213053cc20f1e5ee5723394a3c71"
+      "sha256": "f603005adcd6d19c68df37542035117dac57d6d114d2fdd9b21ba51b33657a2a"
     },
     {
       "path": "scripts/lib/create-pr-publication-state.mjs",
-      "bytes": 5885,
+      "bytes": 15260,
       "mode": "0755",
-      "sha256": "e18b8258f4b71e603ecda6e26828e3fa0f711394beabaf6e2ec241e98b345735"
+      "sha256": "5f9a3a02ae9819a7a387ba039215dad14f8cca339438d5b6c2d1a86c3676aafd"
     },
     {
       "path": "scripts/lib/cursor-debug-trace.mjs",
@@ -1369,9 +1369,9 @@
     },
     {
       "path": "scripts/lib/delivery-workflow-controller.mjs",
-      "bytes": 22633,
+      "bytes": 23572,
       "mode": "0755",
-      "sha256": "f0ca93297c7d93c9b1b6ee51a41adcd02f102546cd7ad8381128fdcd5731f278"
+      "sha256": "9e2cdeb3d2629a79558dd9b8405273056e04d81bd245360edf4b5a658d6ce49c"
     },
     {
       "path": "scripts/lib/delivery-workflow-profiles.mjs",
@@ -1429,9 +1429,9 @@
     },
     {
       "path": "scripts/lib/github-lifecycle-mutation-broker.mjs",
-      "bytes": 13219,
+      "bytes": 14013,
       "mode": "0755",
-      "sha256": "ff80088d3ba47feaf7ba848a99c809f51ea5ab49253d401aa3ff5d5fd5a860d8"
+      "sha256": "b223ee8ef0a97e4667418d58e8d92f03e0fd764805edc17e4a7e9b1cb112a1d2"
     },
     {
       "path": "scripts/lib/github-mutation-broker.mjs",
@@ -1447,9 +1447,9 @@
     },
     {
       "path": "scripts/lib/github-pagination.mjs",
-      "bytes": 1606,
+      "bytes": 1641,
       "mode": "0755",
-      "sha256": "3aedd09ad9581a1e62ca2b792d698c672818e7ba02261aed2b10f5685096f15e"
+      "sha256": "443e084e4618822c10b445b1e684be124e8be45130ba68e131518a69361e584c"
     },
     {
       "path": "scripts/lib/github-retry.mjs",
@@ -1507,9 +1507,9 @@
     },
     {
       "path": "scripts/lib/lifecycle-mutations.mjs",
-      "bytes": 21316,
+      "bytes": 25674,
       "mode": "0755",
-      "sha256": "b42c23cc599ad8813a977a5d5c3566a04df862d1755b8ef5cfa146e5b6cb50b1"
+      "sha256": "98286e9d0f886095098fcf30e8442aebc7b7aef785597ed67ccbfde4eb5e028e"
     },
     {
       "path": "scripts/lib/live-fixture-checks.mjs",
@@ -1564,6 +1564,12 @@
       "bytes": 6097,
       "mode": "0755",
       "sha256": "2ffc9283bb664107ee672ef880e37a8c2191a096e6e7ec00bc489ae8a3fc862e"
+    },
+    {
+      "path": "scripts/lib/local-ci-evidence.mjs",
+      "bytes": 9946,
+      "mode": "0755",
+      "sha256": "bd303b309c624988acffd66df7e7c92c0c99c69efd828af9414d77875913f1c8"
     },
     {
       "path": "scripts/lib/merge-boundary.mjs",
@@ -1621,9 +1627,9 @@
     },
     {
       "path": "scripts/lib/mutation-checkpoint.mjs",
-      "bytes": 7710,
+      "bytes": 11803,
       "mode": "0755",
-      "sha256": "39d90b68e5a17fa32668a3fbda03269f4ecf3668084c08787247bf1e1691fe43"
+      "sha256": "2f0b460407c83052cb2c97732484ee023c1805a30a0894c07e46627f04aef8e4"
     },
     {
       "path": "scripts/lib/mutation-document-execution.mjs",
@@ -1837,15 +1843,15 @@
     },
     {
       "path": "scripts/lib/review-verdict-marker.mjs",
-      "bytes": 2928,
+      "bytes": 3064,
       "mode": "0755",
-      "sha256": "2050296ddf5fdb6b42331e75e092cc8291c1f3e095ba70bd9c4011e6766fecce"
+      "sha256": "5a71ed9a5bf74e74aeb702fa6be0c78a3e58bcd82b6e8c011b5f3f2774f040ae"
     },
     {
       "path": "scripts/lib/review-verdict-provenance.mjs",
-      "bytes": 3410,
+      "bytes": 4584,
       "mode": "0755",
-      "sha256": "11610f3bca5cf834fd11cc3dac457ac1376ede5abed3d53e33695c188a697375"
+      "sha256": "5effa9ab235bd2d08afdc7f1500193bafb9bd3e2d5e0649a6181734dd726db1a"
     },
     {
       "path": "scripts/lib/rewrite-baseline-store.mjs",
@@ -1858,6 +1864,12 @@
       "bytes": 344,
       "mode": "0755",
       "sha256": "41107b0360fde39562bcdcecbe851ce009ba6a4ee5b30899d0b53c50598fa63a"
+    },
+    {
+      "path": "scripts/lib/rules-boundary.mjs",
+      "bytes": 9691,
+      "mode": "0755",
+      "sha256": "b06ec691bbd9b7e8c046dbf41a3801720d5713b8328e4356461bed00742e2020"
     },
     {
       "path": "scripts/lib/runtime-capabilities.mjs",
@@ -1879,9 +1891,9 @@
     },
     {
       "path": "scripts/lib/ship-gate-policy.mjs",
-      "bytes": 7661,
+      "bytes": 8776,
       "mode": "0755",
-      "sha256": "b230feaa51c50e00ed29e5efd7978926d82131779d1bc5297ff4da9fd96812c8"
+      "sha256": "4787198afd1b4e16a45f42162e728cd75209f28ff01a4cfd74ea11f899d191e1"
     },
     {
       "path": "scripts/lib/skill-admission.mjs",
@@ -1897,15 +1909,15 @@
     },
     {
       "path": "scripts/lib/snapshot-capture-payload.mjs",
-      "bytes": 10239,
+      "bytes": 11944,
       "mode": "0755",
-      "sha256": "3136b3a6748f03f355f7ac80cf7844cacbce22b96041dcdcc7baa2f3b8a9ecf4"
+      "sha256": "e1bb51708234426d86de67dec3cf43eb148d8da62e222a081b56b544d3825174"
     },
     {
       "path": "scripts/lib/snapshot-evaluators.mjs",
-      "bytes": 19142,
+      "bytes": 20978,
       "mode": "0755",
-      "sha256": "d1220d66e0d812148e5d4d32fe6e6f9166a4f79d339bef5f91af69038fcea33b"
+      "sha256": "38cf6225055020fdb462f543c4dcddc72235d0060522285440ece2862dcdc328"
     },
     {
       "path": "scripts/lib/snapshot-input.mjs",
@@ -1969,9 +1981,9 @@
     },
     {
       "path": "scripts/lib/user-config.mjs",
-      "bytes": 4008,
+      "bytes": 7577,
       "mode": "0755",
-      "sha256": "038ae84d1cf4956a61e1bfde70c6dec64de5c4bd4c6188bc944d0144849f2ef2"
+      "sha256": "02d2653f332bbcf957e4afa3bd9c44fd8c626b3bc6f7ff5944104368a72eb2c7"
     },
     {
       "path": "scripts/lib/verdict-authority-policy.mjs",
@@ -2086,6 +2098,12 @@
       "bytes": 13627,
       "mode": "0755",
       "sha256": "e42a156c7e9b79c0b3b81183a6dd67641a2260ca234d07755489949a1c98a27a"
+    },
+    {
+      "path": "scripts/local-ci-receipt.mjs",
+      "bytes": 7776,
+      "mode": "0755",
+      "sha256": "46cb6dd43634a68dfc58fe63081453a1d18ff7945bdf3de69326ee1d3b6879b7"
     },
     {
       "path": "scripts/merge-pr-driver.mjs",
@@ -2215,9 +2233,9 @@
     },
     {
       "path": "scripts/ship-gate-snapshot.mjs",
-      "bytes": 29060,
+      "bytes": 33443,
       "mode": "0755",
-      "sha256": "3cc7598585da97fc0efa8b0c15de8c7c7e40de573561fe28900a2fb7b01d77a7"
+      "sha256": "99769c06652672278c9c4b7cb0a7bf3d2a0ecad6edee4772c10b2a70f0425147"
     },
     {
       "path": "scripts/ship-gate.mjs",
@@ -2245,9 +2263,9 @@
     },
     {
       "path": "scripts/validate-npm-package.mjs",
-      "bytes": 4696,
+      "bytes": 4769,
       "mode": "0755",
-      "sha256": "9e17db1012e372592c34fc7d8a482c567c9d377eb348aeeac5239f4c4214ee8a"
+      "sha256": "198e3040e5997e04a209b5f8ac36a0279e8c8ba3e9e1e07b5f6a5dfd03ca7b54"
     },
     {
       "path": "scripts/validate-repository-security.mjs",

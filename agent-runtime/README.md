@@ -20,6 +20,8 @@ node scripts/render-agent-runtime.mjs
 node scripts/render-agent-runtime.mjs --check
 node scripts/render-agent-runtime.mjs --emit-config codex
 node scripts/setup-codex-host.mjs
+node scripts/setup-claude-host.mjs
+node scripts/setup-claude-host.mjs --apply
 ```
 
 `verify-portable-skills.mjs` scans only top-level Hub skills (`skills/*/SKILL.md`). Nested vendored/internal skill trees are governed by their own owner unless promoted to the Hub discovery surface.
@@ -50,6 +52,32 @@ The registry expresses preference, not a claim that every host can enforce it. A
 Do not generate host configuration until `host-capabilities.json` names a supported renderer backed by current host documentation and tests. A plausible-looking file that the host ignores is worse than no adapter.
 
 When a renderer is eventually added, keep shared skills unchanged and generate the host-local agent/profile resource from this registry.
+
+## Claude Code host setup
+
+Claude Code discovers personal skills at `~/.claude/skills/<name>/SKILL.md` and
+documents that each skill entry may be a symlink to a directory elsewhere on
+disk. `scripts/setup-claude-host.mjs` links the Hub's top-level skills into that
+directory (directory junctions on Windows), writes the standard
+`~/.claude/CLAUDE.md` pointer only when the file is missing, and registers the
+same memory hook set as Codex: `SessionStart` (embedding worker),
+`UserPromptSubmit` (hybrid recall, explicit memory commands, candidate capture),
+and `Stop`/`SubagentStop` (agent decision capture plus background pipeline). The
+RTK `PreToolUse` hook is removed when present. Details live in
+`memory-engine/README.md`.
+
+Dry-run first; `--apply` mutates user-scope Claude configuration:
+
+```powershell
+node scripts/setup-claude-host.mjs
+node scripts/setup-claude-host.mjs --apply
+```
+
+The script prunes only links it manages (links into `skills/` whose target is no
+longer a current Hub skill) and leaves conflicting real directories untouched.
+General Claude Code configuration rendering remains unsupported in
+`host-capabilities.json`; this setup covers skills, the pointer, and the memory
+hooks only.
 
 
 ## Codex runtime launch overrides

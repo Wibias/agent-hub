@@ -44,7 +44,7 @@ function validEvent(event) {
     return false;
   }
   if (event.hook_event_name === 'SubagentStop') {
-    return nonEmpty(event.agent_id) && nonEmpty(event.agent_type);
+    return nonEmpty(event.agent_id);
   }
   return true;
 }
@@ -66,6 +66,7 @@ export async function runCodexAgentDecisionHook({
   event,
   env = process.env,
   configOptions = {},
+  harness = 'codex',
   clock = () => new Date().toISOString(),
   createMemory = ({ dbPath }) => new MemoryEngine({ dbPath }),
   resolveProjectScope = resolveCodexProjectScope,
@@ -78,6 +79,12 @@ export async function runCodexAgentDecisionHook({
   launchPipeline = launchMemoryCandidatePipeline,
 } = {}) {
   const response = { continue: true };
+  if (
+    !nonEmpty(harness)
+    || !/^[a-z0-9][a-z0-9-]*$/.test(harness)
+  ) {
+    throw new TypeError('harness must be a lowercase host identifier');
+  }
   if (!validEvent(event)) return response;
   if (event.stop_hook_active === true) return response;
 
@@ -116,7 +123,7 @@ export async function runCodexAgentDecisionHook({
     }
 
     const agentType = event.hook_event_name === 'SubagentStop'
-      ? event.agent_type
+      ? (nonEmpty(event.agent_type) ? event.agent_type : 'subagent')
       : 'root';
     const proposals = classifyAgentDecisionMessage(
       event.last_assistant_message,
@@ -154,14 +161,14 @@ export async function runCodexAgentDecisionHook({
           evidence = memory.recordEvidence({
             id: evidenceId,
             projectId: scope.projectId,
-            harness: 'codex',
+            harness,
             sessionId: event.session_id,
             sourceKind: event.hook_event_name === 'SubagentStop'
               ? 'subagent'
               : 'assistant',
             sourceRef: event.hook_event_name === 'SubagentStop'
-              ? 'codex:subagent:' + event.agent_id
-              : 'codex:assistant:' + event.turn_id,
+              ? harness + ':subagent:' + event.agent_id
+              : harness + ':assistant:' + event.turn_id,
             capturedAt,
             branch: git.branch,
             commitSha: git.revisionSha,

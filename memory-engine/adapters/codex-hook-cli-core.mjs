@@ -281,13 +281,14 @@ function classifyCodexAuthority(channel) {
 
 function authorizeCodexExplicitMemoryClaim({
   memory,
+  harness = 'codex',
   evidence,
   claim,
   lifecycle,
 }) {
   const parsed = parseExplicitMemoryPrompt(evidence?.content_redacted);
   if (
-    evidence?.harness !== 'codex'
+    evidence?.harness !== harness
     || evidence?.source_kind !== 'session'
     || evidence?.authority_class !== 'user_direct'
     || evidence?.metadata?.event_type !== 'user_prompt'
@@ -395,6 +396,7 @@ export async function runCodexMemoryHook({
   event,
   env = process.env,
   configOptions = {},
+  harness = 'codex',
   createEngine = (options) => new MemoryEngine(options),
   createProtocol = createMemoryProtocol,
   createAdapter = createCodexMemoryHookAdapter,
@@ -418,6 +420,12 @@ export async function runCodexMemoryHook({
   prepareRecallRuntime = prepareCodexMemoryRecallRuntime,
   platform = process.platform,
 } = {}) {
+  if (
+    typeof harness !== 'string'
+    || !/^[a-z0-9][a-z0-9-]*$/.test(harness)
+  ) {
+    throw new TypeError('harness must be a lowercase host identifier');
+  }
   const config = parseCodexMemoryConfig(env, configOptions);
   const recallFastPathModeCount = [
     configOptions.recallFastPath === true,
@@ -602,6 +610,7 @@ export async function runCodexMemoryHook({
       classifyAuthority: classifyCodexAuthority,
       authorizeClaim: (args) => authorizeCodexExplicitMemoryClaim({
         memory,
+        harness,
         ...args,
       }),
       onRecallTelemetry: async ({
