@@ -39,8 +39,8 @@
     },
     {
       "path": "src/OfflineAuthorization.cs",
-      "bytes": 9414,
-      "sha256": "623fe05eac9099a4d3e72663a1cf968fc659f9279cc5526cd96380d8bfc2cb33"
+      "bytes": 9442,
+      "sha256": "52fa1063f631dce24bc3ec341dafe4109ed8d4c922ee04a4e16eadcf58481b21"
     },
     {
       "path": "tests/AgentHub.C9.G3.Tests.csproj",
@@ -49,8 +49,8 @@
     },
     {
       "path": "tests/Program.cs",
-      "bytes": 4496,
-      "sha256": "12b5bb7530e39532d0e1d8654e0647f15aed52a4c80329fe1e092ccb33689129"
+      "bytes": 4547,
+      "sha256": "4bf223c75a7237a0ef7ad24b737c94fd86c820614e49277524dd433ba73881c5"
     },
     {
       "path": "verify-offline.yml",

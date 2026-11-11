@@ -37,7 +37,8 @@ void Check(string title, bool ok)
     count++;
 }
 void Denies(string title, OfflineVerdict result) => Check(title, !result.SignatureAndScopeVerified && !result.CanExecuteCommit);
-Check("positive offline signature only", Verify(good) is {SignatureAndScopeVerified:true,CanExecuteCommit:false});
+var baseline = Verify(good);
+Check("positive offline signature only (" + baseline.Reason + ")", baseline is {SignatureAndScopeVerified:true,CanExecuteCommit:false});
 Denies("missing trust", OfflineAuthorization.Verify(Wire(good), observed, null, ticket.Issuer, now));
 Denies("key revoked", Verify(good, k:trust with {Revoked=true}));
 Denies("public key pin swap", Verify(good, k:trust with {ExpectedSpkiSha256=new string('f',64)}));

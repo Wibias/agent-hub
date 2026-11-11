@@ -63,7 +63,8 @@ public static class OfflineAuthorization
     private static bool Sid(string? s)
     {
         if (s is null || s.Length is < 9 or > 180 || !s.StartsWith("S-1-5-", StringComparison.Ordinal)) return false;
-        foreach (char c in s) if (!(c is >= '0' and <= '9' or '-')) return false;
+        for (int i = 2; i < s.Length; i++)
+            if (!(s[i] is >= '0' and <= '9' or '-')) return false;
         return true;
     }
 
