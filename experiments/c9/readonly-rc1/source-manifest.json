@@ -1,0 +1,53 @@
+{
+  "schema": 1,
+  "component": "AgentHub C9 read-only review source",
+  "version": "0.1.0-rc.1",
+  "scope": "READ_ONLY_OFFLINE_BUILD_NO_SCM_NO_SERVICE_NO_WRITE_BROKER",
+  "original_source_kind": "SELF_MANAGED_RECONSTRUCTED_SOURCE_NOT_CANONICAL_V3",
+  "source_tree_sha256": "7001a29bc9fafd9acf5a4acf50d79c3531a8f96cf38a93661bd06c3a82e80476",
+  "source_archive_sha256": "408ed027f2a15335aa791d747a362838dd019bf054fc78f1bfc62b97f0a05bb8",
+  "source_files": [
+    {
+      "name": "AgentHub.C9.ReadOnlyBroker.csproj",
+      "bytes": 1279,
+      "sha256": "67cb51c5c57d75de0b83545e225b2367c263b9db4c9106722725ab59a88acd54"
+    },
+    {
+      "name": "BrokerIdentity.cs",
+      "bytes": 869,
+      "sha256": "1a1c720487393b240e1467f2ebb3006331faa4a375566f1ab2701eb3fdc50e64"
+    },
+    {
+      "name": "BrokerRequestRouter.cs",
+      "bytes": 612,
+      "sha256": "2afffac228156c704858e146ef710e9a37249c96aabb717d7363b73acd5a691c"
+    },
+    {
+      "name": "Native.cs",
+      "bytes": 5208,
+      "sha256": "ba96bef4afd9d1e781ea928c8623fc2f55537943a6b1a5ba0dd5f349a5ca10c5"
+    },
+    {
+      "name": "Program.cs",
+      "bytes": 7349,
+      "sha256": "bffa5744e2f8e560d8b7ddbb73c84684674324b438d3bf1c2dd1c08113a934b4"
+    },
+    {
+      "name": "ReadOnlyPolicy.cs",
+      "bytes": 772,
+      "sha256": "578150ac03a66f5dd7e46b1187c4a9cdff18f2fa321f17aeaf9162f5efe295be"
+    },
+    {
+      "name": "TokenProof.cs",
+      "bytes": 5435,
+      "sha256": "f84696f5ee6ef6181ad05f1e71a2198b821d5e0dd7df306fa72a26c576e9c736"
+    }
+  ],
+  "historic_broker_rc1_zip_sha256": "a8a6ee8ff2e3de41929353cd2c993e20762816bcda34a1bde8a0ccf310d6d933",
+  "historical_tests": "RC2 E2E, RC3 replay, RC4 hardpre/hardpost: historical evidence only",
+  "build_sdk": "8.0.428",
+  "sdk_support": "OUT_OF_SUPPORT_AFTER_2026_11_10",
+  "binary_built": false,
+  "security_gates_approved": 0,
+  "production_go": false
+}

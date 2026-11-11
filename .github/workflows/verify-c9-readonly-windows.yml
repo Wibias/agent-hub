@@ -1,0 +1,48 @@
+name: C9 read-only historical Windows build (review only)
+
+on:
+  push:
+    branches:
+      - codex/c9-source-review-20261111
+      - main
+    paths:
+      - 'experiments/c9/readonly-rc1/**'
+      - '.github/workflows/verify-c9-readonly-windows.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  compile-and-hash:
+    name: Windows x64 pinned SDK / no service
+    runs-on: windows-2022
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
+        with:
+          dotnet-version: '8.0.428'
+          dotnet-quality: 'ga'
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+      - name: Exact-source, build, read-only selftest and SHA256 report
+        shell: pwsh
+        run: ./experiments/c9/readonly-rc1/build-windows.ps1
+      - name: Actual Standard/Deep CLI parity on Windows (main only)
+        if: github.ref == 'refs/heads/main'
+        shell: pwsh
+        run: ./experiments/c9/readonly-rc1/preview-windows.ps1
+      - name: Upload evidence only (never binary)
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: c9-readonly-windows-evidence
+          path: |
+            experiments/c9/readonly-rc1/build-evidence.json
+            experiments/c9/readonly-rc1/preview-evidence.json
+          if-no-files-found: warn
+          retention-days: 14

@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <PlatformTarget>x64</PlatformTarget>
+    <LangVersion>12.0</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <AssemblyName>AgentHub.C9.ReadOnlyBroker</AssemblyName>
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+    <Version>0.1.0-rc.1</Version>
+    <Deterministic>true</Deterministic>
+    <ContinuousIntegrationBuild>true</ContinuousIntegrationBuild>
+  </PropertyGroup>
+  <!-- This target is a fail-closed boundary, not a substitute for source review. -->
+  <Target Name="RejectLabWriterBuild" BeforeTargets="PrepareForBuild" Condition="'$(EnableLabCommit)' == 'true'">
+    <Error Text="C9 source RC forbids EnableLabCommit=true. No writer release exists." />
+  </Target>
+  <ItemGroup>
+    <Compile Include="BrokerIdentity.cs" />
+    <Compile Include="Native.cs" />
+    <Compile Include="TokenProof.cs" />
+    <Compile Include="ReadOnlyPolicy.cs" />
+    <Compile Include="BrokerRequestRouter.cs" />
+    <Compile Include="Program.cs" />
+  </ItemGroup>
+</Project>
