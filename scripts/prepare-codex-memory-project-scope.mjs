@@ -44,8 +44,8 @@ export function prepareProjectReadOnlyMcp({
   apply = false,
   env = process.env,
   homeDir = homedir(),
-  git = (root) => execFileSync(
-    'git', ['-C', root, 'rev-parse', '--show-toplevel'], { encoding: 'utf8' },
+  gitPrefix = (root) => execFileSync(
+    'git', ['-C', root, 'rev-parse', '--show-prefix'], { encoding: 'utf8' },
   ).trim(),
 } = {}) {
   if (typeof cwd !== 'string' || !isAbsolute(cwd)) {
@@ -55,11 +55,12 @@ export function prepareProjectReadOnlyMcp({
     throw new Error('Node.js 24+ is required');
   }
   const root = realpathSync(resolve(cwd));
-  const discoveredRoot = realpathSync(git(root));
-  const sameRoot = process.platform === 'win32'
-    ? discoveredRoot.toLowerCase() === root.toLowerCase()
-    : discoveredRoot === root;
-  if (!sameRoot) throw new Error('--cwd must point to the Git repository root');
+  // Git reports an empty relative prefix only from its repository root.
+  // Comparing Git's path spelling to Windows realpath is unreliable: Git for
+  // Windows may return a different drive letter case or short/long path.
+  if (gitPrefix(root) !== '') {
+    throw new Error('--cwd must point to the Git repository root');
+  }
   if (!existsSync(join(root, 'scripts', 'run-codex-memory-mcp.mjs'))) {
     throw new Error('MCP server entrypoint is missing in this checkout');
   }
