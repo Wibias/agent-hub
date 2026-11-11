@@ -13,6 +13,7 @@ import { buildP28OfflineProfileCandidatePool } from '../../reference-graph/p28-p
 import { createP68DurableCoordinatorStore, startP68LoopbackCoordinator }
   from '../../reference-graph/p68-durable-https-coordinator.mjs';
 import { createP68TrustedServerHost } from '../../reference-graph/p68-server-host.mjs';
+import { planP68LocalOperator, runP68LocalOperator } from '../../reference-graph/cli/p68-run-local-coordinator.mjs';
 
 const sha='5ac18272df42234b7fc9df8ab625391e860c4e26';
 const now=new Date('2026-11-11T08:41:00.000Z');
@@ -284,5 +285,56 @@ test('P68 disconnection during still-valid canary fails closed to Legacy',async(
   }finally{
     // close is idempotent on server handle
     await env.close();
+  }
+});
+
+test('P68 runnable local operator has a strict private manifest and starts OFF',async()=>{
+  const dir=mkdtempSync(join(tmpdir(),'p68-local-operator-'));
+  let launched;
+  try {
+    const tls=certs(dir), stateDir=join(dir,'state');
+    const {mkdirSync}=await import('node:fs');
+    mkdirSync(stateDir,{mode:0o700});
+    const ownerFile=join(dir,'owner-public.pem');
+    const signerFile=join(dir,'response-signer-private.pem');
+    const manifest=join(dir,'local-operator.json');
+    writeFileSync(ownerFile,ownerPem);
+    writeFileSync(signerFile,signer.privateKey.export({
+      type:'pkcs8',format:'pem',
+    }),{mode:0o600});
+    writeFileSync(manifest,JSON.stringify({
+      schema_version:'reference-graph.p68-lab-operator.v1',
+      scope:{mode:'isolated-integration-canary',
+        default_off:true,production_route_wiring:false},
+      state_directory:stateDir,repository_sha:sha,
+      owner_public_key_path:ownerFile,owner_public_key_sha256:ownerPin,
+      response_signer_private_key_path:signerFile,
+      tls_private_key_path:join(dir,'tls.key'),
+      tls_certificate_path:join(dir,'tls.pem'),
+    }));
+    const localEnv={P68_ALLOW_LOCAL_OPERATOR:'1',
+      P68_LAB_READ_TOKEN:token()};
+    assert.throws(()=>planP68LocalOperator({
+      argv:['--manifest',manifest],env:{},
+    }),/BLOCKED/);
+    const plan=planP68LocalOperator({
+      argv:['--manifest',manifest],env:localEnv,clock:()=>now,
+    });
+    assert.equal(plan.store.readPolicy().status,'off');
+    let output='';
+    launched=await runP68LocalOperator({
+      argv:['--manifest',manifest],env:localEnv,clock:()=>now,
+      stdout:{write:s=>{output+=s;}},
+    });
+    assert.equal(JSON.parse(output.trim()).current_mode,'off');
+    const result=await httpsResponse(launched.endpoint,tls,{
+      headers:{Authorization:'Bearer '+localEnv.P68_LAB_READ_TOKEN,
+        'X-P67-Nonce':'b'.repeat(32)},
+    });
+    assert.equal(result.status,200);
+    assert.equal(JSON.parse(JSON.parse(result.body).payload_json).status,'off');
+  } finally {
+    if(launched) await launched.close();
+    rmSync(dir,{recursive:true,force:true});
   }
 });
