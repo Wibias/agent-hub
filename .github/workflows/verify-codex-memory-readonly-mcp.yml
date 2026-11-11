@@ -8,13 +8,17 @@ on:
     paths:
       - 'memory-engine/**'
       - 'scripts/run-codex-memory-mcp.mjs'
+      - 'scripts/prepare-codex-memory-project-scope.mjs'
       - 'tests/memory-engine/codex-readonly-memory-mcp.test.mjs'
+      - 'tests/memory-engine/codex-project-memory-scope.test.mjs'
       - '.github/workflows/verify-codex-memory-readonly-mcp.yml'
   pull_request:
     paths:
       - 'memory-engine/**'
       - 'scripts/run-codex-memory-mcp.mjs'
+      - 'scripts/prepare-codex-memory-project-scope.mjs'
       - 'tests/memory-engine/codex-readonly-memory-mcp.test.mjs'
+      - 'tests/memory-engine/codex-project-memory-scope.test.mjs'
       - '.github/workflows/verify-codex-memory-readonly-mcp.yml'
   workflow_dispatch:
 
@@ -38,4 +42,4 @@ jobs:
         with:
           node-version: '24'
       - name: Test real stdio MCP, canonical SQLite read-only and scoped authority
-        run: node --test tests/memory-engine/codex-readonly-memory-mcp.test.mjs
+        run: node --test tests/memory-engine/codex-readonly-memory-mcp.test.mjs tests/memory-engine/codex-project-memory-scope.test.mjs
