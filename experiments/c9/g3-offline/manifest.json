@@ -1,0 +1,63 @@
+{
+  "schema": 1,
+  "scope": "G3_OFFLINE_REVIEW_NOT_PRODUCTION",
+  "files": [
+    {
+      "path": ".gitattributes",
+      "bytes": 14,
+      "sha256": "a79691a93b46e49ce460c26ef22afcc03d6eca1e63bf2edbc20e96159510f6c9"
+    },
+    {
+      "path": "Directory.Build.props",
+      "bytes": 125,
+      "sha256": "74b2cf3aaf7adda5b64dd7d0ca6c161a7f87353bf93b13dac291f55f42721919"
+    },
+    {
+      "path": "NuGet.Config",
+      "bytes": 125,
+      "sha256": "5256a7e3e07d2c5c94f7a1e6c45f39aab011c659c5e2d53e452dea525ce04575"
+    },
+    {
+      "path": "README.md",
+      "bytes": 2315,
+      "sha256": "387c4cfa7a469bdca15b098caefe327afdfc0c4a6a16449a7cdceccaa8692b1f"
+    },
+    {
+      "path": "docs/G3-DECISION.md",
+      "bytes": 1998,
+      "sha256": "5f55fc315ecb79874ff279f7e50cdde49da23536b84374a4084706495d18e7f6"
+    },
+    {
+      "path": "global.json",
+      "bytes": 75,
+      "sha256": "b61e0efe8dbb9a0543174300c6f524d40d6bbb96a1be5e3cb7343096b326f8c5"
+    },
+    {
+      "path": "src/AgentHub.C9.G3.Offline.csproj",
+      "bytes": 566,
+      "sha256": "0033a1507a71f72e25babd6e6d3450c9d1daff560258ddfecc6dbb305c151590"
+    },
+    {
+      "path": "src/OfflineAuthorization.cs",
+      "bytes": 9414,
+      "sha256": "623fe05eac9099a4d3e72663a1cf968fc659f9279cc5526cd96380d8bfc2cb33"
+    },
+    {
+      "path": "tests/AgentHub.C9.G3.Tests.csproj",
+      "bytes": 537,
+      "sha256": "4e59b5d0e050c78a5bc306fa098cb09131511532bc5c9bd48a27a54581b13a7c"
+    },
+    {
+      "path": "tests/Program.cs",
+      "bytes": 4496,
+      "sha256": "12b5bb7530e39532d0e1d8654e0647f15aed52a4c80329fe1e092ccb33689129"
+    },
+    {
+      "path": "verify-offline.yml",
+      "bytes": 1278,
+      "sha256": "b625d2ad5d8bbe731e7c65480e117e78a6ff5d4a2279fd418a49b379c6f1ca15"
+    }
+  ],
+  "production": "NO_GO",
+  "gates_approved": 0
+}
