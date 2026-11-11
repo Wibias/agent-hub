@@ -37,8 +37,8 @@ if ($BuildData.normal_build -ne 'PASS' -or $BuildData.readonly_selftest -ne 'PAS
     $BuildData.production_go -ne $false -or $BuildData.service_started -ne $false) {
     throw 'PREVIEW_DENY_C9_BUILD_REPORT'
 }
-function Invoke-Query([string]$Script, [string]$Profile) {
-    $q = @($Script, '--profile', $Profile, '--surface', 'dashboard',
+function Invoke-Query([string]$Script, [string]$QueryProfile) {
+    $q = @($Script, '--profile', $QueryProfile, '--surface', 'dashboard',
         '--job', 'design', '--platform', 'web', '--dimensions', 'layout', '--no-record-usage')
     Push-Location $Root
     try {
@@ -48,19 +48,19 @@ function Invoke-Query([string]$Script, [string]$Profile) {
     if ($rc -notin @(0, 2)) { throw 'PREVIEW_FAILED_QUERY_EXIT' }
     try { $j = $out | ConvertFrom-Json -Depth 100 }
     catch { throw 'PREVIEW_FAILED_QUERY_JSON' }
-    if ($j.profile -cne $Profile -or $null -eq $j.coverageGaps -or $null -eq $j.records) {
+    if ($j.profile -cne $QueryProfile -or $null -eq $j.coverageGaps -or $null -eq $j.records) {
         throw 'PREVIEW_FAILED_QUERY_SCHEMA'
     }
     return [pscustomobject]@{ output=$out; exit=$rc; records=@($j.records).Count }
 }
 $Results = @()
-foreach ($Profile in @('standard', 'deep')) {
-    $a = Invoke-Query -Script $Legacy -Profile $Profile
-    $b = Invoke-Query -Script $Runtime -Profile $Profile
+foreach ($QueryProfile in @('standard', 'deep')) {
+    $a = Invoke-Query -Script $Legacy -QueryProfile $QueryProfile
+    $b = Invoke-Query -Script $Runtime -QueryProfile $QueryProfile
     if ($a.exit -ne $b.exit -or $a.output -cne $b.output) {
-        throw ('PREVIEW_FAILED_LEGACY_PARITY_' + $Profile)
+        throw ('PREVIEW_FAILED_LEGACY_PARITY_' + $QueryProfile)
     }
-    $Results += [ordered]@{ profile=$Profile; result='PASS'; records=$b.records }
+    $Results += [ordered]@{ profile=$QueryProfile; result='PASS'; records=$b.records }
 }
 $CodexStatus = 'NOT_RUN'
 if ($RunCodexCLI) {
