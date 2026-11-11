@@ -1,0 +1,12 @@
+# G3: Offline trust-bootstrap boundary, V0.1 (review only)
+
+**Purpose:** Verify root-signed issuer key snapshots under a separately authenticated, monotonic external checkpoint. This component cannot enroll, rotate, revoke, persist or use a private key. No service, registry, Windows ACL, trust store or protected file is changed by the verifier. No `CanExecuteCommit=true` path exists.
+
+- P-256 root SPKI and SHA256 must come from a separately secured owner-controlled channel. Root and issuer keys must be distinct. No production keys exist in this repository.
+- The signed manifest binds schema version, root identity, revision, issuer key identity, issuer SPKI hash, active/revoked state and validity window. Domain separation and fixed-order ASCII canonicalization bind the root signature.
+- The *protected checkpoint* pins the **current** signed content hash and exact revision. The verifier checks that the two match but **cannot prove** the checkpoint was protected, is current, or was atomically updated. Copying both an old manifest and its matching checkpoint defeats rollback detection. Never obtain this checkpoint from the same attacker-writable package or by hashing the untrusted manifest alone.
+- Rotation is modeled by a different root-signed issuer key at a new revision. Revocation is a root-signed `revoked` manifest. The old revision must fail when checked against the new, independently advanced checkpoint. The library does **not** itself advance the checkpoint, enforce revision increase, or prevent a root authority from reissuing a previously revoked key in a later revision.
+- A valid trust manifest returns an issuer public key and `CanExecuteCommit=false`. The offline ticket verifier still requires its own context/ticket verification and likewise never grants execution.
+- A real protected Windows checkpoint implementation, independent root key custody, atomic update protocol, rollback witness, ACL/reparse abuse tests, and production lifecycle are **NOT IMPLEMENTED**. Thus G3 is HOLD and production NO-GO.
+
+**Scope of new tests:** The dedicated bootstrap test project tests root pinning, strict format, valid/invalid signatures, freshness under a supplied checkpoint, key rotation and revocation under different supplied checkpoints. The historical 23 G3 ticket tests are not repeated by the targeted workflow. The new component is in a separate directory and references the pre-existing G3 verifier as an unchanged dependency.
