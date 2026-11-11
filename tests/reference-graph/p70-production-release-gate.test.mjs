@@ -236,27 +236,94 @@ test('P70 installed-config path cannot read ANY local secret without enrolled pi
   assert.equal(result,null);assert.equal(reads,0);assert.equal(called,0);
 });
 
-test('P70 runtime digest changes with any altered installed runtime file',()=>{
+test('P70 release digest includes transitive Graph modules and actual JSONL loader inputs',()=>{
   const d=mkdtempSync(join(tmpdir(),'p70-digest-'));
   const files=[
     'knowledge/design-references/scripts/query-runtime.mjs',
     'knowledge/design-references/scripts/query-host-runtime.mjs',
+    'knowledge/design-references/scripts/query.mjs',
     'reference-graph/p69-installed-off-host.mjs',
     'reference-graph/p70-production-release-gate.mjs',
     'reference-graph/p70-production-host-config.mjs',
+    'reference-graph/p68-server-host.mjs',
+    'reference-graph/p67-server-profile-adapter.mjs',
+    'knowledge/design-references/taxonomy.json',
+    'knowledge/design-references/data/test.jsonl',
+    'knowledge/design-references/patterns/test.jsonl',
   ];
-  try{
-    for(const p of files){
-      const loc=join(d,p);
-      mkdirSync(join(loc,'..'),{recursive:true});
-      writeFileSync(loc,p);
-    }
+  const put=(p,contents)=>{const loc=join(d,p);mkdirSync(join(loc,'..'),{recursive:true});writeFileSync(loc,contents);};
+  try {
+    for(const p of files) put(p,'export const fixture=1;');
+    put('reference-graph/p70-production-release-gate.mjs',
+      "const runtime = import('./p68-server-host.mjs');");
+    put('reference-graph/p68-server-host.mjs',
+      "import { fixture } from './p67-server-profile-adapter.mjs';");
     const before=computeP70InstalledRuntimeDigest({repoRoot:d});
     assert.match(before,/^[a-f0-9]{64}$/);
-    writeFileSync(join(d,files[3]),'tampered');
-    const after=computeP70InstalledRuntimeDigest({repoRoot:d});
-    assert.notEqual(after,before);
-  }finally{rmSync(d,{recursive:true,force:true});}
+    put('reference-graph/p67-server-profile-adapter.mjs','export const fixture=2;');
+    const changedDependency=computeP70InstalledRuntimeDigest({repoRoot:d});
+    assert.notEqual(changedDependency,before);
+    put('knowledge/design-references/data/test.jsonl','{"tampered":true}\n');
+    const changedData=computeP70InstalledRuntimeDigest({repoRoot:d});
+    assert.notEqual(changedData,changedDependency);
+    put('reference-graph/p70-production-release-gate.mjs',
+      'const runtime=import(dynamicName);');
+    assert.throws(()=>computeP70InstalledRuntimeDigest({repoRoot:d}),
+      /computed dynamic import not pinned/);
+  } finally {rmSync(d,{recursive:true,force:true});}
+});
+
+test('P70 trusted host samples a fresh private cohort ID per query, not constant host ID',async()=>{
+  const d=mkdtempSync(join(tmpdir(),'p70-cohort-'));
+  const put=(p,contents)=>{const loc=join(d,p);mkdirSync(join(loc,'..'),{recursive:true});writeFileSync(loc,contents);return loc;};
+  try {
+    for(const p of [
+      'knowledge/design-references/scripts/query-runtime.mjs',
+      'knowledge/design-references/scripts/query-host-runtime.mjs',
+      'knowledge/design-references/scripts/query.mjs',
+      'reference-graph/p69-installed-off-host.mjs',
+      'reference-graph/p70-production-release-gate.mjs',
+      'reference-graph/p70-production-host-config.mjs',
+    ]) put(p,'export const fixture=1;');
+    put('knowledge/design-references/taxonomy.json','{}');
+    put('knowledge/design-references/data/test.jsonl','{}\n');
+    put('knowledge/design-references/patterns/test.jsonl','{}\n');
+    const digestValue=computeP70InstalledRuntimeDigest({repoRoot:d});
+    const env=approval({runtime_artifact_sha256:digestValue});
+    const paths={
+      release_envelope_path:put('release.json',JSON.stringify(env)),
+      owner_public_key_path:put('owner.pem',pem(owner)),
+      reviewer_public_key_path:put('reviewer.pem',pem(reviewer)),
+      coordinator_public_key_path:put('coordinator.pem',pem(coordinator)),
+      state_read_token_path:put('coordinator-token','x'.repeat(50)),
+      service_key_path:put('server-key','sb_secret_unit_test_only_000000000000'),
+      witness_json_path:put('witness.json','trusted pinned snapshot'),
+    };
+    const configPath=put('manifest.json',JSON.stringify({
+      schema_version:'reference-graph.p70-trusted-host-config.v1',
+      repository_sha:COMMIT,operator_host_id:HOST,
+      state_endpoint:'https://trusted-prod-coordinator.example.org/state',
+      ...paths,
+    }));
+    const keys=[];
+    const opts={
+      configPath,records:[],patterns:[],request:{profile:'standard'},
+      now:NOW,trustedPins:envPins,repoRoot:d,
+      activate:async call=>{keys.push(call.requestKey);return {result:{coverageGaps:[]},
+        routing:{authoritative_source:'legacy-control'}};},
+    };
+    assert.ok(await maybeRunP70InstalledProduction(opts));
+    assert.ok(await maybeRunP70InstalledProduction(opts));
+    assert.equal(keys.length,2);
+    for(const key of keys) {
+      assert.match(key,/^[a-f0-9]{32}$/);
+      assert.notEqual(key,HOST);
+    }
+    assert.notEqual(keys[0],keys[1]);
+    put('knowledge/design-references/data/test.jsonl','{"changed":true}\n');
+    assert.equal(await maybeRunP70InstalledProduction(opts),null);
+    assert.equal(keys.length,2);
+  } finally {rmSync(d,{recursive:true,force:true});}
 });
 
 test('P70 real Standard CLI receives Graph only from approved injected server path; default stays Legacy',async()=>{
