@@ -15,6 +15,7 @@ import {
   computeP70InstalledRuntimeDigest, maybeRunP70InstalledProduction,
 } from '../../reference-graph/p70-production-host-config.mjs';
 import { runP69BoundQuery } from '../../knowledge/design-references/scripts/query-host-runtime.mjs';
+import { loadRecords, loadPatterns } from '../../knowledge/design-references/scripts/lib.mjs';
 
 const COMMIT='7d4366c2293633a5906faa809a4ca3d8117425a6';
 const HOST='agentshub-windows-release-host-01';
@@ -178,6 +179,50 @@ test('P70 operational failure after P11 usage returns memoized Legacy without do
   }));
   assert.equal(result.routing.authoritative_source,'legacy-control');
   assert.equal(count,1);
+});
+
+
+test('P70 approved release really lazy-loads P67/P68 without injected factory and respects central OFF',async()=>{
+  let reads=0,usage=0;
+  const stateFetchImpl=async(url,options)=>{
+    reads++;
+    assert.equal(url,'https://trusted-prod-coordinator.example.org/state');
+    assert.equal(options.method,'GET');
+    const nonce=options.headers['X-P67-Nonce'];
+    assert.match(nonce,/^[0-9a-f]{32}$/);
+    const payload_json=JSON.stringify({
+      schema_version:'reference-graph.p67-shared-state.v1',
+      repository_sha:COMMIT,project_ref:PROJECT,nonce,generation:1,
+      status:'off',profiles:[],canary_percent:0,cohort_salt:'0'.repeat(32),
+      issued_at:NOW.toISOString(),
+      expires_at:new Date(NOW.valueOf()+3000).toISOString(),
+    });
+    return {ok:true,status:200,text:async()=>JSON.stringify({
+      payload_json,
+      signature_base64:sign(null,Buffer.from(payload_json),coordinator.privateKey)
+        .toString('base64'),
+    })};
+  };
+  const out=await runP70ApprovedProfile(invocation({
+    // No factory override: this must load the real P68 trusted-host wrapper
+    // after independent test signatures have been verified.
+    records:loadRecords(),patterns:loadPatterns(),
+    request:{
+      profile:'standard',limit:12,surface:'public-home',
+      platform:'web-responsive',
+      job:'creator product landing page with clear primary CTA',
+      dimensions:'visual-world,topology',
+    },
+    recordUsageEnabled:true,
+    recordUsageFn:()=>{usage++;},
+    stateFetchImpl,
+    getWitness:async()=>{throw Error('OFF must not access source');},
+    fetchCandidates:async()=>{throw Error('OFF must not access P30');},
+  }));
+  assert.equal(out?.routing?.authoritative_source,'legacy-control');
+  assert.equal(out.canary.status,'legacy');
+  assert.equal(usage,1);
+  assert.equal(reads,1);
 });
 
 test('P70 installed-config path cannot read ANY local secret without enrolled pins',async()=>{
