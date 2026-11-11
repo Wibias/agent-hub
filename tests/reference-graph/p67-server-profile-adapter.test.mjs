@@ -256,6 +256,16 @@ test('P67 mismatch latches off and never attempts another Graph GET',async()=>{
   assert.equal(x.usages,2);
 });
 
+test('P67 never exceeds an independently scoped owner Canary cap',async()=>{
+  const c=coordinator();
+  const a=adapter(c,{maxCanaryPercent:1});
+  const result=await a.run();
+  assert.equal(result.routing.authoritative_source,'legacy-control');
+  assert.equal(result.canary.reason,'canary-share-exceeds-release');
+  assert.equal(result.canary.local_kill_switch_latched,true);
+  assert.equal(a.gets,0);
+});
+
 test('P67 invalid source hash and coordinator error latch OFF without exposing secret error',async()=>{
   const c=coordinator();
   const a=adapter(c,{getWitness:async()=>({json:witness,sha256:'0'.repeat(64)})});

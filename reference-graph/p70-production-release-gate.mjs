@@ -153,6 +153,7 @@ export async function runP70ApprovedProfile({
       trustedPublicKeyPem:coordinatorPem,
       trustedPublicKeySha256:coordinatorPin,
       stateEndpoint,stateReadToken,serviceKey,getWitness,
+      maxCanaryPercent:approval.canary_percent,
       legacyRunner:async args=>{
         // A failed graph attempt must not double-record local usage.
         const control=await runP11RuntimeQuery({

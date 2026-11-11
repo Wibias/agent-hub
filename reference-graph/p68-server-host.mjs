@@ -12,7 +12,7 @@ export function createP68TrustedServerHost({
   stateEndpoint, stateReadToken, stateFetchImpl,
   serviceKey, getWitness, profileFetchImpl,
   fetchCandidates, legacyRunner, graphOutput, clock,
-  timeoutMs, statePollMs,
+  timeoutMs, statePollMs, maxCanaryPercent,
 } = {}) {
   const readSharedState = createP67HttpsStateReader({
     endpoint: stateEndpoint, readToken: stateReadToken,
@@ -28,5 +28,6 @@ export function createP68TrustedServerHost({
     ...(clock ? { clock } : {}),
     ...(timeoutMs ? { timeoutMs } : {}),
     ...(statePollMs ? { statePollMs } : {}),
+    ...(maxCanaryPercent ? { maxCanaryPercent } : {}),
   });
 }

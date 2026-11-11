@@ -168,6 +168,7 @@ export function createP67ServerProfileAdapter({
   fetchCandidates = fetchP30ProfileCandidateSnapshot,
   graphOutput = constructP66GraphPublicResult,
   clock = () => new Date(), timeoutMs = 5000, statePollMs = 250,
+  maxCanaryPercent = 5,
 } = {}) {
   const verifier = createP67SharedStateVerifier({
     repositorySha, trustedPublicKeyPem, trustedPublicKeySha256, clock,
@@ -177,7 +178,9 @@ export function createP67ServerProfileAdapter({
     || typeof fetchImpl !== 'function' || typeof legacyRunner !== 'function'
     || typeof fetchCandidates !== 'function' || typeof graphOutput !== 'function'
     || !Number.isInteger(timeoutMs) || timeoutMs < 100 || timeoutMs > 10000
-    || !Number.isInteger(statePollMs) || statePollMs < 50 || statePollMs > 1000) {
+    || !Number.isInteger(statePollMs) || statePollMs < 50 || statePollMs > 1000
+    || !Number.isInteger(maxCanaryPercent) || maxCanaryPercent < 1
+    || maxCanaryPercent > 5) {
     throw new TypeError('P67 server-only prerequisites missing');
   }
   let latched = false, generationFloor = 0, lastReason = 'default-off';
@@ -228,6 +231,13 @@ export function createP67ServerProfileAdapter({
         }
       } catch {
         latched = true; lastReason = 'coordinator-unavailable';
+        return fallback(control, lastReason);
+      }
+      // A signed coordinator may never widen the separately owner-approved
+      // Canary share. Check before ANY protected P30 request.
+      if (initial.canary_percent > maxCanaryPercent) {
+        latched = true;
+        lastReason = 'canary-share-exceeds-release';
         return fallback(control, lastReason);
       }
       if (!cohort(requestKey, initial)) return fallback(control, 'not-selected');
