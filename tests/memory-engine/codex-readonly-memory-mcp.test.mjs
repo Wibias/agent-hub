@@ -25,17 +25,20 @@ function fixture() {
     AGENT_HUB_MEMORY_PROJECT_ID: 'allowed-project',
     AGENT_HUB_MEMORY_REPO_IDENTITY: 'allowed-project',
   };
-  function insert(memory, id, projectId, authorityClass, value) {
+  function insert(memory, id, projectId, authorityClass, value, {
+    sessionId = 'real-observation', sourceRef = 'session:real-observation',
+    metadata = {}, subject = 'cache storage',
+  } = {}) {
     memory.ingest({
       evidence: {
         id: 'e-' + id, projectId, harness: 'codex',
-        sessionId: 'fixture', sourceKind: 'session',
-        sourceRef: 'session:fixture', capturedAt: '2026-11-12T10:00:00.000Z',
+        sessionId, sourceKind: 'session',
+        sourceRef, capturedAt: '2026-11-12T10:00:00.000Z',
         branch: 'main', commitSha: null, path: null, blobOid: null,
-        content: value, authorityClass, metadata: {},
+        content: value, authorityClass, metadata,
       },
       claim: {
-        id: 'c-' + id, kind: 'decision', subject: 'cache storage',
+        id: 'c-' + id, kind: 'decision', subject,
         predicate: 'uses', value, branchScope: 'main',
         createdAt: '2026-11-12T10:00:00.000Z',
       },
@@ -47,6 +50,13 @@ function fixture() {
   insert(memory, 'allowed', 'allowed-project', 'user_direct', 'Use SQLite for local cache storage');
   insert(memory, 'inference', 'allowed-project', 'agent_inference', 'Use Redis for cache storage');
   insert(memory, 'other', 'other-project', 'user_direct', 'Use Postgres for cache storage');
+  insert(memory, 'legacy-seed', 'allowed-project', 'user_direct', 'Seed Redis cache storage', {
+    sessionId: 'runtime-e2e-seed-doctor',
+    sourceRef: 'session:runtime-e2e-seed-doctor',
+  });
+  insert(memory, 'explicit-fixture', 'allowed-project', 'user_direct', 'Seed Memcached cache storage', {
+    metadata: { test_fixture: true },
+  });
   memory.close();
   return {
     root, cwd, db, env,
@@ -69,6 +79,7 @@ test('existing approved current memory is retrieved with evidence; no canonical 
     assert.equal(result.items[0].evidence.authority_class, 'user_direct');
     assert.equal(result.read_only, true);
     assert.ok(result.omitted_by_policy > 0);
+    assert.equal(result.omitted_test_data, 2);
     assert.ok(/^[0-9a-f]{40}$/.test(result.revision_sha));
   } finally { f.cleanup(); }
 });
@@ -147,4 +158,51 @@ test('real stdio MCP process lists and calls only read-only tool', async () => {
     assert.equal(data.status, 'found');
     assert.equal(data.items[0].claim.id, 'c-allowed');
   } finally { f.cleanup(); }
+});
+
+
+test('legacy user_direct E2E seeds do not appear even for a seed-only query', () => {
+  const f = fixture();
+  try {
+    const result = readCodexMemory({
+      cwd: f.cwd, env: f.env, query: 'Memcached',
+    });
+    assert.equal(result.status, 'no_current_authorized_match');
+    assert.equal(result.omitted_test_data, 1);
+    assert.deepEqual(result.items, []);
+    const legacy = readCodexMemory({
+      cwd: f.cwd, env: f.env, query: 'Redis',
+    });
+    assert.equal(legacy.status, 'no_current_authorized_match');
+    assert.equal(legacy.omitted_test_data, 1);
+  } finally { f.cleanup(); }
+});
+
+test('test words in genuine claim content do not masquerade as fixture provenance', async () => {
+  const { isSyntheticMemoryItem } = await import(
+    '../../memory-engine/adapters/memory-read-provenance.mjs'
+  );
+  const genuine = {
+    claim: { id: 'claim:user:thoughts' },
+    evidence: {
+      id: 'evidence:user:thoughts', session_id: 'regular-session',
+      source_ref: 'session:regular-session',
+      content_redacted: 'We should test runtime-e2e-seed-doctor examples.',
+      metadata: {},
+    },
+  };
+  assert.equal(isSyntheticMemoryItem(genuine), false);
+  assert.equal(isSyntheticMemoryItem({
+    ...genuine,
+    evidence: { ...genuine.evidence, metadata: { origin: 'test_fixture' } },
+  }), true);
+  const withSupportingFixture = { ...genuine };
+  Object.defineProperty(withSupportingFixture, 'provenance', {
+    value: [
+      { evidence: genuine.evidence },
+      { evidence: { id: 'test-fixture-abc' } },
+    ],
+    enumerable: false,
+  });
+  assert.equal(isSyntheticMemoryItem(withSupportingFixture), true);
 });
