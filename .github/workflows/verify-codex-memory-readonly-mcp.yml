@@ -1,0 +1,41 @@
+name: Codex read-only Memory MCP (real stdio + SQLite)
+
+on:
+  push:
+    branches:
+      - main
+      - feat/codex-readonly-memory-mcp
+    paths:
+      - 'memory-engine/**'
+      - 'scripts/run-codex-memory-mcp.mjs'
+      - 'tests/memory-engine/codex-readonly-memory-mcp.test.mjs'
+      - '.github/workflows/verify-codex-memory-readonly-mcp.yml'
+  pull_request:
+    paths:
+      - 'memory-engine/**'
+      - 'scripts/run-codex-memory-mcp.mjs'
+      - 'tests/memory-engine/codex-readonly-memory-mcp.test.mjs'
+      - '.github/workflows/verify-codex-memory-readonly-mcp.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  real-stdio-mcp:
+    name: Test read-only canonical memory and MCP on ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+      - name: Test real stdio MCP, canonical SQLite read-only and scoped authority
+        run: node --test tests/memory-engine/codex-readonly-memory-mcp.test.mjs
