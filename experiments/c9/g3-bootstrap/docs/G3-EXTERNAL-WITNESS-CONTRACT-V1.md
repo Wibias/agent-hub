@@ -24,7 +24,7 @@
    - manifest_sha256: lowercase hex SHA-256 of **TrustBootstrap.CanonicalBytes(manifest)**, not of an arbitrary JSON serialization;
    - root_key_id and issuer key identity/pin; signed-manifest validation status;
    - a durable tombstone history for revoked issuer key IDs AND key-SPKI pins.
-4. State transitions MUST be atomic and durable *before* a signed successful acknowledgement is issued. A database transaction alone does not prove anti-rollback of the database: the witness head/history also requires an independently retained append-only/WORM audit anchor outside the witness host's rollback domain.
+4. State transitions MUST be atomic and durable *before* a signed successful acknowledgement is issued. A database transaction alone does not prove anti-rollback of the database: the witness head/history also requires an independently retained append-only/WORM audit anchor outside the witness host's rollback domain. Every GetCurrent signature MUST be withheld until the witness has compared its head with that independent anchor; mismatch or unavailable anchor means DENY/UNKNOWN, never a signed stale head.
 5. No automatic re-enrollment of a revoked issuer ID or SPKI pin. New keys need new identities/pins; recovering a revoked key requires a separate owner security exception and cannot silently reuse normal rotation.
 6. The HKLM Registry64 reader remains a **read-only consumer**. It must reject unexpected registry members, unsafe ACL/owner, missing/invalid external root pin, or missing external checkpoint. A registry ACL does not create an independent checkpoint.
 
@@ -94,7 +94,7 @@ The current HKLM reader's five-value reads are **not an atomic transaction**. St
 
 - Existing exact-width checkpoint: ProtectedTrustCheckpoint(Revision, ManifestSha256) in g3-bootstrap, currently supplied by the caller; no authenticated epoch, signed online head or independent origin proof.
 - Existing WindowsTrustStore.VerifyReadOnly validates local HKLM registry and an independently *supplied* checkpoint; it does not obtain or advance one.
-- Existing g3-native-lab Windows 11/11 PASS uses a simulated **in-process** witness and demonstrates local rollback rejection, not remote trust-state durability.
+- Existing g3-native-lab 11/11 tests PASS on Windows Server 2022 uses a simulated **in-process** witness and demonstrates local rollback rejection, not remote trust-state durability.
 - No code, keys, network service, provisioner, production trust data or write-broker integration are added by this document.
 - **Implementation gate:** next work is one minimal off-host witness proof-of-authority and separate Windows consumer integration, not re-running the existing 23/30/30/11 tests.
 - **Open owner decisions:** real external host/operator and key-custody boundary; independent append-only audit anchor; signing-key enrollment ceremony; scope for privileged/admin attackers; in-flight revocation fencing policy. Until resolved, G3 remains HOLD.
