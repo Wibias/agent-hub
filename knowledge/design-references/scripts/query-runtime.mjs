@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 import { spawnSync } from 'node:child_process';
 import { dirname, join } from 'node:path';
+import { existsSync } from 'node:fs';
+import { parseArgs } from './lib.mjs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import {
@@ -12,6 +14,19 @@ const ACTIVATION_FLAG = 'REFERENCE_GRAPH_QUICK_RUNTIME';
 const ACTIVATION_VALUE = 'graph';
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const DEFAULT_QUERY_PATH = join(SCRIPT_DIR, 'query.mjs');
+const P69_QUERY_PATH = join(SCRIPT_DIR, 'query-host-runtime.mjs');
+
+// Only a trusted local Windows installer creates this per-user OFF binding.
+// A caller-specified path can SELECT a probe, never authorize Graph.
+function hostBinding(env) {
+  if (typeof env.AGENTHUB_P69_BINDING_FILE === 'string'
+    && env.AGENTHUB_P69_BINDING_FILE.trim()) {
+    return env.AGENTHUB_P69_BINDING_FILE;
+  }
+  return typeof env.LOCALAPPDATA === 'string' && env.LOCALAPPDATA.trim()
+    ? join(env.LOCALAPPDATA, 'AgentsHub', 'ReferenceGraphHost-P68', 'p69-host-binding.json')
+    : null;
+}
 
 export async function planP17QueryRuntime({
   argv = [],
@@ -28,9 +43,19 @@ export async function planP17QueryRuntime({
   const mode = state?.mode === 'graph' ? 'graph' : 'legacy';
   if (mode === 'graph') childEnv[ACTIVATION_FLAG] = ACTIVATION_VALUE;
 
+  const profile = parseArgs(argv).profile || 'standard';
+  const binding = hostBinding(env);
+  const useHost = (profile === 'standard' || profile === 'deep')
+    && binding !== null && existsSync(binding);
+  if (useHost) {
+    childEnv.AGENTHUB_P69_BINDING_FILE = binding;
+  } else {
+    delete childEnv.AGENTHUB_P69_BINDING_FILE;
+  }
+
   return {
     executable: nodeExecutable,
-    args: [queryPath, ...argv],
+    args: [useHost && queryPath === DEFAULT_QUERY_PATH ? P69_QUERY_PATH : queryPath, ...argv],
     env: childEnv,
     mode,
   };
