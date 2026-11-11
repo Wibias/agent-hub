@@ -92,7 +92,7 @@ function invocation(patch={}) {
     serviceKey:'sb_secret_test_unit_only_0000000000',
     getWitness:async()=>({json:'{}',sha256:WITNESS}),
     records:[],patterns:[],request:{profile:'standard'},
-    requestKey:HOST,now:NOW,recordUsageEnabled:false,
+    requestKey:HOST,now:NOW,trustedClock:()=>NOW,recordUsageEnabled:false,
     ...patch,
   };
 }
@@ -223,6 +223,26 @@ test('P70 approved release really lazy-loads P67/P68 without injected factory an
   assert.equal(out.canary.status,'legacy');
   assert.equal(usage,1);
   assert.equal(reads,1);
+});
+
+test('P70 never returns Graph after the independently signed owner window expires',async()=>{
+  let used=0;
+  const after=new Date('2026-11-11T21:01:00.000Z');
+  const response=await runP70ApprovedProfile(invocation({
+    recordUsageEnabled:true,
+    recordUsageFn:()=>{used++;},
+    trustedClock:()=>after,
+    factory:args=>({run:async()=>{
+      await args.legacyRunner({
+        records:[],patterns:[],request:{profile:'standard'},now:NOW,
+        recordUsageEnabled:true,
+      });
+      return {result:{coverageGaps:[]},routing:{
+        authoritative_source:'reference-graph'}};
+    }}),
+  }));
+  assert.equal(response?.routing?.authoritative_source,'legacy-control');
+  assert.equal(used,1);
 });
 
 test('P70 installed-config path cannot read ANY local secret without enrolled pins',async()=>{
