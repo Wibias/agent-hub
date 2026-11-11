@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { createHash, createHmac, createKeyPairSync, sign } from 'node:crypto';
+import { createHash, createHmac, generateKeyPairSync, sign } from 'node:crypto';
 import test from 'node:test';
 import { readFileSync } from 'node:fs';
 import { loadPatterns, loadRecords } from '../../knowledge/design-references/scripts/lib.mjs';
@@ -41,7 +41,7 @@ const witness = JSON.stringify({
 });
 
 function coordinator() {
-  const { publicKey, privateKey } = createKeyPairSync('ed25519');
+  const { publicKey, privateKey } = generateKeyPairSync('ed25519');
   const pem = publicKey.export({ format: 'pem', type: 'spki' }).toString('utf8');
   const fingerprint = hash(publicKey.export({ type: 'spki', format: 'der' }));
   const shared = {
