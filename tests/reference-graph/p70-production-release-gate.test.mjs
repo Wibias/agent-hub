@@ -20,6 +20,9 @@ import { loadRecords, loadPatterns } from '../../knowledge/design-references/scr
 const COMMIT='7d4366c2293633a5906faa809a4ca3d8117425a6';
 const HOST='agentshub-windows-release-host-01';
 const NOW=new Date('2026-11-11T20:30:00.000Z');
+const COMPLETE_REQUEST={profile:'standard',limit:12,surface:'public-home',
+  platform:'web-responsive',job:'creator product landing page with clear primary CTA',
+  dimensions:'visual-world,topology'};
 const PROJECT='vrznfnxzlxaavpqbzbzd';
 const digest=s=>createHash('sha256').update(s).digest('hex');
 const kp=()=>generateKeyPairSync('ed25519');
@@ -91,7 +94,7 @@ function invocation(patch={}) {
     stateReadToken:'x'.repeat(50),
     serviceKey:'sb_secret_test_unit_only_0000000000',
     getWitness:async()=>({json:'{}',sha256:WITNESS}),
-    records:[],patterns:[],request:{profile:'standard'},
+    records:loadRecords(),patterns:loadPatterns(),request:COMPLETE_REQUEST,
     requestKey:HOST,now:NOW,trustedClock:()=>NOW,recordUsageEnabled:false,
     ...patch,
   };
@@ -134,7 +137,7 @@ test('P70 actual P67 factory is only invoked with two trusted signatures and ind
     assert.equal(args.trustedPublicKeySha256,pin(coordinator));
     return {run:async input=>{
       const control=await args.legacyRunner({
-        records:[],patterns:[],request:{profile:'standard'},now:NOW,
+        records:loadRecords(),patterns:loadPatterns(),request:COMPLETE_REQUEST,now:NOW,
         recordUsageEnabled:true,
       });
       assert.equal(control.routing.authoritative_source,'legacy-control');
@@ -171,7 +174,7 @@ test('P70 operational failure after P11 usage returns memoized Legacy without do
     recordUsageEnabled:true,recordUsageFn:()=>{count++;},
     factory:args=>({run:async()=>{
       await args.legacyRunner({
-        records:[],patterns:[],request:{profile:'standard'},now:NOW,
+        records:loadRecords(),patterns:loadPatterns(),request:COMPLETE_REQUEST,now:NOW,
         recordUsageEnabled:true,
       });
       throw Error('simulate coordinator disconnect after legacy side effect');
@@ -234,7 +237,7 @@ test('P70 never returns Graph after the independently signed owner window expire
     trustedClock:()=>after,
     factory:args=>({run:async()=>{
       await args.legacyRunner({
-        records:[],patterns:[],request:{profile:'standard'},now:NOW,
+        records:loadRecords(),patterns:loadPatterns(),request:COMPLETE_REQUEST,now:NOW,
         recordUsageEnabled:true,
       });
       return {result:{coverageGaps:[]},routing:{
