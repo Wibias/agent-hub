@@ -26,7 +26,7 @@ $Head = (& git -C $Root rev-parse HEAD).Trim()
 $OldGitHubSha = [Environment]::GetEnvironmentVariable('GITHUB_SHA', 'Process')
 try {
     [Environment]::SetEnvironmentVariable('GITHUB_SHA', $Head, 'Process')
-    & $Build
+    & pwsh -NoProfile -NonInteractive -File $Build
     if ($LASTEXITCODE -ne 0) { throw 'PREVIEW_FAILED_C9_BUILD' }
 } finally {
     [Environment]::SetEnvironmentVariable('GITHUB_SHA', $OldGitHubSha, 'Process')
