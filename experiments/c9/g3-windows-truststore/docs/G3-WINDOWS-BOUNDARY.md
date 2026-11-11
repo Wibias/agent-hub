@@ -1,0 +1,9 @@
+# G3 Windows trust store: explicitly limited design decision
+
+- This is a **read-only consumer** of a fixed HKLM Registry64 key, not an enrollment/rotation/rollback service. No provisioning utility, registry writes, persistent keys, SCM operations, or prod activation.
+- A root public key read from local registry is NOT an independent root of trust. A separately authenticated root SPKI fingerprint and separately current exact checkpoint (revision + manifest canonical SHA256) are required. Supplied inputs are checked for equality but their authenticity is a caller obligation.
+- A signed older manifest plus its matching old local registry values is rejected against a newer external checkpoint. If the external checkpoint itself can be rolled back or comes from the same local attacker-controlled source, **rollback protection is not established**. Local ACLs are no substitute for a monotonic or remote witness.
+- Because the planned service currently is disabled and no service account is provisioned, the accepted Registry DACL is intentionally more restrictive than a future deployment: SYSTEM and Administrators only, protected DACL, no inherited rules or arbitrary readers. This read path is not yet a service integration.
+- Validate owner and DACL from the same opened registry handle before and after reading values; read all typed values twice to catch routine accidental changes. This does NOT make five registry values an atomic transaction, prove parent-key protection, or defeat a malicious administrator/TOCTOU adversary.
+- No Windows checkpoint is installed. A controlled separate provisioner and independently durable monotonic witness are still needed. Before any production decision, validate native Windows installation, wrong-SID and ACL denial, registry key replacement/race, recovery of interrupted advancement, root key custody, and upstream service identity.
+- All outcomes are advisory `CanExecuteCommit=false`. `G3=HOLD`; `Production=NO_GO`.

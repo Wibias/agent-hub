@@ -1,0 +1,34 @@
+name: C9 G3 Windows trust-store read-only contract
+on:
+  push:
+    branches: [codex/c9-g3-offline-review]
+    paths:
+      - 'experiments/c9/g3-windows-truststore/**'
+      - '.github/workflows/verify-c9-g3-windows-truststore.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  windows-registry-reader:
+    runs-on: windows-2022
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: experiments/c9/g3-windows-truststore
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9
+        with:
+          dotnet-version: '10.0.100'
+      - name: Targeted Windows ACL + checkpoint tests (no writes)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $sdk = (dotnet --version).Trim()
+          if ($sdk -cne '10.0.100') { throw "Unexpected SDK: $sdk" }
+          dotnet run --project tests/AgentHub.C9.G3.WindowsTrustStore.Tests.csproj --configuration Release
+          if ($LASTEXITCODE -ne 0) { throw "G3 Windows trust-store test failed: $LASTEXITCODE" }
+          Write-Host "C9_G3_WINDOWS_TRUSTSTORE_REVIEW_PASS SHA=$env:GITHUB_SHA SDK=$sdk"
+          Write-Host 'REGISTRY_READ_ONLY NO_KEY_ENROLLED NO_SCM G3_HOLD PRODUCTION_NO_GO'
