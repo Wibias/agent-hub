@@ -53,8 +53,13 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'C9_BUILD_FAILED: SELFTEST' }
     # Deliberate negative compilation; no service start, SCM, pipe, key or write route.
     $BadOutput = Join-Path $Work 'negative'
-    & dotnet build $Project --no-restore --configuration Release --nologo --output $BadOutput -p:EnableLabCommit=true
-    if ($LASTEXITCODE -eq 0) { throw 'C9_BUILD_FAILED: LAB_WRITER_FLAG_ACCEPTED' }
+    $NegativeOutput = (& dotnet build $Project --no-restore --configuration Release --nologo --output $BadOutput -p:EnableLabCommit=true 2>&1 | Out-String)
+    $NegativeExit = $LASTEXITCODE
+    Write-Host $NegativeOutput
+    if ($NegativeExit -eq 0) { throw 'C9_BUILD_FAILED: LAB_WRITER_FLAG_ACCEPTED' }
+    if ($NegativeOutput -notmatch 'C9 source RC forbids EnableLabCommit=true') {
+        throw 'C9_BUILD_FAILED: NEGATIVE_FAILED_FOR_WRONG_REASON'
+    }
 } finally { Pop-Location }
 $files = @(Get-ChildItem -LiteralPath $BuildDir -File | Sort-Object Name | ForEach-Object {
     [ordered]@{name=$_.Name;bytes=$_.Length;sha256=(Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()}
@@ -83,3 +88,4 @@ Write-Host 'C9_WINDOWS_SOURCE_BUILD_PASS'
 Write-Host "C9_BUILD_SDK=$($Report.sdk_version)"
 Write-Host "C9_BUILD_EVIDENCE_SHA256=$((Get-FileHash -LiteralPath $ReportPath -Algorithm SHA256).Hash.ToLowerInvariant())"
 Write-Host 'SERVICE=NOT_STARTED PRODUCTION=NO_GO G1=HOLD'
+exit 0
