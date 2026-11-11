@@ -132,7 +132,7 @@ export async function runP70ApprovedProfile({
     || typeof stateEndpoint!=='string' || typeof stateReadToken!=='string'
     || typeof serviceKey!=='string' || !serviceKey.startsWith('sb_secret_')
     || typeof getWitness!=='function'
-    || typeof factory!=='function') return null;
+    || (factory !== null && typeof factory!=='function')) return null;
   // Separate production coordinator. The installed P68 local lab host is
   // deliberately excluded even if its signer was valid for local OFF.
   let endpoint;
