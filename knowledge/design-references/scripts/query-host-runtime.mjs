@@ -6,6 +6,7 @@ import { runP11RuntimeQuery } from '../../../reference-graph/p11-runtime-router.
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { probeP69InstalledOffHost } from '../../../reference-graph/p69-installed-off-host.mjs';
+import { maybeRunP70InstalledProduction } from '../../../reference-graph/p70-production-host-config.mjs';
 
 /**
  * Actual Standard/Deep CLI entrypoint when P69 host binding is installed.
@@ -19,6 +20,7 @@ export async function runP69BoundQuery({
   patterns = loadPatterns(),
   now = new Date(),
   probe = probeP69InstalledOffHost,
+  approvedProduction = maybeRunP70InstalledProduction,
   query = runP11RuntimeQuery,
   stdout = process.stdout, stderr = process.stderr,
 } = {}) {
@@ -40,6 +42,29 @@ export async function runP69BoundQuery({
     surface: args.surface || '', platform: args.platform || '',
     job: args.job || '', dimensions: args.dimensions || '',
   };
+
+  // Genuine P67 Graph can run only after TWO independently pinned production
+  // signatures, P62 release evidence, exact installed bits and an independent
+  // production coordinator. Current enrolled pins are all NULL: Legacy only.
+  // A P68 lab grant or an arbitrary local env flag can never authorize this.
+  const production = await approvedProduction({
+    configPath: env.AGENTHUB_P70_DEPLOYMENT_MANIFEST,
+    records,patterns,request,now,
+    recordUsageEnabled:!args['no-record-usage'],
+    usageLogPath:args['usage-log'],
+  });
+  if (production) {
+    stdout.write(JSON.stringify(production.result, null, 2) + '\n');
+    if (env.AGENTHUB_P69_DIAGNOSTICS === '1') {
+      stderr.write(production.routing.authoritative_source === 'reference-graph'
+        ? 'P70_SIGNED_PRODUCTION_CANARY_GRAPH\n'
+        : 'P70_SIGNED_PRODUCTION_CANARY_LEGACY\n');
+    }
+    return {
+      mode:production.routing.authoritative_source,
+      signed_off:false,exitCode:production.result.coverageGaps.length?2:0,
+    };
+  }
 
   // Only a coordinator signed OFF is accepted. Missing config, network
   // failure, invalid signer and a signed LAB canary remain Legacy.
