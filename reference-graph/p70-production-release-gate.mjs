@@ -119,7 +119,7 @@ export async function runP70ApprovedProfile({
   serviceKey, getWitness, profileFetchImpl, fetchCandidates,
   records,patterns,request,requestKey,now=new Date(),
   recordUsageEnabled=true,usageLogPath,recordUsageFn,
-  factory=null,
+  trustedClock=()=>new Date(),factory=null,
 }={}) {
   const approval=verifyP70ProductionRelease({
     envelope,ownerPem,ownerPin,reviewerPem,reviewerPin,
@@ -131,7 +131,7 @@ export async function runP70ApprovedProfile({
     || coordinatorPin===ownerPin || coordinatorPin===reviewerPin
     || typeof stateEndpoint!=='string' || typeof stateReadToken!=='string'
     || typeof serviceKey!=='string' || !serviceKey.startsWith('sb_secret_')
-    || typeof getWitness!=='function'
+    || typeof getWitness!=='function' || typeof trustedClock!=='function'
     || (factory !== null && typeof factory!=='function')) return null;
   // Separate production coordinator. The installed P68 local lab host is
   // deliberately excluded even if its signer was valid for local OFF.
@@ -165,7 +165,8 @@ export async function runP70ApprovedProfile({
       ...(stateFetchImpl?{stateFetchImpl}:{}),
       ...(profileFetchImpl?{profileFetchImpl}:{}),
       ...(fetchCandidates?{fetchCandidates}:{}),
-      clock:()=>now,
+      // Fresh real host clock, never the request's frozen start timestamp.
+      clock:trustedClock,
     });
     const response=await runtime.run({
       records,patterns,request,requestKey,now,recordUsageEnabled,usageLogPath,
@@ -173,6 +174,16 @@ export async function runP70ApprovedProfile({
     if (response?.routing?.authoritative_source!=='reference-graph'
       && response?.routing?.authoritative_source!=='legacy-control') {
       return legacyControl;
+    }
+    if (response.routing.authoritative_source==='reference-graph') {
+      const finished=trustedClock();
+      if (!(finished instanceof Date) || !Number.isFinite(finished.valueOf())
+        || finished.valueOf()<now.valueOf()-500
+        || finished.valueOf()>=Date.parse(approval.expires_at)) {
+        // A grant expiring during the Graph fetch cannot authorize output.
+        // Reuse the authentic Legacy control without another usage write.
+        return legacyControl;
+      }
     }
     return response;
   } catch { return legacyControl; }
