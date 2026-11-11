@@ -1,6 +1,5 @@
 import { createHash, createPublicKey, verify } from 'node:crypto';
 import { evaluateP62ReleaseReviewRecord } from './p62-release-review-preflight.mjs';
-import { createP68TrustedServerHost } from './p68-server-host.mjs';
 import { runP11RuntimeQuery } from './p11-runtime-router.mjs';
 
 const PROJECT = 'vrznfnxzlxaavpqbzbzd';
@@ -120,7 +119,7 @@ export async function runP70ApprovedProfile({
   serviceKey, getWitness, profileFetchImpl, fetchCandidates,
   records,patterns,request,requestKey,now=new Date(),
   recordUsageEnabled=true,usageLogPath,recordUsageFn,
-  factory=createP68TrustedServerHost,
+  factory=null,
 }={}) {
   const approval=verifyP70ProductionRelease({
     envelope,ownerPem,ownerPin,reviewerPem,reviewerPin,
@@ -144,7 +143,12 @@ export async function runP70ApprovedProfile({
     || endpoint.pathname!=='/state') return null;
   let legacyControl=null;
   try {
-    const runtime=factory({
+    // The existing Windows P69 installation contains no draft P67/P68
+    // libraries. Only load them AFTER separate trusted release approval.
+    const effectiveFactory=factory ??
+      (await import('./p68-server-host.mjs')).createP68TrustedServerHost;
+    if(typeof effectiveFactory!=='function') return null;
+    const runtime=effectiveFactory({
       repositorySha:expectedRepositorySha,
       trustedPublicKeyPem:coordinatorPem,
       trustedPublicKeySha256:coordinatorPin,
