@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - codex/c9-source-review-20261111
+      - main
     paths:
       - 'experiments/c9/readonly-rc1/**'
       - '.github/workflows/verify-c9-readonly-windows.yml'
@@ -25,14 +26,23 @@ jobs:
         with:
           dotnet-version: '8.0.428'
           dotnet-quality: 'ga'
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
       - name: Exact-source, build, read-only selftest and SHA256 report
         shell: pwsh
         run: ./experiments/c9/readonly-rc1/build-windows.ps1
+      - name: Actual Standard/Deep CLI parity on Windows (main only)
+        if: github.ref == 'refs/heads/main'
+        shell: pwsh
+        run: ./experiments/c9/readonly-rc1/preview-windows.ps1
       - name: Upload evidence only (never binary)
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: c9-readonly-windows-evidence
-          path: experiments/c9/readonly-rc1/build-evidence.json
+          path: |
+            experiments/c9/readonly-rc1/build-evidence.json
+            experiments/c9/readonly-rc1/preview-evidence.json
           if-no-files-found: warn
           retention-days: 14
