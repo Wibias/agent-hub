@@ -39,10 +39,10 @@ Check("strict read request", read==query);
 Check("bad read purpose",WitnessProtocol.ParseRead(Wire(query with {Purpose="G3_TRUST_WRITE"})) is null);
 Check("bad read nonce",WitnessProtocol.ParseRead(Wire(query with {ChallengeNonce="ABC"})) is null);
 byte[] unknown = Encoding.UTF8.GetBytes(Encoding.UTF8.GetString(Wire(query)).Replace(
-    ""Version":1", ""Extra":1,"Version":1",StringComparison.Ordinal));
+    "\"Version\":1", "\"Extra\":1,\"Version\":1",StringComparison.Ordinal));
 Check("unknown request property", WitnessProtocol.ParseRead(unknown) is null);
 byte[] duplicate = Encoding.UTF8.GetBytes(Encoding.UTF8.GetString(Wire(query)).Replace(
-    ""Version":1", ""Version":1,"Version":1",StringComparison.Ordinal));
+    "\"Version\":1", "\"Version\":1,\"Version\":1",StringComparison.Ordinal));
 Check("duplicate request property",WitnessProtocol.ParseRead(duplicate) is null);
 Check("oversized request",WitnessProtocol.ParseRead(new byte[5000]) is null);
 var verified = CheckAnchor(signedAnchor);
@@ -57,7 +57,7 @@ Check("anchor expired denied",CheckAnchor(signedAnchor,at:now+21) is null);
 Check("anchor time too far in future denied",CheckAnchor(signedAnchor with {IssuedAtUnix=now+6}) is null);
 Check("anchor window too long denied",CheckAnchor(SignAnchor(signedAnchor with {ExpiresAtUnix=now+40,SignatureBase64=""})) is null);
 byte[] extraAnchor=Encoding.UTF8.GetBytes(Encoding.UTF8.GetString(Wire(signedAnchor)).Replace(
-    ""Version":1", ""CanExecuteCommit":true,"Version":1",StringComparison.Ordinal));
+    "\"Version\":1", "\"CanExecuteCommit\":true,\"Version\":1",StringComparison.Ordinal));
 Check("extra privilege field denied", WitnessProtocol.VerifyAnchor(extraAnchor,scope,anchorNonce,anchorId,
     anchorSpki,Pin(anchorSpki),now) is null);
 var signedWitness = WitnessProtocol.SignHead(verified!, query,witnessId,witnessKeyId,witness,now);
@@ -70,7 +70,7 @@ Check("witness signs verified anchor only",CheckWitness(signedWitness) is {Revis
 Check("witness wrong nonce denied",CheckWitness(signedWitness,requestNonce:new string('e',64)) is null);
 Check("witness wrong scope denied",CheckWitness(signedWitness,requestScope:"other") is null);
 Check("witness wrong epoch denied",CheckWitness(signedWitness,epoch:2) is null);
-Check("witness signature tampering denied",CheckWitness(signedWitness with {ManifestSha256:new string('a',64)}) is null);
+Check("witness signature tampering denied",CheckWitness(signedWitness with {ManifestSha256=new string('a',64)}) is null);
 Check("witness pin substitution denied",CheckWitness(signedWitness,pin:new string('f',64)) is null);
 Check("witness expiry denied",CheckWitness(signedWitness,at:now+16) is null);
 Check("read response cannot grant execution",typeof(WitnessHeadV1).GetProperty("CanExecuteCommit") is null);
