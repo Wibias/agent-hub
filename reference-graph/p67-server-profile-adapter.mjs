@@ -260,6 +260,10 @@ export function createP67ServerProfileAdapter({
         const witness = validateP40ReadOnlySourceWitness(JSON.parse(pin.json), {
           asOf: now.toISOString(),
         });
+        // Revocation during a slow witness read must suppress the initial GET.
+        if (latched || controller.signal.aborted) {
+          throw Error('P67 revoked before protected GET');
+        }
         // A fetch adapter may ignore AbortSignal. Race its result against
         // revocation so a late response can never restore Graph authority.
         const cancelled = new Promise((_resolve, reject) => {

@@ -214,6 +214,32 @@ test('P67 revocation during in-flight P30 fetch aborts even an adapter ignoring 
   assert.equal(a.instance.status().local_kill_switch_latched,true);
 });
 
+test('P67 revoke while acquiring witness suppresses any later protected GET',async()=>{
+  const c=coordinator();
+  let release, entered;
+  const pending=new Promise(resolve=>{release=resolve});
+  const began=new Promise(resolve=>{entered=resolve});
+  let gets=0;
+  const a=adapter(c,{
+    statePollMs:50,
+    getWitness:async()=>{
+      entered();
+      await pending;
+      return {json:witness,sha256:hash(witness)};
+    },
+    fetchCandidates:async()=>{gets++;return {candidates,transport:{refreshed_at:refreshed}};},
+  });
+  const running=a.run();
+  await began;
+  c.revoke();
+  await new Promise(resolve=>setTimeout(resolve,125));
+  release();
+  const result=await running;
+  assert.equal(result.routing.authoritative_source,'legacy-control');
+  assert.equal(result.canary.local_kill_switch_latched,true);
+  assert.equal(gets,0);
+});
+
 test('P67 mismatch latches off and never attempts another Graph GET',async()=>{
   const c=coordinator();
   let gets=0;
