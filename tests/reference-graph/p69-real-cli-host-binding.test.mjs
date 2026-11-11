@@ -146,7 +146,7 @@ test('P69 real query-runtime runs the bound host, retains Legacy public JSON and
 test('P69 fail-closed binding retains once-only usage and authentic JSON',async()=>{
   const f=fixture();
   try{
-    let queries=0, stdout='',stderr='';
+    let queries=0, usage=0, stdout='',stderr='';
     const records=loadRecords(), patterns=loadPatterns();
     const result=await runP69BoundQuery({
       argv:args.filter(arg=>arg!=='--no-record-usage'),
