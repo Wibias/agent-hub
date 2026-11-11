@@ -84,7 +84,7 @@ try
         WindowsTrustStore.VerifyReadOnly(Wire(m), pinned, witness, now);
 
     ApplyManifest(v1);
-    NativeRegistryAcl.Set(key.Handle, secure);
+    NativeRegistryAcl.Set(hklm.Handle, leaf, secure);
     var valid1 = Verify(v1, rootPin, witness1);
     Check("real HKLM Registry64 signed manifest and strict ACL accepted",
         valid1 is { AnchorAndCheckpointMatch:true, ManifestVerified:true, CanExecuteCommit:false,
@@ -109,11 +109,11 @@ try
 
     try
     {
-        NativeRegistryAcl.Set(key.Handle, loose);
+        NativeRegistryAcl.Set(hklm.Handle, leaf, loose);
         Check("real HKLM Authenticated Users read ACE is rejected",
             Verify(v2, rootPin, witness2) is { AnchorAndCheckpointMatch:false, CanExecuteCommit:false, Reason:"REGISTRY_ACL_DENIED" });
     }
-    finally { NativeRegistryAcl.Set(key.Handle, secure); }
+    finally { NativeRegistryAcl.Set(hklm.Handle, leaf, secure); }
     Check("restored secure ACL accepted",
         Verify(v2, rootPin, witness2) is { AnchorAndCheckpointMatch:true, ManifestVerified:true, CanExecuteCommit:false });
     try
@@ -149,14 +149,29 @@ finally
 internal static class NativeRegistryAcl
 {
     private const uint OwnerAndDaclSecurityInformation = 0x00000001 | 0x00000004;
+    private const uint KeyAllAccess = 0x000F003F;
+    private const uint KeyWow64_64Key = 0x00000100;
+    [DllImport("advapi32.dll", CharSet=CharSet.Unicode, EntryPoint="RegOpenKeyExW", ExactSpelling=true)]
+    private static extern int RegOpenKeyEx(
+        SafeRegistryHandle baseHandle, string subKey, uint options,
+        uint access, out SafeRegistryHandle handle);
     [DllImport("advapi32.dll", ExactSpelling=true)]
-    private static extern int RegSetKeySecurity(SafeRegistryHandle handle, uint securityInformation, byte[] descriptor);
-    internal static void Set(SafeRegistryHandle handle, string sddl)
+    private static extern int RegSetKeySecurity(
+        SafeRegistryHandle handle, uint securityInformation, byte[] descriptor);
+
+    internal static void Set(SafeRegistryHandle baseHandle, string path, string sddl)
     {
-        RawSecurityDescriptor sd = new(sddl);
-        byte[] bytes = new byte[sd.BinaryLength];
-        sd.GetBinaryForm(bytes, 0);
-        int error = RegSetKeySecurity(handle, OwnerAndDaclSecurityInformation, bytes);
-        if (error != 0) throw new InvalidOperationException("C9_NATIVE_LAB_SET_SECURITY_FAILED_WIN32_" + error);
+        // RegistryKey.CreateSubKey's writable handle does not imply WRITE_DAC/WRITE_OWNER.
+        int openError = RegOpenKeyEx(baseHandle, path, 0,
+            KeyAllAccess | KeyWow64_64Key, out SafeRegistryHandle aclHandle);
+        if (openError != 0) throw new InvalidOperationException("C9_NATIVE_LAB_OPEN_SECURITY_HANDLE_FAILED_WIN32_" + openError);
+        using (aclHandle)
+        {
+            RawSecurityDescriptor sd = new(sddl);
+            byte[] bytes = new byte[sd.BinaryLength];
+            sd.GetBinaryForm(bytes, 0);
+            int error = RegSetKeySecurity(aclHandle, OwnerAndDaclSecurityInformation, bytes);
+            if (error != 0) throw new InvalidOperationException("C9_NATIVE_LAB_SET_SECURITY_FAILED_WIN32_" + error);
+        }
     }
 }
