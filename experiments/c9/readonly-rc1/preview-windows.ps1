@@ -94,3 +94,6 @@ $Report | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $Path -Encoding utf
 Write-Host 'AGENTHUB_READONLY_PREVIEW_BUILD_AND_CLI_PARITY_PASS'
 Write-Host "PREVIEW_REPORT_SHA256=$((Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash)"
 Write-Host "CODEX_CLI=$CodexStatus CODEX_DESKTOP=NOT_TESTED PRODUCTION=NO_GO"
+# Node queries legitimately return exit 2 for coverage gaps; explicit success
+# is required after their valid JSON and Legacy parity have been checked.
+exit 0
