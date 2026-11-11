@@ -1,0 +1,36 @@
+name: C9 G3 external witness source and contract (review only)
+on:
+  push:
+    branches: [codex/c9-g3-offline-review]
+    paths:
+      - 'experiments/c9/g3-witness/**'
+      - '.github/workflows/verify-c9-g3-witness.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  witness-review:
+    runs-on: windows-2022
+    timeout-minutes: 12
+    defaults:
+      run:
+        working-directory: experiments/c9/g3-witness
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9
+        with:
+          dotnet-version: '10.0.100'
+      - name: Exact SDK and narrow signature/protocol tests
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $sdk = (dotnet --version).Trim()
+          if ($sdk -cne '10.0.100') { throw "Unexpected SDK: $sdk" }
+          dotnet run --project tests/AgentHub.C9.G3.Witness.Tests.csproj --configuration Release
+          if ($LASTEXITCODE -ne 0) { throw "Witness contract tests failed: $LASTEXITCODE" }
+          dotnet build src/Server/AgentHub.C9.G3.Witness.Server.csproj --configuration Release
+          if ($LASTEXITCODE -ne 0) { throw "Witness server failed to build: $LASTEXITCODE" }
+          Write-Host "C9_G3_WITNESS_SOURCE_REVIEW_PASS SHA=$env:GITHUB_SHA SDK=$sdk"
+          Write-Host 'NO_NETWORK_LISTENER NO_ADVANCE NO_KEYS_PROVISIONED G3_HOLD PRODUCTION_NO_GO'
