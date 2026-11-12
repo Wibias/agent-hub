@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm } from 'node:fs/promises';
+import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 import { MemoryEngine } from '../../memory-engine/index.mjs';
 import {
@@ -104,10 +104,20 @@ test('Claude decision capture records claude-code provenance', async () => {
   memory.close();
 });
 
-test('Claude explicit memory commands pass the claude-code authority gate', async () => {
+test('Claude explicit memory commands pass the claude-code authority gate', async (t) => {
+  // PR checkouts are detached HEADs. The memory runtime correctly denies
+  // unscoped checkouts, so the fixture must create its own branch-scoped repo.
   const root = await mkdtemp(join(tmpdir(), 'claude-memory-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
   const dbPath = join(root, 'memory.sqlite3');
-  const hubRoot = fileURLToPath(new URL('../..', import.meta.url));
+  const hubRoot = join(root, 'repo');
+  await mkdir(hubRoot);
+  execFileSync('git', ['init', '-b', 'main', hubRoot], { stdio: 'ignore' });
+  execFileSync('git', ['-C', hubRoot, '-c', 'user.name=Memory Test',
+    '-c', 'user.email=memory@example.test',
+    'commit', '--allow-empty', '-m', 'initial'], { stdio: 'ignore' });
+  execFileSync('git', ['-C', hubRoot, 'remote', 'add', 'origin',
+    'https://github.com/example/claude-authority-fixture.git']);
   const value = 'Claude explicit memory command stores a user claim.';
 
   const result = await runClaudeCodeHook({
