@@ -28,7 +28,7 @@
     },
     {
       "path": "src/AgentHub.C9.G2.KernelReview.csproj",
-      "sha256": "2322e9ba8d82a0e0b4bcf4d0834f1702201ee1c32a94b2f51987ca6bb1974b1a"
+      "sha256": "ef7933ad201472ea16da1d0fb3fe354c68a92a166c5e7f1bba25a011f5c37df3"
     },
     {
       "path": "src/G2345PipeReview.cs",
@@ -40,7 +40,7 @@
     },
     {
       "path": "tests/AgentHub.C9.G2.KernelReview.Tests.csproj",
-      "sha256": "eab34ee4c8fe3e398adbbc3ddd1f8670599d66b990caef9f5c6740fcac12326f"
+      "sha256": "b0ccf36ac94598b23a70166955e9712f5916b2c34294e5aea996b407d8b95be6"
     },
     {
       "path": "tests/Program.cs",
