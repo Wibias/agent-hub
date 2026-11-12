@@ -37,8 +37,6 @@ jobs:
           $root = Join-Path $env:ProgramData "AgentHubC9G5Lab-$guid"
           $task = "AgentHubC9G5Lab-$guid"
           $exe = Join-Path $root 'bin/AgentHub.C9.G5.MinimalCommitLab.exe'
-          $work = Join-Path $root 'work/positive/target.bin'
-          $signal = Join-Path $root 'signals/attack.txt'
           $taskCreated = $false
           $failure = $null
           try {
@@ -51,7 +49,7 @@ jobs:
             dotnet publish src/AgentHub.C9.G5.MinimalCommitLab.csproj -c Release -o (Join-Path $root 'bin') --nologo
             if ($LASTEXITCODE -ne 0) { throw 'LAB_PUBLISH_FAILED' }
             if (-not (Test-Path -LiteralPath $exe)) { throw 'LAB_EXE_MISSING' }
-            $taskCommand = "$exe --attack $work $signal"
+            $taskCommand = "$exe --attack $root"
             & schtasks.exe /create /tn $task /sc once /st 23:59 /ru 'NT AUTHORITY\LOCALSERVICE' /tr $taskCommand /f | Out-Host
             if ($LASTEXITCODE -ne 0) { throw 'TASK_CREATE_FAILED' }
             $taskCreated = $true

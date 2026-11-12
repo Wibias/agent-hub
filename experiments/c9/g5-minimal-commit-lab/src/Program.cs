@@ -38,8 +38,8 @@ internal static class Program
         try
         {
             if (!OperatingSystem.IsWindows() || args.Length < 1) return 2;
-            if (args[0] == "--attack" && args.Length == 3)
-                return Attack(args[1], args[2]);
+            if (args[0] == "--attack" && args.Length == 2)
+                return Attack(args[1]);
             if (Environment.GetEnvironmentVariable("RUNNER_ENVIRONMENT") != "github-hosted" ||
                 Environment.GetEnvironmentVariable("RUNNER_OS") != "Windows" ||
                 Environment.GetEnvironmentVariable("AGENTHUB_G5_MINIMAL_LAB") != "DISPOSABLE_CI")
@@ -215,8 +215,11 @@ internal static class Program
             !File.Exists(Path.Combine(directory, "attacker-renamed.bin")), "ACL_UNPRIVILEGED_RENAME_DENIED");
     }
 
-    static int Attack(string target, string result)
+    static int Attack(string root)
     {
+        ValidateLabRoot(root);
+        string target = Path.Combine(root, "work", "positive", "target.bin");
+        string result = Path.Combine(root, "signals", "attack.txt");
         // Never run an attack helper on arbitrary paths or under an elevated token.
         string norm = Path.GetFullPath(target);
         string baseRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "AgentHubC9G5Lab-");
