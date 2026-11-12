@@ -9,9 +9,11 @@ on:
       - 'memory-engine/**'
       - 'scripts/run-codex-memory-mcp.mjs'
       - 'scripts/manage-codex-global-memory-projects.mjs'
+      - 'scripts/diagnose-codex-memory-pipeline.mjs'
       - 'scripts/prepare-codex-memory-project-scope.mjs'
       - 'tests/memory-engine/codex-readonly-memory-mcp.test.mjs'
       - 'tests/memory-engine/codex-global-memory-scope.test.mjs'
+      - 'tests/memory-engine/codex-memory-pipeline-diagnostics.test.mjs'
       - 'tests/memory-engine/codex-project-memory-scope.test.mjs'
       - '.github/workflows/verify-codex-memory-readonly-mcp.yml'
   pull_request:
@@ -19,9 +21,11 @@ on:
       - 'memory-engine/**'
       - 'scripts/run-codex-memory-mcp.mjs'
       - 'scripts/manage-codex-global-memory-projects.mjs'
+      - 'scripts/diagnose-codex-memory-pipeline.mjs'
       - 'scripts/prepare-codex-memory-project-scope.mjs'
       - 'tests/memory-engine/codex-readonly-memory-mcp.test.mjs'
       - 'tests/memory-engine/codex-global-memory-scope.test.mjs'
+      - 'tests/memory-engine/codex-memory-pipeline-diagnostics.test.mjs'
       - 'tests/memory-engine/codex-project-memory-scope.test.mjs'
       - '.github/workflows/verify-codex-memory-readonly-mcp.yml'
   workflow_dispatch:
@@ -46,4 +50,4 @@ jobs:
         with:
           node-version: '24'
       - name: Test real stdio MCP, canonical SQLite read-only and scoped authority
-        run: node --test tests/memory-engine/codex-readonly-memory-mcp.test.mjs tests/memory-engine/codex-project-memory-scope.test.mjs tests/memory-engine/codex-global-memory-scope.test.mjs
+        run: node --test tests/memory-engine/codex-readonly-memory-mcp.test.mjs tests/memory-engine/codex-project-memory-scope.test.mjs tests/memory-engine/codex-global-memory-scope.test.mjs tests/memory-engine/codex-memory-pipeline-diagnostics.test.mjs
