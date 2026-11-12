@@ -1,6 +1,7 @@
 #!/usr/bin/env node
+import { lstatSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import {
   createEmbeddingIpcClient,
@@ -10,9 +11,27 @@ import {
   E5_DIMENSIONS,
   E5_MODEL_ID,
   E5_MODEL_REVISION,
+  createE5Embedder,
 } from '../memory-engine/e5-embedder.mjs';
 import { HybridMemoryRetriever } from '../memory-engine/hybrid-retrieval.mjs';
 import { MemoryEngine } from '../memory-engine/index.mjs';
+
+/**
+ * The same repo-local cache selected by the standard Codex hook.
+ * Model loading is offline-only; a Windows fallback never downloads weights.
+ */
+export function defaultSemanticOfflineCacheDir() {
+  return resolve(fileURLToPath(new URL('../.cache/memory-engine/e5/', import.meta.url)));
+}
+
+export function ordinarySemanticCacheDirectory(path) {
+  try {
+    const stat = lstatSync(path);
+    return stat.isDirectory() && !stat.isSymbolicLink();
+  } catch {
+    return false;
+  }
+}
 
 function nonEmpty(value) {
   return typeof value === 'string' && value.trim().length > 0;
@@ -36,6 +55,7 @@ export function parseReindexSemanticArgs(argv) {
     projectId: null,
     branch: null,
     socketPath: null,
+    cacheDir: null,
   };
 
   const flags = new Map([
@@ -43,6 +63,7 @@ export function parseReindexSemanticArgs(argv) {
     ['--project-id', 'projectId'],
     ['--branch', 'branch'],
     ['--socket-path', 'socketPath'],
+    ['--cache-dir', 'cacheDir'],
   ]);
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -76,6 +97,10 @@ export async function reindexMemorySemantic({
   projectId,
   branch,
   socketPath = defaultEmbeddingIpcPath(),
+  cacheDir = defaultSemanticOfflineCacheDir(),
+  platform = process.platform,
+  offlineCacheExists = ordinarySemanticCacheDirectory,
+  createOfflineEmbedder = createE5Embedder,
   createEngine = (options) => new MemoryEngine(options),
   createEmbeddingClient = createEmbeddingIpcClient,
   createHybridRetriever = (options) => new HybridMemoryRetriever(options),
@@ -86,10 +111,18 @@ export async function reindexMemorySemantic({
     [projectId, 'projectId'],
     [branch, 'branch'],
     [socketPath, 'socketPath'],
+    [cacheDir, 'cacheDir'],
   ]) {
     if (!nonEmpty(value)) {
       throw new TypeError(`${name} must be a non-empty string`);
     }
+  }
+  if (typeof platform !== 'string') {
+    throw new TypeError('platform must be a string');
+  }
+  if (typeof offlineCacheExists !== 'function'
+    || typeof createOfflineEmbedder !== 'function') {
+    throw new TypeError('offline embedding dependencies must be functions');
   }
   if (typeof createEngine !== 'function') {
     throw new TypeError('createEngine must be a function');
@@ -113,23 +146,52 @@ export async function reindexMemorySemantic({
       throw new Error(`unknown project: ${projectId}`);
     }
 
-    const embedder = createEmbeddingClient({
-      socketPath,
-      modelId: E5_MODEL_ID,
-      modelRevision: E5_MODEL_REVISION,
-      dimensions: E5_DIMENSIONS,
-      timeoutMs: 5_000,
-    });
+    let embedder;
+    let readiness;
+    try {
+      embedder = createEmbeddingClient({
+        socketPath,
+        modelId: E5_MODEL_ID,
+        modelRevision: E5_MODEL_REVISION,
+        dimensions: E5_DIMENSIONS,
+        timeoutMs: 5_000,
+      });
 
-    // Fail once, up front, if the worker is unavailable instead of paying one
-    // connection timeout per Claim.
-    const readiness = await embedder.embedQuery(
-      'semantic reindex readiness probe',
-    );
-    if (
-      !(readiness instanceof Float32Array)
+      // Fail once up front instead of paying one connection timeout per Claim.
+      readiness = await embedder.embedQuery('semantic reindex readiness probe');
+    } catch (error) {
+      // A Windows IPC listener without verified per-user ACL is not launched
+      // by this repair. Only the *specific worker-unavailable* error may
+      // use a local, pinned, offline E5 embedder in this same process.
+      if (platform !== 'win32'
+        || error?.message !== 'embedding worker unavailable') {
+        throw error;
+      }
+      if (!offlineCacheExists(cacheDir)) {
+        throw new Error('embedding worker unavailable; offline E5 cache missing');
+      }
+      try {
+        embedder = await createOfflineEmbedder({
+          cacheDir: resolve(cacheDir),
+          allowRemoteModels: false,
+        });
+      } catch {
+        throw new Error('offline E5 model initialization failed');
+      }
+      if (embedder?.modelId !== E5_MODEL_ID
+        || embedder?.modelRevision !== E5_MODEL_REVISION
+        || embedder?.dimensions !== E5_DIMENSIONS) {
+        throw new Error('offline E5 provider identity mismatch');
+      }
+      try {
+        readiness = await embedder.embedQuery('semantic reindex readiness probe');
+      } catch {
+        throw new Error('offline E5 readiness failed');
+      }
+    }
+    if (!(readiness instanceof Float32Array)
       || readiness.length !== E5_DIMENSIONS
-    ) {
+      || [...readiness].some(value => !Number.isFinite(value))) {
       throw new Error('embedding worker readiness failed');
     }
 
@@ -178,6 +240,7 @@ async function main() {
     projectId: parsed.projectId,
     branch: parsed.branch,
     socketPath: parsed.socketPath ?? defaultEmbeddingIpcPath(),
+    cacheDir: parsed.cacheDir ?? defaultSemanticOfflineCacheDir(),
   });
   if (result.failed > 0) {
     process.exitCode = 1;
