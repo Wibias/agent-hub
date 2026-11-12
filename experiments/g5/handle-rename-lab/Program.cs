@@ -122,7 +122,10 @@ internal static class Program
             Marshal.Copy(fileName, 0, IntPtr.Add(buffer, 20), fileName.Length);
             Marshal.WriteInt16(buffer, 20 + fileName.Length, 0);
             if (!SetFileInformationByHandle(stage, FileRenameInfo, buffer, (uint)length))
-                throw new Win32Exception(Marshal.GetLastWin32Error(), "Handle rename failed.");
+            {
+                int error = Marshal.GetLastWin32Error();
+                throw new Win32Exception(error, $"Handle rename failed (Win32={error}).");
+            }
         }
         finally
         {
