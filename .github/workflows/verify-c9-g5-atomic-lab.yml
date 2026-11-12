@@ -1,0 +1,49 @@
+name: C9 G5 atomic replacement lab (isolated, non-production)
+on:
+  push:
+    branches: [codex/c9-g3-offline-review]
+    paths:
+      - 'experiments/c9/g5-atomic-lab/**'
+      - '.github/workflows/verify-c9-g5-atomic-lab.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  g5-isolated-atomic-lab:
+    if: github.repository == 'Wibias/agent-hub' && github.ref == 'refs/heads/codex/c9-g3-offline-review'
+    runs-on: windows-2022
+    timeout-minutes: 12
+    defaults:
+      run:
+        working-directory: experiments/c9/g5-atomic-lab
+    env:
+      AGENTHUB_G5_ATOMIC_LAB: DISPOSABLE_GITHUB_RUNNER
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9
+        with:
+          dotnet-version: '10.0.100'
+      - name: Validate source hashes and execute disposable replacement / crash proof
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:RUNNER_ENVIRONMENT -cne 'github-hosted' -or $env:RUNNER_OS -cne 'Windows' -or $env:GITHUB_ACTIONS -cne 'true') { throw 'G5_LAB_WRONG_RUNNER' }
+          if ((dotnet --version).Trim() -cne '10.0.100') { throw 'G5_LAB_WRONG_SDK' }
+          $manifest = Get-Content SHA256-MANIFEST.json -Raw | ConvertFrom-Json
+          foreach ($entry in $manifest.files) {
+            $actual = (Get-FileHash -LiteralPath $entry.path -Algorithm SHA256).Hash.ToLowerInvariant()
+            if ($actual -cne $entry.sha256) { throw "G5_LAB_SOURCE_HASH_CHANGED $($entry.path)" }
+          }
+          dotnet publish src/AgentHub.C9.G5.AtomicLab.csproj -c Release -o (Join-Path $env:RUNNER_TEMP 'c9-g5-atomic-build') --nologo
+          if ($LASTEXITCODE -ne 0) { throw 'G5_LAB_BUILD_FAILED' }
+          $exe = Join-Path $env:RUNNER_TEMP 'c9-g5-atomic-build/AgentHub.C9.G5.AtomicLab.exe'
+          $output = & $exe --run 2>&1
+          $exit = $LASTEXITCODE
+          $output | ForEach-Object { Write-Host $_ }
+          if ($exit -ne 0) { throw "G5_LAB_EXECUTION_FAILED $exit" }
+          if (-not ($output -match '^C9_G5_ATOMIC_DISPOSABLE_LAB_PASS count=') -or
+              -not ($output -match '^C9_G5_ATOMIC_DISPOSABLE_CLEANUP_PASS') -or
+              -not ($output -match '^G5_TOCTOU_UNRESOLVED_PROOF')) { throw 'G5_LAB_REQUIRED_EVIDENCE_MISSING' }
+          Write-Host "C9_G5_ATOMIC_LAB_REVIEW_COMPLETE SHA=$env:GITHUB_SHA G5_WRITE_HOLD GATES_0_OF_7 PRODUCTION_NO_GO"
