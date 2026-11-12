@@ -1,0 +1,49 @@
+name: C9 Broker RC2 .NET 10 read-only integration
+on:
+  push:
+    branches: [codex/c9-g3-offline-review]
+    paths:
+      - 'experiments/c9/broker-rc2/**'
+      - '.github/workflows/verify-c9-broker-rc2.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  review:
+    if: github.repository == 'Wibias/agent-hub' && github.ref == 'refs/heads/codex/c9-g3-offline-review'
+    runs-on: windows-2022
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: experiments/c9/broker-rc2
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9
+        with:
+          dotnet-version: '10.0.100'
+      - name: Build and deny all service and write entrypoints
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          if ((dotnet --version).Trim() -cne '10.0.100') { throw 'SDK drift' }
+          if ($env:RUNNER_ENVIRONMENT -cne 'github-hosted' -or $env:RUNNER_OS -cne 'Windows') { throw 'Unexpected runner' }
+          dotnet publish src/AgentHub.C9.ReadOnlyBroker.RC2.csproj -c Release -o "$env:RUNNER_TEMP/c9-rc2-build" --nologo
+          if ($LASTEXITCODE -ne 0) { throw 'RC2 publish failed' }
+          $exe = Join-Path $env:RUNNER_TEMP 'c9-rc2-build/AgentHub.C9.ReadOnlyBroker.RC2.exe'
+          if (!(Test-Path -LiteralPath $exe)) { throw 'RC2 EXE missing' }
+          & $exe --selftest
+          if ($LASTEXITCODE -ne 0) { throw 'RC2 selftest failed' }
+          & $exe --service 2>&1 | Out-Null
+          if ($LASTEXITCODE -ne 32) { throw "Service activation was not denied: $LASTEXITCODE" }
+          & $exe --apply 2>&1 | Out-Null
+          if ($LASTEXITCODE -ne 12) { throw 'Unsafe CLI mode accepted' }
+          $log = Join-Path $env:RUNNER_TEMP 'c9-rc2-writer-negative.log'
+          dotnet build src/AgentHub.C9.ReadOnlyBroker.RC2.csproj -c Release /p:EnableLabCommit=true --nologo *> $log
+          if ($LASTEXITCODE -eq 0) { throw 'Writer switch unexpectedly compiled' }
+          if (-not (Select-String -LiteralPath $log -Pattern 'Writer/commit build switches are forbidden' -Quiet)) { throw 'Writer build failed for wrong reason' }
+          $dll = Join-Path $env:RUNNER_TEMP 'c9-rc2-build/AgentHub.C9.ReadOnlyBroker.RC2.dll'
+          $sha = (Get-FileHash -LiteralPath $dll -Algorithm SHA256).Hash.ToLowerInvariant()
+          Write-Host "C9_RC2_DOTNET10_REVIEW_PASS SHA=$env:GITHUB_SHA DLL_SHA256=$sha"
+          Write-Host 'NO_SCM NO_PIPE_START NO_WRITER NO_COMMIT NO_PRODUCTION_AUTHORITY G1_G7_HOLD PRODUCTION_NO_GO'

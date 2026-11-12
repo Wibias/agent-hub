@@ -1,0 +1,41 @@
+{
+  "schema": "agenthub-c9-rc2-file-manifest-v1",
+  "files": [
+    {
+      "path": ".gitattributes",
+      "sha256": "719b0465bf471907be9c39b7e1f14731abe7751933988325f40d676553b99e09"
+    },
+    {
+      "path": ".github/workflows/verify-c9-broker-rc2.yml",
+      "sha256": "dea0b44154c308b3464fb349abf07ec8815244a5ba8296e70a226f25e5097bb5"
+    },
+    {
+      "path": "NuGet.Config",
+      "sha256": "2142cfb2dfa2c7feefbe40fabcc68b0dfecadafa99a1db9b70239d977cf2a7ef"
+    },
+    {
+      "path": "README.md",
+      "sha256": "54e8f9cc6899fa3c3c17185ab3a9057ba22579cbb981878f99fc03e06267e927"
+    },
+    {
+      "path": "docs/SECURITY-BOUNDARY.md",
+      "sha256": "cdc6173ef1f122aee2384f39f47a1af8b51bc25e777989acf5f78c904991b9e0"
+    },
+    {
+      "path": "global.json",
+      "sha256": "b61e0efe8dbb9a0543174300c6f524d40d6bbb96a1be5e3cb7343096b326f8c5"
+    },
+    {
+      "path": "src/AgentHub.C9.ReadOnlyBroker.RC2.csproj",
+      "sha256": "1f55b503a889a35772f96346e27d91f4c158ddaf24d1b4feb71136bce1012def"
+    },
+    {
+      "path": "src/BrokerRc2Route.cs",
+      "sha256": "d9c5e4cbd6f1e385d4fe4633cc5ea76a230f11bafe7a3a7deda964042d69d22c"
+    },
+    {
+      "path": "src/Program.cs",
+      "sha256": "8f496cab43f2a018bc18a0c21cdc0c3a548224416f21fae4ba63c16fa03b6f99"
+    }
+  ]
+}
