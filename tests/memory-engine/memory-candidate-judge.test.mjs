@@ -439,6 +439,118 @@ test('batch judge leaves candidate untouched when model output is invalid and co
   memory.close();
 });
 
+test('overlong fact retries once from the same source and stores only a validated judgment', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'agent-hub-candidate-judge-overlong-'));
+  const memory = new MemoryEngine({ dbPath: join(root, 'memory.sqlite3') });
+  try {
+    createProject(memory);
+    const candidate = seedCandidate(memory, {
+      value: 'We decided that Postgres must remain the production database.',
+    });
+    let calls = 0;
+    const result = await evaluatePendingMemoryCandidates({
+      memory, projectId: 'project', branch: 'main',
+      apply: true, evaluatorId: 'codex:test', limit: 1,
+      async judge(next, retry) {
+        assert.equal(next.id, candidate.id);
+        calls += 1;
+        if (calls === 1) {
+          assert.equal(retry, undefined);
+          return JSON.stringify(promoteJudgment({ canonical_fact: 'x'.repeat(501) }));
+        }
+        assert.deepEqual(retry, { retryOverlongCanonicalFact: true });
+        return JSON.stringify(promoteJudgment({
+          canonical_fact: 'The production database must remain Postgres.',
+        }));
+      },
+    });
+    assert.equal(calls, 2);
+    assert.equal(result.failed, 0);
+    assert.equal(result.applied, 1);
+    assert.equal(result.results[0].retry_overlong_canonical_fact, true);
+    assert.equal(memory.getCandidate(candidate.id).evaluated_at !== null, true);
+    const stored = JSON.parse(memory.getCandidate(candidate.id).evaluation_json);
+    assert.equal(stored.canonical_fact, 'The production database must remain Postgres.');
+    // Importance recommendation never itself creates a durable Claim.
+    assert.equal(memory.exportCanonical().claims.length, 0);
+  } finally {
+    memory.close();
+  }
+});
+
+test('overlong canonical fact never gets truncated, force-promoted or retried more than once', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'agent-hub-candidate-judge-overlong-fail-'));
+  const memory = new MemoryEngine({ dbPath: join(root, 'memory.sqlite3') });
+  try {
+    createProject(memory);
+    const candidate = seedCandidate(memory);
+    let calls = 0;
+    const result = await evaluatePendingMemoryCandidates({
+      memory, projectId: 'project', branch: 'main',
+      apply: true, evaluatorId: 'codex:test', limit: 1,
+      async judge(next, retry) {
+        assert.equal(next.id, candidate.id);
+        if (calls > 0) assert.equal(retry.retryOverlongCanonicalFact, true);
+        calls += 1;
+        return JSON.stringify(promoteJudgment({ canonical_fact: 'Y'.repeat(501) }));
+      },
+    });
+    assert.equal(calls, 2);
+    assert.equal(result.failed, 1);
+    assert.equal(result.applied, 0);
+    assert.equal(result.results[0].retry_overlong_canonical_fact, true);
+    assert.match(result.results[0].error, /canonical_fact must be at most 500 characters/i);
+    assert.equal(memory.getCandidate(candidate.id).evaluated_at, null);
+    assert.equal(memory.exportCanonical().claims.length, 0);
+  } finally {
+    memory.close();
+  }
+});
+
+test('unrelated malformed judgments never trigger extra model calls', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'agent-hub-candidate-judge-other-fail-'));
+  const memory = new MemoryEngine({ dbPath: join(root, 'memory.sqlite3') });
+  try {
+    createProject(memory);
+    const candidate = seedCandidate(memory);
+    let calls = 0;
+    const result = await evaluatePendingMemoryCandidates({
+      memory, projectId: 'project', branch: 'main',
+      apply: true, evaluatorId: 'codex:test', limit: 1,
+      async judge() {
+        calls += 1;
+        return JSON.stringify(promoteJudgment({ confidence: 'medium' }));
+      },
+    });
+    assert.equal(calls, 1);
+    assert.equal(result.failed, 1);
+    assert.equal(result.results[0].retry_overlong_canonical_fact, false);
+    assert.equal(memory.getCandidate(candidate.id).evaluated_at, null);
+  } finally {
+    memory.close();
+  }
+});
+
+test('overlong retry prompt uses original candidate rather than rejected paraphrase', () => {
+  const candidate = {
+    id: 'candidate-1',
+    proposed_type: 'constraint',
+    proposed_value: 'We must keep backups and retain all legal exceptions.',
+    source_authority: 'user_direct',
+    policy_version: CAPTURE_POLICY_VERSION,
+  };
+  const prompt = buildMemoryCandidateJudgePrompt(candidate, {
+    retryOverlongCanonicalFact: true,
+  });
+  assert.match(prompt, /RETRY FEEDBACK/);
+  assert.match(prompt, /ORIGINAL CANDIDATE_DATA/);
+  assert.match(prompt, /Do not copy, truncate/);
+  assert.match(prompt, /needs_confirmation/);
+  assert.match(prompt, /We must keep backups and retain all legal exceptions/);
+  assert.doesNotMatch(prompt, /previous overlong fact value/i);
+  assert.doesNotMatch(buildMemoryCandidateJudgePrompt(candidate), /RETRY FEEDBACK/);
+});
+
 test('batch judge dry-run performs model evaluation without mutating ledger', async () => {
   const root = await mkdtemp(join(tmpdir(), 'agent-hub-candidate-judge-dry-'));
   const memory = new MemoryEngine({

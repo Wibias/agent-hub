@@ -58,6 +58,14 @@ For `ignore`, `keep_candidate`, and `needs_confirmation` decisions, a returned `
 
 Confirm the dominant original subcase from the owner's private snapshot after pulling current main before attributing all six earlier errors to empty strings. If the counters indicate only overlong facts, their resolution needs a separate semantic-preserving judge improvement; do not truncate stored evidence or relax the 500-character limit.
 
+### Bounded overlong canonical-fact re-evaluation
+
+On 2026-11-13, the owner's Streamer Content counts-only diagnosis isolated **six** historical importance failures to `canonical_fact_over_500_chars` from **three** distinct candidates, each involved in two failed attempts. The earlier empty-string normalization cannot address this case.
+
+The automatic importance evaluator now makes at most **one additional isolated Codex Judge call per candidate per pipeline attempt**, and only if parsing the first model judgment fails with the exact error `canonical_fact must be at most 500 characters`. The second call uses **the original user-direct candidate**, not the previously rejected long fact, plus explicit guidance to preserve scope, conditions, negations and exceptions. If an accurate <=500-character fact is impossible, the Judge must choose `needs_confirmation` with `canonical_fact=null`, not fabricate an abbreviated `promote`. Every second judgment passes the unchanged strict validator. An overlong second result or a different validation error leaves the candidate unmodified and unevaluated. No string slicing, direct Claim insertion or bypass of provenance/authority checks is permitted.
+
+The retry is bounded **per pipeline attempt**, not a promise of perfect semantic equivalence or a global per-candidate lifetime retry limit. Model calls can incur quota and cost; the existing short automatic retry guard remains in force for recent repeated failures. Historical failure rows persist for auditability, and an actual owner-side post-merge Codex Desktop run is required to establish whether the pending candidates now progress.
+
 A single looping candidate may generate hundreds of failure rows. The code summarizes the top 100 distinct stage/class pairs, not the full unsanitized error logs. If codes point to transient model availability, invalid judge output or pipeline control stalls, inspect the relevant implementation and plan one targeted fix rather than repeatedly re-running the pipeline.
 
 Typical findings:
