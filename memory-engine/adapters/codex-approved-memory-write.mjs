@@ -15,7 +15,7 @@ const SOURCE_KIND = 'operator_explicit';
 
 function pathKey(path) {
   const canonical = realpathSync(path);
-  return process.platform === 'win32' ? canonical.toLowerCase() : canonical;
+  return process.platform === 'win32' ? canonical.replaceAll('/', '\\').toLowerCase() : canonical;
 }
 
 /** This is a pinned, allowlisted per-project preview, not an authenticated host session. */
