@@ -40,7 +40,7 @@ For any always-on hot path, cost is contract evidence. Compare baseline and cand
 
 ### GD-REVIEW-009 — Public security output is redacted
 
-Post security relevance and remediation publicly when appropriate, but keep actionable exploit details or sensitive secrets in the private user conversation unless disclosure is explicitly safe and authorized.
+Post security relevance and remediation publicly when appropriate, but keep actionable exploit details or sensitive secrets in the private user conversation unless disclosure is explicitly safe and authorized. Never publish raw secrets or secret values in review comments, logs, screenshots, or reproducibility evidence; redact and summarize them.
 
 ### GD-REVIEW-010 — Use regression-first evidence without forcing bad tests
 
