@@ -106,11 +106,23 @@ export function validateMemoryCandidateJudgment(value) {
 
   let canonicalFact = null;
   if (value.canonical_fact !== null) {
-    canonicalFact = compactString(
-      value.canonical_fact,
-      'canonical_fact',
-      500,
-    );
+    // A blank fact conveys no assertion. Accept that representation only
+    // for decisions that cannot directly promote durable memory.
+    // Promotes still need a real 1..500-character canonical fact, and
+    // non-string or overlong facts remain invalid for every decision.
+    if (
+      value.decision !== 'promote'
+      && typeof value.canonical_fact === 'string'
+      && value.canonical_fact.trim().length === 0
+    ) {
+      canonicalFact = null;
+    } else {
+      canonicalFact = compactString(
+        value.canonical_fact,
+        'canonical_fact',
+        500,
+      );
+    }
   }
 
   const reason = compactString(value.reason, 'reason', 500);
@@ -247,7 +259,9 @@ export function buildMemoryCandidateJudgePrompt(candidate) {
     '',
     'canonical_fact:',
     '- For promote, provide a concise paraphrase that preserves the exact meaning and qualifiers without adding facts.',
-    '- For ignore, canonical_fact must be null.',
+    '- For ignore, canonical_fact must be null. Never use an empty string instead of null.',
+    '- For keep_candidate and needs_confirmation, canonical_fact may be null; if provided, it must be non-empty and at most 500 characters.',
+    '- For promote, canonical_fact must have 1 to 500 characters; never output an empty or whitespace-only string.',
     '- canonical_fact is advisory only and will not itself become durable memory in this stage.',
     '',
     'Return JSON only, no markdown and no prose, with exactly these fields:',
