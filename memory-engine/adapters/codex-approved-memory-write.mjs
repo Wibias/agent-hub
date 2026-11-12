@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { lstatSync, realpathSync, statSync } from 'node:fs';
+import { lstatSync, realpathSync } from 'node:fs';
 import { isAbsolute, resolve } from 'node:path';
 import { MemoryEngine } from '../index.mjs';
 import { resolveGitContext } from '../git-freshness.mjs';
@@ -14,17 +14,6 @@ const ENVIRONMENT = 'local_preview';
 const OPERATOR_SOURCE = 'local:operator-confirmation';
 const SOURCE_KIND = 'operator_explicit';
 
-function sameApprovedDirectory(a, b) {
-  if (samePath(a, b)) return true;
-  // Windows 8.3 aliases (RUNNER~1 vs runneradmin) can spell the same NTFS object differently.
-  // Compare exact file IDs, never substring or prefix matches.
-  const x = statSync(a, { bigint: true });
-  const y = statSync(b, { bigint: true });
-  return x.isDirectory() && y.isDirectory()
-    && x.ino !== 0n && x.ino === y.ino && x.dev === y.dev;
-}
-
-
 /** This is a pinned, allowlisted per-project preview, not an authenticated host session. */
 export function resolveApprovedWriteScope({
   cwd, scopePath = defaultGlobalMemoryScopePath(),
@@ -36,7 +25,7 @@ export function resolveApprovedWriteScope({
   const current = describeGlobalMemoryProject({ cwd });
   const prefix = String(execFileSync('git', ['-C', resolve(cwd), 'rev-parse', '--show-prefix'], { encoding: 'utf8', timeout: 5000 })).trim();
   if (prefix !== '') throw new Error('pinned_cwd_must_be_git_root');
-  const approved = manifest.projects.find((entry) => sameApprovedDirectory(entry.root, current.root));
+  const approved = manifest.projects.find((entry) => samePath(entry.root, current.root));
   if (!approved) throw new Error('project_not_approved');
   if (approved.project_id !== current.project_id || approved.repo_identity !== current.repo_identity) {
     throw new Error('project_identity_changed');

@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import {
-  existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, renameSync,
+  existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, renameSync, statSync,
   rmSync, writeFileSync,
 } from 'node:fs';
 import { homedir } from 'node:os';
@@ -27,7 +27,19 @@ export function samePath(a, b, platform = process.platform) {
       ? real.replaceAll('/', '\\').toLowerCase()
       : real;
   };
-  return canonical(a) === canonical(b);
+  if (canonical(a) === canonical(b)) return true;
+  // Windows 8.3 aliases (e.g. RUNNER~1) may name the identical NTFS object
+  // but do not necessarily expand through realpathSync. Compare exact file IDs.
+  try {
+    const left = statSync(a, { bigint: true });
+    const right = statSync(b, { bigint: true });
+    return left.ino !== 0n && left.ino === right.ino
+      && left.dev === right.dev
+      && left.isFile() === right.isFile()
+      && left.isDirectory() === right.isDirectory();
+  } catch {
+    return false;
+  }
 }
 function canonicalRoot(path) {
   if (!nonEmpty(path) || !isAbsolute(path)) throw new Error('absolute_path_required');

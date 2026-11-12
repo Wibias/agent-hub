@@ -11,7 +11,7 @@ import {
   prepareApprovedMemoryWrite, commitApprovedMemoryWrite,
 } from '../../memory-engine/adapters/codex-approved-memory-write.mjs';
 import { createApprovedMemoryWriteDispatcher } from '../../memory-engine/adapters/codex-approved-memory-write-mcp.mjs';
-import { readGlobalCodexMemory, describeGlobalMemoryProject, samePath } from '../../memory-engine/adapters/codex-global-memory-scope.mjs';
+import { readGlobalCodexMemory } from '../../memory-engine/adapters/codex-global-memory-scope.mjs';
 
 function fixture() {
   const root = mkdtempSync(join(tmpdir(), 'approved-write-mcp-'));
@@ -50,10 +50,6 @@ const call = (id, evidenceId, extra = {}) => ({
 
 test('real stdio MCP commits one approved Claim, denies replay, and normal Recall returns it', (t) => {
   const f = fixture(); t.after(() => f.cleanup());
-  if (process.platform === 'win32') {
-    const observed = describeGlobalMemoryProject({ cwd: f.cwd });
-    console.error('WIN32_SCOPE_DIAGNOSTIC ' + JSON.stringify({ supplied: f.cwd, observed: observed.root, samePath: samePath(f.cwd, observed.root) }));
-  }
   const prepared = prepareApprovedMemoryWrite({
     cwd: f.cwd, scopePath: f.scopePath,
     text: 'The approved deployment region is eu-central-1.', confirmed: true,
