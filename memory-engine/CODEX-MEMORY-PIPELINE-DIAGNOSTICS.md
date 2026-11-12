@@ -16,6 +16,22 @@ The diagnostic output now includes a `judge_prerequisites` object: `executable` 
 
 The regular diagnostic's `runtime_execution_observed: false` remains a deliberate limitation. Configuration and historical evidence counts are not direct proof of a new post-update Desktop hook invocation.
 
+## Offline follow-up for an unclassified Judge exit
+
+A result of `codex_exec_nonzero_unclassified` from the synthetic model smoke means that the process exited unsuccessfully, but the known failure classifications did not identify why. **Do not share the raw Codex CLI stderr**, which can contain account details or local paths. Do not repeatedly run the model smoke.
+
+First inspect the exact Codex runtime in the same disposable, auth-only environment with **zero model calls**:
+
+~~~powershell
+$preview = Join-Path $env:LOCALAPPDATA 'AgentHub-Memory-Write-Preview'
+git -C $preview pull --ff-only
+node "$preview\scripts\smoke-codex-memory-judge.mjs" --inspect-cli
+~~~
+
+The inspection runs only `codex --version`, `codex login status` and `codex exec --help` with the same no-shell resolver and a fresh isolated `CODEX_HOME`. It reads only metadata about the user's `config.toml`; the config is **not** copied or printed. The tool discards all CLI stdout/stderr except for narrow extraction of a version string and a fixed set of supported flags. It reports `isolated_login_status` as `accepted_by_cli_unverified` or `not_accepted_or_unavailable`, never an account name or token.
+
+The distinction matters: the production Judge copies `auth.json`, but intentionally **does not copy `config.toml`**, profiles, MCPs or arbitrary provider settings. A user who depends on a custom model/provider in the main Codex configuration may have different effective settings inside the isolated Judge. The presence of source `config.toml` alone does not prove that it is needed; do not copy an unreviewed config into the isolated home. CLI login status does not verify actual model entitlement or network availability.
+
 ## Explicit synthetic Judge smoke (one real CLI model call, optional)
 
 After the read-only `judge_prerequisites` check reports `prerequisites_present_unverified`, use this **opt-in** probe to distinguish an actually usable isolated Codex model Judge from mere file presence:
