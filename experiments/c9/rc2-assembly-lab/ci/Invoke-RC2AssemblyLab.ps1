@@ -74,7 +74,10 @@ try {
         if ($LASTEXITCODE -ne 0) { throw "RC2_OUTPUT_ACL_INHERITANCE_FAILED $role" }
     }
 
-    dotnet publish src/AgentHub.C9.RC2.AssemblyLab.csproj --configuration Release --output $binary
+    # The SDK embeds the Git source revision in assembly metadata. Build the
+    # unchanged RC2 sources against the same frozen SourceRevisionId as the
+    # previously verified RC2 DLL, otherwise identical source may hash differently.
+    dotnet publish src/AgentHub.C9.RC2.AssemblyLab.csproj --configuration Release --output $binary /p:SourceRevisionId=22ff0fb6e86805b752dda5ab18db5e54f70ef317
     if ($LASTEXITCODE -ne 0) { throw 'RC2_SERVICE_LAB_BUILD_FAILED' }
     $rc2 = Join-Path $binary 'AgentHub.C9.ReadOnlyBroker.RC2.dll'
     if (-not (Test-Path -LiteralPath $rc2 -PathType Leaf)) { throw 'RC2_ASSEMBLY_NOT_IN_TEST_HOST' }

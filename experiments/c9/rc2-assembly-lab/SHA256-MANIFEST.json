@@ -11,15 +11,15 @@
     },
     {
       "path": "README.md",
-      "sha256": "3a0d70dd1f688e80131ba0f9c308db6b47cce7a701f9598f03f29240f7ba52bc"
+      "sha256": "4d135891b87c04b87fff6f66759695c03fceafb968c5d3a897d149b7a0801d67"
     },
     {
       "path": "ci/Invoke-RC2AssemblyLab.ps1",
-      "sha256": "9f0c02d2dddbe69c06a4eb97cd1c7aea80b865945c49813c764141f6c7bd2dcb"
+      "sha256": "25c29a0553beb33905e4aa8d070fc9259c7214f436fab40955cdf49048475046"
     },
     {
       "path": "docs/SECURITY-BOUNDARY.md",
-      "sha256": "06270064ca52f18aef7eaec989b393a0036f62243627e743c24be996946359a5"
+      "sha256": "933b1d2d7a84c1e87073ccd55906e56d744b69ae32a09e70d84fe0014c5fe64c"
     },
     {
       "path": "global.json",

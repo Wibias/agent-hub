@@ -2,7 +2,7 @@
 
 **Security state: G1-G7 HOLD (0/7); Production NO-GO.** This is a disposable CI-only integration. No persistent service installation, production credentials, writer, or deployable broker is authorized.
 
-This test reuses the successful G2345 two-service harness but changes the broker process to **load and execute `AgentHub.C9.ReadOnlyBroker.RC2.dll` itself**, via its non-public `BrokerRc2Route.EvaluateConnected` method. Reflection is confined to the test host so the RC2 assembly and its hard-disabled `--service` entrypoint remain **byte-for-byte unchanged**. The test verifies the loaded RC2 DLL SHA256 equals the prior successful exact .NET 10 Windows build:
+This test reuses the successful G2345 two-service harness but changes the broker process to **load and execute `AgentHub.C9.ReadOnlyBroker.RC2.dll` itself**, via its non-public `BrokerRc2Route.EvaluateConnected` method. Reflection is confined to the test host so the RC2 assembly and its hard-disabled `--service` entrypoint remain **byte-for-byte unchanged**. The test fixes MSBuild `SourceRevisionId` to the original RC2 commit (so Git metadata cannot silently change the assembly) and requires the loaded RC2 DLL SHA256 to equal the prior successful .NET 10 Windows build:
 
 `d990d989191922f2e10c7acdeb0367f47a1c909fe0f1f8220c14e264de3ef147` (RC2 workflow 43147302504).
 
