@@ -50,3 +50,4 @@ jobs:
             throw "Tampered manifest was not rejected with a checksum mismatch (exit $LASTEXITCODE)"
           }
           Write-Output 'PASS: Incorrect manifest digest fails closed'
+          exit 0
