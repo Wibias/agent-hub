@@ -23,6 +23,14 @@ jobs:
       - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
         with:
           dotnet-version: '10.0.x'
+      - name: Validate Windows 11 pilot PowerShell syntax (do not execute)
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $errors = $null
+          $source = (Resolve-Path './experiments/g5/handle-rename-lab/run-on-windows11.ps1').Path
+          [System.Management.Automation.Language.Parser]::ParseFile($source, [ref]$tokens, [ref]$errors) | Out-Null
+          if ($errors.Count -gt 0) { throw ($errors | Out-String) }
       - name: Three focused NTFS/LocalService/restart tests
         shell: pwsh
         run: ./experiments/g5/handle-rename-lab/verify-windows.ps1
