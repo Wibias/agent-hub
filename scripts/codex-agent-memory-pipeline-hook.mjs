@@ -10,10 +10,12 @@ import {
   runCodexAgentDecisionHook,
 } from '../memory-engine/adapters/codex-agent-decision-hook-cli.mjs';
 import {
+  automaticMemoryCandidatePipelineReady,
   defaultCodexMemoryDbPath,
   parseCodexMemoryConfig,
   resolveCodexProjectScope,
 } from '../memory-engine/adapters/codex-hook-cli.mjs';
+import { MemoryEngine } from '../memory-engine/index.mjs';
 import {
   defaultMemoryCandidatePipelineLogFile,
 } from '../memory-engine/candidate-pipeline-launcher.mjs';
@@ -34,7 +36,6 @@ function validEvent(event) {
     || !nonEmpty(event.session_id)
     || !nonEmpty(event.cwd)
     || !nonEmpty(event.turn_id)
-    || !nonEmpty(event.last_assistant_message)
   ) {
     return false;
   }
@@ -56,6 +57,27 @@ export function parseCodexAgentPipelineHookOptions(argv = []) {
   };
 }
 
+/** Read-only preflight: do not start a costly judge when there is no actionable
+ * project/branch candidate. Review-only candidates stay untouched.
+ */
+export function inspectCodexCandidateQueue({
+  dbPath, projectId, branch,
+  createMemory = ({ dbPath: path }) => new MemoryEngine({ dbPath: path, readOnly: true }),
+} = {}) {
+  let memory = null;
+  try {
+    memory = createMemory({ dbPath });
+    if (!memory.getProject(projectId)) return 'project_not_registered';
+    return automaticMemoryCandidatePipelineReady(memory, {
+      projectId, branch,
+    }) ? 'ready' : 'empty';
+  } catch {
+    return 'queue_unavailable';
+  } finally {
+    if (memory && typeof memory.close === 'function') memory.close();
+  }
+}
+
 function createPipelineLog(logFile) {
   mkdirSync(dirname(logFile), { recursive: true });
   return (value) => {
@@ -71,6 +93,7 @@ export async function runCodexAgentPipelineHook({
   resolveProjectScope = resolveCodexProjectScope,
   resolveGit = resolveGitContext,
   runWorker = runMemoryCandidatePipelineWorker,
+  inspectQueue = inspectCodexCandidateQueue,
   createLog = createPipelineLog,
 } = {}) {
   if (!validEvent(event) || event.stop_hook_active === true) {
@@ -87,20 +110,39 @@ export async function runCodexAgentPipelineHook({
     config.dbPath = defaultCodexMemoryDbPath({ env });
   }
 
-  // The synchronous Stop/SubagentStop hook normally wins this race, but
-  // Codex schedules async handlers independently. Re-running capture here is
-  // intentional and safe because candidate fingerprints are idempotent.
-  await captureDecision({
-    event,
-    env,
-    configOptions: {
-      ignoreMemoryEnv: configOptions.ignoreMemoryEnv === true,
-      autoPipeline: false,
-    },
-  });
+  // Codex legitimately emits null last_assistant_message. That means there is
+  // no agent decision to capture, not that the user's pending candidates vanish.
+  // The two Stop hooks execute independently; a capture failure must not block
+  // processing the previously captured direct-user queue.
+  if (nonEmpty(event.last_assistant_message)) {
+    try {
+      await captureDecision({
+        event,
+        env,
+        configOptions: {
+          ignoreMemoryEnv: configOptions.ignoreMemoryEnv === true,
+          autoPipeline: false,
+        },
+      });
+    } catch {
+      // Fail soft for agent decision capture; existing user candidates remain.
+    }
+  }
 
   const scope = resolveProjectScope({ event, config });
   const git = resolveGit({ cwd: event.cwd });
+  const queue = inspectQueue({
+    dbPath: config.dbPath,
+    projectId: scope.projectId,
+    branch: git.branch,
+  });
+  if (queue !== 'ready') {
+    return {
+      status: 'skipped',
+      reason: queue === 'empty' ? 'no_actionable_candidates' : queue,
+    };
+  }
+
   const logFile = defaultMemoryCandidatePipelineLogFile(config.dbPath);
   const log = createLog(logFile);
 
@@ -150,13 +192,19 @@ async function main() {
       defaultMemoryCandidatePipelineLogFile(config.dbPath),
     );
 
-    await runCodexAgentPipelineHook({
+    const result = await runCodexAgentPipelineHook({
       event,
       configOptions: options,
       createLog() {
         return log;
       },
     });
+    if (result.status === 'skipped' && result.reason === 'queue_unavailable') {
+      log(JSON.stringify({
+        type: 'agent_hub_codex_agent_pipeline_skip',
+        reason: result.reason,
+      }));
+    }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     try {
