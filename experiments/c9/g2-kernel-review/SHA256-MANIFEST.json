@@ -1,0 +1,50 @@
+{
+  "scope": "review_only",
+  "gates": 0,
+  "files": [
+    {
+      "path": ".gitattributes",
+      "sha256": "d60f352d0db1404c70afb4bb8b2ca3fd1c610572aa40720e8a0b7baa7885418c"
+    },
+    {
+      "path": ".github/workflows/verify-c9-g2-kernel-review.yml",
+      "sha256": "a221fc3cf0e2c388befe3278a21070b0f152063e44d705a186a8a3534c4d051e"
+    },
+    {
+      "path": "NuGet.Config",
+      "sha256": "72b33a12a2cddfda521126184fef3ab94bbb17a91a3a08612509cfcb6bc4918a"
+    },
+    {
+      "path": "README.md",
+      "sha256": "b912b68b430de5e66177f582d8fe91a1622975e497c6f64c74afd50498fd10ba"
+    },
+    {
+      "path": "docs/SECURITY-BOUNDARY.md",
+      "sha256": "815f23c4130f8583456ad42201f17391a020a3517973a4cf6fd51717172b36b2"
+    },
+    {
+      "path": "global.json",
+      "sha256": "3539053fdc4cd4e9c9e32e64351bdd2ae68557e926a9d78a1eb3f8b86883737d"
+    },
+    {
+      "path": "src/AgentHub.C9.G2.KernelReview.csproj",
+      "sha256": "2322e9ba8d82a0e0b4bcf4d0834f1702201ee1c32a94b2f51987ca6bb1974b1a"
+    },
+    {
+      "path": "src/G2345PipeReview.cs",
+      "sha256": "eaeb25e3b14703beafc381910f8e5fb780c8c54c08e98f86b392ddc540524ab0"
+    },
+    {
+      "path": "src/G2KernelIdentity.cs",
+      "sha256": "a6f40a72cd5b0cfc102d48262ef91b05bd690ed244ce7655c7fc6f020f7ec4e2"
+    },
+    {
+      "path": "tests/AgentHub.C9.G2.KernelReview.Tests.csproj",
+      "sha256": "eab34ee4c8fe3e398adbbc3ddd1f8670599d66b990caef9f5c6740fcac12326f"
+    },
+    {
+      "path": "tests/Program.cs",
+      "sha256": "15472762318f7b394b44ccf131c72d81f9da24c8570f6006d91f7d9636969cf6"
+    }
+  ]
+}

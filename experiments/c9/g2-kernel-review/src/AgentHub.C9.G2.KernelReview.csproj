@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable><ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <Deterministic>true</Deterministic>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../g345-review/src/AgentHub.C9.G345.Review.csproj" />
+    <Compile Include="G2KernelIdentity.cs" />
+    <Compile Include="G2345PipeReview.cs" />
+  </ItemGroup>
+</Project>

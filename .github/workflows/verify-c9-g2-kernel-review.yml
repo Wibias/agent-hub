@@ -1,0 +1,38 @@
+name: C9 G2 Windows kernel pipe identity and G345 fail-closed review
+on:
+  push:
+    branches: [codex/c9-g3-offline-review]
+    paths:
+      - 'experiments/c9/g2-kernel-review/**'
+      - '.github/workflows/verify-c9-g2-kernel-review.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  review:
+    runs-on: windows-2022
+    timeout-minutes: 12
+    defaults:
+      run:
+        working-directory: experiments/c9/g2-kernel-review
+    env:
+      AGENTHUB_G2_REVIEW_ONLY: DISPOSABLE_WINDOWS_TEST
+      AGENTHUB_G345_REVIEW_ONLY: DISPOSABLE_WINDOWS_TEST
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9
+        with:
+          dotnet-version: '10.0.100'
+      - name: Native process and pipe client token observation, strict service denial
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $sdk=(dotnet --version).Trim()
+          if ($sdk -cne '10.0.100') { throw "Unexpected SDK: $sdk" }
+          if ($env:RUNNER_ENVIRONMENT -cne 'github-hosted' -or $env:RUNNER_OS -cne 'Windows') { throw 'Not a disposable Windows runner' }
+          dotnet run --project tests/AgentHub.C9.G2.KernelReview.Tests.csproj --configuration Release
+          if ($LASTEXITCODE -ne 0) { throw "G2 native test failure: $LASTEXITCODE" }
+          Write-Host "C9_G2_SOURCE_REVIEW_PASS SHA=$env:GITHUB_SHA SDK=$sdk"
+          Write-Host 'NO_SCM NO_SERVICE_INSTALL NO_BROKER NO_TARGET_WRITE NO_COMMIT G2_HOLD GATES_0_OF_7 PRODUCTION_NO_GO'
