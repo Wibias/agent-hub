@@ -36,6 +36,32 @@ The implementation mechanism must preserve continuity when retargeted. If a
 library/API cannot be interrupted without a visible jump, it is the wrong tool for
 that interaction.
 
+## Pointer-loop cost and linked feedback
+
+During tracking, do not run the pointer position through a spring, transition,
+or React state update on each move. Use the project's direct motion-value or
+transform primitive, and update the manipulated element rather than an
+inherited parent CSS variable that forces descendant restyling. This is a
+source-level performance precaution, not proof of frame rate; profile on
+real hardware when responsiveness matters.
+
+Derive overlay opacity, backdrop movement and dependent feedback from the
+same drag progress value, including on reversal. Separate uncoordinated
+animations create visible mismatches after interruption. For dismissal,
+consider both displacement and release velocity, using thresholds set by
+the existing component behavior and device rather than one universal number.
+
+Do not hand-roll the accessibility, focus trapping, keyboard dismissal and
+scroll-lock behavior of a standard drawer/sheet when a suitable established
+project component already owns those contracts.
+
+## Hold gesture timing
+
+For intentional hold-to-confirm or hold-to-delete controls, show the held
+duration with linear progress; time should not appear to accelerate or slow
+down while the pointer is down. Releasing early must cancel promptly. This
+is a hold-specific rule, not a general demand for linear UI animation.
+
 ## 4. Hand off velocity
 
 When direct manipulation releases into animated settling, preserve the release
@@ -88,5 +114,6 @@ If hardware or runtime tooling is unavailable, state that feel/performance remai
 blocked rather than claiming it from code inspection.
 
 Source lineage: direct-manipulation principles selectively adapted from
-`emilkowalski/skills` `apple-design` (MIT) and Apple's public fluid-interface
+`emilkowalski/skills` `apple-design` and `gestures` (reviewed through
+`4061b67b8d976a186aca118594f54b638c5f718a`) (MIT) and Apple's public fluid-interface
 principles, without importing an Apple visual/material house style.
