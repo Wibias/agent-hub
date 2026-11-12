@@ -12,7 +12,9 @@ The Hub keeps shared behavior in one place while separating:
 - project-local rules and skills.
 
 The public repository is designed to work without maintainer-specific paths,
-private transcripts, local memory history, or a required operating system.
+private transcripts, or local memory history. Agent Hub itself supports Windows
+x64 (`win-x64`) as its only host and operator platform. Its reusable skills may
+still help build software for other operating systems and CPU architectures.
 
 ## Layout
 
@@ -335,14 +337,11 @@ require one concrete home-directory layout.
 Clone **this published repository** into that location. Do not clone the
 historical private operator checkout.
 
-### macOS / Linux
+### Windows x64 (supported Agent Hub host)
 
-```sh
-git clone https://github.com/Wibias/agent-hub.git "$HOME/.agents"
-cd "$HOME/.agents"
-```
-
-### Windows PowerShell
+Install and maintain Agent Hub with PowerShell (`pwsh`) on Windows x64.
+macOS, Linux, ARM, and non-x64 Windows are not supported Agent Hub host
+platforms. Skills may still work on external projects targeting those systems.
 
 ```powershell
 git clone https://github.com/Wibias/agent-hub.git "$HOME\.agents"
