@@ -1,0 +1,28 @@
+name: C9 G2 positive two real Windows service identities (ephemeral only)
+on:
+  push:
+    branches: [codex/c9-g3-offline-review]
+    paths:
+      - 'experiments/c9/g2-service-lab/**'
+      - '.github/workflows/verify-c9-g2-two-service-lab.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  isolated-positive-service-identity:
+    if: github.repository == 'Wibias/agent-hub' && github.ref == 'refs/heads/codex/c9-g3-offline-review'
+    runs-on: windows-2022
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: experiments/c9/g2-service-lab
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9
+        with:
+          dotnet-version: '10.0.100'
+      - name: Positive G2 test with two REAL disposable LocalService service SIDs; enforced cleanup
+        shell: pwsh
+        run: ./ci/Invoke-G2TwoServiceLab.ps1

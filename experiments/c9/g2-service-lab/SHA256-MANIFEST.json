@@ -1,0 +1,43 @@
+{
+  "name": "AgentHub C9 G2 isolated two-service Windows SID positive lab",
+  "mode": "EPHEMERAL_WINDOWS_CI_REVIEW_ONLY",
+  "gates": "0/7; production NO-GO",
+  "files": [
+    {
+      "path": ".gitattributes",
+      "sha256": "d60f352d0db1404c70afb4bb8b2ca3fd1c610572aa40720e8a0b7baa7885418c"
+    },
+    {
+      "path": "NuGet.Config",
+      "sha256": "2142cfb2dfa2c7feefbe40fabcc68b0dfecadafa99a1db9b70239d977cf2a7ef"
+    },
+    {
+      "path": "README.md",
+      "sha256": "7beff5d3ee9a80d007c611df97b9b7eb15cb88aecfe9101289ba481b6baadd55"
+    },
+    {
+      "path": "ci/Invoke-G2TwoServiceLab.ps1",
+      "sha256": "2d88354216b70bede5559311cee0d2f204cff4ee73b345658de9d1f19521173c"
+    },
+    {
+      "path": "docs/SECURITY-BOUNDARY.md",
+      "sha256": "8a5526c44624c3da605477a67ea2c443d8f9a203a23eb4cdfa509b31aa097eaf"
+    },
+    {
+      "path": "global.json",
+      "sha256": "3539053fdc4cd4e9c9e32e64351bdd2ae68557e926a9d78a1eb3f8b86883737d"
+    },
+    {
+      "path": "src/AgentHub.C9.G2.ServiceLab.csproj",
+      "sha256": "e26d9046fce79eb187a4bd9878a589873401717c435be4961f5a983ca3d2eddb"
+    },
+    {
+      "path": "src/Program.cs",
+      "sha256": "1fac40d6942e14b17d5375c870d1d4cd2c62a5a2849c7a8655145405b279823f"
+    },
+    {
+      "path": "verify-c9-g2-two-service-lab.yml",
+      "sha256": "cac0dac06785d2c777981ce5f35fa8c2690ae7bdc270fa810172de109f147abc"
+    }
+  ]
+}
