@@ -214,7 +214,7 @@ export function memoryCandidateJudgeRef(candidateId) {
     .slice(0, 10);
 }
 
-export function buildMemoryCandidateJudgePrompt(candidate) {
+export function buildMemoryCandidateJudgePrompt(candidate, { retryOverlongCanonicalFact = false } = {}) {
   if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
     throw new TypeError('candidate must be an object');
   }
@@ -269,6 +269,14 @@ export function buildMemoryCandidateJudgePrompt(candidate) {
     '',
     'For decision=promote you MUST use durability=long, future_utility=high, confidence=high, meaning_preserved=true, a non-empty canonical_fact, and an empty risk_flags array.',
     'When uncertain, do not promote.',
+    ...(retryOverlongCanonicalFact ? [
+      '',
+      'RETRY FEEDBACK: The previous response was rejected because canonical_fact exceeded the strict 500-character limit.',
+      'Re-evaluate the ORIGINAL CANDIDATE_DATA below. Do not copy, truncate, or rely on the rejected prior output.',
+      'Keep all material scope, negations, exceptions, conditions, and qualifiers. Do not add facts or strengthen the user statement.',
+      'If a faithful canonical_fact of 1 to 500 characters is not possible, do NOT promote. Return needs_confirmation with canonical_fact=null, risk_flags including ambiguous or scope_unclear, and a concise reason.',
+      'Return a complete JSON judgment satisfying every other rule above. No tools.',
+    ] : []),
     '',
     'CANDIDATE_DATA',
     JSON.stringify(data),
@@ -326,13 +334,28 @@ export async function evaluatePendingMemoryCandidates({
 
   for (const candidate of candidates) {
     const candidateRef = memoryCandidateJudgeRef(candidate.id);
+    let retryAttempted = false;
     try {
-      const raw = await judge(candidate);
-      const judgment = (
+      const parseJudgment = (raw) => (
         typeof raw === 'string'
           ? parseMemoryCandidateJudgment(raw)
           : validateMemoryCandidateJudgment(raw)
       );
+      let judgment;
+      try {
+        judgment = parseJudgment(await judge(candidate));
+      } catch (error) {
+        // Exactly one bounded re-evaluation from the ORIGINAL user candidate.
+        // No truncation or conversion of an unsafe promote to a valid fact.
+        if (!(error instanceof TypeError)
+          || error.message !== 'canonical_fact must be at most 500 characters') {
+          throw error;
+        }
+        retryAttempted = true;
+        judgment = parseJudgment(await judge(candidate, {
+          retryOverlongCanonicalFact: true,
+        }));
+      }
 
       evaluated += 1;
       if (apply) {
@@ -353,6 +376,7 @@ export async function evaluatePendingMemoryCandidates({
         ok: true,
         decision: judgment.decision,
         applied: apply,
+        retry_overlong_canonical_fact: retryAttempted,
         judgment,
       });
     } catch (error) {
@@ -362,6 +386,7 @@ export async function evaluatePendingMemoryCandidates({
         ok: false,
         decision: null,
         applied: false,
+        retry_overlong_canonical_fact: retryAttempted,
         error: error instanceof Error ? error.message : String(error),
       });
     }
