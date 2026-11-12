@@ -99,6 +99,35 @@ function importanceFailureSignatures(db, projectId, branch) {
 }
 
 /**
+ * Diagnose optional semantic indexing using aggregate SQL codes only.
+ * Never select error_text, which can contain OS paths or provider output.
+ */
+function semanticSyncFailureSignatures(db, projectId, branch) {
+  const entries = [
+    ['embedding_worker_unavailable', "instr(lower(error_text), 'embedding worker unavailable') > 0"],
+    ['embedding_worker_model_mismatch', "instr(lower(error_text), 'embedding worker model identity mismatch') > 0"],
+    ['embedding_worker_request_failed', "instr(lower(error_text), 'embedding worker request failed') > 0"],
+    ['embedding_worker_invalid_response', "instr(lower(error_text), 'embedding worker returned an invalid') > 0"],
+    ['embedding_worker_readiness_failed', "instr(lower(error_text), 'embedding worker readiness failed') > 0"],
+    ['embedding_permission_denied', "instr(lower(error_text), 'eacces') > 0 OR instr(lower(error_text), 'eperm') > 0 OR instr(lower(error_text), 'permission denied') > 0"],
+    ['embedding_database_busy', "instr(lower(error_text), 'database is locked') > 0 OR instr(lower(error_text), 'sqlite_busy') > 0"],
+    ['embedding_unknown_project', "instr(lower(error_text), 'unknown project:') > 0"],
+  ];
+  const sql = [
+    'SELECT CASE',
+    ...entries.map(([code, condition]) => "WHEN (" + condition + ") THEN '" + code + "'"),
+    "ELSE 'unclassified' END AS signature,",
+    'COUNT(*) AS n FROM memory_pipeline_failures',
+    "WHERE project_id = ? AND branch = ? AND stage = 'semantic_sync'",
+    'GROUP BY signature ORDER BY n DESC, signature ASC',
+  ].join(' ');
+  return Object.fromEntries(
+    db.prepare(sql).all(projectId, branch)
+      .map(row => [row.signature, Number(row.n)]),
+  );
+}
+
+/**
  * Pure host prerequisite inspection. Does not spawn Codex, read auth contents,
  * call an LLM, retry candidates, or touch the canonical SQLite.
  * Presence of auth.json is NOT proof of a valid CLI session or usable model.
@@ -164,6 +193,7 @@ function emptyCounts() {
     pipeline_failures: 0,
     pipeline_failure_codes: { by_stage: {}, by_error_class: {} },
     importance_failure_signatures: {},
+    semantic_failure_signatures: {},
     pipeline_latest_failure_at: null,
     pipeline_running_older_than_30m: 0,
     pipeline_last_start: null,
@@ -277,6 +307,7 @@ function inspectProject(db, approved, {
       scoped);
     const pipelineFailureCodes = groupedFailureCodes(db, id, branch);
     const importanceSignatures = importanceFailureSignatures(db, id, branch);
+    const semanticSignatures = semanticSyncFailureSignatures(db, id, branch);
     const lastFailure = db.prepare(
       'SELECT MAX(occurred_at) as at FROM memory_pipeline_failures '
       + 'WHERE project_id = ? AND branch = ?',
@@ -353,6 +384,7 @@ function inspectProject(db, approved, {
       pipeline_failures: pipelineFailures,
       pipeline_failure_codes: pipelineFailureCodes,
       importance_failure_signatures: importanceSignatures,
+      semantic_failure_signatures: semanticSignatures,
       pipeline_latest_failure_at: lastFailure?.at ?? null,
       pipeline_running_older_than_30m: oldRunning,
       pipeline_last_start: lastRun?.started_at ?? null,
@@ -381,6 +413,12 @@ function inspectProject(db, approved, {
     if (oldRunning > 0) findings.push('pipeline_running_older_than_30m');
     if ((pipelineFailureCodes.by_stage.pipeline_control ?? 0) > 0) {
       findings.push('pipeline_control_failures_detected');
+    }
+    if ((semanticSignatures.embedding_worker_unavailable ?? 0) > 0) {
+      findings.push('semantic_embedding_worker_unavailable');
+    }
+    if ((semanticSignatures.unclassified ?? 0) > 0) {
+      findings.push('semantic_sync_failure_unclassified');
     }
     if ((importanceSignatures.unclassified ?? 0) > 0) {
       findings.push('importance_failure_signature_unclassified');
