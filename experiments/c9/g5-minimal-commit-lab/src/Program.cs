@@ -17,7 +17,7 @@ internal static class Program
     const uint CreateNew = 1, OpenExisting = 3;
     const uint BackupSemantics = 0x02000000, OpenReparsePoint = 0x00200000;
     const uint WriteThrough = 0x80000000;
-    const int RenameInfo = 3, FileIdInfo = 18;
+    const int NativeRenameInformation = 10, FileIdInfo = 18;
     static readonly byte[] Old = Encoding.UTF8.GetBytes("approved-old-content\n");
     static readonly byte[] New = Encoding.UTF8.GetBytes("approved-new-content\n");
 
@@ -25,9 +25,14 @@ internal static class Program
     static extern SafeFileHandle CreateFile(string path, uint access, uint share, nint attributes,
         uint disposition, uint flags, nint templateFile);
 
-    [DllImport("kernel32.dll", EntryPoint = "SetFileInformationByHandle", SetLastError = true, ExactSpelling = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    static extern bool SetInfo(SafeFileHandle handle, int kind, nint info, uint length);
+    [StructLayout(LayoutKind.Sequential)]
+    struct IoStatusBlock { public nint StatusOrPointer; public nuint Information; }
+
+    // Native FILE_RENAME_INFORMATION honors RootDirectory for a relative target name.
+    // CI experiment only: this is not a production-supported Broker API contract.
+    [DllImport("ntdll.dll", EntryPoint = "NtSetInformationFile", ExactSpelling = true)]
+    static extern int NtSetInfo(SafeFileHandle handle, out IoStatusBlock io,
+        nint info, uint length, int infoClass);
 
     [DllImport("kernel32.dll", EntryPoint = "GetFileInformationByHandleEx", SetLastError = true, ExactSpelling = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
@@ -160,8 +165,10 @@ internal static class Program
             Marshal.WriteIntPtr(blob, 8, directory.DangerousGetHandle());
             Marshal.WriteInt32(blob, 16, wide.Length);
             Marshal.Copy(wide, 0, blob + 20, wide.Length);
-            if (!SetInfo(stage, RenameInfo, blob, checked((uint)(20 + wide.Length))))
-                throw new Win32Exception(Marshal.GetLastWin32Error(), "STAGE_HANDLE_RENAME_FAILED");
+            int status = NtSetInfo(stage, out IoStatusBlock io, blob,
+                checked((uint)(20 + wide.Length)), NativeRenameInformation);
+            if (status < 0)
+                throw new InvalidOperationException($"NATIVE_STAGE_HANDLE_RENAME_STATUS_0x{status:X8}");
         }
         finally { Marshal.FreeHGlobal(blob); }
     }
