@@ -1,0 +1,51 @@
+{
+  "scope": "C9 G3+G4+G5 REVIEW ONLY / Windows hosted ephemeral runner",
+  "gates": "G3 G4 G5 HOLD",
+  "production": "NO_GO",
+  "files": [
+    {
+      "path": ".gitattributes",
+      "sha256": "d60f352d0db1404c70afb4bb8b2ca3fd1c610572aa40720e8a0b7baa7885418c"
+    },
+    {
+      "path": ".github/workflows/verify-c9-g345-readonly.yml",
+      "sha256": "282f71f5f181fe7f4a175b13254feaebd7ab8bc85b093207873b05b3dde39648"
+    },
+    {
+      "path": "NuGet.Config",
+      "sha256": "72b33a12a2cddfda521126184fef3ab94bbb17a91a3a08612509cfcb6bc4918a"
+    },
+    {
+      "path": "README.md",
+      "sha256": "934b062bf3f007882be32c0f232ea802e1e827909f639341b5fe47ee2b4deaba"
+    },
+    {
+      "path": "docs/SECURITY-BOUNDARY.md",
+      "sha256": "2138a4949a916a699fe870b367adac7f8c1f19a7370671b1fb9aec8eac58c868"
+    },
+    {
+      "path": "global.json",
+      "sha256": "3539053fdc4cd4e9c9e32e64351bdd2ae68557e926a9d78a1eb3f8b86883737d"
+    },
+    {
+      "path": "src/AgentHub.C9.G345.Review.csproj",
+      "sha256": "a1240de88faf2faef511f63fcc5c96f67d8c9508a28e4f6ab98dc70244eb0743"
+    },
+    {
+      "path": "src/G4NonceJournal.cs",
+      "sha256": "34c2a98c0d4a2a9886773fadea08a85a3345ba12f501e1490377e94cc02d6524"
+    },
+    {
+      "path": "src/ReviewGate.cs",
+      "sha256": "f2982dedb9295ee35b3213a8b7d17d9dbed08cb639ca9243817a5237c19fe5f1"
+    },
+    {
+      "path": "tests/AgentHub.C9.G345.Review.Tests.csproj",
+      "sha256": "bd0f8ef792df0255f283404cca12e337d271268b3e664033ded3bd10d96fa286"
+    },
+    {
+      "path": "tests/Program.cs",
+      "sha256": "02aa4f94bd558dd3f064b74377bd1311e015c54a45afeed645734466d5d11d28"
+    }
+  ]
+}
