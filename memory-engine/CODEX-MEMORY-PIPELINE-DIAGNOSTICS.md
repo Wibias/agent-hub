@@ -16,6 +16,22 @@ The diagnostic output now includes a `judge_prerequisites` object: `executable` 
 
 The regular diagnostic's `runtime_execution_observed: false` remains a deliberate limitation. Configuration and historical evidence counts are not direct proof of a new post-update Desktop hook invocation.
 
+## Codex usage-limit and quota failure classification (2026-11-12)
+
+The opt-in synthetic Judge smoke now classifies the *actual process error text* into fixed, secret-free codes without printing CLI stdout/stderr, model results, account names, local paths or reset timestamps. It reports only a sanitized `process_exit_code` integer when present. **A classification with `_possible` is evidence that the CLI error contains a matching signature, not independent proof that the account has zero quota.**
+
+- `usage_limit_reached_possible`: Codex-specific usage-window messages such as `You've hit your usage limit`, including errors that happen to carry HTTP 429.
+- `credits_exhausted_possible`: `Your workspace is out of credits` or equivalent depleted-credit errors.
+- `spend_cap_reached_possible`: workspace spending cap or hard billing limit.
+- `quota_exceeded_possible`: `Quota exceeded` or `insufficient_quota`.
+- `rate_limited_possible`: generic 429, rate limit exceeded or too many requests, *without* a stronger usage-window/credit/quota signature.
+- `authentication_rejected_possible`, `model_unavailable_possible`, `cli_configuration_or_arguments_possible` and `network_unavailable_possible` cover other common messages.
+- `codex_exec_nonzero_unclassified` remains valid when no reliable pattern matches. Never guess quota based on the integer exit code alone.
+
+The automatic Stop/SubagentStop candidate worker additionally applies a **read-only 15-minute cooldown** after an actual logged quota/usage-window/credit/spend-cap error, rather than retrying expensive model calls on every turn. A generic transient HTTP 429 retains its separate 10-minute cooldown. The database is unchanged by this preflight. There is no automatic credit purchase, claim promotion, bypass of permissions or broker production gate.
+
+**Previously emitted smoke JSON cannot be reclassified retroactively:** the deliberate privacy design discarded the original process stderr, so the old `codex_exec_nonzero_unclassified` result alone cannot reveal whether quota was the cause. Prefer checking the Codex usage page before any new model smoke. A new opt-in `--run-model` invokes a real model and may consume quota; it is not required to install or test the improved classifier.
+
 ## Offline follow-up for an unclassified Judge exit
 
 A result of `codex_exec_nonzero_unclassified` from the synthetic model smoke means that the process exited unsuccessfully, but the known failure classifications did not identify why. **Do not share the raw Codex CLI stderr**, which can contain account details or local paths. Do not repeatedly run the model smoke.
