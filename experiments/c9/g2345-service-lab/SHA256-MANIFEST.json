@@ -1,0 +1,51 @@
+{
+  "schema": "agenthub-c9-g2345-two-service-lab-sha256-v1",
+  "scope": "review-only-no-deploy",
+  "files": [
+    {
+      "path": ".gitattributes",
+      "sha256": "d60f352d0db1404c70afb4bb8b2ca3fd1c610572aa40720e8a0b7baa7885418c",
+      "bytes": 19
+    },
+    {
+      "path": "NuGet.Config",
+      "sha256": "2142cfb2dfa2c7feefbe40fabcc68b0dfecadafa99a1db9b70239d977cf2a7ef",
+      "bytes": 113
+    },
+    {
+      "path": "global.json",
+      "sha256": "3539053fdc4cd4e9c9e32e64351bdd2ae68557e926a9d78a1eb3f8b86883737d",
+      "bytes": 55
+    },
+    {
+      "path": "README.md",
+      "sha256": "44b5f0af015aee317697acc5f13e976e69f32b65ec5ee6b3854d4dc4f2ef90bf",
+      "bytes": 2908
+    },
+    {
+      "path": "docs/SECURITY-BOUNDARY.md",
+      "sha256": "288e6e9e04b9825f4f09d249b278cfa761984bcd7241f2a3316605e9d679de43",
+      "bytes": 1819
+    },
+    {
+      "path": "src/AgentHub.C9.G2345.ServiceLab.csproj",
+      "sha256": "c6f09137cd589d4762dbc28ce083c996f0bcf7b3bc62a789d2d8dbc606761e99",
+      "bytes": 666
+    },
+    {
+      "path": "src/Program.cs",
+      "sha256": "86b339e3ba0b0ea27431b58aa14890165d32d34395c7c00b6ba6f46cf7526417",
+      "bytes": 17163
+    },
+    {
+      "path": "ci/Invoke-G2345TwoServiceLab.ps1",
+      "sha256": "9c85845c900bde0e4e895e5a43b203b89ff4566c257fefe6da8a8a9b022e7841",
+      "bytes": 12253
+    },
+    {
+      "path": "verify-c9-g2345-two-service.yml",
+      "sha256": "31f87c48989e9184c6e521a6c6293472ce58a4ac870aeb02cd73dd4e0b28c998",
+      "bytes": 1014
+    }
+  ]
+}

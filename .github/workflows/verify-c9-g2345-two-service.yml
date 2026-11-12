@@ -1,0 +1,28 @@
+name: C9 G2 G3 G4 G5 full read-only positive two-service integration
+on:
+  push:
+    branches: [codex/c9-g3-offline-review]
+    paths:
+      - 'experiments/c9/g2345-service-lab/**'
+      - '.github/workflows/verify-c9-g2345-two-service.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  isolated-full-readonly-integration:
+    if: github.repository == 'Wibias/agent-hub' && github.ref == 'refs/heads/codex/c9-g3-offline-review'
+    runs-on: windows-2022
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: experiments/c9/g2345-service-lab
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9
+        with:
+          dotnet-version: '10.0.100'
+      - name: G2 native two-service -> signed G3 -> retained G5 -> persistent G4 -> replay denied -> cleanup
+        shell: pwsh
+        run: ./ci/Invoke-G2345TwoServiceLab.ps1
