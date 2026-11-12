@@ -13,6 +13,7 @@ import { join, isAbsolute, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { fileURLToPath } from 'node:url';
 
+import { resolveCodexJudgeExecutable } from '../memory-engine/codex-judge-executable.mjs';
 import {
   defaultGlobalMemoryScopePath,
   describeGlobalMemoryProject,
@@ -95,6 +96,58 @@ function importanceFailureSignatures(db, projectId, branch) {
     db.prepare(sql).all(projectId, branch)
       .map((row) => [row.signature, Number(row.n)]),
   );
+}
+
+/**
+ * Pure host prerequisite inspection. Does not spawn Codex, read auth contents,
+ * call an LLM, retry candidates, or touch the canonical SQLite.
+ * Presence of auth.json is NOT proof of a valid CLI session or usable model.
+ */
+export function inspectCodexJudgePrerequisites({
+  env = process.env,
+  platform = process.platform,
+  codexHome = join(homedir(), '.codex'),
+  resolveJudge = resolveCodexJudgeExecutable,
+} = {}) {
+  const sourceHome = env.MEMORY_CANDIDATE_JUDGE_SOURCE_CODEX_HOME
+    || env.CODEX_HOME || codexHome;
+  let authFile = 'unavailable';
+  if (typeof sourceHome === 'string' && isAbsolute(sourceHome)) {
+    try {
+      const info = lstatSync(join(sourceHome, 'auth.json'));
+      authFile = info.isFile() && !info.isSymbolicLink()
+        ? 'present_unverified' : 'not_regular_file';
+    } catch (error) {
+      authFile = error?.code === 'ENOENT'
+        ? 'missing' : 'unreadable';
+    }
+  }
+
+  let executable = 'unavailable';
+  let executableKind = null;
+  try {
+    const resolved = resolveJudge({ env, platform });
+    if (['native', 'node_js', 'npm_js', 'path_command'].includes(resolved?.kind)) {
+      executable = 'resolved_unverified';
+      executableKind = resolved.kind;
+    }
+  } catch {
+    // Never display raw errors; override values can contain local paths.
+  }
+
+  return {
+    executable,
+    executable_kind: executableKind,
+    auth_file: authFile,
+    status: executable !== 'resolved_unverified'
+      ? 'cli_not_resolved'
+      : authFile !== 'present_unverified'
+        ? 'auth_file_not_ready'
+        : 'prerequisites_present_unverified',
+    actual_cli_login_verified: false,
+    model_call_performed: false,
+    note: 'A resolved executable and auth.json file do not prove login, network access, quotas or an executable judge model.',
+  };
 }
 
 function emptyCounts() {
@@ -358,12 +411,15 @@ export function diagnoseCodexMemoryPipeline({
   openDb = (path) => new DatabaseSync(path, { readOnly: true, timeout: 5_000 }),
   hooksInspector = inspectHooks,
   projectInspector = inspectProject,
+  judgeInspector = inspectCodexJudgePrerequisites,
+  env = process.env,
 } = {}) {
   const hooks = hooksInspector({ codexHome });
   const common = {
     version: 1,
     read_only: true,
     hooks,
+    judge_prerequisites: judgeInspector({ codexHome, env }),
     windows_prompt_hook_autopipeline_start: process.platform !== 'win32',
     note: 'No memory values, evidence content or transcripts were read or emitted. Hook configuration is not proof of hook execution.',
     projects: [],
