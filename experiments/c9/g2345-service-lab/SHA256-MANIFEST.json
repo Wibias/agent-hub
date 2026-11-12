@@ -39,8 +39,8 @@
     },
     {
       "path": "ci/Invoke-G2345TwoServiceLab.ps1",
-      "sha256": "9c85845c900bde0e4e895e5a43b203b89ff4566c257fefe6da8a8a9b022e7841",
-      "bytes": 12253
+      "sha256": "a3ef7a97ebcef64933a85847eb2aa8330ac77e2819e66362e0549495d4921f94",
+      "bytes": 12866
     },
     {
       "path": "verify-c9-g2345-two-service.yml",

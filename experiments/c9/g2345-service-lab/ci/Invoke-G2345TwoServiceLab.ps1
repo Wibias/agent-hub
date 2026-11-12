@@ -49,23 +49,29 @@ $cleanupProblems = [System.Collections.Generic.List[string]]::new()
 
 try {
     New-Item -ItemType Directory -Path $binary -Force -ErrorAction Stop | Out-Null
-    # Test inputs and code are read-only to LocalService. Only the BROKER
-    # service SID may modify its G4 journal; client cannot write the target.
+    # Preserve explicit cleanup authorities BEFORE dropping inherited ACEs.
+    # Client and broker start with read-only LocalService access to test data.
+    & icacls.exe $root /grant:r '*S-1-5-18:(OI)(CI)F' '*S-1-5-32-544:(OI)(CI)F' | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw 'G2345_ROOT_ADMIN_ACE_FAILED' }
     & icacls.exe $root /inheritance:r | Out-Null
-    if ($LASTEXITCODE -ne 0) { throw 'G2345_ACL_INHERITANCE_FAILED' }
-    & icacls.exe $root /grant:r '*S-1-5-18:(OI)(CI)F' '*S-1-5-32-544:(OI)(CI)F' '*S-1-5-19:(OI)(CI)RX' | Out-Null
-    if ($LASTEXITCODE -ne 0) { throw 'G2345_ACL_GRANT_FAILED' }
+    if ($LASTEXITCODE -ne 0) { throw 'G2345_ROOT_ACL_INHERITANCE_FAILED' }
+    & icacls.exe $root /grant:r '*S-1-5-19:(OI)(CI)RX' | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw 'G2345_ROOT_READONLY_ACE_FAILED' }
+    & icacls.exe $binary /grant:r '*S-1-5-18:(OI)(CI)F' '*S-1-5-32-544:(OI)(CI)F' | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw 'G2345_BIN_ADMIN_ACE_FAILED' }
     & icacls.exe $binary /inheritance:r | Out-Null
-    & icacls.exe $binary /grant:r '*S-1-5-18:(OI)(CI)F' '*S-1-5-32-544:(OI)(CI)F' '*S-1-5-19:(OI)(CI)RX' | Out-Null
     if ($LASTEXITCODE -ne 0) { throw 'G2345_BIN_ACL_FAILED' }
+    & icacls.exe $binary /grant:r '*S-1-5-19:(OI)(CI)RX' | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw 'G2345_BIN_READONLY_ACE_FAILED' }
     foreach ($role in @('broker', 'client')) {
         $out = Join-Path $root "$role-output"
         New-Item -ItemType Directory -Path $out -Force | Out-Null
-        $serviceSid = if ($role -ceq 'broker') { $brokerSid } else { $clientSid }
+        # Make admin/SYSTEM explicit before dropping inherited ACEs. The role
+        # SID does not resolve until its SCM service exists, so grant it below.
+        & icacls.exe $out /grant:r '*S-1-5-18:(OI)(CI)F' '*S-1-5-32-544:(OI)(CI)F' | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw "G2345_OUTPUT_ADMIN_ACE_FAILED $role" }
         & icacls.exe $out /inheritance:r | Out-Null
         if ($LASTEXITCODE -ne 0) { throw "G2345_OUTPUT_ACL_INHERITANCE_FAILED $role" }
-        & icacls.exe $out /grant:r '*S-1-5-18:(OI)(CI)F' '*S-1-5-32-544:(OI)(CI)F' "*$serviceSid`:(OI)(CI)M" | Out-Null
-        if ($LASTEXITCODE -ne 0) { throw "G2345_OUTPUT_ROLE_ACL_FAILED $role" }
     }
 
     dotnet publish src/AgentHub.C9.G2345.ServiceLab.csproj --configuration Release --output $binary
@@ -76,15 +82,6 @@ try {
     & $exe --isolated-g2345-setup $root
     if ($LASTEXITCODE -ne 0) { throw 'G2345_EPHEMERAL_TICKET_SETUP_FAILED' }
     $journalFile = Join-Path $root 'g4.journal'
-    & icacls.exe $journalFile /inheritance:r | Out-Null
-    if ($LASTEXITCODE -ne 0) { throw 'G2345_JOURNAL_ACL_INHERITANCE_FAILED' }
-    & icacls.exe $journalFile /grant:r '*S-1-5-18:F' '*S-1-5-32-544:F' "*$brokerSid`:M" | Out-Null
-    if ($LASTEXITCODE -ne 0) { throw 'G2345_JOURNAL_BROKER_ONLY_ACL_FAILED' }
-    $currentAcl = (Get-Acl -LiteralPath $journalFile).Access
-    if (-not ($currentAcl | Where-Object { $_.IdentityReference.Value -eq $brokerSid -and $_.FileSystemRights.ToString() -match 'Modify' })) {
-        # Get-Acl may resolve a SID to NT SERVICE\name; icacls was definitive.
-        Write-Host 'G2345_JOURNAL_ACL_SET broker_service_sid=only_mutator'
-    }
 
     foreach ($pair in @(@($broker, 'broker'), @($client, 'client'))) {
         $name = $pair[0]
@@ -105,6 +102,21 @@ try {
             throw "G2345_SC_CONFIG_MISMATCH $name"
         }
     }
+
+    # Both service SIDs now resolve in Windows. Only now grant role rights.
+    foreach ($role in @('broker', 'client')) {
+        $out = Join-Path $root "$role-output"
+        $serviceSid = if ($role -ceq 'broker') { $brokerSid } else { $clientSid }
+        & icacls.exe $out /grant:r "*$serviceSid`:(OI)(CI)M" | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw "G2345_OUTPUT_ROLE_ACL_FAILED $role" }
+    }
+    & icacls.exe $journalFile /grant:r '*S-1-5-18:F' '*S-1-5-32-544:F' | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw 'G2345_JOURNAL_ADMIN_ACE_FAILED' }
+    & icacls.exe $journalFile /inheritance:r | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw 'G2345_JOURNAL_ACL_INHERITANCE_FAILED' }
+    & icacls.exe $journalFile /grant:r "*$brokerSid`:M" | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw 'G2345_JOURNAL_BROKER_ONLY_ACL_FAILED' }
+    Write-Host 'G2345_BROKER_ONLY_JOURNAL_ACL_APPLIED clients_cannot_write=true'
 
     & sc.exe start $broker
     if ($LASTEXITCODE -ne 0) { throw 'G2345_BROKER_TEST_SERVICE_START_FAILED' }
