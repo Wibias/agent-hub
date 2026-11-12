@@ -212,6 +212,61 @@ test('ignore judgment must not carry a canonical fact', () => {
   );
 });
 
+test('blank non-promote canonical_fact normalizes to null but never creates a durable claim', () => {
+  for (const decision of ['ignore', 'keep_candidate', 'needs_confirmation']) {
+    for (const blank of ['', '   \t']) {
+      const incoming = promoteJudgment({
+        decision,
+        durability: 'medium',
+        future_utility: 'medium',
+        confidence: 'medium',
+        canonical_fact: blank,
+        risk_flags: ['scope_unclear'],
+      });
+      const normalized = parseMemoryCandidateJudgment(JSON.stringify(incoming));
+      assert.equal(normalized.decision, decision);
+      assert.equal(normalized.canonical_fact, null);
+      assert.deepEqual(normalized.risk_flags, ['scope_unclear']);
+    }
+  }
+});
+
+test('canonical_fact remains strict for promote, non-strings, overlong text and substantive ignore', () => {
+  for (const blank of ['', ' ', '\n\t']) {
+    assert.throws(
+      () => parseMemoryCandidateJudgment(JSON.stringify(
+        promoteJudgment({ canonical_fact: blank }),
+      )),
+      /canonical_fact must be a non-empty string/i,
+    );
+  }
+
+  for (const invalid of [true, 42, [], {}, ['a fact']]) {
+    assert.throws(
+      () => parseMemoryCandidateJudgment(JSON.stringify(
+        promoteJudgment({ decision: 'needs_confirmation', canonical_fact: invalid }),
+      )),
+      /canonical_fact must be a non-empty string/i,
+    );
+  }
+
+  for (const decision of ['ignore', 'keep_candidate', 'needs_confirmation', 'promote']) {
+    assert.throws(
+      () => parseMemoryCandidateJudgment(JSON.stringify(
+        promoteJudgment({ decision, canonical_fact: 'x'.repeat(501) }),
+      )),
+      /canonical_fact must be at most 500 characters/i,
+    );
+  }
+
+  assert.throws(
+    () => parseMemoryCandidateJudgment(JSON.stringify(
+      promoteJudgment({ decision: 'ignore', canonical_fact: 'Substantive value' }),
+    )),
+    /ignore requires canonical_fact=null/i,
+  );
+});
+
 test('engine stores a promote recommendation as candidate evaluation only and creates no Claim', async () => {
   const root = await mkdtemp(join(tmpdir(), 'agent-hub-candidate-judge-store-'));
   const memory = new MemoryEngine({
