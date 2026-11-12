@@ -9,7 +9,10 @@ import { join } from 'node:path';
 import test from 'node:test';
 import { MemoryEngine } from '../../memory-engine/index.mjs';
 import { manageGlobalMemoryProject } from '../../memory-engine/adapters/codex-global-memory-scope.mjs';
-import { diagnoseCodexMemoryPipeline } from '../../scripts/diagnose-codex-memory-pipeline.mjs';
+import {
+  diagnoseCodexMemoryPipeline,
+  inspectCodexJudgePrerequisites,
+} from '../../scripts/diagnose-codex-memory-pipeline.mjs';
 
 function fixture() {
   const base = mkdtempSync(join(tmpdir(), 'agenthub-memory-diagnostic-'));
@@ -82,6 +85,74 @@ function fixture() {
     close() { rmSync(base, { recursive: true, force: true }); },
   };
 }
+
+test('judge prerequisite inspection is content-free and makes no CLI or model calls', () => {
+  const f = fixture();
+  try {
+    let resolves = 0;
+    const resolveJudge = () => {
+      resolves += 1;
+      return { kind: 'npm_js', command: 'private-path-value', prefixArgs: [] };
+    };
+    assert.deepEqual(inspectCodexJudgePrerequisites({
+      codexHome: f.codexHome,
+      env: {},
+      platform: 'win32',
+      resolveJudge,
+    }), {
+      executable: 'resolved_unverified',
+      executable_kind: 'npm_js',
+      auth_file: 'missing',
+      status: 'auth_file_not_ready',
+      actual_cli_login_verified: false,
+      model_call_performed: false,
+      note: 'A resolved executable and auth.json file do not prove login, network access, quotas or an executable judge model.',
+    });
+    writeFileSync(join(f.codexHome, 'auth.json'), 'PRIVATE_SECRET_NOT_TO_BE_READ');
+    const report = diagnoseCodexMemoryPipeline({
+      scopePath: f.scopePath,
+      codexHome: f.codexHome,
+      env: {},
+      judgeInspector: (params) => inspectCodexJudgePrerequisites({
+        ...params, platform: 'win32', resolveJudge,
+      }),
+    });
+    assert.equal(report.judge_prerequisites.status, 'prerequisites_present_unverified');
+    assert.equal(report.judge_prerequisites.auth_file, 'present_unverified');
+    assert.equal(report.judge_prerequisites.actual_cli_login_verified, false);
+    assert.equal(resolves, 2);
+    assert.ok(!JSON.stringify(report).includes('PRIVATE_SECRET'));
+    assert.ok(!JSON.stringify(report).includes('private-path-value'));
+  } finally { f.close(); }
+});
+
+test('judge prerequisite inspection fails closed for unresolvable CLI', () => {
+  const f = fixture();
+  try {
+    writeFileSync(join(f.codexHome, 'auth.json'), 'PRIVATE_TEST_CREDENTIAL');
+    const report = inspectCodexJudgePrerequisites({
+      env: {}, platform: 'win32', codexHome: f.codexHome,
+      resolveJudge() { throw new Error('PRIVATE_LOCAL_PATH'); },
+    });
+    assert.equal(report.status, 'cli_not_resolved');
+    assert.equal(report.executable, 'unavailable');
+    assert.equal(report.auth_file, 'present_unverified');
+    assert.ok(!JSON.stringify(report).includes('PRIVATE'));
+  } finally { f.close(); }
+});
+
+test('judge prerequisite inspection does not interpret a directory as auth.json', () => {
+  const f = fixture();
+  try {
+    mkdirSync(join(f.codexHome, 'auth.json'));
+    const report = inspectCodexJudgePrerequisites({
+      env: {}, codexHome: f.codexHome,
+      resolveJudge: () => ({ kind: 'native', command: '/fake/codex.exe' }),
+    });
+    assert.equal(report.auth_file, 'not_regular_file');
+    assert.equal(report.status, 'auth_file_not_ready');
+  } finally { f.close(); }
+});
 
 test('no memory values escape and original SQLite remains byte-for-byte unchanged', () => {
   const f = fixture();
