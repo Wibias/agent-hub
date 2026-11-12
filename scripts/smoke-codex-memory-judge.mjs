@@ -5,13 +5,19 @@
  * disposable Git workspace. Does not open or mutate canonical Memory SQLite.
  * Only fixed status codes are printed; never print raw stderr, tokens or model text.
  */
-import { resolve } from 'node:path';
+import { spawn } from 'node:child_process';
+import { lstatSync } from 'node:fs';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { homedir, tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   CANDIDATE_JUDGE_POLICY_VERSION,
   parseMemoryCandidateJudgment,
 } from '../memory-engine/memory-candidate-judge.mjs';
 import { createCodexMemoryCandidateJudge } from './judge-memory-candidates.mjs';
+import { resolveCodexJudgeExecutable } from '../memory-engine/codex-judge-executable.mjs';
+import { createIsolatedCodexEnv, prepareIsolatedCodexHome } from '../memory-engine/codex-memory-behavioral-eval.mjs';
 
 export const SYNTHETIC_CANDIDATE = Object.freeze({
   proposed_value: 'We chose a temporary implementation detail.',
@@ -107,11 +113,144 @@ export async function runCodexJudgeSmoke({
   }
 }
 
+// Only fixed CLI subcommands. No model, repository input, or user messages.
+function runCodexOfflineCommand({ command, args, env, cwd, timeoutMs = 15_000 }) {
+  return new Promise((resolveResult) => {
+    let child;
+    try {
+      child = spawn(command, args, {
+        cwd, env, shell: false, windowsHide: true,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+    } catch {
+      resolveResult({ status: 'launch_failed', exitCode: null, stdout: '' });
+      return;
+    }
+    let finished = false;
+    let stdout = '';
+    const finish = (result) => {
+      if (finished) return;
+      finished = true;
+      clearTimeout(timeout);
+      resolveResult(result);
+    };
+    const timeout = setTimeout(() => {
+      try { child.kill(); } catch {}
+      finish({ status: 'timeout', exitCode: null, stdout: '' });
+    }, timeoutMs);
+    child.stdout.on('data', (chunk) => {
+      // Only --help/--version output is parsed; never returned to callers.
+      if (stdout.length < 65_536) stdout += String(chunk).slice(0, 65_536 - stdout.length);
+    });
+    // Drain stderr without capturing it; login status can reveal account info.
+    child.stderr.on('data', () => {});
+    child.on('error', () => finish({
+      status: 'launch_failed', exitCode: null, stdout: '',
+    }));
+    child.on('close', (code) => finish({
+      status: 'completed',
+      exitCode: Number.isInteger(code) && code >= 0 && code <= 255 ? code : null,
+      stdout,
+    }));
+  });
+}
+
+/**
+ * Shell-free, model-free inspection inside a disposable copy of the *same*
+ * auth-only CODEX_HOME used by the production candidate Judge.
+ * All process output stays local and is discarded after narrow parsing.
+ */
+export async function inspectCodexJudgeOffline({
+  env = process.env,
+  sourceCodexHome = env.MEMORY_CANDIDATE_JUDGE_SOURCE_CODEX_HOME
+    || env.CODEX_HOME || join(homedir(), '.codex'),
+  resolveJudge = resolveCodexJudgeExecutable,
+  prepareHome = prepareIsolatedCodexHome,
+  runCommand = runCodexOfflineCommand,
+} = {}) {
+  const base = {
+    status: 'offline_checks_incomplete',
+    model_call_attempted: false,
+    memory_db_modified: false,
+    executable_kind: null,
+    cli_version: null,
+    version_command: 'not_run',
+    isolated_login_status: 'not_run',
+    exec_flags: 'not_checked',
+    source_config_file: 'not_checked',
+    isolated_config_copied: false,
+    note: 'Login status only verifies saved CLI authentication, not model access, network, tokens remaining or Codex Desktop hook execution.',
+  };
+  let root = null;
+  try {
+    let executable = resolveJudge({ env });
+    if (!executable || !['native', 'npm_js', 'node_js', 'path_command'].includes(executable.kind)) {
+      return { ...base, status: 'cli_not_resolved' };
+    }
+    const configPath = join(sourceCodexHome, 'config.toml');
+    let sourceConfig = 'absent';
+    try {
+      const st = lstatSync(configPath);
+      sourceConfig = st.isFile() && !st.isSymbolicLink() ? 'present_unread' : 'not_regular_file';
+    } catch (error) {
+      sourceConfig = error?.code === 'ENOENT' ? 'absent' : 'unavailable';
+    }
+    root = await mkdtemp(join(tmpdir(), 'agenthub-judge-offline-'));
+    const isolatedHome = join(root, 'codex-home');
+    const prepared = await prepareHome({
+      sourceCodexHome, isolatedCodexHome: isolatedHome,
+    });
+    if (!prepared.authCopied) {
+      return {
+        ...base, status: 'auth_file_missing',
+        executable_kind: executable.kind, source_config_file: sourceConfig,
+      };
+    }
+    const isolatedEnv = createIsolatedCodexEnv(env, isolatedHome);
+    const call = (args) => runCommand({
+      command: executable.command, args: [...(executable.prefixArgs ?? []), ...args],
+      env: isolatedEnv, cwd: root,
+    });
+
+    // Each call is an offline CLI mode. Login status never sends a model prompt.
+    const version = await call(['--version']);
+    const login = await call(['login', 'status']);
+    const help = await call(['exec', '--help']);
+
+    const versionMatch = version.exitCode === 0
+      ? version.stdout.match(/\bcodex(?:-cli)?\s+(\d{1,4}\.\d{1,4}\.\d{1,4}(?:[-+][a-z0-9.-]+)?)/i)
+      : null;
+    const flagsSupported = help.exitCode === 0
+      && ['--cd', '--ephemeral', '--output-last-message']
+        .every((flag) => help.stdout.includes(flag));
+    return {
+      ...base,
+      status: version.exitCode === 0 && login.exitCode === 0 && flagsSupported
+        ? 'offline_checks_passed'
+        : 'offline_checks_incomplete',
+      executable_kind: executable.kind,
+      cli_version: versionMatch?.[1] ?? null,
+      version_command: version.exitCode === 0 ? 'ok' : 'failed',
+      isolated_login_status: login.exitCode === 0
+        ? 'accepted_by_cli_unverified' : 'not_accepted_or_unavailable',
+      exec_flags: flagsSupported ? 'supported' : 'missing_or_unavailable',
+      source_config_file: sourceConfig,
+    };
+  } catch {
+    return { ...base, status: 'offline_check_failed' };
+  } finally {
+    if (root) {
+      try { await rm(root, { recursive: true, force: true }); } catch {}
+    }
+  }
+}
+
 export function parseSmokeArgs(argv = []) {
   if (!Array.isArray(argv)) throw new TypeError('argv must be an array');
   if (argv.length === 0) return { runModel: false };
   if (argv.length === 1 && argv[0] === '--run-model') return { runModel: true };
-  throw new Error('usage: node scripts/smoke-codex-memory-judge.mjs [--run-model]');
+  if (argv.length === 1 && argv[0] === '--inspect-cli') return { inspectCli: true };
+  throw new Error('usage: node scripts/smoke-codex-memory-judge.mjs [--inspect-cli|--run-model]');
 }
 
 const isMain = process.argv[1]
@@ -119,7 +258,10 @@ const isMain = process.argv[1]
 
 if (isMain) {
   try {
-    const result = await runCodexJudgeSmoke(parseSmokeArgs(process.argv.slice(2)));
+    const options = parseSmokeArgs(process.argv.slice(2));
+    const result = options.inspectCli
+      ? await inspectCodexJudgeOffline()
+      : await runCodexJudgeSmoke(options);
     process.stdout.write(JSON.stringify(result, null, 2) + '\n');
     if (result.status === 'judge_failed') process.exitCode = 2;
   } catch {
