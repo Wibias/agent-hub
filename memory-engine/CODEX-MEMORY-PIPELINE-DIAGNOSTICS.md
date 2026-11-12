@@ -18,6 +18,18 @@ The command loads the existing per-user approved scope manifest and opens exactl
 
 No claim content, evidence text, transcripts, credentials, model prompts, or individual user messages are read or emitted. There is no memory capture, approval, promotion, freshness update, diagnostic telemetry write, or Codex configuration change.
 
+## Failure triage without opening private logs
+
+For projects with repeated `partial` runs, the same command additionally reports these **aggregate codes only**:
+
+- `pipeline_failure_codes.by_stage`: counts by internal pipeline stage (such as importance, relation, promotion, pipeline_control or worker).
+- `pipeline_failure_codes.by_error_class`: counts by exception type (such as TimeoutError or PipelineStalled). **No error_text is selected or displayed.**
+- `pipeline_latest_failure_at`: the time of the newest recorded failure.
+- `pipeline_running_older_than_30m`: persistent "running" records older than 30 minutes. These may indicate interrupted observability; they do not prove a live process exists. **Do not delete SQLite rows or lock files solely because a run is old.**
+- `active_claim_blockers`: *overlapping* counts of disallowed primary authority, stale/unverified file-path evidence, historical runtime E2E seed markers and open conflict membership. These do not exhaust supporting-Evidence restrictions.
+
+A single looping candidate may generate hundreds of failure rows. The code summarizes the top 100 distinct stage/class pairs, not the full unsanitized error logs. If codes point to transient model availability, invalid judge output or pipeline control stalls, inspect the relevant implementation and plan one targeted fix rather than repeatedly re-running the pipeline.
+
 Typical findings:
 
 - **no_captured_evidence:** no evidence was stored for the project. Check actual hook installation/trust and whether UserPromptSubmit fired; read-only MCP registration is not capture registration.
