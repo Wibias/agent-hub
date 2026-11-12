@@ -196,11 +196,19 @@ review and integration gates.
 
 ---
 
+## Target platform
+
+Agent Hub itself supports Windows x64 (`win-x64`) as its only host platform. Build, package, install, operate, and document Agent Hub's native host integrations and local operator workflows for Windows x64 only. Do not introduce other Agent Hub host OS or CPU targets without an explicit change to this policy.
+
+This host restriction does not limit the software that agents and shared skills can build, test, debug, or deploy. External projects may target Linux, macOS, mobile platforms, ARM, and other environments using their appropriate tools. Keep portable skill instructions usable for those target projects. Cross-platform CI for individual components does not imply support for Agent Hub itself as a host on those platforms.
+
+---
+
 ## Shell execution
 
-Use the host-native shell for the active operating system. On Windows, prefer PowerShell (`pwsh`). On macOS and Linux, use the host-native POSIX shell.
+Use PowerShell (`pwsh`) for Agent Hub installation, maintenance, and operator workflows on its supported Windows x64 host.
 
-Shared instructions must not require `cmd.exe`-only, PowerShell-only, or Bash-only syntax unless the step is explicitly platform-scoped.
+For external projects handled by Agent Hub skills, use the toolchain and shell appropriate to that project's environment. Do not force PowerShell on Linux, macOS, mobile, or other target-project workflows. Keep shared skill instructions shell-neutral unless a step is explicitly scoped to the Windows Agent Hub host.
 
 Avoid opening visible shell windows for non-interactive work. Use hidden or background execution only when a separate process is actually required.
 

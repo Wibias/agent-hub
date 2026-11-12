@@ -21,3 +21,4 @@ Agent vocabulary for this hub. Identity: `SOUL.md`. Routing and policy: `AGENTS.
 | **Screenshot-Check**     | UI not done until live browser proof                      |
 | **Close the Loop**       | Agent verifies output via CLI, tests, or screenshots      |
 | **Harness is the model** | System form (rules, hooks, gates) beats raw model upgrade |
+| **Windows x64**         | Only supported Agent Hub host (`win-x64`); external project targets are unrestricted |
