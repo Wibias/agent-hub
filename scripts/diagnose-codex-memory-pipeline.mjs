@@ -80,6 +80,8 @@ function importanceFailureSignatures(db, projectId, branch) {
       + ' OR ' + pattern('must be one of:')],
     ["judge_policy_invariant_failed", pattern('promote requires')
       + ' OR ' + pattern('ignore requires')],
+    ["canonical_fact_not_nonempty_string", pattern('canonical_fact must be a non-empty string')],
+    ["canonical_fact_over_500_chars", pattern('canonical_fact must be at most 500 characters')],
     ["codex_exec_nonzero", pattern('codex candidate judge failed with exit')],
   ];
   const sql = [
