@@ -92,6 +92,24 @@ The project diagnostics also report `counts.semantic_failure_signatures`, genera
 
 Possible codes include `embedding_worker_unavailable`, `embedding_worker_model_mismatch`, `embedding_worker_request_failed`, `embedding_worker_invalid_response`, `embedding_worker_readiness_failed`, `embedding_permission_denied`, `embedding_database_busy`, `embedding_unknown_project` and `unclassified`. These are observed error signatures, not assumptions about causes. `semantic_embedding_worker_unavailable` and `semantic_sync_failure_unclassified` can appear in the findings.
 
+**Windows repair (in-process, offline only):** `scripts/reindex-memory-semantic.mjs` now first tries its existing E5 IPC worker; when and only when that worker reports `embedding worker unavailable` under Windows, it can instead load the pinned `intfloat/multilingual-e5-small` model *inside the same pipeline worker*, directly from the repo-local `.cache/memory-engine/e5` directory. It never launches a Windows pipe, loosens ACLs, downloads weights, enables arbitrary models or changes the candidate-promotion policy. Loading must use `allowRemoteModels:false`. It fails closed on a missing or symlinked cache root, an incomplete model, model identity mismatch, invalid 384-dimensional vector or any IPC failure other than unavailable. On non-Windows hosts, existing IPC behavior is unchanged. This is an optional index repair, not part of the already proven Claim persistence/read-only keyword recall.
+
+New historical failure signatures: `offline_e5_cache_missing`, `offline_e5_initialization_failed`, `offline_e5_model_mismatch`, and `offline_e5_readiness_failed`. Old `embedding_worker_unavailable` entries remain intact and do not change retroactively.
+
+To check which model cache the preview branch would use **without creating a model or changing memory**, run:
+
+~~~powershell
+$preview = Join-Path $env:LOCALAPPDATA 'AgentHub-Memory-Write-Preview'
+$cache = Join-Path $preview '.cache\memory-engine\e5'
+[pscustomobject]@{
+  PreviewCacheDirectory = Test-Path -LiteralPath $cache -PathType Container
+  LiveHubCacheDirectory = Test-Path -LiteralPath (Join-Path $HOME '.agents\.cache\memory-engine\e5') -PathType Container
+  PreviewTransformersPackage = Test-Path -LiteralPath (Join-Path $preview 'node_modules\@huggingface\transformers\package.json') -PathType Leaf
+}
+~~~
+
+`Test-Path` proves only presence, **not** complete model integrity. Do not copy credentials, automatically download a model, invoke reindex on the canonical DB, or run an unprotected Windows named-pipe server just to get a PASS. Reindex is an explicit canonical SQLite write; only do it after local-cache verification and approval. Existing historical partial runs remain partial.
+
 The current reindex stage requires a local `intfloat/multilingual-e5-small` worker on the embedding IPC endpoint. Its Windows default is a local named pipe. Codex `UserPromptSubmit` currently does **not** launch its embedding worker under `win32`; therefore an unavailable worker is plausible but not proven by a generic `Error` stage count alone. Never auto-start an unreviewed Windows named-pipe worker or relax its access boundaries based only on these signatures.
 
 A missing semantic vector does **not** invalidate a stored Claim or an already successful read-only FTS keyword recall. It means semantic/hybrid retrieval is not yet verified. The historical `partial` event is retained honestly; do not edit or remove previous pipeline records to manufacture a PASS.
