@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
+import { directoryScopeFor, hasScopedChanges } from './lib/upstream-scope-diff.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(here, '..');
@@ -86,6 +87,31 @@ for (const source of registry.sources) {
   if (!/^[0-9a-f]{40}$/.test(head)) fail(`${source.id}: could not parse remote HEAD`);
 
   if (head !== source.reviewedCommit) {
+    const scopedDirectory = directoryScopeFor(source);
+    if (scopedDirectory) {
+      let changed;
+      try {
+        changed = hasScopedChanges({
+          remote,
+          reviewedCommit: source.reviewedCommit,
+          head,
+          scope: scopedDirectory,
+        });
+      } catch (error) {
+        fail(`${source.id}: scoped update check failed: ${error.message}`);
+      }
+      if (!changed) {
+        if (source.decision === 'update-pending') {
+          findings += 1;
+          console.log(adoptionStatus(source) + ` head=${head} scope-unchanged`);
+        } else {
+          console.log(
+            `CURRENT ${source.id} ${source.repository} reviewed=${source.reviewedCommit} head=${head} scope=${source.scope} (scope unchanged)`,
+          );
+        }
+        continue;
+      }
+    }
     findings += 1;
     console.log(
       `UPDATE ${source.id} ${source.repository} reviewed=${source.reviewedCommit} head=${head} scope=${source.scope}`,

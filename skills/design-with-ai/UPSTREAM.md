@@ -7,7 +7,7 @@ are maintained here.
 | Source | Snapshot / access | Role | Licence / provenance |
 |---|---|---|---|
 | LexnLin design-with-AI thread | accessed 2026-07-12; URL recorded historically | Methods 1-3 and component-by-component framing | public thread, historical local note |
-| emilkowalski/skills | commit `c8a79627b59d72d764d6ab6f2c87c09a48169833` reviewed 2026-11-05 | motion craft, removal-safety, runtime motion advice and selectively adapted `choreograph` coordination guidance; no new skill route and no wholesale recipe import; `break-ui` remains owned by `fortify worst-case` | MIT |
+| emilkowalski/skills | commit `4061b67b8d976a186aca118594f54b638c5f718a` reviewed 2026-11-12 (previous `c8a79627b59d72d764d6ab6f2c87c09a48169833` reviewed 2026-11-05) | motion craft, removal-safety, runtime motion advice and selectively adapted `choreograph` coordination guidance; no new skill route and no wholesale recipe import; `break-ui` remains owned by `fortify worst-case` | MIT |
 | MengTo/Skills | commit `321c769739b823de5eb94eb3a52aa1974fe783a2` reviewed 2026-09-04 | design-first prompting and runtime animation profiling | MIT |
 | ibelick/ui-skills `baseline-ui` | local adapted snapshot | baseline UI floor | MIT |
 | jakubkrehel/make-interfaces-feel-better | local adapted snapshot | micro craft | MIT |
@@ -78,6 +78,14 @@ integration pins upstream capability/provenance only: Penpot source, MCP server
 code, client configuration, credentials, and session state are not vendored into
 this skill. Current upstream OAuth support and legacy query-token compatibility
 are treated as current-source facts, not a permanent universal client contract.
+
+The 2026-11-12 Emil refresh classifies the new `gestures` skill as an
+`EXTEND` of existing `references/direct-manipulation.md`, not another
+standalone skill. It adds tracking-loop cost guidance, linked drag feedback,
+velocity-aware dismissal and linear hold-progress cancellation. It keeps
+local platform/gesture primitives authoritative and rejects copied magic
+thresholds or a universal Vaul requirement. README-only changes were
+reviewed without adopting a new routing owner.
 
 The 2026-11-05 Emil refresh classifies `choreograph` as `EXTEND` for
 coordinated motion only. `references/motion-choreography.md` is loaded

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "reviewedAt": "2026-11-05",
+  "reviewedAt": "2026-11-12",
   "sources": [
     {
       "id": "addy",
@@ -12,7 +12,7 @@
     {
       "id": "emil",
       "repository": "emilkowalski/skills",
-      "reviewedCommit": "c8a79627b59d72d764d6ab6f2c87c09a48169833",
+      "reviewedCommit": "4061b67b8d976a186aca118594f54b638c5f718a",
       "scope": "design-with-ai motion sources",
       "decision": "current"
     },
