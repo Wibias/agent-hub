@@ -116,6 +116,14 @@ export function validateMemoryCandidateJudgment(value) {
       && value.canonical_fact.trim().length === 0
     ) {
       canonicalFact = null;
+    } else if (
+      (value.decision === 'keep_candidate' || value.decision === 'needs_confirmation')
+      && typeof value.canonical_fact === 'string'
+      && value.canonical_fact.trim().length > 500
+    ) {
+      // These states store the original candidate for later review; an
+      // advisory paraphrase must not block that review or be truncated.
+      canonicalFact = null;
     } else {
       canonicalFact = compactString(
         value.canonical_fact,
@@ -260,7 +268,7 @@ export function buildMemoryCandidateJudgePrompt(candidate, { retryOverlongCanoni
     'canonical_fact:',
     '- For promote, provide a concise paraphrase that preserves the exact meaning and qualifiers without adding facts.',
     '- For ignore, canonical_fact must be null. Never use an empty string instead of null.',
-    '- For keep_candidate and needs_confirmation, canonical_fact may be null; if provided, it must be non-empty and at most 500 characters.',
+    '- For keep_candidate and needs_confirmation, canonical_fact may be null; if a faithful fact would exceed 500 characters, use null and preserve the original candidate for review.',
     '- For promote, canonical_fact must have 1 to 500 characters; never output an empty or whitespace-only string.',
     '- canonical_fact is advisory only and will not itself become durable memory in this stage.',
     '',
@@ -352,9 +360,32 @@ export async function evaluatePendingMemoryCandidates({
           throw error;
         }
         retryAttempted = true;
-        judgment = parseJudgment(await judge(candidate, {
-          retryOverlongCanonicalFact: true,
-        }));
+        try {
+          judgment = parseJudgment(await judge(candidate, {
+            retryOverlongCanonicalFact: true,
+          }));
+        } catch (retryError) {
+          if (!(retryError instanceof TypeError)
+            || retryError.message !== 'canonical_fact must be at most 500 characters') {
+            throw retryError;
+          }
+          // Strict fallback for repeated oversized output: no promotion,
+          // no fact truncation, and no interpretation of the rejected text.
+          // A human reviews the preserved ORIGINAL evidence and candidate.
+          judgment = {
+            decision: 'needs_confirmation',
+            suggested_type: candidate.proposed_type,
+            durability: 'medium',
+            future_utility: 'medium',
+            specificity: 'low',
+            confidence: 'low',
+            meaning_preserved: false,
+            canonical_fact: null,
+            reason: 'technical_review_required: canonical_fact remained over 500 characters after one retry',
+            risk_flags: [],
+          };
+          judgment = validateMemoryCandidateJudgment(judgment);
+        }
       }
 
       evaluated += 1;

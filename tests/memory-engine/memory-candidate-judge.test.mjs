@@ -250,13 +250,21 @@ test('canonical_fact remains strict for promote, non-strings, overlong text and 
     );
   }
 
-  for (const decision of ['ignore', 'keep_candidate', 'needs_confirmation', 'promote']) {
+  for (const decision of ['ignore', 'promote']) {
     assert.throws(
       () => parseMemoryCandidateJudgment(JSON.stringify(
         promoteJudgment({ decision, canonical_fact: 'x'.repeat(501) }),
       )),
       /canonical_fact must be at most 500 characters/i,
     );
+  }
+  for (const decision of ['keep_candidate', 'needs_confirmation']) {
+    const normalized = parseMemoryCandidateJudgment(JSON.stringify(
+      promoteJudgment({ decision, canonical_fact: 'x'.repeat(501) }),
+    ));
+    assert.equal(normalized.decision, decision);
+    assert.equal(normalized.canonical_fact, null);
+    assert.equal(normalized.risk_flags.length, 0);
   }
 
   assert.throws(
@@ -478,7 +486,7 @@ test('overlong fact retries once from the same source and stores only a validate
   }
 });
 
-test('overlong canonical fact never gets truncated, force-promoted or retried more than once', async () => {
+test('repeated overlong canonical fact routes to human review without a Claim or third attempt', async () => {
   const root = await mkdtemp(join(tmpdir(), 'agent-hub-candidate-judge-overlong-fail-'));
   const memory = new MemoryEngine({ dbPath: join(root, 'memory.sqlite3') });
   try {
@@ -496,10 +504,84 @@ test('overlong canonical fact never gets truncated, force-promoted or retried mo
       },
     });
     assert.equal(calls, 2);
+    assert.equal(result.failed, 0);
+    assert.equal(result.applied, 1);
+    assert.equal(result.results[0].retry_overlong_canonical_fact, true);
+    assert.equal(result.results[0].decision, 'needs_confirmation');
+    assert.equal(memory.getCandidate(candidate.id).status, 'needs_confirmation');
+    assert.equal(memory.listUnevaluatedCandidates({
+      projectId: 'project', branch: 'main', limit: 10,
+    }).length, 0);
+    const review = JSON.parse(memory.getCandidate(candidate.id).evaluation_json);
+    assert.equal(review.canonical_fact, null);
+    assert.equal(review.meaning_preserved, false);
+    assert.match(review.reason, /^technical_review_required:/);
+    assert.equal(review.suggested_type, candidate.proposed_type);
+    assert.equal(memory.exportCanonical().claims.length, 0);
+  } finally {
+    memory.close();
+  }
+});
+
+test('non-promoting overlong advisory fact does not block candidate retention', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'agent-hub-candidate-judge-overlong-kept-'));
+  const memory = new MemoryEngine({ dbPath: join(root, 'memory.sqlite3') });
+  try {
+    createProject(memory);
+    const candidate = seedCandidate(memory);
+    let calls = 0;
+    const result = await evaluatePendingMemoryCandidates({
+      memory, projectId: 'project', branch: 'main',
+      apply: true, evaluatorId: 'codex:test', limit: 1,
+      async judge() {
+        calls += 1;
+        return JSON.stringify(promoteJudgment({
+          decision: 'keep_candidate', durability: 'medium',
+          future_utility: 'medium', confidence: 'medium',
+          canonical_fact: 'Noisy explanatory advisory fact.'.repeat(30),
+        }));
+      },
+    });
+    assert.equal(calls, 1);
+    assert.equal(result.failed, 0);
+    assert.equal(result.applied, 1);
+    assert.equal(memory.getCandidate(candidate.id).status, 'pending');
+    assert.notEqual(memory.getCandidate(candidate.id).evaluated_at, null);
+    assert.equal(
+      JSON.parse(memory.getCandidate(candidate.id).evaluation_json).canonical_fact,
+      null,
+    );
+    assert.equal(memory.listUnevaluatedCandidates({
+      projectId: 'project', branch: 'main', limit: 10,
+    }).length, 0);
+    assert.equal(memory.exportCanonical().claims.length, 0);
+  } finally {
+    memory.close();
+  }
+});
+
+test('a different error on the second judgment stays unevaluated and is not review-routed', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'agent-hub-candidate-judge-other-retry-fail-'));
+  const memory = new MemoryEngine({ dbPath: join(root, 'memory.sqlite3') });
+  try {
+    createProject(memory);
+    const candidate = seedCandidate(memory);
+    let calls = 0;
+    const result = await evaluatePendingMemoryCandidates({
+      memory, projectId: 'project', branch: 'main',
+      apply: true, evaluatorId: 'codex:test', limit: 1,
+      async judge() {
+        calls += 1;
+        return JSON.stringify(calls === 1
+          ? promoteJudgment({ canonical_fact: 'Y'.repeat(501) })
+          : promoteJudgment({ confidence: 'medium' }));
+      },
+    });
+    assert.equal(calls, 2);
     assert.equal(result.failed, 1);
     assert.equal(result.applied, 0);
-    assert.equal(result.results[0].retry_overlong_canonical_fact, true);
-    assert.match(result.results[0].error, /canonical_fact must be at most 500 characters/i);
+    assert.match(result.results[0].error, /promote requires confidence=high/i);
+    assert.equal(memory.getCandidate(candidate.id).status, 'pending');
     assert.equal(memory.getCandidate(candidate.id).evaluated_at, null);
     assert.equal(memory.exportCanonical().claims.length, 0);
   } finally {
