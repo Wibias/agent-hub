@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
 using System.Security.Principal;
 using Microsoft.Win32.SafeHandles;
 
@@ -20,6 +21,7 @@ public sealed record KernelTokenSnapshot(
     string UserSid, IReadOnlyList<string> EnabledGroupSids, int RestrictedSidCount,
     int TokenType, int? ImpersonationLevel);
 
+[SupportedOSPlatform("windows")]
 public static class G2KernelIdentity
 {
     private const uint TokenQuery = 0x0008;

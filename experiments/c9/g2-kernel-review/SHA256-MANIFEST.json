@@ -36,7 +36,7 @@
     },
     {
       "path": "src/G2KernelIdentity.cs",
-      "sha256": "a6f40a72cd5b0cfc102d48262ef91b05bd690ed244ce7655c7fc6f020f7ec4e2"
+      "sha256": "56adfef67445827da1ea560f7a75d60ffb0738dd3bdc61b6873156f1017a0284"
     },
     {
       "path": "tests/AgentHub.C9.G2.KernelReview.Tests.csproj",
