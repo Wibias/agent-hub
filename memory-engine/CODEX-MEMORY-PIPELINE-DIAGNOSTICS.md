@@ -4,6 +4,8 @@ The global AgentHub Memory MCP is **read only**. Registering an approved project
 
 The separate Codex UserPromptSubmit hooks perform candidate capture, based on narrow explicit decision/preference/correction rules; prompts that do not match can remain unrecorded. Even when --auto-pipeline appears in hook configuration, the **UserPromptSubmit auto-pipeline launch is gated off on Windows** in the current runtime. This is a code-level observation, not proof that a specific user's hooks have actually executed or that no alternative Stop/passive pipeline has run.
 
+**Windows Stop backlog repair:** Codex `Stop`/`SubagentStop` events may legitimately contain `last_assistant_message: null`. The background Stop pipeline now checks the pre-existing current-project/current-branch candidate queues even in this case, without pretending a missing assistant reply was an agent decision. It performs an inexpensive **read-only** queue preflight and skips empty queues, keeping judge execution and unnecessary pipeline records out of empty turns. A failed agent-decision capture does not suppress already captured direct-user candidates. This does **not** enable the disabled Windows UserPromptSubmit detached worker, bypass confirmation requirements, or promote ordinary prompts automatically without the existing judge/promotion gates. The Win32 Codex CLI executable prerequisite and retry backoff continue to apply.
+
 ## Operator-safe diagnosis (PowerShell 7, Node.js 24+)
 
 Run in the AgentHub checkout after pulling the merged feature:
