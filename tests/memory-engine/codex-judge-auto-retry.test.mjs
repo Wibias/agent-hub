@@ -65,6 +65,34 @@ test('one rate-limit indication defers only automatic worker requests', () => {
   });
 });
 
+test('one usage-window, credits or spend-cap failure defers automatic retries', () => {
+  for (const message of [
+    "codex candidate judge failed with exit 1: You've hit your usage limit",
+    'codex candidate judge failed with exit 1: Your workspace is out of credits',
+    'codex candidate judge failed with exit 1: Quota exceeded',
+    'codex candidate judge failed with exit 1: You hit your spend cap set in your workspace',
+  ]) {
+    withFixture([message], (ctx) => {
+      assert.deepEqual(inspect(ctx), {
+        deferred: true,
+        reason: 'usage_or_quota_cooldown',
+        minutes: 15,
+      });
+      assert.deepEqual(inspect({ ...ctx, now: () => TIME + 20 * 60_000 }), {
+        deferred: false,
+        reason: null,
+        minutes: 0,
+      });
+    });
+  }
+});
+
+test('a generic 429 remains a rate-limit cooldown rather than usage quota', () => {
+  withFixture(['codex candidate judge failed with exit 1: HTTP 429 rate limit'], (ctx) => {
+    assert.equal(inspect(ctx).reason, 'rate_limit_cooldown');
+  });
+});
+
 test('two auth rejections create a short backoff', () => {
   withFixture(['Unauthorized (private secret)', 'Authentication failed'], ctx => {
     assert.deepEqual(inspect(ctx), {
