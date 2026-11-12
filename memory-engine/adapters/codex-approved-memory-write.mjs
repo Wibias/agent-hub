@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
 import { lstatSync, realpathSync } from 'node:fs';
 import { isAbsolute, resolve } from 'node:path';
 import { MemoryEngine } from '../index.mjs';
@@ -27,7 +28,8 @@ export function resolveApprovedWriteScope({
   const manifest = loadGlobalMemoryScope(scopePath);
   if (!manifest) throw new Error('scope_not_configured');
   const current = describeGlobalMemoryProject({ cwd });
-  if (pathKey(current.root) !== pathKey(resolve(cwd))) throw new Error('pinned_cwd_must_be_git_root');
+  const prefix = String(execFileSync('git', ['-C', resolve(cwd), 'rev-parse', '--show-prefix'], { encoding: 'utf8', timeout: 5000 })).trim();
+  if (prefix !== '') throw new Error('pinned_cwd_must_be_git_root');
   const approved = manifest.projects.find((entry) => pathKey(entry.root) === pathKey(current.root));
   if (!approved) throw new Error('project_not_approved');
   if (approved.project_id !== current.project_id || approved.repo_identity !== current.repo_identity) {
