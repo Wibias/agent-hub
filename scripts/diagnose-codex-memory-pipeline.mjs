@@ -104,6 +104,10 @@ function importanceFailureSignatures(db, projectId, branch) {
  */
 function semanticSyncFailureSignatures(db, projectId, branch) {
   const entries = [
+    ['offline_e5_cache_missing', "instr(lower(error_text), 'offline e5 cache missing') > 0"],
+    ['offline_e5_initialization_failed', "instr(lower(error_text), 'offline e5 model initialization failed') > 0"],
+    ['offline_e5_model_mismatch', "instr(lower(error_text), 'offline e5 provider identity mismatch') > 0"],
+    ['offline_e5_readiness_failed', "instr(lower(error_text), 'offline e5 readiness failed') > 0"],
     ['embedding_worker_unavailable', "instr(lower(error_text), 'embedding worker unavailable') > 0"],
     ['embedding_worker_model_mismatch', "instr(lower(error_text), 'embedding worker model identity mismatch') > 0"],
     ['embedding_worker_request_failed', "instr(lower(error_text), 'embedding worker request failed') > 0"],
