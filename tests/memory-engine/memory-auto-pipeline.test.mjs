@@ -131,6 +131,15 @@ test('async agent pipeline hook captures idempotently before inline processing',
         revisionSha: '9'.repeat(40),
       };
     },
+    inspectQueue(args) {
+      order.push('queue');
+      assert.deepEqual(args, {
+        dbPath: '/state/memory.sqlite3',
+        projectId: 'project-a',
+        branch: 'feature/async-agent-pipeline',
+      });
+      return 'ready';
+    },
     createLog() {
       return (value) => logs.push(String(value));
     },
@@ -162,7 +171,7 @@ test('async agent pipeline hook captures idempotently before inline processing',
     },
   });
 
-  assert.deepEqual(order, ['capture', 'scope', 'git', 'worker']);
+  assert.deepEqual(order, ['capture', 'scope', 'git', 'queue', 'worker']);
   assert.equal(result.status, 'completed');
   assert.deepEqual(logs, [
     'pipeline-stage-output',
