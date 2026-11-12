@@ -283,6 +283,60 @@ test('failure-stage codes identify real pipeline blockers without exposing error
 });
 
 
+test('semantic sync failure signatures identify worker outages without reading or leaking error text', () => {
+  const f = fixture();
+  try {
+    const memory = new MemoryEngine({ dbPath: f.memoryDb });
+    try {
+      memory.startPipelineRun({
+        id: 'semantic-signature-run',
+        projectId: 'github.com/example/beta', branch: 'main',
+        trigger: 'Stop', startedAt: '2026-11-12T00:00:00Z',
+      });
+      for (const [i, message] of [
+        'embedding worker unavailable C:\\PRIVATE_ACCOUNT\\secrets',
+        'embedding worker model identity mismatch PRIVATE_MODEL_NAME',
+        'embedding worker request failed PRIVATE_ACCOUNT',
+        'embedding worker returned an invalid response PRIVATE_ACCOUNT',
+        'UNKNOWN PRIVATE_SECRET that cannot be classified',
+      ].entries()) {
+        memory.recordPipelineFailure({
+          runId: 'semantic-signature-run',
+          projectId: 'github.com/example/beta', branch: 'main',
+          stage: 'semantic_sync', errorClass: 'Error', error: message,
+          occurredAt: '2026-11-12T00:00:0' + i + 'Z',
+        });
+      }
+      memory.finishPipelineRun({
+        id: 'semantic-signature-run', status: 'partial',
+        finishedAt: '2026-11-12T00:01:00Z', durationMs: 60_000,
+      });
+    } finally { memory.close(); }
+
+    const hash = () => createHash('sha256').update(readFileSync(f.memoryDb)).digest('hex');
+    const before = hash();
+    const report = diagnoseCodexMemoryPipeline({
+      scopePath: f.scopePath, codexHome: f.codexHome,
+    });
+    const beta = report.projects.find(p => p.project_id.endsWith('/beta'));
+    assert.deepEqual(beta.counts.semantic_failure_signatures, {
+      embedding_worker_invalid_response: 1,
+      embedding_worker_model_mismatch: 1,
+      embedding_worker_request_failed: 1,
+      embedding_worker_unavailable: 1,
+      unclassified: 1,
+    });
+    assert.ok(beta.findings.includes('semantic_embedding_worker_unavailable'));
+    assert.ok(beta.findings.includes('semantic_sync_failure_unclassified'));
+    const publicReport = JSON.stringify(report);
+    assert.ok(!publicReport.includes('PRIVATE'));
+    assert.ok(!publicReport.includes('secrets'));
+    assert.equal(hash(), before, 'read-only diagnostics must not change SQLite');
+    const alpha = report.projects.find(p => p.project_id.endsWith('/alpha'));
+    assert.deepEqual(alpha.counts.semantic_failure_signatures, {});
+  } finally { f.close(); }
+});
+
 test('importance failure signatures are aggregate-only and do not expose raw Codex stderr', () => {
   const f = fixture();
   try {
