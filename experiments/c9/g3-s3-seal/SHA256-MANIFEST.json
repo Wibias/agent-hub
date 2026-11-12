@@ -1,0 +1,69 @@
+{
+  "schema": 1,
+  "scope": "G3_S3_SEAL_SOURCE_REVIEW_ONLY_NO_CLOUD_DEPLOYMENT",
+  "count": 10,
+  "files": [
+    {
+      "path": ".gitattributes",
+      "bytes": 14,
+      "sha256": "a79691a93b46e49ce460c26ef22afcc03d6eca1e63bf2edbc20e96159510f6c9",
+      "git_blob_sha1": "fcadb2cf97913f58a2523f535336e725c6b59d1f"
+    },
+    {
+      "path": ".github/workflows/verify-c9-g3-s3-seal.yml",
+      "bytes": 1149,
+      "sha256": "0bee473faf3f7e68476e57613948ec9c9ff7d2b96bc5efc62af4082eb319df8c",
+      "git_blob_sha1": "0c8bf917f5c3afab5e428b8cc9216cb6850d9d84"
+    },
+    {
+      "path": "README.md",
+      "bytes": 4973,
+      "sha256": "5c63575a1b8959d243f4d6f24df7ae2d4d031846db72e817722968a64a400ee5",
+      "git_blob_sha1": "9337a584322550f97bf4d4ae579bd0bcc80a2953"
+    },
+    {
+      "path": "docs/ACCEPTANCE.md",
+      "bytes": 1790,
+      "sha256": "f6010298360020b9ec0b670b1867aa41346ed13ce33e7c0352bda925dd1f23e6",
+      "git_blob_sha1": "4c8e41b6a8b636e59b9e706e3956837ab46b7565"
+    },
+    {
+      "path": "infra/aws-s3-object-lock.yaml",
+      "bytes": 2853,
+      "sha256": "457d04f1f6bf055589b509364303d45ff0dcdde31a63faefafe1ba6c52290999",
+      "git_blob_sha1": "af0e2d830063262919b26fe30ec50130281ff4bc"
+    },
+    {
+      "path": "infra/runtime-role-policy.example.json",
+      "bytes": 724,
+      "sha256": "bc76464e163dfbf3c80ee1bf3579a2e32dd56905cae6cdc6f588cd7471ceb7a9",
+      "git_blob_sha1": "894ebf0e0e896372fb6756c37c0be24425b8c9fa"
+    },
+    {
+      "path": "requirements.txt",
+      "bytes": 54,
+      "sha256": "8a7183b6ec2e8986b816c1a5c62dfc57e8929690876a97b50cb485f2134d3be4",
+      "git_blob_sha1": "48b0bae830c9af998ec13957dd54b57c96f8f07e"
+    },
+    {
+      "path": "src/s3seal.py",
+      "bytes": 17055,
+      "sha256": "9b6b6381eb9fe70c343f0d24c15d7abb8de6de67a28ba31a6589336944dc5dde",
+      "git_blob_sha1": "e0a4fd2aff1eeac4739f58868357853f8a01bb2d"
+    },
+    {
+      "path": "src/seal_http.py",
+      "bytes": 9458,
+      "sha256": "c6a23244853be77e3401bf6d7c206150e800f0e190939096567921d845652e00",
+      "git_blob_sha1": "0c0b5a855da4203020795b7c5f8e429ce4fdbdd2"
+    },
+    {
+      "path": "tests/test_s3seal.py",
+      "bytes": 6970,
+      "sha256": "931116db3b59e1ec5ae7f399f597f5b29cef412d4c84166b6de8fc2c51d4a026",
+      "git_blob_sha1": "18ba59ffbc92d29eab2fe659aade243169c0f3dc"
+    }
+  ],
+  "gatesApproved": 0,
+  "production": "NO_GO"
+}

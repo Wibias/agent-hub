@@ -1,0 +1,32 @@
+name: C9 G3 AWS S3 WORM backend contract (no AWS deployment)
+on:
+  push:
+    branches: [codex/c9-g3-offline-review]
+    paths:
+      - 'experiments/c9/g3-s3-seal/**'
+      - '.github/workflows/verify-c9-g3-s3-seal.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  read-only-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: experiments/c9/g3-s3-seal
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
+        with:
+          python-version: '3.13'
+      - name: Verify pinned library versions and isolated storage contract
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check -r requirements.txt
+          python -m unittest discover -s tests -v
+          python -m compileall -q src
+          echo "C9_G3_S3_SEAL_SOURCE_REVIEW_PASS SHA=$GITHUB_SHA PY=$(python -V)"
+          echo 'NO_AWS_CREDENTIALS NO_BUCKET_CREATED NO_WORM_ACCEPTANCE G3_HOLD PRODUCTION_NO_GO'

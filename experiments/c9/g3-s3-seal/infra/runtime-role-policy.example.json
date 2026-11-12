@@ -1,0 +1,23 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "InspectDedicatedBucket",
+      "Effect": "Allow",
+      "Action": ["s3:GetBucketVersioning", "s3:GetBucketObjectLockConfiguration", "s3:ListBucketVersions"],
+      "Resource": "arn:aws:s3:::REPLACE_WITH_DEDICATED_BUCKET"
+    },
+    {
+      "Sid": "WormHistoryCAS",
+      "Effect": "Allow",
+      "Action": ["s3:GetObject", "s3:GetObjectVersion", "s3:GetObjectRetention", "s3:PutObject"],
+      "Resource": "arn:aws:s3:::REPLACE_WITH_DEDICATED_BUCKET/c9-g3/seal/*"
+    },
+    {
+      "Sid": "SignFreshSealReceiptOnly",
+      "Effect": "Allow",
+      "Action": ["kms:GetPublicKey", "kms:Sign"],
+      "Resource": "REPLACE_WITH_SIGNING_KMS_KEY_ARN"
+    }
+  ]
+}
