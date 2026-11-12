@@ -295,6 +295,7 @@ test('semantic sync failure signatures identify worker outages without reading o
       });
       for (const [i, message] of [
         'embedding worker unavailable C:\\PRIVATE_ACCOUNT\\secrets',
+        'embedding worker unavailable; offline E5 cache missing PRIVATE_PATH',
         'embedding worker model identity mismatch PRIVATE_MODEL_NAME',
         'embedding worker request failed PRIVATE_ACCOUNT',
         'embedding worker returned an invalid response PRIVATE_ACCOUNT',
@@ -324,6 +325,7 @@ test('semantic sync failure signatures identify worker outages without reading o
       embedding_worker_model_mismatch: 1,
       embedding_worker_request_failed: 1,
       embedding_worker_unavailable: 1,
+      offline_e5_cache_missing: 1,
       unclassified: 1,
     });
     assert.ok(beta.findings.includes('semantic_embedding_worker_unavailable'));
