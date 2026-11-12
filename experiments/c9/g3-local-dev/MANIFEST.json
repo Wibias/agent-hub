@@ -1,0 +1,50 @@
+{
+  "schema": 1,
+  "scope": "G3_LOCAL_DEV_TEST_ONLY_NO_WORM",
+  "production": "NO_GO",
+  "g3": "HOLD",
+  "files": [
+    {
+      "path": ".github/workflows/verify-c9-g3-local-dev.yml",
+      "size": 1248,
+      "sha256": "4ed59487eee2c95eec4898cfafc0df786e14c4fadad8e286ce6b92d415eeece2",
+      "git_blob_sha1": "04dba43dd92e9126c8c4be9da644f6e20efd34f1"
+    },
+    {
+      "path": "NuGet.Config",
+      "size": 125,
+      "sha256": "5256a7e3e07d2c5c94f7a1e6c45f39aab011c659c5e2d53e452dea525ce04575",
+      "git_blob_sha1": "a3f3aea61c8f0a0b796eb417dc4ed9a056934afb"
+    },
+    {
+      "path": "README.md",
+      "size": 1870,
+      "sha256": "a79a74dbc79d85e6a465f4da6067ee6040b764c25de7f568fa69c4021c67c4bc",
+      "git_blob_sha1": "91f2fdb5eb2ab9911a51520792442baa6842be32"
+    },
+    {
+      "path": "global.json",
+      "size": 63,
+      "sha256": "f070367fb56c02506aa5d5df74e106131811634ed90006e428337bbb33edd1bf",
+      "git_blob_sha1": "dcfd4f31c2b7f55a9d94311d350aa8276ae55563"
+    },
+    {
+      "path": "tests/AgentHub.C9.G3.LocalDev.Tests.csproj",
+      "size": 594,
+      "sha256": "f87ede7ce66a2f3052e8cc756228f179e540b422a70cf3397d0c762b3f4394f8",
+      "git_blob_sha1": "b17db0eb807389049c8d6018e53198ef038b0024"
+    },
+    {
+      "path": "tests/LocalDevSeal.cs",
+      "size": 2236,
+      "sha256": "61a8cd58bf712c6f2fb60ba29126929503ce85743d2659cb45f99d8a5ff21aac",
+      "git_blob_sha1": "49133e08345a2a64646c4c76d95bc0a9570ddfb5"
+    },
+    {
+      "path": "tests/Program.cs",
+      "size": 11855,
+      "sha256": "869bafedf5c3c74b7fb2d865296b0fe74e8737724d3f71697b0db6e1622dccc0",
+      "git_blob_sha1": "06fe787ac4203cd8e02052d5c3d5ad3a972033ed"
+    }
+  ]
+}
