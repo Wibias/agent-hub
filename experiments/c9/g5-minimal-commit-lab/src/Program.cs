@@ -197,6 +197,9 @@ internal static class Program
         if (taskName is not null) ProveNoUnprivilegedRename(taskName, directory);
         Rename(staged.SafeFileHandle, parent, "target.bin");
         if (mode == "after") Process.GetCurrentProcess().Kill();
+        // This staging handle requested DELETE and shared only READ. Close it
+        // before reopening the now-renamed destination for verification.
+        staged.Dispose();
         using SafeFileHandle newHandle = File.OpenHandle(target, FileMode.Open, FileAccess.Read, FileShare.Read);
         Require(Identity(newHandle).FileId == stageId &&
             Hash(File.ReadAllBytes(target)) == Hash(New), "STAGE_HANDLE_TARGET_IDENTITY");
