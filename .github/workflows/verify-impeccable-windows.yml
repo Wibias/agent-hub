@@ -1,0 +1,53 @@
+name: Impeccable Windows engine smoke
+
+on:
+  pull_request:
+    paths:
+      - 'skills/impeccable/**'
+      - '.github/workflows/verify-impeccable-windows.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-launcher:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify release-pinned Windows launcher and checksum refusal
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $scripts = Join-Path $env:GITHUB_WORKSPACE 'skills\impeccable\scripts'
+          $version = (Get-Content -Raw -LiteralPath (Join-Path $scripts 'VERSION')).Trim()
+          if ($version -ne '0.1.22') { throw "Unexpected engine version: $version" }
+          $manifest = Get-Content -LiteralPath (Join-Path $scripts 'engine-checksums.txt')
+          $matching = @($manifest | Where-Object { $_ -match '^0\.1\.22 impeccable-windows-x64\.exe [0-9a-f]{64}$' })
+          if ($matching.Count -ne 1) { throw 'Expected exactly one Windows 0.1.22 checksum' }
+
+          $env:IMPECCABLE_HOME = Join-Path $env:RUNNER_TEMP 'impeccable-positive'
+          Remove-Item Env:IMPECCABLE_BIN -ErrorAction SilentlyContinue
+          $out = (& (Join-Path $scripts 'impeccable.cmd') engine-probe 2>&1 | Out-String).Trim()
+          if ($LASTEXITCODE -ne 0 -or $out -notmatch 'impeccable-engine 0\.1\.22') {
+            throw "Pinned Windows engine launch failed (exit $LASTEXITCODE)"
+          }
+          Write-Output 'PASS: Engine 0.1.22 launched through the Windows checksum-verifying path'
+
+          $badScripts = Join-Path $env:RUNNER_TEMP 'impeccable-tampered-scripts'
+          Copy-Item -LiteralPath $scripts -Destination $badScripts -Recurse
+          $badManifestPath = Join-Path $badScripts 'engine-checksums.txt'
+          $lines = @(Get-Content -LiteralPath $badManifestPath)
+          $badLine = '0.1.22 impeccable-windows-x64.exe ' + ('0' * 64)
+          $changed = @($lines | ForEach-Object {
+            if ($_ -eq $matching[0]) { $badLine } else { $_ }
+          })
+          Set-Content -LiteralPath $badManifestPath -Value $changed -Encoding utf8
+          $env:IMPECCABLE_HOME = Join-Path $env:RUNNER_TEMP 'impeccable-negative'
+          $badOut = (& (Join-Path $badScripts 'impeccable.cmd') engine-probe 2>&1 | Out-String).Trim()
+          if ($LASTEXITCODE -eq 0 -or $badOut -notmatch 'checksum mismatch') {
+            throw "Tampered manifest was not rejected with a checksum mismatch (exit $LASTEXITCODE)"
+          }
+          Write-Output 'PASS: Incorrect manifest digest fails closed'
+          exit 0

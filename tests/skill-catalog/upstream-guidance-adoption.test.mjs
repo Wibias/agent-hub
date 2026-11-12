@@ -176,22 +176,22 @@ test('github delivery treats always-on cost and generated-output review as contr
   assert.match(prDescription, /generated|mechanical/i);
 });
 
-test('Impeccable pending refresh preserves released 4.8.0 pin and local overlay', async () => {
+test('Impeccable release candidate preserves explicit local overlay', async () => {
   const upstream = await text('skills/impeccable/UPSTREAM.md');
   const skill = await text('skills/impeccable/SKILL.md');
   const engineVersion = (await text('skills/impeccable/scripts/VERSION')).trim();
   const checksums = await text('skills/impeccable/scripts/engine-checksums.txt');
 
-  assert.match(upstream, /9fadc41729c38fd47d7ae622b501558653f9d2e9/);
-  assert.match(upstream, /5af4319c4e7a7ee3e5e2b9fe899bcfb21c6190cb/);
+  assert.match(upstream, /90b3072f0f7c9a7a85f64d6dd3db9cd94d364eff/);
+  assert.match(upstream, /90b3072f0f7c9a7a85f64d6dd3db9cd94d364eff/);
   assert.match(upstream, /update.pending/i);
-  assert.match(upstream, /Skill version: `4\.8\.0`/);
-  assert.match(upstream, /Engine version: `0\.1\.18`/);
-  assert.match(skill, /version: 4\.8\.0/);
+  assert.match(upstream, /Skill version: `4\.8\.2`/);
+  assert.match(upstream, /Engine version: `0\.1\.22`/);
+  assert.match(skill, /version: 4\.8\.2/);
   assert.match(skill, /Scale ambition to the surface's mode/i);
   assert.doesNotMatch(skill, /the ceiling covers the whole cycle/i);
-  assert.equal(engineVersion, '0.1.18');
-  assert.match(checksums, /0\.1\.18 impeccable-windows-x64\.exe [0-9a-f]{64}/);
+  assert.equal(engineVersion, '0.1.22');
+  assert.match(checksums, /0\.1\.22 impeccable-windows-x64\.exe [0-9a-f]{64}/);
   assert.match(skill, /Explicit-only Impeccable frontend design specialist/i);
   assert.match(skill, /repository instruction injection/i);
 });

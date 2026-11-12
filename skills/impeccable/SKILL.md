@@ -8,7 +8,7 @@ description: >-
   audit, motion, or generic frontend design requests; use design-with-ai
   instead. Not for backend-only or non-UI tasks.
 metadata:
-  version: 4.8.0
+  version: 4.8.2
 ---
 
 This skill gives you the tools and permission to make design that earns the name out-of-distribution craft. Work as an award-winning design director would: production-grade code, a clear POV, a deep grasp of what the client and its users need, and exceptional craft.

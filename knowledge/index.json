@@ -628,7 +628,7 @@
       ],
       "status": "active",
       "canonicalId": null,
-      "contentHash": "cd36ff203bfa893e060acb477a9c80fe9d1aa5eb36a6cbb168121894afa6a969"
+      "contentHash": "209b14235e6945075c4a28ae443f20d3476ad7b4f98749b173db66ada5531b52"
     },
     {
       "id": "agents/improve-codebase-architecture",

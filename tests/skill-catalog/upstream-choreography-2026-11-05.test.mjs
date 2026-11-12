@@ -56,11 +56,11 @@ test('new choreography guidance is selectively attributed without replacing loca
   assert.match(motion, /emilkowalski\/skills/);
 });
 
-test('Impeccable tracks vendor source without claiming an unreleased engine refresh', () => {
+test('Impeccable pinned engine release requires executable verification', () => {
   const provenance = read('skills/impeccable/UPSTREAM.md');
   const engine = read('skills/impeccable/scripts/VERSION').trim();
-  assert.match(provenance, /5af4319c4e7a7ee3e5e2b9fe899bcfb21c6190cb/);
+  assert.match(provenance, /90b3072f0f7c9a7a85f64d6dd3db9cd94d364eff/);
   assert.match(provenance, /binary|engine/i);
-  assert.match(provenance, /not (?:included|shipped|released)|unreleased|not.*in.*binary/i);
-  assert.equal(engine, '0.1.18');
+  assert.match(provenance, /runtime verification/i);
+  assert.equal(engine, '0.1.22');
 });
