@@ -110,6 +110,7 @@ test('Windows real spawn executes an npm Codex entrypoint without cmd.exe, shell
       Object.entries(process.env).filter(([name]) => name.toUpperCase() !== 'PATH'),
     );
     env.PATH = root + ';' + (process.env.Path || process.env.PATH || '');
+    env.AGENT_HUB_MEMORY_JUDGE_CODEX_BIN = shim;
 
     resource = await createCodexMemoryCandidateJudge({
       cwd: root, env, sourceCodexHome: authHome, timeoutMs: 20_000,
