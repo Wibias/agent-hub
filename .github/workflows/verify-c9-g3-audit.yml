@@ -1,0 +1,36 @@
+name: C9 G3 external audit CAS review (no deployment)
+on:
+  push:
+    branches: [codex/c9-g3-offline-review]
+    paths:
+      - 'experiments/c9/g3-audit/**'
+      - '.github/workflows/verify-c9-g3-audit.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  audit-review:
+    runs-on: windows-2022
+    timeout-minutes: 12
+    defaults:
+      run:
+        working-directory: experiments/c9/g3-audit
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9
+        with:
+          dotnet-version: '10.0.100'
+      - name: Narrow audit-CAS tests and source-only HTTP build
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $sdk = (dotnet --version).Trim()
+          if ($sdk -cne '10.0.100') { throw "Unexpected SDK: $sdk" }
+          dotnet run --project tests/AgentHub.C9.G3.Audit.Tests.csproj --configuration Release
+          if ($LASTEXITCODE -ne 0) { throw "Audit CAS tests failed: $LASTEXITCODE" }
+          dotnet build src/Server/AgentHub.C9.G3.Audit.Server.csproj --configuration Release
+          if ($LASTEXITCODE -ne 0) { throw "Audit server compile failed: $LASTEXITCODE" }
+          Write-Host "C9_G3_AUDIT_SOURCE_REVIEW_PASS SHA=$env:GITHUB_SHA SDK=$sdk"
+          Write-Host 'SEAL_NOT_PROVISIONED NO_NETWORK_LISTENER NO_CERT_ENROLLMENT G3_HOLD PRODUCTION_NO_GO'

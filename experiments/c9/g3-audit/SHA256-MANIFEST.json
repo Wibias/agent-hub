@@ -1,0 +1,80 @@
+{
+  "schema": 1,
+  "component": "C9 G3 audit CAS service",
+  "scope": "REVIEW_ONLY_SOURCE_NO_NETWORK_NO_DEPLOYMENT",
+  "version": "0.1.0",
+  "security_gates_passed": 0,
+  "production": "NO_GO",
+  "files": [
+    {
+      "path": ".gitattributes",
+      "bytes": 14,
+      "sha256": "a79691a93b46e49ce460c26ef22afcc03d6eca1e63bf2edbc20e96159510f6c9"
+    },
+    {
+      "path": ".github/workflows/verify-c9-g3-audit.yml",
+      "bytes": 1475,
+      "sha256": "5c627bec5b75d6651aaf3e017d1dfda8b0d4864995c5a667ee52cfca8493b953"
+    },
+    {
+      "path": "NuGet.Config",
+      "bytes": 113,
+      "sha256": "2142cfb2dfa2c7feefbe40fabcc68b0dfecadafa99a1db9b70239d977cf2a7ef"
+    },
+    {
+      "path": "README.md",
+      "bytes": 2969,
+      "sha256": "67bd6e84a89adc388d19b9933ded8be2044b410365bfb61d21682c635c50e366"
+    },
+    {
+      "path": "docs/G3-AUDIT-SECURITY-BOUNDARY.md",
+      "bytes": 5756,
+      "sha256": "75d72c7f1a6b233b652e3d05665f0886d19bd6e333e79aef30db81bac092db2b"
+    },
+    {
+      "path": "global.json",
+      "bytes": 55,
+      "sha256": "3539053fdc4cd4e9c9e32e64351bdd2ae68557e926a9d78a1eb3f8b86883737d"
+    },
+    {
+      "path": "src/AgentHub.C9.G3.Audit.Core.csproj",
+      "bytes": 567,
+      "sha256": "a0c222d20fb223b2fc59feb704df809db98119c490ab9776539ca616f2b66396"
+    },
+    {
+      "path": "src/AuditEngine.cs",
+      "bytes": 7353,
+      "sha256": "9437ec4ffe715911f62f534722de1ff432aa78b91606901e8f125404f846d8a9"
+    },
+    {
+      "path": "src/SealProtocol.cs",
+      "bytes": 5117,
+      "sha256": "ec0f7c946fd40b8f474a75c3d18fb126a87d6501fe436c2ad88c1fa7d82a07cc"
+    },
+    {
+      "path": "src/Server/AgentHub.C9.G3.Audit.Server.csproj",
+      "bytes": 552,
+      "sha256": "8be44ade15568c246ffc22d097037a5285ba2f88c4dd1c0d4937ec6ff52f157f"
+    },
+    {
+      "path": "src/Server/Program.cs",
+      "bytes": 10035,
+      "sha256": "269068929607760da76ac714c37888effa471bfe253e67a6c0cb3222f54130ed"
+    },
+    {
+      "path": "src/Server/SealHttpBackend.cs",
+      "bytes": 4295,
+      "sha256": "edea9d597e244361b4e6b68a454419d47d887b794be8014fd420c2403cdd253b"
+    },
+    {
+      "path": "tests/AgentHub.C9.G3.Audit.Tests.csproj",
+      "bytes": 540,
+      "sha256": "9dd63ae88c0891ecc339e27352669ee105bf3e2159f86ac4fe051638e2f855b2"
+    },
+    {
+      "path": "tests/Program.cs",
+      "bytes": 9960,
+      "sha256": "3d277d9fd2e6a9c62988c79041f77c70573e8c3e817bd0105dfc0216eb94a7b3"
+    }
+  ]
+}
