@@ -58,6 +58,45 @@ function groupedFailureCodes(db, projectId, branch) {
   };
 }
 
+function importanceFailureSignatures(db, projectId, branch) {
+  // Classification runs wholly inside SQLite. Node never retrieves raw
+  // error_text, stderr, model output, or candidate details.
+  //
+  // These are diagnostic *patterns*, not proof of the underlying root cause.
+  const pattern = (value) => "instr(lower(error_text), '" + value + "') > 0";
+  const entries = [
+    ["auth_file_missing", pattern('candidate judge requires an authenticated codex home')],
+    ["codex_executable_not_found", pattern('spawn codex enoent')],
+    ["codex_spawn_permission_denied", pattern('spawn codex eacces') + ' OR ' + pattern('spawn codex eperm')],
+    ["isolated_git_init_failed", pattern('failed to initialize isolated judge workspace')],
+    ["judge_timeout", pattern('timed out after')],
+    ["auth_rejection_possible", pattern('not logged in') + ' OR ' + pattern('unauthorized') + ' OR ' + pattern('authentication failed')],
+    ["rate_limited_possible", pattern('rate limit') + ' OR ' + pattern('too many requests') + ' OR ' + pattern('429')],
+    ["quota_exceeded_possible", pattern('quota exceeded') + ' OR ' + pattern('insufficient quota')],
+    ["judge_json_missing", pattern('judgment response must be non-empty json')],
+    ["judge_json_invalid", pattern('judgment response must be json')],
+    ["judge_schema_invalid", pattern('missing field in memory candidate judgment')
+      + ' OR ' + pattern('unexpected field in memory candidate judgment')
+      + ' OR ' + pattern('must be one of:')],
+    ["judge_policy_invariant_failed", pattern('promote requires')
+      + ' OR ' + pattern('ignore requires')],
+    ["codex_exec_nonzero", pattern('codex candidate judge failed with exit')],
+  ];
+  const sql = [
+    'SELECT CASE',
+    ...entries.map(([label, test]) => "WHEN (" + test + ") THEN '" + label + "'"),
+    "ELSE 'unclassified' END AS signature,",
+    'COUNT(*) AS n FROM memory_pipeline_failures',
+    "WHERE project_id = ? AND branch = ? AND stage = 'importance'",
+    "AND error_class = 'candidate_stage_failure'",
+    'GROUP BY signature ORDER BY n DESC, signature ASC',
+  ].join(' ');
+  return Object.fromEntries(
+    db.prepare(sql).all(projectId, branch)
+      .map((row) => [row.signature, Number(row.n)]),
+  );
+}
+
 function emptyCounts() {
   return {
     evidence_total: 0,
@@ -71,6 +110,7 @@ function emptyCounts() {
     current_branch_pipeline_by_status: {},
     pipeline_failures: 0,
     pipeline_failure_codes: { by_stage: {}, by_error_class: {} },
+    importance_failure_signatures: {},
     pipeline_latest_failure_at: null,
     pipeline_running_older_than_30m: 0,
     pipeline_last_start: null,
@@ -183,6 +223,7 @@ function inspectProject(db, approved, {
       'SELECT COUNT(*) n FROM memory_pipeline_failures WHERE project_id = ? AND branch = ?',
       scoped);
     const pipelineFailureCodes = groupedFailureCodes(db, id, branch);
+    const importanceSignatures = importanceFailureSignatures(db, id, branch);
     const lastFailure = db.prepare(
       'SELECT MAX(occurred_at) as at FROM memory_pipeline_failures '
       + 'WHERE project_id = ? AND branch = ?',
@@ -258,6 +299,7 @@ function inspectProject(db, approved, {
       current_branch_pipeline_by_status: pipeline,
       pipeline_failures: pipelineFailures,
       pipeline_failure_codes: pipelineFailureCodes,
+      importance_failure_signatures: importanceSignatures,
       pipeline_latest_failure_at: lastFailure?.at ?? null,
       pipeline_running_older_than_30m: oldRunning,
       pipeline_last_start: lastRun?.started_at ?? null,
@@ -286,6 +328,9 @@ function inspectProject(db, approved, {
     if (oldRunning > 0) findings.push('pipeline_running_older_than_30m');
     if ((pipelineFailureCodes.by_stage.pipeline_control ?? 0) > 0) {
       findings.push('pipeline_control_failures_detected');
+    }
+    if ((importanceSignatures.unclassified ?? 0) > 0) {
+      findings.push('importance_failure_signature_unclassified');
     }
     if (currentClaims === 0 && Object.values(candidateStatus).reduce((a, b) => a + b, 0) === 0
         && evidence > 0) {
