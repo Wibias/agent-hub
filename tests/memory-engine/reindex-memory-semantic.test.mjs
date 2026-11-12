@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { resolve } from 'node:path';
 
 import {
   parseReindexSemanticArgs,
@@ -143,7 +144,7 @@ test('Windows reindex performs offline E5 fallback only when IPC unavailable and
     }; },
     offlineCacheExists(path) { assert.equal(path, '/cached-e5'); return true; },
     async createOfflineEmbedder(options) {
-      assert.deepEqual(options, { cacheDir: '/cached-e5', allowRemoteModels: false });
+      assert.deepEqual(options, { cacheDir: resolve('/cached-e5'), allowRemoteModels: false });
       steps.push('offline_load');
       return model;
     },
