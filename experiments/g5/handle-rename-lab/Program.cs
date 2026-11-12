@@ -31,6 +31,13 @@ internal static class Program
                 return 0;
             }
 
+            if (args.Length == 4 && args[0] == "diagnose-absolute")
+            {
+                DiagnoseAbsolute(args[1], args[2], args[3]);
+                Console.WriteLine("G5_DIAGNOSTIC_ABSOLUTE_RENAME_OK");
+                return 0;
+            }
+
             if (args.Length == 3 && args[0] == "prepare")
             {
                 using var stage = CreateStage(args[1]);
@@ -70,7 +77,16 @@ internal static class Program
         using var stage = CreateStage(stagePath);
         WriteAndFlush(stage, value);
         using var directory = OpenDirectory(targetDir);
-        RenameUsingHandles(stage, directory, targetName);
+        RenameUsingHandles(stage, directory.DangerousGetHandle(), targetName);
+    }
+
+    private static void DiagnoseAbsolute(string stagePath, string targetPath, string value)
+    {
+        if (!Path.IsPathFullyQualified(targetPath))
+            throw new ArgumentException("Only a fully qualified diagnostic target is supported.");
+        using var stage = CreateStage(stagePath);
+        WriteAndFlush(stage, value);
+        RenameUsingHandles(stage, IntPtr.Zero, targetPath);
     }
 
     private static SafeFileHandle CreateStage(string path)
@@ -106,7 +122,7 @@ internal static class Program
         RandomAccess.FlushToDisk(handle);
     }
 
-    private static void RenameUsingHandles(SafeFileHandle stage, SafeFileHandle directory, string name)
+    private static void RenameUsingHandles(SafeFileHandle stage, IntPtr rootDirectory, string name)
     {
         // Windows x64 FILE_RENAME_INFO: Flags [0..3], padding [4..7],
         // RootDirectory [8..15], FileNameLength [16..19], UTF-16 filename [20..].
@@ -117,7 +133,7 @@ internal static class Program
         {
             Marshal.WriteInt32(buffer, 0, 1); // ReplaceIfExists = TRUE, FileRenameInfo
             Marshal.WriteInt32(buffer, 4, 0);
-            Marshal.WriteIntPtr(buffer, 8, directory.DangerousGetHandle());
+            Marshal.WriteIntPtr(buffer, 8, rootDirectory);
             Marshal.WriteInt32(buffer, 16, fileName.Length);
             Marshal.Copy(fileName, 0, IntPtr.Add(buffer, 20), fileName.Length);
             Marshal.WriteInt16(buffer, 20 + fileName.Length, 0);
