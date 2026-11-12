@@ -90,6 +90,7 @@ backticks.
 | <!-- skill-doc:ponytail-review -->[**ponytail-review**](skills/ponytail-review/SKILL.md) | Explicit-only cut-list review for over-engineering: identify what can be deleted or flattened without changing behavior. | “Run ponytail-review on this abstraction layer.” |
 | <!-- skill-doc:quality-constraints -->[**quality-constraints**](skills/quality-constraints/SKILL.md) | Define and maintain a project's persistent blocking/warning quality bar in `CONSTRAINTS.md`. | “Define the quality constraints for this service.” |
 | <!-- skill-doc:test-quality -->[**test-quality**](skills/test-quality/SKILL.md) | Evaluate whether tests actually protect behavior and improve low-value, brittle, or misleading test suites. | “Review these tests for signal, not just coverage.” |
+| <!-- skill-doc:tdd -->[**tdd**](skills/tdd/SKILL.md) | Test-first red-green-refactor workflow for behavior changes with credible regression evidence. | “Write a failing test for this bug before implementing the fix.” |
 
 ### Debugging, performance & quality
 

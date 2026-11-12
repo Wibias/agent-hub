@@ -73,6 +73,8 @@ Run verification appropriate to the changed behavior and required project checks
 
 Prefer focused verification over test accumulation.
 
+For a behavior change with a credible, runnable test boundary, prefer observing the intended regression or missing behavior fail before implementing the fix, then pass afterward. The `tdd` skill owns the red-green-refactor workflow when test-first development is requested or materially useful. Do not force a contrived test for configuration, generated content, purely mechanical edits, or behavior that cannot be driven reliably; record the alternative evidence. Never represent a regression test added after a fix as witnessed test-first RED.
+
 Tests should protect meaningful behavior, contracts, invariants, or reproduced defects. Avoid low-value smoke tests, implementation-detail tests, and regression tests that exist only because code was moved, renamed, or deleted.
 
 Prefer tests that call the subject as a real consumer does and assert an observable result against an expected value that is independent of the implementation under test.
@@ -183,6 +185,15 @@ Do not recursively delegate unless it materially helps and the parent task permi
 
 Review delegated results before relying on them.
 
+For delegated implementation work, reconcile each worker's actual diff against its
+assigned acceptance criteria, changed behavior, and test evidence before integration.
+For independent packets with material spec or correctness risk, obtain a separate
+spec-compliance and code-quality assessment when an independent reviewer is
+available. Do not assume a worker's self-report is a review, and do not require
+new reviewers for trivial edits. When the user explicitly requests artifact-backed
+multi-agent orchestration, `codex-dynamic-workflows` owns the detailed packet
+review and integration gates.
+
 ---
 
 ## Shell execution
@@ -225,7 +236,7 @@ Host-local instructions define exact tool identifiers and fallback syntax.
 
 Skills live under the Hub's `skills/` directory, normally `~/.agents/skills/` when installed as the user hub.
 
-`skills/superpowers/` is vendored and read-only.
+External workflow plugins (including Superpowers) are optional, not canonical runtime dependencies. Select Hub-native skills from the live catalog; never require a plugin merely because a historical implementation plan mentions it. If a capability is absent, report the gap instead of silently loading a similarly named external skill.
 
 Use the live skill catalog to decide whether a skill applies. When a skill is selected, read its `SKILL.md` before following its workflow.
 

@@ -1,0 +1,35 @@
+name: Native workflow skill structural verification
+
+on:
+  pull_request:
+    paths:
+      - 'AGENTS.md'
+      - 'skills/tdd/**'
+      - 'skills/codex-dynamic-workflows/**'
+      - 'skills/deprecation-and-migration/**'
+      - 'knowledge/**'
+      - '.github/workflows/verify-native-development-skills.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  structural:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Validate TDD skill
+        run: node scripts/skill-ratchet.mjs validate --skill-root "$PWD/skills/tdd" --json
+      - name: Validate multi-agent workflow skill
+        run: node scripts/skill-ratchet.mjs validate --skill-root "$PWD/skills/codex-dynamic-workflows" --json
+      - name: Validate migration skill
+        run: node scripts/skill-ratchet.mjs validate --skill-root "$PWD/skills/deprecation-and-migration" --json
+      - name: Verify canonical knowledge index
+        run: |
+          node knowledge/build-index.mjs
+          git diff --exit-code -- knowledge/index.json knowledge/INDEX.md
