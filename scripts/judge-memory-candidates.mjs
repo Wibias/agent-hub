@@ -254,10 +254,12 @@ export async function createCodexMemoryCandidateJudge({
     ].join(':');
 
     let sequence = 0;
-    const judge = async (candidate) => {
+    const judge = async (candidate, { retryOverlongCanonicalFact = false } = {}) => {
       sequence += 1;
       const resultPath = join(root, 'result-' + sequence + '.json');
-      const prompt = buildMemoryCandidateJudgePrompt(candidate);
+      const prompt = buildMemoryCandidateJudgePrompt(candidate, {
+        retryOverlongCanonicalFact,
+      });
       const args = [
         'exec',
         '--cd',
