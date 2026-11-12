@@ -27,7 +27,7 @@ test('upstream update check tracks the five canonical sources and decisions', ()
 
   const expected = new Map([
     ['addy', ['addyosmani/agent-skills', '301b02b12bff98e4688e6984af6556802322bbde', 'current']],
-    ['emil', ['emilkowalski/skills', 'c8a79627b59d72d764d6ab6f2c87c09a48169833', 'current']],
+    ['emil', ['emilkowalski/skills', '4061b67b8d976a186aca118594f54b638c5f718a', 'current']],
     ['matt', ['mattpocock/skills', '4ae2317ddb22b046e26455e4f9c9b3aaaf62212d', 'not-applicable']],
     ['pstack', ['cursor/plugins', 'bb68f2365eceafa0cb2d253112f675acf5f144cc', 'current']],
     ['impeccable', ['pbakaus/impeccable', '90b3072f0f7c9a7a85f64d6dd3db9cd94d364eff', 'update-pending']],
@@ -56,6 +56,7 @@ test('upstream update check tracks the five canonical sources and decisions', ()
   assert.match(checker, /CURRENT/);
   assert.match(checker, /UPDATE/);
   assert.match(checker, /PENDING/);
+  assert.match(checker, /hasScopedChanges/);
 });
 
 test('offline upstream check flags Impeccable reference and engine adoption as pending', () => {
