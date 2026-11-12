@@ -1,0 +1,28 @@
+name: C9 RC2 exact assembly under two real Windows service identities (ephemeral)
+on:
+  push:
+    branches: [codex/c9-g3-offline-review]
+    paths:
+      - 'experiments/c9/rc2-assembly-lab/**'
+      - '.github/workflows/verify-c9-rc2-assembly-lab.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  ephemeral-rc2-assembly-integration:
+    if: github.repository == 'Wibias/agent-hub' && github.ref == 'refs/heads/codex/c9-g3-offline-review'
+    runs-on: windows-2022
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: experiments/c9/rc2-assembly-lab
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9
+        with:
+          dotnet-version: '10.0.100'
+      - name: Exact RC2 DLL; two native service SIDs; G2/G3/G5/G4; replay and SCM cleanup
+        shell: pwsh
+        run: ./ci/Invoke-RC2AssemblyLab.ps1

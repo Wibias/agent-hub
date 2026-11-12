@@ -1,0 +1,41 @@
+{
+  "schema": 1,
+  "files": [
+    {
+      "path": ".gitattributes",
+      "sha256": "d60f352d0db1404c70afb4bb8b2ca3fd1c610572aa40720e8a0b7baa7885418c"
+    },
+    {
+      "path": "NuGet.Config",
+      "sha256": "2142cfb2dfa2c7feefbe40fabcc68b0dfecadafa99a1db9b70239d977cf2a7ef"
+    },
+    {
+      "path": "README.md",
+      "sha256": "3a0d70dd1f688e80131ba0f9c308db6b47cce7a701f9598f03f29240f7ba52bc"
+    },
+    {
+      "path": "ci/Invoke-RC2AssemblyLab.ps1",
+      "sha256": "9f0c02d2dddbe69c06a4eb97cd1c7aea80b865945c49813c764141f6c7bd2dcb"
+    },
+    {
+      "path": "docs/SECURITY-BOUNDARY.md",
+      "sha256": "06270064ca52f18aef7eaec989b393a0036f62243627e743c24be996946359a5"
+    },
+    {
+      "path": "global.json",
+      "sha256": "3539053fdc4cd4e9c9e32e64351bdd2ae68557e926a9d78a1eb3f8b86883737d"
+    },
+    {
+      "path": "src/AgentHub.C9.RC2.AssemblyLab.csproj",
+      "sha256": "bd368d2d4474e57382e7c3e91d9b59ae793cec5d125141ae0bda0d8ae870238b"
+    },
+    {
+      "path": "src/Program.cs",
+      "sha256": "994be139efa7e59e25688aee5b16175f266e9efad4de909a867d4e5de28dd3fc"
+    },
+    {
+      "path": "verify-c9-rc2-assembly-lab.yml",
+      "sha256": "d5e8f74bdebb4e2d67d87c8d32bcec137f747ccdc3798ebe01b6e6bb683502a8"
+    }
+  ]
+}
