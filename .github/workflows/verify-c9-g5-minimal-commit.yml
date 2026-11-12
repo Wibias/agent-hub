@@ -1,0 +1,80 @@
+name: C9 G5 minimal handle-rename lab (disposable only)
+
+on:
+  push:
+    branches:
+      - codex/c9-g3-offline-review
+    paths:
+      - 'experiments/c9/g5-minimal-commit-lab/**'
+      - '.github/workflows/verify-c9-g5-minimal-commit.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  minimal-lab:
+    runs-on: windows-2022
+    timeout-minutes: 12
+    env:
+      AGENTHUB_G5_MINIMAL_LAB: DISPOSABLE_CI
+    defaults:
+      run:
+        working-directory: experiments/c9/g5-minimal-commit-lab
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9
+        with:
+          dotnet-version: 10.0.100
+      - name: Three tests using protected NTFS fixtures and LocalService
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:RUNNER_ENVIRONMENT -cne 'github-hosted' -or $env:RUNNER_OS -cne 'Windows' -or
+              $env:GITHUB_ACTIONS -cne 'true') { throw 'NOT_DISPOSABLE_WINDOWS_CI' }
+          if ((dotnet --version).Trim() -cne '10.0.100') { throw 'SDK_VERSION_CHANGED' }
+          $guid = [guid]::NewGuid().ToString('N')
+          $root = Join-Path $env:ProgramData "AgentHubC9G5Lab-$guid"
+          $task = "AgentHubC9G5Lab-$guid"
+          $exe = Join-Path $root 'bin/AgentHub.C9.G5.MinimalCommitLab.exe'
+          $work = Join-Path $root 'work/positive/target.bin'
+          $signal = Join-Path $root 'signals/attack.txt'
+          $taskCreated = $false
+          $failure = $null
+          try {
+            New-Item -ItemType Directory -Force $root | Out-Null
+            & icacls.exe $root /inheritance:r /grant:r '*S-1-5-18:(OI)(CI)F' '*S-1-5-32-544:(OI)(CI)F' '*S-1-5-19:(OI)(CI)RX' | Out-Host
+            if ($LASTEXITCODE -ne 0) { throw 'ROOT_ACL_SETUP_FAILED' }
+            New-Item -ItemType Directory -Force (Join-Path $root 'bin'), (Join-Path $root 'work'), (Join-Path $root 'signals') | Out-Null
+            & icacls.exe (Join-Path $root 'signals') /inheritance:r /grant:r '*S-1-5-18:(OI)(CI)F' '*S-1-5-32-544:(OI)(CI)F' '*S-1-5-19:(OI)(CI)M' | Out-Host
+            if ($LASTEXITCODE -ne 0) { throw 'SIGNAL_ACL_SETUP_FAILED' }
+            dotnet publish src/AgentHub.C9.G5.MinimalCommitLab.csproj -c Release -o (Join-Path $root 'bin') --nologo
+            if ($LASTEXITCODE -ne 0) { throw 'LAB_PUBLISH_FAILED' }
+            if (-not (Test-Path -LiteralPath $exe)) { throw 'LAB_EXE_MISSING' }
+            $taskCommand = "$exe --attack $work $signal"
+            & schtasks.exe /create /tn $task /sc once /st 23:59 /ru 'NT AUTHORITY\LOCALSERVICE' /tr $taskCommand /f | Out-Host
+            if ($LASTEXITCODE -ne 0) { throw 'TASK_CREATE_FAILED' }
+            $taskCreated = $true
+            & $exe --run $root $task
+            if ($LASTEXITCODE -ne 0) { throw "LAB_FAILED $LASTEXITCODE" }
+            Write-Host 'G5_MINIMAL_CI_TESTS_PASS count=3'
+          }
+          catch { $failure = $_ }
+          finally {
+            if ($taskCreated) {
+              & schtasks.exe /end /tn $task 2>&1 | Out-Null
+              & schtasks.exe /delete /tn $task /f 2>&1 | Out-Null
+              if ($LASTEXITCODE -ne 0) { $failure = 'TASK_CLEANUP_FAILED' }
+              & schtasks.exe /query /tn $task 2>&1 | Out-Null
+              if ($LASTEXITCODE -eq 0) { $failure = 'TASK_STILL_EXISTS' }
+            }
+            if (Test-Path -LiteralPath $root) {
+              try { Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction Stop }
+              catch { $failure = 'FILE_CLEANUP_FAILED: ' + $_ }
+            }
+            if (Test-Path -LiteralPath $root) { $failure = 'TEST_FILES_STILL_EXIST' }
+          }
+          if ($failure) { throw $failure }
+          Write-Host "G5_MINIMAL_CLEANUP_PASS task=deleted files=removed SHA=$env:GITHUB_SHA"
+          Write-Host 'G5_WRITE_HOLD GATES_0_OF_7 PRODUCTION_NO_GO NO_BROKER_CHANGE'
+          exit 0
