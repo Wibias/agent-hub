@@ -192,8 +192,8 @@ export function createCodexMemoryMcpDispatcher({ cwd, env = process.env, recall 
   };
 }
 
-export async function serveCodexMemoryMcp({ cwd, env = process.env, input = process.stdin, output = process.stdout } = {}) {
-  const dispatch = createCodexMemoryMcpDispatcher({ cwd, env });
+export async function serveCodexMemoryMcp({ cwd, env = process.env, recall = readCodexMemory, input = process.stdin, output = process.stdout } = {}) {
+  const dispatch = createCodexMemoryMcpDispatcher({ cwd, env, recall });
   const lines = createInterface({ input, crlfDelay: Infinity, terminal: false });
   for await (const line of lines) {
     if (line.length > 32_768) {
