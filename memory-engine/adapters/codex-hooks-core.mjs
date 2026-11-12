@@ -31,10 +31,16 @@ export function canonicalizeExplicitMemoryValue(value) {
   if (typeof value !== 'string') return null;
 
   const normalized = value.trim();
-  const prefix = normalized.match(/^memory:\s*/i);
-  const canonical = prefix === null
+  const prefix = normalized.match(
+    /^(?:memory\s*:|(?:bitte\s+)?merke\s+dir\s*:|remember(?:\s+this)?\s*:)\s*/i,
+  );
+  const clause = normalized.match(
+    /^(?:(?:bitte\s+)?merke\s+dir,\s+dass|remember\s+that)\s+/i,
+  );
+  const marker = prefix ?? clause;
+  const canonical = marker === null
     ? normalized
-    : normalized.slice(prefix[0].length).trim();
+    : normalized.slice(marker[0].length).trim();
 
   return nonEmptyString(canonical) ? canonical : null;
 }
@@ -268,11 +274,13 @@ export function parseExplicitMemoryPrompt(prompt) {
     };
   }
 
-  if (/^\s*memory:\s*\S/i.test(prompt)) {
-    return {
-      mode: 'remember',
-      value: prompt,
-    };
+  // Only an explicit whole-message user instruction may assert a user memory.
+  // Ordinary discussion stays in the reviewable candidate pipeline.
+  if (
+    /^\s*(?:memory\s*:|(?:bitte\s+)?merke\s+dir\s*:|remember(?:\s+this)?\s*:)\s*\S/i.test(prompt)
+    || /^\s*(?:(?:bitte\s+)?merke\s+dir,\s+dass|remember\s+that)\s+\S[^\r\n]*$/i.test(prompt)
+  ) {
+    return { mode: 'remember', value: prompt };
   }
 
   const prefix = prompt.match(/^\s*memory\s+replace:\s*/i);

@@ -13,6 +13,7 @@ import { join, isAbsolute, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { fileURLToPath } from 'node:url';
 
+import { resolveCodexJudgeExecutable } from '../memory-engine/codex-judge-executable.mjs';
 import {
   defaultGlobalMemoryScopePath,
   describeGlobalMemoryProject,
@@ -99,6 +100,91 @@ function importanceFailureSignatures(db, projectId, branch) {
   );
 }
 
+/**
+ * Diagnose optional semantic indexing using aggregate SQL codes only.
+ * Never select error_text, which can contain OS paths or provider output.
+ */
+function semanticSyncFailureSignatures(db, projectId, branch) {
+  const entries = [
+    ['offline_e5_cache_missing', "instr(lower(error_text), 'offline e5 cache missing') > 0"],
+    ['offline_e5_initialization_failed', "instr(lower(error_text), 'offline e5 model initialization failed') > 0"],
+    ['offline_e5_model_mismatch', "instr(lower(error_text), 'offline e5 provider identity mismatch') > 0"],
+    ['offline_e5_readiness_failed', "instr(lower(error_text), 'offline e5 readiness failed') > 0"],
+    ['embedding_worker_unavailable', "instr(lower(error_text), 'embedding worker unavailable') > 0"],
+    ['embedding_worker_model_mismatch', "instr(lower(error_text), 'embedding worker model identity mismatch') > 0"],
+    ['embedding_worker_request_failed', "instr(lower(error_text), 'embedding worker request failed') > 0"],
+    ['embedding_worker_invalid_response', "instr(lower(error_text), 'embedding worker returned an invalid') > 0"],
+    ['embedding_worker_readiness_failed', "instr(lower(error_text), 'embedding worker readiness failed') > 0"],
+    ['embedding_permission_denied', "instr(lower(error_text), 'eacces') > 0 OR instr(lower(error_text), 'eperm') > 0 OR instr(lower(error_text), 'permission denied') > 0"],
+    ['embedding_database_busy', "instr(lower(error_text), 'database is locked') > 0 OR instr(lower(error_text), 'sqlite_busy') > 0"],
+    ['embedding_unknown_project', "instr(lower(error_text), 'unknown project:') > 0"],
+  ];
+  const sql = [
+    'SELECT CASE',
+    ...entries.map(([code, condition]) => "WHEN (" + condition + ") THEN '" + code + "'"),
+    "ELSE 'unclassified' END AS signature,",
+    'COUNT(*) AS n FROM memory_pipeline_failures',
+    "WHERE project_id = ? AND branch = ? AND stage = 'semantic_sync'",
+    'GROUP BY signature ORDER BY n DESC, signature ASC',
+  ].join(' ');
+  return Object.fromEntries(
+    db.prepare(sql).all(projectId, branch)
+      .map(row => [row.signature, Number(row.n)]),
+  );
+}
+
+/**
+ * Pure host prerequisite inspection. Does not spawn Codex, read auth contents,
+ * call an LLM, retry candidates, or touch the canonical SQLite.
+ * Presence of auth.json is NOT proof of a valid CLI session or usable model.
+ */
+export function inspectCodexJudgePrerequisites({
+  env = process.env,
+  platform = process.platform,
+  codexHome = join(homedir(), '.codex'),
+  resolveJudge = resolveCodexJudgeExecutable,
+} = {}) {
+  const sourceHome = env.MEMORY_CANDIDATE_JUDGE_SOURCE_CODEX_HOME
+    || env.CODEX_HOME || codexHome;
+  let authFile = 'unavailable';
+  if (typeof sourceHome === 'string' && isAbsolute(sourceHome)) {
+    try {
+      const info = lstatSync(join(sourceHome, 'auth.json'));
+      authFile = info.isFile() && !info.isSymbolicLink()
+        ? 'present_unverified' : 'not_regular_file';
+    } catch (error) {
+      authFile = error?.code === 'ENOENT'
+        ? 'missing' : 'unreadable';
+    }
+  }
+
+  let executable = 'unavailable';
+  let executableKind = null;
+  try {
+    const resolved = resolveJudge({ env, platform });
+    if (['native', 'node_js', 'npm_js', 'path_command'].includes(resolved?.kind)) {
+      executable = 'resolved_unverified';
+      executableKind = resolved.kind;
+    }
+  } catch {
+    // Never display raw errors; override values can contain local paths.
+  }
+
+  return {
+    executable,
+    executable_kind: executableKind,
+    auth_file: authFile,
+    status: executable !== 'resolved_unverified'
+      ? 'cli_not_resolved'
+      : authFile !== 'present_unverified'
+        ? 'auth_file_not_ready'
+        : 'prerequisites_present_unverified',
+    actual_cli_login_verified: false,
+    model_call_performed: false,
+    note: 'A resolved executable and auth.json file do not prove login, network access, quotas or an executable judge model.',
+  };
+}
+
 function emptyCounts() {
   return {
     evidence_total: 0,
@@ -113,6 +199,7 @@ function emptyCounts() {
     pipeline_failures: 0,
     pipeline_failure_codes: { by_stage: {}, by_error_class: {} },
     importance_failure_signatures: {},
+    semantic_failure_signatures: {},
     pipeline_latest_failure_at: null,
     pipeline_running_older_than_30m: 0,
     pipeline_last_start: null,
@@ -226,6 +313,7 @@ function inspectProject(db, approved, {
       scoped);
     const pipelineFailureCodes = groupedFailureCodes(db, id, branch);
     const importanceSignatures = importanceFailureSignatures(db, id, branch);
+    const semanticSignatures = semanticSyncFailureSignatures(db, id, branch);
     const lastFailure = db.prepare(
       'SELECT MAX(occurred_at) as at FROM memory_pipeline_failures '
       + 'WHERE project_id = ? AND branch = ?',
@@ -302,6 +390,7 @@ function inspectProject(db, approved, {
       pipeline_failures: pipelineFailures,
       pipeline_failure_codes: pipelineFailureCodes,
       importance_failure_signatures: importanceSignatures,
+      semantic_failure_signatures: semanticSignatures,
       pipeline_latest_failure_at: lastFailure?.at ?? null,
       pipeline_running_older_than_30m: oldRunning,
       pipeline_last_start: lastRun?.started_at ?? null,
@@ -330,6 +419,12 @@ function inspectProject(db, approved, {
     if (oldRunning > 0) findings.push('pipeline_running_older_than_30m');
     if ((pipelineFailureCodes.by_stage.pipeline_control ?? 0) > 0) {
       findings.push('pipeline_control_failures_detected');
+    }
+    if ((semanticSignatures.embedding_worker_unavailable ?? 0) > 0) {
+      findings.push('semantic_embedding_worker_unavailable');
+    }
+    if ((semanticSignatures.unclassified ?? 0) > 0) {
+      findings.push('semantic_sync_failure_unclassified');
     }
     if ((importanceSignatures.unclassified ?? 0) > 0) {
       findings.push('importance_failure_signature_unclassified');
@@ -360,12 +455,15 @@ export function diagnoseCodexMemoryPipeline({
   openDb = (path) => new DatabaseSync(path, { readOnly: true, timeout: 5_000 }),
   hooksInspector = inspectHooks,
   projectInspector = inspectProject,
+  judgeInspector = inspectCodexJudgePrerequisites,
+  env = process.env,
 } = {}) {
   const hooks = hooksInspector({ codexHome });
   const common = {
     version: 1,
     read_only: true,
     hooks,
+    judge_prerequisites: judgeInspector({ codexHome, env }),
     windows_prompt_hook_autopipeline_start: process.platform !== 'win32',
     note: 'No memory values, evidence content or transcripts were read or emitted. Hook configuration is not proof of hook execution.',
     projects: [],

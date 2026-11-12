@@ -1,0 +1,69 @@
+name: Codex approved Memory Write preview (real stdio SQLite)
+
+on:
+  push:
+    branches:
+      - feat/codex-memory-write-approved-preview-20261112
+    paths:
+      - 'memory-engine/adapters/codex-approved-memory-write*'
+      - 'scripts/*codex-approved-memory-write*'
+      - 'tests/memory-engine/codex-approved-memory-write-mcp.test.mjs'
+      - 'tests/memory-engine/codex-natural-memory-e2e.test.mjs'
+      - 'tests/memory-engine/claude-code-event-normalization.test.mjs'
+      - 'scripts/codex-agent-memory-pipeline-hook.mjs'
+      - 'scripts/diagnose-codex-memory-pipeline.mjs'
+      - 'scripts/smoke-codex-memory-judge.mjs'
+      - 'scripts/reindex-memory-semantic.mjs'
+      - 'tests/memory-engine/reindex-memory-semantic.test.mjs'
+      - 'memory-engine/codex-judge-auto-retry.mjs'
+      - 'tests/memory-engine/codex-judge-auto-retry.test.mjs'
+      - 'tests/memory-engine/codex-judge-smoke.test.mjs'
+      - 'memory-engine/codex-judge-executable.mjs'
+      - 'tests/memory-engine/codex-judge-executable.test.mjs'
+      - 'tests/memory-engine/codex-memory-pipeline-diagnostics.test.mjs'
+      - 'tests/memory-engine/codex-stop-backlog-windows.test.mjs'
+      - 'tests/memory-engine/memory-auto-pipeline.test.mjs'
+      - '.github/workflows/verify-codex-memory-write-preview.yml'
+  pull_request:
+    paths:
+      - 'memory-engine/adapters/codex-approved-memory-write*'
+      - 'scripts/*codex-approved-memory-write*'
+      - 'tests/memory-engine/codex-approved-memory-write-mcp.test.mjs'
+      - 'tests/memory-engine/codex-natural-memory-e2e.test.mjs'
+      - 'tests/memory-engine/claude-code-event-normalization.test.mjs'
+      - 'scripts/codex-agent-memory-pipeline-hook.mjs'
+      - 'scripts/diagnose-codex-memory-pipeline.mjs'
+      - 'scripts/smoke-codex-memory-judge.mjs'
+      - 'scripts/reindex-memory-semantic.mjs'
+      - 'tests/memory-engine/reindex-memory-semantic.test.mjs'
+      - 'memory-engine/codex-judge-auto-retry.mjs'
+      - 'tests/memory-engine/codex-judge-auto-retry.test.mjs'
+      - 'tests/memory-engine/codex-judge-smoke.test.mjs'
+      - 'memory-engine/codex-judge-executable.mjs'
+      - 'tests/memory-engine/codex-judge-executable.test.mjs'
+      - 'tests/memory-engine/codex-memory-pipeline-diagnostics.test.mjs'
+      - 'tests/memory-engine/codex-stop-backlog-windows.test.mjs'
+      - 'tests/memory-engine/memory-auto-pipeline.test.mjs'
+      - '.github/workflows/verify-codex-memory-write-preview.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  actual-memory-write-stdio:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2022, ubuntu-24.04]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+      - name: Real stdio tools/call, one-use approval and canonical readback
+        run: node --test tests/memory-engine/reindex-memory-semantic.test.mjs tests/memory-engine/codex-judge-auto-retry.test.mjs tests/memory-engine/codex-judge-executable.test.mjs tests/memory-engine/codex-memory-pipeline-diagnostics.test.mjs tests/memory-engine/codex-judge-smoke.test.mjs tests/memory-engine/codex-approved-memory-write-mcp.test.mjs tests/memory-engine/codex-memory-commit-cli.test.mjs tests/memory-engine/codex-natural-memory-e2e.test.mjs tests/memory-engine/claude-code-event-normalization.test.mjs tests/memory-engine/codex-memory-command-consumption.test.mjs tests/memory-engine/codex-stop-backlog-windows.test.mjs tests/memory-engine/memory-auto-pipeline.test.mjs

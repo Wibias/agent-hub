@@ -91,14 +91,18 @@ export function resolveCodexJudgeExecutable({
   ];
   const dirs = [...new Set([...pathDirs, ...extraDirs])];
 
-  // Prefer a real executable over a shell shim even when both are on PATH.
+  // PATH directory order takes precedence. A global native-first sweep
+  // can silently select an older codex.exe from a later directory instead
+  // of the npm CLI the user runs via an earlier codex.cmd shim.
+  // Within one directory, favor the native executable; never invoke a
+  // Windows cmd/bat/PowerShell shim as a child shell.
   for (const dir of dirs) {
-    const located = fromPath(join(dir, 'codex.exe'), { platform, nodeExecutable });
-    if (located) return located;
-  }
-  for (const dir of dirs) {
-    const located = fromPath(join(dir, 'codex.cmd'), { platform, nodeExecutable });
-    if (located) return located;
+    for (const filename of ['codex.exe', 'codex.cmd']) {
+      const located = fromPath(join(dir, filename), {
+        platform, nodeExecutable,
+      });
+      if (located) return located;
+    }
   }
 
   throw new Error(

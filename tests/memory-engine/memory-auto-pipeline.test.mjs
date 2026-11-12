@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 
 import { MemoryEngine } from '../../memory-engine/index.mjs';
 import {
@@ -131,6 +131,15 @@ test('async agent pipeline hook captures idempotently before inline processing',
         revisionSha: '9'.repeat(40),
       };
     },
+    inspectQueue(args) {
+      order.push('queue');
+      assert.deepEqual(args, {
+        dbPath: '/state/memory.sqlite3',
+        projectId: 'project-a',
+        branch: 'feature/async-agent-pipeline',
+      });
+      return 'ready';
+    },
     createLog() {
       return (value) => logs.push(String(value));
     },
@@ -162,7 +171,7 @@ test('async agent pipeline hook captures idempotently before inline processing',
     },
   });
 
-  assert.deepEqual(order, ['capture', 'scope', 'git', 'worker']);
+  assert.deepEqual(order, ['capture', 'scope', 'git', 'queue', 'worker']);
   assert.equal(result.status, 'completed');
   assert.deepEqual(logs, [
     'pipeline-stage-output',
@@ -522,8 +531,8 @@ test('worker drains bounded automatic queues with one frozen runtime', async () 
   assert.equal(result.status, 'drained');
   assert.equal(result.rounds, 1);
   assert.deepEqual(calls[0], {
-    cwd: '/repo',
-    dbPath: '/state/memory.sqlite3',
+    cwd: resolve('/repo'),
+    dbPath: resolve('/state/memory.sqlite3'),
     projectId: 'project-a',
     branch: 'feature/frozen',
     revisionSha: '1'.repeat(40),
@@ -617,7 +626,7 @@ test('worker synchronizes semantic derived state once after real promotion', asy
     }),
     async syncSemantic(args) {
       syncCalls += 1;
-      assert.equal(args.dbPath, '/state/memory.sqlite3');
+      assert.equal(args.dbPath, resolve('/state/memory.sqlite3'));
       assert.equal(args.projectId, 'project-a');
       assert.equal(args.branch, 'main');
       return { indexed: 4, failed: 0 };

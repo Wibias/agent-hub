@@ -53,6 +53,63 @@ test('standalone executable wins over an npm shim', () => withFixture((root) => 
   assert.equal(got.command, native);
 }));
 
+test('Windows prefers earlier npm codex.cmd over later native codex.exe on PATH', () => withFixture((root) => {
+  const npmDir = join(root, 'npm-first');
+  const nativeDir = join(root, 'old-native-last');
+  const npmPackage = join(npmDir, 'node_modules', '@openai', 'codex', 'bin');
+  mkdirSync(npmPackage, { recursive: true });
+  mkdirSync(nativeDir);
+  writeFileSync(join(npmDir, 'codex.cmd'), '@echo off\n');
+  const js = join(npmPackage, 'codex.js');
+  writeFileSync(js, 'process.exit(0);\n');
+  writeFileSync(join(nativeDir, 'codex.exe'), 'old standalone binary');
+
+  const resolved = resolveCodexJudgeExecutable({
+    platform: 'win32',
+    userHome: root,
+    env: { PATH: npmDir + ';' + nativeDir },
+  });
+  assert.equal(resolved.kind, 'npm_js');
+  assert.equal(resolved.command, process.execPath);
+  assert.deepEqual(resolved.prefixArgs, [js]);
+}));
+
+test('Windows keeps earlier native CLI ahead of a later npm shim', () => withFixture((root) => {
+  const nativeDir = join(root, 'native-first');
+  const npmDir = join(root, 'npm-last');
+  mkdirSync(nativeDir);
+  const npmPackage = join(npmDir, 'node_modules', '@openai', 'codex', 'bin');
+  mkdirSync(npmPackage, { recursive: true });
+  const exe = join(nativeDir, 'codex.exe');
+  writeFileSync(exe, 'binary');
+  writeFileSync(join(npmDir, 'codex.cmd'), '@echo off\n');
+  writeFileSync(join(npmPackage, 'codex.js'), 'process.exit(0);\n');
+
+  const resolved = resolveCodexJudgeExecutable({
+    platform: 'win32', userHome: root,
+    env: { PATH: nativeDir + ';' + npmDir },
+  });
+  assert.deepEqual(resolved, { command: exe, prefixArgs: [], kind: 'native' });
+}));
+
+test('Windows skips unsupported earlier batch/shim and uses later valid native CLI', () => withFixture((root) => {
+  const unsupportedDir = join(root, 'unsupported-first');
+  const nativeDir = join(root, 'native-last');
+  mkdirSync(unsupportedDir);
+  mkdirSync(nativeDir);
+  writeFileSync(join(unsupportedDir, 'codex.cmd'), '@echo off\n');
+  writeFileSync(join(unsupportedDir, 'codex.bat'), '@echo off\n');
+  writeFileSync(join(unsupportedDir, 'codex.ps1'), 'echo unsafe\n');
+  const exe = join(nativeDir, 'codex.exe');
+  writeFileSync(exe, 'native binary');
+
+  const resolved = resolveCodexJudgeExecutable({
+    platform: 'win32', userHome: root,
+    env: { PATH: unsupportedDir + ';' + nativeDir },
+  });
+  assert.deepEqual(resolved, { command: exe, prefixArgs: [], kind: 'native' });
+}));
+
 test('missing Windows CLI fails clearly, not via repeated spawn ENOENT', () => withFixture((root) => {
   assert.throws(() => resolveCodexJudgeExecutable({
     platform: 'win32', userHome: root,
