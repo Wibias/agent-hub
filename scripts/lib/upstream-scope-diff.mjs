@@ -8,13 +8,15 @@ const shaPattern = /^[0-9a-f]{40}$/;
 const directoryScope = /^(?:[A-Za-z0-9._-]+\/)+$/;
 
 export function directoryScopeFor(source) {
-  return typeof source?.scope === 'string' && directoryScope.test(source.scope)
+  return typeof source?.scope === 'string' &&
+    directoryScope.test(source.scope) &&
+    !source.scope.split('/').some((part) => part === '.' || part === '..')
     ? source.scope : null;
 }
 
 export function hasScopedChanges({ remote, reviewedCommit, head, scope }) {
   if (!shaPattern.test(reviewedCommit) || !shaPattern.test(head) ||
-      !directoryScope.test(scope) || typeof remote !== 'string' || !remote) {
+      directoryScopeFor({ scope }) !== scope || typeof remote !== 'string' || !remote) {
     throw new TypeError('invalid scoped comparison inputs');
   }
 
