@@ -34,6 +34,8 @@ When the PR is not ours under `GD-GIT-004`, do not base-sync, push, or simplify 
 
 For merge-ready review, **find bugs before bots** and verify the diff's contracts: wiring, operator smoke, test honesty, docs/non-goals, input/evidence semantics, hot-path scale, malformed inputs, serialization/trace budgets, recursion termination, and payload completeness. Where applicable enforce one decision/clock, filter before LIMIT, aggregate semantics matching docs, byte-true budgets, bounded memory, absent-vs-malformed distinctions, complete source aggregation, and no self-recursion. Unknown must not outrank measured; incomplete verification blocks a positive verdict.
 
+A report with **zero findings** is not sufficient review evidence by itself. Reviewers must verify reachable callers, compare behavior to the baseline, and establish the scope actually exercised; absence of reported findings never proves absence of bugs.
+
 For any always-on hot path, cost is contract evidence. Compare baseline and candidate with the same measurement method and representative inputs. Report a latency distribution with p50 and p95 when the sample supports meaningful percentiles, include cold-start impact when relevant, and mark unavailable or insufficient measurements unproven.
 
 ### GD-REVIEW-009 — Public security output is redacted
