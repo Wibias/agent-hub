@@ -15,9 +15,19 @@ const SCHEMA = 1;
 function nonEmpty(s) { return typeof s === 'string' && s.trim().length > 0; }
 function isRecord(x) { return x !== null && typeof x === 'object' && !Array.isArray(x); }
 function samePath(a, b, platform = process.platform) {
-  const x = resolve(a);
-  const y = resolve(b);
-  return platform === 'win32' ? x.toLowerCase() === y.toLowerCase() : x === y;
+  // Git for Windows may spell a checkout root differently from a direct
+  // Node realpath (drive casing, junctions and path separators). Canonicalize
+  // both sides before checking an approval or revocation.
+  const canonical = (path) => {
+    const absolute = resolve(path);
+    let real;
+    try { real = realpathSync(absolute); }
+    catch { real = absolute; }
+    return platform === 'win32'
+      ? real.replaceAll('/', '\\').toLowerCase()
+      : real;
+  };
+  return canonical(a) === canonical(b);
 }
 function canonicalRoot(path) {
   if (!nonEmpty(path) || !isAbsolute(path)) throw new Error('absolute_path_required');
@@ -171,6 +181,10 @@ export function manageGlobalMemoryProject({
 } = {}) {
   if (!isAbsolute(scopePath)) throw new Error('scopePath must be absolute');
   const old = loadGlobalMemoryScope(scopePath);
+  if (operation === 'remove' && !old) {
+    return { status: 'revocation_planned', applied: false, changed: false,
+      scope_path: scopePath, memory_db: null, projects: [] };
+  }
   if (operation === 'list') {
     if (apply || cwd !== null || dbPath !== null) throw new Error('list_takes_no_changes');
     return { status: 'listed', applied: false, scope_path: scopePath,
@@ -182,8 +196,12 @@ export function manageGlobalMemoryProject({
   let observed;
   if (operation === 'add') observed = describe({ cwd });
   else {
-    // Revocation should remain possible if Git identity changed.
-    const root = canonicalRoot(cwd);
+    // Match the same Git-root spelling used at enrollment whenever possible.
+    // If the remote identity is now invalid, revocation must still work when
+    // the operator supplies the exact canonical Git root.
+    let root;
+    try { root = describe({ cwd }).root; }
+    catch { root = canonicalRoot(cwd); }
     observed = { root };
   }
 
