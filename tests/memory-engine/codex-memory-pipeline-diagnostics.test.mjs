@@ -151,3 +151,126 @@ test('hook configuration is inspected without claiming actual host execution', (
     assert.equal(r.hooks.runtime_execution_observed, false);
   } finally { f.close(); }
 });
+
+
+test('failure-stage codes identify real pipeline blockers without exposing error text', () => {
+  const f = fixture();
+  try {
+    const memory = new MemoryEngine({ dbPath: f.memoryDb });
+    try {
+      memory.startPipelineRun({
+        id: 'test-run-1', projectId: 'github.com/example/beta', branch: 'main',
+        trigger: 'Stop', startedAt: '2026-11-12T00:00:00Z',
+      });
+      memory.recordPipelineFailure({
+        runId: 'test-run-1', projectId: 'github.com/example/beta',
+        branch: 'main', candidateId: 'candidate-pending',
+        stage: 'importance', errorClass: 'TimeoutError',
+        error: 'PRIVATE secret description that must not leak',
+        occurredAt: '2026-11-12T00:01:00Z',
+      });
+      memory.recordPipelineFailure({
+        runId: 'test-run-1', projectId: 'github.com/example/beta',
+        branch: 'main', stage: 'pipeline_control',
+        errorClass: 'PipelineStalled',
+        error: 'PRIVATE internal failure description',
+        occurredAt: '2026-11-12T00:01:01Z',
+      });
+      memory.finishPipelineRun({
+        id: 'test-run-1', status: 'partial',
+        finishedAt: '2026-11-12T00:01:02Z', durationMs: 62_000,
+      });
+      memory.startPipelineRun({
+        id: 'test-running-stale', projectId: 'github.com/example/beta',
+        branch: 'main', trigger: 'Stop', startedAt: '2020-01-01T00:00:00Z',
+      });
+    } finally { memory.close(); }
+
+    const beforeHash = createHash('sha256').update(readFileSync(f.memoryDb)).digest('hex');
+    const report = diagnoseCodexMemoryPipeline({
+      scopePath: f.scopePath, codexHome: f.codexHome,
+    });
+    const beta = report.projects.find((p) => p.project_id.endsWith('/beta'));
+    assert.equal(beta.status, 'inspected');
+    assert.equal(beta.counts.pipeline_failures, 2);
+    assert.deepEqual(beta.counts.pipeline_failure_codes.by_stage,
+      { importance: 1, pipeline_control: 1 });
+    assert.deepEqual(beta.counts.pipeline_failure_codes.by_error_class,
+      { PipelineStalled: 1, TimeoutError: 1 });
+    assert.equal(beta.counts.pipeline_running_older_than_30m, 1);
+    assert.ok(beta.findings.includes('pipeline_control_failures_detected'));
+    assert.ok(beta.findings.includes('pipeline_running_older_than_30m'));
+    assert.equal(beta.counts.pipeline_latest_failure_at, '2026-11-12T00:01:01Z');
+    const out = JSON.stringify(report);
+    assert.equal(out.includes('PRIVATE'), false);
+    assert.equal(out.includes('secret description'), false);
+    assert.equal(
+      createHash('sha256').update(readFileSync(f.memoryDb)).digest('hex'),
+      beforeHash,
+    );
+  } finally { f.close(); }
+});
+
+
+test('importance failure signatures are aggregate-only and do not expose raw Codex stderr', () => {
+  const f = fixture();
+  try {
+    const memory = new MemoryEngine({ dbPath: f.memoryDb });
+    try {
+      memory.startPipelineRun({
+        id: 'importance-signature-run',
+        projectId: 'github.com/example/beta',
+        branch: 'main',
+        trigger: 'Stop',
+        startedAt: '2026-11-12T00:00:00Z',
+      });
+      for (const [index, message] of [
+        'codex candidate judge failed with exit 1: private token: PRIVATE_CREDENTIAL',
+        'candidate judge requires an authenticated Codex home containing auth.json',
+        'memory candidate judgment response must be JSON: PRIVATE_MODEL_RESPONSE',
+        'spawn codex ENOENT C:\\\\private\\\\user\\\\path',
+        'Unexpected uncategorized PRIVATE_DATA',
+      ].entries()) {
+        memory.recordPipelineFailure({
+          runId: 'importance-signature-run',
+          projectId: 'github.com/example/beta',
+          branch: 'main',
+          candidateId: 'candidate-pending',
+          stage: 'importance',
+          errorClass: 'candidate_stage_failure',
+          error: message,
+          occurredAt: '2026-11-12T00:00:0' + index + 'Z',
+        });
+      }
+      memory.finishPipelineRun({
+        id: 'importance-signature-run', status: 'partial',
+        finishedAt: '2026-11-12T00:01:00Z', durationMs: 60_000,
+      });
+    } finally { memory.close(); }
+
+    const sha = () => createHash('sha256').update(readFileSync(f.memoryDb)).digest('hex');
+    const before = sha();
+    const result = diagnoseCodexMemoryPipeline({
+      scopePath: f.scopePath, codexHome: f.codexHome,
+    });
+    const beta = result.projects.find(x => x.project_id.endsWith('/beta'));
+    assert.equal(beta.status, 'inspected');
+    assert.deepEqual(beta.counts.importance_failure_signatures, {
+      auth_file_missing: 1,
+      codex_exec_nonzero: 1,
+      codex_executable_not_found: 1,
+      judge_json_invalid: 1,
+      unclassified: 1,
+    });
+    assert.equal(
+      Object.values(beta.counts.importance_failure_signatures)
+        .reduce((total, count) => total + count, 0), 5,
+    );
+    assert.ok(beta.findings.includes('importance_failure_signature_unclassified'));
+    for (const sensitive of ['PRIVATE_CREDENTIAL', 'PRIVATE_MODEL_RESPONSE',
+      'PRIVATE_DATA', 'C:\\\\private']) {
+      assert.ok(!JSON.stringify(result).includes(sensitive));
+    }
+    assert.equal(sha(), before);
+  } finally { f.close(); }
+});

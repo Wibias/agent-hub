@@ -18,6 +18,39 @@ The command loads the existing per-user approved scope manifest and opens exactl
 
 No claim content, evidence text, transcripts, credentials, model prompts, or individual user messages are read or emitted. There is no memory capture, approval, promotion, freshness update, diagnostic telemetry write, or Codex configuration change.
 
+## Failure triage without opening private logs
+
+For projects with repeated `partial` runs, the same command additionally reports these **aggregate codes only**:
+
+- `pipeline_failure_codes.by_stage`: counts by internal pipeline stage (such as importance, relation, promotion, pipeline_control or worker).
+- `pipeline_failure_codes.by_error_class`: counts by exception type (such as TimeoutError or PipelineStalled). **No error_text is selected or displayed.**
+- `pipeline_latest_failure_at`: the time of the newest recorded failure.
+- `pipeline_running_older_than_30m`: persistent "running" records older than 30 minutes. These may indicate interrupted observability; they do not prove a live process exists. **Do not delete SQLite rows or lock files solely because a run is old.**
+- `active_claim_blockers`: *overlapping* counts of disallowed primary authority, stale/unverified file-path evidence, historical runtime E2E seed markers and open conflict membership. These do not exhaust supporting-Evidence restrictions.
+
+### Importance failure signatures without model-output disclosure
+
+When Stage=importance and error_class=candidate_stage_failure, the existing local diagnostic now reports **importance_failure_signatures**. It groups persisted error_text using fixed SQL patterns **inside SQLite**, returning only predefined categories and counts. The raw error strings, paths, stderr, model responses, and secrets are never selected into Node or printed. No candidate is retried and the database remains read-only.
+
+The fixed categories are: auth_file_missing, codex_executable_not_found, codex_spawn_permission_denied, isolated_git_init_failed, judge_timeout, auth_rejection_possible, rate_limited_possible, quota_exceeded_possible, judge_json_missing, judge_json_invalid, judge_schema_invalid, judge_policy_invariant_failed, codex_exec_nonzero, and unclassified. Labels ending in _possible indicate a substring match, not proven root cause. codex_exec_nonzero only means the CLI failed; it does not establish why.
+
+PowerShell 7 (summary only):
+
+~~~powershell
+Set-Location "$HOME\Downloads\AgentHub-ReadOnly-Preview"
+git pull --ff-only
+$report = node .\scripts\diagnose-codex-memory-pipeline.mjs | Out-String | ConvertFrom-Json
+$report.projects | Where-Object { $_.status -eq 'inspected' } |
+    ForEach-Object {
+        [pscustomobject]@{
+            Project = $_.project_id
+            ImportanceErrors = ($_.counts.importance_failure_signatures | ConvertTo-Json -Compress)
+        }
+    } | Format-List
+~~~
+
+A single looping candidate may generate hundreds of failure rows. The code summarizes the top 100 distinct stage/class pairs, not the full unsanitized error logs. If codes point to transient model availability, invalid judge output or pipeline control stalls, inspect the relevant implementation and plan one targeted fix rather than repeatedly re-running the pipeline.
+
 Typical findings:
 
 - **no_captured_evidence:** no evidence was stored for the project. Check actual hook installation/trust and whether UserPromptSubmit fired; read-only MCP registration is not capture registration.

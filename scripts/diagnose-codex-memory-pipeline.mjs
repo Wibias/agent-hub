@@ -32,6 +32,71 @@ function grouped(db, sql, params = []) {
   );
 }
 
+function safeCodeLabel(value) {
+  // Stage/error *codes* only. Never forward arbitrary error text or message.
+  return typeof value === 'string' && /^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(value)
+    ? value : 'other_code';
+}
+
+function groupedFailureCodes(db, projectId, branch) {
+  const rows = db.prepare(
+    'SELECT stage, error_class, COUNT(*) n FROM memory_pipeline_failures '
+    + 'WHERE project_id = ? AND branch = ? '
+    + 'GROUP BY stage, error_class ORDER BY n DESC LIMIT 100',
+  ).all(projectId, branch);
+  const stages = {};
+  const classes = {};
+  for (const row of rows) {
+    const stage = safeCodeLabel(row.stage);
+    const errorClass = safeCodeLabel(row.error_class);
+    stages[stage] = (stages[stage] ?? 0) + Number(row.n);
+    classes[errorClass] = (classes[errorClass] ?? 0) + Number(row.n);
+  }
+  return {
+    by_stage: Object.fromEntries(Object.entries(stages).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))),
+    by_error_class: Object.fromEntries(Object.entries(classes).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))),
+  };
+}
+
+function importanceFailureSignatures(db, projectId, branch) {
+  // Classification runs wholly inside SQLite. Node never retrieves raw
+  // error_text, stderr, model output, or candidate details.
+  //
+  // These are diagnostic *patterns*, not proof of the underlying root cause.
+  const pattern = (value) => "instr(lower(error_text), '" + value + "') > 0";
+  const entries = [
+    ["auth_file_missing", pattern('candidate judge requires an authenticated codex home')],
+    ["codex_executable_not_found", pattern('spawn codex enoent')],
+    ["codex_spawn_permission_denied", pattern('spawn codex eacces') + ' OR ' + pattern('spawn codex eperm')],
+    ["isolated_git_init_failed", pattern('failed to initialize isolated judge workspace')],
+    ["judge_timeout", pattern('timed out after')],
+    ["auth_rejection_possible", pattern('not logged in') + ' OR ' + pattern('unauthorized') + ' OR ' + pattern('authentication failed')],
+    ["rate_limited_possible", pattern('rate limit') + ' OR ' + pattern('too many requests') + ' OR ' + pattern('429')],
+    ["quota_exceeded_possible", pattern('quota exceeded') + ' OR ' + pattern('insufficient quota')],
+    ["judge_json_missing", pattern('judgment response must be non-empty json')],
+    ["judge_json_invalid", pattern('judgment response must be json')],
+    ["judge_schema_invalid", pattern('missing field in memory candidate judgment')
+      + ' OR ' + pattern('unexpected field in memory candidate judgment')
+      + ' OR ' + pattern('must be one of:')],
+    ["judge_policy_invariant_failed", pattern('promote requires')
+      + ' OR ' + pattern('ignore requires')],
+    ["codex_exec_nonzero", pattern('codex candidate judge failed with exit')],
+  ];
+  const sql = [
+    'SELECT CASE',
+    ...entries.map(([label, test]) => "WHEN (" + test + ") THEN '" + label + "'"),
+    "ELSE 'unclassified' END AS signature,",
+    'COUNT(*) AS n FROM memory_pipeline_failures',
+    "WHERE project_id = ? AND branch = ? AND stage = 'importance'",
+    "AND error_class = 'candidate_stage_failure'",
+    'GROUP BY signature ORDER BY n DESC, signature ASC',
+  ].join(' ');
+  return Object.fromEntries(
+    db.prepare(sql).all(projectId, branch)
+      .map((row) => [row.signature, Number(row.n)]),
+  );
+}
+
 function emptyCounts() {
   return {
     evidence_total: 0,
@@ -44,7 +109,17 @@ function emptyCounts() {
     current_branch_fts_rows: 0,
     current_branch_pipeline_by_status: {},
     pipeline_failures: 0,
+    pipeline_failure_codes: { by_stage: {}, by_error_class: {} },
+    importance_failure_signatures: {},
+    pipeline_latest_failure_at: null,
+    pipeline_running_older_than_30m: 0,
     pipeline_last_start: null,
+    active_claim_blockers: {
+      disallowed_authority: 0,
+      path_not_current: 0,
+      primary_seed_marker: 0,
+      open_conflict: 0,
+    },
     eligible_claims_upper_bound: 0,
   };
 }
@@ -147,6 +222,46 @@ function inspectProject(db, approved, {
     const pipelineFailures = count(db,
       'SELECT COUNT(*) n FROM memory_pipeline_failures WHERE project_id = ? AND branch = ?',
       scoped);
+    const pipelineFailureCodes = groupedFailureCodes(db, id, branch);
+    const importanceSignatures = importanceFailureSignatures(db, id, branch);
+    const lastFailure = db.prepare(
+      'SELECT MAX(occurred_at) as at FROM memory_pipeline_failures '
+      + 'WHERE project_id = ? AND branch = ?',
+    ).get(...scoped);
+    const pendingRuns = db.prepare(
+      "SELECT started_at FROM memory_pipeline_runs "
+      + "WHERE project_id = ? AND branch = ? AND status = 'running'",
+    ).all(...scoped);
+    const oldRunning = pendingRuns.filter(({ started_at }) => {
+      const ms = Date.parse(started_at);
+      return Number.isFinite(ms) && (Date.now() - ms) > 30 * 60 * 1000;
+    }).length;
+    // These blockers are overlapping reason categories, not a partition.
+    // Aggregate in SQL without selecting Claim values or Evidence contents.
+    const blockersRow = db.prepare(
+      "SELECT "
+      + "COALESCE(SUM(CASE WHEN e.authority_class NOT IN "
+      + "('user_direct','repo_trusted','tool_observation') THEN 1 ELSE 0 END),0) disallowed_authority, "
+      + "COALESCE(SUM(CASE WHEN e.path IS NOT NULL AND NOT "
+      + "(e.blob_oid IS NOT NULL AND rps.commit_sha = ? AND rps.blob_oid = e.blob_oid) "
+      + "THEN 1 ELSE 0 END),0) path_not_current, "
+      + "COALESCE(SUM(CASE WHEN lower(c.id) LIKE '%runtime-e2e-seed%' "
+      + "OR lower(coalesce(e.source_ref,'')) LIKE '%runtime-e2e-seed%' "
+      + "THEN 1 ELSE 0 END),0) primary_seed_marker, "
+      + "COALESCE(SUM(CASE WHEN EXISTS "
+      + "(SELECT 1 FROM conflicts co WHERE co.project_id = c.project_id "
+      + "AND co.state = 'open' AND (co.claim_a = c.id OR co.claim_b = c.id)) "
+      + "THEN 1 ELSE 0 END),0) open_conflict "
+      + "FROM claims c JOIN evidence e ON e.id = c.created_from_evidence_id "
+      + "LEFT JOIN repository_path_state rps ON rps.project_id = c.project_id "
+      + "AND rps.branch = c.branch_scope AND rps.path = e.path "
+      + "WHERE c.project_id = ? AND c.branch_scope = ? AND c.state = 'active'",
+    ).get(revision, ...scoped);
+    const activeBlockers = Object.fromEntries(
+      ['disallowed_authority', 'path_not_current',
+        'primary_seed_marker', 'open_conflict']
+        .map((key) => [key, Number(blockersRow[key] ?? 0)]),
+    );
     const lastRun = db.prepare(
       'SELECT started_at FROM memory_pipeline_runs '
       + 'WHERE project_id = ? AND branch = ? '
@@ -183,7 +298,12 @@ function inspectProject(db, approved, {
       current_branch_fts_rows: fts,
       current_branch_pipeline_by_status: pipeline,
       pipeline_failures: pipelineFailures,
+      pipeline_failure_codes: pipelineFailureCodes,
+      importance_failure_signatures: importanceSignatures,
+      pipeline_latest_failure_at: lastFailure?.at ?? null,
+      pipeline_running_older_than_30m: oldRunning,
       pipeline_last_start: lastRun?.started_at ?? null,
+      active_claim_blockers: activeBlockers,
       eligible_claims_upper_bound: upperBound,
     };
 
@@ -204,6 +324,13 @@ function inspectProject(db, approved, {
     }
     if ((candidateStatus.failed ?? 0) > 0 || pipelineFailures > 0) {
       findings.push('candidate_or_pipeline_failures');
+    }
+    if (oldRunning > 0) findings.push('pipeline_running_older_than_30m');
+    if ((pipelineFailureCodes.by_stage.pipeline_control ?? 0) > 0) {
+      findings.push('pipeline_control_failures_detected');
+    }
+    if ((importanceSignatures.unclassified ?? 0) > 0) {
+      findings.push('importance_failure_signature_unclassified');
     }
     if (currentClaims === 0 && Object.values(candidateStatus).reduce((a, b) => a + b, 0) === 0
         && evidence > 0) {
