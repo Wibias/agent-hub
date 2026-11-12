@@ -1,6 +1,6 @@
 # RC2 exact-assembly two-service security boundary
 
-- Pins `SourceRevisionId` to the original RC2 build and loads the exact, hash-pinned RC2 assembly compiled in previous CI: `d990d989191922f2e10c7acdeb0367f47a1c909fe0f1f8220c14e264de3ef147`. All service tests call its actual internal `BrokerRc2Route.EvaluateConnected` on the broker's native thread. Reflection is test scaffolding and not a production entrypoint.
+- Pins seven RC2 and linked RC1 source inputs against exact Git blob hashes from the original reviewed RC2 commit `22ff0fb6e86805b752dda5ab18db5e54f70ef317`; records the new RC2 DLL SHA256 and requires the broker service to report that exact loaded DLL hash from its own process. The earlier CI DLL was not retained, so this does NOT prove byte-for-byte identity with the earlier DLL, only frozen source identity and execution of the newly built actual RC2 route. Reflection is test scaffolding and not a production entrypoint.
 - Actual Windows tokens: two separate `LocalService` own-process SCM services, frozen service SIDs, same-thread `ReadFile` / `ImpersonateNamedPipeClient` and `RevertToSelf` performed by the RC2-linked G2 library.
 - G3: ephemeral P-256 issuer test key, valid signed ticket and independently supplied test SPKI; no production private key provisioning.
 - G5: native FileIdInfo and preimage SHA256 bound to retained handle; no target write.

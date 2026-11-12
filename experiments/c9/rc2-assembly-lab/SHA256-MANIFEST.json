@@ -11,15 +11,15 @@
     },
     {
       "path": "README.md",
-      "sha256": "4d135891b87c04b87fff6f66759695c03fceafb968c5d3a897d149b7a0801d67"
+      "sha256": "175c32bc4979fb6a805e51a3c41542538960b494515a091df25469ee1302f7da"
     },
     {
       "path": "ci/Invoke-RC2AssemblyLab.ps1",
-      "sha256": "25c29a0553beb33905e4aa8d070fc9259c7214f436fab40955cdf49048475046"
+      "sha256": "38209d6c131418efeb3ab329d7239b05bbbc3bae6a5f5250929cb707761c915f"
     },
     {
       "path": "docs/SECURITY-BOUNDARY.md",
-      "sha256": "933b1d2d7a84c1e87073ccd55906e56d744b69ae32a09e70d84fe0014c5fe64c"
+      "sha256": "5771163f689fbd41109c8fa099cc20ea9d3e5aacffc54f84559610b3621839e9"
     },
     {
       "path": "global.json",
@@ -31,7 +31,7 @@
     },
     {
       "path": "src/Program.cs",
-      "sha256": "994be139efa7e59e25688aee5b16175f266e9efad4de909a867d4e5de28dd3fc"
+      "sha256": "9619a7ccac72215e3e1b6147520069e030c438b33338e9c7d037df25b43ab66d"
     },
     {
       "path": "verify-c9-rc2-assembly-lab.yml",

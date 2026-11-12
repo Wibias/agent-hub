@@ -313,8 +313,10 @@ internal static class Program
             !Path.IsPathFullyQualified(rc2Path) || !File.Exists(rc2Path))
             throw new InvalidOperationException("RC2_ASSEMBLY_NOT_LOADED");
         string sha=Sha256(File.ReadAllBytes(rc2Path));
-        if(sha!="d990d989191922f2e10c7acdeb0367f47a1c909fe0f1f8220c14e264de3ef147")
-            throw new InvalidOperationException("RC2_ASSEMBLY_SHA256_MISMATCH "+sha);
+        string expectedLocation=Path.GetFullPath(Path.Combine(AppContext.BaseDirectory,
+            "AgentHub.C9.ReadOnlyBroker.RC2.dll"));
+        if(!Path.GetFullPath(rc2Path).Equals(expectedLocation,StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("RC2_ASSEMBLY_ORIGIN_MISMATCH");
         var routeType=rc2.GetType("AgentHub.LaneB.BrokerRc2Route",throwOnError:true)!;
         var getProduction=routeType.GetMethod("GetProductionAuthority",BindingFlags.Static|BindingFlags.NonPublic)!;
         if(getProduction.Invoke(null,null) is not null)

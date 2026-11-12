@@ -74,18 +74,33 @@ try {
         if ($LASTEXITCODE -ne 0) { throw "RC2_OUTPUT_ACL_INHERITANCE_FAILED $role" }
     }
 
-    # The SDK embeds the Git source revision in assembly metadata. Build the
-    # unchanged RC2 sources against the same frozen SourceRevisionId as the
-    # previously verified RC2 DLL, otherwise identical source may hash differently.
-    dotnet publish src/AgentHub.C9.RC2.AssemblyLab.csproj --configuration Release --output $binary /p:SourceRevisionId=22ff0fb6e86805b752dda5ab18db5e54f70ef317
+    # Pin the source identity, not an unrecoverable old build artifact: the
+    # previous workflow never uploaded RC2 DLL bytes, and the SDK output hash
+    # varies with CI provenance metadata. Fail if any RC2 or linked RC1 source
+    # was modified since the exact reviewed RC2 commit.
+    $frozenSources = @{
+        '../broker-rc2/src/AgentHub.C9.ReadOnlyBroker.RC2.csproj'='18be1539a46dc33a5764b812326d7278ca67402b'
+        '../broker-rc2/src/Program.cs'='f2523bf40158d3981777b01ae9126d5986b46175'
+        '../broker-rc2/src/BrokerRc2Route.cs'='911820dd7b69909f4a2fcc79e8d360146b879b33'
+        '../readonly-rc1/src/Broker/BrokerIdentity.cs'='498a60832075a2694326da586156990251109d1d'
+        '../readonly-rc1/src/Broker/Native.cs'='ccdebdd4bb0a7c04752d9ea1c492e467d79b75d3'
+        '../readonly-rc1/src/Broker/ReadOnlyPolicy.cs'='3487fce404aad47a8601b4812432a5e338e50e62'
+        '../readonly-rc1/src/Broker/BrokerRequestRouter.cs'='6b95e204b448f0b670234e064dd64c6146e8b3b8'
+    }
+    foreach ($source in $frozenSources.Keys) {
+        $actual = (& git hash-object -- $source).Trim()
+        if ($LASTEXITCODE -ne 0 -or $actual -cne $frozenSources[$source]) {
+            throw "RC2_FROZEN_SOURCE_MISMATCH $source $actual"
+        }
+    }
+    Write-Host 'RC2_FROZEN_SOURCE_TREE_PASS sources=7 origin_commit=22ff0fb6e86805b752dda5ab18db5e54f70ef317'
+    dotnet publish src/AgentHub.C9.RC2.AssemblyLab.csproj --configuration Release --output $binary
     if ($LASTEXITCODE -ne 0) { throw 'RC2_SERVICE_LAB_BUILD_FAILED' }
     $rc2 = Join-Path $binary 'AgentHub.C9.ReadOnlyBroker.RC2.dll'
     if (-not (Test-Path -LiteralPath $rc2 -PathType Leaf)) { throw 'RC2_ASSEMBLY_NOT_IN_TEST_HOST' }
     $rc2Sha = (Get-FileHash -LiteralPath $rc2 -Algorithm SHA256).Hash.ToLowerInvariant()
-    if ($rc2Sha -cne 'd990d989191922f2e10c7acdeb0367f47a1c909fe0f1f8220c14e264de3ef147') {
-        throw "RC2_ORIGINAL_ASSEMBLY_HASH_MISMATCH $rc2Sha"
-    }
-    Write-Host "RC2_EXACT_ASSEMBLY_SHA256_PASS sha256=$rc2Sha"
+    if ($rc2Sha -notmatch '^[0-9a-f]{64}$') { throw 'RC2_DLL_SHA256_INVALID' }
+    Write-Host "RC2_REBUILT_ASSEMBLY_SHA256_RECORDED sha256=$rc2Sha"
     $exe = Join-Path $binary 'AgentHub.C9.RC2.AssemblyLab.exe'
     if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) { throw 'RC2_SERVICE_HOST_EXE_MISSING' }
 
