@@ -104,7 +104,7 @@ $cache = Join-Path $preview '.cache\memory-engine\e5'
 [pscustomobject]@{
   PreviewCacheDirectory = Test-Path -LiteralPath $cache -PathType Container
   LiveHubCacheDirectory = Test-Path -LiteralPath (Join-Path $HOME '.agents\.cache\memory-engine\e5') -PathType Container
-  PreviewTransformersPackage = Test-Path -LiteralPath (Join-Path $preview 'node_modules\@huggingface\transformers\package.json') -PathType Leaf
+  PreviewTransformersPackage = Test-Path -LiteralPath (Join-Path $preview 'memory-engine\node_modules\@huggingface\transformers\package.json') -PathType Leaf
 }
 ~~~
 
