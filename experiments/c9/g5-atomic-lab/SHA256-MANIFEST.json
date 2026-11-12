@@ -2,6 +2,10 @@
   "schema": "agenthub-c9-g5-atomic-disposable-v1",
   "files": [
     {
+      "path": ".gitattributes",
+      "sha256": "d60f352d0db1404c70afb4bb8b2ca3fd1c610572aa40720e8a0b7baa7885418c"
+    },
+    {
       "path": "global.json",
       "sha256": "3539053fdc4cd4e9c9e32e64351bdd2ae68557e926a9d78a1eb3f8b86883737d"
     },
