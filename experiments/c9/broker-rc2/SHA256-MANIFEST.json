@@ -7,7 +7,7 @@
     },
     {
       "path": ".github/workflows/verify-c9-broker-rc2.yml",
-      "sha256": "dea0b44154c308b3464fb349abf07ec8815244a5ba8296e70a226f25e5097bb5"
+      "sha256": "1624a53d38f2a113584d3c7fbf0d15dbfa9881efdfe9a5cc1df94dfdab5143fc"
     },
     {
       "path": "NuGet.Config",

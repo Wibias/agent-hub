@@ -47,3 +47,6 @@ jobs:
           $sha = (Get-FileHash -LiteralPath $dll -Algorithm SHA256).Hash.ToLowerInvariant()
           Write-Host "C9_RC2_DOTNET10_REVIEW_PASS SHA=$env:GITHUB_SHA DLL_SHA256=$sha"
           Write-Host 'NO_SCM NO_PIPE_START NO_WRITER NO_COMMIT NO_PRODUCTION_AUTHORITY G1_G7_HOLD PRODUCTION_NO_GO'
+          # dotnet's deliberate negative writer build left LASTEXITCODE non-zero.
+          # Reset ONLY after every assertion above has passed.
+          exit 0
