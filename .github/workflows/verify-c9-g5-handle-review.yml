@@ -1,0 +1,37 @@
+name: C9 G5 retained handle file identity review
+on:
+  push:
+    branches: [codex/c9-g3-offline-review]
+    paths:
+      - 'experiments/c9/g5-handle-review/**'
+      - '.github/workflows/verify-c9-g5-handle-review.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  g5-handle-review:
+    runs-on: windows-2022
+    timeout-minutes: 12
+    defaults:
+      run:
+        working-directory: experiments/c9/g5-handle-review
+    env:
+      AGENTHUB_G5_REVIEW_ONLY: ISOLATED_GITHUB_RUNNER
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9
+        with:
+          dotnet-version: '10.0.100'
+      - name: Narrow native G5 read-only handle contract tests
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:RUNNER_ENVIRONMENT -cne 'github-hosted' -or $env:RUNNER_OS -cne 'Windows') { throw 'Wrong runner scope' }
+          $sdk = (dotnet --version).Trim()
+          if ($sdk -cne '10.0.100') { throw "Wrong SDK: $sdk" }
+          dotnet run --project tests/AgentHub.C9.G5.HandleReview.Tests.csproj --configuration Release
+          if ($LASTEXITCODE -ne 0) { throw 'G5 handle review failed' }
+          Write-Host "C9_G5_HANDLE_SOURCE_REVIEW_PASS SHA=$env:GITHUB_SHA SDK=$sdk"
+          Write-Host 'NO_WRITE_HANDLE NO_SCM NO_COMMIT G5_HOLD PRODUCTION_NO_GO'

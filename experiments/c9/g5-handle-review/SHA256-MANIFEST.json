@@ -1,0 +1,55 @@
+{
+  "scope": "G5 isolated read-only review; no write authority, production NO-GO",
+  "files": [
+    {
+      "path": ".gitattributes",
+      "sha256": "d60f352d0db1404c70afb4bb8b2ca3fd1c610572aa40720e8a0b7baa7885418c",
+      "size": 19
+    },
+    {
+      "path": "NuGet.Config",
+      "sha256": "2142cfb2dfa2c7feefbe40fabcc68b0dfecadafa99a1db9b70239d977cf2a7ef",
+      "size": 113
+    },
+    {
+      "path": "README.md",
+      "sha256": "335f98897534ced72497abe6af46bd3d441a656bbdad2d5d787a1f6396d51c2b",
+      "size": 2407
+    },
+    {
+      "path": "docs/G5-SECURITY-BOUNDARY.md",
+      "sha256": "9135ebb0be9f1569469fc7c1572a9eba4291a18cd1d809be8719bcfbc5579a1a",
+      "size": 2208
+    },
+    {
+      "path": "global.json",
+      "sha256": "3539053fdc4cd4e9c9e32e64351bdd2ae68557e926a9d78a1eb3f8b86883737d",
+      "size": 55
+    },
+    {
+      "path": "src/AgentHub.C9.G5.HandleReview.csproj",
+      "sha256": "779a55ec026d2ad460ebb2064e28d6e082ddebeb22f66bf19e51535a8937addc",
+      "size": 439
+    },
+    {
+      "path": "src/HandleIdentity.cs",
+      "sha256": "d93a8ca7e53859f4f574b15cbbaf554741df306cf7534cae688ed5e468efdf07",
+      "size": 12414
+    },
+    {
+      "path": "tests/AgentHub.C9.G5.HandleReview.Tests.csproj",
+      "sha256": "c1dd545f13fc04d25c9dd9c5250448e59422f0789d4b2e7043d42d1856d5f379",
+      "size": 502
+    },
+    {
+      "path": "tests/Program.cs",
+      "sha256": "98a130e0ddca010c61ce5f9978e0542e77f33ce830d90c2751f00ab7a32de7d4",
+      "size": 8081
+    },
+    {
+      "path": "verify-c9-g5-handle-review.yml",
+      "sha256": "a34a39fcdf84ccc20c70235cd0d4ec0f6de260855446404c0b0f0bbda47e5646",
+      "size": 1464
+    }
+  ]
+}
