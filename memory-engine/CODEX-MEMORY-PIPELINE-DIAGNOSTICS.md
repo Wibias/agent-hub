@@ -16,6 +16,20 @@ The diagnostic output now includes a `judge_prerequisites` object: `executable` 
 
 The regular diagnostic's `runtime_execution_observed: false` remains a deliberate limitation. Configuration and historical evidence counts are not direct proof of a new post-update Desktop hook invocation.
 
+## Explicit synthetic Judge smoke (one real CLI model call, optional)
+
+After the read-only `judge_prerequisites` check reports `prerequisites_present_unverified`, use this **opt-in** probe to distinguish an actually usable isolated Codex model Judge from mere file presence:
+
+~~~powershell
+$preview = Join-Path $env:LOCALAPPDATA 'AgentHub-Memory-Write-Preview'
+git -C $preview pull --ff-only
+node "$preview\scripts\smoke-codex-memory-judge.mjs" --run-model
+~~~
+
+This command **does send one small, synthetic, fixed test candidate to the Codex model**. It may use account quota. It reuses the exact `createCodexMemoryCandidateJudge` code path, copying only `auth.json` into its temporary isolated home, creating a disposable Git workspace, spawning the resolved executable without a shell, and applying the same strict candidate judgment schema parser. It does **not** open the canonical Memory SQLite or evaluate any actual pending project candidate. On completion it deletes the isolated workspace and copied credentials.
+
+The only output is sanitized JSON: `judge_usable` with a schema-valid result, or `judge_failed` with a fixed `failure_code` (e.g. `authentication_rejected_possible`, `rate_limited_possible`, `model_unavailable_possible`, `codex_exec_nonzero_unclassified`). It never prints credentials, local paths, candidate text, Codex stderr, stdout or the model result. No separate user project authorization is granted. Running without `--run-model` performs no work and makes no model call. A successful smoke does not prove a live Codex Desktop hook actually fired, and it does not waive the G2/G3/G4/G5 production holds.
+
 ## Operator-safe diagnosis (PowerShell 7, Node.js 24+)
 
 Run in the AgentHub checkout after pulling the merged feature:
