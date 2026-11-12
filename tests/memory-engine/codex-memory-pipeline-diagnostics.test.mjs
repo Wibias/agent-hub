@@ -230,6 +230,8 @@ test('importance failure signatures are aggregate-only and do not expose raw Cod
         'memory candidate judgment response must be JSON: PRIVATE_MODEL_RESPONSE',
         'spawn codex ENOENT C:\\\\private\\\\user\\\\path',
         'Unexpected uncategorized PRIVATE_DATA',
+        'canonical_fact must be a non-empty string PRIVATE_CANARY_1',
+        'canonical_fact must be at most 500 characters PRIVATE_CANARY_2',
       ].entries()) {
         memory.recordPipelineFailure({
           runId: 'importance-signature-run',
@@ -257,6 +259,8 @@ test('importance failure signatures are aggregate-only and do not expose raw Cod
     assert.equal(beta.status, 'inspected');
     assert.deepEqual(beta.counts.importance_failure_signatures, {
       auth_file_missing: 1,
+      canonical_fact_not_nonempty_string: 1,
+      canonical_fact_over_500_chars: 1,
       codex_exec_nonzero: 1,
       codex_executable_not_found: 1,
       judge_json_invalid: 1,
@@ -264,11 +268,11 @@ test('importance failure signatures are aggregate-only and do not expose raw Cod
     });
     assert.equal(
       Object.values(beta.counts.importance_failure_signatures)
-        .reduce((total, count) => total + count, 0), 5,
+        .reduce((total, count) => total + count, 0), 7,
     );
     assert.ok(beta.findings.includes('importance_failure_signature_unclassified'));
     for (const sensitive of ['PRIVATE_CREDENTIAL', 'PRIVATE_MODEL_RESPONSE',
-      'PRIVATE_DATA', 'C:\\\\private']) {
+      'PRIVATE_DATA', 'PRIVATE_CANARY_1', 'PRIVATE_CANARY_2', 'C:\\\\private']) {
       assert.ok(!JSON.stringify(result).includes(sensitive));
     }
     assert.equal(sha(), before);
