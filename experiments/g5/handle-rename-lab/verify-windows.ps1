@@ -63,21 +63,7 @@ try {
     & icacls.exe $protected
 
     # Test 1: the sole authorized writer commits through open source/directory handles.
-    try {
-        Invoke-Program -Arguments @('commit', (Join-Path $staging 'first.tmp'), $protected, 'payload.txt', 'NEW')
-    }
-    catch {
-        # Diagnostic only. Never accept an absolute-path fallback as a G5 pass.
-        Write-Output 'G5_AB_DIAGNOSTIC_START'
-        try {
-            Invoke-Program -Arguments @('diagnose-absolute', (Join-Path $staging 'absolute-probe.tmp'), $target, 'DIAG')
-            Write-Output 'G5_AB_ABSOLUTE_PATH_SUCCEEDED_RELATIVE_ROOT_FAILED'
-        }
-        catch {
-            Write-Output 'G5_AB_BOTH_MODES_FAILED'
-        }
-        throw 'G5_RELATIVE_ROOT_COMMIT_NOT_ACCEPTED'
-    }
+    Invoke-Program -Arguments @('commit', (Join-Path $staging 'first.tmp'), $protected, 'payload.txt', 'NEW')
     Assert-Content $target 'NEW'
     Write-Output 'G5_TEST_1_COMMIT_PASS'
 

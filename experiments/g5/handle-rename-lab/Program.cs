@@ -15,7 +15,6 @@ internal static class Program
     private const uint OpenExisting = 3;
     private const uint FileAttributeNormal = 0x00000080;
     private const uint FileFlagBackupSemantics = 0x02000000;
-    private const int FileRenameInfo = 3;
     private const int NativeFileRenameInformation = 10;
 
     private static int Main(string[] args)
@@ -29,13 +28,6 @@ internal static class Program
             {
                 Commit(args[1], args[2], args[3], args[4]);
                 Console.WriteLine("G5_COMMIT_OK");
-                return 0;
-            }
-
-            if (args.Length == 4 && args[0] == "diagnose-absolute")
-            {
-                DiagnoseAbsolute(args[1], args[2], args[3]);
-                Console.WriteLine("G5_DIAGNOSTIC_ABSOLUTE_RENAME_OK");
                 return 0;
             }
 
@@ -78,16 +70,7 @@ internal static class Program
         using var stage = CreateStage(stagePath);
         WriteAndFlush(stage, value);
         using var directory = OpenDirectory(targetDir);
-        RenameUsingHandles(stage, directory.DangerousGetHandle(), targetName, useNative: true);
-    }
-
-    private static void DiagnoseAbsolute(string stagePath, string targetPath, string value)
-    {
-        if (!Path.IsPathFullyQualified(targetPath))
-            throw new ArgumentException("Only a fully qualified diagnostic target is supported.");
-        using var stage = CreateStage(stagePath);
-        WriteAndFlush(stage, value);
-        RenameUsingHandles(stage, IntPtr.Zero, targetPath, useNative: false);
+        RenameUsingHandles(stage, directory.DangerousGetHandle(), targetName);
     }
 
     private static SafeFileHandle CreateStage(string path)
@@ -123,34 +106,26 @@ internal static class Program
         RandomAccess.FlushToDisk(handle);
     }
 
-    private static void RenameUsingHandles(SafeFileHandle stage, IntPtr rootDirectory, string name, bool useNative)
+    private static void RenameUsingHandles(SafeFileHandle stage, IntPtr rootDirectory, string name)
     {
-        // Windows x64 FILE_RENAME_INFO: Flags [0..3], padding [4..7],
+        // Windows x64 FILE_RENAME_INFORMATION: flag [0], padding [1..7],
         // RootDirectory [8..15], FileNameLength [16..19], UTF-16 filename [20..].
         byte[] fileName = Encoding.Unicode.GetBytes(name);
         int length = checked(20 + fileName.Length + 2);
         IntPtr buffer = Marshal.AllocHGlobal(length);
         try
         {
-            Marshal.WriteInt32(buffer, 0, 1); // ReplaceIfExists = TRUE, FileRenameInfo
+            Marshal.WriteInt32(buffer, 0, 1); // ReplaceIfExists = TRUE
             Marshal.WriteInt32(buffer, 4, 0);
             Marshal.WriteIntPtr(buffer, 8, rootDirectory);
             Marshal.WriteInt32(buffer, 16, fileName.Length);
             Marshal.Copy(fileName, 0, IntPtr.Add(buffer, 20), fileName.Length);
             Marshal.WriteInt16(buffer, 20 + fileName.Length, 0);
-            if (useNative)
-            {
-                // FileRenameInformation = 10 in the NT interface (not Win32 FileRenameInfo = 3).
-                // The native call preserves RootDirectory + relative filename on Windows x64.
-                int status = NtSetInformationFile(stage, out _, buffer, (uint)length, NativeFileRenameInformation);
-                if (status != 0)
-                    throw new InvalidOperationException($"Native handle-relative rename failed (NTSTATUS=0x{status:X8}).");
-            }
-            else if (!SetFileInformationByHandle(stage, FileRenameInfo, buffer, (uint)length))
-            {
-                int error = Marshal.GetLastWin32Error();
-                throw new Win32Exception(error, $"Absolute-path diagnostic failed (Win32={error}).");
-            }
+            // FileRenameInformation (10) is the NT class, not Win32 FileRenameInfo (3).
+            // The still-open directory handle anchors this relative filename.
+            int status = NtSetInformationFile(stage, out _, buffer, (uint)length, NativeFileRenameInformation);
+            if (status != 0)
+                throw new InvalidOperationException($"Native handle-relative rename failed (NTSTATUS=0x{status:X8}).");
         }
         finally
         {
@@ -198,8 +173,4 @@ internal static class Program
     private static extern int NtSetInformationFile(
         SafeFileHandle file, out IoStatusBlock ioStatusBlock, IntPtr info, uint length, int infoClass);
 
-    [DllImport("kernel32.dll", EntryPoint = "SetFileInformationByHandle", ExactSpelling = true, SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool SetFileInformationByHandle(
-        SafeFileHandle file, int infoClass, IntPtr info, uint length);
 }

@@ -2,7 +2,7 @@
 
 This isolated Windows x64/NTFS experiment exercises **only** the G5 filesystem commit primitive. It does not integrate G2/G3/G4/G5 authorization, grant production write permission, or modify an installed broker. The disposable test area is created below `%ProgramData%\AgentHub-G5-Lab-<random>`.
 
-- Authorized test writer writes and flushes a staging file, keeps its DELETE-capable handle open, opens the protected target directory, and calls `NtSetInformationFile(FileRenameInformation=10)` from `ntdll.dll` with the still-open `RootDirectory` handle and a single relative filename. The original Win32 `SetFileInformationByHandle(FileRenameInfo=3)` rejects this pattern with Win32 error 87 on Windows Server 2022; it remains only as a failing-path diagnostic with an absolute filename.
+- Authorized test writer writes and flushes a staging file, keeps its DELETE-capable handle open, opens the protected target directory, and calls `NtSetInformationFile(FileRenameInformation=10)` from `ntdll.dll` with the still-open `RootDirectory` handle and a single relative filename. The original Win32 `SetFileInformationByHandle(FileRenameInfo=3)` rejects this pattern with Win32 error 87 on Windows Server 2022; the final lab keeps no path-based fallback.
 - Real `LocalService` adversary attempts a replacement through a one-time scheduled task and must receive access-denied error 5.
 - Separate invocations simulate termination after staging flush and recover by discarding the orphan before retrying.
 
