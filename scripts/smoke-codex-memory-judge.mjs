@@ -27,25 +27,48 @@ export const SYNTHETIC_CANDIDATE = Object.freeze({
 });
 
 export function classifyCodexJudgeSmokeFailure(error) {
+  // The process error embeds untrusted CLI stdout/stderr. Inspect it locally
+  // but return ONLY fixed, non-sensitive codes. Never return excerpts,
+  // usernames, file paths, provider responses, account details or reset times.
   const raw = String(error instanceof Error ? error.message : error ?? '');
   const message = raw.toLowerCase();
+
   if (/codex_judge_cli_not_found|spawn codex enoent/.test(message)) {
     return 'cli_not_resolved';
   }
   if (/auth\.json|authenticated codex home/.test(message)) {
     return 'auth_file_missing_or_invalid';
   }
-  if (/429|rate limit|too many requests/.test(message)) {
-    return 'rate_limited_possible';
+
+  // OpenAI Codex distinguishes subscription usage windows, credit depletion
+  // and workspace spend caps. Check these before generic HTTP 429/rate limit:
+  // an exhausted 5-hour or weekly budget can also produce a 429 response.
+  if (/\b(?:you['’]ve|you have)\s+(?:hit|reached)\s+your\s+usage\s+limit\b|\b(?:usage[_ -]?limit[_ -]?(?:reached|exceeded)|(?:hit|reached|exceeded)\s+(?:your\s+)?(?:weekly\s+|daily\s+|five.hour\s+|5.hour\s+)?usage limit)\b/.test(message)) {
+    return 'usage_limit_reached_possible';
   }
-  if (/quota exceeded|insufficient quota|credits exhausted/.test(message)) {
+  if (/\b(?:workspace|account|organization|your)\s+(?:is\s+)?out of credits\b|\b(?:out of|no remaining|zero)\s+credits\b|\bcredits?\s+(?:are\s+)?(?:exhausted|depleted)\b|\binsufficient[_ -]credits?\b|\b(?:workspace_owner_credits_depleted|workspace_member_credits_depleted)\b/.test(message)) {
+    return 'credits_exhausted_possible';
+  }
+  if (/\b(?:you\s+hit\s+your|(?:hit|reached|exceeded)\s+(?:your\s+)?(?:workspace\s+)?|increase\s+your\s+)(?:spend|spending)\s+cap\b|\bbilling[_ -]?hard[_ -]?limit[_ -]?reached\b|\b(?:workspace_owner_usage_limit_reached)\b/.test(message)) {
+    return 'spend_cap_reached_possible';
+  }
+  if (/\bquota\s+(?:exceeded|exhausted|depleted|reached)\b|\b(?:insufficient[_ -]?quota|quota[_ -]?exceeded|resource_exhausted)\b/.test(message)) {
     return 'quota_exceeded_possible';
   }
-  if (/unauthorized|unauthenticated|not logged in|authentication failed|401|invalid api key|token expired/.test(message)) {
+  if (/\b(?:http\s*)?429\b|\b(?:rate[_ -]?limit(?:ed|ing)?(?:\s+exceeded)?|too many requests|requests per minute|tokens per minute)\b/.test(message)) {
+    return 'rate_limited_possible';
+  }
+  if (/\b(?:unauthorized|unauthenticated|not logged in|authentication failed|invalid api key|token expired|login required|401)\b/.test(message)) {
     return 'authentication_rejected_possible';
   }
-  if (/(?:model).*(?:not found|not available|does not exist|unsupported|unknown model)/.test(message)) {
+  if (/(?:model).*(?:not found|not available|does not exist|unsupported|unknown model|not supported)|unsupported.*model/.test(message)) {
     return 'model_unavailable_possible';
+  }
+  if (/\b(?:failed to (?:load|parse) config|invalid configuration|invalid config\.toml|unknown configuration key|unexpected argument|unrecognized option|unexpected argument|unknown option)\b/.test(message)) {
+    return 'cli_configuration_or_arguments_possible';
+  }
+  if (/\b(?:dns lookup failed|connection refused|network is unreachable|failed to connect|could not resolve host|tls handshake failed)\b/.test(message)) {
+    return 'network_unavailable_possible';
   }
   if (/timed out|timeout/.test(message)) {
     return 'timeout';
@@ -63,6 +86,14 @@ export function classifyCodexJudgeSmokeFailure(error) {
     return 'codex_exec_nonzero_unclassified';
   }
   return 'judge_failure_unclassified';
+}
+
+export function sanitizedCodexJudgeExitCode(error) {
+  const message = String(error instanceof Error ? error.message : error ?? '');
+  const match = message.match(/\bcodex candidate judge failed with exit (\d{1,3})\b/i);
+  if (!match) return null;
+  const code = Number(match[1]);
+  return Number.isInteger(code) && code > 0 && code <= 255 ? code : null;
 }
 
 export async function runCodexJudgeSmoke({
@@ -105,6 +136,7 @@ export async function runCodexJudgeSmoke({
       model_call_attempted: modelCallAttempted,
       memory_db_modified: false,
       failure_code: classifyCodexJudgeSmokeFailure(error),
+      process_exit_code: sanitizedCodexJudgeExitCode(error),
     };
   } finally {
     if (resource?.close && typeof resource.close === 'function') {
