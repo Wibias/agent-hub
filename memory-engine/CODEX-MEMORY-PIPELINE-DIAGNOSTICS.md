@@ -6,6 +6,16 @@ The separate Codex UserPromptSubmit hooks perform candidate capture, based on na
 
 **Windows Stop backlog repair:** Codex `Stop`/`SubagentStop` events may legitimately contain `last_assistant_message: null`. The background Stop pipeline now checks the pre-existing current-project/current-branch candidate queues even in this case, without pretending a missing assistant reply was an agent decision. It performs an inexpensive **read-only** queue preflight and skips empty queues, keeping judge execution and unnecessary pipeline records out of empty turns. A failed agent-decision capture does not suppress already captured direct-user candidates. This does **not** enable the disabled Windows UserPromptSubmit detached worker, bypass confirmation requirements, or promote ordinary prompts automatically without the existing judge/promotion gates. The Win32 Codex CLI executable prerequisite and retry backoff continue to apply.
 
+## Local judge prerequisites (read-only, no model calls)
+
+The diagnostic output now includes a `judge_prerequisites` object: `executable` is a sanitized, no-shell Codex CLI resolver result, `executable_kind` is `native`, `npm_js`, `node_js` or `path_command`; `auth_file` reports only whether the source Codex home's `auth.json` is an ordinary file. Paths, tokens, accounts and auth file contents are neither read nor included in the report. The diagnostic does **not** execute the Codex CLI, perform a model call, refresh the database or validate actual login/credits.
+
+- `cli_not_resolved`: Codex CLI is not locatable through the Judge's real no-shell resolver. Installing/configuring only Codex Desktop will not fix this.
+- `auth_file_not_ready`: The isolated judge cannot copy the required `auth.json`; check the original CLI auth location, not the memory database.
+- `prerequisites_present_unverified`: The preflight passed, but this does **not** prove the CLI can authenticate to the model, that the model exists, or that rate limits allow the judge. Historical `codex_exec_nonzero` cannot be attributed to any one root cause from aggregate counters alone.
+
+The regular diagnostic's `runtime_execution_observed: false` remains a deliberate limitation. Configuration and historical evidence counts are not direct proof of a new post-update Desktop hook invocation.
+
 ## Operator-safe diagnosis (PowerShell 7, Node.js 24+)
 
 Run in the AgentHub checkout after pulling the merged feature:

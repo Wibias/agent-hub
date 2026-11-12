@@ -10,6 +10,9 @@ on:
       - 'tests/memory-engine/codex-approved-memory-write-mcp.test.mjs'
       - 'tests/memory-engine/codex-natural-memory-e2e.test.mjs'
       - 'scripts/codex-agent-memory-pipeline-hook.mjs'
+      - 'scripts/diagnose-codex-memory-pipeline.mjs'
+      - 'memory-engine/codex-judge-executable.mjs'
+      - 'tests/memory-engine/codex-memory-pipeline-diagnostics.test.mjs'
       - 'tests/memory-engine/codex-stop-backlog-windows.test.mjs'
       - 'tests/memory-engine/memory-auto-pipeline.test.mjs'
       - '.github/workflows/verify-codex-memory-write-preview.yml'
@@ -20,6 +23,9 @@ on:
       - 'tests/memory-engine/codex-approved-memory-write-mcp.test.mjs'
       - 'tests/memory-engine/codex-natural-memory-e2e.test.mjs'
       - 'scripts/codex-agent-memory-pipeline-hook.mjs'
+      - 'scripts/diagnose-codex-memory-pipeline.mjs'
+      - 'memory-engine/codex-judge-executable.mjs'
+      - 'tests/memory-engine/codex-memory-pipeline-diagnostics.test.mjs'
       - 'tests/memory-engine/codex-stop-backlog-windows.test.mjs'
       - 'tests/memory-engine/memory-auto-pipeline.test.mjs'
       - '.github/workflows/verify-codex-memory-write-preview.yml'
@@ -44,4 +50,4 @@ jobs:
         with:
           node-version: '24'
       - name: Real stdio tools/call, one-use approval and canonical readback
-        run: node --test tests/memory-engine/codex-approved-memory-write-mcp.test.mjs tests/memory-engine/codex-memory-commit-cli.test.mjs tests/memory-engine/codex-natural-memory-e2e.test.mjs tests/memory-engine/codex-memory-command-consumption.test.mjs tests/memory-engine/codex-stop-backlog-windows.test.mjs tests/memory-engine/memory-auto-pipeline.test.mjs
+        run: node --test tests/memory-engine/codex-memory-pipeline-diagnostics.test.mjs tests/memory-engine/codex-approved-memory-write-mcp.test.mjs tests/memory-engine/codex-memory-commit-cli.test.mjs tests/memory-engine/codex-natural-memory-e2e.test.mjs tests/memory-engine/codex-memory-command-consumption.test.mjs tests/memory-engine/codex-stop-backlog-windows.test.mjs tests/memory-engine/memory-auto-pipeline.test.mjs
