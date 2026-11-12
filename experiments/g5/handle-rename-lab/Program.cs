@@ -101,11 +101,9 @@ internal static class Program
 
     private static void WriteAndFlush(SafeFileHandle handle, string value)
     {
-        // Leave the original DELETE-capable staging handle alive for the rename.
-        using var stream = new FileStream(handle, FileAccess.Write, 4096, isAsync: false);
-        stream.Write(Encoding.UTF8.GetBytes(value));
-        stream.Flush(flushToDisk: true);
-        // FileStream.Dispose closes the handle, so the caller must rename first.
+        // Write and flush without transferring ownership of the DELETE-capable handle.
+        RandomAccess.Write(handle, Encoding.UTF8.GetBytes(value), fileOffset: 0);
+        RandomAccess.FlushToDisk(handle);
     }
 
     private static void RenameUsingHandles(SafeFileHandle stage, SafeFileHandle directory, string name)
