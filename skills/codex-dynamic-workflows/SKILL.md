@@ -6,9 +6,9 @@ description: >
   workflow, multi-track orchestration, goal mode, or Claude Code-style
   orchestration. A migration, audit, or research task does not trigger this
   merely because it is large; the domain skill keeps primary ownership unless
-  orchestration is requested. Differs from superpowers:dispatching-parallel-agents
-  (agent dispatch only) and superpowers:subagent-driven-development (dev-focused)
-  by providing an artifact-backed orchestration loop with reusable workflow recipes.
+  orchestration is requested. Differs from plain agent dispatch by owning
+  artifact-backed work packets, bounded task review, integration and recovery;
+  it does not depend on an external workflow plugin.
 ---
 
 # AI Agent Dynamic Workflows
@@ -130,6 +130,11 @@ reviewers; they receive spec, diff, and evidence pointers only.
 
 Prefer disjoint ownership: discovery / dependency research / implementation slice /
 tests / docs / UX review / security review / final verification.
+
+For multi-packet implementation where independent work can diverge from a
+specified contract, load `references/implementation-review-gates.md`. It owns
+task-level spec/quality acceptance before integration. Do not run this gate
+on every trivial tool call or duplicate the repository's PR review workflow.
 
 ## Worker continuity policy
 
@@ -257,6 +262,7 @@ before scheduling, explicit disturbances, and an optional regression dampener.
 | `references/iterated-control-loop.md` | Repeated or scheduled improvement loop with set point, sensor, controller, actuator, disturbances, dampener, and bounded WIP |
 | `references/plan-schema.md` | When a machine-readable workflow plan helps coordination |
 | `references/risk-gates.md` | Before any risky or ambiguous operation — detailed approval checklist |
+| `references/implementation-review-gates.md` | Independent implementation packets that need spec compliance and code-quality acceptance before integration |
 | `references/doubt-gate.md` | High-risk non-trivial decision needing fresh-context adversarial review before it stands |
 | `references/validation-examples.md` | Forward-testing or improving this skill |
 
