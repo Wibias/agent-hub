@@ -20,6 +20,7 @@ import {
   createIsolatedCodexEnv,
   prepareIsolatedCodexHome,
 } from '../memory-engine/codex-memory-behavioral-eval.mjs';
+import { resolveCodexJudgeExecutable } from '../memory-engine/codex-judge-executable.mjs';
 import {
   defaultCodexMemoryDbPath,
   resolveCodexProjectScope,
@@ -224,6 +225,8 @@ export async function createCodexMemoryCandidateJudge({
     throw new TypeError('timeoutMs must be a positive integer');
   }
 
+  const resolvedCodex = resolveCodexJudgeExecutable({ env });
+
   const root = await mkdtemp(
     join(tmpdir(), 'agent-hub-memory-candidate-judge-'),
   );
@@ -268,7 +271,7 @@ export async function createCodexMemoryCandidateJudge({
       if (model) args.push('--model', model);
       args.push('-');
 
-      const executed = await runProcess('codex', args, {
+      const executed = await runProcess(resolvedCodex.command, [...resolvedCodex.prefixArgs, ...args], {
         cwd: workspace,
         env: isolatedEnv,
         input: prompt,

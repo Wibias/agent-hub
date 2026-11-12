@@ -13,6 +13,7 @@ import {
   createIsolatedCodexEnv,
   prepareIsolatedCodexHome,
 } from '../memory-engine/codex-memory-behavioral-eval.mjs';
+import { resolveCodexJudgeExecutable } from '../memory-engine/codex-judge-executable.mjs';
 import {
   parseCodexExecJsonUsage,
 } from '../memory-engine/codex-exec-usage.mjs';
@@ -135,6 +136,11 @@ export async function createIsolatedCodexJsonJudge({
     throw new TypeError('executable must be a non-empty string');
   }
 
+  const resolvedCodex = resolveCodexJudgeExecutable({
+    env, ...((executable && executable !== 'codex')
+      ? { env: { ...env, AGENT_HUB_MEMORY_JUDGE_CODEX_BIN: executable } } : {}),
+  });
+
   const root = await mkdtemp(
     join(tmpdir(), 'agent-hub-' + workspaceLabel.replace(/[^a-z0-9-]+/gi, '-') + '-'),
   );
@@ -179,7 +185,7 @@ export async function createIsolatedCodexJsonJudge({
         model,
       });
 
-      const executed = await runProcess(executable, args, {
+      const executed = await runProcess(resolvedCodex.command, [...resolvedCodex.prefixArgs, ...args], {
         cwd: workspace,
         env: isolatedEnv,
         input: prompt,

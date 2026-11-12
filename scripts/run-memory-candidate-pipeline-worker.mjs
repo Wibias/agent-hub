@@ -11,6 +11,8 @@ import { dirname, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 import { MemoryEngine } from '../memory-engine/index.mjs';
+import { resolveCodexJudgeExecutable } from '../memory-engine/codex-judge-executable.mjs';
+import { inspectAutomaticJudgeRetryBackoff } from '../memory-engine/codex-judge-auto-retry.mjs';
 import { memoryRestoreLocked } from '../memory-engine/memory-maintenance-lock.mjs';
 import {
   createPipelineRunId,
@@ -320,6 +322,45 @@ export async function runMemoryCandidatePipelineWorker({
     branch,
     revisionSha: nonEmpty(revisionSha) ? revisionSha : null,
   };
+  // The real automatic Stop/SubagentStop pipeline must never flood SQLite
+  // with identical environmental judge failures. Test-injected pipelines are
+  // unaffected by this host prerequisite check.
+  if (runPipeline === runMemoryCandidatePipelineCli) {
+    if (process.platform === 'win32') {
+      try {
+        resolveCodexJudgeExecutable();
+      } catch (error) {
+        return {
+          type: 'agent_hub_memory_candidate_pipeline_worker',
+          status: 'prerequisite_blocked',
+          reason: 'judge_cli_not_resolvable',
+          projectId: runtime.projectId,
+          branch: runtime.branch,
+          rounds: 0,
+          promotedClaims: 0,
+        };
+      }
+    }
+    const backoff = inspectAutomaticJudgeRetryBackoff({
+      dbPath: runtime.dbPath,
+      projectId: runtime.projectId,
+      branch: runtime.branch,
+      now,
+    });
+    if (backoff.deferred) {
+      return {
+        type: 'agent_hub_memory_candidate_pipeline_worker',
+        status: 'retry_deferred',
+        reason: backoff.reason,
+        minutes: backoff.minutes,
+        projectId: runtime.projectId,
+        branch: runtime.branch,
+        rounds: 0,
+        promotedClaims: 0,
+      };
+    }
+  }
+
   const lockPath = memoryCandidatePipelineLockPath(runtime);
   const lock = await acquireLock(lockPath);
   if (lock === null) {
