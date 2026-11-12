@@ -49,6 +49,15 @@ $report.projects | Where-Object { $_.status -eq 'inspected' } |
     } | Format-List
 ~~~
 
+
+### Canonical-fact validation after restoring Windows Codex CLI
+
+If an Importance judge reaches the model but still fails on `canonical_fact`, diagnostic signatures now distinguish `canonical_fact_not_nonempty_string` from `canonical_fact_over_500_chars`. The classification uses SQL substring tests inside read-only SQLite, without selecting the original error text. The first category means a null/empty/non-string *required fact value* was rejected; the exact original model output is not exposed by the diagnostic.
+
+For `ignore`, `keep_candidate`, and `needs_confirmation` decisions, a returned `canonical_fact: ""` or whitespace-only string is safely normalized to `null` because these decisions cannot directly create durable Claims. For `promote`, a non-empty canonical fact of at most 500 characters remains mandatory. Non-string facts, meaningful but overlong facts, unexpected fields, non-empty `canonical_fact` on `ignore`, and all existing authority/risk checks continue to be rejected. **No automatic promotion or retroactive candidate rewriting occurs.** Prompt instructions explicitly request `null` rather than an empty string and cap non-null facts at 500 characters. The policy is not relaxed to truncate meaningful facts.
+
+Confirm the dominant original subcase from the owner's private snapshot after pulling current main before attributing all six earlier errors to empty strings. If the counters indicate only overlong facts, their resolution needs a separate semantic-preserving judge improvement; do not truncate stored evidence or relax the 500-character limit.
+
 A single looping candidate may generate hundreds of failure rows. The code summarizes the top 100 distinct stage/class pairs, not the full unsanitized error logs. If codes point to transient model availability, invalid judge output or pipeline control stalls, inspect the relevant implementation and plan one targeted fix rather than repeatedly re-running the pipeline.
 
 Typical findings:
