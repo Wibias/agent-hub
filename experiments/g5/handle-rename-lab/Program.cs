@@ -16,6 +16,7 @@ internal static class Program
     private const uint FileAttributeNormal = 0x00000080;
     private const uint FileFlagBackupSemantics = 0x02000000;
     private const int FileRenameInfo = 3;
+    private const int NativeFileRenameInformation = 10;
 
     private static int Main(string[] args)
     {
@@ -77,7 +78,7 @@ internal static class Program
         using var stage = CreateStage(stagePath);
         WriteAndFlush(stage, value);
         using var directory = OpenDirectory(targetDir);
-        RenameUsingHandles(stage, directory.DangerousGetHandle(), targetName);
+        RenameUsingHandles(stage, directory.DangerousGetHandle(), targetName, useNative: true);
     }
 
     private static void DiagnoseAbsolute(string stagePath, string targetPath, string value)
@@ -86,7 +87,7 @@ internal static class Program
             throw new ArgumentException("Only a fully qualified diagnostic target is supported.");
         using var stage = CreateStage(stagePath);
         WriteAndFlush(stage, value);
-        RenameUsingHandles(stage, IntPtr.Zero, targetPath);
+        RenameUsingHandles(stage, IntPtr.Zero, targetPath, useNative: false);
     }
 
     private static SafeFileHandle CreateStage(string path)
@@ -122,7 +123,7 @@ internal static class Program
         RandomAccess.FlushToDisk(handle);
     }
 
-    private static void RenameUsingHandles(SafeFileHandle stage, IntPtr rootDirectory, string name)
+    private static void RenameUsingHandles(SafeFileHandle stage, IntPtr rootDirectory, string name, bool useNative)
     {
         // Windows x64 FILE_RENAME_INFO: Flags [0..3], padding [4..7],
         // RootDirectory [8..15], FileNameLength [16..19], UTF-16 filename [20..].
@@ -137,10 +138,18 @@ internal static class Program
             Marshal.WriteInt32(buffer, 16, fileName.Length);
             Marshal.Copy(fileName, 0, IntPtr.Add(buffer, 20), fileName.Length);
             Marshal.WriteInt16(buffer, 20 + fileName.Length, 0);
-            if (!SetFileInformationByHandle(stage, FileRenameInfo, buffer, (uint)length))
+            if (useNative)
+            {
+                // FileRenameInformation = 10 in the NT interface (not Win32 FileRenameInfo = 3).
+                // The native call preserves RootDirectory + relative filename on Windows x64.
+                int status = NtSetInformationFile(stage, out _, buffer, (uint)length, NativeFileRenameInformation);
+                if (status != 0)
+                    throw new InvalidOperationException($"Native handle-relative rename failed (NTSTATUS=0x{status:X8}).");
+            }
+            else if (!SetFileInformationByHandle(stage, FileRenameInfo, buffer, (uint)length))
             {
                 int error = Marshal.GetLastWin32Error();
-                throw new Win32Exception(error, $"Handle rename failed (Win32={error}).");
+                throw new Win32Exception(error, $"Absolute-path diagnostic failed (Win32={error}).");
             }
         }
         finally
@@ -177,6 +186,17 @@ internal static class Program
     [DllImport("kernel32.dll", EntryPoint = "CreateFileW", CharSet = CharSet.Unicode, ExactSpelling = true, SetLastError = true)]
     private static extern SafeFileHandle CreateFileW(
         string path, uint access, uint share, IntPtr security, uint creation, uint flags, IntPtr template);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct IoStatusBlock
+    {
+        public IntPtr Status;
+        public UIntPtr Information;
+    }
+
+    [DllImport("ntdll.dll", EntryPoint = "NtSetInformationFile", ExactSpelling = true)]
+    private static extern int NtSetInformationFile(
+        SafeFileHandle file, out IoStatusBlock ioStatusBlock, IntPtr info, uint length, int infoClass);
 
     [DllImport("kernel32.dll", EntryPoint = "SetFileInformationByHandle", ExactSpelling = true, SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
