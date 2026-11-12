@@ -14,7 +14,7 @@ const SCHEMA = 1;
 
 function nonEmpty(s) { return typeof s === 'string' && s.trim().length > 0; }
 function isRecord(x) { return x !== null && typeof x === 'object' && !Array.isArray(x); }
-function samePath(a, b, platform = process.platform) {
+export function samePath(a, b, platform = process.platform) {
   // Git for Windows may spell a checkout root differently from a direct
   // Node realpath (drive casing, junctions and path separators). Canonicalize
   // both sides before checking an approval or revocation.

@@ -5,7 +5,7 @@ import { isAbsolute, resolve } from 'node:path';
 import { MemoryEngine } from '../index.mjs';
 import { resolveGitContext } from '../git-freshness.mjs';
 import {
-  defaultGlobalMemoryScopePath, describeGlobalMemoryProject, loadGlobalMemoryScope,
+  defaultGlobalMemoryScopePath, describeGlobalMemoryProject, loadGlobalMemoryScope, samePath,
 } from './codex-global-memory-scope.mjs';
 import { commitCodexMemoryClaim } from './codex-memory-commit-cli.mjs';
 
@@ -14,10 +14,6 @@ const ENVIRONMENT = 'local_preview';
 const OPERATOR_SOURCE = 'local:operator-confirmation';
 const SOURCE_KIND = 'operator_explicit';
 
-function pathKey(path) {
-  const canonical = realpathSync(path);
-  return process.platform === 'win32' ? canonical.replaceAll('/', '\\').toLowerCase() : canonical;
-}
 
 /** This is a pinned, allowlisted per-project preview, not an authenticated host session. */
 export function resolveApprovedWriteScope({
@@ -30,7 +26,7 @@ export function resolveApprovedWriteScope({
   const current = describeGlobalMemoryProject({ cwd });
   const prefix = String(execFileSync('git', ['-C', resolve(cwd), 'rev-parse', '--show-prefix'], { encoding: 'utf8', timeout: 5000 })).trim();
   if (prefix !== '') throw new Error('pinned_cwd_must_be_git_root');
-  const approved = manifest.projects.find((entry) => pathKey(entry.root) === pathKey(current.root));
+  const approved = manifest.projects.find((entry) => samePath(entry.root, current.root));
   if (!approved) throw new Error('project_not_approved');
   if (approved.project_id !== current.project_id || approved.repo_identity !== current.repo_identity) {
     throw new Error('project_identity_changed');
