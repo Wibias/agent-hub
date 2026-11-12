@@ -560,6 +560,35 @@ test('non-promoting overlong advisory fact does not block candidate retention', 
   }
 });
 
+test('a different error on the second judgment stays unevaluated and is not review-routed', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'agent-hub-candidate-judge-other-retry-fail-'));
+  const memory = new MemoryEngine({ dbPath: join(root, 'memory.sqlite3') });
+  try {
+    createProject(memory);
+    const candidate = seedCandidate(memory);
+    let calls = 0;
+    const result = await evaluatePendingMemoryCandidates({
+      memory, projectId: 'project', branch: 'main',
+      apply: true, evaluatorId: 'codex:test', limit: 1,
+      async judge() {
+        calls += 1;
+        return JSON.stringify(calls === 1
+          ? promoteJudgment({ canonical_fact: 'Y'.repeat(501) })
+          : promoteJudgment({ confidence: 'medium' }));
+      },
+    });
+    assert.equal(calls, 2);
+    assert.equal(result.failed, 1);
+    assert.equal(result.applied, 0);
+    assert.match(result.results[0].error, /promote requires confidence=high/i);
+    assert.equal(memory.getCandidate(candidate.id).status, 'pending');
+    assert.equal(memory.getCandidate(candidate.id).evaluated_at, null);
+    assert.equal(memory.exportCanonical().claims.length, 0);
+  } finally {
+    memory.close();
+  }
+});
+
 test('unrelated malformed judgments never trigger extra model calls', async () => {
   const root = await mkdtemp(join(tmpdir(), 'agent-hub-candidate-judge-other-fail-'));
   const memory = new MemoryEngine({ dbPath: join(root, 'memory.sqlite3') });
