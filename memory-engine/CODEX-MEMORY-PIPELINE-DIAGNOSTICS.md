@@ -70,3 +70,22 @@ The eligible count is an **upper bound**, not a guarantee of a retrievable Claim
 Return the command's JSON status, hooks section, and per-project counts/findings. This is sufficient to identify whether the blocker is capture, candidate evaluation/promotion, branch-scoping, reliance/freshness or recall-term matching, without sharing memory content.
 
 **Production:** this diagnosis does not change the C9 Write-Broker, Graph P70 production pins or security gates.
+
+## Windows Codex CLI judge execution and bounded automatic retry
+
+The original Codex Desktop global MCP can read memory independently of the Codex **CLI** used by the separate candidate and agent-decision judges. A working MCP does **not** imply that the background Judge can spawn the CLI.
+
+Windows Node child_process.spawn('codex') does not reliably execute an npm codex.cmd shim without a shell. The judge now resolves an actual codex.exe from PATH or the standard current-user standalone installer path, or resolves an npm codex.cmd to its @openai/codex/bin/codex.js entrypoint and executes it via process.execPath. It never runs the shim through cmd.exe, shell:true, or interpolates candidate text into command arguments. If neither is available, it reports a clean CODEX_JUDGE_CLI_NOT_FOUND without launching a failing judge.
+
+The same no-shell resolver is used by direct-user importance/relation judges and agent importance/relation judges. An explicitly configured AGENT_HUB_MEMORY_JUDGE_CODEX_BIN or CODEX_BIN must be an absolute existing native executable, JavaScript entrypoint or supported npm shim. Do not set this to a PowerShell shim, arbitrary batch file or untrusted path.
+
+The automatic Stop/SubagentStop pipeline worker (only) now performs this CLI prerequisite check before it creates another pipeline run. It uses existing failure records to apply a **temporary**, read-only circuit breaker: rate-limit signals pause automated attempts for 10 minutes; two recent auth signals pause them for 10 minutes; five recent non-missing-CLI failures pause them for 3 minutes. Historical missing-CLI failures alone never suppress a newly working CLI. A deferred run does not change, reject, or promote any memory candidate and does not write another run/failure record. The backoff does not claim to fix authentication or rate limits, and the current `codex exec` failure may still require direct diagnosis.
+
+To inspect Windows CLI availability without sending data or invoking a model:
+
+~~~powershell
+Get-Command codex -All | Select-Object Name, CommandType, Source
+where.exe codex
+~~~
+
+Codex CLI installation and authentication are separate prerequisites from the desktop app/MCP. After installation changes, restart Codex Desktop so its background hook processes get the updated PATH. Do not copy auth.json into chat or log it. A missing auth.json, a rejected token, 429, and an unsupported model are different failure modes; the resolver fixes only executable discovery.
