@@ -7,8 +7,8 @@ Agent Hub vendors the Impeccable skill from `pbakaus/impeccable`.
 - Canonical source: `engine-v0.1.22`, commit `90b3072f0f7c9a7a85f64d6dd3db9cd94d364eff`.
 - Metadata in the source: Skill version: `4.8.2`; Engine version: `0.1.22`.
 - `skill-v4.8.2` is commit `035c8f319edd019936525a062fe99e83ca8d12c6`, 19 commits before the engine tag. The copied shared reference/runtime files come from the engine tag, **not** a mix of ad hoc HEAD files.
-- Exception: the engine tag's `scripts/engine-checksums.txt` still contained 0.1.21 digests. The 0.1.22 binary digest manifest was published later upstream and is taken byte-for-byte from the recorded upstream `main` blob `9985c5c07f31f08f3201cf96198a55e3ce3bb1a4` **only after verifying its actual blob SHA**. The 0.1.22 checksum manifest is essential for the launchers; never ship a 0.1.22 VERSION with 0.1.21 checksums.
-- Shared files changed since the last complete adoption were synchronized from the above release pin. The Agent Hub `SKILL.md` remains an intentional local overlay with only its metadata version updated.
+- Exception: the engine tag's `scripts/engine-checksums.txt` still contained 0.1.21 digests. The 0.1.22 binary digest manifest was published later upstream and is taken byte-for-byte from the recorded upstream `main` blob `956695b88090649ee8d6a3d27470066b38b62c8` **only after verifying its actual blob SHA**. The 0.1.22 checksum manifest is essential for the launchers; never ship a 0.1.22 VERSION with 0.1.21 checksums.
+- Engine 0.1.22 source contains the previously deferred `cssAuthoring.styleClose` and `ignore_runtime_output` contracts; binary behavior still needs verification.\n- Shared files changed since the last complete adoption were synchronized from the above release pin. The Agent Hub `SKILL.md` remains an intentional local overlay with only its metadata version updated.
 - This is a candidate until the versioned checksum/launcher tests, release-governance suite, source-byte checks and Windows launcher smoke have actually passed. Do not assert engine parity or executable readiness from source alone.
 
 ## Scope and boundaries
