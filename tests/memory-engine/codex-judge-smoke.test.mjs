@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
+  inspectCodexJudgeOffline,
   classifyCodexJudgeSmokeFailure,
   parseSmokeArgs,
   runCodexJudgeSmoke,
@@ -15,6 +16,7 @@ import {
 test('model probe requires explicit opt-in and does nothing by default', async () => {
   assert.deepEqual(parseSmokeArgs([]), { runModel: false });
   assert.deepEqual(parseSmokeArgs(['--run-model']), { runModel: true });
+  assert.deepEqual(parseSmokeArgs(['--inspect-cli']), { inspectCli: true });
   assert.throws(() => parseSmokeArgs(['--run-model', 'user-data']), /usage/);
   let initialized = false;
   const result = await runCodexJudgeSmoke({
@@ -79,6 +81,98 @@ test('failure classifiers never include source error text, paths or account deta
     assert.equal(result, expected);
     assert.ok(!result.includes('PRIVATE'));
   }
+});
+
+
+test('isolated CLI offline inspection runs only static subcommands and discards sensitive stdout', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'judge-offline-test-'));
+  try {
+    const home = join(root, 'home');
+    mkdirSync(home);
+    writeFileSync(join(home, 'auth.json'), 'PRIVATE_LOGIN_TOKEN');
+    writeFileSync(join(home, 'config.toml'), 'PRIVATE_PROVIDER_CONFIG');
+
+    const fakeCli = join(root, 'fake-codex.js');
+    writeFileSync(fakeCli, [
+      '#!/usr/bin/env node',
+      "import { existsSync, readFileSync } from 'node:fs';",
+      "import { join } from 'node:path';",
+      "const home = process.env.CODEX_HOME;",
+      "if (!home || !existsSync(join(home, 'auth.json')) || existsSync(join(home, 'config.toml'))) process.exit(8);",
+      "if (process.argv.includes('--version')) { console.log('codex-cli 0.222.1'); process.exit(0); }",
+      "if (process.argv.includes('login') && process.argv.includes('status')) { console.log('PRIVATE_EMAIL'); process.exit(0); }",
+      "if (process.argv.includes('exec') && process.argv.includes('--help')) { console.log('--cd --ephemeral --output-last-message'); process.exit(0); }",
+      "process.exit(9);",
+    ].join('\n'));
+    chmodSync(fakeCli, 0o755);
+    const report = await inspectCodexJudgeOffline({
+      sourceCodexHome: home,
+      env: {
+        ...process.env,
+        AGENT_HUB_MEMORY_JUDGE_CODEX_BIN: fakeCli,
+        AGENT_HUB_MEMORY_DB: join(root, 'never-open.sqlite3'),
+      },
+    });
+    assert.equal(report.status, 'offline_checks_passed');
+    assert.equal(report.cli_version, '0.222.1');
+    assert.equal(report.version_command, 'ok');
+    assert.equal(report.isolated_login_status, 'accepted_by_cli_unverified');
+    assert.equal(report.exec_flags, 'supported');
+    assert.equal(report.source_config_file, 'present_unread');
+    assert.equal(report.isolated_config_copied, false);
+    assert.equal(report.model_call_attempted, false);
+    assert.equal(report.memory_db_modified, false);
+    assert.ok(!JSON.stringify(report).includes('PRIVATE'));
+    assert.equal(existsSync(join(root, 'never-open.sqlite3')), false);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('offline inspection reports isolated authentication failure without model or user data', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'judge-offline-negative-'));
+  try {
+    const home = join(root, 'home');
+    mkdirSync(home);
+    writeFileSync(join(home, 'auth.json'), 'PRIVATE_LOGIN_TOKEN');
+    let calls = 0;
+    const report = await inspectCodexJudgeOffline({
+      sourceCodexHome: home,
+      env: {},
+      resolveJudge() {
+        return { command: 'fake-binary', prefixArgs: [], kind: 'native' };
+      },
+      async runCommand({ args }) {
+        calls++;
+        if (args.includes('--version')) {
+          return { exitCode: 0, stdout: 'codex-cli 0.123.4 PRIVATE_PATH' };
+        }
+        if (args.includes('status')) {
+          return { exitCode: 1, stdout: 'PRIVATE_EMAIL' };
+        }
+        return { exitCode: 0, stdout: '--cd --ephemeral --output-last-message' };
+      },
+    });
+    assert.equal(calls, 3);
+    assert.equal(report.status, 'offline_checks_incomplete');
+    assert.equal(report.isolated_login_status, 'not_accepted_or_unavailable');
+    assert.equal(report.model_call_attempted, false);
+    assert.ok(!JSON.stringify(report).includes('PRIVATE'));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('offline inspection fails closed when CLI cannot be resolved and does not copy auth', async () => {
+  let copied = false;
+  const result = await inspectCodexJudgeOffline({
+    resolveJudge() { throw new Error('PRIVATE_LOCAL_PATH'); },
+    async prepareHome() { copied = true; throw new Error('should not run'); },
+  });
+  assert.equal(result.status, 'offline_check_failed');
+  assert.equal(result.model_call_attempted, false);
+  assert.equal(copied, false);
+  assert.ok(!JSON.stringify(result).includes('PRIVATE'));
 });
 
 const FAKE_CODEX = [
