@@ -6,6 +6,14 @@ Make a first **real canonical Memory Claim write** available to original Codex C
 
 The existing global agenthub-memory-read MCP and memory_recall tool remain unchanged. This is a separate server with one tool: memory_commit_approved. There are no free-form model-supplied memory contents, SQL queries, file paths, DB selectors, branch or project selectors, lifecycle transitions or approvals.
 
+## Normal Codex conversation path (preferred)
+
+The already-installed `UserPromptSubmit` hook, not the experimental writer MCP, owns explicit user-direct memory commands. The hook now recognizes clear **whole-message** requests such as `Merke dir, dass wir PostgreSQL nutzen.`, `Merke dir: Wir nutzen PostgreSQL.`, or `Remember that we use Node 24.`. This writes one canonical Claim through the original Memory Engine without copying evidence IDs or invoking any preview MCP tool. It remains subject to the original hook's project and branch scope and provenance checks. The direct message is stored as redacted source Evidence. The hook consumes the request and returns a confirmation instead of forwarding it to the model.
+
+Ordinary conversations are different: conservative user/agent candidate capture and the existing Stop/SubagentStop processing route may propose memories. A candidate needing confirmation is **not** silently promoted. A model's own text is not user_direct approval. On Windows the UserPromptSubmit **background candidate pipeline launch remains disabled** as before; the separate Stop/SubagentStop pipeline is not changed.
+
+To activate the improved natural wording locally, the installed Codex hooks must actually point to this checked-out source; mere global MCP registration does not install or redirect hooks. Use `node scripts/setup-codex-host.mjs` to inspect first. No automatic host configuration changes are performed by merging this PR.
+
 ## Exact write flow
 
 1. A human uses a separate **interactive** PowerShell terminal to type the exact fact and confirm with the phrase APPROVE ONE WRITE.
