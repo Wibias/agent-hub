@@ -185,6 +185,15 @@ Do not recursively delegate unless it materially helps and the parent task permi
 
 Review delegated results before relying on them.
 
+For delegated implementation work, reconcile each worker's actual diff against its
+assigned acceptance criteria, changed behavior, and test evidence before integration.
+For independent packets with material spec or correctness risk, obtain a separate
+spec-compliance and code-quality assessment when an independent reviewer is
+available. Do not assume a worker's self-report is a review, and do not require
+new reviewers for trivial edits. When the user explicitly requests artifact-backed
+multi-agent orchestration, `codex-dynamic-workflows` owns the detailed packet
+review and integration gates.
+
 ---
 
 ## Shell execution
