@@ -6,7 +6,7 @@ This is a single .NET 10 Windows x64 broker executable that links (rather than f
 
 ## Intentional, mandatory limits
 
-- `--service` returns exit code 32, without starting SCM or creating a pipe. No installer is included.
+- `--service` is blocked by a hardcoded, non-configurable `static readonly false` gate and returns exit code 32, without starting SCM or creating a pipe. No installer is included.
 - Production `GetProductionAuthority()` returns `null` unconditionally. The independently controlled current issuer/checkpoint/root bootstrap and a protected production G4 ledger have not been provided. The broker is not provisionable through a client frame, environment variable, or neighboring file.
 - The referenced G2345 review gate is additionally hard-guarded to an ephemeral GitHub-hosted Windows runner. This RC2 cannot be deployed by flipping a build flag or variable.
 - There is no writer, replacement operation, delete operation, commit handler, backup mutator, production key material, or live Witness. `EnableLabCommit=true` and `EnableWriteCommit=true` fail the build.

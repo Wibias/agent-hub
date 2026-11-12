@@ -15,11 +15,11 @@
     },
     {
       "path": "README.md",
-      "sha256": "54e8f9cc6899fa3c3c17185ab3a9057ba22579cbb981878f99fc03e06267e927"
+      "sha256": "7e6a87c3c8de690435168c03670b566564d51bb3ea5f6e3397e7fa19637a09c8"
     },
     {
       "path": "docs/SECURITY-BOUNDARY.md",
-      "sha256": "cdc6173ef1f122aee2384f39f47a1af8b51bc25e777989acf5f78c904991b9e0"
+      "sha256": "0abff99999e53d94694616c5819de19882d580037b975c802d23e69efebdbbcd"
     },
     {
       "path": "global.json",
@@ -35,7 +35,7 @@
     },
     {
       "path": "src/Program.cs",
-      "sha256": "8f496cab43f2a018bc18a0c21cdc0c3a548224416f21fae4ba63c16fa03b6f99"
+      "sha256": "b05955f4a99cfa5d064f4c128ee1200d8aa79d56a4eee71d428db127f486dcfe"
     }
   ]
 }

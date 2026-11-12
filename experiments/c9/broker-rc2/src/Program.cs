@@ -34,8 +34,8 @@ internal static class Program
     private const uint ServiceStartPending = 2;
     private const uint ServiceStopPending = 3;
     private const uint ServiceRunning = 4;
-    // Release guard is literal and not environment-configurable.
-    private const bool ServiceActivationAuthorized = false;
+    // Hardcoded read-only release guard, not environment-configurable.
+    private static readonly bool ServiceActivationAuthorized = false;
     private static readonly ServiceMainProc MainDelegate = ServiceMain;
     private static readonly HandlerProc ControlDelegate = Control;
     private static SafeFileHandle? currentPipe;
