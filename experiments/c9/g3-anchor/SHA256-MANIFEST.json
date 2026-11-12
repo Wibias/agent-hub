@@ -1,0 +1,94 @@
+{
+  "schema": 1,
+  "component": "AgentHub C9 G3 Anchor review v0.1",
+  "target_repo": "Wibias/agent-hub",
+  "branch": "codex/c9-g3-offline-review",
+  "status": "G3_HOLD_PRODUCTION_NO_GO",
+  "no_production_secrets": true,
+  "files": [
+    {
+      "path": ".gitattributes",
+      "bytes": 14,
+      "sha256": "a79691a93b46e49ce460c26ef22afcc03d6eca1e63bf2edbc20e96159510f6c9",
+      "git_blob_sha1": "fcadb2cf97913f58a2523f535336e725c6b59d1f"
+    },
+    {
+      "path": ".github/workflows/verify-c9-g3-anchor.yml",
+      "bytes": 1484,
+      "sha256": "da5550f603c9ee1cd90f50d746b0d9f1fda64509054d2bd1c32e7f72c2e739e3",
+      "git_blob_sha1": "31510c2be05405aa0fdaec38ba3db006fc90e1ef"
+    },
+    {
+      "path": "NuGet.Config",
+      "bytes": 113,
+      "sha256": "2142cfb2dfa2c7feefbe40fabcc68b0dfecadafa99a1db9b70239d977cf2a7ef",
+      "git_blob_sha1": "9a611e303cfe42b16b3b09fcbfd33a3e505b5f72"
+    },
+    {
+      "path": "README.md",
+      "bytes": 4194,
+      "sha256": "031033f1a9990ce4ec3e8cb352557ddd8da51d6146effed48725e11bbf3b5a16",
+      "git_blob_sha1": "8b6e11f2bee1b112a420e56ce15a587d8b7b31b5"
+    },
+    {
+      "path": "docs/G3-ANCHOR-IMPLEMENTATION-BOUNDARY.md",
+      "bytes": 2378,
+      "sha256": "64c91534be81a23bef6643368fe41247293bee193670c313b1478368a25131e5",
+      "git_blob_sha1": "4cd8d5adf73213cdaf2dc82b5a5e10da669136bc"
+    },
+    {
+      "path": "global.json",
+      "bytes": 55,
+      "sha256": "3539053fdc4cd4e9c9e32e64351bdd2ae68557e926a9d78a1eb3f8b86883737d",
+      "git_blob_sha1": "ab94f401e70c99321123a0811aacffce24ce133b"
+    },
+    {
+      "path": "src/AgentHub.C9.G3.Anchor.Core.csproj",
+      "bytes": 661,
+      "sha256": "be31d31659488a61e9fa9a7c578457fc95f1b62584eb48dc3ef5d916add79d31",
+      "git_blob_sha1": "eff1eb569eb99b8cb84f3c0eac7797c281d2818d"
+    },
+    {
+      "path": "src/AnchorEngine.cs",
+      "bytes": 8740,
+      "sha256": "0a2757d1e698bce04adcd0e6073cad348b9ef778d327ac976871be68d806632d",
+      "git_blob_sha1": "bee88f996b43c9918cfa78da642677d3eb8b6fca"
+    },
+    {
+      "path": "src/AnchorJournal.cs",
+      "bytes": 7179,
+      "sha256": "dbb1f4a33baa09bdd622a6bda3f0e1107a2e2d172c4babfdc7d8de7af82735b9",
+      "git_blob_sha1": "90440505619693b4cbca340fa89bb929bd01b4a6"
+    },
+    {
+      "path": "src/Server/AgentHub.C9.G3.Anchor.Server.csproj",
+      "bytes": 554,
+      "sha256": "42888588d7900beb315ffb44d194857839745d33a4efb128374bbb0517c51316",
+      "git_blob_sha1": "7e9af5cdd13cfffb93d15fa40ab68cad8cca6018"
+    },
+    {
+      "path": "src/Server/AuditHttpBackend.cs",
+      "bytes": 4697,
+      "sha256": "4e898c3ca8997a2d07b967e7c83cc95267157b6868c945fc1e99d99da35138dc",
+      "git_blob_sha1": "0c91c796d10161ff1e7ba04e513cd0848cecfc53"
+    },
+    {
+      "path": "src/Server/Program.cs",
+      "bytes": 9790,
+      "sha256": "1344e774e83157a3308ed9f456214915a199afa1eff28449da5774047e669e71",
+      "git_blob_sha1": "945eec8966eebeedbc0260a3208eb3454f4904f5"
+    },
+    {
+      "path": "tests/AgentHub.C9.G3.Anchor.Tests.csproj",
+      "bytes": 541,
+      "sha256": "6eea056dc9250450694493939c8d2e4804037d19ec6e62b5577d0ec332f3398e",
+      "git_blob_sha1": "dd9dcc87ac112a2665e61b639bbc505c512de286"
+    },
+    {
+      "path": "tests/Program.cs",
+      "bytes": 7804,
+      "sha256": "69885f2f7d9ff506238534c445ef7d25cb9336978e26e3efde71f2f9ac829872",
+      "git_blob_sha1": "fd876861f3fc7e2d0d30115a41ab7b566a6d206d"
+    }
+  ]
+}
