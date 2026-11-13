@@ -161,7 +161,47 @@ test('missing or unreadable DB fails closed without writing or creating it', () 
   });
 });
 
-function withScopedFailures(entries, fn) {
+function recordSuccessfulJudgeEvaluation(mem, {
+  projectId = PROJECT,
+  branch = 'main',
+  evaluatedAt,
+  evaluatorId = 'codex:default:importance-v2',
+  sourceRef = 'session:human',
+  sourceKind = 'session',
+  id,
+}) {
+  const statement = 'The project uses read-only memory during the preview.';
+  const fingerprint = createHash('sha256')
+    .update('decision\n' + statement.toLowerCase()).digest('hex');
+  mem.recordEvidence({
+    id: 'evidence:success-' + id,
+    projectId, harness: 'codex', sessionId: 'real',
+    sourceKind, sourceRef, capturedAt: evaluatedAt,
+    branch, commitSha: null, path: null, blobOid: null,
+    content: statement, authorityClass: 'user_direct',
+    metadata: { event_type: 'user_prompt' },
+  });
+  const candidate = mem.recordCandidate({
+    id: 'candidate:success-' + id,
+    evidenceId: 'evidence:success-' + id,
+    type: 'decision', proposedValue: statement,
+    decisionReason: 'rule:decision:definitive',
+    policyVersion: 'capture-v1', fingerprint,
+    createdAt: evaluatedAt,
+  });
+  mem.evaluateCandidate({
+    candidateId: candidate.id, evaluatorId, evaluatedAt,
+    evaluation: {
+      decision: 'ignore', suggested_type: 'decision',
+      durability: 'short', future_utility: 'low',
+      specificity: 'high', confidence: 'high',
+      meaning_preserved: true, canonical_fact: null,
+      reason: 'Short-lived task instruction.', risk_flags: ['transient'],
+    },
+  });
+}
+
+function withScopedFailures(entries, fn, { successfulEvaluations = [] } = {}) {
   const root = mkdtempSync(join(tmpdir(), 'memory-scoped-auto-retry-'));
   const dbPath = join(root, 'memory.sqlite3');
   const otherProject = 'github.com/example/other-project';
@@ -186,6 +226,8 @@ function withScopedFailures(entries, fn) {
         durationMs: 45_000,
       });
     });
+    successfulEvaluations.forEach((evaluation, i) =>
+      recordSuccessfulJudgeEvaluation(mem, { ...evaluation, id: i }));
     mem.close();
 
     const hash = () => createHash('sha256').update(readFileSync(dbPath)).digest('hex');
@@ -238,4 +280,61 @@ test('repeated cross-branch quota refusals extend cooldown, but generic 429 rema
       deferred: true, reason: 'rate_limit_cooldown', minutes: 10,
     });
   });
+});
+
+test('genuine later Codex importance judgment ends an earlier project-wide quota outage', () => {
+  withScopedFailures([
+    { branch: 'feature-a', error: 'Quota exceeded' },
+    { branch: 'feature-b', error: 'Your usage limit has been reached' },
+  ], ({ inspectScope }) => {
+    for (const branch of ['main', 'feature-a', 'feature-b']) {
+      assert.deepEqual(inspectScope(PROJECT, branch), {
+        deferred: false, reason: null, minutes: 0,
+      });
+    }
+  }, { successfulEvaluations: [
+    { branch: 'main', evaluatedAt: new Date(TIME - 5_000).toISOString() },
+  ] });
+});
+
+test('fresh quota failure after a successful importance judgment starts a new six-hour window', () => {
+  withScopedFailures([
+    { branch: 'feature-a', error: 'Quota exceeded' },
+    { branch: 'feature-b', error: 'Your usage limit has been reached' },
+  ], ({ inspectScope }) => {
+    assert.deepEqual(inspectScope(PROJECT, 'main'), {
+      deferred: true, reason: 'usage_or_quota_cooldown', minutes: 360,
+    });
+  }, { successfulEvaluations: [
+    { evaluatedAt: new Date(TIME - 29_500).toISOString() },
+  ] });
+});
+
+test('test, mock and future-dated judgments cannot clear a known quota refusal', () => {
+  for (const success of [
+    { evaluatorId: 'codex:test:importance-v2', evaluatedAt: new Date(TIME - 5_000).toISOString() },
+    { evaluatorId: 'codex:mock:importance-v2', evaluatedAt: new Date(TIME - 5_000).toISOString() },
+    { sourceRef: 'runtime-e2e-seed:synthetic', evaluatedAt: new Date(TIME - 5_000).toISOString() },
+    { sourceKind: 'operator_explicit', evaluatedAt: new Date(TIME - 5_000).toISOString() },
+    { evaluatedAt: new Date(TIME + 3_600_000).toISOString() },
+  ]) {
+    withScopedFailures([
+      { branch: 'feature', error: 'Quota exceeded' },
+    ], ({ inspectScope }) => {
+      assert.deepEqual(inspectScope(PROJECT, 'main'), {
+        deferred: true, reason: 'usage_or_quota_cooldown', minutes: 360,
+      });
+    }, { successfulEvaluations: [success] });
+  }
+});
+
+test('successful judgment in a different project cannot clear this project quota', () => {
+  withScopedFailures([
+    { branch: 'feature', error: 'Quota exceeded' },
+  ], ({ inspectScope, otherProject }) => {
+    assert.equal(inspectScope(PROJECT, 'main').reason, 'usage_or_quota_cooldown');
+    assert.equal(inspectScope(otherProject, 'main').deferred, false);
+  }, { successfulEvaluations: [
+    { projectId: 'github.com/example/other-project', evaluatedAt: new Date(TIME - 5_000).toISOString() },
+  ] });
 });
