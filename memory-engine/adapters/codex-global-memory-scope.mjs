@@ -8,6 +8,8 @@ import { dirname, isAbsolute, join, resolve, win32 } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { defaultCodexMemoryDbPath, resolveCodexProjectScope } from './codex-hook-cli-core.mjs';
 import { readCodexMemory } from './codex-readonly-memory-mcp.mjs';
+import { readPublishedProjectUserMemories } from './project-wide-user-memory.mjs';
+import { enforceRecallBudget } from '../hybrid-retrieval.mjs';
 
 const MAX_PROJECTS = 128;
 const SCHEMA = 1;
@@ -149,7 +151,7 @@ export function readGlobalCodexMemory({
   }
   // Deliberately ignore all inherited AGENT_HUB_MEMORY_* overrides.
   // This is not host authentication. The trusted allowlist is the authority.
-  return read({
+  const result = read({
     cwd: current.root, query, maxItems,
     env: {
       AGENT_HUB_MEMORY_DB: manifest.memory_db,
@@ -157,6 +159,33 @@ export function readGlobalCodexMemory({
       AGENT_HUB_MEMORY_REPO_IDENTITY: enrolled.repo_identity,
     },
   });
+  if (!['found', 'no_current_authorized_match'].includes(result?.status)) return result;
+
+  // Cross-branch visibility requires a separate, explicit operator-approved
+  // publication in canonical Evidence. Ordinary branch-scoped user decisions
+  // and model-inferred facts never become project-wide implicitly.
+  const published = readPublishedProjectUserMemories({
+    dbPath: manifest.memory_db, projectId: enrolled.project_id,
+    currentBranch: result.branch, query, maxItems,
+  });
+  if (published.length === 0) return result;
+
+  const seen = new Set(result.items.map((item) => item.claim.id));
+  const items = [...result.items];
+  for (const item of published) {
+    if (seen.has(item.claim.id)) continue;
+    seen.add(item.claim.id);
+    items.push(item);
+  }
+  const bounded = enforceRecallBudget({ items, conflicts: [] }, {
+    maxItems, maxSerializedBytes: 12_000,
+  });
+  return {
+    ...result,
+    status: bounded.items.length ? 'found' : 'no_current_authorized_match',
+    items: bounded.items,
+    project_wide_matches: bounded.items.filter((item) => item.scope === 'project').length,
+  };
 }
 
 function ensureRegularDb(path) {
