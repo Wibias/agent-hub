@@ -4,7 +4,7 @@ The Codex `UserPromptSubmit` installer now defaults to the verified **local, aut
 
 Relevance selection plus observational replay remains explicitly available to an operator with `node scripts/install-codex-memory-hooks.mjs --recall-relevance` (dry run), then `--apply` after reviewing the plan. The default installer and combined installer will preserve the model-free baseline on reinstall. The operator must approve any changed Codex hooks.
 
-The E5 model is pinned to `intfloat/multilingual-e5-small` at the source revision. The worker explicitly sets `local_files_only: true` at runtime: a missing or incomplete model cache cannot self-download. On Windows, prompt-time recovery can now launch the detached local worker **only when its cache directory exists**, with a bounded 2.5-second startup check. This is a best-effort warm-up; a cold start may finish after the prompt. If the model cache is not valid, lexical recall remains available and `query_embedding_failed` is expected until cache/worker repair.
+The E5 model is pinned to `intfloat/multilingual-e5-small` at the source revision. The worker explicitly sets `local_files_only: true` at runtime: a missing or incomplete model cache cannot self-download. On Windows, the long-lived E5 worker is deliberately started by `SessionStart` or the explicit operator launcher, **never by `UserPromptSubmit`**. This preserves the existing no-prompt-daemon invariant and avoids unexpected background processes. A cold async startup may finish after the first prompt. If the model cache is incomplete or the worker is unavailable, lexical recall remains available and `query_embedding_failed` may occur until cache/worker repair.
 
 Read-only diagnosis (does not start a worker, invoke Codex, or download the model):
 

@@ -521,7 +521,8 @@ export async function runCodexMemoryHook({
         : defaultCodexEmbeddingCacheDir();
 
       if (
-        typeof embeddingCacheAvailable === 'function'
+        platform !== 'win32'
+        && typeof embeddingCacheAvailable === 'function'
         && typeof ensureEmbeddingWorker === 'function'
         && embeddingCacheAvailable(cacheDir)
       ) {
@@ -529,18 +530,15 @@ export async function runCodexMemoryHook({
           await ensureEmbeddingWorker({
             cacheDir,
             socketPath,
-            // On Windows a SessionStart hook may still be warming the local
-            // E5 model when the first prompt arrives. The bounded probe can
-            // recover the detached local worker without a remote model fetch.
             startupTimeoutMs: Number.isInteger(
               configOptions.embeddingStartupTimeoutMs,
             )
               ? configOptions.embeddingStartupTimeoutMs
-              : platform === 'win32' ? 2_500 : 5_000,
+              : 5_000,
           });
         } catch {
-          // Worker startup is optional. Lexical retrieval must still work
-          // when a pinned local model is missing or still loading.
+          // SessionStart is only an optimization. If a host skips it and
+          // prompt-time recovery also fails, semantic selection remains fail-soft.
         }
       }
 
