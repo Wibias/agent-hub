@@ -1,3 +1,33 @@
+## Windows automatic recall after E5 or Codex judge failures (2026-11-13)
+
+The Codex `UserPromptSubmit` installer now defaults to the verified **local, authority- and conflict-filtered recall**: `--hybrid-recall` stays enabled, while `--recall-relevance` and `--recall-fast-path-shadow-replay` are **not** enabled automatically. This prevents a quota-exhausted or unavailable model-based relevance selector from silently removing every otherwise eligible local-memory hit. It does not disable authorization, project/branch scoping, freshness/conflict checks or the local lexically ranked fallback. Because the optional relevance filter is off, broad lexical queries can include less directly relevant records; recalled content is evidence, not instructions or permission.
+
+Relevance selection plus observational replay remains explicitly available to an operator with `node scripts/install-codex-memory-hooks.mjs --recall-relevance` (dry run), then `--apply` after reviewing the plan. The default installer and combined installer will preserve the model-free baseline on reinstall. The operator must approve any changed Codex hooks.
+
+The E5 model is pinned to `intfloat/multilingual-e5-small` at the source revision. The worker explicitly sets `local_files_only: true` at runtime: a missing or incomplete model cache cannot self-download. On Windows, prompt-time recovery can now launch the detached local worker **only when its cache directory exists**, with a bounded 2.5-second startup check. This is a best-effort warm-up; a cold start may finish after the prompt. If the model cache is not valid, lexical recall remains available and `query_embedding_failed` is expected until cache/worker repair.
+
+Read-only diagnosis (does not start a worker, invoke Codex, or download the model):
+
+```powershell
+$repo = Join-Path $env:LOCALAPPDATA 'AgentHub-Memory-Write-Preview'
+Push-Location $repo
+node scripts/diagnose-memory-embedding-worker.mjs
+Pop-Location
+```
+
+If the cache is `missing`, `empty`, or incomplete, the explicit one-time preparation command fetches the **pinned** model over the network. This is an opt-in operation and may download large model assets; it does not create or promote Claims:
+
+```powershell
+$repo = Join-Path $env:LOCALAPPDATA 'AgentHub-Memory-Write-Preview'
+Push-Location $repo
+node scripts/prepare-memory-embedding-model.mjs --cache-dir (Join-Path $repo '.cache\memory-engine\e5')
+node memory-engine/embedding-worker-launcher.mjs --cache-dir (Join-Path $repo '.cache\memory-engine\e5')
+node scripts/diagnose-memory-embedding-worker.mjs
+Pop-Location
+```
+
+Successful E5 repair requires `worker_ready: true`, followed by a new ordinary prompt with no `query_embedding_failed` and without losing `selected_count > 0` or `context_bytes > 0`. Do not infer success from `cache_status: present_not_verified` alone. A `log_classification` is a sanitized pattern hint, not a definitive root cause or evidence that the latest entry is current. The model-based relevance selector remains independent of E5 readiness and should not be re-enabled while Codex account usage is exhausted.
+
 # Diagnose missing Codex memories without changing local data
 
 The global AgentHub Memory MCP is **read only**. Registering an approved project for reads does not enable capturing memories from that project's Codex conversations.

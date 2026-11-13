@@ -235,7 +235,7 @@ function stripManagedHooks(entries, predicate, eventName) {
   return result;
 }
 
-function promptEntry({ hubRoot, nodePath }) {
+function promptEntry({ hubRoot, nodePath, relevanceSelection = false }) {
   const script = resolve(
     hubRoot,
     'memory-engine',
@@ -246,8 +246,12 @@ function promptEntry({ hubRoot, nodePath }) {
     '--ignore-memory-env',
     '--explicit-memory-requests',
     '--hybrid-recall',
-    '--recall-relevance',
-    '--recall-fast-path-shadow-replay',
+    // The optional judge may fail closed under account quota exhaustion and
+    // suppress otherwise authorized local-memory hits. Default to the proven
+    // authority-filtered retrieval path, opt into the model judge explicitly.
+    ...(relevanceSelection
+      ? ['--recall-relevance', '--recall-fast-path-shadow-replay']
+      : []),
     '--candidate-capture',
     '--auto-pipeline',
   ];
@@ -342,6 +346,7 @@ export function planCodexMemoryHooks({
   existing,
   hubRoot = defaultHubRoot(),
   nodePath = process.execPath,
+  relevanceSelection = false,
 } = {}) {
   if (!existing || typeof existing !== 'object' || Array.isArray(existing)) {
     throw new TypeError('existing must be a Codex hooks object');
@@ -353,8 +358,12 @@ export function planCodexMemoryHooks({
     throw new TypeError('nodePath must be a non-empty string');
   }
 
+  if (typeof relevanceSelection !== 'boolean') {
+    throw new TypeError('relevanceSelection must be boolean');
+  }
+
   const hooks = { ...(existing.hooks ?? {}) };
-  const desiredPrompt = promptEntry({ hubRoot, nodePath });
+  const desiredPrompt = promptEntry({ hubRoot, nodePath, relevanceSelection });
   const desiredSession = sessionStartEntry({ hubRoot, nodePath });
   const desiredStop = agentDecisionEntry({ hubRoot, nodePath });
   const desiredSubagentStop = agentDecisionEntry({ hubRoot, nodePath });
@@ -482,6 +491,7 @@ export function installCodexMemoryHooks({
   hooksPath = defaultHooksPath(),
   hubRoot = defaultHubRoot(),
   nodePath = process.execPath,
+  relevanceSelection = false,
   apply = false,
   writeFile = writeFileSync,
 } = {}) {
@@ -495,6 +505,7 @@ export function installCodexMemoryHooks({
       existing,
       hubRoot: root,
       nodePath,
+      relevanceSelection,
     });
 
     let backupPath = null;
@@ -516,6 +527,7 @@ export function installCodexMemoryHooks({
       hooksPath: target,
       hubRoot: root,
       nodePath,
+      relevanceSelection,
       wouldChange: plan.changed,
       applied: apply && plan.changed,
       backupPath,
@@ -548,6 +560,7 @@ export function parseCodexMemoryHookInstallArgs(argv = []) {
 
   const result = {
     apply: false,
+    relevanceSelection: false,
     hooksPath: undefined,
     hubRoot: undefined,
     nodePath: undefined,
@@ -557,6 +570,10 @@ export function parseCodexMemoryHookInstallArgs(argv = []) {
     const arg = argv[index];
     if (arg === '--apply') {
       result.apply = true;
+      continue;
+    }
+    if (arg === '--recall-relevance') {
+      result.relevanceSelection = true;
       continue;
     }
     if (['--hooks', '--hub-root', '--node'].includes(arg)) {
@@ -571,7 +588,7 @@ export function parseCodexMemoryHookInstallArgs(argv = []) {
     throw new Error(
       'Unknown option: ' + arg
       + '\nUsage: node scripts/install-codex-memory-hooks.mjs '
-      + '[--apply] [--hooks PATH] [--hub-root PATH] [--node PATH]',
+      + '[--apply] [--recall-relevance] [--hooks PATH] [--hub-root PATH] [--node PATH]',
     );
   }
 
