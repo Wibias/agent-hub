@@ -160,3 +160,82 @@ test('missing or unreadable DB fails closed without writing or creating it', () 
     deferred: true, reason: 'retry_guard_unavailable', minutes: 0,
   });
 });
+
+function withScopedFailures(entries, fn) {
+  const root = mkdtempSync(join(tmpdir(), 'memory-scoped-auto-retry-'));
+  const dbPath = join(root, 'memory.sqlite3');
+  const otherProject = 'github.com/example/other-project';
+  try {
+    const mem = new MemoryEngine({ dbPath });
+    mem.registerProject({ projectId: PROJECT, repoIdentity: PROJECT });
+    mem.registerProject({ projectId: otherProject, repoIdentity: otherProject });
+    entries.forEach(({ projectId = PROJECT, branch = 'feature', error, stage = 'importance' }, i) => {
+      const id = 'scoped-run-' + i;
+      mem.startPipelineRun({
+        id, projectId, branch, trigger: 'Stop',
+        startedAt: new Date(TIME - 60_000 + i * 1000).toISOString(),
+      });
+      mem.recordPipelineFailure({
+        runId: id, projectId, branch, stage,
+        errorClass: 'candidate_stage_failure', error,
+        occurredAt: new Date(TIME - 30_000 + i * 1000).toISOString(),
+      });
+      mem.finishPipelineRun({
+        id, status: 'partial',
+        finishedAt: new Date(TIME - 15_000 + i * 1000).toISOString(),
+        durationMs: 45_000,
+      });
+    });
+    mem.close();
+
+    const hash = () => createHash('sha256').update(readFileSync(dbPath)).digest('hex');
+    const before = hash();
+    const inspectScope = (projectId, branch, at = TIME) => inspectAutomaticJudgeRetryBackoff({
+      dbPath, projectId, branch, now: () => at,
+    });
+    fn({ inspectScope, otherProject });
+    assert.equal(hash(), before, 'cross-branch retry guard must remain read-only');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
+test('quota refusal on one branch defers automatic judges on sibling branches, not other projects', () => {
+  withScopedFailures([
+    { branch: 'feature-a', error: "codex candidate judge failed with exit 1: You've hit your usage limit" },
+  ], ({ inspectScope, otherProject }) => {
+    assert.deepEqual(inspectScope(PROJECT, 'feature-b'), {
+      deferred: true, reason: 'usage_or_quota_cooldown', minutes: 360,
+    });
+    assert.deepEqual(inspectScope(PROJECT, 'main'), {
+      deferred: true, reason: 'usage_or_quota_cooldown', minutes: 360,
+    });
+    assert.deepEqual(inspectScope(otherProject, 'main'), {
+      deferred: false, reason: null, minutes: 0,
+    });
+    assert.deepEqual(inspectScope(PROJECT, 'feature-b', TIME + 6 * 60 * 60_000), {
+      deferred: false, reason: null, minutes: 0,
+    });
+  });
+});
+
+test('repeated cross-branch quota refusals extend cooldown, but generic 429 remains branch-local', () => {
+  withScopedFailures([
+    { branch: 'feature-a', error: 'Quota exceeded' },
+    { branch: 'feature-b', error: 'Your workspace is out of credits' },
+  ], ({ inspectScope }) => {
+    assert.deepEqual(inspectScope(PROJECT, 'feature-c'), {
+      deferred: true, reason: 'usage_or_quota_cooldown', minutes: 1440,
+    });
+  });
+  withScopedFailures([
+    { branch: 'feature-a', error: 'HTTP 429 rate limit' },
+  ], ({ inspectScope }) => {
+    assert.deepEqual(inspectScope(PROJECT, 'feature-b'), {
+      deferred: false, reason: null, minutes: 0,
+    });
+    assert.deepEqual(inspectScope(PROJECT, 'feature-a'), {
+      deferred: true, reason: 'rate_limit_cooldown', minutes: 10,
+    });
+  });
+});
