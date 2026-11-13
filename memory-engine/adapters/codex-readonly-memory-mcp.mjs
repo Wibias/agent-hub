@@ -180,14 +180,34 @@ export function createCodexMemoryMcpDispatcher({ cwd, env = process.env, recall 
     if (Object.keys(args).some((key) => !['query', 'max_items'].includes(key))) {
       return rpc(id, toolResult({ status: 'forbidden_argument' }, true));
     }
+    // Validate before entering the memory/SQLite path so bad tool inputs are
+    // distinguishable from storage failures without returning query contents.
+    if (typeof args.query !== 'string' || !args.query.trim()) {
+      return rpc(id, toolResult({
+        status: 'invalid_tool_input', reason: 'query_required',
+      }, true));
+    }
+    if (args.query.length > 500) {
+      return rpc(id, toolResult({
+        status: 'invalid_tool_input', reason: 'query_too_long',
+      }, true));
+    }
+    const maxItems = args.max_items === undefined ? 5 : args.max_items;
+    if (!Number.isInteger(maxItems) || maxItems < 1 || maxItems > MAX_ITEMS) {
+      return rpc(id, toolResult({
+        status: 'invalid_tool_input', reason: 'max_items_out_of_range',
+      }, true));
+    }
     try {
-      const data = recall({
-        cwd, env, query: args.query, maxItems: args.max_items ?? 5,
-      });
-      return rpc(id, toolResult(data));
+      const data = recall({ cwd, env, query: args.query, maxItems });
+      // A safe error result returned by the global reader must also be an MCP
+      // error, not a successful tool call carrying a failed status.
+      return rpc(id, toolResult(data, data?.status === 'memory_read_failed'));
     } catch {
-      // Do not leak local paths, SQL, credentials or stored claim data on errors.
-      return rpc(id, toolResult({ status: 'memory_read_failed' }, true));
+      // Never emit paths, SQL, credentials, exception messages or claim text.
+      return rpc(id, toolResult({
+        status: 'memory_read_failed', stage: 'request_dispatch',
+      }, true));
     }
   };
 }

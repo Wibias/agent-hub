@@ -132,6 +132,74 @@ test('tool contract permits only recall and refuses scope/path override', async 
   } finally { f.cleanup(); }
 });
 
+test('MCP rejects invalid recall inputs with safe, actionable error codes', async () => {
+  const f = fixture();
+  try {
+    const dispatch = createCodexMemoryMcpDispatcher({ cwd: f.cwd, env: f.env });
+    const call = (args) => dispatch({
+      jsonrpc: '2.0', id: 30, method: 'tools/call',
+      params: { name: 'memory_recall', arguments: args },
+    });
+    for (const [args, reason] of [
+      [{}, 'query_required'],
+      [{ query: '' }, 'query_required'],
+      [{ query: '   ' }, 'query_required'],
+      [{ query: 42 }, 'query_required'],
+      [{ query: 'secret:' + 'x'.repeat(500) }, 'query_too_long'],
+      [{ query: 'SQLite', max_items: null }, 'max_items_out_of_range'],
+      [{ query: 'SQLite', max_items: 0 }, 'max_items_out_of_range'],
+      [{ query: 'SQLite', max_items: 11 }, 'max_items_out_of_range'],
+      [{ query: 'SQLite', max_items: 1.5 }, 'max_items_out_of_range'],
+    ]) {
+      const response = await call(args);
+      assert.equal(response.result.isError, true);
+      assert.deepEqual(JSON.parse(response.result.content[0].text), {
+        status: 'invalid_tool_input', reason,
+      });
+      assert.equal(response.result.content[0].text.includes('secret:'), false);
+    }
+    // Broad but valid queries are not rejected merely because they contain
+    // many words. 500 characters is the documented maximum.
+    const longQuery = ('SQLite ' + 'unrelated '.repeat(80)).slice(0, 500);
+    assert.equal(longQuery.length, 500);
+    const accepted = await call({ query: longQuery, max_items: 10 });
+    assert.equal(accepted.result.isError, false);
+    assert.equal(JSON.parse(accepted.result.content[0].text).status, 'found');
+  } finally { f.cleanup(); }
+});
+
+test('MCP preserves global read failure status as an error without leaking details', async () => {
+  const f = fixture();
+  try {
+    const safeFailure = { status: 'memory_read_failed', stage: 'branch_recall',
+      items: [], read_only: true };
+    const dispatch = createCodexMemoryMcpDispatcher({
+      cwd: f.cwd, env: f.env, recall: () => safeFailure,
+    });
+    const invoke = (query) => dispatch({
+      jsonrpc: '2.0', id: 31, method: 'tools/call',
+      params: { name: 'memory_recall', arguments: { query } },
+    });
+    const result = await invoke('cache');
+    assert.equal(result.result.isError, true);
+    assert.deepEqual(JSON.parse(result.result.content[0].text), safeFailure);
+
+    const unexpected = createCodexMemoryMcpDispatcher({
+      cwd: f.cwd, env: f.env,
+      recall: () => { throw new Error('private-file-path / database secret'); },
+    });
+    const failed = await unexpected({
+      jsonrpc: '2.0', id: 32, method: 'tools/call',
+      params: { name: 'memory_recall', arguments: { query: 'cache' } },
+    });
+    assert.equal(failed.result.isError, true);
+    assert.deepEqual(JSON.parse(failed.result.content[0].text), {
+      status: 'memory_read_failed', stage: 'request_dispatch',
+    });
+    assert.doesNotMatch(failed.result.content[0].text, /private-file-path|database secret/);
+  } finally { f.cleanup(); }
+});
+
 test('real stdio MCP process lists and calls only read-only tool', async () => {
   const f = fixture();
   try {

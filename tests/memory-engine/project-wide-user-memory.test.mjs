@@ -104,6 +104,26 @@ test('project-wide release needs explicit consent and retains original claim and
   assert.equal(f.read().status, 'found');
 });
 
+test('published project memory is recalled from broad and German queries', (t) => {
+  const f = fixture(); t.after(() => f.close());
+  f.change('claim:codex:windows-platform', 'publish', '2026-11-13T00:00:01Z');
+  const queries = [
+    'Recall all approved decisions about the platform, Windows x64 support and memory.',
+    'Welche Entscheidungen gelten für ausschließlich Windows x64?',
+    ('Windows x64 ' + 'unrelated '.repeat(70)).slice(0, 500),
+  ];
+  for (const query of queries) {
+    assert.ok(query.length <= 500);
+    const result = f.read(query);
+    assert.equal(result.status, 'found');
+    assert.equal(result.project_wide_matches, 1);
+    assert.deepEqual(result.items.map((item) => item.claim.id),
+      ['claim:codex:windows-platform']);
+    assert.equal(result.items[0].scope, 'project');
+    assert.equal(result.items[0].origin_branch, f.origin);
+  }
+});
+
 test('no implicit publication, and untrusted or synthetic memories cannot publish', (t) => {
   const f = fixture(); t.after(() => f.close());
   assert.equal(f.read('Sqlite').status, 'no_current_authorized_match');
