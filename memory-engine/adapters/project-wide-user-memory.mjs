@@ -40,7 +40,7 @@ function publicationEvents(dbPath, projectId) {
   const db = new DatabaseSync(dbPath, { readOnly: true });
   try {
     return db.prepare(`
-      SELECT id, metadata_json FROM evidence
+      SELECT id, captured_at, metadata_json FROM evidence
       WHERE project_id = ?
         AND harness = 'codex'
         AND source_kind = 'operator_explicit'
@@ -54,11 +54,16 @@ function publicationEvents(dbPath, projectId) {
         return m && (m.event_type === PUBLISH || m.event_type === REVOKE)
           && nonEmpty(m.claim_id) && nonEmpty(m.origin_branch)
           && nonEmpty(m.primary_evidence_id) && /^[a-f0-9]{64}$/.test(m.value_hash)
-          ? [{ id: row.id, ...m }] : [];
+          ? [{ id: row.id, captured_at: row.captured_at, ...m }] : [];
       } catch {
         return [];
       }
-    });
+    }).sort((a, b) => (
+      b.captured_at.localeCompare(a.captured_at)
+      // A same-instant revoke wins rather than accidentally re-publicizing.
+      || Number(b.event_type === REVOKE) - Number(a.event_type === REVOKE)
+      || b.id.localeCompare(a.id)
+    ));
   } finally {
     db.close();
   }

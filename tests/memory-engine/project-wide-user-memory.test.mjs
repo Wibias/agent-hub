@@ -9,6 +9,7 @@ import { MemoryEngine } from '../../memory-engine/index.mjs';
 import { manageGlobalMemoryProject, readGlobalCodexMemory } from '../../memory-engine/adapters/codex-global-memory-scope.mjs';
 import {
   changeProjectMemoryPublication, inspectProjectMemoryPublication,
+  readPublishedProjectUserMemories,
 } from '../../memory-engine/adapters/project-wide-user-memory.mjs';
 
 function fixture() {
@@ -134,4 +135,37 @@ test('read-only MCP cannot publish Claims and returns only explicitly published 
   assert.deepEqual(read.items.map(x => x.claim.id), ['claim:codex:windows-platform']);
   assert.equal(read.items[0].evidence.authority_class, 'user_direct');
   assert.equal(f.read('Sqlite').items.length, 0);
+});
+
+test('publication and revocation survive canonical export/import without copying a Claim', (t) => {
+  const f = fixture(); t.after(() => f.close());
+  const claimId = 'claim:codex:windows-platform';
+  const restore = (name) => {
+    const source = new MemoryEngine({ dbPath: f.dbPath, readOnly: true });
+    let payload;
+    try { payload = source.exportCanonical(); }
+    finally { source.close(); }
+    const dbPath = join(f.root, name + '.sqlite3');
+    const target = new MemoryEngine({ dbPath });
+    try { target.importCanonical(payload); }
+    finally { target.close(); }
+    return readPublishedProjectUserMemories({
+      dbPath, projectId: f.projectId, currentBranch: 'main',
+      query: 'Windows x64', maxItems: 10,
+    });
+  };
+  f.change(claimId, 'publish', '2026-11-13T00:00:01Z');
+  const published = restore('after-publish');
+  assert.deepEqual(published.map((x) => x.claim.id), [claimId]);
+  assert.equal(published[0].origin_branch, f.origin);
+  f.change(claimId, 'revoke', '2026-11-13T00:00:02Z');
+  assert.deepEqual(restore('after-revoke'), []);
+});
+
+test('simultaneous publish and revoke timestamps fail closed in favor of revocation', (t) => {
+  const f = fixture(); t.after(() => f.close());
+  const id = 'claim:codex:windows-platform';
+  f.change(id, 'publish', '2026-11-13T00:00:01Z');
+  f.change(id, 'revoke', '2026-11-13T00:00:01Z');
+  assert.equal(f.read().status, 'no_current_authorized_match');
 });
