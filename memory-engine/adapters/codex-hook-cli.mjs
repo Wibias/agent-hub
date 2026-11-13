@@ -10,6 +10,7 @@ import {
 } from './codex-hook-cli-core.mjs';
 import {
   createCodexMemoryHookAdapter,
+  explicitMemoryCommandFailure,
 } from './codex-hooks.mjs';
 
 export * from './codex-hook-cli-core.mjs';
@@ -92,18 +93,29 @@ async function readStdin(stream = process.stdin) {
 }
 
 async function main() {
+  let event = null;
   try {
     const raw = await readStdin();
-    const event = JSON.parse(raw);
+    event = JSON.parse(raw);
+    const options = parseCodexHookCliOptions(process.argv.slice(2));
     const output = await runCodexMemoryHook({
       event,
-      configOptions: parseCodexHookCliOptions(process.argv.slice(2)),
+      configOptions: options,
     });
-    if (output !== null) {
-      process.stdout.write(`${JSON.stringify(output)}\n`);
+    const response = output ?? explicitMemoryCommandFailure(event, {
+      enabled: options.explicitMemoryRequests === true,
+    });
+    if (response !== null) {
+      process.stdout.write(`${JSON.stringify(response)}\n`);
     }
   } catch {
-    // Codex command hooks are fail-soft here: exit 0 with no output.
+    // Ordinary prompts remain fail-soft. Do not forward admin commands to Codex.
+    const response = explicitMemoryCommandFailure(event, {
+      enabled: process.argv.includes('--explicit-memory-requests'),
+    });
+    if (response !== null) {
+      process.stdout.write(`${JSON.stringify(response)}\n`);
+    }
   }
 }
 
