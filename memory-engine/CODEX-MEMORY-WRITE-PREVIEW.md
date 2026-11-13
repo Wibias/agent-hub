@@ -59,3 +59,43 @@ This preview runs as the **same Windows user as Codex**. A fully shell-capable m
 For production, G2/G3/G4/G5 gates, broker-separated OS identity, authenticated session and explicit authorization controls must be integrated and reviewed separately. No service or pipe is installed by these scripts. The preview does not unlock G5 writing or Graph production routing.
 
 **G5-Write HOLD. Production NO-GO.**
+
+## Optional project-wide publication for an existing user-direct memory
+
+A normal Claim remains scoped to the Git branch where its original source
+Evidence was captured. Do **not** copy Claims between branches, overwrite
+their branches, or infer project scope from conversational phrasing alone.
+
+An operator may explicitly publish a single existing, active, non-synthetic
+`user_direct` Claim (subject: user memory; predicate: states; real user-prompt
+Evidence) through `scripts/manage-project-wide-memory.mjs`. Publication and
+revocation are append-only canonical Evidence events in the same SQLite
+database, including the exact original Claim and Evidence IDs, originating
+branch, and a SHA-256 of the Claim text. They survive canonical export/import.
+
+A published Claim remains subject to normal current/historical, provenance,
+conflict and authority checks on its **source branch**. Other user decisions,
+repository evidence, test seeds and model-inferred Claims are not published.
+
+This operation requires an already approved repository and an interactive
+PowerShell terminal. First retrieve the exact Claim ID from the original
+branch using a read-only `MemoryEngine.recall` call. Inspect it with:
+
+~~~powershell
+$hub = Join-Path $HOME '.agents'
+node "$hub\scripts\manage-project-wide-memory.mjs" --cwd $hub --claim-id "EXACT_CLAIM_ID" --inspect
+~~~
+
+If and only if that decision should apply to all branches of the same Git
+project, repeat with `--publish`, read the displayed Claim, and type
+`PUBLISH PROJECT-WIDE`. `--revoke` requires `REVOKE PROJECT-WIDE` and
+immediately stops the cross-branch projection without deleting canonical
+Evidence or modifying the original Claim.
+
+Only the already allowlisted **global** read-only `memory_recall` MCP projects
+published Claims into other branches. Returned cross-branch items include
+`scope:"project"` and `origin_branch`. This does not alter the old pinned
+project MCP, make the system multi-tenant, or unlock C9 production writing.
+
+This is same-Windows-user operator consent, not a privileged OS security
+boundary. No normal model-side memory write can silently publish a Claim.

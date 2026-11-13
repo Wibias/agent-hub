@@ -19,7 +19,7 @@ function safeText(value, limit = 1200) {
   const redacted = inspectMemoryTextSensitivity(String(value)).redacted;
   return redacted.length > limit ? redacted.slice(0, limit) + ' [TRUNCATED]' : redacted;
 }
-function publicItem(item) {
+export function publicItem(item) {
   return {
     claim: {
       id: item.claim.id,
