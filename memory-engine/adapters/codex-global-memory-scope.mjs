@@ -129,6 +129,7 @@ export function readGlobalCodexMemory({
   scopePath = defaultGlobalMemoryScopePath(),
   describe = describeGlobalMemoryProject,
   read = readCodexMemory,
+  readPublished = readPublishedProjectUserMemories,
 } = {}) {
   let manifest;
   try {
@@ -151,23 +152,36 @@ export function readGlobalCodexMemory({
   }
   // Deliberately ignore all inherited AGENT_HUB_MEMORY_* overrides.
   // This is not host authentication. The trusted allowlist is the authority.
-  const result = read({
-    cwd: current.root, query, maxItems,
-    env: {
-      AGENT_HUB_MEMORY_DB: manifest.memory_db,
-      AGENT_HUB_MEMORY_PROJECT_ID: enrolled.project_id,
-      AGENT_HUB_MEMORY_REPO_IDENTITY: enrolled.repo_identity,
-    },
-  });
+  let result;
+  try {
+    result = read({
+      cwd: current.root, query, maxItems,
+      env: {
+        AGENT_HUB_MEMORY_DB: manifest.memory_db,
+        AGENT_HUB_MEMORY_PROJECT_ID: enrolled.project_id,
+        AGENT_HUB_MEMORY_REPO_IDENTITY: enrolled.repo_identity,
+      },
+    });
+  } catch {
+    // Expose only which read stage failed, never SQLite or file details.
+    return { status: 'memory_read_failed', stage: 'branch_recall',
+      items: [], read_only: true };
+  }
   if (!['found', 'no_current_authorized_match'].includes(result?.status)) return result;
 
   // Cross-branch visibility requires a separate, explicit operator-approved
   // publication in canonical Evidence. Ordinary branch-scoped user decisions
   // and model-inferred facts never become project-wide implicitly.
-  const published = readPublishedProjectUserMemories({
-    dbPath: manifest.memory_db, projectId: enrolled.project_id,
-    currentBranch: result.branch, query, maxItems,
-  });
+  let published;
+  try {
+    published = readPublished({
+      dbPath: manifest.memory_db, projectId: enrolled.project_id,
+      currentBranch: result.branch, query, maxItems,
+    });
+  } catch {
+    return { status: 'memory_read_failed', stage: 'published_recall',
+      items: [], read_only: true };
+  }
   if (published.length === 0) return result;
 
   const seen = new Set(result.items.map((item) => item.claim.id));
