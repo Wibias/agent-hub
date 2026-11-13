@@ -23,11 +23,13 @@ export function inspectAutomaticJudgeRetryBackoff({
     db = openDb(dbPath);
     db.exec('PRAGMA query_only = ON');
     const earliest = new Date(now() - 15 * 60_000).toISOString();
-    // Usage/quota exhaustion may span hours, unlike HTTP 429 bursts.
-    // Probe only after six hours. An explicit manual pipeline invocation
-    // remains available to test recovery earlier without touching this guard.
-    const quotaCooldownMinutes = 6 * 60;
-    const quotaEarliest = new Date(now() - quotaCooldownMinutes * 60_000).toISOString();
+    // Quota exhaustion may last hours or days. After the first known quota
+    // refusal, defer auto-judging for six hours. If multiple refusals occur
+    // in 48 hours, defer for 24 hours rather than retrying on every Stop.
+    // Manual pipeline invocations remain available to probe recovery early.
+    const firstQuotaCooldownMinutes = 6 * 60;
+    const repeatedQuotaCooldownMinutes = 24 * 60;
+    const quotaHistoryEarliest = new Date(now() - 48 * 60 * 60_000).toISOString();
     const quotaPredicate = [
       // Include variants such as "You've reached the usage limit" and
       // "Your usage limit has been reached", not only "hit your usage limit".
@@ -39,11 +41,11 @@ export function inspectAutomaticJudgeRetryBackoff({
       "instr(lower(error_text),'spend cap') > 0",
     ].join(' OR ');
     const quota = db.prepare(
-      'SELECT MAX(occurred_at) AS latest_quota FROM memory_pipeline_failures '
+      'SELECT MAX(occurred_at) AS latest_quota, COUNT(*) AS quota_count FROM memory_pipeline_failures '
       + "WHERE project_id = ? AND branch = ? AND stage = 'importance' "
       + "AND error_class = 'candidate_stage_failure' AND occurred_at >= ? "
       + "AND (" + quotaPredicate + ')',
-    ).get(projectId, branch, quotaEarliest);
+    ).get(projectId, branch, quotaHistoryEarliest);
     const counts = db.prepare(
       'SELECT '
       + "SUM(CASE WHEN instr(lower(error_text),'rate limit') > 0 "
@@ -64,6 +66,9 @@ export function inspectAutomaticJudgeRetryBackoff({
     const age = Number.isFinite(latest) ? now() - latest : Infinity;
     const quotaAt = Date.parse(quota?.latest_quota);
     const quotaAge = Number.isFinite(quotaAt) ? now() - quotaAt : Infinity;
+    const quotaCooldownMinutes = Number(quota?.quota_count ?? 0) >= 2
+      ? repeatedQuotaCooldownMinutes
+      : firstQuotaCooldownMinutes;
     if (quotaAge >= 0 && quotaAge < quotaCooldownMinutes * 60_000) {
       return {
         deferred: true,
