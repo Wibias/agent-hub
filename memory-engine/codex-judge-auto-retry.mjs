@@ -40,12 +40,16 @@ export function inspectAutomaticJudgeRetryBackoff({
       "instr(lower(error_text),'out of credits') > 0",
       "instr(lower(error_text),'spend cap') > 0",
     ].join(' OR ');
+    // The same project can have dozens of Codex worktree branches. A known
+    // quota refusal must suppress automatic retries on all those branches.
+    // Keep other projects isolated: historical failure rows do not record
+    // a judge-account identity, so an account-wide guard would be unsound.
     const quota = db.prepare(
       'SELECT MAX(occurred_at) AS latest_quota, COUNT(*) AS quota_count FROM memory_pipeline_failures '
-      + "WHERE project_id = ? AND branch = ? AND stage = 'importance' "
+      + "WHERE project_id = ? AND stage = 'importance' "
       + "AND error_class = 'candidate_stage_failure' AND occurred_at >= ? "
       + "AND (" + quotaPredicate + ')',
-    ).get(projectId, branch, quotaHistoryEarliest);
+    ).get(projectId, quotaHistoryEarliest);
     const counts = db.prepare(
       'SELECT '
       + "SUM(CASE WHEN instr(lower(error_text),'rate limit') > 0 "
