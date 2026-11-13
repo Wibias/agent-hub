@@ -706,6 +706,47 @@ test('runCodexMemoryHook wires configured engine, protocol, adapter, and teardow
 });
 
 
+test('Windows hybrid recall recovers a cached local E5 worker with bounded startup and no model judge', async () => {
+  for (const cacheReady of [true, false]) {
+    const started = [];
+    const memory = {
+      getProject() { return { projectId: 'project-a' }; },
+      close() {},
+    };
+
+    await runCodexMemoryHook({
+      event: userPromptEvent(),
+      platform: 'win32',
+      configOptions: { hybridRecall: true },
+      env: {
+        AGENT_HUB_MEMORY_DB: '/shared/memory.sqlite3',
+        AGENT_HUB_MEMORY_PROJECT_ID: 'project-a',
+        AGENT_HUB_MEMORY_REPO_IDENTITY: 'project-a',
+      },
+      createEngine() { return memory; },
+      resolveProjectScope() {
+        return { projectId: 'project-a', repoIdentity: 'project-a', canonicalRemote: null };
+      },
+      embeddingCacheAvailable() { return cacheReady; },
+      async ensureEmbeddingWorker(options) {
+        started.push(options);
+        return { status: 'already_running' };
+      },
+      createEmbeddingClient() { return { health: async () => ({ ready: true }) }; },
+      createHybridRetriever() { return {}; },
+      createDiagnosticsRetriever() { return {}; },
+      createProtocol() { return { handle() {} }; },
+      createAdapter() { return { async handle() { return null; } }; },
+    });
+    assert.equal(started.length, cacheReady ? 1 : 0);
+    if (cacheReady) {
+      assert.equal(started[0].startupTimeoutMs, 2_500);
+      assert.equal(typeof started[0].socketPath, 'string');
+      assert.equal(typeof started[0].cacheDir, 'string');
+    }
+  }
+});
+
 test('Codex CLI reads hook JSON from stdin and writes recalled context', () => {
   const root = mkdtempSync(join(tmpdir(), 'agent-hub-codex-cli-'));
   const repoDir = join(root, 'repo');
