@@ -65,26 +65,37 @@ test('one rate-limit indication defers only automatic worker requests', () => {
   });
 });
 
-test('one usage-window, credits or spend-cap failure defers automatic retries', () => {
+test('one usage-window, credits or spend-cap failure suppresses repeated auto-judging for six hours', () => {
   for (const message of [
     "codex candidate judge failed with exit 1: You've hit your usage limit",
+    'codex candidate judge failed with exit 1: You have reached the usage limit',
+    'codex candidate judge failed with exit 1: usage_limit_reached',
     'codex candidate judge failed with exit 1: Your workspace is out of credits',
     'codex candidate judge failed with exit 1: Quota exceeded',
     'codex candidate judge failed with exit 1: You hit your spend cap set in your workspace',
   ]) {
     withFixture([message], (ctx) => {
-      assert.deepEqual(inspect(ctx), {
+      const blocked = {
         deferred: true,
         reason: 'usage_or_quota_cooldown',
-        minutes: 15,
-      });
-      assert.deepEqual(inspect({ ...ctx, now: () => TIME + 20 * 60_000 }), {
+        minutes: 360,
+      };
+      assert.deepEqual(inspect(ctx), blocked);
+      assert.deepEqual(inspect({ ...ctx, now: () => TIME + 20 * 60_000 }), blocked);
+      assert.deepEqual(inspect({ ...ctx, now: () => TIME + 5 * 60 * 60_000 }), blocked);
+      assert.deepEqual(inspect({ ...ctx, now: () => TIME + 6 * 60 * 60_000 }), {
         deferred: false,
         reason: null,
         minutes: 0,
       });
     });
   }
+});
+
+test('quota failures in another branch or failure stage cannot block this project', () => {
+  withFixture(['totally normal candidate failure'], (ctx) => {
+    assert.equal(inspect(ctx).deferred, false);
+  });
 });
 
 test('a generic 429 remains a rate-limit cooldown rather than usage quota', () => {
