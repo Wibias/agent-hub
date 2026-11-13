@@ -151,12 +151,15 @@ test('installer plan adds current memory hooks while preserving unrelated hooks 
   assert.match(prompt.command, /--ignore-memory-env/);
   assert.match(prompt.command, /--explicit-memory-requests/);
   assert.match(prompt.command, /--hybrid-recall/);
+  assert.doesNotMatch(prompt.command, /--recall-relevance/);
+  assert.doesNotMatch(prompt.command, /--recall-fast-path/);
   assert.match(prompt.command, /--candidate-capture/);
   assert.match(prompt.command, /--auto-pipeline/);
   const promptWindows = decodeWindowsPowerShellCommand(prompt);
   assert.match(promptWindows, /^& '\/usr\/bin\/node' '/);
   assert.match(promptWindows, /codex-hook-cli\.mjs/);
   assert.match(promptWindows, /'--candidate-capture'/);
+  assert.doesNotMatch(promptWindows, /'--recall-relevance'/);
   assert.match(promptWindows, /; exit \$LASTEXITCODE$/);
   assert.equal(prompt.timeout, 30);
   assert.equal(prompt.additionalContextLimit, 2500);
@@ -389,6 +392,31 @@ test('installer replaces stale agent decision hooks without deleting unrelated s
   );
 });
 
+test('installer replaces previous opt-in relevance flags with model-free recall when opting out', () => {
+  const enabled = planCodexMemoryHooks({
+    existing: { hooks: {} },
+    hubRoot: HUB,
+    nodePath: NODE,
+    relevanceSelection: true,
+  });
+  assert.match(managedPromptHook(enabled.config).command, /--recall-relevance/);
+
+  const safe = planCodexMemoryHooks({
+    existing: enabled.config,
+    hubRoot: HUB,
+    nodePath: NODE,
+  });
+  assert.equal(safe.changed, true);
+  const prompt = managedPromptHook(safe.config);
+  assert.doesNotMatch(prompt.command, /--recall-relevance/);
+  assert.doesNotMatch(decodeWindowsPowerShellCommand(prompt), /'--recall-relevance'/);
+  assert.equal(planCodexMemoryHooks({
+    existing: safe.config,
+    hubRoot: HUB,
+    nodePath: NODE,
+  }).changed, false);
+});
+
 test('installer plan is idempotent after normalization', () => {
   const first = planCodexMemoryHooks({
     existing: { hooks: {} },
@@ -509,6 +537,7 @@ test('installer refuses to modify a symlinked hooks file', async (t) => {
 test('installer argument parser supports dry-run and explicit apply overrides', () => {
   assert.deepEqual(parseCodexMemoryHookInstallArgs([]), {
     apply: false,
+    relevanceSelection: false,
     hooksPath: undefined,
     hubRoot: undefined,
     nodePath: undefined,
@@ -517,12 +546,14 @@ test('installer argument parser supports dry-run and explicit apply overrides', 
   assert.deepEqual(
     parseCodexMemoryHookInstallArgs([
       '--apply',
+      '--recall-relevance',
       '--hooks', '/state/hooks.json',
       '--hub-root', '/repo/agent-hub',
       '--node', '/runtime/node',
     ]),
     {
       apply: true,
+      relevanceSelection: true,
       hooksPath: '/state/hooks.json',
       hubRoot: '/repo/agent-hub',
       nodePath: '/runtime/node',
