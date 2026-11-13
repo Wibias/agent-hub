@@ -14,6 +14,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { fileURLToPath } from 'node:url';
 
 import { resolveCodexJudgeExecutable } from '../memory-engine/codex-judge-executable.mjs';
+import { inspectAutomaticJudgeRetryBackoff } from '../memory-engine/codex-judge-auto-retry.mjs';
 import {
   defaultGlobalMemoryScopePath,
   describeGlobalMemoryProject,
@@ -196,6 +197,8 @@ function emptyCounts() {
     user_prompt_evidence: 0,
     candidate_by_status: {},
     pending_user_candidates: 0,
+    pending_unevaluated: 0,
+    pending_evaluated: 0,
     claims_current_branch_by_state: {},
     claims_other_branches: 0,
     active_current_by_authority: {},
@@ -208,6 +211,7 @@ function emptyCounts() {
     pipeline_latest_failure_at: null,
     pipeline_running_older_than_30m: 0,
     pipeline_last_start: null,
+    automatic_judge_retry: { deferred: null, reason: 'not_inspected', minutes: 0 },
     active_claim_blockers: {
       disallowed_authority: 0,
       path_not_current: 0,
@@ -251,6 +255,8 @@ function inspectHooks({ codexHome = join(homedir(), '.codex') } = {}) {
 }
 
 function inspectProject(db, approved, {
+  dbPath = null,
+  retryInspector = inspectAutomaticJudgeRetryBackoff,
   observe = describeGlobalMemoryProject,
   git = (root, args) => execFileSync(
     'git', ['-C', root, ...args], { encoding: 'utf8', timeout: 5_000,
@@ -297,6 +303,19 @@ function inspectProject(db, approved, {
       "SELECT COUNT(*) n FROM memory_candidates WHERE project_id = ? AND branch = ? "
       + "AND status = 'pending' AND source_authority = 'user_direct' AND evaluated_at IS NULL",
       scoped);
+    // A pending candidate may already have a non-promote judge decision.
+    // Only unevaluated pending candidates are awaiting an importance judgment.
+    const pendingUnevaluated = count(db,
+      "SELECT COUNT(*) n FROM memory_candidates WHERE project_id = ? AND branch = ? "
+      + "AND status = 'pending' AND evaluated_at IS NULL", scoped);
+    const pendingEvaluated = count(db,
+      "SELECT COUNT(*) n FROM memory_candidates WHERE project_id = ? AND branch = ? "
+      + "AND status = 'pending' AND evaluated_at IS NOT NULL", scoped);
+    // This preflight reads historical failure metadata only. No model call,
+    // candidate mutation, retry attempt or quota probe occurs.
+    const autoRetry = dbPath
+      ? retryInspector({ dbPath, projectId: id, branch })
+      : { deferred: null, reason: 'not_inspected', minutes: 0 };
     const claimsCurrent = grouped(db,
       'SELECT state label, COUNT(*) n FROM claims '
       + 'WHERE project_id = ? AND branch_scope = ? GROUP BY state', scoped);
@@ -387,6 +406,8 @@ function inspectProject(db, approved, {
       user_prompt_evidence: userPrompts,
       candidate_by_status: candidateStatus,
       pending_user_candidates: pendingUser,
+      pending_unevaluated: pendingUnevaluated,
+      pending_evaluated: pendingEvaluated,
       claims_current_branch_by_state: claimsCurrent,
       claims_other_branches: claimsOther,
       active_current_by_authority: activeAuthority,
@@ -399,6 +420,7 @@ function inspectProject(db, approved, {
       pipeline_latest_failure_at: lastFailure?.at ?? null,
       pipeline_running_older_than_30m: oldRunning,
       pipeline_last_start: lastRun?.started_at ?? null,
+      automatic_judge_retry: autoRetry,
       active_claim_blockers: activeBlockers,
       eligible_claims_upper_bound: upperBound,
     };
@@ -415,6 +437,7 @@ function inspectProject(db, approved, {
       findings.push('pending_user_candidates_without_pipeline_runs');
     }
     if (pendingUser > 0) findings.push('pending_user_candidates');
+    if (autoRetry.deferred === true) findings.push('automatic_judge_retry_deferred');
     if ((candidateStatus.needs_confirmation ?? 0) > 0) {
       findings.push('candidates_need_confirmation');
     }
@@ -507,7 +530,9 @@ export function diagnoseCodexMemoryPipeline({
       ...common,
       status: 'inspected',
       approved_project_count: manifest.projects.length,
-      projects: manifest.projects.map((approved) => projectInspector(db, approved)),
+      projects: manifest.projects.map((approved) => projectInspector(db, approved, {
+        dbPath: manifest.memory_db,
+      })),
     };
   } catch {
     return { ...common, status: 'database_read_failed' };

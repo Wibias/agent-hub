@@ -471,3 +471,92 @@ test('importance diagnostics prioritize account usage and quota over generic HTT
     assert.equal(hash(), before, 'diagnosis must not change canonical SQLite');
   } finally { f.close(); }
 });
+
+test('read-only diagnosis distinguishes evaluated pending items from unevaluated backlog', () => {
+  const f = fixture();
+  try {
+    const memory = new MemoryEngine({ dbPath: f.memoryDb });
+    try {
+      memory.evaluateCandidate({
+        candidateId: 'candidate-pending',
+        evaluatorId: 'codex:test:importance-v2',
+        evaluatedAt: new Date().toISOString(),
+        evaluation: {
+          decision: 'keep_candidate',
+          suggested_type: 'decision',
+          durability: 'medium',
+          future_utility: 'medium',
+          specificity: 'high',
+          confidence: 'high',
+          meaning_preserved: true,
+          canonical_fact: 'The team decided to use SQLite during the review milestone.',
+          reason: 'Still actionable during review but not a long-term commitment.',
+          risk_flags: ['transient'],
+        },
+      });
+    } finally { memory.close(); }
+    const before = createHash('sha256').update(readFileSync(f.memoryDb)).digest('hex');
+    const result = diagnoseCodexMemoryPipeline({
+      scopePath: f.scopePath, codexHome: f.codexHome,
+    });
+    const beta = result.projects.find(p => p.project_id.endsWith('/beta'));
+    assert.equal(beta.counts.candidate_by_status.pending, 1);
+    assert.equal(beta.counts.pending_unevaluated, 0);
+    assert.equal(beta.counts.pending_evaluated, 1);
+    assert.equal(beta.counts.pending_user_candidates, 0);
+    assert.ok(!beta.findings.includes('pending_user_candidates'));
+    assert.equal(createHash('sha256').update(readFileSync(f.memoryDb)).digest('hex'), before);
+  } finally { f.close(); }
+});
+
+test('read-only diagnosis reports actual cross-branch automatic retry guard, not just historical quota count', () => {
+  const f = fixture();
+  try {
+    const memory = new MemoryEngine({ dbPath: f.memoryDb });
+    try {
+      const now = Date.now();
+      memory.startPipelineRun({
+        id: 'retry-diagnostic-sibling-branch',
+        projectId: 'github.com/example/beta',
+        branch: 'feature',
+        trigger: 'Stop',
+        startedAt: new Date(now - 60_000).toISOString(),
+      });
+      for (let i = 0; i < 2; i += 1) {
+        memory.recordPipelineFailure({
+          runId: 'retry-diagnostic-sibling-branch',
+          projectId: 'github.com/example/beta',
+          branch: 'feature',
+          stage: 'importance',
+          errorClass: 'candidate_stage_failure',
+          error: 'codex candidate judge failed with exit 1: Your usage limit has been reached PRIVATE_TOKEN',
+          occurredAt: new Date(now - 50_000 + i * 1000).toISOString(),
+        });
+      }
+      memory.finishPipelineRun({
+        id: 'retry-diagnostic-sibling-branch',
+        status: 'partial',
+        finishedAt: new Date(now - 45_000).toISOString(),
+        durationMs: 15_000,
+      });
+    } finally { memory.close(); }
+
+    const before = createHash('sha256').update(readFileSync(f.memoryDb)).digest('hex');
+    const report = diagnoseCodexMemoryPipeline({
+      scopePath: f.scopePath, codexHome: f.codexHome,
+    });
+    const beta = report.projects.find(p => p.project_id.endsWith('/beta'));
+    const alpha = report.projects.find(p => p.project_id.endsWith('/alpha'));
+    assert.deepEqual(beta.counts.automatic_judge_retry, {
+      deferred: true, reason: 'usage_or_quota_cooldown', minutes: 1440,
+    });
+    assert.ok(beta.findings.includes('automatic_judge_retry_deferred'));
+    assert.equal(beta.counts.pipeline_failures, 0,
+      'a sibling branch refusal should not appear as current-branch failure');
+    assert.deepEqual(alpha.counts.automatic_judge_retry, {
+      deferred: false, reason: null, minutes: 0,
+    });
+    assert.ok(!JSON.stringify(report).includes('PRIVATE_TOKEN'));
+    assert.equal(createHash('sha256').update(readFileSync(f.memoryDb)).digest('hex'), before);
+  } finally { f.close(); }
+});
