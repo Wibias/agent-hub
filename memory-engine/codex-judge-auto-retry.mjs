@@ -1,4 +1,5 @@
 import { DatabaseSync } from 'node:sqlite';
+import { CANDIDATE_JUDGE_POLICY_VERSION } from './memory-candidate-judge.mjs';
 
 /**
  * Opt-in from the automatically triggered Stop/SubagentStop worker only.
@@ -55,7 +56,7 @@ export function inspectAutomaticJudgeRetryBackoff({
       + 'JOIN evidence e ON e.id = c.source_evidence_id '
       + "WHERE c.project_id = ? AND c.source_authority = 'user_direct' "
       + "AND c.evaluated_at >= ? AND c.evaluated_at <= ? "
-      + "AND c.evaluator_id LIKE 'codex:%:importance-v2' "
+      + "AND c.evaluator_id LIKE ? "
       + "AND c.evaluator_id NOT LIKE 'codex:test:%' "
       + "AND c.evaluator_id NOT LIKE 'codex:mock:%' "
       + "AND c.evaluator_id NOT LIKE 'codex:fixture:%' "
@@ -70,7 +71,8 @@ export function inspectAutomaticJudgeRetryBackoff({
       + "AND json_extract(e.metadata_json, '$.event_type') = 'user_prompt' "
       + "AND lower(c.id) NOT LIKE '%runtime-e2e-seed%' "
       + "AND lower(coalesce(e.source_ref,'')) NOT LIKE '%runtime-e2e-seed%'",
-    ).get(projectId, quotaHistoryEarliest, new Date(checkedAt).toISOString());
+    ).get(projectId, quotaHistoryEarliest, new Date(checkedAt).toISOString(),
+      'codex:%:' + CANDIDATE_JUDGE_POLICY_VERSION);
     const lastSuccess = success?.latest_success ?? null;
     const quota = db.prepare(
       'SELECT MAX(occurred_at) AS latest_quota, COUNT(*) AS quota_count FROM memory_pipeline_failures '
