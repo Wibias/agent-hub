@@ -43,11 +43,36 @@ function assertRolloutArgs(text, { windows = false } = {}) {
   assert.doesNotMatch(text, synchronous);
 }
 
-test('managed UserPromptSubmit is prepared for non-blocking replay Shadow rollout only', () => {
+test('managed UserPromptSubmit defaults to model-free authorized recall on both hosts', () => {
   const plan = planCodexMemoryHooks({
     existing: { hooks: {} },
     hubRoot: '/opt/agent-hub',
     nodePath: '/usr/bin/node',
+  });
+  const prompt = managedPromptHook(plan.config);
+  assert.ok(prompt);
+  for (const command of [prompt.command, decodeWindows(prompt)]) {
+    assert.match(command, /--hybrid-recall/);
+    assert.match(command, /--candidate-capture/);
+    assert.match(command, /--auto-pipeline/);
+    assert.doesNotMatch(command, /--recall-relevance/);
+    assert.doesNotMatch(command, /--recall-fast-path/);
+  }
+
+  const repeated = planCodexMemoryHooks({
+    existing: plan.config,
+    hubRoot: '/opt/agent-hub',
+    nodePath: '/usr/bin/node',
+  });
+  assert.equal(repeated.changed, false);
+});
+
+test('optional relevance selector retains non-blocking shadow replay without authoritative fast-path', () => {
+  const plan = planCodexMemoryHooks({
+    existing: { hooks: {} },
+    hubRoot: '/opt/agent-hub',
+    nodePath: '/usr/bin/node',
+    relevanceSelection: true,
   });
 
   const prompt = managedPromptHook(plan.config);
