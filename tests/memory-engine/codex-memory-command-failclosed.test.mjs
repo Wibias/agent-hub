@@ -7,6 +7,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { MemoryEngine } from '../../memory-engine/index.mjs';
+import { memoryCandidateFingerprint } from '../../memory-engine/memory-capture-policy.mjs';
 import {
   createCodexMemoryHookAdapter,
   explicitMemoryCommandFailure,
@@ -71,7 +72,9 @@ function fixture(run) {
         proposedValue: evidence.content_redacted,
         decisionReason: 'rule:decision:definitive',
         policyVersion: 'capture-v1',
-        fingerprint: 'memory-command-fingerprint',
+        fingerprint: memoryCandidateFingerprint({
+          type: 'decision', value: evidence.content_redacted,
+        }),
         createdAt: '2026-10-03T00:00:00.000Z',
       });
       memory.evaluateCandidate({
