@@ -40,6 +40,7 @@ import {
 import {
   canonicalizeExplicitMemoryValue,
   createCodexMemoryHookAdapter,
+  explicitMemoryCommandFailure,
   parseExplicitMemoryPrompt,
   resolveActiveDirectUserMemoryTarget,
 } from './codex-hooks.mjs';
@@ -835,7 +836,9 @@ export async function runCodexMemoryHook({
     }
   }
 
-  return output;
+  return output ?? explicitMemoryCommandFailure(event, {
+    enabled: configOptions.explicitMemoryRequests === true,
+  });
 }
 
 async function readStdin(stream = process.stdin) {
@@ -848,18 +851,29 @@ async function readStdin(stream = process.stdin) {
 }
 
 async function main() {
+  let event = null;
   try {
     const raw = await readStdin();
-    const event = JSON.parse(raw);
+    event = JSON.parse(raw);
+    const options = parseCodexHookCliOptions(process.argv.slice(2));
     const output = await runCodexMemoryHook({
       event,
-      configOptions: parseCodexHookCliOptions(process.argv.slice(2)),
+      configOptions: options,
     });
-    if (output !== null) {
-      process.stdout.write(`${JSON.stringify(output)}\n`);
+    const response = output ?? explicitMemoryCommandFailure(event, {
+      enabled: options.explicitMemoryRequests === true,
+    });
+    if (response !== null) {
+      process.stdout.write(`${JSON.stringify(response)}\n`);
     }
   } catch {
-    // Codex command hooks are fail-soft here: exit 0 with no output.
+    // Ordinary prompts stay fail-soft. An explicit Memory command must be consumed.
+    const response = explicitMemoryCommandFailure(event, {
+      enabled: process.argv.includes('--explicit-memory-requests'),
+    });
+    if (response !== null) {
+      process.stdout.write(`${JSON.stringify(response)}\n`);
+    }
   }
 }
 
