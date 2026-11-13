@@ -92,6 +92,28 @@ test('one usage-window, credits or spend-cap failure suppresses repeated auto-ju
   }
 });
 
+test('repeated quota refusals extend only automatic cooldown to one day', () => {
+  withFixture([
+    'codex candidate judge failed with exit 1: You have reached the usage limit',
+    'codex candidate judge failed with exit 1: You have reached the usage limit',
+  ], (ctx) => {
+    const blocked = {
+      deferred: true,
+      reason: 'usage_or_quota_cooldown',
+      minutes: 1440,
+    };
+    assert.deepEqual(inspect(ctx), blocked);
+    assert.deepEqual(inspect({ ...ctx, now: () => TIME + 15 * 60_000 }), blocked);
+    assert.deepEqual(inspect({ ...ctx, now: () => TIME + 6 * 60 * 60_000 }), blocked);
+    assert.deepEqual(inspect({ ...ctx, now: () => TIME + 20 * 60 * 60_000 }), blocked);
+    assert.deepEqual(inspect({ ...ctx, now: () => TIME + 24 * 60 * 60_000 }), {
+      deferred: false,
+      reason: null,
+      minutes: 0,
+    });
+  });
+});
+
 test('quota failures in another branch or failure stage cannot block this project', () => {
   withFixture(['totally normal candidate failure'], (ctx) => {
     assert.equal(inspect(ctx).deferred, false);
