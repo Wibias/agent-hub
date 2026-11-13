@@ -157,6 +157,38 @@ test('untrusted inherited project-identity overrides cannot redirect global scop
   } finally { f.cleanup(); }
 });
 
+test('global recall identifies branch vs published-read failure without exposing internals', () => {
+  const f = setup();
+  try {
+    f.enroll(f.alpha);
+    const branchFailure = readGlobalCodexMemory({
+      cwd: f.alpha, scopePath: f.scopePath,
+      query: 'database',
+      read: () => { throw new Error('sensitive branch SQL and file path'); },
+    });
+    assert.deepEqual(branchFailure, {
+      status: 'memory_read_failed', stage: 'branch_recall',
+      items: [], read_only: true,
+    });
+
+    const publicationFailure = readGlobalCodexMemory({
+      cwd: f.alpha, scopePath: f.scopePath,
+      query: 'database',
+      read: () => ({
+        status: 'found', project_id: 'github.com/example/alpha',
+        branch: 'main', items: [], read_only: true,
+      }),
+      readPublished: () => { throw new Error('sensitive published memory SQL'); },
+    });
+    assert.deepEqual(publicationFailure, {
+      status: 'memory_read_failed', stage: 'published_recall',
+      items: [], read_only: true,
+    });
+    assert.doesNotMatch(JSON.stringify([branchFailure, publicationFailure]),
+      /sensitive|SQL|file path/);
+  } finally { f.cleanup(); }
+});
+
 test('explicit revocation closes access without changing existing memories', () => {
   const f = setup();
   try {
