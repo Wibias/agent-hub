@@ -168,7 +168,7 @@ This sends only a local IPC `health` request. It does not create semantic vector
 
 When Stage=importance and error_class=candidate_stage_failure, the existing local diagnostic now reports **importance_failure_signatures**. It groups persisted error_text using fixed SQL patterns **inside SQLite**, returning only predefined categories and counts. The raw error strings, paths, stderr, model responses, and secrets are never selected into Node or printed. No candidate is retried and the database remains read-only.
 
-The fixed categories are: auth_file_missing, codex_executable_not_found, codex_spawn_permission_denied, isolated_git_init_failed, judge_timeout, auth_rejection_possible, rate_limited_possible, quota_exceeded_possible, judge_json_missing, judge_json_invalid, judge_schema_invalid, judge_policy_invariant_failed, codex_exec_nonzero, and unclassified. Labels ending in _possible indicate a substring match, not proven root cause. codex_exec_nonzero only means the CLI failed; it does not establish why.
+The fixed categories are: auth_file_missing, codex_executable_not_found, codex_spawn_permission_denied, isolated_git_init_failed, judge_timeout, usage_limit_reached_possible, credits_exhausted_possible, spend_cap_reached_possible, quota_exceeded_possible, auth_rejection_possible, rate_limited_possible, judge_json_missing, judge_json_invalid, judge_schema_invalid, judge_policy_invariant_failed, codex_exec_nonzero, and unclassified. Labels ending in _possible indicate a substring match, not proven root cause. Specific usage-window, credits, spend-cap and quota signatures take precedence over a generic HTTP 429 in the same stored error. codex_exec_nonzero only means the CLI failed; it does not establish why.
 
 PowerShell 7 (summary only):
 

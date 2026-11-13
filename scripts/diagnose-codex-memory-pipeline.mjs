@@ -71,9 +71,14 @@ function importanceFailureSignatures(db, projectId, branch) {
     ["codex_spawn_permission_denied", pattern('spawn codex eacces') + ' OR ' + pattern('spawn codex eperm')],
     ["isolated_git_init_failed", pattern('failed to initialize isolated judge workspace')],
     ["judge_timeout", pattern('timed out after')],
+    // Specific usage, credit and quota errors must precede a generic HTTP 429.
+    // Match the same known quota families as codex-judge-auto-retry.mjs.
+    ["usage_limit_reached_possible", pattern('usage limit') + ' OR ' + pattern('usage_limit')],
+    ["credits_exhausted_possible", pattern('out of credits')],
+    ["spend_cap_reached_possible", pattern('spend cap')],
+    ["quota_exceeded_possible", pattern('quota exceeded') + ' OR ' + pattern('insufficient_quota') + ' OR ' + pattern('insufficient quota')],
     ["auth_rejection_possible", pattern('not logged in') + ' OR ' + pattern('unauthorized') + ' OR ' + pattern('authentication failed')],
     ["rate_limited_possible", pattern('rate limit') + ' OR ' + pattern('too many requests') + ' OR ' + pattern('429')],
-    ["quota_exceeded_possible", pattern('quota exceeded') + ' OR ' + pattern('insufficient quota')],
     ["judge_json_missing", pattern('judgment response must be non-empty json')],
     ["judge_json_invalid", pattern('judgment response must be json')],
     ["judge_schema_invalid", pattern('missing field in memory candidate judgment')
