@@ -89,6 +89,37 @@ function normalizeCandidateRef(value) {
   return /^~[0-9a-f]{10}$/.test(normalized) ? normalized : null;
 }
 
+/** Only explicit, whole-prompt commands are intercepted. A malformed candidate
+ * command must not fall through into an expensive general agent turn.
+ */
+export function isExplicitMemoryCommandAttempt(prompt) {
+  if (typeof prompt !== 'string') return false;
+  return parseExplicitMemoryPrompt(prompt) !== null
+    || /^\s*memory\s+candidate\s+(?:reject|confirm)(?=\s|:|$)/i.test(prompt)
+    || /^\s*memory\s+(?:inspect|explain|forget|replace)\s*:/i.test(prompt)
+    || /^\s*memory\s*:/i.test(prompt);
+}
+
+/** Fixed, secret-free fallback. Never claim that a mutation did or did not
+ * commit if the hook failed after starting the operation.
+ */
+export function explicitMemoryCommandFailure(event, {
+  enabled = false,
+} = {}) {
+  if (enabled !== true
+    || event?.hook_event_name !== 'UserPromptSubmit'
+    || !isExplicitMemoryCommandAttempt(event?.prompt)) {
+    return null;
+  }
+  const valid = parseExplicitMemoryPrompt(event.prompt) !== null;
+  return {
+    decision: 'block',
+    reason: valid
+      ? 'AgentHub Memory command could not be completed. No change was confirmed. Inspect Memory state before retrying.'
+      : 'Invalid AgentHub Memory command syntax. No operation was performed. Check the command and candidate reference.',
+  };
+}
+
 export function formatCodexMemoryContext(result, options = {}) {
   return formatMemoryRecallContext(result, options);
 }
@@ -1346,7 +1377,13 @@ export function createCodexMemoryHookAdapter({
 
   return {
     async handle(event) {
-      if (!validUserPromptEvent(event)) return null;
+      const commandFallback = explicitMemoryCommandFailure(event, {
+        enabled: explicitMemoryRequests,
+      });
+      if (!validUserPromptEvent(event)) return commandFallback;
+      if (commandFallback !== null && parseExplicitMemoryPrompt(event.prompt) === null) {
+        return commandFallback;
+      }
 
       try {
         const context = await gitRuntime.resolveContext({ cwd: event.cwd });
@@ -2097,7 +2134,7 @@ export function createCodexMemoryHookAdapter({
           },
         };
       } catch {
-        return null;
+        return commandFallback;
       }
     },
   };
