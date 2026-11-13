@@ -405,3 +405,69 @@ test('importance failure signatures are aggregate-only and do not expose raw Cod
     assert.equal(sha(), before);
   } finally { f.close(); }
 });
+
+test('importance diagnostics prioritize account usage and quota over generic HTTP 429', () => {
+  const f = fixture();
+  try {
+    const memory = new MemoryEngine({ dbPath: f.memoryDb });
+    try {
+      memory.startPipelineRun({
+        id: 'quota-signature-run',
+        projectId: 'github.com/example/beta',
+        branch: 'main',
+        trigger: 'Stop',
+        startedAt: '2026-11-12T00:00:00Z',
+      });
+      const messages = [
+        "codex candidate judge failed with exit 1: You've hit your usage limit; HTTP 429 PRIVATE_USAGE",
+        'codex candidate judge failed with exit 1: usage_limit_reached PRIVATE_USAGE',
+        'codex candidate judge failed with exit 1: Your workspace is out of credits; HTTP 429 PRIVATE_CREDITS',
+        'codex candidate judge failed with exit 1: spend cap reached; HTTP 429 PRIVATE_BILLING',
+        'codex candidate judge failed with exit 1: Quota exceeded; HTTP 429 PRIVATE_QUOTA',
+        'codex candidate judge failed with exit 1: insufficient_quota PRIVATE_QUOTA',
+        'codex candidate judge failed with exit 1: HTTP 429 too many requests PRIVATE_RATE',
+        'codex candidate judge failed with exit 1: PRIVATE_OTHER',
+      ];
+      for (const [index, error] of messages.entries()) {
+        memory.recordPipelineFailure({
+          runId: 'quota-signature-run',
+          projectId: 'github.com/example/beta',
+          branch: 'main',
+          stage: 'importance',
+          errorClass: 'candidate_stage_failure',
+          error,
+          occurredAt: '2026-11-12T00:00:0' + index + 'Z',
+        });
+      }
+      memory.finishPipelineRun({
+        id: 'quota-signature-run',
+        status: 'partial',
+        finishedAt: '2026-11-12T00:01:00Z',
+        durationMs: 60_000,
+      });
+    } finally { memory.close(); }
+
+    const hash = () => createHash('sha256').update(readFileSync(f.memoryDb)).digest('hex');
+    const before = hash();
+    const report = diagnoseCodexMemoryPipeline({
+      scopePath: f.scopePath, codexHome: f.codexHome,
+    });
+    const beta = report.projects.find(x => x.project_id.endsWith('/beta'));
+    assert.deepEqual(beta.counts.importance_failure_signatures, {
+      codex_exec_nonzero: 1,
+      credits_exhausted_possible: 1,
+      quota_exceeded_possible: 2,
+      rate_limited_possible: 1,
+      spend_cap_reached_possible: 1,
+      usage_limit_reached_possible: 2,
+    });
+    const publicReport = JSON.stringify(report);
+    for (const secret of [
+      'PRIVATE_USAGE', 'PRIVATE_CREDITS', 'PRIVATE_BILLING',
+      'PRIVATE_QUOTA', 'PRIVATE_RATE', 'PRIVATE_OTHER',
+    ]) {
+      assert.equal(publicReport.includes(secret), false);
+    }
+    assert.equal(hash(), before, 'diagnosis must not change canonical SQLite');
+  } finally { f.close(); }
+});
