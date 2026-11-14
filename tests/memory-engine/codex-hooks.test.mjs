@@ -845,6 +845,7 @@ test('Codex CLI --ignore-memory-env bypasses stale daemon memory settings', () =
       env: {
         ...process.env,
         XDG_STATE_HOME: stateHome,
+        LOCALAPPDATA: stateHome,
         AGENT_HUB_MEMORY_DB: staleDb,
         AGENT_HUB_MEMORY_PROJECT_ID: 'stale-project',
         AGENT_HUB_MEMORY_REPO_IDENTITY: 'github.com/example/stale',
@@ -1388,6 +1389,7 @@ test('Codex CLI explicit-memory flag persists only memory: prompts in a real Git
         env: {
           ...process.env,
           XDG_STATE_HOME: stateHome,
+        LOCALAPPDATA: stateHome,
           AGENT_HUB_MEMORY_DB: join(root, 'stale.sqlite3'),
           AGENT_HUB_MEMORY_CAPTURE_PROMPTS: 'true',
         },
@@ -1813,6 +1815,7 @@ test('real Codex hook replacement keeps only the new memory current and old memo
         env: {
           ...process.env,
           XDG_STATE_HOME: stateHome,
+        LOCALAPPDATA: stateHome,
         },
       });
       assert.equal(result.status, 0, result.stderr);

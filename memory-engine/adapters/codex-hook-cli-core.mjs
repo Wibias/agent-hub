@@ -20,6 +20,7 @@ import {
 } from '../e5-embedder.mjs';
 import { HybridMemoryRetriever } from '../hybrid-retrieval.mjs';
 import { MemoryEngine } from '../index.mjs';
+import { isAtomicRuleConfirmationAttempt } from '../memory-atomic-confirmation-capture.mjs';
 import {
   recallQueryHash,
   recallTelemetryRunId,
@@ -141,6 +142,9 @@ export function parseCodexHookCliOptions(argv = []) {
   }
   if (argv.includes('--candidate-capture')) {
     options.candidateCapture = true;
+  }
+  if (argv.includes('--atomic-rule-confirmation-capture')) {
+    options.atomicRuleConfirmationCapture = true;
   }
   if (argv.includes('--auto-pipeline')) {
     options.autoPipeline = true;
@@ -477,7 +481,9 @@ export async function runCodexMemoryHook({
     }
 
     if (shouldPrepareCodexMemoryRecallRuntime(memory, {
-      explicitMemoryMode: parseExplicitMemoryPrompt(event?.prompt)?.mode ?? null,
+      explicitMemoryMode: isAtomicRuleConfirmationAttempt(event?.prompt)
+        ? 'atomic_rule_confirm'
+        : (parseExplicitMemoryPrompt(event?.prompt)?.mode ?? null),
     })) {
       recallRuntime = prepareRecallRuntime({
         memory,
@@ -687,6 +693,7 @@ export async function runCodexMemoryHook({
       capturePrompts: config.capturePrompts,
       explicitMemoryRequests: configOptions.explicitMemoryRequests === true,
       candidateCapture: configOptions.candidateCapture === true,
+    atomicRuleConfirmationCapture: configOptions.atomicRuleConfirmationCapture === true,
       recallRelevanceJudge: recallRuntime?.relevanceJudge ?? null,
       recallFastPathShadowMode: configOptions.recallFastPathShadow === true,
       recallFastPathShadowReplayMode: configOptions.recallFastPathShadowReplay === true,

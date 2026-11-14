@@ -1,0 +1,44 @@
+name: Memory D12.3 default-off confirmation capture
+on:
+  pull_request:
+    paths:
+      - 'memory-engine/adapters/codex-hooks-core.mjs'
+      - 'memory-engine/adapters/codex-hook-cli-core.mjs'
+      - 'memory-engine/adapters/codex-memory-recall-runtime.mjs'
+      - 'memory-engine/memory-atomic-confirmation-capture.mjs'
+      - 'tests/memory-engine/memory-atomic-confirmation-capture.test.mjs'
+      - 'tests/memory-engine/memory-atomic-command-reserved.test.mjs'
+      - '.github/workflows/verify-memory-d12-3-confirm-capture.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'memory-engine/adapters/codex-hooks-core.mjs'
+      - 'memory-engine/adapters/codex-hook-cli-core.mjs'
+      - 'memory-engine/adapters/codex-memory-recall-runtime.mjs'
+      - 'tests/memory-engine/memory-atomic-confirmation-capture.test.mjs'
+      - '.github/workflows/verify-memory-d12-3-confirm-capture.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+      - name: Test opt-in capture and baseline hook behavior
+        run: >-
+          node --test
+          tests/memory-engine/memory-atomic-confirmation-capture.test.mjs
+          tests/memory-engine/memory-atomic-command-reserved.test.mjs
+          tests/memory-engine/codex-hooks.test.mjs
+          tests/memory-engine/codex-memory-command-failclosed.test.mjs
