@@ -7,10 +7,10 @@ using System.ServiceProcess;
 namespace MemoryReviewAuthority.LabService;
 
 /// <summary>
-/// The test service has NO IPC endpoint, network listener, credential store,
-/// Memory database access, or Claim-write operation. Its only filesystem
-/// write is a benign marker under a pre-provisioned service-SID lab ACL. The SCM identity is
-/// checked before even constructing future authority state.
+/// Disposable GitHub Actions lab host; NOT a production service. It exposes
+/// only a signed read-only local named pipe serving one synthetic fixture
+/// Claim. No approval/write IPC, network listener or user Memory DB access.
+/// The SCM identity is checked before any protected state is opened.
 /// </summary>
 internal static class ReviewHostIdentity
 {
@@ -52,6 +52,9 @@ internal static class ReviewHostIdentity
 
 internal sealed class ReviewAuthorityLabService : ServiceBase
 {
+    private ProtectedPendingReviewLedger? _ledger;
+    private SignedProtectedClaimPipe? _readPipe;
+
     internal ReviewAuthorityLabService()
     {
         ServiceName = ReviewHostIdentity.ServiceName;
@@ -79,40 +82,24 @@ internal sealed class ReviewAuthorityLabService : ServiceBase
         File.WriteAllText(Path.Combine(stateDir, "service-started.txt"),
             "SERVICE_SID_STATE_WRITE_OK");
 
-        // LAB-ONLY synthetic request. This separate database is never an
-        // approved Claim and contains NO real user evidence. The protected
-        // state directory was ACL-provisioned before SCM start.
-        using (var ledger = ProtectedPendingReviewLedger.OpenInProtectedDirectory(stateDir))
-        {
-            static string Hash(string value) =>
-                Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value))).ToLowerInvariant();
+        // The only generated Claim is explicitly synthetic. An ephemeral test
+        // key verifies the UV check path, never an actual human or Windows Hello
+        // user. Neither user-writable canonical SQLite nor MCP is opened here.
+        _ledger = ProtectedPendingReviewLedger.OpenInProtectedDirectory(stateDir);
+        SyntheticLabClaim.Seed(_ledger);
+        File.WriteAllText(Path.Combine(stateDir, "protected-ledger-ok.txt"),
+            "SYNTHETIC_PROTECTED_CLAIM_NO_HUMAN_APPROVAL");
 
-            var pending = new PendingReview(
-                "github.com/example/lab-fixture",
-                "main",
-                new string('a', 40),
-                "E~0123456789",
-                new string('b', 64),
-                Hash("Synthetic non-authorizing lab fact"),
-                Hash("Synthetic non-authorizing lab Evidence"),
-                "confirm");
-            var record = ledger.RecordPending(pending);
-            var replay = ledger.RecordPending(pending);
-            if (record != replay
-                || record.Status != ProtectedPendingReviewLedger.PendingState
-                || ledger.CountPending() != 1)
-                throw new InvalidOperationException("protected_pending_review_ledger_failed");
-            File.WriteAllText(Path.Combine(stateDir, "protected-ledger-ok.txt"),
-                "PENDING_ONLY_NO_AUTHORIZATION");
-        }
-
-        // Still NO credentials, real WebAuthn challenge, pipe, HTTP server,
-        // user Memory database, Claim mutation or agent endpoint.
+        _readPipe = new SignedProtectedClaimPipe(_ledger, stateDir);
+        _readPipe.Start();
     }
 
     protected override void OnStop()
     {
-        // No persistent state or side effects.
+        _readPipe?.Dispose();
+        _readPipe = null;
+        _ledger?.Dispose();
+        _ledger = null;
     }
 }
 
