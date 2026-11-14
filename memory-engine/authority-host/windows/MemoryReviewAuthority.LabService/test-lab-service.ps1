@@ -339,6 +339,18 @@ try {
     }
     Write-Host 'PASS: real E~ protected exact fact -> admin-only LocalService WebAuthn challenge -> signed UV receipt; replay denied, NO Claim'
 
+    # The *real native Windows GUI executable*, rather than a Node-simulated
+    # browser, must itself connect with elevated token, verify Admin-owned
+    # service signing key + parent ACL and the service's exact signed E~ fact.
+    # --service-smoke does not invoke Hello or create any Claim; physical user
+    # approval remains a separate, explicitly initiated acceptance step.
+    $nativeProject = Join-Path $repoRoot 'memory-engine/authority-host/windows/MemoryReviewAuthority.OperatorUi/MemoryReviewAuthority.OperatorUi.csproj'
+    & dotnet run --project $nativeProject -c Release --runtime win-x64 --no-build --no-restore -- --service-smoke
+    if ($LASTEXITCODE -ne 0) {
+        throw 'native operator Windows GUI failed to verify signed real E~ from live service'
+    }
+    Write-Host 'PASS: native elevated operator Windows GUI client validates actual protected E~ and Admin-owned signer via SCM pipe; NO Hello, NO Claim'
+
     $probeScript = Join-Path $repoRoot 'scripts/probe-protected-memory-lab.mjs'
     # Resolve script path from GitHub checkout, never from service IPC input.
     if (-not (Test-Path -LiteralPath $probeScript -PathType Leaf)) {
