@@ -568,6 +568,7 @@ internal static class Program
     private sealed class TestCredential : IDisposable
     {
         private readonly ECDsa _key;
+        private uint _signCount;
         public PinnedCredential Pinned { get; }
 
         private TestCredential(ECDsa key)
@@ -594,7 +595,8 @@ internal static class Program
             var authenticator = new byte[37];
             SHA256.HashData(Encoding.UTF8.GetBytes("localhost")).CopyTo(authenticator, 0);
             authenticator[32] = 0x05;
-            BinaryPrimitives.WriteUInt32BigEndian(authenticator.AsSpan(33), 1);
+            BinaryPrimitives.WriteUInt32BigEndian(authenticator.AsSpan(33),
+                checked(++_signCount));
             var signed = new byte[authenticator.Length + 32];
             authenticator.CopyTo(signed, 0);
             SHA256.HashData(client).CopyTo(signed, authenticator.Length);
