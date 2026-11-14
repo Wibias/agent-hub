@@ -71,13 +71,25 @@ internal static class ProtectedOperatorService
             throw new InvalidOperationException("Geschützter Dienst-Pin fehlt");
         // A same-account, non-admin agent may READ the pin but must not
         // replace it with a forged service identity.
-        var acl = file.GetAccessControl(AccessControlSections.Owner
-            | AccessControlSections.Access);
+        var parent = file.Directory;
+        if (parent is null || !parent.Exists
+            || (parent.Attributes & FileAttributes.ReparsePoint) != 0)
+            throw new InvalidOperationException("Dienst-Pin-Verzeichnis ungültig");
+        VerifyAdminOwnedDacl(file.GetAccessControl(
+            AccessControlSections.Owner | AccessControlSections.Access));
+        VerifyAdminOwnedDacl(parent.GetAccessControl(
+            AccessControlSections.Owner | AccessControlSections.Access));
+        return File.ReadAllText(PinPath, Utf8);
+    }
+
+    private static void VerifyAdminOwnedDacl(FileSystemSecurity acl)
+    {
         var owner = acl.GetOwner(typeof(SecurityIdentifier))
             as SecurityIdentifier;
         if (owner?.Value != "S-1-5-32-544"
             || !acl.AreAccessRulesProtected)
-            throw new InvalidOperationException("Dienst-Pin Besitzer/ACL ungültig");
+            throw new InvalidOperationException(
+                "Dienst-Signaturpfad ist nicht Administrator-geschützt");
         foreach (FileSystemAccessRule ace in acl.GetAccessRules(
             true, true, typeof(SecurityIdentifier)))
         {
@@ -87,12 +99,13 @@ internal static class ProtectedOperatorService
             const FileSystemRights write =
                 FileSystemRights.Write | FileSystemRights.Modify
                 | FileSystemRights.FullControl | FileSystemRights.Delete
+                | FileSystemRights.DeleteSubdirectoriesAndFiles
                 | FileSystemRights.ChangePermissions
                 | FileSystemRights.TakeOwnership;
             if ((ace.FileSystemRights & write) != 0)
-                throw new InvalidOperationException("Dienst-Pin ist fremd beschreibbar");
+                throw new InvalidOperationException(
+                    "Nichtadministrativer Schreibzugriff auf Dienst-Pin-Verzeichnis");
         }
-        return File.ReadAllText(PinPath, Utf8);
     }
 
     private static string Encode(ReadOnlySpan<byte> bytes)
