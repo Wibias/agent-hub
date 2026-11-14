@@ -170,8 +170,9 @@ public sealed partial class ProtectedPendingReviewLedger
             || currentSource.ReviewSnapshotSha256 != meaning.ReviewSnapshotSha256
             || currentSource.CanonicalFact != meaning.CanonicalFact
             || currentSource.Kind is not ("knowledge" or "preference")
-            || currentSource.Relation != "unrelated"
-            || currentSource.RelatedClaimId is not null
+            || (meaning.Decision == "confirm" && (
+                currentSource.Relation != "unrelated"
+                || currentSource.RelatedClaimId is not null))
             || currentSource.SourceEvidenceSha256 is not { Length: 64 }
             || !currentSource.SourceEvidenceSha256.All(c =>
                 c is >= '0' and <= '9' or >= 'a' and <= 'f'))
