@@ -122,7 +122,7 @@ export function explicitMemoryCommandFailure(event, {
   return {
     decision: 'block',
     reason: reservedAtomic
-      ? 'Atomic project-rule confirmation is not enabled. No Evidence, stage or Claim was created.'
+      ? 'Atomic rule confirmation not captured: not enabled. No Evidence, stage or Claim was created.'
       : valid
         ? 'AgentHub Memory command could not be completed. No change was confirmed. Inspect Memory state before retrying.'
         : 'Invalid AgentHub Memory command syntax. No operation was performed. Check the command and candidate reference.',
