@@ -101,14 +101,25 @@ public sealed partial class ProtectedPendingReviewLedger
                    c.created_at_utc, c.policy_version
             FROM protected_review_claims c
             JOIN verified_review_intents v ON v.request_id=c.request_id
+            JOIN protected_review_sources s ON s.request_id=c.request_id
+              AND s.project_id=c.project_id AND s.branch=c.branch
+              AND s.revision_sha=c.revision_sha
+              AND s.proposal_ref=c.proposal_ref
+              AND s.snapshot_sha256=c.snapshot_sha256
+              AND s.fact_sha256=c.fact_sha256
+              AND s.evidence_sha256=c.evidence_sha256
+              AND s.kind=c.kind
+              AND s.canonical_fact=c.value_text
             WHERE c.project_id=$project AND c.branch=$branch
               AND v.disposition=$confirm
+              AND s.source_origin=$origin
             ORDER BY c.created_at_utc DESC, c.claim_id ASC
             LIMIT $limit;
             """;
         command.Parameters.AddWithValue("$project", projectId);
         command.Parameters.AddWithValue("$branch", branch);
         command.Parameters.AddWithValue("$confirm", ConfirmDisposition);
+        command.Parameters.AddWithValue("$origin", SyntheticSourceOrigin);
         command.Parameters.AddWithValue("$limit", maxItems);
         var found = new List<ProtectedReviewClaim>();
         using var reader = command.ExecuteReader();
@@ -148,12 +159,11 @@ public sealed partial class ProtectedPendingReviewLedger
     internal ProtectedReviewDecisionResult CommitReviewedDecision(
         ReviewMeaning meaning,
         PinnedCredential credential,
-        VerificationResult proof,
-        TrustedReviewSource currentSource)
+        VerificationResult proof)
     {
         EnsureOpen();
         if (meaning is null || credential is null || proof is null
-            || currentSource is null || !proof.Verified
+            || !proof.Verified
             || !proof.UserPresent || !proof.UserVerified
             || proof.ApprovedReviewDecision || proof.ClaimWritten)
             throw new InvalidOperationException("verified_host_proof_required");
@@ -161,8 +171,24 @@ public sealed partial class ProtectedPendingReviewLedger
             || meaning.CanonicalFact.Length is < 1 or > 4000
             || Hash(meaning.CanonicalFact) != meaning.CanonicalFactSha256)
             throw new InvalidOperationException("review_fact_invalid");
-        // This check is necessary but NOT sufficient to trust the source.
-        // The host must inject a trusted reader, never take a client object.
+        // Source lookup AND decision/Claim inserts are under the SAME write
+        // transaction. A caller cannot supply or swap a trusted source.
+        using var transaction = _connection.BeginTransaction(deferred: false);
+        var pending = Lookup(meaning.ProjectId, meaning.Branch,
+            meaning.ProposalRef, transaction);
+        if (pending is null
+            || pending.Review.RevisionSha != meaning.RevisionSha
+            || pending.Review.ReviewSnapshotSha256 != meaning.ReviewSnapshotSha256
+            || pending.Review.CanonicalFactSha256 != meaning.CanonicalFactSha256
+            || pending.Review.RequestedAction != meaning.Decision
+            || pending.Status != PendingState)
+            throw new InvalidOperationException("pending_review_changed");
+
+        var hosted = FindServiceOwnedSource(pending.RequestId, transaction);
+        if (hosted is null || hosted.SourceOrigin != SyntheticSourceOrigin)
+            throw new InvalidOperationException("protected_review_source_not_staged");
+        var currentSource = hosted.Source;
+        ValidateSource(pending.Review, currentSource);
         if (currentSource.ProjectId != meaning.ProjectId
             || currentSource.Branch != meaning.Branch
             || currentSource.RevisionSha != meaning.RevisionSha
@@ -176,19 +202,7 @@ public sealed partial class ProtectedPendingReviewLedger
             || currentSource.SourceEvidenceSha256 is not { Length: 64 }
             || !currentSource.SourceEvidenceSha256.All(c =>
                 c is >= '0' and <= '9' or >= 'a' and <= 'f'))
-            throw new InvalidOperationException("trusted_source_mismatch_or_relation_unsafe");
-
-        using var transaction = _connection.BeginTransaction(deferred: false);
-        var pending = Lookup(meaning.ProjectId, meaning.Branch,
-            meaning.ProposalRef, transaction);
-        if (pending is null
-            || pending.Review.RevisionSha != meaning.RevisionSha
-            || pending.Review.ReviewSnapshotSha256 != meaning.ReviewSnapshotSha256
-            || pending.Review.CanonicalFactSha256 != meaning.CanonicalFactSha256
-            || pending.Review.SourceEvidenceSha256 != currentSource.SourceEvidenceSha256
-            || pending.Review.RequestedAction != meaning.Decision
-            || pending.Status != PendingState)
-            throw new InvalidOperationException("pending_review_changed");
+            throw new InvalidOperationException("protected_source_mismatch_or_relation_unsafe");
         if (FindVerifiedIntent(pending.RequestId, transaction) is not null)
             throw new InvalidOperationException("review_decision_already_recorded");
 
