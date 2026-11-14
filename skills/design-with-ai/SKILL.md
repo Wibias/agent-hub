@@ -236,6 +236,7 @@ host-specific guide for ordinary cross-host design work.
 - references/react-native-motion.md -- when to read: React Native/Expo motion build/review/optimization reasoning
 - references/direct-manipulation.md -- when to read: direct drag/swipe/throw/reorder/sheet gesture mechanics
 - references/durable-design-contract.md -- when to read: explicit multi-surface design-system/design-contract persistence
+- references/taste-correction-retention.md -- when to read: explicit approved design-taste correction retention workflow
 - references/quality-stack.md -- when to read: improve-existing and final polish phases
 - references/taste-workflow.md -- when to read: direction, restyle, redesign, new surface
 - references/anti-slop-gates.md -- when to read: anti-slop gate, contextual-default cluster review, or audit verdict
