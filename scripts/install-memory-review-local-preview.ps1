@@ -78,12 +78,12 @@ function Is-Admin {
 }
 function Protect-Directory([string]$path, [object[]]$permissions) {
     New-Item -ItemType Directory -Path $path -ErrorAction Stop | Out-Null
-    $acl = Get-Acl -LiteralPath $path
+    # Build from an EMPTY DACL. Reusing ProgramData's inherited ACL
+    # then deleting individual inherited rules can silently retain the
+    # parent security inheritance control bit on Windows.
+    $acl = [Security.AccessControl.DirectorySecurity]::new()
     $acl.SetAccessRuleProtection($true, $false)
     $acl.SetOwner((SID 'S-1-5-32-544'))
-    foreach ($old in @($acl.Access)) {
-        [void]$acl.RemoveAccessRuleSpecific($old)
-    }
     $inherit = [Security.AccessControl.InheritanceFlags]'ContainerInherit, ObjectInherit'
     $propagate = [Security.AccessControl.PropagationFlags]::None
     $allow = [Security.AccessControl.AccessControlType]::Allow
@@ -163,10 +163,11 @@ function Verify-Copy([string]$src, [string]$target, [string]$expectedHash) {
     Require ((Sha $target) -ceq $expectedHash) 'Source changed during protected copy'
 }
 function Set-File-Acl([string]$path, [object[]]$permissions) {
-    $acl = Get-Acl -LiteralPath $path
+    # Use a new, explicitly protected FileSecurity rather than retaining
+    # any source-ACL inheritance or owner metadata from user-writable input.
+    $acl = [Security.AccessControl.FileSecurity]::new()
     $acl.SetAccessRuleProtection($true,$false)
     $acl.SetOwner((SID 'S-1-5-32-544'))
-    foreach ($old in @($acl.Access)) { [void]$acl.RemoveAccessRuleSpecific($old) }
     foreach ($p in $permissions) {
         $acl.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new(
             (SID $p[0]), $p[1],
