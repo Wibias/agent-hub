@@ -38,14 +38,14 @@
     </fieldset>
     <label class="webauthn-ack">
       <input type="checkbox" id="ack">
-      Ich verstehe: Das ist ein technischer WebAuthn-Test, keine echte Claim-Freigabe.
+      Ich verstehe: Das ist keine echte Claim-Freigabe. Windows Hello oder der Passkey-Manager kann ein Testcredential dauerhaft auf dem Gerät speichern.
     </label>
     <button id="start-hello" type="button" disabled>Windows Hello prüfen</button>
     <div id="probe-status" role="status" aria-live="polite" class="webauthn-status">
       Lade...
     </div>
     <footer class="webauthn-footer">
-      Keine permanente Credential-Speicherung · keine Änderung an deiner SQLite ·
+      Credential nur serverseitig flüchtig (Windows/Browser können den Passkey behalten) · keine SQLite-Änderung ·
       keine produktive Windows-Service-Aktivierung
     </footer>
   </main>
