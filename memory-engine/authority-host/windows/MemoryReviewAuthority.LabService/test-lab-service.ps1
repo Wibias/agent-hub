@@ -136,7 +136,26 @@ try {
         ((Get-Content -LiteralPath $markerFile -Raw) -ne 'SERVICE_SID_STATE_WRITE_OK')) {
         throw 'restricted service failed to write protected state marker'
     }
-    Write-Host 'PASS: restricted LocalService wrote a service-SID-protected marker; NO_PIPE NO_NETWORK NO_DB'
+    $ledgerPath = Join-Path $stateRoot 'review-authority.sqlite3'
+    $ledgerMarker = Join-Path $stateRoot 'protected-ledger-ok.txt'
+    if (-not (Test-Path -LiteralPath $ledgerPath -PathType Leaf) -or
+        ((Get-Item -LiteralPath $ledgerPath).Length -lt 4096) -or
+        -not (Test-Path -LiteralPath $ledgerMarker -PathType Leaf) -or
+        ((Get-Content -LiteralPath $ledgerMarker -Raw) -ne 'PENDING_ONLY_NO_AUTHORIZATION')) {
+        throw 'service-owned pending-only SQLite ledger missing or incomplete'
+    }
+    $stateFiles = @(Get-ChildItem -LiteralPath $stateRoot -File)
+    foreach ($stateFile in $stateFiles) {
+        $fileAcl = Get-Acl -LiteralPath $stateFile.FullName
+        foreach ($ace in $fileAcl.Access) {
+            $sid = $ace.IdentityReference.Translate(
+                [System.Security.Principal.SecurityIdentifier]).Value
+            if ($sid -notin $allowedStateSids) {
+                throw 'service-owned SQLite or journal file has a user-writable ACL'
+            }
+        }
+    }
+    Write-Host 'PASS: restricted LocalService wrote a pending-only WAL SQLite ledger under exact service-SID ACL; NO_IPC NO_CLAIMS'
 }
 finally {
     if ($created) {
