@@ -132,6 +132,7 @@ public sealed class ReviewChallengeCore
         try
         {
             var verified = CheckAssertion(pending.Credential, pending.Challenge, assertion);
+            if (!verified.Verified) return verified;
             var id = pending.Credential.CredentialIdBase64Url;
             lock (_gate)
             {
@@ -153,7 +154,7 @@ public sealed class ReviewChallengeCore
         }
         catch (Exception error) when (error is ArgumentException
             or FormatException or JsonException or CryptographicException
-            or InvalidOperationException)
+            or InvalidOperationException or KeyNotFoundException)
         {
             return Denied("assertion_invalid");
         }
