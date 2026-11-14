@@ -1,0 +1,41 @@
+name: Memory Evidence-Bound WebAuthn verifier (offline)
+
+on:
+  pull_request:
+    paths:
+      - 'memory-engine/evidence-bound-webauthn-verifier.mjs'
+      - 'tests/memory-engine/evidence-bound-webauthn-verifier.test.mjs'
+      - 'docs/memory-evidence-bound-webauthn-verifier.md'
+      - '.github/workflows/verify-memory-evidence-webauthn.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'memory-engine/evidence-bound-webauthn-verifier.mjs'
+      - 'tests/memory-engine/evidence-bound-webauthn-verifier.test.mjs'
+      - '.github/workflows/verify-memory-evidence-webauthn.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+      - name: Verify scope-bound WebAuthn signature, UV and counter failures
+        run: >-
+          node --test
+          tests/memory-engine/evidence-bound-webauthn-verifier.test.mjs
+          tests/memory-engine/evidence-bound-decision-preflight.test.mjs
+          tests/memory-engine/evidence-bound-review-intent-staging.test.mjs
