@@ -1,0 +1,55 @@
+name: Memory Review Authority native Windows core (default OFF)
+
+on:
+  pull_request:
+    paths:
+      - 'memory-engine/authority-host/windows/**'
+      - 'docs/memory-review-authority-native-host-core.md'
+      - '.github/workflows/verify-memory-review-authority-core.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'memory-engine/authority-host/windows/**'
+      - '.github/workflows/verify-memory-review-authority-core.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native-offline:
+    runs-on: windows-2022
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
+        with:
+          dotnet-version: '10.0.x'
+          dotnet-quality: 'ga'
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+      - name: Restore and compile standalone win-x64 core (no service install)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $project = 'memory-engine/authority-host/windows/MemoryReviewAuthority.SelfTest/MemoryReviewAuthority.SelfTest.csproj'
+          dotnet restore $project --runtime win-x64
+          if ($LASTEXITCODE -ne 0) { throw "native restore failed" }
+          dotnet build $project -c Release --no-restore --runtime win-x64
+          if ($LASTEXITCODE -ne 0) { throw "native build failed" }
+      - name: Native Windows-only one-use challenge/UV selftest
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $project = 'memory-engine/authority-host/windows/MemoryReviewAuthority.SelfTest/MemoryReviewAuthority.SelfTest.csproj'
+          dotnet run --project $project -c Release --no-restore --no-build --runtime win-x64
+          if ($LASTEXITCODE -ne 0) { throw "native selftest failed" }
+      - name: Existing Node ES256 verifier and review preflight regressions
+        run: >-
+          node --test
+          tests/memory-engine/evidence-bound-webauthn-verifier.test.mjs
+          tests/memory-engine/evidence-bound-decision-preflight.test.mjs
+          tests/memory-engine/evidence-bound-review-intent-staging.test.mjs
