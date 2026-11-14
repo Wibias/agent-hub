@@ -4,6 +4,7 @@ import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { homedir } from 'node:os';
+import { DatabaseSync } from 'node:sqlite';
 import { dirname, extname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -16,6 +17,7 @@ import {
 } from '../memory-engine/adapters/codex-hooks.mjs';
 import { MemoryEngine } from '../memory-engine/index.mjs';
 import { memoryEvidenceReviewSnapshot } from '../memory-engine/evidence-bound-review-readonly.mjs';
+import { inspectEvidenceBoundDecision } from '../memory-engine/evidence-bound-decision-preflight.mjs';
 import {
   createAsyncGitGraphView,
   normalizeRepositoryRoots,
@@ -125,6 +127,10 @@ function validClaimRef(value) {
 
 function validCandidateRef(value) {
   return typeof value === 'string' && /^~[0-9a-f]{10}$/i.test(value.trim());
+}
+
+function validEvidenceReviewRef(value) {
+  return typeof value === 'string' && /^E~[0-9a-f]{10}$/.test(value);
 }
 
 async function readJsonBody(req, {
@@ -494,6 +500,72 @@ export function createMemoryUiServer({
           });
         }
         json(res, 200, scope);
+        return;
+      }
+
+      if (url.pathname === '/api/review-preflight') {
+        // Browser chooses an opaque E~ ref, never a path, DB, branch revision,
+        // evidence ID or authority. Verified root comes from server startup.
+        const projectId = queryValue(url, 'projectId');
+        const branch = queryValue(url, 'branch');
+        const selectedRef = queryValue(url, 'proposalRef');
+        if (projectId === null || branch === null
+          || !validEvidenceReviewRef(selectedRef)) {
+          json(res, 400, {
+            error: 'invalid_review_scope',
+            message: 'projectId, branch and exact E~ proposalRef are required',
+          });
+          return;
+        }
+
+        // Reuse the Console scope/branch registry instead of permitting
+        // arbitrary model-selected project identities.
+        memoryUiScope(engine, { projectId, branch });
+        const gitScope = await resolveMemoryConsoleGitScopeAsync({
+          memory: engine, projectId, branch, repositoryRoots: approvedGitRoots,
+        });
+        if (gitScope.status !== 'verified') {
+          json(res, 200, {
+            type: 'agent_hub_console_evidence_preflight_v1',
+            status: 'git_context_unavailable',
+            gitContext: { status: gitScope.status, revisionSha: null },
+            selectedRef,
+            readOnly: true, promotionAllowed: false,
+            hostUserOriginAuthenticated: false, decisionsApplied: 0,
+            claimsCreated: 0, writesToSource: false,
+          });
+          return;
+        }
+
+        const db = new DatabaseSync(resolvedDbPath, {
+          readOnly: true, timeout: 5_000,
+        });
+        let began = false;
+        try {
+          db.exec('PRAGMA query_only = ON');
+          db.exec('BEGIN');
+          began = true;
+          const preflight = inspectEvidenceBoundDecision({
+            db, projectId, branch, revisionSha: gitScope.revisionSha,
+            selectedRef, showLocalContent: false,
+          });
+          db.exec('COMMIT');
+          began = false;
+          // Report a real, read-only integrity preflight, NOT an authenticated
+          // approval token. Suppress source texts and filesystem paths.
+          json(res, 200, {
+            ...preflight,
+            gitContext: publicMemoryConsoleGitScope(gitScope),
+            promotionAllowed: false,
+            hostUserOriginAuthenticated: false,
+            decisionCommandEnabled: false,
+          });
+        } finally {
+          if (began) {
+            try { db.exec('ROLLBACK'); } catch {}
+          }
+          db.close();
+        }
         return;
       }
 

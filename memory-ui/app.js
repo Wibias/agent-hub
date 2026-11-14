@@ -18,6 +18,10 @@ const state = {
   selectedClaimId: null,
   selectedCandidateId: null,
   selectedEvidenceProposalId: null,
+  evidencePreflight: null,
+  evidencePreflightRef: null,
+  evidencePreflightBusy: false,
+  evidencePreflightError: '',
   actionToken: null,
   claimActionMode: null,
   reviewRelation: 'unrelated',
@@ -1672,6 +1676,17 @@ function renderEvidenceReviewInspector(proposal) {
     (item) => item.ref === proposal.relation?.targetRef,
   );
   const relation = proposal.relation ?? {};
+  const preflight = state.evidencePreflightRef === proposal.ref
+    ? state.evidencePreflight : null;
+  const preflightDetail = preflight
+    ? definition([
+        ['Status', preflight.status, 'status-warn'],
+        ['Checkout', preflight.gitContext?.status || 'unavailable'],
+        ['Revision', preflight.gitContext?.revisionSha || 'unavailable'],
+        ['Active Claims', preflight.activeClaimsInScope ?? 'unchecked'],
+        ['Exact duplicates', preflight.exactDuplicateCount ?? 'unchecked'],
+        ['Blockers', (preflight.blockers ?? []).join(', ') || 'none reported'],
+      ]) : '';
   return `
     <div class="inspector-scroll">
       <div class="inspector-head">
@@ -1718,6 +1733,21 @@ function renderEvidenceReviewInspector(proposal) {
           </p>
         </section>
       ` : ''}
+      <section class="inspect-section">
+        <h3>Current checkout preflight</h3>
+        <p class="review-evidence-notice">
+          Inspects this proposal against the exact server-approved Git checkout
+          and existing scoped Claims. This is NOT a human approval.
+        </p>
+        <button id="inspect-evidence-preflight" class="text-action" type="button"
+          ${state.evidencePreflightBusy ? 'disabled' : ''}>
+          ${state.evidencePreflightBusy ? 'Checking current evidence...' : 'Check evidence and conflicts'}
+        </button>
+        ${state.evidencePreflightError
+          ? `<p class="action-message error">${escapeHtml(state.evidencePreflightError)}</p>` : ''}
+        ${preflightDetail}
+        ${preflight ? '<p class="review-evidence-notice">Snapshot is diagnostic only. No protected approval or Claim was created.</p>' : ''}
+      </section>
       <section class="inspect-section">
         <h3>Approval boundary</h3>
         <p class="review-evidence-notice">
@@ -1937,6 +1967,38 @@ function renderReview() {
       </aside>
     </div>
   `;
+
+  el.view.querySelector('#inspect-evidence-preflight')?.addEventListener('click', async () => {
+    if (!selectedEvidence || state.evidencePreflightBusy) return;
+    const projectId = state.projectId;
+    const branch = state.branch;
+    const proposalId = selectedEvidence.id;
+    const proposalRef = selectedEvidence.ref;
+    state.evidencePreflightBusy = true;
+    state.evidencePreflightRef = proposalRef;
+    state.evidencePreflight = null;
+    state.evidencePreflightError = '';
+    renderReview();
+    try {
+      const result = await fetchJson(api('/api/review-preflight', {
+        projectId, branch, proposalRef,
+      }));
+      if (state.projectId === projectId && state.branch === branch
+        && state.selectedEvidenceProposalId === proposalId) {
+        state.evidencePreflight = result;
+      }
+    } catch (error) {
+      if (state.projectId === projectId && state.branch === branch
+        && state.selectedEvidenceProposalId === proposalId) {
+        state.evidencePreflightError = error.message || 'Review preflight unavailable.';
+      }
+    } finally {
+      if (state.projectId === projectId && state.branch === branch) {
+        state.evidencePreflightBusy = false;
+        renderReview();
+      }
+    }
+  });
 
   el.view.querySelectorAll('[data-evidence-proposal]').forEach((button) => {
     button.addEventListener('click', () => {
@@ -2277,6 +2339,10 @@ async function loadScope({
   state.selectedClaimId = null;
   state.selectedCandidateId = null;
   state.selectedEvidenceProposalId = null;
+  state.evidencePreflight = null;
+  state.evidencePreflightRef = null;
+  state.evidencePreflightBusy = false;
+  state.evidencePreflightError = '';
   state.selectedGraphNodeId = null;
   state.memoryInspectorOpen = false;
   state.graphInspectorOpen = false;
