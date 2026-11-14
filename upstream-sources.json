@@ -12,7 +12,7 @@
     {
       "id": "emil",
       "repository": "emilkowalski/skills",
-      "reviewedCommit": "4061b67b8d976a186aca118594f54b638c5f718a",
+      "reviewedCommit": "0f2e23b32bb1265e84cff8d3e75785fec953fb1b",
       "scope": "design-with-ai motion sources",
       "decision": "current"
     },
@@ -34,10 +34,10 @@
     {
       "id": "impeccable",
       "repository": "pbakaus/impeccable",
-      "reviewedCommit": "90b3072f0f7c9a7a85f64d6dd3db9cd94d364eff",
+      "reviewedCommit": "acb4cfe14470b1fdf51e855431af618d936b7db8",
       "scope": ".agents/skills/impeccable/",
       "decision": "update-pending",
-      "localPin": "90b3072f0f7c9a7a85f64d6dd3db9cd94d364eff"
+      "localPin": "acb4cfe14470b1fdf51e855431af618d936b7db8"
     }
   ]
 }

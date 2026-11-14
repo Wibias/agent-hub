@@ -66,9 +66,11 @@ owner that can stop the unwanted work.
 Keep the hot path small enough that the browser can render consistently on a
 slower device, not only on the development machine.
 
-- Prefer `transform` and `opacity` for continuous animation. Treat layout
-  properties such as `width`, `height`, `top`, `left`, and repeated geometry
-  reads as suspect in a per-frame path.
+- Prefer `transform` and `opacity` for continuous animation. Those are
+  compositor-friendly defaults, not measured guarantees. Do not classify
+  `filter`, `clip-path`, or `background-color` as composite-only on all browsers:
+  verify the actual engine/profile. Treat layout properties such as `width`,
+  `height`, `top`, `left` and repeated geometry reads as suspect per frame.
 - Read stable layout geometry during setup or at a bounded resize/update point,
   then animate from cached values. Do not alternate layout reads and writes in
   every frame when the geometry did not change.

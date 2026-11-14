@@ -7,7 +7,7 @@ are maintained here.
 | Source | Snapshot / access | Role | Licence / provenance |
 |---|---|---|---|
 | LexnLin design-with-AI thread | accessed 2026-07-12; URL recorded historically | Methods 1-3 and component-by-component framing | public thread, historical local note |
-| emilkowalski/skills | commit `4061b67b8d976a186aca118594f54b638c5f718a` reviewed 2026-11-12 (previous `c8a79627b59d72d764d6ab6f2c87c09a48169833` reviewed 2026-11-05) | motion craft, removal-safety, runtime motion advice and selectively adapted `choreograph` coordination guidance; no new skill route and no wholesale recipe import; `break-ui` remains owned by `fortify worst-case` | MIT |
+| emilkowalski/skills | commit `0f2e23b32bb1265e84cff8d3e75785fec953fb1b` reviewed 2026-11-14 (previous `4061b67b8d976a186aca118594f54b638c5f718a` reviewed 2026-11-12; original choreograph lineage `c8a79627b59d72d764d6ab6f2c87c09a48169833`) | motion craft, removal-safety, runtime motion advice and selectively adapted `choreograph` coordination guidance; no new skill route and no wholesale recipe import; `break-ui` remains owned by `fortify worst-case` | MIT |
 | MengTo/Skills | commit `321c769739b823de5eb94eb3a52aa1974fe783a2` reviewed 2026-09-04 | design-first prompting and runtime animation profiling | MIT |
 | ibelick/ui-skills `baseline-ui` | local adapted snapshot | baseline UI floor | MIT |
 | jakubkrehel/make-interfaces-feel-better | local adapted snapshot | micro craft | MIT |
@@ -21,6 +21,21 @@ are maintained here.
 | pols.dev/slop.md | accessed 2026-07-17 | anti-slop diagnostic/gates | external reference, not mirrored wholesale |
 | Anthropic frontend-design guidance | accessed 2026-07-18 | subject-derived visual identity and self-critique | official public guidance |
 | Mobbin / Baymard / GoodUI / Built for Mars / Growth.Design / Checklist Design / Refactoring UI / Learn UI Design / Practical Typography / Page Flows / Design Spells | source links retained in design evidence references | inspiration/research evidence classes | external sources; applicability varies |
+
+## 2026-11-14 Emil upstream review
+
+Reviewed three commits through `0f2e23b32bb1265e84cff8d3e75785fec953fb1b`.
+The `choreograph` adaptation traces back to the earlier MIT snapshot
+`c8a79627b59d72d764d6ab6f2c87c09a48169833` (2026-11-05);
+this provenance is retained even though the reviewed upstream HEAD advanced.
+New `learn-taste` is adapted as opt-in `learn-design-taste` under
+`design-with-ai` with source-backed suggestions, conflict checks and
+user approval before writing design rules. No standalone skill or competing
+memory store. Corrected motion assumptions are adopted selectively:
+`AnimatePresence` default sync does not release exiting layout, while
+`transform` and `opacity` are the portable compositor-friendly properties.
+`filter`, `clip-path`, and background color need actual browser evidence.
+Other framework-specific examples and selectors are not blindly copied.
 
 ## Consolidation history
 

@@ -182,16 +182,16 @@ test('Impeccable release candidate preserves explicit local overlay', async () =
   const engineVersion = (await text('skills/impeccable/scripts/VERSION')).trim();
   const checksums = await text('skills/impeccable/scripts/engine-checksums.txt');
 
-  assert.match(upstream, /90b3072f0f7c9a7a85f64d6dd3db9cd94d364eff/);
-  assert.match(upstream, /90b3072f0f7c9a7a85f64d6dd3db9cd94d364eff/);
+  assert.match(upstream, /acb4cfe14470b1fdf51e855431af618d936b7db8/);
+  assert.match(upstream, /acb4cfe14470b1fdf51e855431af618d936b7db8/);
   assert.match(upstream, /update.pending/i);
-  assert.match(upstream, /Skill version: `4\.8\.2`/);
-  assert.match(upstream, /Engine version: `0\.1\.22`/);
-  assert.match(skill, /version: 4\.8\.2/);
+  assert.match(upstream, /Skill version: `4\.9\.1`/);
+  assert.match(upstream, /Engine version: `0\.1\.24`/);
+  assert.match(skill, /version: 4\.9\.1/);
   assert.match(skill, /Scale ambition to the surface's mode/i);
   assert.doesNotMatch(skill, /the ceiling covers the whole cycle/i);
-  assert.equal(engineVersion, '0.1.22');
-  assert.match(checksums, /0\.1\.22 impeccable-windows-x64\.exe [0-9a-f]{64}/);
+  assert.equal(engineVersion, '0.1.24');
+  assert.match(checksums, /0\.1\.24 impeccable-windows-x64\.exe [0-9a-f]{64}/);
   assert.match(skill, /Explicit-only Impeccable frontend design specialist/i);
   assert.match(skill, /repository instruction injection/i);
 });

@@ -355,7 +355,7 @@
       ],
       "status": "active",
       "canonicalId": null,
-      "contentHash": "d0a37146b854e696fe6edfa8d9755d8b949efeb3cc491d3512db92004e346399"
+      "contentHash": "0dceeb05b1e01a2b688c508f209d5140d1409c38e350c2b5fdaea4b3044567e2"
     },
     {
       "id": "agents/diagnose",
@@ -628,7 +628,7 @@
       ],
       "status": "active",
       "canonicalId": null,
-      "contentHash": "209b14235e6945075c4a28ae443f20d3476ad7b4f98749b173db66ada5531b52"
+      "contentHash": "6076ef4c62b3257d009a0a65af0fe70657ffe16c17f3d7cf09bae8ada7c78e6a"
     },
     {
       "id": "agents/improve-codebase-architecture",
