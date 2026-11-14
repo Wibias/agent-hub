@@ -88,14 +88,15 @@ test('ephemeral browser WebAuthn create/get verifies UV but never approves a Cla
   assert.equal(h.enrollment.meaning.canonicalFact, fact);
   assert.deepEqual(h.enrollment.blockers, ['relation_requires_review']);
   assert.equal(h.register().humanApprovalVerified, false);
-  const response = await h.probe.finish(h.assertion());
+  const signedAssertion = h.assertion();
+  const response = await h.probe.finish(signedAssertion);
   assert.equal(response.status, 'browser_webauthn_uv_observed_not_approved');
   assert.equal(response.browserUserVerificationObserved, true);
   assert.equal(response.humanApprovalVerified, false);
   assert.equal(response.protectedApproval, false);
   assert.equal(response.claimWritten, false);
   assert.equal(response.claimsCreated, 0);
-  await assert.rejects(h.probe.finish(h.assertion()), /consumed/);
+  await assert.rejects(h.probe.finish(signedAssertion), /consumed/);
 });
 
 test('invalid signature consumes the assertion and cannot be retried', async () => {
