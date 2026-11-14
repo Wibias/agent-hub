@@ -196,7 +196,7 @@ function mountedGraph(nodeBounds) {
   }
   const document = {
     querySelector(id) {
-      if (id === '#graph-open-memory') return null;
+      if (id === '#graph-open-memory' || id === '#graph-close-details') return null;
       if (['#graph-search', '#graph-origin-filter', '#graph-group-filter', '#graph-state-filter'].includes(id)) {
         return { addEventListener() {} };
       }
