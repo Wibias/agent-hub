@@ -76,6 +76,24 @@ try {
 
     # sc.exe requires a space after each option's '='. Use separate native
     # argv elements; the ProgramData GUID path contains no spaces.
+    # Directories alone are insufficient. Audit every staged DLL/EXE and
+    # nested directory; inherited or copied file ACEs must not grant ordinary
+    # same-account users access or allow LocalService to modify binaries.
+    foreach ($item in @(Get-ChildItem -LiteralPath $root -Recurse -Force)) {
+        $fileAcl = Get-Acl -LiteralPath $item.FullName
+        foreach ($ace in $fileAcl.Access) {
+            $sid = $ace.IdentityReference.Translate(
+                [System.Security.Principal.SecurityIdentifier]).Value
+            if ($sid -notin @('S-1-5-18','S-1-5-32-544','S-1-5-19')) {
+                throw 'unexpected DLL, EXE or directory ACL'
+            }
+            if ($sid -eq 'S-1-5-19' -and
+                (($ace.FileSystemRights -band [System.Security.AccessControl.FileSystemRights]::WriteData) -ne 0)) {
+                throw 'LocalService must not modify the executable or native DLL'
+            }
+        }
+    }
+
     & $sc create $service binPath= $target start= demand obj= 'NT AUTHORITY\LocalService' type= own
     if ($LASTEXITCODE -ne 0) { throw 'could not create disposable service' }
     $created = $true
