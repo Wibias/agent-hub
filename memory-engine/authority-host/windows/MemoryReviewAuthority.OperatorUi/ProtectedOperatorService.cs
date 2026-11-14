@@ -96,9 +96,14 @@ internal static class ProtectedOperatorService
             if (ace.AccessControlType != AccessControlType.Allow) continue;
             var sid = (SecurityIdentifier)ace.IdentityReference;
             if (sid.Value is "S-1-5-18" or "S-1-5-32-544") continue;
+            // Do not OR composite rights like Modify or FullControl here:
+            // they CONTAIN ordinary ReadAndExecute bits and would classify a
+            // Users READ-ONLY ACE as writeable. Inspect only the primitive
+            // actual mutation bits; FullControl still necessarily matches.
             const FileSystemRights write =
-                FileSystemRights.Write | FileSystemRights.Modify
-                | FileSystemRights.FullControl | FileSystemRights.Delete
+                FileSystemRights.WriteData | FileSystemRights.AppendData
+                | FileSystemRights.WriteExtendedAttributes
+                | FileSystemRights.WriteAttributes | FileSystemRights.Delete
                 | FileSystemRights.DeleteSubdirectoriesAndFiles
                 | FileSystemRights.ChangePermissions
                 | FileSystemRights.TakeOwnership;
