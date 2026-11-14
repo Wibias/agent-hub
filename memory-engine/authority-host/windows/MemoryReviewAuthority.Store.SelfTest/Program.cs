@@ -1,4 +1,7 @@
+using System.Buffers.Binary;
 using System.Security.Cryptography;
+using System.Text.Json;
+using MemoryReviewAuthority.Core;
 using System.Text;
 using Microsoft.Data.Sqlite;
 using MemoryReviewAuthority.Store;
@@ -26,7 +29,13 @@ internal static class Program
         Run("reopen_preserves_pending_not_authority", Reopen);
         Run("input_and_path_validation", Validation);
         Run("wal_and_no_claim_schema", WalAndNoClaimSchema);
-        Console.WriteLine($"MEMORY_REVIEW_LEDGER PASS {_passed}/8; NO_APPROVAL NO_CLAIM_WRITES");
+        Run("signed_uv_confirm_records_intent_not_claim", VerifiedConfirm);
+        Run("signed_uv_reject_records_no_claim", VerifiedReject);
+        Run("exact_scope_and_fact_must_match_pending", StrictReviewScope);
+        Run("bad_assertion_consumes_ticket_without_intent", BadAssertionConsumes);
+        Run("verified_intent_survives_restart_once_only", VerifiedRestart);
+        Run("second_coordinator_cannot_reuse_completed_proposal", CompetingCoordinators);
+        Console.WriteLine($"MEMORY_REVIEW_LEDGER PASS {_passed}/14; NO_CLAIM_WRITES");
     }
 
     private static void Run(string label, Action test)
@@ -159,6 +168,186 @@ internal static class Program
         Check(Convert.ToInt32(command.ExecuteScalar()) == 0);
         command.CommandText = "SELECT COUNT(*) FROM review_requests WHERE status='awaiting_independent_host_authorization';";
         Check(Convert.ToInt32(command.ExecuteScalar()) == 1);
+    }
+
+    private static ReviewMeaning MeaningFor(PendingReview pending)
+        => new(pending.ProjectId, pending.Branch, pending.RevisionSha,
+            pending.ProposalRef, pending.ReviewSnapshotSha256,
+            pending.CanonicalFactSha256, pending.RequestedAction, "Synthetic fact");
+
+    private static void VerifiedConfirm()
+    {
+        using var store = Open();
+        using var key = TestCredential.New();
+        var pending = store.RecordPending(Example);
+        var coordinator = new VerifiedReviewCoordinator(store, key.Pinned);
+        var meaning = MeaningFor(Example);
+        var ticket = coordinator.Begin(meaning);
+        var finished = coordinator.Complete(ticket.TicketId, meaning, key.Sign(ticket));
+        Check(finished.Verified && finished.Status == "verified_intent_recorded_no_claim");
+        Check(finished.Disposition == ProtectedPendingReviewLedger.ConfirmDisposition);
+        Check(finished.RequestId == pending.RequestId);
+        Check(!finished.ClaimWritten && !finished.ApprovedClaim);
+        Check(store.CountPending() == 0);
+        Check(store.ReadPending(Example.ProjectId, Example.Branch, Example.ProposalRef) is null);
+        Check(store.ReadVerifiedIntent(Example.ProjectId, Example.Branch, Example.ProposalRef)?.RequestId
+            == pending.RequestId);
+        Throws<InvalidOperationException>(() => store.RecordPending(Example));
+        var replay = coordinator.Complete(ticket.TicketId, meaning, key.Sign(ticket));
+        Check(!replay.Verified && replay.Status == "ticket_missing_or_consumed");
+        using var db = new SqliteConnection(new SqliteConnectionStringBuilder
+        {
+            DataSource = Path.Combine(TestDirectory, "review-authority.sqlite3"),
+            Mode = SqliteOpenMode.ReadOnly,
+            Pooling = false,
+        }.ToString());
+        db.Open();
+        using var cmd = db.CreateCommand();
+        cmd.CommandText = "SELECT COUNT(*) FROM sqlite_master WHERE name='claims';";
+        Check(Convert.ToInt32(cmd.ExecuteScalar()) == 0);
+    }
+
+    private static void VerifiedReject()
+    {
+        using var store = Open();
+        using var key = TestCredential.New();
+        var reject = Example with { RequestedAction = "reject" };
+        store.RecordPending(reject);
+        var coordinator = new VerifiedReviewCoordinator(store, key.Pinned);
+        var meaning = MeaningFor(reject);
+        var ticket = coordinator.Begin(meaning);
+        var result = coordinator.Complete(ticket.TicketId, meaning, key.Sign(ticket));
+        Check(result.Verified);
+        Check(result.Disposition == ProtectedPendingReviewLedger.RejectDisposition);
+        Check(store.CountPending() == 0);
+        Check(store.ReadVerifiedIntent(reject.ProjectId, reject.Branch, reject.ProposalRef)?
+            .ClaimWritten == false);
+    }
+
+    private static void StrictReviewScope()
+    {
+        using var store = Open();
+        using var key = TestCredential.New();
+        store.RecordPending(Example);
+        var coordinator = new VerifiedReviewCoordinator(store, key.Pinned);
+        var meaning = MeaningFor(Example);
+        Throws<InvalidOperationException>(() =>
+            coordinator.Begin(meaning with { RevisionSha = new string('c', 40) }));
+        Throws<InvalidOperationException>(() =>
+            coordinator.Begin(meaning with { ReviewSnapshotSha256 = new string('d', 64) }));
+        Throws<InvalidOperationException>(() =>
+            coordinator.Begin(meaning with { CanonicalFact = "Modified fact" }));
+        Throws<InvalidOperationException>(() =>
+            coordinator.Begin(meaning with { Decision = "reject" }));
+        Throws<InvalidOperationException>(() =>
+            coordinator.Begin(meaning with { Branch = "feature" }));
+        Check(store.CountPending() == 1);
+        Check(store.ReadVerifiedIntent(Example.ProjectId, Example.Branch, Example.ProposalRef) is null);
+    }
+
+    private static void BadAssertionConsumes()
+    {
+        using var store = Open();
+        using var key = TestCredential.New();
+        store.RecordPending(Example);
+        var coordinator = new VerifiedReviewCoordinator(store, key.Pinned);
+        var meaning = MeaningFor(Example);
+        var ticket = coordinator.Begin(meaning);
+        var invalid = key.Sign(ticket) with
+        {
+            SignatureBase64Url = Encode(RandomNumberGenerator.GetBytes(72)),
+        };
+        var result = coordinator.Complete(ticket.TicketId, meaning, invalid);
+        Check(!result.Verified);
+        Check(!coordinator.Complete(ticket.TicketId, meaning, key.Sign(ticket)).Verified);
+        Check(store.CountPending() == 1);
+        Check(store.ReadVerifiedIntent(Example.ProjectId, Example.Branch, Example.ProposalRef) is null);
+    }
+
+    private static void VerifiedRestart()
+    {
+        using var key = TestCredential.New();
+        string requestId;
+        using (var first = Open())
+        {
+            requestId = first.RecordPending(Example).RequestId;
+            var coordinator = new VerifiedReviewCoordinator(first, key.Pinned);
+            var meaning = MeaningFor(Example);
+        var ticket = coordinator.Begin(meaning);
+            Check(coordinator.Complete(ticket.TicketId, meaning, key.Sign(ticket)).Verified);
+        }
+        using var reopened = Open();
+        Check(reopened.ReadVerifiedIntent(Example.ProjectId, Example.Branch, Example.ProposalRef)
+            ?.RequestId == requestId);
+        Check(reopened.CountPending() == 0);
+        Check(reopened.ReadPending(Example.ProjectId, Example.Branch, Example.ProposalRef) is null);
+        Throws<InvalidOperationException>(() => reopened.RecordPending(Example));
+        var second = new VerifiedReviewCoordinator(reopened, key.Pinned);
+        Throws<InvalidOperationException>(() => second.Begin(MeaningFor(Example)));
+    }
+
+    private static void CompetingCoordinators()
+    {
+        using var firstStore = Open();
+        using var secondStore = Open();
+        using var key = TestCredential.New();
+        firstStore.RecordPending(Example);
+        var first = new VerifiedReviewCoordinator(firstStore, key.Pinned);
+        var second = new VerifiedReviewCoordinator(secondStore, key.Pinned);
+        var meaning = MeaningFor(Example);
+        var ticketA = first.Begin(meaning);
+        var ticketB = second.Begin(meaning);
+        Check(first.Complete(ticketA.TicketId, meaning, key.Sign(ticketA)).Verified);
+        var blocked = second.Complete(ticketB.TicketId, meaning, key.Sign(ticketB));
+        Check(!blocked.Verified && blocked.Status == "pending_scope_or_commit_denied");
+        Check(firstStore.CountPending() == 0);
+        Check(secondStore.ReadVerifiedIntent(Example.ProjectId, Example.Branch, Example.ProposalRef)
+            is not null);
+    }
+
+    private static string Encode(byte[] data)
+        => Convert.ToBase64String(data).TrimEnd('=').Replace('+', '-').Replace('/', '_');
+
+    private sealed class TestCredential : IDisposable
+    {
+        private readonly ECDsa _key;
+        public PinnedCredential Pinned { get; }
+
+        private TestCredential(ECDsa key)
+        {
+            _key = key;
+            Pinned = new PinnedCredential(
+                Encode(RandomNumberGenerator.GetBytes(32)),
+                key.ExportSubjectPublicKeyInfoPem(), "http://localhost:4328");
+        }
+
+        public static TestCredential New()
+            => new(ECDsa.Create(ECCurve.NamedCurves.nistP256));
+
+        public BrowserAssertion Sign(ChallengeTicket ticket)
+        {
+            var client = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(
+                new Dictionary<string, object>
+                {
+                    ["type"] = "webauthn.get",
+                    ["challenge"] = ticket.ChallengeBase64Url,
+                    ["origin"] = Pinned.ExpectedOrigin,
+                    ["crossOrigin"] = false,
+                }));
+            var authenticator = new byte[37];
+            SHA256.HashData(Encoding.UTF8.GetBytes("localhost")).CopyTo(authenticator, 0);
+            authenticator[32] = 0x05;
+            BinaryPrimitives.WriteUInt32BigEndian(authenticator.AsSpan(33), 1);
+            var signed = new byte[authenticator.Length + 32];
+            authenticator.CopyTo(signed, 0);
+            SHA256.HashData(client).CopyTo(signed, authenticator.Length);
+            var signature = _key.SignData(
+                signed, HashAlgorithmName.SHA256, DSASignatureFormat.Rfc3279DerSequence);
+            return new BrowserAssertion(Pinned.CredentialIdBase64Url,
+                "public-key", Encode(client), Encode(authenticator), Encode(signature));
+        }
+
+        public void Dispose() => _key.Dispose();
     }
 
     private static string Hash(string value)

@@ -35,7 +35,7 @@ public sealed record PendingReviewRecord(
 /// and must be checked by the host before opening this class. This library
 /// does not authenticate its caller or make a caller-supplied review trusted.
 /// </summary>
-public sealed class ProtectedPendingReviewLedger : IDisposable
+public sealed partial class ProtectedPendingReviewLedger : IDisposable
 {
     public const string PendingState = "awaiting_independent_host_authorization";
     public const string PolicyVersion = "agenthub-authority-store-pending-v1";
@@ -102,6 +102,7 @@ public sealed class ProtectedPendingReviewLedger : IDisposable
                     """;
                 schema.ExecuteNonQuery();
             }
+            InitializeVerifiedReviewSchema(connection);
             return new ProtectedPendingReviewLedger(connection);
         }
         catch
@@ -124,6 +125,8 @@ public sealed class ProtectedPendingReviewLedger : IDisposable
         var existing = Lookup(review.ProjectId, review.Branch, review.ProposalRef, tx);
         if (existing is not null)
         {
+            if (FindVerifiedIntent(existing.RequestId, tx) is not null)
+                throw new InvalidOperationException("review_already_finalized");
             if (existing.Review != review
                 || existing.Status != PendingState)
                 throw new InvalidOperationException("pending_review_conflict");
@@ -175,14 +178,21 @@ public sealed class ProtectedPendingReviewLedger : IDisposable
         string projectId, string branch, string proposalRef)
     {
         EnsureOpen();
-        return Lookup(projectId, branch, proposalRef, null);
+        var pending = Lookup(projectId, branch, proposalRef, null);
+        return pending is not null
+            && FindVerifiedIntent(pending.RequestId, null) is null
+            ? pending : null;
     }
 
     public int CountPending()
     {
         EnsureOpen();
         using var command = _connection.CreateCommand();
-        command.CommandText = "SELECT COUNT(*) FROM review_requests;";
+        command.CommandText = """
+            SELECT COUNT(*) FROM review_requests r
+            WHERE NOT EXISTS (SELECT 1 FROM verified_review_intents v
+                              WHERE v.request_id = r.request_id);
+            """;
         return Convert.ToInt32(command.ExecuteScalar());
     }
 
