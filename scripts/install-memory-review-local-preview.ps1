@@ -197,7 +197,7 @@ function Stop-And-Delete-Own-Service {
     }
     $status = @(& $sc query $serviceName 2>$null) -join ' '
     Require ($status -notmatch 'RUNNING|STOP_PENDING') 'Cannot stop own preview service'
-    & $sc delete $serviceName
+    & $sc delete $serviceName | Out-Null
     Require ($LASTEXITCODE -eq 0) 'Cannot delete own preview service'
     for ($i = 0; $i -lt 35; $i++) {
         if ($null -eq (Get-Service -Name $serviceName -ErrorAction SilentlyContinue)) {
@@ -317,10 +317,10 @@ try {
     }
     $target = Join-Path $root 'Service/MemoryReviewAuthority.LabService.exe'
     & $sc create $serviceName binPath= $target start= demand `
-        obj= 'NT AUTHORITY\LocalService' type= own
+        obj= 'NT AUTHORITY\LocalService' type= own | Out-Null
     Require ($LASTEXITCODE -eq 0) 'Cannot create isolated demand-start LocalService preview'
     $serviceMade = $true
-    & $sc sidtype $serviceName restricted
+    & $sc sidtype $serviceName restricted | Out-Null
     Require ($LASTEXITCODE -eq 0) 'Restricted per-service SID required'
     $serviceSid = [Security.Principal.NTAccount]::new(
         'NT SERVICE',$serviceName).Translate(
