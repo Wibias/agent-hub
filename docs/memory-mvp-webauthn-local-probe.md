@@ -47,7 +47,11 @@ Die temporäre Registrierung wird nur im RAM des Node-Prozesses gehalten
 und spätestens nach 5 Minuten verworfen; die Signatur-Challenge ist
 90 Sekunden gültig und wird **vor der Prüfung** verbraucht. Das
 Benutzercredential wird weder in der Memory-Datenbank noch im
-LocalService-Ledger registriert.
+LocalService-Ledger registriert. **Achtung:** Browser oder Windows Hello
+können das neu erzeugte Testcredential trotzdem im Passkey-Manager behalten.
+Der Opt-in-Prüflauf ist damit nicht vollständig spurenlos am Gerät.
+Ein verbleibender Passkey muss gegebenenfalls in den jeweiligen
+Browser- oder Windows-Passkey-Einstellungen verwaltet werden.
 
 Die Browser-API kann eine echte Windows-Hello-Bestätigung auslösen,
 aber die Anwendung kann auch einen anderen WebAuthn-Authenticator oder
