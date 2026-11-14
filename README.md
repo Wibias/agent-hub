@@ -443,6 +443,15 @@ Review, Pipeline, Health, Quality, and Stale views. Browsing keeps a read-only
 SQLite connection. Explicit Replace/Forget and candidate Confirm/Reject actions
 use token-protected same-origin POSTs and the existing Memory hook contracts.
 
+The **Review** tab distinguishes actionable, direct-user candidate confirmations
+from evidence-bound proposals requiring a separate decision. The latter are
+displayed read-only with source authority, support evaluation, and suggested
+relation to existing Claims; they do **not** use the candidate Confirm/Reject
+endpoints. An evidence-bound approval protocol with exact user authorization,
+conflict checks, and an atomic audit trail is still required before these
+proposals can be accepted or dismissed from the UI. Do not change the
+canonical SQLite database manually to bypass this boundary.
+
 The **Graph** view is diagnostic and read-only. It shows canonical Claims as
 nodes, lifecycle/conflict relations as explicit edges, and compatible-profile
 semantic similarity as clearly marked inferred edges. Search plus state/origin

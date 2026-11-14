@@ -694,6 +694,23 @@ button {
   box-shadow: inset 2px 0 0 var(--accent);
 }
 
+.review-evidence-head {
+  margin-top: 24px;
+}
+.evidence-review-row .authority {
+  color: var(--muted);
+}
+.review-evidence-notice {
+  padding: 10px 14px;
+  margin: 0;
+  border-left: 2px solid var(--line-strong);
+  background: #111516;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
 .review-meta {
   display: flex;
   flex-wrap: wrap;
