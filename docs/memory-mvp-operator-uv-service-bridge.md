@@ -40,8 +40,9 @@ Integration** aufgehoben:
 
 ## Wichtige Isolation
 
-Der neue Pipe ist **ausschließlich** für Administratoren, SYSTEM,
-LocalService und die ganz konkrete SCM-Service-SID freigegeben. Er gibt
+Der neue Pipe ist **ausschließlich** für Administratoren, SYSTEM
+und die ganz konkrete SCM-Service-SID freigegeben. Der breite
+LocalService-Konto-SID ist ausdrücklich **nicht** freigeschaltet. Er gibt
 den vollständigen, potenziell sensiblen Fakt ausschließlich über diesen
 administrativen Kanal aus. Der unveränderte, für normale Codex-Clients
 sichtbare `AgentHubMemoryReviewLab-ReadV1`-Pipe bleibt dagegen streng
