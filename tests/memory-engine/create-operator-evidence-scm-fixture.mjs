@@ -5,10 +5,13 @@
  * fabricated approved Claim. Refuses outside GitHub Windows runner.
  */
 import { createHash } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
+import { tmpdir } from 'node:os';
 import { DatabaseSync } from 'node:sqlite';
 import { EVIDENCE_PROPOSAL_SCHEMA_SQL } from '../../memory-engine/evidence-bound-proposal-store.mjs';
 import { evidenceExtractionFingerprint } from '../../memory-engine/evidence-bound-extraction.mjs';
-import { existsSync, writeFileSync } from 'node:fs';
+import { existsSync, writeFileSync, mkdirSync, mkdtempSync, copyFileSync, rmSync } from 'node:fs';
+import { exportProtectedEvidenceReview, EVIDENCE_SNAPSHOT_NAME, EVIDENCE_MANIFEST_NAME } from '../../scripts/export-protected-evidence-review.mjs';
 import { isAbsolute, join } from 'node:path';
 
 if (process.env.GITHUB_ACTIONS !== 'true' || process.env.RUNNER_OS !== 'Windows'
@@ -21,16 +24,37 @@ if (!existsSync(stateRoot) || !stateRoot.endsWith('AgentHubMemoryReviewLab-State
   process.stderr.write('Expected service-owned disposable lab state directory.\n');
   process.exit(2);
 }
-const source = join(stateRoot, 'operator-evidence-snapshot.sqlite3');
-const manifest = join(stateRoot, 'operator-evidence-manifest.json');
-if (existsSync(source) || existsSync(manifest)) {
-  process.stderr.write('Refusing to overwrite a pre-existing candidate snapshot.\n');
+const targetSnapshot = join(stateRoot, EVIDENCE_SNAPSHOT_NAME);
+const targetManifest = join(stateRoot, EVIDENCE_MANIFEST_NAME);
+if (existsSync(targetSnapshot) || existsSync(targetManifest)) {
+  process.stderr.write('Refusing to overwrite pre-existing operator source.\\n');
   process.exit(2);
 }
+// Full transfer: a real Git checkout and canonical user-writable schema,
+// followed by read-only preflight and a consistent SQLite backup, then an
+// explicit CI-operator copy to the previously admin/SID-protected directory.
+const scratch = mkdtempSync(join(process.env.RUNNER_TEMP || tmpdir(),
+  'agenthub-evidence-transfer-'));
+const repoRoot = join(scratch, 'repo');
+mkdirSync(repoRoot);
+const git = (...args) => execFileSync('git', ['-C', repoRoot, ...args], {
+  encoding: 'utf8', windowsHide: true, timeout: 5000,
+  stdio: ['ignore', 'pipe', 'pipe'],
+}).trim();
+git('init', '-b', 'main');
+git('config', 'user.email', 'operator-fixture@example.invalid');
+git('config', 'user.name', 'Protected Source Fixture');
+git('config', 'commit.gpgsign', 'false');
+git('remote', 'add', 'origin', 'https://github.com/example/operator-evidence.git');
+writeFileSync(join(repoRoot, 'README.md'), 'Operator E~ source transfer');
+git('add', 'README.md');
+git('commit', '-m', 'fixture');
+const source = join(scratch, 'canonical-memory.sqlite3');
+const exportDir = join(scratch, 'unprivileged-export');
 
 const projectId = 'github.com/example/operator-evidence';
 const branch = 'main';
-const revisionSha = 'b'.repeat(40);
+const revisionSha = git('rev-parse', 'HEAD');
 const proposalId = 'actual-canonical-evidence-proposal-id';
 const evidenceId = 'actual-canonical-evidence-id';
 const fact = 'This real-schema E~ proposal has linked Evidence but no human approval.';
@@ -76,7 +100,20 @@ try {
 } finally {
   db.close();
 }
-writeFileSync(manifest, JSON.stringify({
-  projectId, branch, revisionSha, proposalRef, decision: 'confirm',
-}), { flag: 'wx', encoding: 'utf8' });
-process.stdout.write('REAL_EVIDENCE_FIXTURE_PREPARED_NO_AUTHORITY ' + proposalRef + '\n');
+const exported = await exportProtectedEvidenceReview({
+  dbPath: source, repoPath: repoRoot,
+  proposalRef, decision: 'confirm', outputDir: exportDir,
+});
+if (exported.protectedServiceImportCompleted
+    || exported.claimWritten || exported.humanApprovalVerified
+    || exported.revisionSha !== revisionSha
+    || exported.status !== 'operator_transfer_ready_unverified_unapproved') {
+  throw new Error('incorrect operator export trust boundary');
+}
+// Only the GitHub runner is elevated here. Its previously checked state DACL
+// protects these copies; the actual service accepts no source input path.
+copyFileSync(join(exportDir, EVIDENCE_SNAPSHOT_NAME), targetSnapshot);
+copyFileSync(join(exportDir, EVIDENCE_MANIFEST_NAME), targetManifest);
+rmSync(scratch, { recursive: true, force: true });
+process.stdout.write('REAL_EVIDENCE_GIT_TO_SERVICE_SOURCE_PREPARED_NO_AUTHORITY '
+  + proposalRef + '\\n');
