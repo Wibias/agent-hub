@@ -92,6 +92,12 @@ function Protect-Directory([string]$path, [object[]]$permissions) {
             (SID $p[0]), $p[1], $inherit, $propagate, $allow))
     }
     Set-Acl -LiteralPath $path -AclObject $acl
+    # Windows explicitly owns the inheritance control flag. A fresh
+    # .NET DirectorySecurity object plus Set-Acl may still leave
+    # SE_DACL_PROTECTED unset for a newly created ProgramData child.
+    # icacls /inheritance:r explicitly removes the inheritance boundary.
+    & (Join-Path $env:WINDIR 'System32/icacls.exe') $path '/inheritance:r' | Out-Null
+    Require ($LASTEXITCODE -eq 0) 'Cannot disable inherited directory permissions'
     $allowedWriters = @('S-1-5-18','S-1-5-32-544')
     foreach ($p in $permissions) {
         if ($p[0] -match '^S-1-5-80-' -and
@@ -174,6 +180,8 @@ function Set-File-Acl([string]$path, [object[]]$permissions) {
             [Security.AccessControl.AccessControlType]::Allow))
     }
     Set-Acl -LiteralPath $path -AclObject $acl
+    & (Join-Path $env:WINDIR 'System32/icacls.exe') $path '/inheritance:r' | Out-Null
+    Require ($LASTEXITCODE -eq 0) 'Cannot disable inherited file permissions'
 }
 function Check-ServiceOwnership {
     $service = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
