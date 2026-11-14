@@ -129,7 +129,11 @@ export async function exportProtectedEvidenceReview({
     expectedSnapshot: before.reviewSnapshotSha256,
   });
   const secondGit = currentGit(opts.repoPath);
-  if (!reviewable(after)
+  const current = runEvidenceDecisionPreflight({
+    ...context, expectedSnapshot: before.reviewSnapshotSha256,
+  });
+  if (!reviewable(after) || !reviewable(current)
+      || before.reviewSnapshotSha256 !== current.reviewSnapshotSha256
       || before.reviewSnapshotSha256 !== after.reviewSnapshotSha256
       || before.canonicalFactHash !== after.canonicalFactHash
       || firstGit.projectId !== secondGit.projectId
