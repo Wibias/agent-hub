@@ -10,6 +10,8 @@ const state = {
   graphGroup: 'all',
   graphNodeState: 'all',
   selectedGraphNodeId: null,
+  graphInspectorOpen: false,
+  memoryInspectorOpen: false,
   view: 'memories',
   projectId: null,
   branch: null,
@@ -161,6 +163,7 @@ function resetGraphState({ keepData = false } = {}) {
   state.graphGroup = 'all';
   state.graphNodeState = 'all';
   state.selectedGraphNodeId = null;
+  state.graphInspectorOpen = false;
 }
 
 function actionsAreOpen() {
@@ -316,9 +319,9 @@ function memoryRow(memory) {
     >
       <span class="memory-row-top">
         <span class="ref">${escapeHtml(memory.ref)}</span>
-        <span class="authority">${escapeHtml(memory.authority.replaceAll('_', ' '))}</span>
+        <span class="authority">${escapeHtml(graphAuthorityLabel(memory.authority))}</span>
       </span>
-      <span class="memory-value">${escapeHtml(memory.value)}</span>
+      <span class="memory-value">${escapeHtml(memoryDisplayTitle(memory.value))}</span>
       <span class="memory-row-bottom">
         <span class="inline-state ${escapeHtml(memory.state)}">${escapeHtml(memory.state)}</span>
         <span>${escapeHtml(memory.provenance?.label ?? 'Unknown')}</span>
@@ -412,6 +415,20 @@ function definition(rows) {
   `;
 }
 
+/** Keep optional diagnostics inspectable without showing a sea of n/a fields. */
+function definitionOptional(rows) {
+  const meaningful = rows.filter((row) => row[1] !== undefined && row[1] !== null
+    && row[1] !== '' && row[1] !== '—' && row[1] !== 'n/a' && row[1] !== 'none');
+  return meaningful.length ? definition(meaningful) : '';
+}
+
+/** Render an optional advanced disclosure only when data exists. */
+function optionalInspectorSection(label, rows) {
+  const content = definitionOptional(rows);
+  if (!content) return '';
+  return "<section class='inspect-section'><details class='inspector-advanced'><summary>"
+    + escapeHtml(label) + '</summary>' + content + '</details></section>';
+}
 function renderClaimActions(claim) {
   if (
     claim?.authority !== 'user_direct'
@@ -504,22 +521,27 @@ function renderInspector() {
       </div>
 
       <section class="inspect-section">
-        <h3>Memory</h3>
+        <h3>Source & status</h3>
         ${definition([
-          ['Authority', claim.authority],
-          ['State', claim.state, statusClass(claim.state)],
-          ['Kind', claim.kind],
+          ['Evidence authority', graphAuthorityLabel(claim.authority)],
+          ['Record state', claim.state, statusClass(claim.state)],
           ['Created', dateTime(claim.created_at)],
           ['Branch', claim.branch_scope],
-          ['Semantic', detail.semanticIndexed ? 'indexed' : 'not indexed'],
         ])}
+        <details class="inspector-advanced">
+          <summary>Technical memory fields</summary>
+          ${definition([
+            ['Kind', claim.kind],
+            ['Semantic index', detail.semanticIndexed ? 'available' : 'not indexed'],
+          ])}
+        </details>
       </section>
 
       <section class="inspect-section">
         <h3>Provenance</h3>
         <div class="inspector-chain">${provenanceChain(detail)}</div>
         <div class="spacer-12"></div>
-        ${definition([
+        ${definitionOptional([
           [
             'Evidence',
             compactTechnicalId(evidence.id),
@@ -543,21 +565,17 @@ function renderInspector() {
         ])}
       </section>
 
+      ${optionalInspectorSection('Pipeline details', [
+        ['Candidate', candidate?.ref],
+        ['Status', candidate?.status, statusClass(candidate?.status)],
+        ['Importance', importance?.decision],
+        ['Durability', importance?.durability],
+        ['Utility', importance?.future_utility],
+        ['Relation', detail.relation?.relation],
+        ['Relation target', detail.relation?.targetRef],
+      ])}
       <section class="inspect-section">
-        <h3>Pipeline</h3>
-        ${definition([
-          ['Candidate', candidate?.ref || 'n/a'],
-          ['Status', candidate?.status || 'n/a', statusClass(candidate?.status)],
-          ['Importance', importance?.decision || 'n/a'],
-          ['Durability', importance?.durability || 'n/a'],
-          ['Utility', importance?.future_utility || 'n/a'],
-          ['Relation', detail.relation?.relation || 'n/a'],
-          ['Relation target', detail.relation?.targetRef || 'none'],
-        ])}
-      </section>
-
-      <section class="inspect-section">
-        <h3>Recall usage</h3>
+        <details class="inspector-advanced"><summary>Recall usage</summary>
         ${definition([
           ['Retrieved', number(usage.retrieval_count)],
           ['Budget retained', number(usage.retained_count)],
@@ -565,6 +583,7 @@ function renderInspector() {
           ['Last retained', dateTime(usage.last_retained_at)],
           ['Last context', dateTime(usage.last_context_at)],
         ])}
+        </details>
       </section>
 
       <section class="inspect-section">
@@ -591,10 +610,6 @@ function renderInspector() {
           : '<div class="inline-empty">No conflicts.</div>'}
       </section>
 
-      <section class="inspect-section">
-        <h3>Value</h3>
-        <p class="inspect-value">${escapeHtml(claim.value)}</p>
-      </section>
 
       ${renderClaimActions(claim)}
     </div>
@@ -717,7 +732,7 @@ function renderMemories() {
   const states = [...new Set(memories.map((item) => item.state))].sort();
 
   el.view.innerHTML = `
-    <div class="memory-layout">
+    <div class="memory-layout ${state.memoryInspectorOpen ? 'is-details-open' : ''}">
       <section class="memory-column">
         <div class="toolbar">
           <input
@@ -751,7 +766,8 @@ function renderMemories() {
             : '<div class="empty">No memories match the current filters.</div>'}
         </div>
       </section>
-      <aside class="inspector">
+      <aside class="inspector" aria-label="Selected memory details">
+        <div class="mobile-detail-heading"><strong>Memory details</strong><button class="text-action" id="memory-close-details" type="button">Close</button></div>
         ${renderInspector()}
       </aside>
     </div>
@@ -762,16 +778,20 @@ function renderMemories() {
   const claimState = document.querySelector('#state-filter');
 
   search?.addEventListener('input', () => {
+    const selection = { start: search.selectionStart, end: search.selectionEnd };
     state.search = search.value;
     renderMemories();
+    restoreGraphControlFocus('memory-search', selection);
   });
   authority?.addEventListener('change', () => {
     state.authority = authority.value;
     renderMemories();
+    restoreGraphControlFocus('authority-filter');
   });
   claimState?.addEventListener('change', () => {
     state.claimState = claimState.value;
     renderMemories();
+    restoreGraphControlFocus('state-filter');
   });
 
   el.view.querySelectorAll('[data-claim]').forEach((button) => {
@@ -779,6 +799,14 @@ function renderMemories() {
       resetActionState();
       selectClaim(button.dataset.claim);
     });
+  });
+
+  document.querySelector('#memory-close-details')?.addEventListener('click', () => {
+    state.memoryInspectorOpen = false;
+    renderMemories();
+    const selectedRow = [...el.view.querySelectorAll('[data-claim]')]
+      .find((item) => item.dataset.claim === state.selectedClaimId);
+    selectedRow?.focus({ preventScroll: true });
   });
 
   document.querySelector('#replace-memory')?.addEventListener('click', () => {
@@ -861,6 +889,119 @@ function graphFilteredEdges(nodes) {
   ));
 }
 
+/** Render excerpts from recorded claim text only; never reinterpret content. */
+function memoryDisplayTitle(value) {
+  const text = String(value ?? '').replace(/\s+/g, ' ').trim()
+    .replace(/^(?:memory|agent decision):\s*/i, '');
+  return text || 'Untitled memory';
+}
+
+/** Two readable lines at a stable width; the full original stays in the inspector. */
+function graphLabelLines(value, maxChars = 27) {
+  const words = [...memoryDisplayTitle(value)].join('').split(/\s+/);
+  const lines = ['', ''];
+  let index = 0;
+  for (const word of words) {
+    const next = lines[index] ? lines[index] + ' ' + word : word;
+    if ([...next].length <= maxChars) {
+      lines[index] = next;
+      continue;
+    }
+    if (index === 0) {
+      if (!lines[0]) lines[0] = [...word].slice(0, maxChars).join('');
+      index = 1;
+      if ([...word].length > maxChars) {
+        lines[1] = [...word].slice(maxChars, maxChars * 2 - 1).join('');
+      } else {
+        lines[1] = word;
+      }
+    } else {
+      break;
+    }
+  }
+  const original = memoryDisplayTitle(value);
+  const shown = lines.filter(Boolean).join(' ');
+  if ([...original].length > [...shown].length) {
+    lines[1] = [...(lines[1] || lines[0])].slice(0, maxChars - 1).join('') + '…';
+    if (!lines[1]) lines[1] = '…';
+  }
+  return lines.filter(Boolean);
+}
+
+/** A bounded semantic layout: connected claims are positioned next to each other. */
+function graphReadableLayout(nodes, edges) {
+  if (nodes.length > 24) return null;
+  const cols = Math.min(3, Math.max(1, Math.ceil(Math.sqrt(nodes.length))));
+  const rows = Math.max(1, Math.ceil(nodes.length / cols));
+  const width = 1200;
+  const height = Math.max(720, 120 + rows * 172);
+  const firstX = (width - (cols - 1) * 360) / 2;
+  const firstY = (height - (rows - 1) * 172) / 2;
+  const byId = new Map(nodes.map(node => [node.id, node]));
+  const adjacent = new Map(nodes.map(node => [node.id, new Set()]));
+  for (const edge of edges) {
+    if (!adjacent.has(edge.from) || !adjacent.has(edge.to)) continue;
+    adjacent.get(edge.from).add(edge.to);
+    adjacent.get(edge.to).add(edge.from);
+  }
+  const ordered = [];
+  const visited = new Set();
+  const roots = [...nodes].sort((a, b) =>
+    adjacent.get(b.id).size - adjacent.get(a.id).size || a.id.localeCompare(b.id, 'en'));
+  for (const root of roots) {
+    if (visited.has(root.id)) continue;
+    const queue = [root.id];
+    visited.add(root.id);
+    for (let index = 0; index < queue.length; index += 1) {
+      const id = queue[index];
+      ordered.push(byId.get(id));
+      const links = [...adjacent.get(id)].sort((a, b) => a.localeCompare(b, 'en'));
+      for (const next of links) {
+        if (visited.has(next)) continue;
+        visited.add(next);
+        queue.push(next);
+      }
+    }
+  }
+  const positions = new Map(ordered.map((node, i) => [node.id, {
+    x: firstX + (i % cols) * 360,
+    y: firstY + Math.floor(i / cols) * 172,
+  }]));
+  return { positions, width, height };
+}
+
+/** Keep relation semantics from the actual edge, never from inferred keywords. */
+function graphRelationLabel(edge) {
+  return String(edge?.relation ?? 'related').replaceAll('_', ' ');
+}
+
+/** Semantic claim excerpts inside interactive SVG cards, never opaque refs. */
+function graphNodeCardSvg(node) {
+  const lines = graphLabelLines(node.value);
+  const meta = node.state + ' · ' + graphAuthorityLabel(node.authority);
+  const clippedMeta = [...meta].length > 37 ? [...meta].slice(0, 36).join('') + '…' : meta;
+  return "<rect class='graph-node-card' x='-126' y='-42' width='252' height='84' rx='9'></rect>"
+    + "<circle cx='-109' cy='-21' r='5'></circle>"
+    + "<text class='graph-node-title' x='-96' y='" + (lines.length === 1 ? '-7' : '-17') + "'>"
+    + lines.map((line, index) => "<tspan x='-96' dy='" + (index === 0 ? '0' : '18') + "'>" + escapeHtml(line) + '</tspan>').join('')
+    + '</text>'
+    + "<text class='graph-node-caption' x='-96' y='29'>" + escapeHtml(clippedMeta) + '</text>';
+}
+
+/** Only actual selected-node relations receive inline semantic labels. */
+function graphSelectedRelationNote(edge, from, to, selected) {
+  if (!selected || (edge.from !== selected.id && edge.to !== selected.id)) return '';
+  const relation = graphRelationLabel(edge);
+  const width = Math.min(196, Math.max(68, relation.length * 7.3 + 24));
+  const x = ((from.x + to.x) / 2).toFixed(2);
+  const y = ((from.y + to.y) / 2).toFixed(2);
+  const source = edge.source === 'typed_relation' ? 'advisory' : edge.origin;
+  const direction = edge.from === selected.id ? 'outgoing' : 'incoming';
+  return "<g class='graph-edge-note " + escapeHtml(source) + "' transform='translate(" + x + ' ' + y + ")'>"
+    + "<rect x='" + (-width / 2).toFixed(1) + "' y='-12' width='" + width.toFixed(1) + "' height='24' rx='5'></rect>"
+    + "<text y='4' text-anchor='middle'>" + escapeHtml(relation) + '</text>'
+    + '<title>' + escapeHtml(relation + ' · ' + direction) + '</title></g>';
+}
 function graphPositions(nodes, edges) {
   const width = 1000;
   const height = 680;
@@ -1092,6 +1233,26 @@ function graphEdgeProvenance(edge) {
   ].filter(Boolean).join(' · ') || 'canonical lifecycle';
 }
 
+/** Small-screen readable index of real visible edges; no relation inference. */
+function graphConnectionIndex(nodes, edges) {
+  if (!edges.length) return '';
+  const byId = new Map(nodes.map(node => [node.id, node]));
+  const rows = edges.slice(0, 12).map(edge => {
+    const from = byId.get(edge.from);
+    const to = byId.get(edge.to);
+    if (!from || !to) return '';
+    return '<button class="graph-connection-row" type="button" data-graph-node="'
+      + escapeHtml(to.id) + '"><span>' + escapeHtml(memoryDisplayTitle(from.value))
+      + '</span><strong>' + escapeHtml(graphRelationLabel(edge)) + ' · '
+      + escapeHtml(graphRelationOriginLabel(edge)) + '</strong><span>'
+      + escapeHtml(memoryDisplayTitle(to.value)) + '</span></button>';
+  }).join('');
+  return '<details class="graph-connection-index"><summary>'
+    + number(edges.length) + ' visible connections</summary><div class="graph-connection-rows">'
+    + rows + '</div>' + (edges.length > 12
+      ? '<p class="graph-connection-limit">Showing the first 12. Filter memories for more.</p>'
+      : '') + '</details>';
+}
 function graphNeighbors(node, edges) {
   if (!node || !state.graph) return [];
   const byId = new Map(state.graph.nodes.map((item) => [item.id, item]));
@@ -1176,12 +1337,12 @@ function graphInspector(node, visibleEdges) {
             ? neighbors.map(({ edge, node: neighbor }) => `
                 <button class="graph-neighbor" type="button" data-graph-node="${escapeHtml(neighbor.id)}">
                   <span class="graph-neighbor-top">
-                    <span class="ref">${escapeHtml(neighbor.ref)}</span>
+                    <span class="graph-neighbor-name">${escapeHtml(memoryDisplayTitle(neighbor.value))}</span>
                     <span class="graph-origin ${escapeHtml(edge.origin)}">${escapeHtml(graphRelationOriginLabel(edge))}</span>
                   </span>
                   <span class="graph-neighbor-relation">${escapeHtml(edge.relation.replaceAll('_', ' '))}</span>
                   <span class="graph-neighbor-meta">
-                    ${edge.relation === 'semantic_similarity' ? `weight ${Number(edge.weight ?? 0).toFixed(3)} · ` : ''}${escapeHtml(graphEdgeProvenance(edge))}
+                    <span class="graph-neighbor-ref">${escapeHtml(neighbor.ref)}</span> · ${edge.relation === 'semantic_similarity' ? `weight ${Number(edge.weight ?? 0).toFixed(3)} · ` : ''}${escapeHtml(graphEdgeProvenance(edge))}
                   </span>
                 </button>
               `).join('')
@@ -1211,7 +1372,10 @@ function renderGraph() {
   const edges = graphFilteredEdges(nodes);
   const states = [...new Set(state.graph.nodes.map((node) => node.state))].sort();
   const groups = state.graph.groups ?? [];
-  const positions = graphPositions(nodes, edges);
+  const readableLayout = graphReadableLayout(nodes, edges);
+  const positions = readableLayout?.positions ?? graphPositions(nodes, edges);
+  const graphWidth = readableLayout?.width ?? 1000;
+  const graphHeight = readableLayout?.height ?? 680;
   const selected = nodes.find((node) => node.id === state.selectedGraphNodeId)
     ?? nodes.find((node) => node.state === 'active')
     ?? nodes[0]
@@ -1220,12 +1384,16 @@ function renderGraph() {
     state.selectedGraphNodeId = selected.id;
   }
 
-  const labelEveryNode = nodes.length <= 60;
+  const labelEveryNode = nodes.length <= 24;
   const stats = state.graph.stats ?? {};
   const gitContext = state.graph.gitContext ?? { status: 'unconfigured', revisionSha: null };
   const verification = graphVerificationSummary(state.graph);
+  const previousCanvas = el.view.querySelector?.('.graph-canvas-wrap');
+  const priorScroll = previousCanvas
+    ? { left: previousCanvas.scrollLeft, top: previousCanvas.scrollTop }
+    : null;
   el.view.innerHTML = `
-    <div class="graph-layout">
+    <div class="graph-layout ${state.graphInspectorOpen ? 'is-details-open' : ''}">
       <section class="graph-stage" aria-label="Memory connections">
         <div class="graph-context" data-verification-tone="${escapeHtml(verification.tone)}">
           <div class="graph-context-body">
@@ -1269,11 +1437,19 @@ function renderGraph() {
           </select>
         </div>
         <div class="graph-meta">
-          <div class="graph-legend" aria-label="Graph relation legend">
+          <div class="graph-legend graph-legend-desktop" aria-label="Graph relation legend">
             <span class="graph-legend-item"><span class="graph-legend-swatch explicit"></span>Explicit relation · recorded</span>
             <span class="graph-legend-item"><span class="graph-legend-swatch typed"></span>Advisory typed · not proof</span>
             <span class="graph-legend-item"><span class="graph-legend-swatch inferred"></span>Inferred similarity (optional)</span>
           </div>
+          <details class="graph-legend-mobile">
+            <summary>Connection key</summary>
+            <div class="graph-legend" aria-label="Connection types">
+              <span class="graph-legend-item"><span class="graph-legend-swatch explicit"></span>Recorded</span>
+              <span class="graph-legend-item"><span class="graph-legend-swatch typed"></span>Advisory, not proof</span>
+              <span class="graph-legend-item"><span class="graph-legend-swatch inferred"></span>Similarity suggestion</span>
+            </div>
+          </details>
           <div class="graph-stats">
             <span>${number(nodes.length)} of ${number(stats.nodeCount)} memories shown</span>
             <span>·</span>
@@ -1285,9 +1461,10 @@ function renderGraph() {
             ${stats.truncated ? `<span>· ${number(stats.omittedClaims)} omitted by bound</span>` : ''}
           </div>
         </div>
+        ${graphConnectionIndex(nodes, edges)}
         <div class="graph-canvas-wrap">
           ${nodes.length ? `
-            <svg class="graph-canvas" viewBox="0 0 1000 680" role="group" aria-label="Interactive memory relation graph">
+            <svg class="graph-canvas" viewBox="0 0 ${graphWidth} ${graphHeight}" role="group" aria-label="Interactive memory relation graph">
               <g class="graph-edges">
                 ${edges.map((edge) => {
                   const from = positions.get(edge.from);
@@ -1303,6 +1480,7 @@ function renderGraph() {
                     >
                       <title>${escapeHtml(edge.relation)} · ${escapeHtml(edge.origin)}${edge.relation === 'semantic_similarity' && Number.isFinite(edge.weight) ? ` · ${edge.weight.toFixed(3)}` : ''}</title>
                     </line>
+                    ${graphSelectedRelationNote(edge, from, to, selected)}
                   `;
                 }).join('')}
               </g>
@@ -1321,10 +1499,9 @@ function renderGraph() {
                       role="button"
                       tabindex="0"
                       aria-pressed="${node.id === selected?.id ? 'true' : 'false'}"
-                      aria-label="${escapeHtml(`${node.ref} ${node.value}`)}"
+                      aria-label="${escapeHtml(`${memoryDisplayTitle(node.value)}; ${node.state}; ${graphAuthorityLabel(node.authority)}`)}"
                     >
-                      <circle r="10"></circle>
-                      ${(labelEveryNode || node.id === selected?.id) ? `<text x="15" y="4">${escapeHtml(node.ref)}</text>` : ''}
+                      ${(labelEveryNode || node.id === selected?.id) ? graphNodeCardSvg(node) : '<circle r="9"></circle>'}
                       <title>${escapeHtml(node.ref)} · ${escapeHtml(node.state)} · ${escapeHtml(node.value)}</title>
                     </g>
                   `;
@@ -1334,11 +1511,25 @@ function renderGraph() {
           ` : '<div class="empty">No graph nodes match the current filters.</div>'}
         </div>
       </section>
-      <aside class="graph-inspector">
+      <aside class="graph-inspector" aria-label="Selected memory details">
+        <div class="mobile-detail-heading"><strong>Memory details</strong><button class="text-action" id="graph-close-details" type="button">Close</button></div>
         ${graphInspector(selected, edges)}
       </aside>
     </div>
   `;
+
+  // Keep canvas navigation stable during search, selection and 10-second refresh.
+  const activeCanvas = el.view.querySelector?.('.graph-canvas-wrap');
+  if (activeCanvas && priorScroll) {
+    activeCanvas.scrollLeft = priorScroll.left;
+    activeCanvas.scrollTop = priorScroll.top;
+  } else if (activeCanvas && selected && readableLayout) {
+    const point = positions.get(selected.id);
+    if (point) {
+      activeCanvas.scrollLeft = Math.max(0, point.x - activeCanvas.clientWidth / 2);
+      activeCanvas.scrollTop = Math.max(0, point.y - activeCanvas.clientHeight / 2);
+    }
+  }
 
   const search = document.querySelector('#graph-search');
   const origin = document.querySelector('#graph-origin-filter');
@@ -1369,6 +1560,7 @@ function renderGraph() {
   const selectGraphNode = (nodeId) => {
     if (!state.graph?.nodes.some((node) => node.id === nodeId)) return;
     state.selectedGraphNodeId = nodeId;
+    state.graphInspectorOpen = true;
     renderGraph();
     focusSelectedGraphNode(nodeId);
   };
@@ -1381,12 +1573,19 @@ function renderGraph() {
     });
   });
 
+  document.querySelector('#graph-close-details')?.addEventListener('click', () => {
+    state.graphInspectorOpen = false;
+    renderGraph();
+    if (state.selectedGraphNodeId) focusSelectedGraphNode(state.selectedGraphNodeId);
+  });
+
   document.querySelector('#graph-open-memory')?.addEventListener('click', async () => {
     if (!selected) return;
     state.view = 'memories';
     state.selectedClaimId = null;
     state.claim = null;
     resetActionState();
+    state.memoryInspectorOpen = true;
     updateUrl();
     renderView();
     await selectClaim(selected.id);
@@ -2023,6 +2222,7 @@ function renderView() {
 
 async function selectClaim(claimId) {
   state.selectedClaimId = claimId;
+  state.memoryInspectorOpen = true;
   state.claim = null;
   updateUrl();
   renderMemories();
@@ -2063,6 +2263,8 @@ async function loadScope({
   state.selectedCandidateId = null;
   state.selectedEvidenceProposalId = null;
   state.selectedGraphNodeId = null;
+  state.memoryInspectorOpen = false;
+  state.graphInspectorOpen = false;
   resetActionState();
   state.search = '';
   state.authority = 'all';
@@ -2192,6 +2394,8 @@ el.tabs.addEventListener('click', async (event) => {
   const button = event.target.closest('[data-view]');
   if (!button || button.dataset.view === state.view) return;
   state.view = button.dataset.view;
+  state.memoryInspectorOpen = false;
+  state.graphInspectorOpen = false;
   state.selectedClaimId = null;
   state.selectedCandidateId = null;
   state.claim = null;
