@@ -1,3 +1,4 @@
+using MemoryReviewAuthority.Core;
 using Microsoft.Data.Sqlite;
 using System.Security.Cryptography;
 using System.Text;
