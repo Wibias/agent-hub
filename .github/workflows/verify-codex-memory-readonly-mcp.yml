@@ -18,6 +18,7 @@ on:
       - 'tests/memory-engine/codex-readonly-memory-mcp.test.mjs'
       - 'tests/memory-engine/codex-global-memory-scope.test.mjs'
       - 'tests/memory-engine/codex-protected-claim-pipe.test.mjs'
+      - 'tests/memory-engine/operator-web-authn-probe-pipe.test.mjs'
       - 'tests/memory-engine/project-wide-user-memory.test.mjs'
       - 'scripts/manage-project-wide-memory.mjs'
       - 'tests/memory-engine/codex-memory-pipeline-diagnostics.test.mjs'
@@ -42,6 +43,7 @@ on:
       - 'tests/memory-engine/codex-readonly-memory-mcp.test.mjs'
       - 'tests/memory-engine/codex-global-memory-scope.test.mjs'
       - 'tests/memory-engine/codex-protected-claim-pipe.test.mjs'
+      - 'tests/memory-engine/operator-web-authn-probe-pipe.test.mjs'
       - 'tests/memory-engine/project-wide-user-memory.test.mjs'
       - 'scripts/manage-project-wide-memory.mjs'
       - 'tests/memory-engine/codex-memory-pipeline-diagnostics.test.mjs'
@@ -74,4 +76,4 @@ jobs:
         with:
           node-version: '24'
       - name: Test real stdio MCP, canonical SQLite read-only and scoped authority
-        run: node --test tests/memory-engine/codex-readonly-memory-mcp.test.mjs tests/memory-engine/codex-protected-claim-pipe.test.mjs tests/memory-engine/codex-project-memory-scope.test.mjs tests/memory-engine/codex-global-memory-scope.test.mjs tests/memory-engine/project-wide-user-memory.test.mjs tests/memory-engine/codex-memory-pipeline-diagnostics.test.mjs tests/memory-engine/memory-candidate-judge.test.mjs tests/memory-engine/memory-candidate-fence-redaction.test.mjs tests/memory-engine/codex-candidate-process-error.test.mjs tests/memory-engine/codex-judge-executable.test.mjs tests/memory-engine/codex-judge-auto-retry.test.mjs tests/memory-engine/codex-memory-command-failclosed.test.mjs
+        run: node --test tests/memory-engine/codex-readonly-memory-mcp.test.mjs tests/memory-engine/codex-protected-claim-pipe.test.mjs tests/memory-engine/operator-web-authn-probe-pipe.test.mjs tests/memory-engine/codex-project-memory-scope.test.mjs tests/memory-engine/codex-global-memory-scope.test.mjs tests/memory-engine/project-wide-user-memory.test.mjs tests/memory-engine/codex-memory-pipeline-diagnostics.test.mjs tests/memory-engine/memory-candidate-judge.test.mjs tests/memory-engine/memory-candidate-fence-redaction.test.mjs tests/memory-engine/codex-candidate-process-error.test.mjs tests/memory-engine/codex-judge-executable.test.mjs tests/memory-engine/codex-judge-auto-retry.test.mjs tests/memory-engine/codex-memory-command-failclosed.test.mjs

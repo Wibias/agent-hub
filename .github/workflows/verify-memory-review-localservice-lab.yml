@@ -8,6 +8,8 @@ on:
       - 'memory-engine/authority-host/windows/MemoryReviewAuthority.Store/**'
       - 'tests/memory-engine/create-operator-evidence-scm-fixture.mjs'
       - 'scripts/export-protected-evidence-review.mjs'
+      - 'scripts/probe-operator-service-web-authn.mjs'
+      - 'memory-engine/adapters/operator-webauthn-probe-pipe.mjs'
       - 'memory-engine/authority-host/windows/MemoryReviewAuthority.AccessProbe/**'
       - '.github/workflows/verify-memory-review-localservice-lab.yml'
   push:
@@ -18,6 +20,8 @@ on:
       - 'memory-engine/authority-host/windows/MemoryReviewAuthority.Store/**'
       - 'tests/memory-engine/create-operator-evidence-scm-fixture.mjs'
       - 'scripts/export-protected-evidence-review.mjs'
+      - 'scripts/probe-operator-service-web-authn.mjs'
+      - 'memory-engine/adapters/operator-webauthn-probe-pipe.mjs'
       - 'memory-engine/authority-host/windows/MemoryReviewAuthority.AccessProbe/**'
       - '.github/workflows/verify-memory-review-localservice-lab.yml'
   workflow_dispatch:

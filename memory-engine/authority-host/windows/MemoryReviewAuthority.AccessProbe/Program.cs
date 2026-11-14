@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.IO.Pipes;
 using System.Runtime.InteropServices;
 using System.Security.Principal;
 using Microsoft.Win32.SafeHandles;
@@ -85,6 +86,17 @@ internal static class Program
                                 using var unused = new FileStream(sqlite, FileMode.Open,
                                     FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
                             });
+                            // Same-account restricted token must also be
+                            // unable to connect to the ADMIN-ONLY real E~
+                            // review/UV pipe. The old synthetic read pipe is
+                            // deliberately a different security boundary.
+                            ExpectAccessDenied("operator_uv_pipe", () =>
+                            {
+                                using var pipe = new NamedPipeClientStream(".",
+                                    "AgentHubMemoryReviewLab-OperatorV1",
+                                    PipeDirection.InOut);
+                                pipe.Connect(1000);
+                            });
                         });
                     }
                 }
@@ -93,7 +105,7 @@ internal static class Program
             {
                 Marshal.FreeHGlobal(adminPointer);
             }
-            Console.WriteLine("MEMORY_REVIEW_SAME_ACCOUNT_RESTRICTED_TOKEN PASS 3/3; SAME_USER NO_ADMIN NO_DIRECT_DB_ACCESS");
+            Console.WriteLine("MEMORY_REVIEW_SAME_ACCOUNT_RESTRICTED_TOKEN PASS 4/4; SAME_USER NO_ADMIN NO_DIRECT_DB_OR_UV_PIPE_ACCESS");
             return 0;
         }
         catch (Exception ex)

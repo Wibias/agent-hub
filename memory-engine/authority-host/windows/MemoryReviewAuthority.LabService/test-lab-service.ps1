@@ -317,6 +317,28 @@ try {
         }
     }
 
+    # Exercise the REAL service-owned E~ content in a new ADMIN-ACL-only
+    # WebAuthn pipe: signed exact fact and challenge are issued by restricted
+    # LocalService, a software ECDSA test key gives UV proof, persisted
+    # hardware-like nonzero sign-counter replay is rejected on next ticket.
+    # Absolutely NO human approval and NO protected real Claim.
+    $operatorProbe = Join-Path $repoRoot 'scripts/probe-operator-service-web-authn.mjs'
+    $operatorOutput = & node $operatorProbe $publishedPin
+    if ($LASTEXITCODE -ne 0) {
+        throw 'admin-only WebAuthn proof bridge for actual E~ source failed'
+    }
+    $operator = $operatorOutput | ConvertFrom-Json
+    if ($operator.status -ne 'operator_real_E_source_uv_service_bridge_test_pass' -or
+        -not $operator.exact_service_signed_fact_verified -or
+        -not $operator.service_generated_challenge_verified -or
+        -not $operator.protected_operator_credential_counter_persisted -or
+        -not $operator.stale_nonzero_counter_denied -or
+        $operator.human_approval_verified -or $operator.claim_written -or
+        -not $operator.production_no_go) {
+        throw 'operator proof wrongly classified synthetic CI assertion as human approval'
+    }
+    Write-Host 'PASS: real E~ protected exact fact -> admin-only LocalService WebAuthn challenge -> signed UV receipt; replay denied, NO Claim'
+
     $probeScript = Join-Path $repoRoot 'scripts/probe-protected-memory-lab.mjs'
     # Resolve script path from GitHub checkout, never from service IPC input.
     if (-not (Test-Path -LiteralPath $probeScript -PathType Leaf)) {
@@ -414,6 +436,10 @@ try {
     Write-Host 'PASS: restricted LocalService protected SQLite ACL and same-account negative access'
 }
 finally {
+    $ephemeralOperatorTestPrivateKey = Join-Path $env:RUNNER_TEMP 'AgentHubMemoryReviewLab-TestOperatorPrivateKey.pem'
+    if (Test-Path -LiteralPath $ephemeralOperatorTestPrivateKey) {
+        Remove-Item -LiteralPath $ephemeralOperatorTestPrivateKey -Force -ErrorAction SilentlyContinue
+    }
     if ($created) {
         & $sc stop $service 2>$null | Out-Null
         for ($attempt = 0; $attempt -lt 20; $attempt++) {
