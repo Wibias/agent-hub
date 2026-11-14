@@ -9,7 +9,7 @@ import {
 test('normalizes likely provider errors to fixed codes without exposing text', () => {
   const cases = [
     ['insufficient_quota', 'insufficient_quota'],
-    ['You have hit your usage limit', 'insufficient_quota'],
+    ['You have hit your usage limit', 'usage_limit_reached_possible'],
     ['HTTP 429 Too Many Requests', 'rate_limit'],
     ['HTTP 401 Unauthorized', 'authentication'],
     ['HTTP 403 Forbidden', 'authorization'],
