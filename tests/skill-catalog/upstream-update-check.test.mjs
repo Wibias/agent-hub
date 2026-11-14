@@ -26,7 +26,7 @@ test('upstream update check tracks the five canonical sources and decisions', ()
   );
 
   const expected = new Map([
-    ['addy', ['addyosmani/agent-skills', '301b02b12bff98e4688e6984af6556802322bbde', 'current']],
+    ['addy', ['addyosmani/agent-skills', '39b723ceebf81474d0557c1fecd01eddab585563', 'current']],
     ['emil', ['emilkowalski/skills', '4061b67b8d976a186aca118594f54b638c5f718a', 'current']],
     ['matt', ['mattpocock/skills', '4ae2317ddb22b046e26455e4f9c9b3aaaf62212d', 'not-applicable']],
     ['pstack', ['cursor/plugins', 'bb68f2365eceafa0cb2d253112f675acf5f144cc', 'current']],

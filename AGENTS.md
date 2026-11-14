@@ -306,6 +306,16 @@ Otherwise:
 
 Do not delete documentation merely because the implementation is self-explanatory. Preserve documentation that serves users, APIs, contracts, operations, onboarding, or architectural decisions.
 
+When a change affects a public API, CLI, configuration, user-facing behavior,
+or runbook, check its documentation against the current implementation and
+actual validation evidence. Update only the impacted canonical pages, examples
+and links; classify old, unchanged, superseded, and not-yet-verified claims.
+Do not infer source/doc parity from a passing test that never executed the
+documented command. For a major, expensive-to-reverse architecture choice,
+use the project's existing ADR convention and record the rationale,
+alternatives and consequences. Mark superseded ADRs instead of silently
+rewriting history; trivial changes do not need new ADRs.
+
 ---
 
 ## Completion standard
