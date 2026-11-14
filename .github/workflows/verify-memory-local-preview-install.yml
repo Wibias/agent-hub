@@ -1,0 +1,47 @@
+name: Memory local protected Windows operator preview install (default OFF)
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/prepare-memory-review-local-preview.ps1'
+      - 'scripts/install-memory-review-local-preview.ps1'
+      - 'tests/memory-engine/test-local-review-preview.ps1'
+      - 'tests/memory-engine/create-operator-evidence-scm-fixture.mjs'
+      - 'memory-engine/authority-host/windows/MemoryReviewAuthority.OperatorUi/**'
+      - 'memory-engine/authority-host/windows/MemoryReviewAuthority.LabService/**'
+      - '.github/workflows/verify-memory-local-preview-install.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/prepare-memory-review-local-preview.ps1'
+      - 'scripts/install-memory-review-local-preview.ps1'
+      - 'tests/memory-engine/test-local-review-preview.ps1'
+      - 'tests/memory-engine/create-operator-evidence-scm-fixture.mjs'
+      - 'memory-engine/authority-host/windows/MemoryReviewAuthority.OperatorUi/**'
+      - 'memory-engine/authority-host/windows/MemoryReviewAuthority.LabService/**'
+      - '.github/workflows/verify-memory-local-preview-install.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  protected-temporary-preview:
+    runs-on: windows-2022
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
+        with:
+          dotnet-version: '10.0.x'
+          dotnet-quality: 'ga'
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+      - name: Build clean pinned operator bundle, reject checkout elevation/tampering, install, verify native E~, remove, preserve backup
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          ./tests/memory-engine/test-local-review-preview.ps1
