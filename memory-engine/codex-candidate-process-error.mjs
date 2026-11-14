@@ -6,7 +6,7 @@
 export function codexCandidateFailureCode({ stderr = '', stdout = '' } = {}) {
   const text = String(stderr ?? '') + '\n' + String(stdout ?? '');
   if (/missing optional dependency|cannot find module.*codex-win32/iu.test(text)) return 'missing_platform_dependency';
-  if (/\busage limit\b|usage[_ -]?limit[_ -]?(?:reached|exceeded)/iu.test(text)) return 'usage_limit_reached_possible';
+  if (/\busage limit\b|usage[_ -]?limit[_ -]?(?:reached|exceeded)/iu.test(text)) return 'usage_limit_reached';
   if (/\binsufficient_quota\b|quota exceeded|out of credits/iu.test(text)) return 'insufficient_quota';
   if (/\b429\b|rate[ _-]?limit|too many requests/iu.test(text)) return 'rate_limit';
   if (/\b401\b|unauthori[sz]ed|authentication failed|invalid api key/iu.test(text)) return 'authentication';
