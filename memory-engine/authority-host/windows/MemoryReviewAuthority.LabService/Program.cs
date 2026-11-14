@@ -87,6 +87,20 @@ internal sealed class ReviewAuthorityLabService : ServiceBase
         // user. Neither user-writable canonical SQLite nor MCP is opened here.
         _ledger = ProtectedPendingReviewLedger.OpenInProtectedDirectory(stateDir);
         SyntheticLabClaim.Seed(_ledger);
+        // A distinct REAL E~ pipeline input can be pinned by the elevated
+        // operator into this service-owned directory. No input path, source
+        // content, scope or action is accepted via the user-facing pipe.
+        // Import is an UNAPPROVED pending review, not a Claim.
+        if (File.Exists(Path.Combine(stateDir,
+            ProtectedPendingReviewLedger.OperatorManifestFile)))
+        {
+            var imported = _ledger.ImportOperatorPinnedEvidence();
+            if (imported.HumanApprovalVerified || imported.ClaimWritten
+                || _ledger.ReadProtectedClaims(imported.ProjectId, imported.Branch).Count != 0)
+                throw new InvalidOperationException("operator_import_unexpected_authority");
+            File.WriteAllText(Path.Combine(stateDir, "operator-evidence-imported.txt"),
+                "REAL_EVIDENCE_PENDING_NO_CLAIM");
+        }
         File.WriteAllText(Path.Combine(stateDir, "protected-ledger-ok.txt"),
             "SYNTHETIC_PROTECTED_CLAIM_NO_HUMAN_APPROVAL");
 

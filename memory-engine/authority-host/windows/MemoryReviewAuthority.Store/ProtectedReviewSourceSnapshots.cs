@@ -44,7 +44,8 @@ public sealed partial class ProtectedPendingReviewLedger
                     length(canonical_fact)>0 AND length(canonical_fact)<=4000
                 ),
                 source_origin TEXT NOT NULL CHECK (
-                    source_origin='synthetic_disposable_lab'
+                    source_origin IN ('synthetic_disposable_lab',
+                        'operator_pinned_unverified_evidence_v1')
                 ),
                 captured_at_utc TEXT NOT NULL,
                 policy_version TEXT NOT NULL CHECK (
@@ -89,8 +90,14 @@ public sealed partial class ProtectedPendingReviewLedger
     /// real credential enrollment. Never repurpose this method for production.
     /// </summary>
     public void StageSyntheticLabSource(PendingReview review, TrustedReviewSource source)
+        => StageSource(review, source, SyntheticSourceOrigin);
+
+    private void StageSource(
+        PendingReview review, TrustedReviewSource source, string origin)
     {
         EnsureOpen();
+        if (origin is not (SyntheticSourceOrigin or OperatorSourceOrigin))
+            throw new InvalidOperationException("protected_source_origin_invalid");
         ValidateSource(review, source);
         using var tx = _connection.BeginTransaction(deferred: false);
         var pending = Lookup(review.ProjectId, review.Branch, review.ProposalRef, tx);
@@ -103,7 +110,7 @@ public sealed partial class ProtectedPendingReviewLedger
         if (existing is not null)
         {
             if (existing.Source != source
-                || existing.SourceOrigin != SyntheticSourceOrigin)
+                || existing.SourceOrigin != origin)
                 throw new InvalidOperationException("protected_source_conflict");
             tx.Commit();
             return;
@@ -135,7 +142,7 @@ public sealed partial class ProtectedPendingReviewLedger
         cmd.Parameters.AddWithValue("$relation", source.Relation);
         cmd.Parameters.AddWithValue("$target", (object?)source.RelatedClaimId ?? DBNull.Value);
         cmd.Parameters.AddWithValue("$text", source.CanonicalFact);
-        cmd.Parameters.AddWithValue("$origin", SyntheticSourceOrigin);
+        cmd.Parameters.AddWithValue("$origin", origin);
         cmd.Parameters.AddWithValue("$when", DateTimeOffset.UtcNow.ToString("O"));
         cmd.Parameters.AddWithValue("$policy", ProtectedSourcePolicyVersion);
         if (cmd.ExecuteNonQuery() != 1)
@@ -159,7 +166,7 @@ public sealed partial class ProtectedPendingReviewLedger
         using var reader = cmd.ExecuteReader();
         if (!reader.Read()) return null;
         if (reader.GetString(13) != ProtectedSourcePolicyVersion
-            || reader.GetString(11) != SyntheticSourceOrigin)
+            || reader.GetString(11) is not (SyntheticSourceOrigin or OperatorSourceOrigin))
             throw new InvalidOperationException("unrecognized_protected_source_policy");
         var source = new TrustedReviewSource(
             reader.GetString(0), reader.GetString(1), reader.GetString(2),

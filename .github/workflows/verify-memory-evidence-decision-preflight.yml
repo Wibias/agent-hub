@@ -5,6 +5,8 @@ on:
       - 'memory-engine/evidence-bound-decision-preflight.mjs'
       - 'scripts/inspect-evidence-bound-decision.mjs'
       - 'tests/memory-engine/evidence-bound-decision-preflight.test.mjs'
+      - 'scripts/export-protected-evidence-review.mjs'
+      - 'tests/memory-engine/export-protected-evidence-review.test.mjs'
       - 'tests/memory-engine/memory-console-evidence-review.test.mjs'
       - 'tests/memory-engine/evidence-webauthn-local-probe.test.mjs'
       - 'memory-engine/evidence-webauthn-local-probe.mjs'
@@ -22,6 +24,8 @@ on:
       - 'memory-engine/evidence-bound-decision-preflight.mjs'
       - 'scripts/inspect-evidence-bound-decision.mjs'
       - 'tests/memory-engine/evidence-bound-decision-preflight.test.mjs'
+      - 'scripts/export-protected-evidence-review.mjs'
+      - 'tests/memory-engine/export-protected-evidence-review.test.mjs'
       - 'tests/memory-engine/memory-console-evidence-review.test.mjs'
       - 'tests/memory-engine/evidence-webauthn-local-probe.test.mjs'
       - 'memory-engine/evidence-webauthn-local-probe.mjs'
@@ -53,6 +57,7 @@ jobs:
         run: >-
           node --test
           tests/memory-engine/evidence-bound-decision-preflight.test.mjs
+          tests/memory-engine/export-protected-evidence-review.test.mjs
           tests/memory-engine/memory-console-evidence-review.test.mjs
           tests/memory-engine/evidence-webauthn-local-probe.test.mjs
           tests/memory-engine/evidence-bound-proposal-store.test.mjs

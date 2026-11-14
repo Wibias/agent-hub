@@ -185,8 +185,14 @@ public sealed partial class ProtectedPendingReviewLedger
             throw new InvalidOperationException("pending_review_changed");
 
         var hosted = FindServiceOwnedSource(pending.RequestId, transaction);
-        if (hosted is null || hosted.SourceOrigin != SyntheticSourceOrigin)
+        if (hosted is null)
             throw new InvalidOperationException("protected_review_source_not_staged");
+        // REAL E~ candidate ingestion is now possible, but importing an
+        // operator-pinned copy is not a human approval, and the current lab
+        // has no protected enrolled real Windows Hello credential. Never
+        // allow a synthetic UV key to finalize operator candidate rows.
+        if (hosted.SourceOrigin != SyntheticSourceOrigin)
+            throw new InvalidOperationException("real_review_credential_enrollment_required");
         var currentSource = hosted.Source;
         ValidateSource(pending.Review, currentSource);
         if (currentSource.ProjectId != meaning.ProjectId

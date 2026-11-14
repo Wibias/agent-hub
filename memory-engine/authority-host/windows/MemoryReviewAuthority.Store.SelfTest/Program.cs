@@ -43,7 +43,11 @@ internal static class Program
         Run("protected_competing_tickets_commit_only_once", ProtectedRace);
         Run("protected_snapshot_immutable_and_reopens_with_same_request", SnapshotImmutable);
         Run("protected_targeted_confirmation_refused", TargetedConfirmDenied);
-        Console.WriteLine($"MEMORY_REVIEW_LEDGER PASS {_passed}/22; PROTECTED_CLAIMS_ONLY SYNTHETIC_NO_IPC");
+        Run("real_evidence_import_pending_without_claim", RealEvidenceImport);
+        Run("real_evidence_wrong_scope_and_secret_denied", RealEvidenceScopeDenied);
+        Run("real_evidence_relation_and_kind_denied", RealEvidenceUnsafeDenied);
+        Run("real_evidence_changed_snapshot_denied", RealEvidenceChanged);
+        Console.WriteLine($"MEMORY_REVIEW_LEDGER PASS {_passed}/26; REAL_EVIDENCE_PENDING_NO_AUTHORITY");
     }
 
     private static void Run(string label, Action test)
@@ -560,6 +564,180 @@ internal static class Program
             Example.ProposalRef) is null);
         Check(store.ReadProtectedClaims(Example.ProjectId, Example.Branch).Count == 0);
         Check(store.CountPending() == 1);
+    }
+
+    private const string RealProject = "github.com/example/operator-evidence";
+    private const string RealBranch = "main";
+    private const string RealProposalId = "actual-canonical-evidence-proposal-id";
+    private const string RealFact = "This real-schema E~ proposal has linked Evidence but no human approval.";
+
+    private static string RealERef => "E~" + Hash(RealProposalId)[..10];
+    private static string RealSnapshotPath => Path.Combine(TestDirectory,
+        ProtectedPendingReviewLedger.OperatorSnapshotFile);
+
+    private static void CreateRealEvidenceFixture()
+    {
+        using (var conn = new SqliteConnection(new SqliteConnectionStringBuilder
+        {
+            DataSource = RealSnapshotPath, Mode = SqliteOpenMode.ReadWriteCreate,
+            Pooling = false,
+        }.ToString()))
+        {
+            conn.Open();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = """
+                CREATE TABLE memory_evidence_proposals (
+                  id TEXT PRIMARY KEY, project_id TEXT, branch TEXT, kind TEXT,
+                  canonical_fact TEXT, status TEXT, policy_version TEXT,
+                  fingerprint TEXT NOT NULL);
+                CREATE TABLE memory_evidence_proposal_evidence (
+                  proposal_id TEXT, evidence_id TEXT,
+                  PRIMARY KEY(proposal_id, evidence_id));
+                CREATE TABLE evidence (
+                  id TEXT PRIMARY KEY, project_id TEXT, branch TEXT,
+                  authority_class TEXT, sensitivity TEXT,
+                  content_redacted TEXT, metadata_json TEXT);
+                CREATE TABLE claims (
+                  id TEXT PRIMARY KEY, project_id TEXT, branch_scope TEXT,
+                  state TEXT, value_text TEXT);
+                """;
+            cmd.ExecuteNonQuery();
+            using var insert = conn.CreateCommand();
+            insert.CommandText = """
+                INSERT INTO memory_evidence_proposals
+                 (id,project_id,branch,kind,canonical_fact,status,
+                  policy_version,fingerprint)
+                VALUES ($id,$p,$b,'knowledge',$fact,'needs_confirmation',
+                  'test-v1',$fingerprint);
+                INSERT INTO memory_evidence_proposal_evidence
+                 (proposal_id,evidence_id) VALUES ($id,'real-evidence-1');
+                INSERT INTO evidence
+                 (id,project_id,branch,authority_class,sensitivity,
+                  content_redacted,metadata_json)
+                VALUES ('real-evidence-1',$p,$b,'user_direct','normal',
+                  'Unverified user-supplied evidence text','{"event_type":"user_prompt"}');
+                """;
+            insert.Parameters.AddWithValue("$id", RealProposalId);
+            insert.Parameters.AddWithValue("$p", RealProject);
+            insert.Parameters.AddWithValue("$b", RealBranch);
+            insert.Parameters.AddWithValue("$fact", RealFact);
+            insert.Parameters.AddWithValue("$fingerprint",
+                Hash("knowledge\0" + RealFact.ToLowerInvariant()));
+            insert.ExecuteNonQuery();
+        }
+        File.WriteAllText(Path.Combine(TestDirectory,
+            ProtectedPendingReviewLedger.OperatorManifestFile),
+            JsonSerializer.Serialize(new
+            {
+                projectId = RealProject,
+                branch = RealBranch,
+                revisionSha = new string('b', 40),
+                proposalRef = RealERef,
+                decision = "confirm",
+            }));
+    }
+
+    private static void MutateRealSnapshot(string statement)
+    {
+        using var conn = new SqliteConnection(new SqliteConnectionStringBuilder
+        {
+            DataSource = RealSnapshotPath, Mode = SqliteOpenMode.ReadWrite,
+            Pooling = false,
+        }.ToString());
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = statement;
+        cmd.ExecuteNonQuery();
+    }
+
+    private static void RealEvidenceImport()
+    {
+        CreateRealEvidenceFixture();
+        string request;
+        using (var store = Open())
+        {
+            var review = store.ImportOperatorPinnedEvidence();
+            Check(review.ProposalRef == RealERef
+                && review.CanonicalFact == RealFact
+                && review.Kind == "knowledge"
+                && review.EvidenceCount == 1
+                && review.SourceOrigin == ProtectedPendingReviewLedger.OperatorSourceOrigin
+                && !review.HumanApprovalVerified && !review.ClaimWritten);
+            Check(store.CountPending() == 1);
+            Check(store.ReadProtectedClaims(RealProject, RealBranch).Count == 0);
+            Check(store.ReadVerifiedIntent(RealProject, RealBranch, RealERef) is null);
+            request = review.PendingRequestId;
+            var repeated = store.ImportOperatorPinnedEvidence();
+            Check(repeated.PendingRequestId == request);
+
+            // Prove that a synthetic ES256 passkey can NEVER finalize REAL E~
+            // imports without independent credential enrollment.
+            using var credential = TestCredential.New();
+            var meaning = new ReviewMeaning(RealProject, RealBranch,
+                new string('b', 40), RealERef, review.ReviewSnapshotSha256,
+                review.CanonicalFactSha256, "confirm", RealFact);
+            var coordinator = new VerifiedReviewCoordinator(store, credential.Pinned);
+            var ticket = coordinator.Begin(meaning);
+            var denied = coordinator.CompleteProtected(
+                ticket.TicketId, meaning, credential.Sign(ticket));
+            Check(!denied.Verified && !denied.ClaimWritten
+                && denied.Status == "protected_review_scope_or_commit_denied");
+            Check(store.CountPending() == 1);
+            Check(store.ReadVerifiedIntent(RealProject, RealBranch, RealERef) is null);
+        }
+        using (var reopened = Open())
+        {
+            Check(reopened.ReadPending(RealProject, RealBranch, RealERef)?.RequestId
+                == request);
+            Check(reopened.ImportOperatorPinnedEvidence().PendingRequestId == request);
+            Check(reopened.ReadProtectedClaims(RealProject, RealBranch).Count == 0);
+        }
+    }
+
+    private static void RealEvidenceScopeDenied()
+    {
+        CreateRealEvidenceFixture();
+        MutateRealSnapshot("UPDATE evidence SET project_id='github.com/foreign/claim';");
+        using var store = Open();
+        Throws<InvalidOperationException>(() => store.ImportOperatorPinnedEvidence());
+        Check(store.CountPending() == 0);
+        MutateRealSnapshot("""
+            UPDATE evidence SET project_id='github.com/example/operator-evidence',
+            sensitivity='secret_redacted';
+            """);
+        Throws<InvalidOperationException>(() => store.ImportOperatorPinnedEvidence());
+        Check(store.CountPending() == 0);
+    }
+
+    private static void RealEvidenceUnsafeDenied()
+    {
+        CreateRealEvidenceFixture();
+        MutateRealSnapshot("""
+            INSERT INTO claims (id,project_id,branch_scope,state,value_text)
+            VALUES ('prior','github.com/example/operator-evidence','main',
+                    'active','Existing fact');
+            """);
+        using var store = Open();
+        Throws<InvalidOperationException>(() => store.ImportOperatorPinnedEvidence());
+        Check(store.CountPending() == 0);
+        MutateRealSnapshot("DELETE FROM claims; UPDATE memory_evidence_proposals SET kind='procedure';");
+        Throws<InvalidOperationException>(() => store.ImportOperatorPinnedEvidence());
+        Check(store.CountPending() == 0);
+    }
+
+    private static void RealEvidenceChanged()
+    {
+        CreateRealEvidenceFixture();
+        using var store = Open();
+        var first = store.ImportOperatorPinnedEvidence();
+        MutateRealSnapshot("""
+            UPDATE evidence SET content_redacted='Agent changed the original source';
+            """);
+        Throws<InvalidOperationException>(() => store.ImportOperatorPinnedEvidence());
+        Check(store.ReadPending(RealProject, RealBranch, RealERef)?.RequestId
+            == first.PendingRequestId);
+        Check(store.CountPending() == 1);
+        Check(store.ReadProtectedClaims(RealProject, RealBranch).Count == 0);
     }
 
     private static string Encode(byte[] data)

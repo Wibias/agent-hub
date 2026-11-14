@@ -41,11 +41,13 @@ public sealed partial class ProtectedPendingReviewLedger : IDisposable
     public const string PolicyVersion = "agenthub-authority-store-pending-v1";
 
     private readonly SqliteConnection _connection;
+    private readonly string _protectedDirectory;
     private bool _disposed;
 
-    private ProtectedPendingReviewLedger(SqliteConnection connection)
+    private ProtectedPendingReviewLedger(SqliteConnection connection, string protectedDirectory)
     {
         _connection = connection;
+        _protectedDirectory = protectedDirectory;
     }
 
     public static ProtectedPendingReviewLedger OpenInProtectedDirectory(string directory)
@@ -105,7 +107,7 @@ public sealed partial class ProtectedPendingReviewLedger : IDisposable
             InitializeVerifiedReviewSchema(connection);
             InitializeProtectedClaimSchema(connection);
             InitializeProtectedSourceSchema(connection);
-            return new ProtectedPendingReviewLedger(connection);
+            return new ProtectedPendingReviewLedger(connection, directory);
         }
         catch
         {
