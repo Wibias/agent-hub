@@ -12,18 +12,19 @@ Er öffnet **nicht** die vorhandene benutzerbeschreibbare
 `%LOCALAPPDATA%\agent-hub\memory.sqlite3`.
 
 Die Datenbank verwendet SQLite-WAL und `synchronous=FULL`.
-Ihre einzige fachliche Tabelle `review_requests` speichert
-projekt-/branch-/Git-revisionsgebundene Anfragen mit E~-Vorschlagsref,
-Snapshot-, Fakt- und Evidence-SHA256, der gewünschten Aktion und
-dem einzigen erlaubten Status
-`awaiting_independent_host_authorization`.
+Die Tabelle `review_requests` speichert projekt-/branch-/Git-revisionsgebundene
+Anfragen mit E~-Vorschlagsref, Snapshot-, Fakt- und Evidence-SHA256 und
+dem Status `awaiting_independent_host_authorization`.
+Die zusätzliche Tabelle `verified_review_intents` speichert ausschließlich
+die nach einer gültigen Einmal-Challenge beobachtete Bestätigungs- oder
+Ablehnungsabsicht, **nicht** die freigegebene Memory-Claim-Entscheidung.
 
-Es existieren **keine** API oder Tabellen zum Bestätigen, Ablehnen,
-Promoten, Überschreiben des ursprünglichen Claims oder Registrieren
-von Passkeys. Gleiche Anfragen sind idempotent. Eine abweichende
-Aktion, Evidence oder Snapshot für denselben Vorschlag führt zu einem
-Transaktionskonflikt. Der Speicher hält keine ursprünglichen
-Fakttexte oder Nutzer-Evidence und gibt keine Autorisierungstokens aus.
+Es existieren **keine** APIs zum Erstellen, Promoten oder Ändern
+autorisierter Claims und keine produktive Passkey-Registrierung.
+Gleiche Pending-Anfragen sind bis zur verifizierten Entscheidung idempotent.
+Eine abweichende Aktion, Evidence oder Snapshot führt zu einem Konflikt.
+Der Speicher hält keine ursprünglichen Fakttexte oder Nutzer-Evidence
+und gibt keine Autorisierungstokens aus.
 
 ## Native Tests
 
