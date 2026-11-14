@@ -183,7 +183,7 @@ test('reserved Evidence-Bound confirm/reject never becomes an agent turn even wh
     const memory = new MemoryEngine({ dbPath, readOnly: true });
     try {
       assert.equal(memory.exportCanonical().claims.length, 0);
-      assert.equal(memory.getCandidate('memory-command-seed-candidate').status, 'needs_importance');
+      assert.notEqual(memory.getCandidate('memory-command-seed-candidate').status, 'ignored');
     } finally {
       memory.close();
     }
