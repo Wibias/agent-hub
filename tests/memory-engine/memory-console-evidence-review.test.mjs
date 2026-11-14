@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -218,4 +219,128 @@ test('Memory Console GET /api/scope includes read-only evidence-bound review', a
     memory.close();
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+test('Console E~ preflight uses only server-approved exact Git revision and never grants write authority', async (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'agent-hub-evidence-preflight-http-'));
+  const repoRoot = join(root, 'repo');
+  const dbPath = join(root, 'memory.sqlite3');
+  mkdirSync(repoRoot);
+  const git = (...args) => execFileSync('git', ['-C', repoRoot, ...args], {
+    encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
+  }).trim();
+  git('init', '-b', 'preview');
+  git('config', 'user.name', 'Preflight Test');
+  git('config', 'user.email', 'preflight@example.test');
+  git('config', 'commit.gpgsign', 'false');
+  git('remote', 'add', 'origin', 'https://github.com/example/evidence-review.git');
+  writeFileSync(join(repoRoot, 'README.md'), 'Synthetic review fixture.\\n');
+  git('add', 'README.md');
+  git('commit', '-m', 'fixture');
+  const revisionSha = git('rev-parse', 'HEAD');
+
+  const memory = new MemoryEngine({ dbPath });
+  let server;
+  t.after(async () => {
+    if (server) await new Promise((resolve) => server.close(resolve));
+    memory.close();
+    rmSync(root, { recursive: true, force: true });
+  });
+  memory.registerProject({ projectId, repoIdentity: projectId });
+  memory.recordEvidence({
+    id: 'e-review', projectId,
+    harness: 'codex', sessionId: 'fixture',
+    sourceKind: 'session', sourceRef: 'session:fixture',
+    capturedAt: '2026-11-14T06:51:00.000Z', branch: 'preview',
+    content: 'Agent Hub itself targets Windows x64 only.',
+    authorityClass: 'user_direct',
+    metadata: { event_type: 'user_prompt' },
+  });
+  seedProposal(dbPath);
+
+  const baseline = memory.exportCanonical();
+  const ui = createMemoryUiServer({
+    dbPath, memory, repositoryRoots: [repoRoot], includeRuntimeHealth: false,
+  });
+  server = ui.server;
+  await new Promise((done) => server.listen(0, '127.0.0.1', done));
+  const base = 'http://127.0.0.1:' + server.address().port;
+  const original = memoryEvidenceReviewSnapshot({ dbPath, projectId, branch: 'preview' });
+  const selectedRef = original.items[0].ref;
+  const url = base + '/api/review-preflight?projectId=' + encodeURIComponent(projectId)
+    + '&branch=preview&proposalRef=' + encodeURIComponent(selectedRef);
+  const response = await fetch(url + '&revisionSha=' + 'f'.repeat(40)
+    + '&repoPath=/not/allowed&dbPath=/not/allowed');
+  assert.equal(response.status, 200);
+  const report = await response.json();
+  assert.equal(report.type, 'agent_hub_evidence_bound_decision_preflight_v1');
+  assert.equal(report.selectedRef, selectedRef);
+  assert.equal(report.gitContext.status, 'verified');
+  assert.equal(report.gitContext.revisionSha, revisionSha);
+  assert.equal(report.scope.revisionSha, revisionSha);
+  assert.ok(['requires_review', 'reviewable_no_write_authority'].includes(report.status));
+  assert.equal(report.readOnly, true);
+  assert.equal(report.promotionAllowed, false);
+  assert.equal(report.hostUserOriginAuthenticated, false);
+  assert.equal(report.decisionCommandEnabled, false);
+  assert.equal(report.claimsCreated, 0);
+  assert.equal(report.decisionsApplied, 0);
+  assert.equal(report.writesToSource, false);
+  assert.equal('canonicalFact' in report, false);
+  assert.equal('repoPath' in report.gitContext, false);
+  assert.doesNotMatch(JSON.stringify(report), /agent-hub-evidence-preflight-http-/);
+
+  const malformed = await fetch(url.replace(encodeURIComponent(selectedRef), 'E~invalid'));
+  assert.equal(malformed.status, 400);
+  git('checkout', '-b', 'feature/wrong-branch');
+  const changed = await (await fetch(url)).json();
+  assert.equal(changed.status, 'git_context_unavailable');
+  assert.equal(changed.gitContext.status, 'branch_mismatch');
+  assert.equal(changed.promotionAllowed, false);
+  assert.equal(changed.claimsCreated, 0);
+
+  const unchanged = memoryEvidenceReviewSnapshot({ dbPath, projectId, branch: 'preview' });
+  assert.equal(unchanged.total, 1);
+  assert.equal(unchanged.items[0].status, 'needs_confirmation');
+  assert.deepEqual(memory.exportCanonical(), baseline);
+});
+
+test('Console E~ preflight with no configured checkout stays read-only and does not invent a revision', async (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'agent-hub-evidence-preflight-unconfigured-'));
+  const dbPath = join(root, 'memory.sqlite3');
+  const memory = new MemoryEngine({ dbPath });
+  let server;
+  t.after(async () => {
+    if (server) await new Promise((resolve) => server.close(resolve));
+    memory.close();
+    rmSync(root, { recursive: true, force: true });
+  });
+  memory.registerProject({ projectId, repoIdentity: projectId });
+  memory.recordEvidence({
+    id: 'e-review', projectId,
+    harness: 'codex', sessionId: 'fixture',
+    sourceKind: 'session', sourceRef: 'session:fixture',
+    capturedAt: '2026-11-14T06:51:00.000Z', branch: 'preview',
+    content: 'Agent Hub itself targets Windows x64 only.',
+    authorityClass: 'user_direct',
+    metadata: { event_type: 'user_prompt' },
+  });
+  seedProposal(dbPath);
+  const ui = createMemoryUiServer({ dbPath, memory, includeRuntimeHealth: false });
+  server = ui.server;
+  await new Promise((done) => server.listen(0, '127.0.0.1', done));
+  const ref = memoryEvidenceReviewSnapshot({ dbPath, projectId, branch: 'preview' }).items[0].ref;
+  const url = 'http://127.0.0.1:' + server.address().port
+    + '/api/review-preflight?projectId=' + encodeURIComponent(projectId)
+    + '&branch=preview&proposalRef=' + encodeURIComponent(ref);
+  const response = await fetch(url);
+  assert.equal(response.status, 200);
+  const data = await response.json();
+  assert.equal(data.status, 'git_context_unavailable');
+  assert.equal(data.gitContext.status, 'unconfigured');
+  assert.equal(data.gitContext.revisionSha, null);
+  assert.equal(data.promotionAllowed, false);
+  assert.equal(data.hostUserOriginAuthenticated, false);
+  assert.equal(data.claimsCreated, 0);
+  assert.equal('reviewSnapshotSha256' in data, false);
 });
