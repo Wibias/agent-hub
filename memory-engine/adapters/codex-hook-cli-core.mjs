@@ -20,6 +20,7 @@ import {
 } from '../e5-embedder.mjs';
 import { HybridMemoryRetriever } from '../hybrid-retrieval.mjs';
 import { MemoryEngine } from '../index.mjs';
+import { isAtomicRuleConfirmationAttempt } from '../memory-atomic-confirmation-capture.mjs';
 import {
   recallQueryHash,
   recallTelemetryRunId,
@@ -480,7 +481,9 @@ export async function runCodexMemoryHook({
     }
 
     if (shouldPrepareCodexMemoryRecallRuntime(memory, {
-      explicitMemoryMode: parseExplicitMemoryPrompt(event?.prompt)?.mode ?? null,
+      explicitMemoryMode: isAtomicRuleConfirmationAttempt(event?.prompt)
+        ? 'atomic_rule_confirm'
+        : (parseExplicitMemoryPrompt(event?.prompt)?.mode ?? null),
     })) {
       recallRuntime = prepareRecallRuntime({
         memory,
