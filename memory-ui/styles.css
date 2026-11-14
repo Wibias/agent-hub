@@ -697,7 +697,7 @@ button {
 .review-evidence-head {
   margin-top: 24px;
 }
-.review-evidence-row .authority {
+.evidence-review-row .authority {
   color: var(--muted);
 }
 .review-evidence-notice {
