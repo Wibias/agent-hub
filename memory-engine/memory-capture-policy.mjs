@@ -124,6 +124,9 @@ const RULES = [
     patterns: [
       /\b(?:we|i)\s+(?:decided(?:\s+to)?|choose|chose|will use|use|are using|stick with|are sticking with|go with)\b/iu,
       /\b(?:wir|ich)\s+(?:verwenden|nutzen|nehmen|setzen auf|bleiben bei|entscheiden uns für)\b/iu,
+      // In German, an explanatory scope may separate 'bleiben' from 'bei'.
+      // Keep the match inside a single sentence; the judge still evaluates durability.
+      /\b(?:wir|ich)\s+bleiben\b[^.!?]{1,120}\bbei\b/iu,
       /\b(?:wir|ich)\s+haben uns für\b/iu,
     ],
   },
