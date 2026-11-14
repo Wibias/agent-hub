@@ -41,7 +41,9 @@ internal static class Program
         Run("protected_write_rejects_stale_and_targeted_source", SourceMismatch);
         Run("protected_duplicate_rolls_back_uv_intent_and_claim", DuplicateRollback);
         Run("protected_competing_tickets_commit_only_once", ProtectedRace);
-        Console.WriteLine($"MEMORY_REVIEW_LEDGER PASS {_passed}/20; PROTECTED_CLAIMS_ONLY SYNTHETIC_NO_IPC");
+        Run("protected_snapshot_immutable_and_reopens_with_same_request", SnapshotImmutable);
+        Run("protected_targeted_confirmation_refused", TargetedConfirmDenied);
+        Console.WriteLine($"MEMORY_REVIEW_LEDGER PASS {_passed}/22; PROTECTED_CLAIMS_ONLY SYNTHETIC_NO_IPC");
     }
 
     private static void Run(string label, Action test)
@@ -327,13 +329,13 @@ internal static class Program
         using (var store = Open())
         {
             requestId = store.RecordPending(Example).RequestId;
-            var coordinator = new VerifiedReviewCoordinator(store, key.Pinned,
-                trustedSourceReader: _ => SourceFor(Example));
+            store.StageSyntheticLabSource(Example, SourceFor(Example));
+            var coordinator = new VerifiedReviewCoordinator(store, key.Pinned);
             var meaning = MeaningFor(Example);
             var ticket = coordinator.Begin(meaning);
             var result = coordinator.CompleteProtected(ticket.TicketId,
                 meaning, key.Sign(ticket));
-            Check(result.Verified && result.ClaimWritten && result.ApprovedClaim);
+            Check(result.Verified && result.ClaimWritten && !result.ApprovedClaim);
             Check(result.Status == "protected_claim_written");
             Check(result.RequestId == requestId);
             var claims = store.ReadProtectedClaims(Example.ProjectId, Example.Branch);
@@ -373,9 +375,10 @@ internal static class Program
         using var key = TestCredential.New();
         var proposal = Example with { RequestedAction = "reject" };
         store.RecordPending(proposal);
-        // Reject even a targeted relationship; this must never write a Claim.
-        var coordinator = new VerifiedReviewCoordinator(store, key.Pinned,
-            trustedSourceReader: _ => SourceFor(proposal, "contradict", "foreign-claim"));
+        // Reject a protected related source without ever writing a Claim.
+        store.StageSyntheticLabSource(proposal,
+            SourceFor(proposal, "contradict", "foreign-claim"));
+        var coordinator = new VerifiedReviewCoordinator(store, key.Pinned);
         var meaning = MeaningFor(proposal);
         var ticket = coordinator.Begin(meaning);
         var result = coordinator.CompleteProtected(ticket.TicketId, meaning, key.Sign(ticket));
@@ -392,23 +395,26 @@ internal static class Program
         using var key = TestCredential.New();
         store.RecordPending(Example);
         var meaning = MeaningFor(Example);
-        var withoutSource = new VerifiedReviewCoordinator(store, key.Pinned);
-        var ticket = withoutSource.Begin(meaning);
-        var result = withoutSource.CompleteProtected(ticket.TicketId,
+        var coordinator = new VerifiedReviewCoordinator(store, key.Pinned);
+        var ticket = coordinator.Begin(meaning);
+        var denied = coordinator.CompleteProtected(ticket.TicketId,
             meaning, key.Sign(ticket));
-        Check(!result.Verified && result.Status == "trusted_review_source_not_configured");
-        Check(!withoutSource.CompleteProtected(ticket.TicketId,
+        Check(!denied.Verified
+            && denied.Status == "protected_review_source_not_staged");
+        Check(!coordinator.CompleteProtected(ticket.TicketId,
             meaning, key.Sign(ticket)).Verified);
-        var unavailable = new VerifiedReviewCoordinator(store, key.Pinned,
-            trustedSourceReader: _ => null);
-        var another = unavailable.Begin(meaning);
-        var denied = unavailable.CompleteProtected(another.TicketId,
-            meaning, key.Sign(another));
-        Check(!denied.Verified && denied.Status == "trusted_review_source_not_found");
         Check(store.CountPending() == 1);
         Check(store.ReadProtectedClaims(Example.ProjectId, Example.Branch).Count == 0);
         Check(store.ReadVerifiedIntent(Example.ProjectId, Example.Branch,
             Example.ProposalRef) is null);
+
+        // Staging the original source in protected SQLite permits a NEW
+        // one-time challenge. A consumed proof cannot be replayed.
+        store.StageSyntheticLabSource(Example, SourceFor(Example));
+        var another = coordinator.Begin(meaning);
+        Check(coordinator.CompleteProtected(another.TicketId, meaning,
+            key.Sign(another)).Verified);
+        Check(store.CountPending() == 0);
     }
 
     private static void SourceMismatch()
@@ -425,23 +431,21 @@ internal static class Program
             source with { ReviewSnapshotSha256 = new string('c', 64) },
             source with { ProjectId = "github.com/foreign/repo" },
             source with { Kind = "arbitrary" },
-            source with { Relation = "update", RelatedClaimId = "existing" },
         };
-        var meaning = MeaningFor(Example);
         foreach (var candidate in changes)
-        {
-            var coordinator = new VerifiedReviewCoordinator(store, key.Pinned,
-                trustedSourceReader: _ => candidate);
-            var ticket = coordinator.Begin(meaning);
-            var result = coordinator.CompleteProtected(ticket.TicketId,
-                meaning, key.Sign(ticket));
-            Check(!result.Verified);
-            Check(result.Status == "protected_review_scope_or_commit_denied");
-        }
+            Throws<InvalidOperationException>(() =>
+                store.StageSyntheticLabSource(Example, candidate));
         Check(store.CountPending() == 1);
         Check(store.ReadProtectedClaims(Example.ProjectId, Example.Branch).Count == 0);
         Check(store.ReadVerifiedIntent(Example.ProjectId, Example.Branch,
             Example.ProposalRef) is null);
+
+        var coordinator = new VerifiedReviewCoordinator(store, key.Pinned);
+        var meaning = MeaningFor(Example);
+        var ticket = coordinator.Begin(meaning);
+        Check(!coordinator.CompleteProtected(ticket.TicketId, meaning,
+            key.Sign(ticket)).Verified);
+        Check(store.CountPending() == 1);
     }
 
     private static void DuplicateRollback()
@@ -452,10 +456,10 @@ internal static class Program
         var second = Example with { ProposalRef = "E~9876543210" };
         store.RecordPending(first);
         store.RecordPending(second);
-        var firstCoordinator = new VerifiedReviewCoordinator(store, key.Pinned,
-            trustedSourceReader: _ => SourceFor(first));
-        var secondCoordinator = new VerifiedReviewCoordinator(store, key.Pinned,
-            trustedSourceReader: _ => SourceFor(second));
+        store.StageSyntheticLabSource(first, SourceFor(first));
+        store.StageSyntheticLabSource(second, SourceFor(second));
+        var firstCoordinator = new VerifiedReviewCoordinator(store, key.Pinned);
+        var secondCoordinator = new VerifiedReviewCoordinator(store, key.Pinned);
         var firstMeaning = MeaningFor(first);
         var firstTicket = firstCoordinator.Begin(firstMeaning);
         Check(firstCoordinator.CompleteProtected(firstTicket.TicketId,
@@ -481,10 +485,9 @@ internal static class Program
         using var secondStore = Open();
         using var key = TestCredential.New();
         firstStore.RecordPending(Example);
-        var first = new VerifiedReviewCoordinator(firstStore, key.Pinned,
-            trustedSourceReader: _ => SourceFor(Example));
-        var second = new VerifiedReviewCoordinator(secondStore, key.Pinned,
-            trustedSourceReader: _ => SourceFor(Example));
+        firstStore.StageSyntheticLabSource(Example, SourceFor(Example));
+        var first = new VerifiedReviewCoordinator(firstStore, key.Pinned);
+        var second = new VerifiedReviewCoordinator(secondStore, key.Pinned);
         var meaning = MeaningFor(Example);
         var firstTicket = first.Begin(meaning);
         var secondTicket = second.Begin(meaning);
@@ -496,12 +499,76 @@ internal static class Program
         Check(secondStore.ReadProtectedClaims(Example.ProjectId, Example.Branch).Count == 1);
     }
 
+    private static void SnapshotImmutable()
+    {
+        var reference = Example;
+        using (var store = Open())
+        {
+            store.RecordPending(reference);
+            store.StageSyntheticLabSource(reference, SourceFor(reference));
+            // Exactly identical re-staging is harmless and idempotent.
+            store.StageSyntheticLabSource(reference, SourceFor(reference));
+            Throws<InvalidOperationException>(() =>
+                store.StageSyntheticLabSource(reference,
+                    SourceFor(reference) with { Kind = "preference" }));
+        }
+        using (var reopened = Open())
+        {
+            // Service-owned snapshot persists across database close/reopen.
+            using var key = TestCredential.New();
+            var coordinator = new VerifiedReviewCoordinator(reopened, key.Pinned);
+            var meaning = MeaningFor(reference);
+            var ticket = coordinator.Begin(meaning);
+            var confirmed = coordinator.CompleteProtected(ticket.TicketId,
+                meaning, key.Sign(ticket));
+            Check(confirmed.Verified && confirmed.ClaimWritten);
+            Throws<InvalidOperationException>(() =>
+                reopened.StageSyntheticLabSource(reference, SourceFor(reference)));
+        }
+        // Even a direct SQLite update cannot change the immutable snapshot
+        // after staging. The directory's service-SID ACL protects against
+        // unprivileged file access in the native SCM integration test.
+        using var sql = new SqliteConnection(new SqliteConnectionStringBuilder
+        {
+            DataSource = Path.Combine(TestDirectory, "review-authority.sqlite3"),
+            Mode = SqliteOpenMode.ReadWrite, Pooling = false,
+        }.ToString());
+        sql.Open();
+        using var update = sql.CreateCommand();
+        update.CommandText = "UPDATE protected_review_sources SET canonical_fact='forged';";
+        Throws<SqliteException>(() => update.ExecuteNonQuery());
+        using var deletion = sql.CreateCommand();
+        deletion.CommandText = "DELETE FROM protected_review_sources;";
+        Throws<SqliteException>(() => deletion.ExecuteNonQuery());
+    }
+
+    private static void TargetedConfirmDenied()
+    {
+        using var store = Open();
+        using var key = TestCredential.New();
+        store.RecordPending(Example);
+        store.StageSyntheticLabSource(Example,
+            SourceFor(Example, "update", "existing-other-claim"));
+        var coordinator = new VerifiedReviewCoordinator(store, key.Pinned);
+        var meaning = MeaningFor(Example);
+        var ticket = coordinator.Begin(meaning);
+        var result = coordinator.CompleteProtected(ticket.TicketId,
+            meaning, key.Sign(ticket));
+        Check(!result.Verified);
+        Check(result.Status == "protected_review_scope_or_commit_denied");
+        Check(store.ReadVerifiedIntent(Example.ProjectId, Example.Branch,
+            Example.ProposalRef) is null);
+        Check(store.ReadProtectedClaims(Example.ProjectId, Example.Branch).Count == 0);
+        Check(store.CountPending() == 1);
+    }
+
     private static string Encode(byte[] data)
         => Convert.ToBase64String(data).TrimEnd('=').Replace('+', '-').Replace('/', '_');
 
     private sealed class TestCredential : IDisposable
     {
         private readonly ECDsa _key;
+        private uint _signCount;
         public PinnedCredential Pinned { get; }
 
         private TestCredential(ECDsa key)
@@ -528,7 +595,8 @@ internal static class Program
             var authenticator = new byte[37];
             SHA256.HashData(Encoding.UTF8.GetBytes("localhost")).CopyTo(authenticator, 0);
             authenticator[32] = 0x05;
-            BinaryPrimitives.WriteUInt32BigEndian(authenticator.AsSpan(33), 1);
+            BinaryPrimitives.WriteUInt32BigEndian(authenticator.AsSpan(33),
+                checked(++_signCount));
             var signed = new byte[authenticator.Length + 32];
             authenticator.CopyTo(signed, 0);
             SHA256.HashData(client).CopyTo(signed, authenticator.Length);

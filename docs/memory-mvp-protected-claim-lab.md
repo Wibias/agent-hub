@@ -13,9 +13,11 @@ The opt-in `CompleteProtected` flow requires:
 1. A pending `E~` review already staged in the service-owned ledger.
 2. The existing short-lived P-256 WebAuthn assertion, with user presence and
    user verification. Its ticket is consumed before any write attempt.
-3. A trusted snapshot reader **injected into the host**, which independently
-   resolves current project, branch, revision, proposal ref, snapshot hash,
-   original canonical fact and source Evidence hash.
+3. An exact source snapshot **already staged by the protected host** in
+   its own SQLite WAL, bound immutably to the same pending request ID, project,
+   branch, revision, proposal reference, original fact, relationship and
+   supporting Evidence digest. The coordinator does not accept any
+   caller-injected source-reader function at decision time.
 4. Exact equality between the human-reviewed meaning, trusted snapshot and
    protected pending row. The only supported Claim creation is for a new
    **unrelated** `knowledge` or `preference` fact. Updates, same/contradict
@@ -47,12 +49,18 @@ unrelated-only writes, duplicate rollback, independently issued challenges,
 reopen and persistence. Existing SCM CI checks the service-owned directory
 ACL and cleanup.
 
-This code does **not** by itself establish a human-controlled host: the
-`trustedSourceReader` interface is a required boundary, not proof that a
-source is independently trusted. A real host must implement it using a
-trusted, immutable snapshot and never accept an agent-supplied provider,
-`user_direct` flag, mutable canonical SQLite row or local consent string
-as authorization. A CI-generated ECDSA key is not Windows Hello enrollment.
+This code does **not** by itself establish a human-controlled host.
+The old `trustedSourceReader` injection point has been removed from the
+protected Claim coordinator, so an arbitrary callback cannot provide the
+source *at approval time*. Protected source rows reject later UPDATE/DELETE
+at SQLite level and persist across restart; staged rows must match the
+exact pending request and cannot be replaced with another value.
+**The only source-staging API is currently `StageSyntheticLabSource`**.
+It has no IPC handler and cannot import a real `E~` proposal. It is
+deliberately labeled `synthetic_disposable_lab`; this is NOT a
+host-verified real source, and CI ECDSA keys are NOT Windows Hello enrollment.
+An actual host still needs to verify the original Evidence/Git content and
+human review independently before it can stage any real source.
 
 **Still missing** are a real protected host source reader and UI/browser
 origin control, Windows Hello/FIDO2 credential enrollment and a human
