@@ -112,7 +112,7 @@ test('wrong localhost origin, missing UV and changed snapshot fail closed', asyn
   const originAttack = harness();
   originAttack.register();
   assert.equal((await originAttack.probe.finish(originAttack.assertion({
-    atOrigin: 'http://evil.local:4317',
+    atOrigin: 'http://example.invalid:4317',
   }))).status, 'probe_invalid_assertion');
   const missingUv = harness();
   missingUv.register();
@@ -205,7 +205,7 @@ test('real Console HTTP prepares an actual E~ only in explicitly enabled localho
     'http://127.0.0.1:' + disabledPort + '/api/webauthn-probe/prepare',
     { headers: { Host: 'localhost:' + disabledPort } },
   );
-  assert.equal(disabledApi.status, 403);
+  assert.equal(disabledApi.status, 404);
   await new Promise(done => server.close(done));
   server = null;
   const runtime = createMemoryUiServer({
@@ -235,7 +235,7 @@ test('real Console HTTP prepares an actual E~ only in explicitly enabled localho
   assert.equal(prepared.reviewAuthorityEstablished, false);
   const post = await fetch(base + '/api/webauthn-probe/challenge', {
     method: 'POST', headers: { ...headers,
-      Origin: 'http://evil.local:4317', 'Content-Type': 'application/json' },
+      Origin: 'http://example.invalid:4317', 'Content-Type': 'application/json' },
     body: JSON.stringify({ sessionId: prepared.sessionId }),
   });
   assert.equal(post.status, 403);
