@@ -8,7 +8,7 @@ description: >-
   audit, motion, or generic frontend design requests; use design-with-ai
   instead. Not for backend-only or non-UI tasks.
 metadata:
-  version: 4.8.2
+  version: 4.9.1
 ---
 
 This skill gives you the tools and permission to make design that earns the name out-of-distribution craft. Work as an award-winning design director would: production-grade code, a clear POV, a deep grasp of what the client and its users need, and exceptional craft.
@@ -85,6 +85,8 @@ Choose the mode from the requested surface, not the product, and persist it only
 | `optimize [target]` | Fix | Diagnose and fix UI performance | [reference/optimize.md](reference/optimize.md) |
 | `live` | Iterate | Visual variant mode: pick elements in the browser, iterate on alternatives | [reference/live.md](reference/live.md) |
 | `generate [n] [action] [element]` | Iterate | Variants, versions, or alternatives of a named element to choose from in the live browser; no manual picking | [reference/generate.md](reference/generate.md) |
+
+Engine 0.1.24 also supplies the opt-in CLI commands `foundations` (local launch-readiness checks), `world` (catalog-based DESIGN.md world seeding), and `walkthrough` (recording-to-walkthrough card). These are not automatic design routes; run only on explicit request, inspect `reference/foundations.md` for its assessment contract, and do not invent missing targets or claim a native engine command succeeded without running it.
 
 Routing:
 
