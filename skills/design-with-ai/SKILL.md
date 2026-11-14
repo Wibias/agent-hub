@@ -43,11 +43,13 @@ Then load only the selected workflow bundle.
 | `motion-review <diff-or-target>` | standard | `references/motion-workflows.md`, `references/standards.md` |
 | `motion-optimize <route-or-target>` | standard | `references/motion-performance.md`, `references/browser-profiling.md` |
 | `motion-name <description>` | quick | `references/motion-vocabulary.md` |
+| `learn-design-taste <project-or-surface>` | quick | `references/taste-correction-retention.md` |
 
 Without a command, a vague look-better/polish request loads
 `references/design-methods.md` and routes to `improve-existing standard`.
 A direct request to implement/add an animation routes to `motion-build`, not to
 motion audit/review/opportunity discovery.
+Explicit requests to retain user design corrections route to `learn-design-taste`; never automatically persist rules from ordinary feedback, infer reasons as facts, or create a parallel memory store.
 
 Penpot is a target/source adapter, not a separate command family. Resolve the
 underlying design task with the normal route, then load
@@ -183,6 +185,7 @@ host-specific guide for ordinary cross-host design work.
 
 - `references/hard-invariants.md`: always-on routing and authority invariants
 - `references/design-methods.md`: method selection and vague-request routing
+- `references/taste-correction-retention.md`: opt-in, evidence-grounded design correction retention; explicit approval before durable edits
 - `references/existing-ui-workflows.md`: audit/improve/restyle/redesign contracts
 - `references/audit-surface-evidence.md`: route relevance, state matrix, non-text contrast, widget/keyboard and claim calibration
 - `references/new-product-surface.md`: new visible product surfaces
