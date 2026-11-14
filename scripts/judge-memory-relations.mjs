@@ -20,6 +20,7 @@ import {
   prepareIsolatedCodexHome,
 } from '../memory-engine/codex-memory-behavioral-eval.mjs';
 import { resolveCodexJudgeExecutable } from '../memory-engine/codex-judge-executable.mjs';
+import { codexCandidateFailureCode, codexCandidateLaunchFailureCode } from '../memory-engine/codex-candidate-process-error.mjs';
 import {
   defaultCodexMemoryDbPath,
   resolveCodexProjectScope,
@@ -269,20 +270,22 @@ export async function createCodexMemoryCandidateRelationJudge({
       if (model) args.push('--model', model);
       args.push('-');
 
-      const executed = await runProcess(resolvedCodex.command, [...resolvedCodex.prefixArgs, ...args], {
-        cwd: workspace,
-        env: isolatedEnv,
-        input: prompt,
-        timeoutMs,
-      });
+      let executed;
+      try {
+        executed = await runProcess(resolvedCodex.command, [...resolvedCodex.prefixArgs, ...args], {
+          cwd: workspace,
+          env: isolatedEnv,
+          input: prompt,
+          timeoutMs,
+        });
+      } catch (error) {
+        throw new Error('codex relation judge launch failed: ' + codexCandidateLaunchFailureCode(error));
+      }
       if (executed.code !== 0) {
-        throw new Error(
-          [
-            'codex relation judge failed with exit ' + executed.code,
-            executed.stderr.trim(),
-            executed.stdout.trim(),
-          ].filter(Boolean).join(': '),
-        );
+        const exitCode = Number.isInteger(executed.code) && executed.code >= 0
+          ? String(executed.code) : 'unknown';
+        throw new Error('codex relation judge failed with exit ' + exitCode
+          + ': ' + codexCandidateFailureCode(executed));
       }
 
       return readFile(resultPath, 'utf8');
