@@ -335,7 +335,7 @@ internal static class Program
             var ticket = coordinator.Begin(meaning);
             var result = coordinator.CompleteProtected(ticket.TicketId,
                 meaning, key.Sign(ticket));
-            Check(result.Verified && result.ClaimWritten && result.ApprovedClaim);
+            Check(result.Verified && result.ClaimWritten && !result.ApprovedClaim);
             Check(result.Status == "protected_claim_written");
             Check(result.RequestId == requestId);
             var claims = store.ReadProtectedClaims(Example.ProjectId, Example.Branch);
