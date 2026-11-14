@@ -1,6 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
+import { spawnSync, execFileSync } from 'node:child_process';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { evidenceBoundDecisionRef, inspectEvidenceBoundDecision } from '../../memory-engine/evidence-bound-decision-preflight.mjs';
 import {
   parseEvidenceDecisionPreflightArgs,
@@ -15,8 +20,8 @@ const FACT = 'Always verify actual source and reproducible test evidence before 
 const ID = 'review-proposal-1';
 const SOURCE_ID = 'source-evidence-1';
 
-function fixture() {
-  const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: true });
+function fixture(dbPath = ':memory:') {
+  const db = new DatabaseSync(dbPath, { enableForeignKeyConstraints: true });
   db.exec(
     "CREATE TABLE project_registry (project_id TEXT PRIMARY KEY, repo_identity TEXT);"
     + "CREATE TABLE evidence (id TEXT PRIMARY KEY, project_id TEXT NOT NULL, branch TEXT, "
@@ -137,4 +142,53 @@ test('stale snapshot token never authorizes an operation', () => {
   assert.equal(out.status, 'snapshot_changed');
   assert.equal(out.promotionAllowed, false);
   assert.equal(out.decisionCommandEnabled, false);
+});
+
+test('real Git + CLI stdio preflight is read-only and identity-bound', t => {
+  const git = spawnSync('git', ['--version'], { encoding:'utf8' });
+  if (git.error?.code === 'ENOENT') return t.skip('Git not installed in isolated test container');
+  assert.equal(git.status, 0);
+  const root = mkdtempSync(join(tmpdir(), 'agenthub-evidence-preflight-'));
+  const repoPath = join(root, 'repo');
+  const dbPath = join(root, 'memory.sqlite3');
+  const command = fileURLToPath(new URL('../../scripts/inspect-evidence-bound-decision.mjs', import.meta.url));
+  try {
+    mkdirSync(repoPath);
+    execFileSync('git', ['init','-b','main',repoPath], { stdio:'ignore' });
+    execFileSync('git', ['-C',repoPath,'config','user.email','test@example.com']);
+    execFileSync('git', ['-C',repoPath,'config','user.name','Local Test']);
+    execFileSync('git', ['-C',repoPath,'remote','add','origin','https://github.com/example/repo.git']);
+    writeFileSync(join(repoPath, 'README.md'), 'fixture\n');
+    execFileSync('git', ['-C',repoPath,'add','README.md']);
+    execFileSync('git', ['-C',repoPath,'commit','-m','fixture'], { stdio:'ignore' });
+    const revision = execFileSync('git', ['-C',repoPath,'rev-parse','HEAD'], { encoding:'utf8' }).trim();
+    const db = fixture(dbPath);
+    db.close();
+    const args = [
+      command, '--db-path',dbPath, '--repo-path',repoPath, '--project-id',PROJECT,
+      '--branch',BRANCH, '--revision',revision, '--proposal-ref',evidenceBoundDecisionRef(ID),
+    ];
+    const ok = spawnSync(process.execPath, args, { encoding:'utf8' });
+    assert.equal(ok.status, 0, ok.stderr);
+    const report = JSON.parse(ok.stdout);
+    assert.equal(report.status,'requires_review');
+    assert.equal(report.scope.revisionSha,revision);
+    assert.equal(report.writesToSource,false);
+    assert.equal(report.contentIncluded,false);
+    const wrong = spawnSync(process.execPath, [
+      ...args.slice(0, args.indexOf('--project-id') + 1),
+      'github.com/example/another-repo',
+      ...args.slice(args.indexOf('--project-id') + 2),
+    ], { encoding:'utf8' });
+    assert.equal(wrong.status,2);
+    assert.equal(wrong.stdout,'');
+    const dbVerify = new DatabaseSync(dbPath, {readOnly:true});
+    try {
+      assert.equal(dbVerify.prepare('SELECT status FROM memory_evidence_proposals WHERE id=?').get(ID).status,
+        'needs_confirmation');
+      assert.equal(dbVerify.prepare('SELECT COUNT(*) AS n FROM claims').get().n,0);
+    } finally { dbVerify.close(); }
+  } finally {
+    rmSync(root, { recursive:true, force:true });
+  }
 });
