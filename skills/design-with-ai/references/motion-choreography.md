@@ -56,8 +56,10 @@ stagger. The content must be operable as soon as it is visible.
 Use official API semantics rather than importing an upstream shortcut:
 
 - `AnimatePresence mode="sync"` is the **default**: entering and exiting
-  children start together. It does not manage layout conflicts for you. Choose
-  explicit positioning when simultaneous views share the same space.
+  children start together, but the exiting child remains in normal layout.
+  For a shared-container crossfade use explicit overlapping positioning, or
+  `popLayout` if exiting content must leave layout immediately. Verify actual
+  layout and focus rather than assuming the mode alone guarantees overlap.
 - `AnimatePresence mode="wait"` intentionally sequences exit before enter and
   supports one child at a time. Use only when that pause carries meaning.
 - `AnimatePresence mode="popLayout"` removes exiting children from layout
