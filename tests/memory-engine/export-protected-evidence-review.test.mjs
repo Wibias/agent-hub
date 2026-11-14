@@ -146,9 +146,10 @@ test('stale/foreign Git context and dangerous relation fail without creating out
 
 test('malformed ref/decision, duplicate keys, relative paths and unsafe flags deny', () => {
   const sample = [
-    '--db-path','/tmp/memory.sqlite3', '--repo-path','/tmp/repo',
+    '--db-path',join(tmpdir(),'memory.sqlite3'),
+    '--repo-path',join(tmpdir(),'repo'),
     '--proposal-ref',proposalRef,'--decision','confirm',
-    '--output-dir','/tmp/out',
+    '--output-dir',join(tmpdir(),'operator-out'),
   ];
   assert.equal(parseOperatorEvidenceExportArgs(sample).decision, 'confirm');
   assert.throws(() => parseOperatorEvidenceExportArgs(
@@ -160,5 +161,6 @@ test('malformed ref/decision, duplicate keys, relative paths and unsafe flags de
   assert.throws(() => parseOperatorEvidenceExportArgs(
     sample.map(x => x === 'confirm' ? 'approve' : x)), /invalid_review_ref/);
   assert.throws(() => parseOperatorEvidenceExportArgs(
-    sample.map(x => x === '/tmp/out' ? 'relative/path' : x)), /absolute_path_required/);
+    sample.map(x => x === join(tmpdir(),'operator-out') ? 'relative/path' : x)),
+    /absolute_path_required/);
 });
