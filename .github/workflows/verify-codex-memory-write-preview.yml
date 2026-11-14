@@ -3,6 +3,7 @@ name: Codex approved Memory Write preview (real stdio SQLite)
 on:
   push:
     branches:
+      - main
       - feat/codex-memory-write-approved-preview-20261112
     paths:
       - 'memory-engine/adapters/codex-approved-memory-write*'
