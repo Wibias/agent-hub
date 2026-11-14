@@ -57,8 +57,9 @@ try {
         }
     }
 
-    $binPathArgument = 'binPath= "' + $target + '"'
-    & $sc create $service $binPathArgument 'start= demand' 'obj= NT AUTHORITY\LocalService' 'type= own'
+    # sc.exe requires a space after each option's '='. Use separate native
+    # argv elements; the ProgramData GUID path contains no spaces.
+    & $sc create $service binPath= $target start= demand obj= 'NT AUTHORITY\LocalService' type= own
     if ($LASTEXITCODE -ne 0) { throw 'could not create disposable service' }
     $created = $true
     & $sc sidtype $service restricted
