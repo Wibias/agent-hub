@@ -97,7 +97,9 @@ public sealed class VerifiedReviewCoordinator
                     ? "protected_claim_written"
                     : "verified_rejection_no_claim",
                 saved.Disposition, saved.RequestId,
-                ApprovedClaim: saved.ClaimWritten,
+                // The only supported source origin is a synthetic lab
+                // fixture. Writing that fixture is NOT human approval.
+                ApprovedClaim: false,
                 ClaimWritten: saved.ClaimWritten);
         }
         catch (Exception error) when (error is InvalidOperationException
