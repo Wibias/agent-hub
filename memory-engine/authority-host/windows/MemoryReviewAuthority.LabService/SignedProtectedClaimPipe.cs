@@ -165,7 +165,13 @@ internal sealed class SignedProtectedClaimPipe : IDisposable
 
         // Always read from the *service-owned* SQLite handle, never an input
         // path. The fixture was originated inside this disposable host.
-        var rows = _ledger.ReadProtectedClaims(FixtureProject, FixtureBranch, 100);
+        IReadOnlyList<ProtectedReviewClaim> rows;
+        lock (_ledger)
+        {
+            // The Admin-only operator proof pipe may atomically update the
+            // same protected SQLite connection. Serialize read and UV state.
+            rows = _ledger.ReadProtectedClaims(FixtureProject, FixtureBranch, 100);
+        }
         var matches = rows.Where(c => c.Value.Contains(query,
             StringComparison.OrdinalIgnoreCase)).Take(limit.Value)
             .Select(c => new
