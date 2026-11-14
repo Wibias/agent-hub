@@ -6,6 +6,11 @@ on:
       - 'scripts/inspect-evidence-bound-decision.mjs'
       - 'tests/memory-engine/evidence-bound-decision-preflight.test.mjs'
       - 'tests/memory-engine/memory-console-evidence-review.test.mjs'
+      - 'tests/memory-engine/evidence-webauthn-local-probe.test.mjs'
+      - 'memory-engine/evidence-webauthn-local-probe.mjs'
+      - 'memory-ui/webauthn-probe.html'
+      - 'memory-ui/webauthn-probe.js'
+      - 'docs/memory-mvp-webauthn-local-probe.md'
       - 'scripts/memory-ui.mjs'
       - 'memory-ui/app.js'
       - 'docs/memory-console-evidence-preflight.md'
@@ -18,6 +23,11 @@ on:
       - 'scripts/inspect-evidence-bound-decision.mjs'
       - 'tests/memory-engine/evidence-bound-decision-preflight.test.mjs'
       - 'tests/memory-engine/memory-console-evidence-review.test.mjs'
+      - 'tests/memory-engine/evidence-webauthn-local-probe.test.mjs'
+      - 'memory-engine/evidence-webauthn-local-probe.mjs'
+      - 'memory-ui/webauthn-probe.html'
+      - 'memory-ui/webauthn-probe.js'
+      - 'docs/memory-mvp-webauthn-local-probe.md'
       - 'scripts/memory-ui.mjs'
       - 'memory-ui/app.js'
       - '.github/workflows/verify-memory-evidence-decision-preflight.yml'
@@ -44,5 +54,6 @@ jobs:
           node --test
           tests/memory-engine/evidence-bound-decision-preflight.test.mjs
           tests/memory-engine/memory-console-evidence-review.test.mjs
+          tests/memory-engine/evidence-webauthn-local-probe.test.mjs
           tests/memory-engine/evidence-bound-proposal-store.test.mjs
           tests/memory-engine/memory-local-proposal-evidence-review.test.mjs
