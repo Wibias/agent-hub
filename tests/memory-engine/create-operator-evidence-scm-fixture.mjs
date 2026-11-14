@@ -6,6 +6,8 @@
  */
 import { createHash } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
+import { EVIDENCE_PROPOSAL_SCHEMA_SQL } from '../../memory-engine/evidence-bound-proposal-store.mjs';
+import { evidenceExtractionFingerprint } from '../../memory-engine/evidence-bound-extraction.mjs';
 import { existsSync, writeFileSync } from 'node:fs';
 import { isAbsolute, join } from 'node:path';
 
@@ -48,16 +50,11 @@ try {
       id TEXT PRIMARY KEY, project_id TEXT NOT NULL,
       branch_scope TEXT NOT NULL, state TEXT NOT NULL, value_text TEXT NOT NULL
     );
-    CREATE TABLE memory_evidence_proposals (
-      id TEXT PRIMARY KEY, project_id TEXT NOT NULL, branch TEXT NOT NULL,
-      kind TEXT NOT NULL, canonical_fact TEXT NOT NULL,
-      status TEXT NOT NULL, policy_version TEXT NOT NULL
-    );
-    CREATE TABLE memory_evidence_proposal_evidence (
-      proposal_id TEXT NOT NULL, evidence_id TEXT NOT NULL,
-      PRIMARY KEY (proposal_id, evidence_id)
-    );
   `);
+  // Use the EXACT shipped canonical Evidence-Bound proposal schema, not
+  // a simplified lookalike CI table. This genuinely exercises the live
+  // extraction-to-protected-pending data boundary.
+  db.exec(EVIDENCE_PROPOSAL_SCHEMA_SQL);
   db.prepare('INSERT INTO project_registry (project_id) VALUES (?)').run(projectId);
   db.prepare(`INSERT INTO evidence
     (id, project_id, branch, authority_class, sensitivity,
@@ -65,12 +62,17 @@ try {
   ).run(evidenceId, projectId, branch, 'user_direct', 'normal',
     'User text submitted as Evidence, origin unverified.', '{"event_type":"user_prompt"}');
   db.prepare(`INSERT INTO memory_evidence_proposals
-    (id,project_id,branch,kind,canonical_fact,status,policy_version)
-    VALUES (?,?,?,?,?,?,?)`
+    (id,project_id,branch,kind,canonical_fact,status,policy_version,
+     evaluator_id,fingerprint,created_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?)`
   ).run(proposalId, projectId, branch, 'knowledge', fact,
-    'needs_confirmation', 'ci-canonical-evidence-v1');
+    'needs_confirmation', 'ci-canonical-evidence-v1',
+    'trusted-ci-fixture-builder',
+    evidenceExtractionFingerprint({ kind: 'knowledge', canonicalFact: fact }),
+    '2026-11-14T19:00:00.000Z');
   db.prepare(`INSERT INTO memory_evidence_proposal_evidence
-    (proposal_id,evidence_id) VALUES (?,?)`).run(proposalId, evidenceId);
+    (proposal_id,evidence_id,linked_at) VALUES (?,?,?)`)
+    .run(proposalId, evidenceId, '2026-11-14T19:00:00.000Z');
 } finally {
   db.close();
 }
