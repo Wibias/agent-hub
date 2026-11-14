@@ -93,9 +93,21 @@ finally {
             Start-Sleep -Milliseconds 300
         }
         & $sc delete $service 2>$null | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw 'temporary SCM service deletion failed' }
+        $gone = $false
+        for ($attempt = 0; $attempt -lt 30; $attempt++) {
+            if ($null -eq (Get-Service -Name $service -ErrorAction SilentlyContinue)) {
+                $gone = $true
+                break
+            }
+            Start-Sleep -Milliseconds 300
+        }
+        if (-not $gone) { throw 'temporary SCM service was not fully removed' }
     }
     if (Test-Path -LiteralPath $root) {
-        Remove-Item -LiteralPath $root -Force -Recurse -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath $root -Force -Recurse -ErrorAction Stop
     }
+    if (Test-Path -LiteralPath $root) { throw 'temporary executable directory still exists' }
+    Write-Host 'PASS: ephemeral SCM service and executable directory removed'
     # Runner is ephemeral; never delete any pre-existing operator service.
 }
