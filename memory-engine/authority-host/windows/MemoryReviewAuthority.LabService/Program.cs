@@ -5,7 +5,8 @@ namespace MemoryReviewAuthority.LabService;
 
 /// <summary>
 /// The test service has NO IPC endpoint, network listener, credential store,
-/// Memory database access, or Claim-write operation. The SCM identity is
+/// Memory database access, or Claim-write operation. Its only filesystem
+/// write is a benign marker under a pre-provisioned service-SID lab ACL. The SCM identity is
 /// checked before even constructing future authority state.
 /// </summary>
 internal static class ReviewHostIdentity
@@ -63,8 +64,19 @@ internal sealed class ReviewAuthorityLabService : ServiceBase
         if (!ReviewHostIdentity.IsCurrentScmIdentity())
             throw new InvalidOperationException("memory_review_service_identity_denied");
 
-        // Intentionally NO credentials, WebAuthn challenge, pipe, HTTP server,
-        // schema, DB access, or agent endpoint. Service identity lab only.
+        // The disposable SCM lab pre-provisions this state directory with
+        // ONLY the exact service SID (Modify) and SYSTEM/Admin (FullControl).
+        // This benign marker proves a real restricted LocalService process
+        // can write through the service-SID ACL. No untrusted path input.
+        var stateDir = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+            "AgentHubMemoryReviewLab-State");
+        if (!Directory.Exists(stateDir))
+            throw new InvalidOperationException("protected_lab_state_missing");
+        File.WriteAllText(Path.Combine(stateDir, "service-started.txt"),
+            "SERVICE_SID_STATE_WRITE_OK");
+        // Still NO credentials, WebAuthn challenge, pipe, HTTP server,
+        // Memory database, Claim mutation or agent endpoint.
     }
 
     protected override void OnStop()
