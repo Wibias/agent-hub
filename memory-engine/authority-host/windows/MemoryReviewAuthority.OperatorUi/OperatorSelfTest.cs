@@ -42,8 +42,19 @@ internal static class OperatorSelfTest
             // check. A real operator must click Windows Hello separately.
             return 0;
         }
-        catch
+        catch (Exception error)
         {
+            if (Environment.GetEnvironmentVariable("GITHUB_ACTIONS") == "true"
+                && Environment.GetEnvironmentVariable("RUNNER_OS") == "Windows")
+            {
+                var temp = Environment.GetEnvironmentVariable("RUNNER_TEMP");
+                if (!string.IsNullOrWhiteSpace(temp))
+                {
+                    File.WriteAllText(Path.Combine(temp,
+                        "AgentHubNativeOperatorSmokeFailure.txt"),
+                        error.GetType().Name + ": " + error.Message);
+                }
+            }
             return 2;
         }
     }
