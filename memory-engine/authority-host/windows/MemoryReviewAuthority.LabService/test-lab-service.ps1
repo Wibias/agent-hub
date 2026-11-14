@@ -2,7 +2,9 @@
 # Creates a disposable, non-networked LocalService host and always removes it.
 param(
     [Parameter(Mandatory = $true)]
-    [string]$PublishedExe
+    [string]$PublishedExe,
+    [Parameter(Mandatory = $true)]
+    [string]$AccessProbeExe
 )
 
 $ErrorActionPreference = 'Stop'
@@ -118,6 +120,9 @@ try {
     New-Item -ItemType Directory -Path $stateRoot | Out-Null
     $stateAcl = Get-Acl -LiteralPath $stateRoot
     $stateAcl.SetAccessRuleProtection($true, $false)
+    # The same logged-in user must not own the protected directory: an
+    # object's owner can otherwise rewrite its DACL despite missing WRITE ACEs.
+    $stateAcl.SetOwner([System.Security.Principal.SecurityIdentifier]::new('S-1-5-32-544'))
     $stateAcl.Access | ForEach-Object { [void]$stateAcl.RemoveAccessRuleSpecific($_) }
     foreach ($item in @(
         @('S-1-5-18', [System.Security.AccessControl.FileSystemRights]::FullControl),
@@ -136,6 +141,11 @@ try {
     $actualState = Get-Acl -LiteralPath $stateRoot
     if (-not $actualState.AreAccessRulesProtected) {
         throw 'service state ACL inherits ordinary user rights'
+    }
+    $stateOwner = $actualState.GetOwner(
+        [System.Security.Principal.SecurityIdentifier]).Value
+    if ($stateOwner -ne 'S-1-5-32-544') {
+        throw 'service state has unsafe owner; ordinary same-account user could change its DACL'
     }
     $allowedStateSids = @('S-1-5-18', 'S-1-5-32-544', $serviceSid.Value)
     foreach ($ace in $actualState.Access) {
@@ -204,7 +214,17 @@ try {
                 throw 'service-owned SQLite or journal file has a user-writable ACL'
             }
         }
+        $ownerSid = $fileAcl.GetOwner(
+            [System.Security.Principal.SecurityIdentifier]).Value
+        if ($ownerSid -notin @('S-1-5-18', 'S-1-5-19', 'S-1-5-32-544', $serviceSid.Value)) {
+            throw 'service-owned SQLite or journal file has an unexpected owner'
+        }
     }
+    # Real negative I/O under a restricted token of the SAME CI account.
+    # The Administrators SID is deny-only and elevated privileges are removed.
+    $accessProbe = (Resolve-Path -LiteralPath $AccessProbeExe).Path
+    & $accessProbe $stateRoot
+    if ($LASTEXITCODE -ne 0) { throw 'same-account nonadmin SQLite access denial failed' }
     Write-Host 'PASS: restricted LocalService wrote a pending-only WAL SQLite ledger under exact service-SID ACL; NO_IPC NO_CLAIMS'
 }
 finally {
