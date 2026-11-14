@@ -44,7 +44,20 @@ try {
         $dirAcl.AddAccessRule($ace)
     }
     Set-Acl -LiteralPath $root -AclObject $dirAcl
-    Copy-Item -LiteralPath $exe -Destination $target -Force
+    # SQLitePCLRaw publishes a native e_sqlite3.dll alongside the single
+    # managed service EXE. Copy the *complete* publish output to the protected
+    # directory; a lone EXE cannot load the native provider.
+    $publishedDirectory = Split-Path -Parent $exe
+    foreach ($publishedItem in @(Get-ChildItem -LiteralPath $publishedDirectory -Force)) {
+        Copy-Item -LiteralPath $publishedItem.FullName -Destination (
+            Join-Path $root $publishedItem.Name) -Recurse -Force
+    }
+    if (-not (Test-Path -LiteralPath $target -PathType Leaf)) {
+        throw 'published service EXE not staged'
+    }
+    if (-not @(Get-ChildItem -LiteralPath $root -Filter 'e_sqlite3.dll' -File -Recurse).Count) {
+        throw 'native SQLite library missing from protected publish output'
+    }
 
     # Ordinary logged-in users must not get write access to the executable.
     $actual = Get-Acl -LiteralPath $root
@@ -130,7 +143,27 @@ try {
         if (($status -join ' ') -match 'RUNNING') { $running = $true; break }
         Start-Sleep -Milliseconds 250
     }
-    if (-not $running) { throw 'service never reached RUNNING state' }
+    if (-not $running) {
+        Write-Host ('DIAG SCM: ' + ((& $sc queryex $service) -join ' '))
+        Write-Host ('DIAG before cleanup: marker='
+            + (Test-Path -LiteralPath (Join-Path $stateRoot 'service-started.txt'))
+            + ' ledger='
+            + (Test-Path -LiteralPath (Join-Path $stateRoot 'review-authority.sqlite3')))
+        try {
+            $failures = @(Get-WinEvent -FilterHashtable @{
+                LogName='Application'
+                StartTime=(Get-Date).AddMinutes(-3)
+            } -MaxEvents 30 -ErrorAction Stop | Where-Object {
+                $_.ProviderName -in @('.NET Runtime','Application Error')
+                -and $_.Message -match 'MemoryReviewAuthority'
+            } | Select-Object -First 2)
+            foreach ($failure in $failures) {
+                Write-Host ('DIAG managed event ' + $failure.Id
+                    + ': ' + $failure.Message.Substring(0,[Math]::Min(1500,$failure.Message.Length)))
+            }
+        } catch { Write-Host 'DIAG managed event unavailable' }
+        throw 'service never reached RUNNING state'
+    }
     $markerFile = Join-Path $stateRoot 'service-started.txt'
     if (-not (Test-Path -LiteralPath $markerFile -PathType Leaf) -or
         ((Get-Content -LiteralPath $markerFile -Raw) -ne 'SERVICE_SID_STATE_WRITE_OK')) {
