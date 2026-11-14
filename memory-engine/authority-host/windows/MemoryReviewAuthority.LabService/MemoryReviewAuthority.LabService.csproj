@@ -12,6 +12,7 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../MemoryReviewAuthority.Core/MemoryReviewAuthority.Core.csproj" />
+    <ProjectReference Include="../MemoryReviewAuthority.Store/MemoryReviewAuthority.Store.csproj" />
     <PackageReference Include="System.ServiceProcess.ServiceController" Version="10.0.14" />
   </ItemGroup>
 </Project>
