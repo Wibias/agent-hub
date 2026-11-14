@@ -33,6 +33,9 @@ jobs:
         with:
           dotnet-version: '10.0.x'
           dotnet-quality: 'ga'
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
       - name: Native build and negative service-identity policy tests
         shell: pwsh
         run: |
