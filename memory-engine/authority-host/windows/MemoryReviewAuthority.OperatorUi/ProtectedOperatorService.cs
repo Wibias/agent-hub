@@ -83,19 +83,21 @@ internal static class ProtectedOperatorService
                 Path.GetFullPath(expected), StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException(
                 "Native Windows-Hello-Oberfläche darf nicht aus einem Git-Checkout erhöht gestartet werden");
-        foreach (var path in new[] { root, directory, expected })
+        foreach (var dir in new[] { root, directory })
         {
-            var item = new FileInfo(path);
+            var item = new DirectoryInfo(dir);
             if (!item.Exists
                 || (item.Attributes & FileAttributes.ReparsePoint) != 0)
-                throw new InvalidOperationException("Geschützte native Installation fehlt");
-            var acl = path == expected
-                ? (FileSystemSecurity)item.GetAccessControl(
-                    AccessControlSections.Owner | AccessControlSections.Access)
-                : new DirectoryInfo(path).GetAccessControl(
-                    AccessControlSections.Owner | AccessControlSections.Access);
-            VerifyAdminOwnedDacl(acl);
+                throw new InvalidOperationException("Geschütztes natives Verzeichnis fehlt");
+            VerifyAdminOwnedDacl(item.GetAccessControl(
+                AccessControlSections.Owner | AccessControlSections.Access));
         }
+        var binary = new FileInfo(expected);
+        if (!binary.Exists
+            || (binary.Attributes & FileAttributes.ReparsePoint) != 0)
+            throw new InvalidOperationException("Geschützte native ausführbare Datei fehlt");
+        VerifyAdminOwnedDacl(binary.GetAccessControl(
+            AccessControlSections.Owner | AccessControlSections.Access));
     }
 
     private static string LoadAdminOwnedServicePin()
