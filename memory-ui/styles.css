@@ -1972,3 +1972,111 @@ button {
     gap: 2px;
   }
 }
+
+/* Operator WebAuthn probe: editorial, browser-held and deliberately separate
+   from the protected Claim authorization UI (which does not exist yet). */
+.webauthn-probe {
+  background: #0e1114;
+  color: #eceeef;
+  min-height: 100vh;
+}
+.webauthn-stage {
+  max-width: 920px;
+  margin: 0 auto;
+  padding: 28px clamp(24px, 5vw, 72px) 70px;
+}
+.webauthn-top {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  font-size: 12px;
+  letter-spacing: .12em;
+  color: #a5afb5;
+  margin-bottom: 90px;
+}
+.webauthn-top .text-action { margin-left: auto; }
+.webauthn-kicker {
+  font-size: 12px;
+  color: #b8c6cd;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+.webauthn-stage h1 {
+  max-width: 770px;
+  font-size: clamp(32px, 5vw, 55px);
+  line-height: 1.12;
+  letter-spacing: -.035em;
+  font-weight: 570;
+  margin: 22px 0;
+}
+.webauthn-lede {
+  max-width: 650px;
+  font-size: 16px;
+  line-height: 1.65;
+  color: #aab5ba;
+}
+.webauthn-separator {
+  height: 1px;
+  background: #334048;
+  margin: 38px 0 25px;
+}
+.webauthn-details {
+  display: grid;
+  grid-template-columns: 122px minmax(0, 1fr);
+  gap: 20px 28px;
+  font-size: 14px;
+  line-height: 1.55;
+}
+.webauthn-details dt { color: #85959e; }
+.webauthn-details dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+#p-fact { font-size: 19px; color: #f1f2f2; }
+.webauthn-decision {
+  padding: 0;
+  margin: 0 0 24px;
+  border: 0;
+}
+.webauthn-decision legend {
+  font-size: 14px;
+  margin-bottom: 16px;
+}
+.webauthn-decision label { display: inline-flex; gap: 8px; margin-right: 28px; }
+.webauthn-ack {
+  display: flex;
+  gap: 10px;
+  max-width: 620px;
+  margin-bottom: 26px;
+  line-height: 1.5;
+  color: #b9c5c9;
+}
+#start-hello {
+  border: 0;
+  border-radius: 3px;
+  padding: 15px 26px;
+  font-weight: 660;
+  background: #e5eeee;
+  color: #111a1d;
+  cursor: pointer;
+}
+#start-hello:disabled { opacity: .4; cursor: not-allowed; }
+.webauthn-status {
+  padding: 24px 0;
+  min-height: 80px;
+  color: #d4dede;
+  font-size: 14px;
+}
+.webauthn-status.error { color: #ffada7; }
+.webauthn-footer {
+  margin-top: 45px;
+  color: #8c9da5;
+  font-size: 12px;
+  line-height: 1.6;
+}
+@media (max-width: 650px) {
+  .webauthn-top { margin-bottom: 54px; }
+  .webauthn-details { grid-template-columns: 1fr; gap: 6px; }
+  .webauthn-details dd { margin-bottom: 18px; }
+}
