@@ -18,7 +18,8 @@ internal static class Program
             if (args.Length == 1 && args[0] == "--contract-selftest")
                 return OperatorSelfTest.Run();
 
-            if (args.Length != 0
+            if ((args.Length != 0
+                    && !(args.Length == 1 && args[0] == "--service-smoke"))
                 || !new WindowsPrincipal(WindowsIdentity.GetCurrent())
                     .IsInRole(WindowsBuiltInRole.Administrator))
             {
