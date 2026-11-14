@@ -54,6 +54,7 @@ internal sealed class ReviewAuthorityLabService : ServiceBase
 {
     private ProtectedPendingReviewLedger? _ledger;
     private SignedProtectedClaimPipe? _readPipe;
+    private OperatorWebAuthnPipe? _operatorProofPipe;
 
     internal ReviewAuthorityLabService()
     {
@@ -122,10 +123,20 @@ internal sealed class ReviewAuthorityLabService : ServiceBase
 
         _readPipe = new SignedProtectedClaimPipe(_ledger, stateDir);
         _readPipe.Start();
+        if (_ledger.ReadOperatorCredential() is not null)
+        {
+            // Admin-ACL only. This is a NON-AUTHORIZING browser UV probe:
+            // the only result is a signed "no-approval/no-Claim" receipt.
+            // The existing read-only Codex pipe remains unchanged.
+            _operatorProofPipe = new OperatorWebAuthnPipe(_ledger, stateDir);
+            _operatorProofPipe.Start();
+        }
     }
 
     protected override void OnStop()
     {
+        _operatorProofPipe?.Dispose();
+        _operatorProofPipe = null;
         _readPipe?.Dispose();
         _readPipe = null;
         _ledger?.Dispose();
