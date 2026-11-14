@@ -90,7 +90,14 @@ function Protect-Directory([string]$path, [object[]]$permissions) {
             (SID $p[0]), $p[1], $inherit, $propagate, $allow))
     }
     Set-Acl -LiteralPath $path -AclObject $acl
-    Inspect-Acl $path @('S-1-5-18','S-1-5-32-544', $permissions[2][0])
+    $allowedWriters = @('S-1-5-18','S-1-5-32-544')
+    foreach ($p in $permissions) {
+        if ($p[0] -match '^S-1-5-80-' -and
+            (Has-ChangeRights $p[1])) {
+            $allowedWriters += [string]$p[0]
+        }
+    }
+    Inspect-Acl $path $allowedWriters
 }
 function Machine-Permissions {
     return @(
@@ -197,9 +204,11 @@ function Stop-And-Delete-Own-Service {
     }
     throw 'Preview service deletion not confirmed'
 }
-function Preserve-Protected-State {
+function Preserve-Protected-State([string]$sid = '') {
     if (-not (Test-Path -LiteralPath $stateRoot -PathType Container)) { return $null }
-    Inspect-Acl $stateRoot @('S-1-5-18','S-1-5-32-544')
+    $writers = @('S-1-5-18','S-1-5-32-544')
+    if ($sid -match '^S-1-5-80-') { $writers += $sid }
+    Inspect-Acl $stateRoot $writers
     $archive = Join-Path $env:ProgramData (
         'AgentHubMemoryReviewLab-Preserved-' + [guid]::NewGuid().ToString('N'))
     Move-Item -LiteralPath $stateRoot -Destination $archive -ErrorAction Stop
@@ -237,8 +246,11 @@ if ($Action -eq 'Remove') {
         $record.productionWriteEnabled -eq $false) `
         'Own preview state marker invalid'
     Check-ServiceOwnership
+    $oldServiceSid = [Security.Principal.NTAccount]::new(
+        'NT SERVICE',$serviceName).Translate(
+        [Security.Principal.SecurityIdentifier]).Value
     Stop-And-Delete-Own-Service
-    $saved = Preserve-Protected-State
+    $saved = Preserve-Protected-State $oldServiceSid
     if (Test-Path -LiteralPath $publicRoot) {
         Inspect-Acl $publicRoot @('S-1-5-18','S-1-5-32-544')
         Remove-Item -LiteralPath $publicRoot -Recurse -Force
@@ -297,6 +309,8 @@ try {
             New-Item -ItemType Directory -Path $dir -ErrorAction Stop | Out-Null
         }
         Verify-Copy $src $dst $entry.sha256
+        $targetAcl = if ($relative.StartsWith('Service/')) { $program } else { $machine }
+        Set-File-Acl $dst $targetAcl
     }
     $target = Join-Path $root 'Service/MemoryReviewAuthority.LabService.exe'
     & $sc create $serviceName binPath= $target start= demand `
@@ -315,6 +329,9 @@ try {
     Verify-Copy $sourceEvidence (Join-Path $stateRoot $stateSource) $evidenceDigest
     Verify-Copy $sourceManifest (Join-Path $stateRoot $stateManifest) $manifestDigest
     Verify-Copy $publicCredential (Join-Path $stateRoot $stateCredential) $credentialDigest
+    foreach ($inputName in @($stateSource,$stateManifest,$stateCredential)) {
+        Set-File-Acl (Join-Path $stateRoot $inputName) $stateRights
+    }
     & $sc start $serviceName | Out-Null
     Require ($LASTEXITCODE -eq 0) 'Preview service start refused'
     $sourcePub = Join-Path $stateRoot 'review-service-signing-key.pub.pem'
@@ -358,8 +375,14 @@ try {
     # Fail closed. Never leave a failed, privileged preview service running.
     # Privacy rule: every imported user SQLite copy is PRESERVED under the
     # same protected owner/DACL instead of being silently deleted.
-    if ($serviceMade) { Stop-And-Delete-Own-Service }
-    $preserved = Preserve-Protected-State
+    $knownSid = ''
+    if ($serviceMade) {
+        $knownSid = [Security.Principal.NTAccount]::new(
+            'NT SERVICE',$serviceName).Translate(
+            [Security.Principal.SecurityIdentifier]).Value
+        Stop-And-Delete-Own-Service
+    }
+    $preserved = Preserve-Protected-State $knownSid
     foreach ($path in @($publicRoot,$root)) {
         if (Test-Path -LiteralPath $path) {
             Inspect-Acl $path @('S-1-5-18','S-1-5-32-544')
