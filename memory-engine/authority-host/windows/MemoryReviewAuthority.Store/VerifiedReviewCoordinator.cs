@@ -1,6 +1,7 @@
 using MemoryReviewAuthority.Core;
 using System.Security.Cryptography;
 using System.Text;
+using Microsoft.Data.Sqlite;
 
 namespace MemoryReviewAuthority.Store;
 
@@ -14,15 +15,20 @@ public sealed class VerifiedReviewCoordinator
     private readonly ProtectedPendingReviewLedger _ledger;
     private readonly ReviewChallengeCore _challengeCore;
     private readonly PinnedCredential _credential;
+    private readonly Func<ReviewMeaning, TrustedReviewSource?>? _trustedSourceReader;
 
     public VerifiedReviewCoordinator(
         ProtectedPendingReviewLedger ledger,
         PinnedCredential credential,
-        ReviewChallengeCore? challengeCore = null)
+        ReviewChallengeCore? challengeCore = null,
+        Func<ReviewMeaning, TrustedReviewSource?>? trustedSourceReader = null)
     {
         _ledger = ledger ?? throw new ArgumentNullException(nameof(ledger));
         _credential = credential ?? throw new ArgumentNullException(nameof(credential));
         _challengeCore = challengeCore ?? new ReviewChallengeCore();
+        // A real service must inject its independently authenticated snapshot
+        // reader. Default OFF; it must not be an agent-controlled callback.
+        _trustedSourceReader = trustedSourceReader;
     }
 
     /// <summary>
@@ -61,6 +67,46 @@ public sealed class VerifiedReviewCoordinator
         catch (InvalidOperationException)
         {
             return new(false, "pending_scope_or_commit_denied");
+        }
+    }
+
+    /// <summary>
+    /// The opt-in host-only protected Claim path. Every real confirmation
+    /// requires the exact UV assertion plus a separate, injected trusted
+    /// source reader. Without a trusted reader the default stays disabled.
+    /// A rejected proposal records an immutable decision but no Claim.
+    /// No standalone browser endpoint or source reader ships in this library.
+    /// </summary>
+    public VerifiedReviewCompletion CompleteProtected(
+        string ticketId, ReviewMeaning meaning, BrowserAssertion assertion)
+    {
+        // Consume on first attempt, even when no host source is installed or
+        // the assertion is invalid. No reusable "approved" token is returned.
+        var proof = _challengeCore.VerifyAndConsume(ticketId, meaning, assertion);
+        if (!proof.Verified || !proof.UserVerified || !proof.UserPresent)
+            return new(false, proof.Status);
+        if (_trustedSourceReader is null)
+            return new(false, "trusted_review_source_not_configured");
+        try
+        {
+            VerifyPendingMeaning(meaning);
+            var trusted = _trustedSourceReader(meaning);
+            if (trusted is null)
+                return new(false, "trusted_review_source_not_found");
+            var saved = _ledger.CommitReviewedDecision(
+                meaning, _credential, proof, trusted);
+            return new(true,
+                saved.ClaimWritten
+                    ? "protected_claim_written"
+                    : "verified_rejection_no_claim",
+                saved.Disposition, saved.RequestId,
+                ApprovedClaim: saved.ClaimWritten,
+                ClaimWritten: saved.ClaimWritten);
+        }
+        catch (Exception error) when (error is InvalidOperationException
+            or SqliteException or ArgumentException)
+        {
+            return new(false, "protected_review_scope_or_commit_denied");
         }
     }
 
