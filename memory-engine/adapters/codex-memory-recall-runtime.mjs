@@ -25,6 +25,7 @@ const MEMORY_MUTATION_MODES = new Set([
   'forget',
   'candidate_confirm',
   'candidate_reject',
+  'atomic_rule_confirm',
 ]);
 
 export function shouldPrepareCodexMemoryRecallRuntime(memory, {
