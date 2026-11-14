@@ -1,0 +1,35 @@
+name: Upstream authoring skill structural verification
+
+on:
+  pull_request:
+    paths:
+      - 'skills/impeccable/**'
+      - 'skills/design-with-ai/**'
+      - 'skills/github-delivery/**'
+      - 'knowledge/**'
+      - 'upstream-sources.json'
+      - '.github/workflows/verify-upstream-authoring-skills.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Validate Impeccable skill
+        run: node scripts/skill-ratchet.mjs validate --skill-root "$PWD/skills/impeccable" --json
+      - name: Validate Design with AI skill
+        run: node scripts/skill-ratchet.mjs validate --skill-root "$PWD/skills/design-with-ai" --json
+      - name: Validate GitHub Delivery skill
+        run: node scripts/skill-ratchet.mjs validate --skill-root "$PWD/skills/github-delivery" --json
+      - name: Verify knowledge index
+        run: |
+          node knowledge/build-index.mjs
+          git diff --exit-code -- knowledge/index.json knowledge/INDEX.md
