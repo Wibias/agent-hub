@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using System.Security.AccessControl;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -136,6 +137,19 @@ internal static class OperatorSelfTest
             });
             if (denied != 3)
                 throw new Exception("operator_envelope_negative_cases_missing");
+            if (ProtectedOperatorService.HasMutationRights(
+                    FileSystemRights.ReadAndExecute)
+                || ProtectedOperatorService.HasMutationRights(
+                    FileSystemRights.Read)
+                || !ProtectedOperatorService.HasMutationRights(
+                    FileSystemRights.Modify)
+                || !ProtectedOperatorService.HasMutationRights(
+                    FileSystemRights.FullControl)
+                || !ProtectedOperatorService.HasMutationRights(
+                    FileSystemRights.Write)
+                || !ProtectedOperatorService.HasMutationRights(
+                    FileSystemRights.DeleteSubdirectoriesAndFiles))
+                throw new Exception("operator_acl_read_vs_write_mask_regression");
             // Only static v1 ABI prefix is needed. Avoid a GUI/physical
             // credential during CI, even on an elevated Windows runner.
             var authDataPointer = Marshal.SizeOf<IntPtr>() == 8;
