@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - 'memory-engine/authority-host/windows/MemoryReviewAuthority.LabService/**'
+      - 'memory-engine/authority-host/windows/MemoryReviewAuthority.OperatorUi/**'
       - 'memory-engine/authority-host/windows/MemoryReviewAuthority.Core/**'
       - 'memory-engine/authority-host/windows/MemoryReviewAuthority.Store/**'
       - 'tests/memory-engine/create-operator-evidence-scm-fixture.mjs'
@@ -16,6 +17,7 @@ on:
     branches: [main]
     paths:
       - 'memory-engine/authority-host/windows/MemoryReviewAuthority.LabService/**'
+      - 'memory-engine/authority-host/windows/MemoryReviewAuthority.OperatorUi/**'
       - 'memory-engine/authority-host/windows/MemoryReviewAuthority.Core/**'
       - 'memory-engine/authority-host/windows/MemoryReviewAuthority.Store/**'
       - 'tests/memory-engine/create-operator-evidence-scm-fixture.mjs'
@@ -64,6 +66,15 @@ jobs:
           dotnet publish $project -c Release --runtime win-x64 --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=false --output $target
           if ($LASTEXITCODE -ne 0) { throw "publish failed" }
           "MEMORY_REVIEW_LAB_EXE=$target/MemoryReviewAuthority.LabService.exe" >> $env:GITHUB_ENV
+      - name: Build native elevated human operator window (no physical Hello call)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $project = 'memory-engine/authority-host/windows/MemoryReviewAuthority.OperatorUi/MemoryReviewAuthority.OperatorUi.csproj'
+          dotnet restore $project --runtime win-x64
+          if ($LASTEXITCODE -ne 0) { throw 'operator UI restore failed' }
+          dotnet build $project -c Release --runtime win-x64 --no-restore -warnaserror
+          if ($LASTEXITCODE -ne 0) { throw 'operator UI build failed' }
       - name: Publish same-account nonadmin token access probe (runner only)
         shell: pwsh
         run: |

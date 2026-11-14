@@ -1,0 +1,46 @@
+name: Memory native Windows Hello operator UI (default OFF)
+
+on:
+  pull_request:
+    paths:
+      - 'memory-engine/authority-host/windows/MemoryReviewAuthority.OperatorUi/**'
+      - '.github/workflows/verify-memory-native-operator-ui.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'memory-engine/authority-host/windows/MemoryReviewAuthority.OperatorUi/**'
+      - '.github/workflows/verify-memory-native-operator-ui.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  operator-ui-contract:
+    runs-on: windows-2022
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
+        with:
+          dotnet-version: '10.0.x'
+          dotnet-quality: 'ga'
+      - name: Build native Windows x64 WinForms/operator WebAuthn ABI
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $project = 'memory-engine/authority-host/windows/MemoryReviewAuthority.OperatorUi/MemoryReviewAuthority.OperatorUi.csproj'
+          dotnet restore $project --runtime win-x64
+          if ($LASTEXITCODE -ne 0) { throw 'Windows native UI restore failed' }
+          dotnet build $project -c Release --runtime win-x64 --no-restore -warnaserror
+          if ($LASTEXITCODE -ne 0) { throw 'Windows native UI build failed' }
+      - name: Validate signed service protocol and negative cases without GUI/Hello
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $project = 'memory-engine/authority-host/windows/MemoryReviewAuthority.OperatorUi/MemoryReviewAuthority.OperatorUi.csproj'
+          dotnet run --project $project -c Release --runtime win-x64 --no-build --no-restore -- --contract-selftest
+          if ($LASTEXITCODE -ne 0) { throw 'native operator window contract / signer / ABI negative selftest failed' }
+          Write-Host 'PASS: native WinForms Windows x64 UI and service signature contract; NO biometric call, NO Claim'
