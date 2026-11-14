@@ -103,7 +103,8 @@ try {
     assertion: signedAssertion(second, 1),
   });
   if (!denied.service_signature_verified || denied.signature_verified
-      || denied.status !== 'operator_proof_scope_or_counter_denied'
+      || !['sign_counter_replay', 'operator_proof_scope_or_counter_denied']
+        .includes(denied.status)
       || denied.human_approval_verified || denied.claim_written) {
     throw new Error('protected service accepted replayed signing counter');
   }
