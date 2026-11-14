@@ -473,8 +473,8 @@ export function createMemoryUiServer({
 
     try {
       const requestHost = String(req.headers.host ?? '');
-      if (!/^127\\.0\\.0\\.1(?::\\d+)?$/.test(requestHost)
-          && !(uvProbe && /^localhost:\\d+$/.test(requestHost))) {
+      if (!/^127\.0\.0\.1(?::\d+)?$/.test(requestHost)
+          && !(uvProbe && /^localhost:\d+$/.test(requestHost))) {
         json(res, 403, {
           error: 'invalid_host',
           message: 'Memory Console only accepts the 127.0.0.1 host.',
@@ -489,7 +489,7 @@ export function createMemoryUiServer({
           json(res, 404, { error: 'webauthn_probe_disabled' });
           return;
         }
-        if (!/^localhost:\\d+$/.test(requestHost)) {
+        if (!/^localhost:\d+$/.test(requestHost)) {
           json(res, 403, { error: 'localhost_origin_required' });
           return;
         }
@@ -518,7 +518,7 @@ export function createMemoryUiServer({
           return;
         }
         if (req.headers.origin !== origin
-            || !/^application\\/json(?:;|$)/.test(
+            || !/^application\/json(?:;|$)/.test(
               String(req.headers['content-type'] ?? ''))) {
           json(res, 403, { error: 'forbidden_probe_origin_or_content' });
           return;
