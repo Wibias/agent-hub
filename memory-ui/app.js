@@ -1678,6 +1678,18 @@ function renderEvidenceReviewInspector(proposal) {
   const relation = proposal.relation ?? {};
   const preflight = state.evidencePreflightRef === proposal.ref
     ? state.evidencePreflight : null;
+  const probeLink = state.overview?.webauthnProbe?.enabled
+    ? `<a class="text-action" target="_blank" rel="noopener noreferrer"
+          href="${escapeHtml('http://localhost:' + window.location.port
+            + '/webauthn-probe.html?'
+            + new URLSearchParams({
+              projectId: state.projectId,
+              branch: state.branch,
+              proposalRef: proposal.ref,
+            }).toString())}">
+          Windows Hello mit diesem E~ testen (nur Prüflauf)
+        </a>`
+    : '';
   const preflightDetail = preflight
     ? definition([
         ['Status', preflight.status, 'status-warn'],
@@ -1747,6 +1759,8 @@ function renderEvidenceReviewInspector(proposal) {
           ? `<p class="action-message error">${escapeHtml(state.evidencePreflightError)}</p>` : ''}
         ${preflightDetail}
         ${preflight ? '<p class="review-evidence-notice">Snapshot is diagnostic only. No protected approval or Claim was created.</p>' : ''}
+        ${probeLink}
+        ${probeLink ? '<p class="review-evidence-notice">This is a real browser WebAuthn challenge, but only an ephemeral read-only hardware probe, never a protected E~ approval.</p>' : ''}
       </section>
       <section class="inspect-section">
         <h3>Approval boundary</h3>

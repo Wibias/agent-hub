@@ -19,6 +19,9 @@ jobs:
       - name: Verify UI and regressions
         run: |
           node --check memory-ui/app.js
+          node --check memory-ui/webauthn-probe.js
+          node --check memory-engine/evidence-webauthn-local-probe.mjs
+          node --check scripts/memory-ui.mjs
           node --test tests/memory-engine/memory-console-d12-1-readable.test.mjs tests/memory-engine/memory-console-d12-design.test.mjs tests/memory-engine/memory-graph-ui.test.mjs tests/memory-engine/memory-graph-v2-ui.test.mjs tests/memory-engine/memory-ui.test.mjs
       - name: Design with AI source taste gate
         run: node skills/design-with-ai/scripts/taste-gate.mjs --path memory-ui --json

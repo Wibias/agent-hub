@@ -18,6 +18,7 @@ import {
 import { MemoryEngine } from '../memory-engine/index.mjs';
 import { memoryEvidenceReviewSnapshot } from '../memory-engine/evidence-bound-review-readonly.mjs';
 import { inspectEvidenceBoundDecision } from '../memory-engine/evidence-bound-decision-preflight.mjs';
+import { EvidenceWebAuthnLocalProbe } from '../memory-engine/evidence-webauthn-local-probe.mjs';
 import {
   createAsyncGitGraphView,
   normalizeRepositoryRoots,
@@ -67,6 +68,7 @@ export function parseMemoryUiArgs(argv = []) {
     port: DEFAULT_PORT,
     dbPath: defaultCodexMemoryDbPath(),
     repositoryRoots: [],
+    webauthnProbe: false,
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -83,6 +85,10 @@ export function parseMemoryUiArgs(argv = []) {
       if (!nonEmpty(value)) throw new Error('--db-path requires a value');
       result.dbPath = resolve(value);
       index += 1;
+      continue;
+    }
+    if (arg === '--webauthn-probe') {
+      result.webauthnProbe = true;
       continue;
     }
     if (arg === '--repo-root') {
@@ -305,6 +311,8 @@ function staticFileFor(pathname) {
   }
   if (pathname === '/styles.css') return join(STATIC_DIR, 'styles.css');
   if (pathname === '/app.js') return join(STATIC_DIR, 'app.js');
+  if (pathname === '/webauthn-probe.html') return join(STATIC_DIR, 'webauthn-probe.html');
+  if (pathname === '/webauthn-probe.js') return join(STATIC_DIR, 'webauthn-probe.js');
   return null;
 }
 
@@ -329,7 +337,9 @@ export function createMemoryUiServer({
   codexHome = resolve(process.env.CODEX_HOME || join(homedir(), '.codex')),
   includeRuntimeHealth = true,
   repositoryRoots = [],
+  webauthnProbe = false,
 } = {}) {
+  if (typeof webauthnProbe !== 'boolean') throw new TypeError('webauthnProbe must be a boolean');
   if (!nonEmpty(dbPath)) throw new TypeError('dbPath must be non-empty');
   const resolvedDbPath = resolve(dbPath);
   if (!existsSync(resolvedDbPath)) {
@@ -344,6 +354,49 @@ export function createMemoryUiServer({
     readOnly: true,
   });
   const actionToken = randomBytes(24).toString('hex');
+  const uvProbe = webauthnProbe ? new EvidenceWebAuthnLocalProbe() : null;
+
+  async function resolveFreshEvidenceMeaning({ projectId, branch, proposalRef, decision }) {
+    if (!nonEmpty(projectId) || !nonEmpty(branch)
+        || !validEvidenceReviewRef(proposalRef)
+        || !['confirm', 'reject'].includes(decision)) return null;
+    // The checkout and exact revision are resolved from SERVER-approved roots.
+    memoryUiScope(engine, { projectId, branch });
+    const git = await resolveMemoryConsoleGitScopeAsync({
+      memory: engine, projectId, branch, repositoryRoots: approvedGitRoots,
+    });
+    if (git.status !== 'verified') return null;
+    const db = new DatabaseSync(resolvedDbPath, { readOnly: true, timeout: 5_000 });
+    let active = false;
+    try {
+      db.exec('PRAGMA query_only=ON');
+      db.exec('BEGIN');
+      active = true;
+      const inspection = inspectEvidenceBoundDecision({
+        db, projectId, branch, revisionSha: git.revisionSha,
+        selectedRef: proposalRef, showLocalContent: true,
+      });
+      db.exec('COMMIT');
+      active = false;
+      if (!['requires_review', 'reviewable_no_write_authority'].includes(inspection.status)
+          || typeof inspection.canonicalFact !== 'string'
+          || !inspection.canonicalFact || !inspection.reviewSnapshotSha256) return null;
+      return {
+        meaning: {
+          projectId, branch, revisionSha: git.revisionSha,
+          proposalRef, reviewSnapshotSha256: inspection.reviewSnapshotSha256,
+          canonicalFactSha256: inspection.canonicalFactHash,
+          canonicalFact: inspection.canonicalFact,
+          decision,
+        },
+        blockers: inspection.blockers ?? [],
+      };
+    } finally {
+      if (active) { try { db.exec('ROLLBACK'); } catch {} }
+      db.close();
+    }
+  }
+
 
   async function runAction(pathname, payload) {
     const command = actionCommand(pathname, payload);
@@ -420,7 +473,8 @@ export function createMemoryUiServer({
 
     try {
       const requestHost = String(req.headers.host ?? '');
-      if (!/^127\.0\.0\.1(?::\d+)?$/.test(requestHost)) {
+      if (!/^127\.0\.0\.1(?::\d+)?$/.test(requestHost)
+          && !(uvProbe && /^localhost:\d+$/.test(requestHost))) {
         json(res, 403, {
           error: 'invalid_host',
           message: 'Memory Console only accepts the 127.0.0.1 host.',
@@ -429,6 +483,66 @@ export function createMemoryUiServer({
       }
 
       const url = new URL(req.url ?? '/', `http://${HOST}`);
+
+      if (url.pathname.startsWith('/api/webauthn-probe/')) {
+        if (!uvProbe) {
+          json(res, 404, { error: 'webauthn_probe_disabled' });
+          return;
+        }
+        if (!/^localhost:\d+$/.test(requestHost)) {
+          json(res, 403, { error: 'localhost_origin_required' });
+          return;
+        }
+        const origin = 'http://' + requestHost;
+        if (req.method === 'GET' && url.pathname === '/api/webauthn-probe/prepare') {
+          const projectId = queryValue(url, 'projectId');
+          const branch = queryValue(url, 'branch');
+          const proposalRef = queryValue(url, 'proposalRef');
+          const decision = queryValue(url, 'decision');
+          const fresh = await resolveFreshEvidenceMeaning({
+            projectId, branch, proposalRef, decision,
+          });
+          if (!fresh) {
+            json(res, 409, { error: 'review_source_unavailable_or_changed',
+              protectedApproval: false, claimWritten: false });
+            return;
+          }
+          json(res, 200, uvProbe.begin({ ...fresh, origin }));
+          return;
+        }
+        if (req.method !== 'POST'
+            || !['/api/webauthn-probe/enroll',
+                '/api/webauthn-probe/challenge',
+                '/api/webauthn-probe/finish'].includes(url.pathname)) {
+          json(res, 405, { error: 'unsupported_probe_operation' });
+          return;
+        }
+        if (req.headers.origin !== origin
+            || !/^application\/json(?:;|$)/.test(
+              String(req.headers['content-type'] ?? ''))) {
+          json(res, 403, { error: 'forbidden_probe_origin_or_content' });
+          return;
+        }
+        const body = await readJsonBody(req);
+        if (url.pathname === '/api/webauthn-probe/enroll') {
+          json(res, 200, uvProbe.enroll(body));
+          return;
+        }
+        if (url.pathname === '/api/webauthn-probe/challenge') {
+          json(res, 200, uvProbe.challenge(body));
+          return;
+        }
+        const previous = uvProbe.peekMeaning(body.sessionId);
+        let fresh = null;
+        try {
+          fresh = (await resolveFreshEvidenceMeaning({
+            projectId: previous.projectId, branch: previous.branch,
+            proposalRef: previous.proposalRef, decision: previous.decision,
+          }))?.meaning ?? null;
+        } catch { /* stale/unavailable recheck fails closed */ }
+        json(res, 200, await uvProbe.finish({ ...body, freshMeaning: fresh }));
+        return;
+      }
 
       if (req.method === 'POST' && url.pathname.startsWith('/api/actions/')) {
         const origin = String(req.headers.origin ?? '');
@@ -470,6 +584,7 @@ export function createMemoryUiServer({
           enabled: true,
           token: actionToken,
         };
+        overview.webauthnProbe = { enabled: uvProbe !== null, protectedApproval: false };
         json(res, 200, overview);
         return;
       }
@@ -695,6 +810,10 @@ export async function runMemoryUi({
   log(`Memory Console: ${url}`);
   log(`Database: ${runtime.dbPath}`);
   log('Mode: read-only browsing · explicit local actions · loopback only');
+  if (options.webauthnProbe) {
+    log('WebAuthn E~ probe: http://localhost:' + port
+      + '/webauthn-probe.html (ephemeral credential, NO protected approval)');
+  }
   if (options.repositoryRoots.length) {
     log('Trusted Git roots configured: ' + options.repositoryRoots.length);
   }

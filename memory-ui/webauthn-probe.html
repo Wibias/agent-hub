@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AgentHub · Windows Hello Prüflauf</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body class="webauthn-probe">
+  <main class="webauthn-stage">
+    <header class="webauthn-top">
+      <div class="brand-mark">AH</div>
+      <span>AGENTHUB MEMORY / LOKALER PRÜFLAUF</span>
+      <a href="/" class="text-action">Memory Console</a>
+    </header>
+    <div class="webauthn-kicker">01 / E~ Vorschlag und Windows Hello</div>
+    <h1>Eine echte Bestätigung testen. Keine Erinnerung freigeben.</h1>
+    <p class="webauthn-lede">
+      Dieser Test verwendet den realen Git-Checkout und einen vorhandenen
+      E~-Vorschlag. Der Browser fordert eine WebAuthn-Bestätigung an.
+      Die Anmeldung gilt nur für diesen Vorgang. Sie erzeugt keinen Claim,
+      keine Dienstfreigabe und keine produktive Erinnerung.
+    </p>
+    <div class="webauthn-separator"></div>
+    <dl class="webauthn-details">
+      <dt>Projekt</dt><dd id="p-project">-</dd>
+      <dt>Branch</dt><dd id="p-branch">-</dd>
+      <dt>Vorschlag</dt><dd id="p-reference">-</dd>
+      <dt>Revision</dt><dd id="p-revision">-</dd>
+      <dt>Inhalt</dt><dd id="p-fact">Vorschlag wird geladen, sobald du den Test startest.</dd>
+      <dt>Prüfhinweise</dt><dd id="p-blockers">-</dd>
+    </dl>
+    <div class="webauthn-separator"></div>
+    <fieldset id="decision" class="webauthn-decision">
+      <legend>Welche Entscheidung willst du prüfen?</legend>
+      <label><input type="radio" name="decision" value="confirm" checked> Bestätigen</label>
+      <label><input type="radio" name="decision" value="reject"> Ablehnen</label>
+    </fieldset>
+    <label class="webauthn-ack">
+      <input type="checkbox" id="ack">
+      Ich verstehe: Das ist keine echte Claim-Freigabe. Windows Hello oder der Passkey-Manager kann ein Testcredential dauerhaft auf dem Gerät speichern.
+    </label>
+    <button id="start-hello" type="button" disabled>Windows Hello prüfen</button>
+    <div id="probe-status" role="status" aria-live="polite" class="webauthn-status">
+      Lade...
+    </div>
+    <footer class="webauthn-footer">
+      Credential nur serverseitig flüchtig (Windows/Browser können den Passkey behalten) · keine SQLite-Änderung ·
+      keine produktive Windows-Service-Aktivierung
+    </footer>
+  </main>
+  <script src="/webauthn-probe.js" defer></script>
+</body>
+</html>
