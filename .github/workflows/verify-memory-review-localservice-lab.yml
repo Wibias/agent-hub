@@ -7,6 +7,7 @@ on:
       - 'memory-engine/authority-host/windows/MemoryReviewAuthority.Core/**'
       - 'memory-engine/authority-host/windows/MemoryReviewAuthority.Store/**'
       - 'tests/memory-engine/create-operator-evidence-scm-fixture.mjs'
+      - 'scripts/export-protected-evidence-review.mjs'
       - 'memory-engine/authority-host/windows/MemoryReviewAuthority.AccessProbe/**'
       - '.github/workflows/verify-memory-review-localservice-lab.yml'
   push:
@@ -16,6 +17,7 @@ on:
       - 'memory-engine/authority-host/windows/MemoryReviewAuthority.Core/**'
       - 'memory-engine/authority-host/windows/MemoryReviewAuthority.Store/**'
       - 'tests/memory-engine/create-operator-evidence-scm-fixture.mjs'
+      - 'scripts/export-protected-evidence-review.mjs'
       - 'memory-engine/authority-host/windows/MemoryReviewAuthority.AccessProbe/**'
       - '.github/workflows/verify-memory-review-localservice-lab.yml'
   workflow_dispatch:
