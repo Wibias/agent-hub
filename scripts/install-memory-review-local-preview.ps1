@@ -392,25 +392,41 @@ try {
         uninstallAction='Remove'
     } | ConvertTo-Json -Depth 4
 } catch {
-    # Fail closed. Never leave a failed, privileged preview service running.
-    # Privacy rule: every imported user SQLite copy is PRESERVED under the
-    # same protected owner/DACL instead of being silently deleted.
+    # Preserve the ORIGINAL failure; cleanup must never hide a security
+    # denial or accidentally delete data from an unknown ACL state.
+    $originalError = $_.Exception.Message
+    if ($env:GITHUB_ACTIONS -eq 'true') {
+        Write-Host ('CI-ORIGINAL-INSTALL-DENIAL: ' + $originalError)
+    }
     $knownSid = ''
     if ($serviceMade) {
-        $knownSid = [Security.Principal.NTAccount]::new(
-            'NT SERVICE',$serviceName).Translate(
-            [Security.Principal.SecurityIdentifier]).Value
-        Stop-And-Delete-Own-Service
+        try {
+            $knownSid = [Security.Principal.NTAccount]::new(
+                'NT SERVICE',$serviceName).Translate(
+                [Security.Principal.SecurityIdentifier]).Value
+            Stop-And-Delete-Own-Service
+        } catch {
+            Write-Warning 'The service may still be registered; do not proceed with unverified cleanup'
+        }
     }
-    $preserved = Preserve-Protected-State $knownSid
+    $preserved = $null
+    try {
+        $preserved = Preserve-Protected-State $knownSid
+    } catch {
+        Write-Warning 'State preservation could not be verified; leave evidence untouched for manual recovery'
+    }
     foreach ($path in @($publicRoot,$root)) {
         if (Test-Path -LiteralPath $path) {
-            Inspect-Acl $path @('S-1-5-18','S-1-5-32-544')
-            Remove-Item -LiteralPath $path -Force -Recurse
+            try {
+                Inspect-Acl $path @('S-1-5-18','S-1-5-32-544')
+                Remove-Item -LiteralPath $path -Force -Recurse
+            } catch {
+                Write-Warning 'Cannot prove safe ownership for cleanup; leave suspect path untouched'
+            }
         }
     }
     if ($null -ne $preserved) {
         Write-Warning ('Failed preview state preserved under protected ' + $preserved)
     }
-    throw
+    throw ('Preview install denied without activation: ' + $originalError)
 }
