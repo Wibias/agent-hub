@@ -4,11 +4,13 @@ on:
   pull_request:
     paths:
       - 'memory-engine/authority-host/windows/MemoryReviewAuthority.LabService/**'
+      - 'memory-engine/authority-host/windows/MemoryReviewAuthority.AccessProbe/**'
       - '.github/workflows/verify-memory-review-localservice-lab.yml'
   push:
     branches: [main]
     paths:
       - 'memory-engine/authority-host/windows/MemoryReviewAuthority.LabService/**'
+      - 'memory-engine/authority-host/windows/MemoryReviewAuthority.AccessProbe/**'
       - '.github/workflows/verify-memory-review-localservice-lab.yml'
   workflow_dispatch:
 
@@ -47,8 +49,17 @@ jobs:
           dotnet publish $project -c Release --runtime win-x64 --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=false --output $target
           if ($LASTEXITCODE -ne 0) { throw "publish failed" }
           "MEMORY_REVIEW_LAB_EXE=$target/MemoryReviewAuthority.LabService.exe" >> $env:GITHUB_ENV
+      - name: Publish same-account nonadmin token access probe (runner only)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $project = 'memory-engine/authority-host/windows/MemoryReviewAuthority.AccessProbe/MemoryReviewAuthority.AccessProbe.csproj'
+          $target = Join-Path $env:RUNNER_TEMP 'agenthub-review-access-probe'
+          dotnet publish $project -c Release --runtime win-x64 --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=false --output $target
+          if ($LASTEXITCODE -ne 0) { throw "access probe build failed" }
+          "MEMORY_REVIEW_ACCESS_PROBE_EXE=$target/MemoryReviewAuthority.AccessProbe.exe" >> $env:GITHUB_ENV
       - name: Ephemeral restricted LocalService SCM startup and cleanup
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          ./memory-engine/authority-host/windows/MemoryReviewAuthority.LabService/test-lab-service.ps1 -PublishedExe $env:MEMORY_REVIEW_LAB_EXE
+          ./memory-engine/authority-host/windows/MemoryReviewAuthority.LabService/test-lab-service.ps1 -PublishedExe $env:MEMORY_REVIEW_LAB_EXE -AccessProbeExe $env:MEMORY_REVIEW_ACCESS_PROBE_EXE
