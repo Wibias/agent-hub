@@ -8,6 +8,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+$repoRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..\..\..\..')).Path
 if ($env:GITHUB_ACTIONS -ne 'true' -or $env:RUNNER_OS -ne 'Windows' -or
     [string]::IsNullOrWhiteSpace($env:RUNNER_TEMP)) {
     throw 'SCM lab is permitted only on an ephemeral Windows GitHub runner'
@@ -20,10 +21,13 @@ if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) { throw 'published exe mi
 if ($LASTEXITCODE -eq 0) { throw 'service already exists: refuse to touch it' }
 
 $stateRoot = Join-Path $env:ProgramData 'AgentHubMemoryReviewLab-State'
-if (Test-Path -LiteralPath $stateRoot) {
-    throw 'preexisting state directory: refuse to touch it'
+$publicRoot = Join-Path $env:ProgramData 'AgentHubMemoryReviewLab-Public'
+if ((Test-Path -LiteralPath $stateRoot) -or
+    (Test-Path -LiteralPath $publicRoot)) {
+    throw 'preexisting lab state or admin-public-key directory: refuse to touch it'
 }
 $root = Join-Path $env:ProgramData ("AgentHubMemoryReviewLab-" + [guid]::NewGuid().ToString('N'))
+$labGitRoot = Join-Path $env:RUNNER_TEMP ("AgentHubProtectedReadRepo-" + [guid]::NewGuid().ToString('N'))
 $target = Join-Path $root 'MemoryReviewAuthority.LabService.exe'
 $created = $false
 try {
@@ -201,7 +205,7 @@ try {
     if (-not (Test-Path -LiteralPath $ledgerPath -PathType Leaf) -or
         ((Get-Item -LiteralPath $ledgerPath).Length -lt 4096) -or
         -not (Test-Path -LiteralPath $ledgerMarker -PathType Leaf) -or
-        ((Get-Content -LiteralPath $ledgerMarker -Raw) -ne 'PENDING_ONLY_NO_AUTHORIZATION')) {
+        ((Get-Content -LiteralPath $ledgerMarker -Raw) -ne 'SYNTHETIC_PROTECTED_CLAIM_NO_HUMAN_APPROVAL')) {
         throw 'service-owned pending-only SQLite ledger missing or incomplete'
     }
     $stateFiles = @(Get-ChildItem -LiteralPath $stateRoot -File)
@@ -225,7 +229,167 @@ try {
     $accessProbe = (Resolve-Path -LiteralPath $AccessProbeExe).Path
     & $accessProbe $stateRoot
     if ($LASTEXITCODE -ne 0) { throw 'same-account nonadmin SQLite access denial failed' }
-    Write-Host 'PASS: restricted LocalService wrote a pending-only WAL SQLite ledger under exact service-SID ACL; NO_IPC NO_CLAIMS'
+    # Publish ONLY the service-generated public key under a separate
+    # Administrators-owned directory. Ordinary users may read this key but
+    # cannot replace it with a forged same-account pipe server identity.
+    $sourcePin = Join-Path $stateRoot 'review-service-signing-key.pub.pem'
+    for ($attempt=0; $attempt -lt 30; $attempt++) {
+        if (Test-Path -LiteralPath $sourcePin -PathType Leaf) { break }
+        Start-Sleep -Milliseconds 150
+    }
+    if (-not (Test-Path -LiteralPath $sourcePin -PathType Leaf)) {
+        throw 'protected signing public key was not generated'
+    }
+    $privateKey = Join-Path $stateRoot 'review-service-signing-key.pk8'
+    if (-not (Test-Path -LiteralPath $privateKey -PathType Leaf)) {
+        throw 'protected signing private key was not generated'
+    }
+    New-Item -ItemType Directory -Path $publicRoot | Out-Null
+    $publicAcl = Get-Acl -LiteralPath $publicRoot
+    $publicAcl.SetAccessRuleProtection($true, $false)
+    $publicAcl.SetOwner([System.Security.Principal.SecurityIdentifier]::new('S-1-5-32-544'))
+    $publicAcl.Access | ForEach-Object { [void]$publicAcl.RemoveAccessRuleSpecific($_) }
+    foreach ($grant in @(
+        @('S-1-5-18', [System.Security.AccessControl.FileSystemRights]::FullControl),
+        @('S-1-5-32-544', [System.Security.AccessControl.FileSystemRights]::FullControl),
+        @('S-1-5-32-545', [System.Security.AccessControl.FileSystemRights]::ReadAndExecute)
+    )) {
+        $sid = [System.Security.Principal.SecurityIdentifier]::new($grant[0])
+        $publicAcl.AddAccessRule(
+            [System.Security.AccessControl.FileSystemAccessRule]::new(
+                $sid, $grant[1], $inherit, $propagate, $allow))
+    }
+    Set-Acl -LiteralPath $publicRoot -AclObject $publicAcl
+    $publishedPin = Join-Path $publicRoot 'review-service-signing-key.pub.pem'
+    Copy-Item -LiteralPath $sourcePin -Destination $publishedPin
+    # Force owner and DACL on the copied file (do not trust Copy-Item to
+    # inherit the destination directory security on all runner versions).
+    $pinAcl = Get-Acl -LiteralPath $publishedPin
+    $pinAcl.SetAccessRuleProtection($true, $false)
+    $pinAcl.SetOwner([System.Security.Principal.SecurityIdentifier]::new('S-1-5-32-544'))
+    $pinAcl.Access | ForEach-Object { [void]$pinAcl.RemoveAccessRuleSpecific($_) }
+    foreach ($grant in @(
+        @('S-1-5-18', [System.Security.AccessControl.FileSystemRights]::FullControl),
+        @('S-1-5-32-544', [System.Security.AccessControl.FileSystemRights]::FullControl),
+        @('S-1-5-32-545', [System.Security.AccessControl.FileSystemRights]::ReadAndExecute)
+    )) {
+        $sid = [System.Security.Principal.SecurityIdentifier]::new($grant[0])
+        $pinAcl.AddAccessRule([System.Security.AccessControl.FileSystemAccessRule]::new(
+            $sid, $grant[1], $allow))
+    }
+    Set-Acl -LiteralPath $publishedPin -AclObject $pinAcl
+    $actualPin = Get-Acl -LiteralPath $publishedPin
+    if (-not $actualPin.AreAccessRulesProtected -or
+        $actualPin.GetOwner([System.Security.Principal.SecurityIdentifier]).Value -ne 'S-1-5-32-544') {
+        throw 'published service identity pin has an unsafe ACL or owner'
+    }
+    foreach ($ace in $actualPin.Access) {
+        $sid = $ace.IdentityReference.Translate(
+            [System.Security.Principal.SecurityIdentifier]).Value
+        if ($sid -notin @('S-1-5-18','S-1-5-32-544','S-1-5-32-545')) {
+            throw 'published identity pin has an unexpected access rule'
+        }
+        if ($sid -eq 'S-1-5-32-545' -and
+            (($ace.FileSystemRights -band [System.Security.AccessControl.FileSystemRights]::WriteData) -ne 0)) {
+            throw 'ordinary users can replace the service identity pin'
+        }
+    }
+
+    $probeScript = Join-Path $repoRoot 'scripts/probe-protected-memory-lab.mjs'
+    # Resolve script path from GitHub checkout, never from service IPC input.
+    if (-not (Test-Path -LiteralPath $probeScript -PathType Leaf)) {
+        throw 'repository read probe not present'
+    }
+    $goodJson = & node $probeScript --pin $publishedPin
+    if ($LASTEXITCODE -ne 0) { throw 'signed service read failed' }
+    $good = $goodJson | ConvertFrom-Json
+    if ($good.status -ne 'found_lab_only' -or
+        -not $good.signed_response_verified -or
+        $good.trusted_for_production_recall -or
+        $good.real_human_approval_verified -or
+        @($good.items).Count -ne 1 -or
+        $good.items[0].value -ne 'Synthetic non-authorizing lab fact') {
+        throw 'verified protected read had incorrect content or authority flags'
+    }
+    $forgedPin = Join-Path $env:RUNNER_TEMP 'agenthub-review-forged-key.pem'
+    Set-Content -LiteralPath $forgedPin -Value 'not-a-valid-public-key'
+    $forgedJson = & node $probeScript --pin $forgedPin
+    $forgedExit = $LASTEXITCODE
+    $forged = $forgedJson | ConvertFrom-Json
+    if ($forgedExit -ne 2 -or
+        $forged.status -ne 'protected_lab_read_unverified' -or
+        @($forged.items).Count -ne 0) {
+        throw 'forged signing key was not rejected closed'
+    }
+    # Exercise the exact EXISTING memory_recall MCP tool, not a separate
+    # diagnostic interface. Server mode is explicitly lab-only. The project
+    # is selected from actual process cwd + Git identity + enrolled root.
+    New-Item -ItemType Directory -Path $labGitRoot | Out-Null
+    & git -C $labGitRoot init -b main | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw 'temporary lab git init failed' }
+    & git -C $labGitRoot config user.email 'signed-lab@example.invalid'
+    & git -C $labGitRoot config user.name 'Signed Lab Test'
+    & git -C $labGitRoot config commit.gpgsign false
+    & git -C $labGitRoot remote add origin 'https://github.com/example/lab-fixture.git'
+    Set-Content -LiteralPath (Join-Path $labGitRoot 'README.md') -Value 'synthetic SCM signed read only'
+    & git -C $labGitRoot add README.md
+    & git -C $labGitRoot commit -m fixture | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw 'temporary lab git commit failed' }
+    $scopePath = Join-Path $labGitRoot 'test-scope.json'
+    @{
+        schema = 1
+        memory_db = (Join-Path $labGitRoot 'not-used-for-protected-read.sqlite3')
+        projects = @(@{
+            root = $labGitRoot
+            project_id = 'github.com/example/lab-fixture'
+            repo_identity = 'github.com/example/lab-fixture'
+        })
+    } | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $scopePath
+    $mcpScript = Join-Path $repoRoot 'scripts/run-codex-memory-mcp.mjs'
+    $rpc = '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"memory_recall","arguments":{"query":"Synthetic non-authorizing lab fact","max_items":3}}}'
+    Push-Location -LiteralPath $labGitRoot
+    try {
+        $rpcResponse = $rpc | & node $mcpScript --lab-protected-read --scope $scopePath --pin $publishedPin
+        $rpcExit = $LASTEXITCODE
+    } finally { Pop-Location }
+    if ($rpcExit -ne 0) { throw 'actual protected Codex MCP read failed' }
+    $mcp = $rpcResponse | ConvertFrom-Json
+    if ($mcp.result.isError -or @($mcp.result.content).Count -ne 1) {
+        throw 'signed lab read failed in existing MCP dispatcher'
+    }
+    $memory = $mcp.result.content[0].text | ConvertFrom-Json
+    if ($memory.status -ne 'found_lab_only' -or
+        -not $memory.signed_response_verified -or
+        $memory.trusted_for_production_recall -or
+        @($memory.items).Count -ne 1 -or
+        $memory.items[0].value -ne 'Synthetic non-authorizing lab fact') {
+        throw 'Codex MCP returned wrong or unverified protected lab Claim'
+    }
+
+    # A model cannot choose another source, root, database or pin as an MCP
+    # argument. These are pinned by the host at startup.
+    $badRpc = '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"memory_recall","arguments":{"query":"Synthetic","projectId":"github.com/other/repo"}}}'
+    Push-Location -LiteralPath $labGitRoot
+    try { $badResponse = $badRpc | & node $mcpScript --lab-protected-read --scope $scopePath --pin $publishedPin }
+    finally { Pop-Location }
+    $badTool = (($badResponse | ConvertFrom-Json).result.content[0].text) | ConvertFrom-Json
+    if ($badTool.status -ne 'forbidden_argument') {
+        throw 'model could override signed read scope'
+    }
+
+    # Same MCP binary from an unapproved cwd must fail BEFORE it tries to
+    # fetch any protected Claim or trusts a fake caller project ID.
+    Push-Location -LiteralPath $repoRoot
+    try { $denyResponse = $rpc | & node $mcpScript --lab-protected-read --scope $scopePath --pin $publishedPin }
+    finally { Pop-Location }
+    $denied = (($denyResponse | ConvertFrom-Json).result.content[0].text) | ConvertFrom-Json
+    if ($denied.status -ne 'project_not_approved' -or @($denied.items).Count -ne 0) {
+        throw 'unapproved Git checkout reached protected Claim read'
+    }
+    Write-Host 'PASS: existing Codex MCP memory_recall sees exactly one signed, synthetic SCM Claim; wrong cwd/model args deny'
+    Write-Host 'PASS: SCM restricted service signed one synthetic protected Claim; Node verified Admin-pinned service origin, one nonce, and strict scope'
+    Write-Host 'PASS: forged pin rejected; NO REAL USER APPROVAL, NO PRODUCTION IPC'
+    Write-Host 'PASS: restricted LocalService protected SQLite ACL and same-account negative access'
 }
 finally {
     if ($created) {
@@ -247,13 +411,22 @@ finally {
         }
         if (-not $gone) { throw 'temporary SCM service was not fully removed' }
     }
+    if (Test-Path -LiteralPath $labGitRoot) {
+        Remove-Item -LiteralPath $labGitRoot -Force -Recurse -ErrorAction Stop
+    }
+    if (Test-Path -LiteralPath $publicRoot) {
+        Remove-Item -LiteralPath $publicRoot -Force -Recurse -ErrorAction Stop
+    }
     if (Test-Path -LiteralPath $stateRoot) {
         Remove-Item -LiteralPath $stateRoot -Force -Recurse -ErrorAction Stop
     }
     if (Test-Path -LiteralPath $root) {
         Remove-Item -LiteralPath $root -Force -Recurse -ErrorAction Stop
     }
-    if ((Test-Path -LiteralPath $stateRoot) -or (Test-Path -LiteralPath $root)) {
+    if ((Test-Path -LiteralPath $stateRoot) -or
+        (Test-Path -LiteralPath $publicRoot) -or
+        (Test-Path -LiteralPath $labGitRoot) -or
+        (Test-Path -LiteralPath $root)) {
         throw 'temporary state or executable directory still exists'
     }
     Write-Host 'PASS: ephemeral SCM service, service-SID state and executable directory removed'

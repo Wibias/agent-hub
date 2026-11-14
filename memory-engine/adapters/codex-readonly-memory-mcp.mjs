@@ -199,7 +199,7 @@ export function createCodexMemoryMcpDispatcher({ cwd, env = process.env, recall 
       }, true));
     }
     try {
-      const data = recall({ cwd, env, query: args.query, maxItems });
+      const data = await recall({ cwd, env, query: args.query, maxItems });
       // A safe error result returned by the global reader must also be an MCP
       // error, not a successful tool call carrying a failed status.
       return rpc(id, toolResult(data, data?.status === 'memory_read_failed'));

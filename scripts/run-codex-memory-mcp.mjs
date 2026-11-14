@@ -2,6 +2,7 @@
 import { isAbsolute, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { serveCodexMemoryMcp } from '../memory-engine/adapters/codex-readonly-memory-mcp.mjs';
+import { readScopedProtectedLabMemory } from '../memory-engine/adapters/codex-protected-claim-pipe.mjs';
 import {
   defaultGlobalMemoryScopePath, readGlobalCodexMemory,
 } from '../memory-engine/adapters/codex-global-memory-scope.mjs';
@@ -23,7 +24,15 @@ export function parseMemoryMcpArgs(argv) {
     return { mode: 'global_scoped',
       scopePath: argv.length === 3 ? resolve(argv[2]) : defaultGlobalMemoryScopePath() };
   }
-  throw new Error('Usage: node scripts/run-codex-memory-mcp.mjs --global [--scope ABSOLUTE_SCOPE_FILE] OR --cwd ABSOLUTE_PROJECT_PATH');
+  if (Array.isArray(argv) && argv.length === 5
+    && argv[0] === '--lab-protected-read'
+    && argv[1] === '--scope' && typeof argv[2] === 'string'
+    && isAbsolute(argv[2]) && argv[3] === '--pin'
+    && typeof argv[4] === 'string' && isAbsolute(argv[4])) {
+    return { mode: 'protected_lab_read', scopePath: resolve(argv[2]),
+      pinPath: resolve(argv[4]) };
+  }
+  throw new Error('Usage: --global [--scope ABS_SCOPE] OR --cwd ABS_REPO OR --lab-protected-read --scope ABS_SCOPE --pin ABS_ADMIN_PIN');
 }
 
 export async function runMemoryMcp(args, {
@@ -32,6 +41,15 @@ export async function runMemoryMcp(args, {
   const opts = parseMemoryMcpArgs(args);
   if (opts.mode === 'pinned_project') {
     return serveCodexMemoryMcp({ cwd: opts.cwd, input, output });
+  }
+  if (opts.mode === 'protected_lab_read') {
+    return serveCodexMemoryMcp({
+      cwd: hostCwd, input, output, env: {},
+      recall: ({ cwd, query, maxItems }) => readScopedProtectedLabMemory({
+        cwd, query, maxItems,
+        scopePath: opts.scopePath, pinPath: opts.pinPath,
+      }),
+    });
   }
   return serveCodexMemoryMcp({
     cwd: hostCwd, input, output, env: {},
