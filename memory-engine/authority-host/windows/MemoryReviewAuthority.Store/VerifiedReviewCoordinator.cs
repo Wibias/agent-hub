@@ -131,7 +131,7 @@ public sealed class VerifiedReviewCoordinator
     }
 }
 
-/// <summary>Never a signed portable approval or canonical Claim.</summary>
+/// <summary>Process-local result, never a transferable approval token. ClaimWritten\n/// applies only to the opt-in protected ledger, not canonical user SQLite.</summary>
 public sealed record VerifiedReviewCompletion(
     bool Verified,
     string Status,
