@@ -2,6 +2,10 @@ import { createHash, createPublicKey, randomBytes, verify } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { createConnection } from 'node:net';
 import { isAbsolute } from 'node:path';
+import { resolveGitContext } from '../git-freshness.mjs';
+import {
+  loadGlobalMemoryScope, describeGlobalMemoryProject, samePath,
+} from './codex-global-memory-scope.mjs';
 
 export const PROTECTED_LAB_PIPE = '\\\\.\\pipe\\AgentHubMemoryReviewLab-ReadV1';
 export const PROTECTED_LAB_PROTOCOL = 'agenthub-protected-lab-read-v1';
@@ -126,4 +130,57 @@ export async function requestProtectedLabClaims({
     envelope: JSON.parse(text), pinnedPublicKeyPem, expectedNonce: nonce,
     projectId, branch,
   });
+}
+
+/**
+ * An explicitly opt-in lab-only implementation of the EXISTING memory_recall
+ * tool. The global Codex project scope is still resolved from the actual
+ * process CWD, never MCP tool input. No canonical SQLite fallback on errors.
+ *
+ * A signed synthetic result is not a human-approved Memory Claim and MUST
+ * NOT enter production recall or automatic decision-making.
+ */
+export async function readScopedProtectedLabMemory({
+  cwd, scopePath, pinPath, query, maxItems = 5,
+  describe = describeGlobalMemoryProject,
+  scopeLoader = loadGlobalMemoryScope,
+  gitResolver = resolveGitContext,
+  request = requestProtectedLabClaims,
+} = {}) {
+  const denied = (status) => Object.freeze({
+    status, items: [], read_only: true,
+    real_human_approval_verified: false,
+    trusted_for_production_recall: false,
+  });
+  if (typeof cwd !== 'string' || !isAbsolute(cwd)
+      || typeof scopePath !== 'string' || !isAbsolute(scopePath)
+      || typeof pinPath !== 'string' || !isAbsolute(pinPath))
+    return denied('protected_lab_invalid_scope');
+  if (typeof query !== 'string' || query.length < 1 || query.length > 500
+      || !Number.isInteger(maxItems) || maxItems < 1 || maxItems > 10)
+    return denied('invalid_tool_input');
+
+  let manifest, current, git;
+  try {
+    manifest = scopeLoader(scopePath);
+    if (!manifest) return denied('scope_not_configured');
+    current = describe({ cwd });
+    const enrolled = manifest.projects.find(p => samePath(p.root, current.root));
+    if (!enrolled) return denied('project_not_approved');
+    if (current.project_id !== enrolled.project_id
+        || current.repo_identity !== enrolled.repo_identity)
+      return denied('project_identity_changed');
+    git = gitResolver({ cwd: current.root });
+  } catch { return denied('project_context_unavailable'); }
+  if (current.project_id !== PROTECTED_LAB_PROJECT
+      || git.branch !== PROTECTED_LAB_BRANCH)
+    return denied('protected_lab_scope_not_enrolled');
+  try {
+    return await request({
+      projectId: current.project_id, branch: git.branch,
+      query, maxItems, pinPath,
+    });
+  } catch {
+    return denied('protected_lab_read_unverified');
+  }
 }
