@@ -29,6 +29,9 @@ internal static class Program
                 return 2;
             }
 
+            if (args.Length == 1 && args[0] == "--service-smoke")
+                return OperatorSelfTest.RunServiceOffer();
+
             ApplicationConfiguration.Initialize();
             Application.Run(new OperatorReviewWindow());
             return 0;
