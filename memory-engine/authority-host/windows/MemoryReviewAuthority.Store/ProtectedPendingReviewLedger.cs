@@ -103,6 +103,7 @@ public sealed partial class ProtectedPendingReviewLedger : IDisposable
                 schema.ExecuteNonQuery();
             }
             InitializeVerifiedReviewSchema(connection);
+            InitializeProtectedClaimSchema(connection);
             return new ProtectedPendingReviewLedger(connection);
         }
         catch

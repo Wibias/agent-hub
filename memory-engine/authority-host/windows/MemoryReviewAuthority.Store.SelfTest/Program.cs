@@ -35,7 +35,13 @@ internal static class Program
         Run("bad_assertion_consumes_ticket_without_intent", BadAssertionConsumes);
         Run("verified_intent_survives_restart_once_only", VerifiedRestart);
         Run("second_coordinator_cannot_reuse_completed_proposal", CompetingCoordinators);
-        Console.WriteLine($"MEMORY_REVIEW_LEDGER PASS {_passed}/14; NO_CLAIM_WRITES");
+        Run("protected_confirm_claim_and_scoped_read_persist_reopen", ProtectedConfirm);
+        Run("protected_rejection_never_creates_claim", ProtectedReject);
+        Run("protected_write_requires_independent_trusted_source", SourceRequired);
+        Run("protected_write_rejects_stale_and_targeted_source", SourceMismatch);
+        Run("protected_duplicate_rolls_back_uv_intent_and_claim", DuplicateRollback);
+        Run("protected_competing_tickets_commit_only_once", ProtectedRace);
+        Console.WriteLine($"MEMORY_REVIEW_LEDGER PASS {_passed}/20; PROTECTED_CLAIMS_ONLY SYNTHETIC_NO_IPC");
     }
 
     private static void Run(string label, Action test)
@@ -303,6 +309,191 @@ internal static class Program
         Check(firstStore.CountPending() == 0);
         Check(secondStore.ReadVerifiedIntent(Example.ProjectId, Example.Branch, Example.ProposalRef)
             is not null);
+    }
+
+
+    private static TrustedReviewSource SourceFor(PendingReview pending,
+        string relation = "unrelated", string? target = null)
+        => new(pending.ProjectId, pending.Branch, pending.RevisionSha,
+            pending.ProposalRef, pending.ReviewSnapshotSha256,
+            "Synthetic fact", pending.SourceEvidenceSha256, "knowledge",
+            relation, target);
+
+    private static void ProtectedConfirm()
+    {
+        using var key = TestCredential.New();
+        string claimId;
+        string requestId;
+        using (var store = Open())
+        {
+            requestId = store.RecordPending(Example).RequestId;
+            var coordinator = new VerifiedReviewCoordinator(store, key.Pinned,
+                trustedSourceReader: _ => SourceFor(Example));
+            var meaning = MeaningFor(Example);
+            var ticket = coordinator.Begin(meaning);
+            var result = coordinator.CompleteProtected(ticket.TicketId,
+                meaning, key.Sign(ticket));
+            Check(result.Verified && result.ClaimWritten && result.ApprovedClaim);
+            Check(result.Status == "protected_claim_written");
+            Check(result.RequestId == requestId);
+            var claims = store.ReadProtectedClaims(Example.ProjectId, Example.Branch);
+            Check(claims.Count == 1);
+            var claim = claims[0];
+            Check(claim.ClaimId.StartsWith("C~", StringComparison.Ordinal));
+            Check(claim.Value == meaning.CanonicalFact);
+            Check(claim.RequestId == requestId);
+            Check(claim.SourceEvidenceSha256 == Example.SourceEvidenceSha256);
+            Check(claim.PolicyVersion == ProtectedPendingReviewLedger.ProtectedClaimPolicyVersion);
+            Check(claim.Kind == "knowledge");
+            claimId = claim.ClaimId;
+            Check(store.CountPending() == 0);
+            Check(store.ReadProtectedClaims("github.com/other/repo", Example.Branch).Count == 0);
+            Check(store.ReadProtectedClaims(Example.ProjectId, "other").Count == 0);
+            Check(!coordinator.CompleteProtected(ticket.TicketId, meaning,
+                key.Sign(ticket)).Verified);
+            Throws<ArgumentException>(() =>
+                store.ReadProtectedClaims(Example.ProjectId, Example.Branch, 101));
+        }
+        using (var reopened = Open())
+        {
+            var claims = reopened.ReadProtectedClaims(Example.ProjectId, Example.Branch);
+            Check(claims.Count == 1);
+            Check(claims[0].ClaimId == claimId);
+            Check(claims[0].RequestId == requestId);
+            Check(reopened.ReadVerifiedIntent(Example.ProjectId,
+                Example.Branch, Example.ProposalRef)?.Disposition
+                == ProtectedPendingReviewLedger.ConfirmDisposition);
+            Throws<InvalidOperationException>(() => reopened.RecordPending(Example));
+        }
+    }
+
+    private static void ProtectedReject()
+    {
+        using var store = Open();
+        using var key = TestCredential.New();
+        var proposal = Example with { RequestedAction = "reject" };
+        store.RecordPending(proposal);
+        // Reject even a targeted relationship; this must never write a Claim.
+        var coordinator = new VerifiedReviewCoordinator(store, key.Pinned,
+            trustedSourceReader: _ => SourceFor(proposal, "contradict", "foreign-claim"));
+        var meaning = MeaningFor(proposal);
+        var ticket = coordinator.Begin(meaning);
+        var result = coordinator.CompleteProtected(ticket.TicketId, meaning, key.Sign(ticket));
+        Check(result.Verified && !result.ClaimWritten && !result.ApprovedClaim);
+        Check(result.Status == "verified_rejection_no_claim");
+        Check(result.Disposition == ProtectedPendingReviewLedger.RejectDisposition);
+        Check(store.ReadProtectedClaims(proposal.ProjectId, proposal.Branch).Count == 0);
+        Check(store.CountPending() == 0);
+    }
+
+    private static void SourceRequired()
+    {
+        using var store = Open();
+        using var key = TestCredential.New();
+        store.RecordPending(Example);
+        var meaning = MeaningFor(Example);
+        var withoutSource = new VerifiedReviewCoordinator(store, key.Pinned);
+        var ticket = withoutSource.Begin(meaning);
+        var result = withoutSource.CompleteProtected(ticket.TicketId,
+            meaning, key.Sign(ticket));
+        Check(!result.Verified && result.Status == "trusted_review_source_not_configured");
+        Check(!withoutSource.CompleteProtected(ticket.TicketId,
+            meaning, key.Sign(ticket)).Verified);
+        var unavailable = new VerifiedReviewCoordinator(store, key.Pinned,
+            trustedSourceReader: _ => null);
+        var another = unavailable.Begin(meaning);
+        var denied = unavailable.CompleteProtected(another.TicketId,
+            meaning, key.Sign(another));
+        Check(!denied.Verified && denied.Status == "trusted_review_source_not_found");
+        Check(store.CountPending() == 1);
+        Check(store.ReadProtectedClaims(Example.ProjectId, Example.Branch).Count == 0);
+        Check(store.ReadVerifiedIntent(Example.ProjectId, Example.Branch,
+            Example.ProposalRef) is null);
+    }
+
+    private static void SourceMismatch()
+    {
+        using var store = Open();
+        using var key = TestCredential.New();
+        store.RecordPending(Example);
+        var source = SourceFor(Example);
+        var changes = new[]
+        {
+            source with { CanonicalFact = "Tampered fact" },
+            source with { SourceEvidenceSha256 = new string('e', 64) },
+            source with { RevisionSha = new string('c', 40) },
+            source with { ReviewSnapshotSha256 = new string('c', 64) },
+            source with { ProjectId = "github.com/foreign/repo" },
+            source with { Kind = "arbitrary" },
+            source with { Relation = "update", RelatedClaimId = "existing" },
+        };
+        var meaning = MeaningFor(Example);
+        foreach (var candidate in changes)
+        {
+            var coordinator = new VerifiedReviewCoordinator(store, key.Pinned,
+                trustedSourceReader: _ => candidate);
+            var ticket = coordinator.Begin(meaning);
+            var result = coordinator.CompleteProtected(ticket.TicketId,
+                meaning, key.Sign(ticket));
+            Check(!result.Verified);
+            Check(result.Status == "protected_review_scope_or_commit_denied");
+        }
+        Check(store.CountPending() == 1);
+        Check(store.ReadProtectedClaims(Example.ProjectId, Example.Branch).Count == 0);
+        Check(store.ReadVerifiedIntent(Example.ProjectId, Example.Branch,
+            Example.ProposalRef) is null);
+    }
+
+    private static void DuplicateRollback()
+    {
+        using var store = Open();
+        using var key = TestCredential.New();
+        var first = Example;
+        var second = Example with { ProposalRef = "E~9876543210" };
+        store.RecordPending(first);
+        store.RecordPending(second);
+        var firstCoordinator = new VerifiedReviewCoordinator(store, key.Pinned,
+            trustedSourceReader: _ => SourceFor(first));
+        var secondCoordinator = new VerifiedReviewCoordinator(store, key.Pinned,
+            trustedSourceReader: _ => SourceFor(second));
+        var firstMeaning = MeaningFor(first);
+        var firstTicket = firstCoordinator.Begin(firstMeaning);
+        Check(firstCoordinator.CompleteProtected(firstTicket.TicketId,
+            firstMeaning, key.Sign(firstTicket)).Verified);
+
+        var secondMeaning = MeaningFor(second);
+        var secondTicket = secondCoordinator.Begin(secondMeaning);
+        var rejected = secondCoordinator.CompleteProtected(secondTicket.TicketId,
+            secondMeaning, key.Sign(secondTicket));
+        Check(!rejected.Verified
+            && rejected.Status == "protected_review_scope_or_commit_denied");
+        Check(store.ReadProtectedClaims(Example.ProjectId, Example.Branch).Count == 1);
+        Check(store.CountPending() == 1);
+        Check(store.ReadVerifiedIntent(second.ProjectId, second.Branch,
+            second.ProposalRef) is null);
+        Check(store.ReadPending(second.ProjectId, second.Branch,
+            second.ProposalRef) is not null);
+    }
+
+    private static void ProtectedRace()
+    {
+        using var firstStore = Open();
+        using var secondStore = Open();
+        using var key = TestCredential.New();
+        firstStore.RecordPending(Example);
+        var first = new VerifiedReviewCoordinator(firstStore, key.Pinned,
+            trustedSourceReader: _ => SourceFor(Example));
+        var second = new VerifiedReviewCoordinator(secondStore, key.Pinned,
+            trustedSourceReader: _ => SourceFor(Example));
+        var meaning = MeaningFor(Example);
+        var firstTicket = first.Begin(meaning);
+        var secondTicket = second.Begin(meaning);
+        Check(first.CompleteProtected(firstTicket.TicketId, meaning,
+            key.Sign(firstTicket)).Verified);
+        Check(!second.CompleteProtected(secondTicket.TicketId, meaning,
+            key.Sign(secondTicket)).Verified);
+        Check(firstStore.ReadProtectedClaims(Example.ProjectId, Example.Branch).Count == 1);
+        Check(secondStore.ReadProtectedClaims(Example.ProjectId, Example.Branch).Count == 1);
     }
 
     private static string Encode(byte[] data)
