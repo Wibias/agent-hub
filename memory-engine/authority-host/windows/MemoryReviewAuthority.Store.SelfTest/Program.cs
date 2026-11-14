@@ -34,7 +34,8 @@ internal static class Program
         Run("exact_scope_and_fact_must_match_pending", StrictReviewScope);
         Run("bad_assertion_consumes_ticket_without_intent", BadAssertionConsumes);
         Run("verified_intent_survives_restart_once_only", VerifiedRestart);
-        Console.WriteLine($"MEMORY_REVIEW_LEDGER PASS {_passed}/13; NO_CLAIM_WRITES");
+        Run("second_coordinator_cannot_reuse_completed_proposal", CompetingCoordinators);
+        Console.WriteLine($"MEMORY_REVIEW_LEDGER PASS {_passed}/14; NO_CLAIM_WRITES");
     }
 
     private static void Run(string label, Action test)
@@ -283,6 +284,25 @@ internal static class Program
         Throws<InvalidOperationException>(() => reopened.RecordPending(Example));
         var second = new VerifiedReviewCoordinator(reopened, key.Pinned);
         Throws<InvalidOperationException>(() => second.Begin(MeaningFor(Example)));
+    }
+
+    private static void CompetingCoordinators()
+    {
+        using var firstStore = Open();
+        using var secondStore = Open();
+        using var key = TestCredential.New();
+        firstStore.RecordPending(Example);
+        var first = new VerifiedReviewCoordinator(firstStore, key.Pinned);
+        var second = new VerifiedReviewCoordinator(secondStore, key.Pinned);
+        var meaning = MeaningFor(Example);
+        var ticketA = first.Begin(meaning);
+        var ticketB = second.Begin(meaning);
+        Check(first.Complete(ticketA.TicketId, meaning, key.Sign(ticketA)).Verified);
+        var blocked = second.Complete(ticketB.TicketId, meaning, key.Sign(ticketB));
+        Check(!blocked.Verified && blocked.Status == "pending_scope_or_commit_denied");
+        Check(firstStore.CountPending() == 0);
+        Check(secondStore.ReadVerifiedIntent(Example.ProjectId, Example.Branch, Example.ProposalRef)
+            is not null);
     }
 
     private static string Encode(byte[] data)
