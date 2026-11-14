@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash, generateKeyPairSync, sign } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
+import { request as httpRequest } from 'node:http';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -30,6 +31,32 @@ const meaning = Object.freeze({
 });
 const origin = 'http://localhost:4317';
 const b64 = input => Buffer.from(input).toString('base64url');
+
+// Connect to loopback 127.0.0.1 while presenting the exact browser RP
+// Host header "localhost". Node fetch may overwrite Host on some platforms.
+async function localRpRequest(port, path, {
+  method = 'GET', origin = null, body = null,
+} = {}) {
+  return new Promise((resolve, reject) => {
+    const headers = { Host: 'localhost:' + port };
+    if (origin !== null) headers.Origin = origin;
+    if (body !== null) headers['Content-Type'] = 'application/json';
+    const req = httpRequest({
+      hostname: '127.0.0.1', port, method, path, headers,
+    }, (res) => {
+      let text = '';
+      res.setEncoding('utf8');
+      res.on('data', chunk => { text += chunk; });
+      res.on('end', () => resolve({
+        status: res.statusCode,
+        json: async () => JSON.parse(text),
+      }));
+    });
+    req.on('error', reject);
+    req.end(body === null ? undefined : JSON.stringify(body));
+  });
+}
+
 
 function harness() {
   const keys = generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
@@ -201,11 +228,10 @@ test('real Console HTTP prepares an actual E~ only in explicitly enabled localho
   server = disabled.server;
   await new Promise(done => server.listen(0, '127.0.0.1', done));
   const disabledPort = server.address().port;
-  const disabledApi = await fetch(
-    'http://127.0.0.1:' + disabledPort + '/api/webauthn-probe/prepare',
-    { headers: { Host: 'localhost:' + disabledPort } },
+  const disabledApi = await localRpRequest(
+    disabledPort, '/api/webauthn-probe/prepare',
   );
-  assert.equal(disabledApi.status, 404);
+  assert.equal(disabledApi.status, 403);
   await new Promise(done => server.close(done));
   server = null;
   const runtime = createMemoryUiServer({
@@ -215,17 +241,13 @@ test('real Console HTTP prepares an actual E~ only in explicitly enabled localho
   server = runtime.server;
   await new Promise(done => server.listen(0, '127.0.0.1', done));
   const port = server.address().port;
-  const base = 'http://127.0.0.1:' + port;
-  const headers = { Host: 'localhost:' + port };
-  const overview = await (await fetch(base + '/api/overview', {
-    headers,
-  })).json();
+  const overview = await (await localRpRequest(port, '/api/overview')).json();
   assert.equal(overview.webauthnProbe.enabled, true);
   const query = new URLSearchParams({
     projectId: meaning.projectId, branch: 'preview',
     proposalRef: ref, decision: 'confirm',
   });
-  const res = await fetch(base + '/api/webauthn-probe/prepare?' + query, { headers });
+  const res = await localRpRequest(port, '/api/webauthn-probe/prepare?' + query);
   assert.equal(res.status, 200);
   const prepared = await res.json();
   assert.equal(prepared.meaning.proposalRef, ref);
@@ -233,14 +255,13 @@ test('real Console HTTP prepares an actual E~ only in explicitly enabled localho
   assert.equal(prepared.meaning.canonicalFact, fact);
   assert.equal(prepared.claimWritten, false);
   assert.equal(prepared.reviewAuthorityEstablished, false);
-  const post = await fetch(base + '/api/webauthn-probe/challenge', {
-    method: 'POST', headers: { ...headers,
-      Origin: 'http://example.invalid:4317', 'Content-Type': 'application/json' },
-    body: JSON.stringify({ sessionId: prepared.sessionId }),
+  const post = await localRpRequest(port, '/api/webauthn-probe/challenge', {
+    method: 'POST', origin: 'http://example.invalid:4317',
+    body: { sessionId: prepared.sessionId },
   });
   assert.equal(post.status, 403);
   git('checkout', '-b', 'wrong-branch');
-  const stale = await fetch(base + '/api/webauthn-probe/prepare?' + query, { headers });
+  const stale = await localRpRequest(port, '/api/webauthn-probe/prepare?' + query);
   assert.equal(stale.status, 409);
   assert.deepEqual(memory.exportCanonical(), initial);
   const unchanged = memoryEvidenceReviewSnapshot({
