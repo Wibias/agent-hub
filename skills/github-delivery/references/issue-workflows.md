@@ -32,6 +32,15 @@ Use when the user asks for a PRD or wants the current conversation turned into p
    - unresolved product decisions that evidence cannot settle.
    If the proposed implementation solves a different problem than the stated outcome, surface that mismatch before encoding it as a requirement. When the user explicitly mandates the implementation, preserve it as a constraint and surface the mismatch or tradeoff rather than silently replacing it.
 3. Identify major modules or contracts likely to change only after the problem statement is grounded.
+   **Conditional capability map:** when one request contains multiple
+   independently testable capabilities (different users/consumers, behaviors,
+   data contracts, or acceptance gates), first record a compact map:
+   `capability -> consumer -> observable behavior -> exclusions -> dependencies
+   -> acceptance evidence`. Name V1 scope and explicitly defer unrelated V2
+   ideas. Use the map to prevent a large all-in-one PRD from hiding independent
+   acceptance and rollout risks. One bounded capability does **not** require
+   a capability map, extra PRD hierarchy or a ritual clarification round.
+   Do not equate a file/module count with a product capability count.
 4. Ask only for high-impact missing decisions, especially test scope.
 5. Produce and publish a PRD with:
    - Problem Statement
@@ -43,6 +52,13 @@ Use when the user asks for a PRD or wants the current conversation turned into p
    - Further Notes
 
 Do not over-interview if the conversation already contains enough context.
+When revising a shipped scope, record a delta (current behavior, new behavior,
+changed acceptance, affected consumers, non-goals) instead of silently
+rewriting the original requirements as though the new feature were always V1.
+
+Source lineage: selective adaptation of Addy Osmani's MIT-licensed
+`spec-driven-development` capability-map and spec-evolution changes,
+`addyosmani/agent-skills@39b723ceebf81474d0557c1fecd01eddab585563`.
 
 ## Issue Breakdown Workflow
 
