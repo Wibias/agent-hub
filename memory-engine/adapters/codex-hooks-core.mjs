@@ -97,6 +97,7 @@ export function isExplicitMemoryCommandAttempt(prompt) {
   return parseExplicitMemoryPrompt(prompt) !== null
     || /^\s*memory\s+candidate\s+(?:reject|confirm)(?=\s|:|$)/i.test(prompt)
     || /^\s*memory\s+(?:inspect|explain|forget|replace)\s*:/i.test(prompt)
+    || /^\s*memory\s+confirm\s+permanent\s+project\s+rule(?:\s|$)/i.test(prompt)
     || /^\s*memory\s*:/i.test(prompt);
 }
 
@@ -106,17 +107,20 @@ export function isExplicitMemoryCommandAttempt(prompt) {
 export function explicitMemoryCommandFailure(event, {
   enabled = false,
 } = {}) {
-  if (enabled !== true
+  if ((enabled !== true && !/^\s*memory\s+confirm\s+permanent\s+project\s+rule(?:\s|$)/i.test(String(event?.prompt ?? '')))
     || event?.hook_event_name !== 'UserPromptSubmit'
     || !isExplicitMemoryCommandAttempt(event?.prompt)) {
     return null;
   }
+  const reservedAtomic = /^\s*memory\s+confirm\s+permanent\s+project\s+rule(?:\s|$)/i.test(event.prompt);
   const valid = parseExplicitMemoryPrompt(event.prompt) !== null;
   return {
     decision: 'block',
-    reason: valid
-      ? 'AgentHub Memory command could not be completed. No change was confirmed. Inspect Memory state before retrying.'
-      : 'Invalid AgentHub Memory command syntax. No operation was performed. Check the command and candidate reference.',
+    reason: reservedAtomic
+      ? 'Atomic project-rule confirmation is not enabled. No Evidence, stage or Claim was created.'
+      : valid
+        ? 'AgentHub Memory command could not be completed. No change was confirmed. Inspect Memory state before retrying.'
+        : 'Invalid AgentHub Memory command syntax. No operation was performed. Check the command and candidate reference.',
   };
 }
 
