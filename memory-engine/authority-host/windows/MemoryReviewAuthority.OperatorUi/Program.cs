@@ -212,6 +212,13 @@ internal sealed class OperatorReviewWindow : Form
             var proposalRef = _reference.Text.Trim();
             var offer = await Task.Run(() =>
                 ProtectedOperatorService.Begin(project, branch, proposalRef));
+            // The user can change selection while the named-pipe call is
+            // pending. Never show or sign a stale service offer under a
+            // different selection typed after the request began.
+            if (_project.Text.Trim() != project
+                || _branch.Text.Trim() != branch
+                || _reference.Text.Trim() != proposalRef)
+                throw new InvalidOperationException("Auswahl während des Ladens geändert");
             if (offer.ExpiresUtc <= DateTimeOffset.UtcNow)
                 throw new InvalidOperationException("Service-Challenge bereits abgelaufen");
             _offer = offer;
@@ -256,6 +263,9 @@ internal sealed class OperatorReviewWindow : Form
         _busy = true;
         _load.Enabled = false;
         _verify.Enabled = false;
+        _project.Enabled = false;
+        _branch.Enabled = false;
+        _reference.Enabled = false;
         _status.Text = "Windows Hello / FIDO2 öffnet. Kein Claim-Write möglich.";
         try
         {
@@ -279,6 +289,9 @@ internal sealed class OperatorReviewWindow : Form
             _acknowledge.Enabled = false;
             _acknowledge.Checked = false;
             _load.Enabled = true;
+            _project.Enabled = true;
+            _branch.Enabled = true;
+            _reference.Enabled = true;
             _busy = false;
             UpdateVerifyEnabled();
         }
