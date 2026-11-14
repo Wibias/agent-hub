@@ -143,11 +143,12 @@ public sealed partial class ProtectedPendingReviewLedger
 
         string kind;
         string fact;
+        string proposalFingerprint;
         using (var query = input.CreateCommand())
         {
             query.Transaction = pinnedRead;
             query.CommandText = """
-                SELECT kind, canonical_fact FROM memory_evidence_proposals
+                SELECT kind, canonical_fact, fingerprint FROM memory_evidence_proposals
                 WHERE id=$id AND project_id=$p AND branch=$b
                   AND status='needs_confirmation';
                 """;
@@ -159,12 +160,47 @@ public sealed partial class ProtectedPendingReviewLedger
                 throw new InvalidOperationException("operator_evidence_changed");
             kind = reader.GetString(0);
             fact = reader.GetString(1);
+            proposalFingerprint = reader.GetString(2);
             if (reader.Read())
                 throw new InvalidOperationException("operator_evidence_duplicate");
         }
         if (kind is not ("knowledge" or "preference")
             || string.IsNullOrWhiteSpace(fact) || fact.Length > 4000)
             throw new InvalidOperationException("operator_fact_kind_unsupported");
+        // Compare with the extraction pipeline's kind + NUL + NFKC/lower
+        // canonical fingerprint, rather than relying on any stored hash.
+        var normalizedFact = System.Text.RegularExpressions.Regex.Replace(
+            fact.Normalize(NormalizationForm.FormKC), @"\s+", " ")
+            .Trim().Normalize(NormalizationForm.FormKC).ToLowerInvariant();
+        if (!Hex(proposalFingerprint, 64)
+            || Sha(kind + "\0" + normalizedFact) != proposalFingerprint)
+            throw new InvalidOperationException("operator_proposal_fingerprint_mismatch");
+
+        // If the original pipeline explicitly targeted an earlier Claim,
+        // it cannot be silently converted into an unrelated Claim merely
+        // because the current active-Claims table is empty.
+        using (var relations = input.CreateCommand())
+        {
+            relations.Transaction = pinnedRead;
+            relations.CommandText = """
+                SELECT 1 FROM sqlite_master WHERE type='table'
+                  AND name='memory_evidence_proposal_relations';
+                """;
+            if (relations.ExecuteScalar() is not null)
+            {
+                using var relation = input.CreateCommand();
+                relation.Transaction = pinnedRead;
+                relation.CommandText = """
+                    SELECT relation, related_claim_id
+                    FROM memory_evidence_proposal_relations WHERE proposal_id=$id;
+                    """;
+                relation.Parameters.AddWithValue("$id", id);
+                using var r = relation.ExecuteReader();
+                if (r.Read() && (r.GetString(0) != "unrelated"
+                    || !r.IsDBNull(1) || r.Read()))
+                    throw new InvalidOperationException("operator_targeted_relation_unsafe");
+            }
+        }
 
         // No automatic update/supersede/contradiction support. When any
         // active Claim is present, the operator must resolve its relation
@@ -244,6 +280,12 @@ public sealed partial class ProtectedPendingReviewLedger
         }).ToArray()));
 
         var factSha = Sha(fact);
+        // Hash the entire protected-copy database in addition to the exact
+        // fact and Evidence rows. Hidden policy/importance/support changes
+        // cannot silently preserve the same pinned snapshot identity.
+        using var sourceStream = File.OpenRead(snapshotPath);
+        var snapshotFileHash = Convert.ToHexString(
+            SHA256.HashData(sourceStream)).ToLowerInvariant();
         var snapshotSha = Sha(JsonSerializer.Serialize(new
         {
             policy = OperatorEvidencePolicy,
@@ -254,6 +296,7 @@ public sealed partial class ProtectedPendingReviewLedger
             sourceProposalId = id,
             factSha,
             evidenceSha,
+            snapshotFileHash,
             kind,
             action = manifest.Decision,
             comparison = "no_active_claims",
