@@ -22,3 +22,14 @@ export function summarizeCodexCandidateProcessExit(result) {
   const hint = codexCandidateFailureCode(result);
   return 'codex candidate judge failed with exit ' + exitCode + ': ' + hint;
 }
+
+/** Normalize spawn exceptions without revealing their messages or paths. */
+export function codexCandidateLaunchFailureCode(error) {
+  if (error?.code === 'ENOENT') return 'executable_not_found';
+  if (error?.code === 'EACCES' || error?.code === 'EPERM') return 'permission_denied';
+  if (error?.code === 'ETIMEDOUT'
+    || /timed out after [0-9]+ms/u.test(String(error?.message ?? ''))) {
+    return 'timeout';
+  }
+  return 'unknown';
+}
