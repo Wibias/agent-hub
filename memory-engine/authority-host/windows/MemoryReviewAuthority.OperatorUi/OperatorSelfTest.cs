@@ -11,6 +11,43 @@ namespace MemoryReviewAuthority.OperatorUi;
 /// </summary>
 internal static class OperatorSelfTest
 {
+    internal static int RunServiceOffer()
+    {
+        try
+        {
+            if (Environment.GetEnvironmentVariable("GITHUB_ACTIONS") != "true"
+                || Environment.GetEnvironmentVariable("RUNNER_OS") != "Windows")
+                return 2;
+            // The source matches the same real canonical fixture exported
+            // from a temporary Git checkout in Windows SCM, NOT a fake fact
+            // supplied to this elevated native UI process.
+            const string id = "actual-canonical-evidence-proposal-id";
+            var proposalHash = Convert.ToHexString(
+                SHA256.HashData(Encoding.UTF8.GetBytes(id))).ToLowerInvariant();
+            var actualRef = "E~" + proposalHash[..10];
+            var offer = ProtectedOperatorService.Begin(
+                "github.com/example/operator-evidence", "main", actualRef);
+            const string expected =
+                "This real-schema E~ proposal has linked Evidence but no human approval.";
+            if (offer.CanonicalFact != expected
+                || offer.ProposalRef != actualRef
+                || offer.SourceOrigin != "operator_pinned_unverified_evidence_v1"
+                || offer.Decision != "confirm"
+                || offer.ExpiresUtc <= DateTimeOffset.UtcNow
+                || offer.CredentialId.Length < 16
+                || offer.Challenge.Length != 43
+                || offer.ExpectedOrigin != "http://localhost:4328")
+                return 2;
+            // The native UI does NOT sign or approve a Claim in this smoke
+            // check. A real operator must click Windows Hello separately.
+            return 0;
+        }
+        catch
+        {
+            return 2;
+        }
+    }
+
     internal static int Run()
     {
         try
