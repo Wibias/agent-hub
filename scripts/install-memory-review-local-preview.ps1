@@ -105,6 +105,15 @@ function Protect-Directory([string]$path, [object[]]$permissions) {
             $allowedWriters += [string]$p[0]
         }
     }
+    if ($env:GITHUB_ACTIONS -eq 'true') {
+        $verifiedDirAcl = Get-Acl -LiteralPath $path
+        if (-not $verifiedDirAcl.AreAccessRulesProtected) {
+            Write-Host ('CI-DACL-DIAG: ' + $path + '; ' +
+                $verifiedDirAcl.GetSecurityDescriptorSddlForm(
+                    [Security.AccessControl.AccessControlSections]::All))
+            Write-Host ('CI-ICACLS-DIAG: ' + ((& (Join-Path $env:WINDIR 'System32/icacls.exe') $path) -join ' | '))
+        }
+    }
     Inspect-Acl $path $allowedWriters
 }
 function Machine-Permissions {
