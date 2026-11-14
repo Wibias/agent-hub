@@ -15,6 +15,7 @@ const state = {
   branch: null,
   selectedClaimId: null,
   selectedCandidateId: null,
+  selectedEvidenceProposalId: null,
   actionToken: null,
   claimActionMode: null,
   reviewRelation: 'unrelated',
@@ -606,6 +607,7 @@ async function reloadCurrentData({
 } = {}) {
   const claimId = preserveClaim ? state.selectedClaimId : null;
   const candidateId = preserveCandidate ? state.selectedCandidateId : null;
+  const evidenceId = preserveCandidate ? state.selectedEvidenceProposalId : null;
   const graphNodeId = state.selectedGraphNodeId;
 
   const overview = await fetchJson('/api/overview');
@@ -624,6 +626,7 @@ async function reloadCurrentData({
     state.graph = null;
     state.selectedClaimId = null;
     state.selectedCandidateId = null;
+    state.selectedEvidenceProposalId = null;
     state.selectedGraphNodeId = null;
     renderProjects();
     renderScopeHeader();
@@ -642,6 +645,7 @@ async function reloadCurrentData({
     state.graph = null;
     state.selectedClaimId = null;
     state.selectedCandidateId = null;
+    state.selectedEvidenceProposalId = null;
     state.selectedGraphNodeId = null;
     renderView();
     return;
@@ -660,6 +664,10 @@ async function reloadCurrentData({
     candidateId
     && state.scope.candidates.some((item) => item.id === candidateId)
   ) ? candidateId : null;
+  state.selectedEvidenceProposalId = (
+    evidenceId
+    && state.scope.evidenceBoundReview?.items?.some((item) => item.id === evidenceId)
+  ) ? evidenceId : null;
 
   state.claim = null;
   if (state.selectedClaimId) {
@@ -1433,6 +1441,81 @@ function reviewableCandidates() {
   return (state.scope?.candidates ?? []).filter((candidate) => candidate.reviewable);
 }
 
+function reviewableEvidenceProposals() {
+  return state.scope?.evidenceBoundReview?.items ?? [];
+}
+
+function evidenceReviewRow(proposal) {
+  return `
+    <button
+      class="review-row evidence-review-row ${proposal.id === state.selectedEvidenceProposalId ? 'is-active' : ''}"
+      data-evidence-proposal="${escapeHtml(proposal.id)}"
+      type="button"
+    >
+      <span class="memory-row-top">
+        <span class="ref">${escapeHtml(proposal.ref)}</span>
+        <span class="authority">Evidence-bound · ${escapeHtml(proposal.kind)}</span>
+      </span>
+      <span class="memory-value">${escapeHtml(proposal.value)}</span>
+      <span class="review-meta">
+        <span class="status-warn">needs confirmation</span>
+        <span>${number(proposal.sourceCount)} source(s)</span>
+        <span>${escapeHtml(proposal.relation?.type || 'unclassified relation')}</span>
+      </span>
+    </button>
+  `;
+}
+
+function renderEvidenceReviewInspector(proposal) {
+  if (!proposal) return '<div class="inspector-empty">No review item selected.</div>';
+  const matched = (state.scope?.memories ?? []).find(
+    (item) => item.ref === proposal.relation?.targetRef,
+  );
+  const relation = proposal.relation ?? {};
+  return `
+    <div class="inspector-scroll">
+      <div class="inspector-head">
+        <div class="inspector-ref">${escapeHtml(proposal.ref)} · Evidence-bound proposal</div>
+        <h2>${escapeHtml(proposal.value)}</h2>
+      </div>
+      <section class="inspect-section">
+        <h3>Proposed memory, not yet approved</h3>
+        ${definition([
+          ['Kind', proposal.kind],
+          ['Status', proposal.status, 'status-warn'],
+          ['Source authority', (proposal.authorities ?? []).join(', ') || 'unknown'],
+          ['Source count', String(proposal.sourceCount)],
+          ['Created', dateTime(proposal.createdAt)],
+          ['Importance', proposal.importance?.decision || 'unknown'],
+          ['Support', proposal.support?.decision || 'unknown'],
+          ['Relation', relation.type || 'unknown'],
+          ['Relation confidence', relation.confidence || 'unknown'],
+          ['Related memory', relation.targetRef || 'none'],
+        ])}
+      </section>
+      ${matched ? `
+        <section class="inspect-section">
+          <h3>Related existing memory</h3>
+          <p class="inspect-value">${escapeHtml(matched.value)}</p>
+          <p class="review-evidence-notice">A judge-suggested relation is not proof of equivalence or an authorized update.</p>
+        </section>
+      ` : ''}
+      <section class="inspect-section">
+        <h3>Why this needs review</h3>
+        <p class="inspect-value">${escapeHtml(proposal.support?.reason || proposal.importance?.reason || relation.reason || 'The evidence-bound pipeline did not authorize automatic promotion.')}</p>
+      </section>
+      <section class="inspect-section">
+        <h3>Approval boundary</h3>
+        <p class="review-evidence-notice">
+          Read-only for now. Candidate Confirm/Reject actions do not apply to evidence-bound proposals.
+          No Claim or lifecycle change can be made from this inspector until an explicit,
+          evidence-linked confirmation protocol is implemented.
+        </p>
+      </section>
+    </div>
+  `;
+}
+
 function reviewTargets(candidate) {
   const memories = (state.scope?.memories ?? []).filter(
     (memory) => memory.state === 'active',
@@ -1585,39 +1668,77 @@ function renderReviewInspector(candidate) {
 
 function renderReview() {
   const candidates = reviewableCandidates();
-  if (
-    !candidates.some((candidate) => candidate.id === state.selectedCandidateId)
-  ) {
+  const evidence = reviewableEvidenceProposals();
+  if (!candidates.some((item) => item.id === state.selectedCandidateId)) {
+    state.selectedCandidateId = null;
+  }
+  if (!evidence.some((item) => item.id === state.selectedEvidenceProposalId)) {
+    state.selectedEvidenceProposalId = null;
+  }
+  if (state.selectedCandidateId === null && state.selectedEvidenceProposalId === null) {
     state.selectedCandidateId = candidates[0]?.id ?? null;
+    state.selectedEvidenceProposalId = state.selectedCandidateId === null
+      ? evidence[0]?.id ?? null : null;
     state.reviewRelation = 'unrelated';
     state.reviewTargetRef = null;
     state.reviewRejectArmed = false;
   }
+  if (state.selectedCandidateId !== null) state.selectedEvidenceProposalId = null;
 
   const selected = candidates.find(
     (candidate) => candidate.id === state.selectedCandidateId,
   ) ?? null;
+  const selectedEvidence = evidence.find(
+    (item) => item.id === state.selectedEvidenceProposalId,
+  ) ?? null;
+  const evidenceStatus = state.scope?.evidenceBoundReview?.status ?? 'not_configured';
 
   el.view.innerHTML = `
     <div class="review-layout">
       <section class="review-list">
         <div class="data-section-head">
-          <h2>Review queue</h2>
+          <h2>Candidate review</h2>
           <span>${number(candidates.length)} actionable</span>
         </div>
         ${candidates.length
           ? candidates.map(reviewCandidateRow).join('')
           : '<div class="empty">No candidates need explicit review.</div>'}
+        <div class="data-section-head review-evidence-head">
+          <h2>Evidence-bound review</h2>
+          <span>${number(evidence.length)} awaiting review · read-only</span>
+        </div>
+        ${evidenceStatus === 'not_configured'
+          ? '<div class="empty">Evidence-bound proposal ledger not available in this database.</div>'
+          : evidence.length
+            ? evidence.map(evidenceReviewRow).join('')
+            : '<div class="empty">No evidence-bound proposals awaiting review.</div>'}
+        ${state.scope?.evidenceBoundReview?.truncated
+          ? '<p class="review-evidence-notice">Showing the 100 newest proposals. Additional proposals are not shown.</p>'
+          : ''}
       </section>
       <aside class="review-inspector">
-        ${renderReviewInspector(selected)}
+        ${selectedEvidence
+          ? renderEvidenceReviewInspector(selectedEvidence)
+          : renderReviewInspector(selected)}
       </aside>
     </div>
   `;
 
+  el.view.querySelectorAll('[data-evidence-proposal]').forEach((button) => {
+    button.addEventListener('click', () => {
+      state.selectedCandidateId = null;
+      state.selectedEvidenceProposalId = button.dataset.evidenceProposal;
+      state.reviewRejectArmed = false;
+      state.actionError = '';
+      state.actionMessage = '';
+      updateUrl();
+      renderReview();
+    });
+  });
   el.view.querySelectorAll('[data-candidate]').forEach((button) => {
     button.addEventListener('click', () => {
       state.selectedCandidateId = button.dataset.candidate;
+      state.selectedEvidenceProposalId = null;
       state.reviewRelation = 'unrelated';
       state.reviewTargetRef = null;
       state.reviewRejectArmed = false;
@@ -1940,6 +2061,7 @@ async function loadScope({
   state.graphLoading = false;
   state.selectedClaimId = null;
   state.selectedCandidateId = null;
+  state.selectedEvidenceProposalId = null;
   state.selectedGraphNodeId = null;
   resetActionState();
   state.search = '';
