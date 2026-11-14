@@ -76,7 +76,7 @@ function Is-Admin {
         [Security.Principal.WindowsIdentity]::GetCurrent())
     return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 }
-function Protect-Directory([string]$path, [object[]]$permissions) {
+function Protect-Directory([string]$path, [Collections.IDictionary]$permissions) {
     New-Item -ItemType Directory -Path $path -ErrorAction Stop | Out-Null
     # Build from an EMPTY DACL. Reusing ProgramData's inherited ACL
     # then deleting individual inherited rules can silently retain the
@@ -87,9 +87,9 @@ function Protect-Directory([string]$path, [object[]]$permissions) {
     $inherit = [Security.AccessControl.InheritanceFlags]'ContainerInherit, ObjectInherit'
     $propagate = [Security.AccessControl.PropagationFlags]::None
     $allow = [Security.AccessControl.AccessControlType]::Allow
-    foreach ($p in $permissions) {
+    foreach ($pair in $permissions.GetEnumerator()) {
         $acl.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new(
-            (SID $p[0]), $p[1], $inherit, $propagate, $allow))
+            (SID ([string]$pair.Key)), $pair.Value, $inherit, $propagate, $allow))
     }
     Set-Acl -LiteralPath $path -AclObject $acl
     # Windows explicitly owns the inheritance control flag. A fresh
@@ -99,10 +99,10 @@ function Protect-Directory([string]$path, [object[]]$permissions) {
     & (Join-Path $env:WINDIR 'System32/icacls.exe') $path '/inheritance:r' | Out-Null
     Require ($LASTEXITCODE -eq 0) 'Cannot disable inherited directory permissions'
     $allowedWriters = @('S-1-5-18','S-1-5-32-544')
-    foreach ($p in $permissions) {
-        if ($p[0] -match '^S-1-5-80-' -and
-            (Has-ChangeRights $p[1])) {
-            $allowedWriters += [string]$p[0]
+    foreach ($pair in $permissions.GetEnumerator()) {
+        if ($pair.Key -match '^S-1-5-80-' -and
+            (Has-ChangeRights $pair.Value)) {
+            $allowedWriters += [string]$pair.Key
         }
     }
     if ($env:GITHUB_ACTIONS -eq 'true') {
@@ -117,15 +117,18 @@ function Protect-Directory([string]$path, [object[]]$permissions) {
     Inspect-Acl $path $allowedWriters
 }
 function Machine-Permissions {
-    return @(
-        ,@('S-1-5-18', [Security.AccessControl.FileSystemRights]::FullControl),
-        ,@('S-1-5-32-544', [Security.AccessControl.FileSystemRights]::FullControl)
-    )
+    # PowerShell functions unwrap nested arrays, silently flattening a
+    # SID/right pair into separate strings. An ordered dictionary avoids
+    # this dangerous positional ACL ambiguity entirely.
+    $p = [ordered]@{}
+    $p['S-1-5-18'] = [Security.AccessControl.FileSystemRights]::FullControl
+    $p['S-1-5-32-544'] = [Security.AccessControl.FileSystemRights]::FullControl
+    return $p
 }
 function Machine-And-ReadPermissions([string]$sid) {
-    $p = @(Machine-Permissions)
-    return @($p + @(,@($sid,
-        [Security.AccessControl.FileSystemRights]::ReadAndExecute)))
+    $p = Machine-Permissions
+    $p[$sid] = [Security.AccessControl.FileSystemRights]::ReadAndExecute
+    return $p
 }
 function Protected-Bootstrap-Required {
     $expected = Join-Path $bootstrap 'install-memory-review-local-preview.ps1'
@@ -177,15 +180,15 @@ function Verify-Copy([string]$src, [string]$target, [string]$expectedHash) {
     Copy-Item -LiteralPath $src -Destination $target -ErrorAction Stop
     Require ((Sha $target) -ceq $expectedHash) 'Source changed during protected copy'
 }
-function Set-File-Acl([string]$path, [object[]]$permissions) {
+function Set-File-Acl([string]$path, [Collections.IDictionary]$permissions) {
     # Use a new, explicitly protected FileSecurity rather than retaining
     # any source-ACL inheritance or owner metadata from user-writable input.
     $acl = [Security.AccessControl.FileSecurity]::new()
     $acl.SetAccessRuleProtection($true,$false)
     $acl.SetOwner((SID 'S-1-5-32-544'))
-    foreach ($p in $permissions) {
+    foreach ($pair in $permissions.GetEnumerator()) {
         $acl.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new(
-            (SID $p[0]), $p[1],
+            (SID ([string]$pair.Key)), $pair.Value,
             [Security.AccessControl.AccessControlType]::Allow))
     }
     Set-Acl -LiteralPath $path -AclObject $acl
@@ -314,8 +317,8 @@ $evidenceDigest = Sha $sourceEvidence
 $manifestDigest = Sha $sourceManifest
 $credentialDigest = Sha $publicCredential
 $serviceMade = $false
-$machine = @(Machine-Permissions)
-$program = @(Machine-And-ReadPermissions 'S-1-5-19')
+$machine = Machine-Permissions
+$program = Machine-And-ReadPermissions 'S-1-5-19'
 try {
     Protect-Directory $root $machine
     Protect-Directory (Join-Path $root 'Service') $program
@@ -343,8 +346,8 @@ try {
         'NT SERVICE',$serviceName).Translate(
         [Security.Principal.SecurityIdentifier]).Value
     Require ($serviceSid.StartsWith('S-1-5-80-')) 'Expected exact service SID'
-    $stateRights = @($machine + @(,@($serviceSid,
-        [Security.AccessControl.FileSystemRights]::Modify)))
+    $stateRights = Machine-Permissions
+    $stateRights[$serviceSid] = [Security.AccessControl.FileSystemRights]::Modify
     Protect-Directory $stateRoot $stateRights
     Verify-Copy $sourceEvidence (Join-Path $stateRoot $stateSource) $evidenceDigest
     Verify-Copy $sourceManifest (Join-Path $stateRoot $stateManifest) $manifestDigest
@@ -364,8 +367,8 @@ try {
     Require ((Test-Path -LiteralPath $sourcePub -PathType Leaf) -and
         (Test-Path -LiteralPath $private -PathType Leaf)) `
         'Restricted LocalService did not generate its own signer'
-    $pubRights = @($machine + @(,@('S-1-5-32-545',
-        [Security.AccessControl.FileSystemRights]::ReadAndExecute)))
+    $pubRights = Machine-Permissions
+    $pubRights['S-1-5-32-545'] = [Security.AccessControl.FileSystemRights]::ReadAndExecute
     Protect-Directory $publicRoot $pubRights
     $pub = Join-Path $publicRoot 'review-service-signing-key.pub.pem'
     Verify-Copy $sourcePub $pub (Sha $sourcePub)
