@@ -15,6 +15,7 @@ public sealed class VerifiedReviewCoordinator
     private readonly ProtectedPendingReviewLedger _ledger;
     private readonly ReviewChallengeCore _challengeCore;
     private readonly PinnedCredential _credential;
+    private readonly bool _operatorProbeOnly;
 
     public VerifiedReviewCoordinator(
         ProtectedPendingReviewLedger ledger,
@@ -24,6 +25,34 @@ public sealed class VerifiedReviewCoordinator
         _ledger = ledger ?? throw new ArgumentNullException(nameof(ledger));
         _credential = credential ?? throw new ArgumentNullException(nameof(credential));
         _challengeCore = challengeCore ?? new ReviewChallengeCore();
+        _operatorProbeOnly = false;
+    }
+
+    private VerifiedReviewCoordinator(ProtectedPendingReviewLedger ledger,
+        PinnedCredential credential, ReviewChallengeCore core, bool operatorProbeOnly)
+    {
+        _ledger = ledger;
+        _credential = credential;
+        _challengeCore = core;
+        _operatorProbeOnly = operatorProbeOnly;
+    }
+
+    /// <summary>
+    /// An operator-probe coordinator can only be constructed using the
+    /// service-owned pin, NOT a caller-supplied PinnedCredential. This is
+    /// still an UNVERIFIED registration, not a human-approved enrollment.
+    /// </summary>
+    public static VerifiedReviewCoordinator ForOperatorCredentialProbe(
+        ProtectedPendingReviewLedger ledger, ReviewChallengeCore? core = null)
+    {
+        if (ledger is null) throw new ArgumentNullException(nameof(ledger));
+        var credential = ledger.ReadOperatorCredential();
+        if (credential is null
+            || credential.EnrollmentState !=
+                ProtectedPendingReviewLedger.OperatorCredentialState)
+            throw new InvalidOperationException("operator_credential_not_enrolled");
+        return new VerifiedReviewCoordinator(ledger, credential.Credential,
+            core ?? new ReviewChallengeCore(), true);
     }
 
     /// <summary>
@@ -34,8 +63,53 @@ public sealed class VerifiedReviewCoordinator
     /// </summary>
     public ChallengeTicket Begin(ReviewMeaning meaning)
     {
+        if (_operatorProbeOnly)
+            throw new InvalidOperationException("operator_probe_has_no_review_authority");
         VerifyPendingMeaning(meaning);
         return _challengeCore.Begin(meaning, _credential);
+    }
+
+    /// <summary>
+    /// A real E~ is displayed from service-owned pending state, and an exact
+    /// WebAuthn challenge is created using the persisted operator credential.
+    /// The caller-facing browser transport does not exist yet, deliberately.
+    /// </summary>
+    public ChallengeTicket BeginOperatorProof(ReviewMeaning meaning)
+    {
+        if (!_operatorProbeOnly)
+            throw new InvalidOperationException("operator_proof_requires_protected_pin");
+        VerifyPendingMeaning(meaning);
+        var source = _ledger.ReadCurrentServiceOwnedSource(meaning);
+        if (source is null)
+            throw new InvalidOperationException("operator_source_not_staged");
+        return _challengeCore.Begin(meaning, _credential);
+    }
+
+    /// <summary>
+    /// Verify a real browser WebAuthn assertion using the protected pinned
+    /// key. Consume the ticket once, persist a monotonic nonzero sign counter
+    /// across restart, but NEVER create an approval intent or protected Claim.
+    /// </summary>
+    public VerifiedReviewCompletion CompleteOperatorProof(
+        string ticketId, ReviewMeaning meaning, BrowserAssertion assertion)
+    {
+        if (!_operatorProbeOnly)
+            return new(false, "operator_proof_requires_protected_pin");
+        var proof = _challengeCore.VerifyAndConsume(ticketId, meaning, assertion);
+        if (!proof.Verified || !proof.UserPresent || !proof.UserVerified)
+            return new(false, proof.Status);
+        try
+        {
+            VerifyPendingMeaning(meaning);
+            _ledger.RecordOperatorCredentialProof(meaning, _credential, proof);
+            return new(true, "operator_webauthn_uv_verified_not_approved",
+                ApprovedClaim: false, ClaimWritten: false);
+        }
+        catch (Exception e) when (e is InvalidOperationException
+            or ArgumentException or SqliteException)
+        {
+            return new(false, "operator_proof_scope_or_counter_denied");
+        }
     }
 
     /// <summary>
@@ -46,6 +120,8 @@ public sealed class VerifiedReviewCoordinator
     public VerifiedReviewCompletion Complete(
         string ticketId, ReviewMeaning meaning, BrowserAssertion assertion)
     {
+        if (_operatorProbeOnly)
+            return new(false, "operator_probe_has_no_review_authority");
         // The core owns its bounded, one-use ticket map. It checks exact
         // equality with the meaning used at Begin; no second unbounded map.
         var proof = _challengeCore.VerifyAndConsume(ticketId, meaning, assertion);
@@ -77,6 +153,8 @@ public sealed class VerifiedReviewCoordinator
     public VerifiedReviewCompletion CompleteProtected(
         string ticketId, ReviewMeaning meaning, BrowserAssertion assertion)
     {
+        if (_operatorProbeOnly)
+            return new(false, "operator_probe_has_no_review_authority");
         // Consume on first attempt, even when no host source is installed or
         // the assertion is invalid. No reusable "approved" token is returned.
         var proof = _challengeCore.VerifyAndConsume(ticketId, meaning, assertion);

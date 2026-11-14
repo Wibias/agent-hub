@@ -101,6 +101,22 @@ internal sealed class ReviewAuthorityLabService : ServiceBase
             File.WriteAllText(Path.Combine(stateDir, "operator-evidence-imported.txt"),
                 "REAL_EVIDENCE_PENDING_NO_CLAIM");
         }
+        // Optional, fixed-name administrator-pinned WebAuthn public key.
+        // Staging does not establish a real identity or approve a Claim.
+        // The lab never issues a browser credential or signs real approvals.
+        if (File.Exists(Path.Combine(stateDir,
+            ProtectedPendingReviewLedger.OperatorCredentialFile)))
+        {
+            var credential = _ledger.StageUnverifiedOperatorCredential();
+            if (credential.CredentialRegistrationTrusted
+                || credential.HumanApprovalVerified
+                || credential.EnrollmentState !=
+                    ProtectedPendingReviewLedger.OperatorCredentialState
+                || _ledger.CountPending() < 1)
+                throw new InvalidOperationException("operator_credential_unexpected_authority");
+            File.WriteAllText(Path.Combine(stateDir, "operator-credential-pinned.txt"),
+                "OPERATOR_CREDENTIAL_UNVERIFIED_NO_APPROVAL");
+        }
         File.WriteAllText(Path.Combine(stateDir, "protected-ledger-ok.txt"),
             "SYNTHETIC_PROTECTED_CLAIM_NO_HUMAN_APPROVAL");
 

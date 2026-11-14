@@ -223,6 +223,13 @@ try {
         throw 'restricted LocalService did not ingest real E~ Evidence without creating a Claim'
     }
     Write-Host 'PASS: real E~ canonical SQLite/Evidence imported by restricted LocalService as PENDING only; NO Claim, NO human approval'
+    $pinnedCredentialMarker = Join-Path $stateRoot 'operator-credential-pinned.txt'
+    if (-not (Test-Path -LiteralPath $pinnedCredentialMarker -PathType Leaf) -or
+        (Get-Content -LiteralPath $pinnedCredentialMarker -Raw) -ne
+            'OPERATOR_CREDENTIAL_UNVERIFIED_NO_APPROVAL') {
+        throw 'restricted LocalService did not persist unverified WebAuthn credential under service SID'
+    }
+    Write-Host 'PASS: restricted LocalService pinned operator ES256 public key as unverified in protected SQLite; no claim or approval'
     $stateFiles = @(Get-ChildItem -LiteralPath $stateRoot -File)
     foreach ($stateFile in $stateFiles) {
         $fileAcl = Get-Acl -LiteralPath $stateFile.FullName

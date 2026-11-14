@@ -11,6 +11,21 @@ const button = $('start-hello');
 const feedback = $('probe-status');
 let prepared = null;
 let busy = false;
+let unverifiedOperatorCredential = null;
+const exportButton = $('export-operator-key');
+
+function pemFromSpki(spki) {
+  const raw = btoa(String.fromCharCode(...new Uint8Array(spki)));
+  return '-----BEGIN PUBLIC KEY-----\n'
+    + (raw.match(/.{1,64}/g) ?? []).join('\n')
+    + '\n-----END PUBLIC KEY-----\n';
+}
+
+function clearExport() {
+  unverifiedOperatorCredential = null;
+  exportButton.hidden = true;
+  exportButton.disabled = true;
+}
 
 function show(message, error = false) {
   feedback.textContent = message;
@@ -127,14 +142,44 @@ async function authenticate(data) {
       || result.protectedApproval !== false || result.claimWritten !== false) {
     throw new Error('WebAuthn-Signatur oder Vorschlag nicht verifiziert. Keine Freigabe.');
   }
-  show('✓ WebAuthn-Bestätigung erfolgreich geprüft. KEIN geschützter Claim geschrieben und KEINE echte Freigabe erteilt.');
+  // This credential is only a PUBLIC candidate. An Administrator-controlled
+  // separate enrollment step still has to verify operator intent, owner/DACL
+  // and key provenance before the protected service may trust anything.
+  unverifiedOperatorCredential = Object.freeze({
+    protocol: 'agenthub-operator-credential-pin-v1',
+    credentialId: encoded(created.rawId),
+    publicKeyPem: pemFromSpki(spki),
+    expectedOrigin: window.location.origin,
+  });
+  exportButton.disabled = false;
+  exportButton.hidden = false;
+  show('✓ WebAuthn-Prüfung erfolgreich. Kein Claim und keine Freigabe. '
+    + 'Optional: Den ÖFFENTLICHEN Schlüssel als unbestätigte Einschreibvorlage exportieren.');
 }
 function enableButton() {
   button.disabled = busy || !$('ack').checked || !scope.projectId
     || !scope.branch || !/^E~[0-9a-f]{10}$/.test(scope.proposalRef ?? '');
 }
+exportButton.addEventListener('click', () => {
+  if (!unverifiedOperatorCredential || busy) return;
+  const content = JSON.stringify(unverifiedOperatorCredential, null, 2) + '\n';
+  const url = URL.createObjectURL(new Blob([content], {
+    type: 'application/json',
+  }));
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = 'operator-webauthn-credential.json';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  show('Öffentlicher Credential-Kandidat exportiert. Das ist KEINE'
+    + ' autorisierte Einschreibung. Nicht automatisch in den Dienst übernehmen.');
+});
+
 button.addEventListener('click', async () => {
   if (busy) return;
+  clearExport();
   busy = true;
   enableButton();
   try {
@@ -161,6 +206,7 @@ $('ack').addEventListener('change', enableButton);
 document.querySelectorAll('input[name="decision"]').forEach(input => {
   input.addEventListener('change', () => {
     prepared = null;
+    clearExport();
     button.textContent = 'Vorschlag laden';
     show('Entscheidung geändert. Bitte den aktuellen Vorschlag neu laden.');
   });

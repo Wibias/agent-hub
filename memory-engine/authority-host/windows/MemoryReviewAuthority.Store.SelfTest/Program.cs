@@ -47,7 +47,11 @@ internal static class Program
         Run("real_evidence_wrong_scope_and_secret_denied", RealEvidenceScopeDenied);
         Run("real_evidence_relation_and_kind_denied", RealEvidenceUnsafeDenied);
         Run("real_evidence_changed_snapshot_denied", RealEvidenceChanged);
-        Console.WriteLine($"MEMORY_REVIEW_LEDGER PASS {_passed}/26; REAL_EVIDENCE_PENDING_NO_AUTHORITY");
+        Run("operator_credential_pinned_uv_real_evidence_no_approval", OperatorPinProof);
+        Run("operator_credential_counter_restart_replay_denied", OperatorCounter);
+        Run("operator_credential_pin_conflict_and_sql_immutability", OperatorPinImmutable);
+        Run("operator_credential_wrong_key_and_generic_approval_denied", OperatorDenied);
+        Console.WriteLine($"MEMORY_REVIEW_LEDGER PASS {_passed}/30; REAL_EVIDENCE_UV_PINNED_NO_APPROVAL");
     }
 
     private static void Run(string label, Action test)
@@ -740,6 +744,159 @@ internal static class Program
         Check(store.ReadProtectedClaims(RealProject, RealBranch).Count == 0);
     }
 
+    private static void WriteOperatorPin(PinnedCredential credential)
+    {
+        File.WriteAllText(Path.Combine(TestDirectory,
+            ProtectedPendingReviewLedger.OperatorCredentialFile),
+            JsonSerializer.Serialize(new
+            {
+                protocol = ProtectedPendingReviewLedger.OperatorCredentialPolicy,
+                credentialId = credential.CredentialIdBase64Url,
+                publicKeyPem = credential.PublicKeyPem,
+                expectedOrigin = credential.ExpectedOrigin,
+            }));
+    }
+
+    private static ReviewMeaning RealReviewMeaning(OperatorEvidenceImport evidence)
+        => new(evidence.ProjectId, evidence.Branch, evidence.RevisionSha,
+            evidence.ProposalRef, evidence.ReviewSnapshotSha256,
+            evidence.CanonicalFactSha256, evidence.RequestedAction,
+            evidence.CanonicalFact);
+
+    private static void OperatorPinProof()
+    {
+        CreateRealEvidenceFixture();
+        using var userCredential = TestCredential.New();
+        WriteOperatorPin(userCredential.Pinned);
+        using (var store = Open())
+        {
+            var evidence = store.ImportOperatorPinnedEvidence();
+            var staged = store.StageUnverifiedOperatorCredential();
+            Check(staged.Credential == userCredential.Pinned
+                && staged.EnrollmentState ==
+                   ProtectedPendingReviewLedger.OperatorCredentialState
+                && !staged.CredentialRegistrationTrusted
+                && !staged.HumanApprovalVerified
+                && staged.LastSignCount == 0);
+            Check(store.StageUnverifiedOperatorCredential() == staged);
+            var coordinator = VerifiedReviewCoordinator.ForOperatorCredentialProbe(store);
+            var meaning = RealReviewMeaning(evidence);
+            var challenge = coordinator.BeginOperatorProof(meaning);
+            var proof = coordinator.CompleteOperatorProof(challenge.TicketId,
+                meaning, userCredential.Sign(challenge));
+            Check(proof.Verified
+                && proof.Status == "operator_webauthn_uv_verified_not_approved"
+                && !proof.ApprovedClaim && !proof.ClaimWritten);
+            Check(store.ReadOperatorCredential()?.LastSignCount == 1);
+            Check(store.CountPending() == 1);
+            Check(store.ReadProtectedClaims(RealProject, RealBranch).Count == 0);
+            Check(store.ReadVerifiedIntent(RealProject, RealBranch, RealERef) is null);
+            Check(!coordinator.CompleteOperatorProof(challenge.TicketId,
+                meaning, userCredential.Sign(challenge)).Verified);
+            Check(!coordinator.CompleteProtected(challenge.TicketId,
+                meaning, userCredential.Sign(challenge)).Verified);
+        }
+        using var reopened = Open();
+        Check(reopened.ReadOperatorCredential()?.Credential == userCredential.Pinned);
+        Check(reopened.ReadOperatorCredential()?.LastSignCount == 1);
+        Check(reopened.CountPending() == 1);
+        Check(reopened.ReadProtectedClaims(RealProject, RealBranch).Count == 0);
+    }
+
+    private static void OperatorCounter()
+    {
+        CreateRealEvidenceFixture();
+        using var userCredential = TestCredential.New();
+        WriteOperatorPin(userCredential.Pinned);
+        using (var store = Open())
+        {
+            var evidence = store.ImportOperatorPinnedEvidence();
+            store.StageUnverifiedOperatorCredential();
+            var coordinator = VerifiedReviewCoordinator.ForOperatorCredentialProbe(store);
+            var meaning = RealReviewMeaning(evidence);
+            var first = coordinator.BeginOperatorProof(meaning);
+            Check(coordinator.CompleteOperatorProof(first.TicketId,
+                meaning, userCredential.Sign(first)).Verified);
+        }
+        using var reopened = Open();
+        var current = reopened.ImportOperatorPinnedEvidence();
+        var other = VerifiedReviewCoordinator.ForOperatorCredentialProbe(reopened);
+        var otherMeaning = RealReviewMeaning(current);
+        var replay = other.BeginOperatorProof(otherMeaning);
+        var denied = other.CompleteOperatorProof(replay.TicketId,
+            otherMeaning, userCredential.Sign(replay, forcedSignCount: 1));
+        Check(!denied.Verified
+            && denied.Status == "operator_proof_scope_or_counter_denied");
+        Check(reopened.ReadOperatorCredential()?.LastSignCount == 1);
+        var fresh = other.BeginOperatorProof(otherMeaning);
+        var allowed = other.CompleteOperatorProof(fresh.TicketId,
+            otherMeaning, userCredential.Sign(fresh, forcedSignCount: 2));
+        Check(allowed.Verified && !allowed.ApprovedClaim && !allowed.ClaimWritten);
+        Check(reopened.ReadOperatorCredential()?.LastSignCount == 2);
+        Check(reopened.CountPending() == 1);
+        Check(reopened.ReadProtectedClaims(RealProject, RealBranch).Count == 0);
+    }
+
+    private static void OperatorPinImmutable()
+    {
+        CreateRealEvidenceFixture();
+        using var original = TestCredential.New();
+        using var replacement = TestCredential.New();
+        WriteOperatorPin(original.Pinned);
+        using var store = Open();
+        store.ImportOperatorPinnedEvidence();
+        store.StageUnverifiedOperatorCredential();
+        WriteOperatorPin(replacement.Pinned);
+        Throws<InvalidOperationException>(() =>
+            store.StageUnverifiedOperatorCredential());
+        Check(store.ReadOperatorCredential()?.Credential == original.Pinned);
+        using var connection = new SqliteConnection(new SqliteConnectionStringBuilder
+        {
+            DataSource = Path.Combine(TestDirectory, "review-authority.sqlite3"),
+            Mode = SqliteOpenMode.ReadWrite, Pooling = false,
+        }.ToString());
+        connection.Open();
+        using var change = connection.CreateCommand();
+        change.CommandText = """
+            UPDATE protected_operator_credentials
+            SET credential_id='forged';
+            """;
+        Throws<SqliteException>(() => change.ExecuteNonQuery());
+        using var deletion = connection.CreateCommand();
+        deletion.CommandText = "DELETE FROM protected_operator_credentials;";
+        Throws<SqliteException>(() => deletion.ExecuteNonQuery());
+    }
+
+    private static void OperatorDenied()
+    {
+        CreateRealEvidenceFixture();
+        using var original = TestCredential.New();
+        using var outsider = TestCredential.New();
+        WriteOperatorPin(original.Pinned);
+        using var store = Open();
+        var evidence = store.ImportOperatorPinnedEvidence();
+        var meaning = RealReviewMeaning(evidence);
+        Throws<InvalidOperationException>(() =>
+            VerifiedReviewCoordinator.ForOperatorCredentialProbe(store));
+        store.StageUnverifiedOperatorCredential();
+        var protectedCoordinator =
+            VerifiedReviewCoordinator.ForOperatorCredentialProbe(store);
+        Throws<InvalidOperationException>(() => protectedCoordinator.Begin(meaning));
+        var ticket = protectedCoordinator.BeginOperatorProof(meaning);
+        var forged = protectedCoordinator.CompleteOperatorProof(ticket.TicketId,
+            meaning, outsider.Sign(ticket));
+        Check(!forged.Verified);
+        Check(store.ReadOperatorCredential()?.LastSignCount == 0);
+        var injected = new VerifiedReviewCoordinator(store, outsider.Pinned);
+        Throws<InvalidOperationException>(() =>
+            injected.BeginOperatorProof(meaning));
+        var generalTicket = injected.Begin(meaning);
+        Check(!injected.CompleteProtected(generalTicket.TicketId,
+            meaning, outsider.Sign(generalTicket)).Verified);
+        Check(store.CountPending() == 1);
+        Check(store.ReadProtectedClaims(RealProject, RealBranch).Count == 0);
+    }
+
     private static string Encode(byte[] data)
         => Convert.ToBase64String(data).TrimEnd('=').Replace('+', '-').Replace('/', '_');
 
@@ -760,7 +917,7 @@ internal static class Program
         public static TestCredential New()
             => new(ECDsa.Create(ECCurve.NamedCurves.nistP256));
 
-        public BrowserAssertion Sign(ChallengeTicket ticket)
+        public BrowserAssertion Sign(ChallengeTicket ticket, uint? forcedSignCount = null)
         {
             var client = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(
                 new Dictionary<string, object>
@@ -774,7 +931,7 @@ internal static class Program
             SHA256.HashData(Encoding.UTF8.GetBytes("localhost")).CopyTo(authenticator, 0);
             authenticator[32] = 0x05;
             BinaryPrimitives.WriteUInt32BigEndian(authenticator.AsSpan(33),
-                checked(++_signCount));
+                forcedSignCount ?? checked(++_signCount));
             var signed = new byte[authenticator.Length + 32];
             authenticator.CopyTo(signed, 0);
             SHA256.HashData(client).CopyTo(signed, authenticator.Length);
