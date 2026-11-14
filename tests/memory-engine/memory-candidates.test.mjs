@@ -111,6 +111,75 @@ test('deterministic capture policy recognizes durable direct-user signals in Eng
   }
 });
 
+test('scoped German stay-with decision in a normal work prompt is classified', () => {
+  const prompt = [
+    'Wir bleiben für den lokalen AgentHub Windows-Broker bei **Windows x64 als einziger unterstützter Zielplattform**.',
+    'Keine VM und keine zusätzlichen Windows-Benutzerkonten für die nativen Tests.',
+    '',
+    'Prüfe das bestehende Repository auf Widersprüche zu dieser Entscheidung.',
+    'Liefere konkrete Fundstellen und sinnvolle Änderungsvorschläge. Nimm vorerst keine Änderungen vor.',
+  ].join('\n');
+  const result = classifyMemoryCandidatePrompt(prompt);
+  assert.equal(result?.type, 'decision');
+  assert.equal(result.value, prompt);
+  assert.equal(result.decisionReason, 'rule:decision:definitive');
+  assert.equal(result.policyVersion, CAPTURE_POLICY_VERSION);
+
+  // The extension does not promote tentative statements or questions.
+  assert.equal(
+    classifyMemoryCandidatePrompt('Vielleicht bleiben wir für den Test bei Windows x64.'),
+    null,
+  );
+  assert.equal(
+    classifyMemoryCandidatePrompt('Wir bleiben für das Projekt bei Windows x64?'),
+    null,
+  );
+});
+
+test('normal scoped German stay-with work prompt enters candidate capture without promotion', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'agent-hub-german-decision-'));
+  const memory = new MemoryEngine({ dbPath: join(root, 'memory.sqlite3') });
+  try {
+    createProject(memory);
+    const protocol = createMemoryProtocol({
+      memory,
+      classifyAuthority(channel) {
+        return channel.sourceKind === 'session'
+          && channel.metadata?.event_type === 'user_prompt'
+          ? 'user_direct' : 'unclassified';
+      },
+    });
+    const adapter = createCodexMemoryHookAdapter({
+      protocol, memory, projectId: 'project',
+      candidateCapture: true, explicitMemoryRequests: true,
+      clock: () => '2026-11-14T06:00:00.000Z',
+      git: fakeGit(),
+    });
+    const prompt = 'Wir bleiben für den lokalen AgentHub Windows-Broker bei Windows x64 als einziger Zielplattform. '
+      + 'Keine VM oder zusätzlichen Windows-Benutzerkonten für native Tests. '
+      + 'Prüfe die vorhandene Dokumentation, ohne Dateien zu ändern.';
+    const result = await adapter.handle({
+      hook_event_name: 'UserPromptSubmit',
+      session_id: 'natural-session',
+      turn_id: '1',
+      cwd: '/repo',
+      prompt,
+    });
+    assert.notEqual(result?.decision, 'block');
+    const pending = memory.listCandidates({
+      projectId: 'project', branch: 'main', status: 'pending',
+    });
+    assert.equal(pending.length, 1);
+    assert.equal(pending[0].proposed_type, 'decision');
+    assert.equal(pending[0].proposed_value, prompt);
+    assert.equal(pending[0].source_authority, 'user_direct');
+    assert.equal(memory.exportCanonical().claims.length, 0);
+    assert.equal(memory.exportCanonical().evidence.length, 1);
+  } finally {
+    memory.close();
+  }
+});
+
 test('capture policy rejects transient, tentative, question, explicit-memory and sensitive prompts', () => {
   const rejected = [
     'go',
