@@ -19,7 +19,8 @@ internal static class Program
                 return OperatorSelfTest.Run();
 
             if ((args.Length != 0
-                    && !(args.Length == 1 && args[0] == "--service-smoke"))
+                    && !(args.Length == 1
+                        && args[0] is "--service-smoke" or "--installed-path-selftest"))
                 || !new WindowsPrincipal(WindowsIdentity.GetCurrent())
                     .IsInRole(WindowsBuiltInRole.Administrator))
             {
@@ -42,6 +43,14 @@ internal static class Program
 
             if (args.Length == 1 && args[0] == "--service-smoke")
                 return OperatorSelfTest.RunServiceOffer();
+            if (args.Length == 1 && args[0] == "--installed-path-selftest")
+            {
+                // This mode cannot create a credential or approve a Claim,
+                // but proves the same exact hardened binary-path assertion
+                // that every INTERACTIVE Hello operation must pass.
+                ProtectedOperatorService.RequireProtectedInteractiveExecutable();
+                return OperatorSelfTest.RunServiceOffer();
+            }
 
             // No real human-originating Hello gesture from an executable
             // in Git, Downloads or any other unsealed same-account path.
