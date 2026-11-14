@@ -23,6 +23,16 @@ internal static class Program
                 || !new WindowsPrincipal(WindowsIdentity.GetCurrent())
                     .IsInRole(WindowsBuiltInRole.Administrator))
             {
+                if (args.Length == 1 && args[0] == "--service-smoke"
+                    && Environment.GetEnvironmentVariable("GITHUB_ACTIONS") == "true")
+                {
+                    var temp = Environment.GetEnvironmentVariable("RUNNER_TEMP");
+                    if (!string.IsNullOrWhiteSpace(temp))
+                        File.WriteAllText(Path.Combine(temp,
+                            "AgentHubNativeOperatorSmokeFailure.txt"),
+                            "SecurityException: native process not elevated");
+                    return 2;
+                }
                 MessageBox.Show(
                     "Diese lokale Prüfoberfläche muss bewusst als Administrator"
                     + " gestartet werden. Sie ist kein produktiver Memory-Writer.",
