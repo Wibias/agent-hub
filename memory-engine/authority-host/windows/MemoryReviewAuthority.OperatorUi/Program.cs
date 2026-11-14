@@ -43,6 +43,9 @@ internal static class Program
             if (args.Length == 1 && args[0] == "--service-smoke")
                 return OperatorSelfTest.RunServiceOffer();
 
+            // No real human-originating Hello gesture from an executable
+            // in Git, Downloads or any other unsealed same-account path.
+            ProtectedOperatorService.RequireProtectedInteractiveExecutable();
             ApplicationConfiguration.Initialize();
             Application.Run(new OperatorReviewWindow());
             return 0;
