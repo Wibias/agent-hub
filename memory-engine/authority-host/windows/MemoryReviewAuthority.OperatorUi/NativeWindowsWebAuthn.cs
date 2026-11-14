@@ -137,14 +137,27 @@ internal static class NativeWindowsWebAuthn
         return id;
     }
 
+    // Only an EXACT signed-and-pinned localhost origin is usable, but its
+    // port cannot be hardcoded: the existing real browser WebAuthn enrollment
+    // chooses a free TCP port. The service signs the canonical pinned origin,
+    // and the native client binds clientDataJSON to precisely that origin.
+    internal static bool ValidPinnedLocalOrigin(string? origin)
+        => origin is not null
+            && Uri.TryCreate(origin, UriKind.Absolute, out var uri)
+            && uri.Scheme == Uri.UriSchemeHttp
+            && uri.Host.Equals("localhost", StringComparison.Ordinal)
+            && uri.Port is >= 1 and <= 65535
+            && uri.UserInfo.Length == 0
+            && uri.Fragment.Length == 0
+            && uri.GetLeftPart(UriPartial.Authority) == origin;
+
     internal static NativeAssertion GetAssertion(IntPtr ownerWindow, ServiceOffer offer)
     {
         if (!OperatingSystem.IsWindowsVersionAtLeast(10)
             || !Environment.Is64BitProcess || ownerWindow == IntPtr.Zero
             || offer.ExpiresUtc <= DateTimeOffset.UtcNow
-            || offer.ExpectedOrigin is not ("http://localhost:4328" or "http://localhost:4317"))
+            || !ValidPinnedLocalOrigin(offer.ExpectedOrigin))
         {
-            // No dynamically supplied origin is trusted for a different RP.
             throw new InvalidOperationException(
                 "Windows-Hello-Kontext, Ursprung oder Challenge ungültig");
         }
