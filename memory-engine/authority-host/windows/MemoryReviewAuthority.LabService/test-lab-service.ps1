@@ -44,7 +44,20 @@ try {
         $dirAcl.AddAccessRule($ace)
     }
     Set-Acl -LiteralPath $root -AclObject $dirAcl
-    Copy-Item -LiteralPath $exe -Destination $target -Force
+    # SQLitePCLRaw publishes a native e_sqlite3.dll alongside the single
+    # managed service EXE. Copy the *complete* publish output to the protected
+    # directory; a lone EXE cannot load the native provider.
+    $publishedDirectory = Split-Path -Parent $exe
+    foreach ($publishedItem in @(Get-ChildItem -LiteralPath $publishedDirectory -Force)) {
+        Copy-Item -LiteralPath $publishedItem.FullName -Destination (
+            Join-Path $root $publishedItem.Name) -Recurse -Force
+    }
+    if (-not (Test-Path -LiteralPath $target -PathType Leaf)) {
+        throw 'published service EXE not staged'
+    }
+    if (-not @(Get-ChildItem -LiteralPath $root -Filter 'e_sqlite3.dll' -File -Recurse).Count) {
+        throw 'native SQLite library missing from protected publish output'
+    }
 
     # Ordinary logged-in users must not get write access to the executable.
     $actual = Get-Acl -LiteralPath $root
@@ -63,6 +76,24 @@ try {
 
     # sc.exe requires a space after each option's '='. Use separate native
     # argv elements; the ProgramData GUID path contains no spaces.
+    # Directories alone are insufficient. Audit every staged DLL/EXE and
+    # nested directory; inherited or copied file ACEs must not grant ordinary
+    # same-account users access or allow LocalService to modify binaries.
+    foreach ($item in @(Get-ChildItem -LiteralPath $root -Recurse -Force)) {
+        $fileAcl = Get-Acl -LiteralPath $item.FullName
+        foreach ($ace in $fileAcl.Access) {
+            $sid = $ace.IdentityReference.Translate(
+                [System.Security.Principal.SecurityIdentifier]).Value
+            if ($sid -notin @('S-1-5-18','S-1-5-32-544','S-1-5-19')) {
+                throw 'unexpected DLL, EXE or directory ACL'
+            }
+            if ($sid -eq 'S-1-5-19' -and
+                (($ace.FileSystemRights -band [System.Security.AccessControl.FileSystemRights]::WriteData) -ne 0)) {
+                throw 'LocalService must not modify the executable or native DLL'
+            }
+        }
+    }
+
     & $sc create $service binPath= $target start= demand obj= 'NT AUTHORITY\LocalService' type= own
     if ($LASTEXITCODE -ne 0) { throw 'could not create disposable service' }
     $created = $true
@@ -130,13 +161,51 @@ try {
         if (($status -join ' ') -match 'RUNNING') { $running = $true; break }
         Start-Sleep -Milliseconds 250
     }
-    if (-not $running) { throw 'service never reached RUNNING state' }
+    if (-not $running) {
+        Write-Host ('DIAG SCM: ' + ((& $sc queryex $service) -join ' '))
+        $labMarkerExists = Test-Path -LiteralPath (Join-Path $stateRoot 'service-started.txt')
+        $ledgerExists = Test-Path -LiteralPath (Join-Path $stateRoot 'review-authority.sqlite3')
+        Write-Host "DIAG before cleanup: marker=$labMarkerExists ledger=$ledgerExists"
+        try {
+            $failures = @(Get-WinEvent -FilterHashtable @{
+                LogName='Application'
+                StartTime=(Get-Date).AddMinutes(-3)
+            } -MaxEvents 30 -ErrorAction Stop | Where-Object {
+                $_.ProviderName -in @('.NET Runtime','Application Error')
+                -and $_.Message -match 'MemoryReviewAuthority'
+            } | Select-Object -First 2)
+            foreach ($failure in $failures) {
+                $detail = $failure.Message.Substring(0, [Math]::Min(1500, $failure.Message.Length))
+                Write-Host "DIAG managed event $($failure.Id): $detail"
+            }
+        } catch { Write-Host 'DIAG managed event unavailable' }
+        throw 'service never reached RUNNING state'
+    }
     $markerFile = Join-Path $stateRoot 'service-started.txt'
     if (-not (Test-Path -LiteralPath $markerFile -PathType Leaf) -or
         ((Get-Content -LiteralPath $markerFile -Raw) -ne 'SERVICE_SID_STATE_WRITE_OK')) {
         throw 'restricted service failed to write protected state marker'
     }
-    Write-Host 'PASS: restricted LocalService wrote a service-SID-protected marker; NO_PIPE NO_NETWORK NO_DB'
+    $ledgerPath = Join-Path $stateRoot 'review-authority.sqlite3'
+    $ledgerMarker = Join-Path $stateRoot 'protected-ledger-ok.txt'
+    if (-not (Test-Path -LiteralPath $ledgerPath -PathType Leaf) -or
+        ((Get-Item -LiteralPath $ledgerPath).Length -lt 4096) -or
+        -not (Test-Path -LiteralPath $ledgerMarker -PathType Leaf) -or
+        ((Get-Content -LiteralPath $ledgerMarker -Raw) -ne 'PENDING_ONLY_NO_AUTHORIZATION')) {
+        throw 'service-owned pending-only SQLite ledger missing or incomplete'
+    }
+    $stateFiles = @(Get-ChildItem -LiteralPath $stateRoot -File)
+    foreach ($stateFile in $stateFiles) {
+        $fileAcl = Get-Acl -LiteralPath $stateFile.FullName
+        foreach ($ace in $fileAcl.Access) {
+            $sid = $ace.IdentityReference.Translate(
+                [System.Security.Principal.SecurityIdentifier]).Value
+            if ($sid -notin $allowedStateSids) {
+                throw 'service-owned SQLite or journal file has a user-writable ACL'
+            }
+        }
+    }
+    Write-Host 'PASS: restricted LocalService wrote a pending-only WAL SQLite ledger under exact service-SID ACL; NO_IPC NO_CLAIMS'
 }
 finally {
     if ($created) {

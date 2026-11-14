@@ -1,0 +1,42 @@
+name: Memory Review Authority service-owned SQLite lab (default OFF)
+on:
+  pull_request:
+    paths:
+      - 'memory-engine/authority-host/windows/MemoryReviewAuthority.Store/**'
+      - 'memory-engine/authority-host/windows/MemoryReviewAuthority.Store.SelfTest/**'
+      - 'memory-engine/authority-host/windows/MemoryReviewAuthority.LabService/**'
+      - 'docs/memory-review-authority-service-owned-ledger-lab.md'
+      - '.github/workflows/verify-memory-review-service-owned-ledger.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'memory-engine/authority-host/windows/MemoryReviewAuthority.Store/**'
+      - 'memory-engine/authority-host/windows/MemoryReviewAuthority.Store.SelfTest/**'
+      - 'memory-engine/authority-host/windows/MemoryReviewAuthority.LabService/**'
+      - '.github/workflows/verify-memory-review-service-owned-ledger.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify-native-store:
+    runs-on: windows-2022
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
+        with:
+          dotnet-version: '10.0.x'
+          dotnet-quality: 'ga'
+      - name: Build and execute synthetic pending authority store suite (no install)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $project = 'memory-engine/authority-host/windows/MemoryReviewAuthority.Store.SelfTest/MemoryReviewAuthority.Store.SelfTest.csproj'
+          dotnet restore $project --runtime win-x64
+          if ($LASTEXITCODE -ne 0) { throw 'restore failed' }
+          dotnet build $project --runtime win-x64 -c Release --no-restore
+          if ($LASTEXITCODE -ne 0) { throw 'build failed' }
+          dotnet run --project $project -c Release --runtime win-x64 --no-build --no-restore
+          if ($LASTEXITCODE -ne 0) { throw 'store selftest failed' }

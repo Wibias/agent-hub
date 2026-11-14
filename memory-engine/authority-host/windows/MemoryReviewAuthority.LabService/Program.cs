@@ -1,3 +1,6 @@
+using MemoryReviewAuthority.Store;
+using System.Security.Cryptography;
+using System.Text;
 using System.Security.Principal;
 using System.ServiceProcess;
 
@@ -75,8 +78,36 @@ internal sealed class ReviewAuthorityLabService : ServiceBase
             throw new InvalidOperationException("protected_lab_state_missing");
         File.WriteAllText(Path.Combine(stateDir, "service-started.txt"),
             "SERVICE_SID_STATE_WRITE_OK");
-        // Still NO credentials, WebAuthn challenge, pipe, HTTP server,
-        // Memory database, Claim mutation or agent endpoint.
+
+        // LAB-ONLY synthetic request. This separate database is never an
+        // approved Claim and contains NO real user evidence. The protected
+        // state directory was ACL-provisioned before SCM start.
+        using (var ledger = ProtectedPendingReviewLedger.OpenInProtectedDirectory(stateDir))
+        {
+            static string Hash(string value) =>
+                Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value))).ToLowerInvariant();
+
+            var pending = new PendingReview(
+                "github.com/example/lab-fixture",
+                "main",
+                new string('a', 40),
+                "E~0123456789",
+                new string('b', 64),
+                Hash("Synthetic non-authorizing lab fact"),
+                Hash("Synthetic non-authorizing lab Evidence"),
+                "confirm");
+            var record = ledger.RecordPending(pending);
+            var replay = ledger.RecordPending(pending);
+            if (record != replay
+                || record.Status != ProtectedPendingReviewLedger.PendingState
+                || ledger.CountPending() != 1)
+                throw new InvalidOperationException("protected_pending_review_ledger_failed");
+            File.WriteAllText(Path.Combine(stateDir, "protected-ledger-ok.txt"),
+                "PENDING_ONLY_NO_AUTHORIZATION");
+        }
+
+        // Still NO credentials, real WebAuthn challenge, pipe, HTTP server,
+        // user Memory database, Claim mutation or agent endpoint.
     }
 
     protected override void OnStop()
