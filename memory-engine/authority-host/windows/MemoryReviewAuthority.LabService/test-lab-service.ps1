@@ -167,6 +167,15 @@ try {
         throw 'service-specific SID lacks necessary write access'
     }
 
+    # Stage a canonical user-Evidence-schema SQLite snapshot only after the
+    # Administrator-owned service directory ACL has been independently checked.
+    # The service itself opens only the fixed file names, never a client path.
+    $fixtureScript = Join-Path $repoRoot 'tests/memory-engine/create-operator-evidence-scm-fixture.mjs'
+    & node $fixtureScript $stateRoot
+    if ($LASTEXITCODE -ne 0) {
+        throw 'canonical E~ source fixture creation failed'
+    }
+
     & $sc start $service
     if ($LASTEXITCODE -ne 0) { throw 'LocalService lab host did not start' }
     $running = $false
@@ -208,6 +217,12 @@ try {
         ((Get-Content -LiteralPath $ledgerMarker -Raw) -ne 'SYNTHETIC_PROTECTED_CLAIM_NO_HUMAN_APPROVAL')) {
         throw 'service-owned pending-only SQLite ledger missing or incomplete'
     }
+    $importMarker = Join-Path $stateRoot 'operator-evidence-imported.txt'
+    if (-not (Test-Path -LiteralPath $importMarker -PathType Leaf) -or
+        (Get-Content -LiteralPath $importMarker -Raw) -ne 'REAL_EVIDENCE_PENDING_NO_CLAIM') {
+        throw 'restricted LocalService did not ingest real E~ Evidence without creating a Claim'
+    }
+    Write-Host 'PASS: real E~ canonical SQLite/Evidence imported by restricted LocalService as PENDING only; NO Claim, NO human approval'
     $stateFiles = @(Get-ChildItem -LiteralPath $stateRoot -File)
     foreach ($stateFile in $stateFiles) {
         $fileAcl = Get-Acl -LiteralPath $stateFile.FullName
