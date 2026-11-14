@@ -137,6 +137,22 @@ internal static class OperatorSelfTest
             });
             if (denied != 3)
                 throw new Exception("operator_envelope_negative_cases_missing");
+            foreach (var valid in new[]
+                { "http://localhost:4317", "http://localhost:4328",
+                  "http://localhost:52348", "http://localhost:1" })
+            {
+                if (!NativeWindowsWebAuthn.ValidPinnedLocalOrigin(valid))
+                    throw new Exception("native_local_origin_port_rejected");
+            }
+            foreach (var invalid in new[]
+                { "", "http://localhost", "http://127.0.0.1:4328",
+                  "https://localhost:4328", "http://localhost:4328.evil.test",
+                  "http://localHost:4328/other", "http://x@localhost:4328",
+                  "http://localhost:4328#fragment", "http://localhost:70000" })
+            {
+                if (NativeWindowsWebAuthn.ValidPinnedLocalOrigin(invalid))
+                    throw new Exception("native_untrusted_web_origin_accepted");
+            }
             if (ProtectedOperatorService.HasMutationRights(
                     FileSystemRights.ReadAndExecute)
                 || ProtectedOperatorService.HasMutationRights(

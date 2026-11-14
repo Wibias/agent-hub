@@ -63,6 +63,43 @@ internal static class ProtectedOperatorService
         Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
         PublicPinDirectory, PublicPinFile);
 
+    /// <summary>
+    /// The actual INTERACTIVE Windows Hello window must never be elevated
+    /// from a user/agent-writable checkout. The only supported location is
+    /// the pinned local preview installation's Admin-owned sealed binary.
+    /// Contract/SCM smoke tests do not issue Hello and bypass this guard
+    /// only because they have no interactive/authorizing action.
+    /// </summary>
+    internal static void RequireProtectedInteractiveExecutable()
+    {
+        var programData = Environment.GetFolderPath(
+            Environment.SpecialFolder.CommonApplicationData);
+        var root = Path.Combine(programData, "AgentHubMemoryReviewLab-PreviewApp");
+        var directory = Path.Combine(root, "Operator");
+        var expected = Path.Combine(directory,
+            "MemoryReviewAuthority.OperatorUi.exe");
+        if (!OperatingSystem.IsWindows() || Environment.ProcessPath is null
+            || !string.Equals(Path.GetFullPath(Environment.ProcessPath),
+                Path.GetFullPath(expected), StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException(
+                "Native Windows-Hello-Oberfläche darf nicht aus einem Git-Checkout erhöht gestartet werden");
+        foreach (var dir in new[] { root, directory })
+        {
+            var item = new DirectoryInfo(dir);
+            if (!item.Exists
+                || (item.Attributes & FileAttributes.ReparsePoint) != 0)
+                throw new InvalidOperationException("Geschütztes natives Verzeichnis fehlt");
+            VerifyAdminOwnedDacl(item.GetAccessControl(
+                AccessControlSections.Owner | AccessControlSections.Access));
+        }
+        var binary = new FileInfo(expected);
+        if (!binary.Exists
+            || (binary.Attributes & FileAttributes.ReparsePoint) != 0)
+            throw new InvalidOperationException("Geschützte native ausführbare Datei fehlt");
+        VerifyAdminOwnedDacl(binary.GetAccessControl(
+            AccessControlSections.Owner | AccessControlSections.Access));
+    }
+
     private static string LoadAdminOwnedServicePin()
     {
         var file = new FileInfo(PinPath);
