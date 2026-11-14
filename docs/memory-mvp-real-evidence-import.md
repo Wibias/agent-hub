@@ -13,6 +13,49 @@ den ursprünglichen Fakteninhalt, seinen Hash, die Evidenzhashes, Projekt,
 Branch, angegebene Revision und gewünschte Entscheidung als
 **unveränderliche, serviceeigene PENDING-Quelle**.
 
+## Der tatsächliche Exportpfad für einen echten Vorschlag
+
+Das Repo enthält nun ein ausführbares Werkzeug, das die bereits vorhandene
+E~-Prüfung wiederverwendet und eine **konsistente SQLite-Backup-Kopie**
+erzeugt. Es ermittelt die Projektidentität, den Branch und den Commit aus
+dem tatsächlichen lokalen Git-Checkout. **Keine Elevation für dieses
+Quell-Exportwerkzeug verwenden.**
+
+```powershell
+node scripts/export-protected-evidence-review.mjs `
+  --db-path "$env:LOCALAPPDATA\agent-hub\memory.sqlite3" `
+  --repo-path "C:\Pfad\zum\freigegebenen\Repo" `
+  --proposal-ref "E~0123456789" `
+  --decision confirm `
+  --output-dir "$env:TEMP\agenthub-operator-evidence-export"
+```
+
+Die konkrete `E~`-Referenz stammt aus der lokalen Memory Console,
+nicht aus diesem Beispiel. Der Zielordner muss **noch nicht existieren**.
+Die Ausgabe besteht aus einer vollständigen kanonischen
+`operator-evidence-snapshot.sqlite3` und einem kleinen
+`operator-evidence-manifest.json`. Dadurch wird nicht in der
+Nutzer-Datenbank geschrieben.
+
+Das Werkzeug prüft zunächst die echte Git-Projektidentität und den
+aktuellen Snapshot. Nach dem SQLite-Backup prüft es die kopierte Quelle,
+den **erneut gelesenen** Live-Snapshot und den unveränderten Git-Stand.
+Bei Veränderungen wird kein gültiges Manifest erstellt. Ein aktiver oder
+duplizierter Claim oder ein gezieltes Update/Contradiction blockiert den
+Export; nur vorläufig unabhängige `knowledge`-/`preference`-Quellen
+sind zulässig.
+
+**Datenschutz:** Diese Kopie enthält den gesamten kanonischen
+Memory-Datenbestand, nicht nur den ausgewählten Fakt. Sie darf nicht
+in Git eingecheckt, versendet oder an eine ungesicherte Stelle
+hochgeladen werden. Der gewöhnliche Exportordner ist **noch nicht**
+administrativ gegen einen Agenten geschützt. Ein separater, expliziter
+privilegierter Schritt muss die zwei Dateien in den unten beschriebenen
+geschützten Dienstpfad übernehmen. Bis zur vollständig geprüften
+Installations-/Rollback-Routine ist das nur im disposable Windows-SCM-
+Integrationstest automatisiert. Der Export allein ist keine
+Operator-Zustimmung und aktiviert keine Windows-Hello-Freigabe.
+
 ## Geschützte Eingangsschnittstelle
 
 **Kein neuer IPC-Write-Befehl.** Der Windows-Dienst liest nur diese
@@ -68,10 +111,12 @@ CI-Daten aus, **niemals einen realen PENDING-Import**.
 
 ## Abnahme auf GitHub Windows CI
 
-Der bereits bestehende Windows SCM-Integrationstest erzeugt eine
-disposable SQLite-Datei mit dem **realen kanonischen Vorschlags- und
-Evidence-Tabellenschema**, platziert sie nach DACL-Einrichtung im
-serviceeigenen Verzeichnis, startet den eingeschränkten LocalService und
+Der bereits bestehende Windows SCM-Integrationstest erstellt einen echten
+temporären Git-Checkout und eine disposable SQLite-Datei mit dem
+**unveränderten produktiven E~-Vorschlagsschema**, durchläuft dann denselben
+read-only Preflight und SQLite-Backup-Export wie das Operator-Werkzeug,
+platziert die Ergebnisse nach DACL-Einrichtung im serviceeigenen
+Verzeichnis, startet den eingeschränkten LocalService und
 prüft die vom Dienst selbst geschriebene
 `REAL_EVIDENCE_PENDING_NO_CLAIM`-Markierung sowie die
 bereits vorhandenen ACL-/signierten-MCP-/Cleanup-Negativtests.
