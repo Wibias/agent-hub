@@ -1,0 +1,54 @@
+name: Memory D12.3 historical read-only reconciliation
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/reconcile-memory-*.mjs'
+      - 'scripts/inspect-memory-cross-branch-*.mjs'
+      - 'scripts/export-memory-legacy-candidates-private.mjs'
+      - 'tests/memory-engine/memory-*reconciliation.test.mjs'
+      - 'tests/memory-engine/memory-cross-branch-claim-evidence-review.test.mjs'
+      - 'tests/memory-engine/memory-cross-branch-legacy-candidate-review.test.mjs'
+      - 'tests/memory-engine/memory-private-legacy-candidate-export.test.mjs'
+      - 'docs/memory-d12-3-*.md'
+      - '.github/workflows/verify-memory-d12-3-readonly-reconciliation.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/reconcile-memory-*.mjs'
+      - 'scripts/inspect-memory-cross-branch-*.mjs'
+      - 'scripts/export-memory-legacy-candidates-private.mjs'
+      - 'tests/memory-engine/memory-*reconciliation.test.mjs'
+      - 'tests/memory-engine/memory-cross-branch-claim-evidence-review.test.mjs'
+      - 'tests/memory-engine/memory-cross-branch-legacy-candidate-review.test.mjs'
+      - 'tests/memory-engine/memory-private-legacy-candidate-export.test.mjs'
+      - '.github/workflows/verify-memory-d12-3-readonly-reconciliation.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+      - name: Verify bounded read-only reconciliation and private export
+        run: >-
+          node --test
+          tests/memory-engine/memory-local-decision-reconciliation.test.mjs
+          tests/memory-engine/memory-cross-branch-claim-evidence-review.test.mjs
+          tests/memory-engine/memory-cross-branch-decision-reconciliation.test.mjs
+          tests/memory-engine/memory-cross-branch-legacy-candidate-review.test.mjs
+          tests/memory-engine/memory-private-legacy-candidate-export.test.mjs
+          tests/memory-engine/memory-final-108-review-reconciliation.test.mjs
