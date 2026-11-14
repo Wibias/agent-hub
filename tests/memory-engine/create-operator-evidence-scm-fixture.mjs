@@ -14,19 +14,30 @@ import { existsSync, writeFileSync, mkdirSync, mkdtempSync, copyFileSync, rmSync
 import { exportProtectedEvidenceReview, EVIDENCE_SNAPSHOT_NAME, EVIDENCE_MANIFEST_NAME } from '../../scripts/export-protected-evidence-review.mjs';
 import { isAbsolute, join } from 'node:path';
 
+const previewExport = process.argv.length === 4
+    && process.argv[2] === '--preview-export';
 if (process.env.GITHUB_ACTIONS !== 'true' || process.env.RUNNER_OS !== 'Windows'
-    || process.argv.length !== 3 || !isAbsolute(process.argv[2])) {
-  process.stderr.write('Disposable Windows SCM fixture only.\n');
+    || ![3, 4].includes(process.argv.length)
+    || (process.argv.length === 4 && !previewExport)
+    || !isAbsolute(previewExport ? process.argv[3] : process.argv[2])) {
+  process.stderr.write('Disposable Windows CI fixture only.\\n');
   process.exit(2);
 }
-const stateRoot = process.argv[2];
-if (!existsSync(stateRoot) || !stateRoot.endsWith('AgentHubMemoryReviewLab-State')) {
-  process.stderr.write('Expected service-owned disposable lab state directory.\n');
+const stateRoot = previewExport ? null : process.argv[2];
+const expectedExport = previewExport ? process.argv[3] : null;
+if (previewExport) {
+  if (existsSync(expectedExport)) {
+    process.stderr.write('Preview evidence export must be a fresh directory.\\n');
+    process.exit(2);
+  }
+} else if (!existsSync(stateRoot)
+    || !stateRoot.endsWith('AgentHubMemoryReviewLab-State')) {
+  process.stderr.write('Expected service-owned disposable lab state directory.\\n');
   process.exit(2);
 }
-const targetSnapshot = join(stateRoot, EVIDENCE_SNAPSHOT_NAME);
-const targetManifest = join(stateRoot, EVIDENCE_MANIFEST_NAME);
-if (existsSync(targetSnapshot) || existsSync(targetManifest)) {
+const targetSnapshot = previewExport ? null : join(stateRoot, EVIDENCE_SNAPSHOT_NAME);
+const targetManifest = previewExport ? null : join(stateRoot, EVIDENCE_MANIFEST_NAME);
+if (!previewExport && (existsSync(targetSnapshot) || existsSync(targetManifest))) {
   process.stderr.write('Refusing to overwrite pre-existing operator source.\\n');
   process.exit(2);
 }
@@ -50,7 +61,8 @@ writeFileSync(join(repoRoot, 'README.md'), 'Operator E~ source transfer');
 git('add', 'README.md');
 git('commit', '-m', 'fixture');
 const source = join(scratch, 'canonical-memory.sqlite3');
-const exportDir = join(scratch, 'unprivileged-export');
+const exportDir = previewExport
+  ? expectedExport : join(scratch, 'unprivileged-export');
 
 const projectId = 'github.com/example/operator-evidence';
 const branch = 'main';
@@ -112,8 +124,10 @@ if (exported.protectedServiceImportCompleted
 }
 // Only the GitHub runner is elevated here. Its previously checked state DACL
 // protects these copies; the actual service accepts no source input path.
-copyFileSync(join(exportDir, EVIDENCE_SNAPSHOT_NAME), targetSnapshot);
-copyFileSync(join(exportDir, EVIDENCE_MANIFEST_NAME), targetManifest);
+if (!previewExport) {
+  copyFileSync(join(exportDir, EVIDENCE_SNAPSHOT_NAME), targetSnapshot);
+  copyFileSync(join(exportDir, EVIDENCE_MANIFEST_NAME), targetManifest);
+}
 // A disposable P-256 PUBLIC KEY simulates a candidate registration source.
 // There is deliberately NO human or WebAuthn browser registration in CI;
 // it may only be staged with "operator_pinned_unverified" status.
@@ -122,12 +136,15 @@ const publicKey = keys.publicKey;
 // The synthetic PRIVATE key remains OUTSIDE the LocalService's protected
 // state and is never sent over IPC. CI uses it solely to prove end-to-end
 // challenge transport, not real Windows Hello human consent.
-const privateFixture = join(process.env.RUNNER_TEMP,
-  'AgentHubMemoryReviewLab-TestOperatorPrivateKey.pem');
-writeFileSync(privateFixture, keys.privateKey.export({
-  format: 'pem', type: 'pkcs8',
-}), { flag: 'wx' });
-writeFileSync(join(stateRoot, 'operator-webauthn-credential.json'),
+if (!previewExport) {
+  const privateFixture = join(process.env.RUNNER_TEMP,
+    'AgentHubMemoryReviewLab-TestOperatorPrivateKey.pem');
+  writeFileSync(privateFixture, keys.privateKey.export({
+    format: 'pem', type: 'pkcs8',
+  }), { flag: 'wx' });
+}
+writeFileSync(join(previewExport ? exportDir : stateRoot,
+  'operator-webauthn-credential.json'),
   JSON.stringify({
     protocol: 'agenthub-operator-credential-pin-v1',
     credentialId: randomBytes(32).toString('base64url'),
@@ -135,5 +152,7 @@ writeFileSync(join(stateRoot, 'operator-webauthn-credential.json'),
     expectedOrigin: 'http://localhost:4328',
   }), { flag: 'wx' });
 rmSync(scratch, { recursive: true, force: true });
-process.stdout.write('REAL_EVIDENCE_GIT_TO_SERVICE_SOURCE_PREPARED_NO_AUTHORITY '
+process.stdout.write((previewExport
+  ? 'REAL_EVIDENCE_OPERATOR_PREVIEW_EXPORT_READY_NO_AUTHORITY '
+  : 'REAL_EVIDENCE_GIT_TO_SERVICE_SOURCE_PREPARED_NO_AUTHORITY ')
   + proposalRef + '\\n');
