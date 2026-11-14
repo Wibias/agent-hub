@@ -25,6 +25,9 @@ are maintained here.
 ## 2026-11-14 Emil upstream review
 
 Reviewed three commits through `0f2e23b32bb1265e84cff8d3e75785fec953fb1b`.
+The `choreograph` adaptation traces back to the earlier MIT snapshot
+`c8a79627b59d72d764d6ab6f2c87c09a48169833` (2026-11-05);
+this provenance is retained even though the reviewed upstream HEAD advanced.
 New `learn-taste` is adapted as opt-in `learn-design-taste` under
 `design-with-ai` with source-backed suggestions, conflict checks and
 user approval before writing design rules. No standalone skill or competing
