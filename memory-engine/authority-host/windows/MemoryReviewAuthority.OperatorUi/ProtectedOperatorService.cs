@@ -191,6 +191,10 @@ internal static class ProtectedOperatorService
     }
 
     private static JsonDocument Request(string operation, object fields)
+        => RequestAsync(operation, fields).GetAwaiter().GetResult();
+
+    private static async Task<JsonDocument> RequestAsync(
+        string operation, object fields)
     {
         var nonce = Encode(RandomNumberGenerator.GetBytes(32));
         var payload = new Dictionary<string, object?>(StringComparer.Ordinal)
@@ -202,33 +206,36 @@ internal static class ProtectedOperatorService
         foreach (var property in JsonSerializer.SerializeToElement(fields)
             .EnumerateObject())
             payload[property.Name] = property.Value.Clone();
-        var message = JsonSerializer.Serialize(payload) + "\n";
+        var message = Utf8.GetBytes(JsonSerializer.Serialize(payload) + "\n");
 
-        // Verify the installed admin-owned pin BEFORE talking to a pipe that
-        // could be forged by a same-user agent in a less restricted design.
+        // This pin and its parent DIRECTORY must both be Admin-owned and
+        // nonwritable to the ordinary user before opening a named pipe.
         var pin = LoadAdminOwnedServicePin();
         using var pipe = new NamedPipeClientStream(".", PipeName,
-            PipeDirection.InOut, PipeOptions.None,
+            PipeDirection.InOut, PipeOptions.Asynchronous,
             TokenImpersonationLevel.Identification);
-        pipe.Connect(3000);
-        pipe.ReadTimeout = 5500;
-        pipe.WriteTimeout = 5500;
-        using (var writer = new StreamWriter(pipe, Utf8, bufferSize: 1024, leaveOpen: true)
+        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(6));
+        await pipe.ConnectAsync(3000, deadline.Token);
+        await pipe.WriteAsync(message, deadline.Token);
+        await pipe.FlushAsync(deadline.Token);
+        // The server's response is one ASCII JSON envelope line. Enforce an
+        // absolute response-size cap even if a compromised pipe never sends
+        // a newline, and an actual cancellation deadline on every read.
+        using var bytes = new MemoryStream();
+        var buffer = new byte[1024];
+        while (bytes.Length < 16_384)
         {
-            AutoFlush = true,
-        })
-            writer.Write(message);
-
-        using var reader = new StreamReader(pipe, Utf8,
-            detectEncodingFromByteOrderMarks: false, bufferSize: 1024, leaveOpen: true);
-        var response = new StringBuilder(12_000);
-        for (int i = 0; i < 16_384; i++)
-        {
-            var ch = reader.Read();
-            if (ch < 0) break;
-            if (ch == '\n') return VerifySignedResponse(
-                response.ToString(), pin, nonce, operation);
-            response.Append((char)ch);
+            var count = await pipe.ReadAsync(buffer, deadline.Token);
+            if (count == 0)
+                throw new InvalidOperationException("Leere Dienstantwort");
+            var lineEnd = Array.IndexOf(buffer, (byte)'\n', 0, count);
+            var size = lineEnd < 0 ? count : lineEnd;
+            if (bytes.Length + size > 16_384)
+                throw new InvalidOperationException("Dienstantwort zu groß");
+            bytes.Write(buffer, 0, size);
+            if (lineEnd >= 0)
+                return VerifySignedResponse(Utf8.GetString(bytes.ToArray()),
+                    pin, nonce, operation);
         }
         throw new InvalidOperationException("Unvollständige Dienstantwort");
     }
