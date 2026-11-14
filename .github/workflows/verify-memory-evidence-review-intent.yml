@@ -1,0 +1,38 @@
+name: Memory Evidence-Bound intent audit (default OFF)
+on:
+  pull_request:
+    paths:
+      - 'memory-engine/evidence-bound-review-intent-staging.mjs'
+      - 'tests/memory-engine/evidence-bound-review-intent-staging.test.mjs'
+      - 'docs/memory-evidence-bound-review-intent-staging.md'
+      - '.github/workflows/verify-memory-evidence-review-intent.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'memory-engine/evidence-bound-review-intent-staging.mjs'
+      - 'tests/memory-engine/evidence-bound-review-intent-staging.test.mjs'
+      - '.github/workflows/verify-memory-evidence-review-intent.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+      - name: Verify staged intent, current review and existing proposal ledger
+        run: >-
+          node --test
+          tests/memory-engine/evidence-bound-review-intent-staging.test.mjs
+          tests/memory-engine/evidence-bound-decision-preflight.test.mjs
+          tests/memory-engine/evidence-bound-proposal-store.test.mjs
