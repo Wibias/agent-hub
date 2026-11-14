@@ -8,6 +8,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+$repoRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..\..\..\..')).Path
 if ($env:GITHUB_ACTIONS -ne 'true' -or $env:RUNNER_OS -ne 'Windows' -or
     [string]::IsNullOrWhiteSpace($env:RUNNER_TEMP)) {
     throw 'SCM lab is permitted only on an ephemeral Windows GitHub runner'
