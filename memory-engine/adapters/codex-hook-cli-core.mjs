@@ -142,6 +142,9 @@ export function parseCodexHookCliOptions(argv = []) {
   if (argv.includes('--candidate-capture')) {
     options.candidateCapture = true;
   }
+  if (argv.includes('--atomic-rule-confirmation-capture')) {
+    options.atomicRuleConfirmationCapture = true;
+  }
   if (argv.includes('--auto-pipeline')) {
     options.autoPipeline = true;
   }
@@ -687,6 +690,7 @@ export async function runCodexMemoryHook({
       capturePrompts: config.capturePrompts,
       explicitMemoryRequests: configOptions.explicitMemoryRequests === true,
       candidateCapture: configOptions.candidateCapture === true,
+    atomicRuleConfirmationCapture: configOptions.atomicRuleConfirmationCapture === true,
       recallRelevanceJudge: recallRuntime?.relevanceJudge ?? null,
       recallFastPathShadowMode: configOptions.recallFastPathShadow === true,
       recallFastPathShadowReplayMode: configOptions.recallFastPathShadowReplay === true,
