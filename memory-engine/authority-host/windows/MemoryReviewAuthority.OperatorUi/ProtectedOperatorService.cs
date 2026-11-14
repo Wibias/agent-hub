@@ -172,19 +172,12 @@ internal static class ProtectedOperatorService
     private static JsonDocument Request(string operation, object fields)
     {
         var nonce = Encode(RandomNumberGenerator.GetBytes(32));
-        var payload = operation == "begin"
-            ? new Dictionary<string, object?>(StringComparer.Ordinal)
-              {
-                  ["protocol"] = Protocol,
-                  ["op"] = operation,
-                  ["nonce"] = nonce,
-              }
-            : new Dictionary<string, object?>(StringComparer.Ordinal)
-              {
-                  ["protocol"] = Protocol,
-                  ["op"] = operation,
-                  ["nonce"] = nonce,
-              };
+        var payload = new Dictionary<string, object?>(StringComparer.Ordinal)
+        {
+            ["protocol"] = Protocol,
+            ["op"] = operation,
+            ["nonce"] = nonce,
+        };
         foreach (var property in JsonSerializer.SerializeToElement(fields)
             .EnumerateObject())
             payload[property.Name] = property.Value.Clone();
@@ -199,14 +192,14 @@ internal static class ProtectedOperatorService
         pipe.Connect(3000);
         pipe.ReadTimeout = 5500;
         pipe.WriteTimeout = 5500;
-        using (var writer = new StreamWriter(pipe, Utf8, leaveOpen: true)
+        using (var writer = new StreamWriter(pipe, Utf8, bufferSize: 1024, leaveOpen: true)
         {
             AutoFlush = true,
         })
             writer.Write(message);
 
         using var reader = new StreamReader(pipe, Utf8,
-            detectEncodingFromByteOrderMarks: false, leaveOpen: true);
+            detectEncodingFromByteOrderMarks: false, bufferSize: 1024, leaveOpen: true);
         var response = new StringBuilder(12_000);
         for (int i = 0; i < 16_384; i++)
         {
