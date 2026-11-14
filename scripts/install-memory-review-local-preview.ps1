@@ -52,7 +52,9 @@ function Inspect-Acl([string]$path, [string[]]$writers) {
     Require (-not (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0)) 'Reparse-point path forbidden'
     $acl = Get-Acl -LiteralPath $path
     $owner = $acl.GetOwner([Security.Principal.SecurityIdentifier]).Value
-    Require ($acl.AreAccessRulesProtected -and $owner -eq 'S-1-5-32-544') 'Owner or DACL not protected'
+    Require ($acl.AreAccessRulesProtected -and $owner -eq 'S-1-5-32-544') (
+        'Owner or DACL not protected at ' + $path +
+        ' (owner=' + $owner + ', inherited=' + (-not $acl.AreAccessRulesProtected) + ')')
     foreach ($rule in $acl.Access) {
         if ($rule.AccessControlType -ne [Security.AccessControl.AccessControlType]::Allow) {
             continue
