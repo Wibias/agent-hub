@@ -588,7 +588,8 @@ internal static class Program
             cmd.CommandText = """
                 CREATE TABLE memory_evidence_proposals (
                   id TEXT PRIMARY KEY, project_id TEXT, branch TEXT, kind TEXT,
-                  canonical_fact TEXT, status TEXT, policy_version TEXT);
+                  canonical_fact TEXT, status TEXT, policy_version TEXT,
+                  fingerprint TEXT NOT NULL);
                 CREATE TABLE memory_evidence_proposal_evidence (
                   proposal_id TEXT, evidence_id TEXT,
                   PRIMARY KEY(proposal_id, evidence_id));
@@ -604,8 +605,10 @@ internal static class Program
             using var insert = conn.CreateCommand();
             insert.CommandText = """
                 INSERT INTO memory_evidence_proposals
-                 (id,project_id,branch,kind,canonical_fact,status,policy_version)
-                VALUES ($id,$p,$b,'knowledge',$fact,'needs_confirmation','test-v1');
+                 (id,project_id,branch,kind,canonical_fact,status,
+                  policy_version,fingerprint)
+                VALUES ($id,$p,$b,'knowledge',$fact,'needs_confirmation',
+                  'test-v1',$fingerprint);
                 INSERT INTO memory_evidence_proposal_evidence
                  (proposal_id,evidence_id) VALUES ($id,'real-evidence-1');
                 INSERT INTO evidence
@@ -618,6 +621,8 @@ internal static class Program
             insert.Parameters.AddWithValue("$p", RealProject);
             insert.Parameters.AddWithValue("$b", RealBranch);
             insert.Parameters.AddWithValue("$fact", RealFact);
+            insert.Parameters.AddWithValue("$fingerprint",
+                Hash("knowledge\\0" + RealFact.ToLowerInvariant()));
             insert.ExecuteNonQuery();
         }
         File.WriteAllText(Path.Combine(TestDirectory,
