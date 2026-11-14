@@ -622,7 +622,7 @@ internal static class Program
             insert.Parameters.AddWithValue("$b", RealBranch);
             insert.Parameters.AddWithValue("$fact", RealFact);
             insert.Parameters.AddWithValue("$fingerprint",
-                Hash("knowledge\\0" + RealFact.ToLowerInvariant()));
+                Hash("knowledge\0" + RealFact.ToLowerInvariant()));
             insert.ExecuteNonQuery();
         }
         File.WriteAllText(Path.Combine(TestDirectory,
