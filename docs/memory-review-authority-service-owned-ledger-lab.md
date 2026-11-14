@@ -19,12 +19,17 @@ Die zusätzliche Tabelle `verified_review_intents` speichert ausschließlich
 die nach einer gültigen Einmal-Challenge beobachtete Bestätigungs- oder
 Ablehnungsabsicht, **nicht** die freigegebene Memory-Claim-Entscheidung.
 
-Es existieren **keine** APIs zum Erstellen, Promoten oder Ändern
-autorisierter Claims und keine produktive Passkey-Registrierung.
+Der zusätzliche, ausdrücklich opt-in bleibende Host-Pfad
+`CompleteProtected` kann eine `protected_review_claims`-Zeile erzeugen,
+aber **nur** mit erfolgreicher einmaliger UV-Prüfung und einer unabhängig
+ermittelten vertrauenswürdigen Quelle. Er ist noch nicht mit dem laufenden
+Dienst oder Codex verbunden. Keine produktive Passkey-Registrierung.
 Gleiche Pending-Anfragen sind bis zur verifizierten Entscheidung idempotent.
 Eine abweichende Aktion, Evidence oder Snapshot führt zu einem Konflikt.
-Der Speicher hält keine ursprünglichen Fakttexte oder Nutzer-Evidence
-und gibt keine Autorisierungstokens aus.
+Der bisherige Pending-/Intent-Pfad enthält weiterhin keine ursprünglichen
+Fakttexte oder Nutzer-Evidence. Die neuen, geschützten Claim-Zeilen enthalten
+den bestätigten Faktext und seine Herkunfts-Hashes, aber keine Passkey-Secrets
+oder übertragbaren Autorisierungstokens.
 
 ## Native Tests
 
@@ -47,7 +52,7 @@ Keine produktive Dienstinstallation oder Datenbankmigration.
 
 Der SQLite-Typ authentifiziert seine Aufrufer **nicht selbst**.
 Der derzeitige Laborhost hat keine Pipe, keinen HTTP-Endpunkt,
-keine FIDO2-Registrierung und keine Claims-Schreibbefugnis.
+keine FIDO2-Registrierung und keinen angebundenen Claims-Schreibendpunkt.
 Das Labor speist fest verdrahtete synthetische Daten ein.
 Der Windows-GitHub-Runner ist privilegiert; ACL-Inspektion und
 erfolgreiche Dienstschreibvorgänge ersetzen **keinen** realen
@@ -100,11 +105,11 @@ vorgelegte Vorschlagsdaten nicht selbst. Eine signierte Challenge beweist
 ohne eine unabhängige Anzeige und Herkunftsprüfung noch keine bewusste
 Freigabe des konkreten Fakts.
 
-`uv_confirm_intent_no_claim` bedeutet deshalb ausdrücklich **weder
-`ClaimWritten` noch produktive Approval Authority**. Es gibt keine
-`claims`-Tabelle und keinen Pfad, um ein `E~`-Proposal in einem Codex
-Memory-Claim zu promoten. Die eigentliche M2-Fertigstellung erfordert einen
-vertrauenswürdigen Proposal-Reader, echte Enrollment-/Review-UI,
-Claim-Transaktion und eine Dienstprojektion, die lokale Cache-Manipulation
-nicht übernimmt. Bis dahin bleibt die Funktion standardmäßig OFF und
-Produktivfreigabe NO-GO.
+`uv_confirm_intent_no_claim` bedeutet weiterhin ausdrücklich **weder
+`ClaimWritten` noch produktive Approval Authority**. Der neue separate
+`CompleteProtected`-Pfad implementiert zwar die atomare Transaktion in
+`protected_review_claims`, ist aber ohne vertrauenswürdigen Proposal-Reader,
+echte Enrollment-/Review-UI und dienstseitige Codex-Read-Projektion noch
+nicht produktiv nutzbar. Die klassische Canonical-Memory-`claims`-Tabelle
+wird von ihm nicht geändert. Bis dahin bleibt der Pfad standardmäßig OFF und
+Produktivfreigabe NO-GO. Siehe `memory-mvp-protected-claim-lab.md`.
