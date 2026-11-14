@@ -180,8 +180,9 @@ internal static class Program
         using var key = TestCredential.New();
         var pending = store.RecordPending(Example);
         var coordinator = new VerifiedReviewCoordinator(store, key.Pinned);
-        var ticket = coordinator.Begin(MeaningFor(Example));
-        var finished = coordinator.Complete(ticket.TicketId, key.Sign(ticket));
+        var meaning = MeaningFor(Example);
+        var ticket = coordinator.Begin(meaning);
+        var finished = coordinator.Complete(ticket.TicketId, meaning, key.Sign(ticket));
         Check(finished.Verified && finished.Status == "verified_intent_recorded_no_claim");
         Check(finished.Disposition == ProtectedPendingReviewLedger.ConfirmDisposition);
         Check(finished.RequestId == pending.RequestId);
@@ -191,7 +192,7 @@ internal static class Program
         Check(store.ReadVerifiedIntent(Example.ProjectId, Example.Branch, Example.ProposalRef)?.RequestId
             == pending.RequestId);
         Throws<InvalidOperationException>(() => store.RecordPending(Example));
-        var replay = coordinator.Complete(ticket.TicketId, key.Sign(ticket));
+        var replay = coordinator.Complete(ticket.TicketId, meaning, key.Sign(ticket));
         Check(!replay.Verified && replay.Status == "ticket_missing_or_consumed");
         using var db = new SqliteConnection(new SqliteConnectionStringBuilder
         {
@@ -212,8 +213,9 @@ internal static class Program
         var reject = Example with { RequestedAction = "reject" };
         store.RecordPending(reject);
         var coordinator = new VerifiedReviewCoordinator(store, key.Pinned);
-        var ticket = coordinator.Begin(MeaningFor(reject));
-        var result = coordinator.Complete(ticket.TicketId, key.Sign(ticket));
+        var meaning = MeaningFor(reject);
+        var ticket = coordinator.Begin(meaning);
+        var result = coordinator.Complete(ticket.TicketId, meaning, key.Sign(ticket));
         Check(result.Verified);
         Check(result.Disposition == ProtectedPendingReviewLedger.RejectDisposition);
         Check(store.CountPending() == 0);
@@ -248,14 +250,15 @@ internal static class Program
         using var key = TestCredential.New();
         store.RecordPending(Example);
         var coordinator = new VerifiedReviewCoordinator(store, key.Pinned);
-        var ticket = coordinator.Begin(MeaningFor(Example));
+        var meaning = MeaningFor(Example);
+        var ticket = coordinator.Begin(meaning);
         var invalid = key.Sign(ticket) with
         {
             SignatureBase64Url = Encode(RandomNumberGenerator.GetBytes(72)),
         };
-        var result = coordinator.Complete(ticket.TicketId, invalid);
+        var result = coordinator.Complete(ticket.TicketId, meaning, invalid);
         Check(!result.Verified);
-        Check(!coordinator.Complete(ticket.TicketId, key.Sign(ticket)).Verified);
+        Check(!coordinator.Complete(ticket.TicketId, meaning, key.Sign(ticket)).Verified);
         Check(store.CountPending() == 1);
         Check(store.ReadVerifiedIntent(Example.ProjectId, Example.Branch, Example.ProposalRef) is null);
     }
@@ -268,8 +271,9 @@ internal static class Program
         {
             requestId = first.RecordPending(Example).RequestId;
             var coordinator = new VerifiedReviewCoordinator(first, key.Pinned);
-            var ticket = coordinator.Begin(MeaningFor(Example));
-            Check(coordinator.Complete(ticket.TicketId, key.Sign(ticket)).Verified);
+            var meaning = MeaningFor(Example);
+        var ticket = coordinator.Begin(meaning);
+            Check(coordinator.Complete(ticket.TicketId, meaning, key.Sign(ticket)).Verified);
         }
         using var reopened = Open();
         Check(reopened.ReadVerifiedIntent(Example.ProjectId, Example.Branch, Example.ProposalRef)
