@@ -14,8 +14,6 @@ public sealed class VerifiedReviewCoordinator
     private readonly ProtectedPendingReviewLedger _ledger;
     private readonly ReviewChallengeCore _challengeCore;
     private readonly PinnedCredential _credential;
-    private readonly object _gate = new();
-    private readonly Dictionary<string, ReviewMeaning> _issued = new(StringComparer.Ordinal);
 
     public VerifiedReviewCoordinator(
         ProtectedPendingReviewLedger ledger,
@@ -36,12 +34,7 @@ public sealed class VerifiedReviewCoordinator
     public ChallengeTicket Begin(ReviewMeaning meaning)
     {
         VerifyPendingMeaning(meaning);
-        var ticket = _challengeCore.Begin(meaning, _credential);
-        lock (_gate)
-        {
-            _issued.Add(ticket.TicketId, meaning);
-        }
-        return ticket;
+        return _challengeCore.Begin(meaning, _credential);
     }
 
     /// <summary>
@@ -49,25 +42,19 @@ public sealed class VerifiedReviewCoordinator
     /// alone is NOT a Claim: this only records a once-only UV-backed intent
     /// in the service-owned database. There is no Claim promotion API here.
     /// </summary>
-    public VerifiedReviewCompletion Complete(string ticketId, BrowserAssertion assertion)
+    public VerifiedReviewCompletion Complete(
+        string ticketId, ReviewMeaning meaning, BrowserAssertion assertion)
     {
-        ReviewMeaning? meaning;
-        lock (_gate)
-        {
-            if (string.IsNullOrWhiteSpace(ticketId)
-                || !_issued.Remove(ticketId, out meaning))
-                return new(false, "ticket_missing_or_consumed");
-        }
-
-        // The challenge engine consumes this even when the signature is bad.
-        var proof = _challengeCore.VerifyAndConsume(ticketId, meaning!, assertion);
+        // The core owns its bounded, one-use ticket map. It checks exact
+        // equality with the meaning used at Begin; no second unbounded map.
+        var proof = _challengeCore.VerifyAndConsume(ticketId, meaning, assertion);
         if (!proof.Verified || !proof.UserVerified || !proof.UserPresent)
             return new(false, proof.Status);
 
         try
         {
-            VerifyPendingMeaning(meaning!);
-            var recorded = _ledger.RecordVerifiedIntent(meaning!, _credential, proof);
+            VerifyPendingMeaning(meaning);
+            var recorded = _ledger.RecordVerifiedIntent(meaning, _credential, proof);
             return new(true, "verified_intent_recorded_no_claim",
                 recorded.Disposition, recorded.RequestId);
         }
