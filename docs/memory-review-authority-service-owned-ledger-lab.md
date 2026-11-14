@@ -71,3 +71,39 @@ Eine produktive Autoritätsdatenbank erfordert zusätzlich:
 
 Das hier ist ein konkreter zusätzlicher Speicher- und ACL-Baustein,
 **noch nicht die fertige Memory-Write-Funktion**.
+
+
+## M2-Teilintegration: UV-Challenge direkt mit geschützter Entscheidung verbinden
+
+`VerifiedReviewCoordinator` verbindet den bestehenden
+`ReviewChallengeCore` mit dem vorhandenen dienstgeschützten SQLite-Speicher.
+Er akzeptiert den exakten Pending-Snapshot, startet nur für eine dazu passende
+`ReviewMeaning` eine kurzlebige Challenge, verbraucht das Ticket bei jeder
+Prüfung und schreibt **nur nach erfolgreicher kryptografischer UV-Prüfung**
+eine unveränderliche Zeile in `verified_review_intents`. Bestätigung und
+Ablehnung bleiben unterscheidbar. Die Prüfung auf bereits erfolgte Entscheidung
+und das Einfügen sind in **einer SQLite-Transaktion**. Nach Neustart bleibt die
+Entscheidung bestehen und kann nicht wiederverwendet werden. Offene Anfragen
+werden von der Summe bereits verifizierter Intents getrennt.
+
+Die Projektion `ReadVerifiedIntent` ist für einen späteren vertrauenswürdigen
+Dienst-Read-Endpunkt vorgesehen. Sie enthält weder Passkey-Geheimnisse noch
+Claim-Daten und macht **keine** vom Benutzer beschreibbare Cache-Datenbank zur
+Autorität.
+
+**Wichtige Grenze:** Die Windows-Selftests signieren mit temporär erzeugten
+Testschlüsseln. Der heutige Dienst hat weiterhin keinen Endpunkt, keine
+echte Passkey-Registrierung, keine Benutzeroberfläche und keine Anbindung an
+reale Codex-Kandidaten. Die Methode `RecordPending` authentifiziert
+vorgelegte Vorschlagsdaten nicht selbst. Eine signierte Challenge beweist
+ohne eine unabhängige Anzeige und Herkunftsprüfung noch keine bewusste
+Freigabe des konkreten Fakts.
+
+`uv_confirm_intent_no_claim` bedeutet deshalb ausdrücklich **weder
+`ClaimWritten` noch produktive Approval Authority**. Es gibt keine
+`claims`-Tabelle und keinen Pfad, um ein `E~`-Proposal in einem Codex
+Memory-Claim zu promoten. Die eigentliche M2-Fertigstellung erfordert einen
+vertrauenswürdigen Proposal-Reader, echte Enrollment-/Review-UI,
+Claim-Transaktion und eine Dienstprojektion, die lokale Cache-Manipulation
+nicht übernimmt. Bis dahin bleibt die Funktion standardmäßig OFF und
+Produktivfreigabe NO-GO.
