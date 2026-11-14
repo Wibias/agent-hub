@@ -5,6 +5,8 @@ on:
     paths:
       - "memory-ui/**"
       - "tests/memory-engine/memory-console-d12-design.test.mjs"
+      - "tests/memory-engine/memory-console-evidence-review.test.mjs"
+      - "memory-engine/evidence-bound-review-readonly.mjs"
       - "docs/memory-console-d12-design-brief.md"
       - ".design-with-ai/**"
       - ".github/workflows/verify-memory-console-d12.yml"
@@ -34,6 +36,7 @@ jobs:
           node --check tests/memory-engine/memory-console-d12-design.test.mjs
           node --test \
             tests/memory-engine/memory-console-d12-design.test.mjs \
+            tests/memory-engine/memory-console-evidence-review.test.mjs \
             tests/memory-engine/memory-graph-ui.test.mjs \
             tests/memory-engine/memory-graph-v2.test.mjs \
             tests/memory-engine/memory-ui.test.mjs
