@@ -126,11 +126,11 @@ try {
     # Run the ACTUAL installed native WinForms binary against the ACTUAL
     # restricted LocalService and protected signing pin. No Hello/prompt in CI.
     $native = Start-Process -FilePath $result.nativeOperatorExe `
-        -ArgumentList @('--service-smoke') -Wait -PassThru -NoNewWindow
+        -ArgumentList @('--installed-path-selftest') -Wait -PassThru -NoNewWindow
     if ($native.ExitCode -ne 0) {
         throw 'Installed native UI failed to verify service-signed real E~'
     }
-    Write-Host 'PASS: installed, admin-owned native UI authenticates signed real E~ over restricted SCM pipe, no Hello, no approval'
+    Write-Host 'PASS: installed, admin-owned native UI authenticates exact binary+ancestor ACL and signed real E~ over restricted SCM pipe, no Hello, no approval'
 
     $uninstall = & $installer -Action Remove `
         -Consent 'REMOVE_AGENTHUB_MEMORY_REVIEW_ONLY_PREVIEW' |
