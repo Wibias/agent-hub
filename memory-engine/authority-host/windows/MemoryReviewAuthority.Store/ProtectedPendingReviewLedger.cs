@@ -233,6 +233,10 @@ public sealed class ProtectedPendingReviewLedger : IDisposable
     private static bool AsciiScope(string? value, int max)
         => !string.IsNullOrWhiteSpace(value)
            && value.Length <= max
+           && !value.StartsWith('.', StringComparison.Ordinal)
+           && !value.StartsWith('/', StringComparison.Ordinal)
+           && !value.Contains("..", StringComparison.Ordinal)
+           && !value.Contains("//", StringComparison.Ordinal)
            && Matches(value, "^[A-Za-z0-9._:/~-]+$");
 
     private static bool Matches(string? value, string pattern)
