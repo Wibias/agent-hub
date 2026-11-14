@@ -88,8 +88,10 @@ public sealed class VerifiedReviewCoordinator
             var trusted = _ledger.ReadCurrentServiceOwnedSource(meaning);
             if (trusted is null)
                 return new(false, "protected_review_source_not_staged");
+            // The ledger will resolve the same immutable source AGAIN inside
+            // BEGIN IMMEDIATE, then commit the decision + Claim atomically.
             var saved = _ledger.CommitReviewedDecision(
-                meaning, _credential, proof, trusted);
+                meaning, _credential, proof);
             return new(true,
                 saved.ClaimWritten
                     ? "protected_claim_written"
