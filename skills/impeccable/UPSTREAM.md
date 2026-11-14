@@ -33,6 +33,17 @@ browser path behaves correctly. The Windows workflow tests a positive
 engine-probe and a tampered-manifest rejection. Skill Ratchet model reviews
 and any user-specific native/browser E2E still need their own receipts.
 
+## Verification state and source-file parity
+
+Skill version: `4.9.1`. Engine version: `0.1.24`. Exact runtime verification
+is required before declaring the Windows launcher ready. The prior
+`cssAuthoring.styleClose` and `ignore_runtime_output` behavior contracts
+remain part of the imported engine history and require executable evidence.
+
+Files shared with upstream are copied verbatim from the tagged release, except
+for the intentional local `SKILL.md` overlay. AgentHub-only integration files
+have no upstream counterpart and remain under their existing local owners.
+
 ## Boundaries and prior history
 
 - Prior candidate: `engine-v0.1.22`, commit

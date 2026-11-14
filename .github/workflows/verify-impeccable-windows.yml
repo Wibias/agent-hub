@@ -24,13 +24,13 @@ jobs:
           $version = (Get-Content -Raw -LiteralPath (Join-Path $scripts 'VERSION')).Trim()
           if ($version -ne '0.1.24') { throw "Unexpected engine version: $version" }
           $manifest = Get-Content -LiteralPath (Join-Path $scripts 'engine-checksums.txt')
-          $matching = @($manifest | Where-Object { $_ -match '^0\.1\.22 impeccable-windows-x64\.exe [0-9a-f]{64}$' })
+          $matching = @($manifest | Where-Object { $_ -match '^0\.1\.24 impeccable-windows-x64\.exe [0-9a-f]{64}$' })
           if ($matching.Count -ne 1) { throw 'Expected exactly one Windows 0.1.24 checksum' }
 
           $env:IMPECCABLE_HOME = Join-Path $env:RUNNER_TEMP 'impeccable-positive'
           Remove-Item Env:IMPECCABLE_BIN -ErrorAction SilentlyContinue
           $out = (& (Join-Path $scripts 'impeccable.cmd') engine-probe 2>&1 | Out-String).Trim()
-          if ($LASTEXITCODE -ne 0 -or $out -notmatch 'impeccable-engine 0\.1\.22') {
+          if ($LASTEXITCODE -ne 0 -or $out -notmatch 'impeccable-engine 0\.1\.24') {
             throw "Pinned Windows engine launch failed (exit $LASTEXITCODE)"
           }
           Write-Output 'PASS: Engine 0.1.24 launched through the Windows checksum-verifying path'

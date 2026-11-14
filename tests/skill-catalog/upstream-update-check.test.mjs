@@ -88,14 +88,14 @@ test('Impeccable released engine 0.1.24 remains subject to runtime verification'
   assert.match(upstream, /acb4cfe14470b1fdf51e855431af618d936b7db8/);
   assert.match(upstream, /cssAuthoring\.styleClose/);
   assert.match(upstream, /update.pending/i);
-  assert.match(upstream, /Skill version: `4\.8\.2`/);
-  assert.match(upstream, /Engine version: `0\.1\.22`/);
-  assert.match(skill, /version: 4\.8\.2/);
+  assert.match(upstream, /Skill version: `4\.9\.1`/);
+  assert.match(upstream, /Engine version: `0\.1\.24`/);
+  assert.match(skill, /version: 4\.9\.1/);
   assert.equal(engineVersion, '0.1.24');
   assert.equal(existsSync(resolve('skills/impeccable/scripts/engine-checksums.txt')), true);
   assert.match(
     read('skills/impeccable/scripts/engine-checksums.txt'),
-    /0\.1\.22 impeccable-windows-x64\.exe [0-9a-f]{64}/,
+    /0\.1\.24 impeccable-windows-x64\.exe [0-9a-f]{64}/,
   );
 
   assert.match(skill, /Explicit-only Impeccable frontend design specialist/i);
