@@ -58,8 +58,8 @@ internal sealed class OperatorWebAuthnPipe : IDisposable
         var rules = new PipeSecurity();
         rules.SetAccessRuleProtection(isProtected: true, preserveInheritance: false);
         static SecurityIdentifier Sid(WellKnownSidType sid) => new(sid, null);
-        rules.AddAccessRule(new PipeAccessRule(Sid(WellKnownSidType.LocalServiceSid),
-            PipeAccessRights.FullControl, AccessControlType.Allow));
+        // No broad LocalService SID: only this particular SCM service SID,
+        // SYSTEM and Administrators may access the operator UV control plane.
         rules.AddAccessRule(new PipeAccessRule(Sid(WellKnownSidType.LocalSystemSid),
             PipeAccessRights.FullControl, AccessControlType.Allow));
         rules.AddAccessRule(new PipeAccessRule(Sid(WellKnownSidType.BuiltinAdministratorsSid),
