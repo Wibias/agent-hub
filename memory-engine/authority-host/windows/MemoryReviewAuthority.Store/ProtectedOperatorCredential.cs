@@ -22,6 +22,15 @@ public sealed record ProtectedOperatorCredential(
     bool CredentialRegistrationTrusted = false,
     bool HumanApprovalVerified = false);
 
+public sealed record ProtectedOperatorReviewOffer(
+    string RequestId,
+    ReviewMeaning Meaning,
+    string SourceEvidenceSha256,
+    string Kind,
+    string SourceOrigin,
+    bool HumanApprovalVerified = false,
+    bool ClaimWritten = false);
+
 public sealed partial class ProtectedPendingReviewLedger
 {
     public const string OperatorCredentialFile = "operator-webauthn-credential.json";
@@ -202,6 +211,33 @@ public sealed partial class ProtectedPendingReviewLedger
     {
         EnsureOpen();
         return FindOperatorCredential(null);
+    }
+
+    /// <summary>
+    /// Service-owned exact display object, resolved by protected pending
+    /// request and immutable source. No fact, action, Git revision or hash
+    /// comes from any browser/IPC caller. No model-facing public pipe can
+    /// access this projection, only the explicitly Admin-ACL operator pipe.
+    /// </summary>
+    public ProtectedOperatorReviewOffer? ReadOperatorReviewOffer(
+        string projectId, string branch, string proposalRef)
+    {
+        EnsureOpen();
+        var pending = ReadPending(projectId, branch, proposalRef);
+        if (pending is null) return null;
+        var source = FindServiceOwnedSource(pending.RequestId, null);
+        if (source is null || source.SourceOrigin != OperatorSourceOrigin)
+            return null;
+        ValidateSource(pending.Review, source.Source);
+        var p = pending.Review;
+        return new ProtectedOperatorReviewOffer(
+            pending.RequestId,
+            new ReviewMeaning(p.ProjectId, p.Branch, p.RevisionSha,
+                p.ProposalRef, p.ReviewSnapshotSha256, p.CanonicalFactSha256,
+                p.RequestedAction, source.Source.CanonicalFact),
+            p.SourceEvidenceSha256,
+            source.Source.Kind,
+            source.SourceOrigin);
     }
 
     /// <summary>
