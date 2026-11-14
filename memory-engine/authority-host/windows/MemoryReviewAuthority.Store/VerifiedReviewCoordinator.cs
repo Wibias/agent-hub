@@ -15,20 +15,15 @@ public sealed class VerifiedReviewCoordinator
     private readonly ProtectedPendingReviewLedger _ledger;
     private readonly ReviewChallengeCore _challengeCore;
     private readonly PinnedCredential _credential;
-    private readonly Func<ReviewMeaning, TrustedReviewSource?>? _trustedSourceReader;
 
     public VerifiedReviewCoordinator(
         ProtectedPendingReviewLedger ledger,
         PinnedCredential credential,
-        ReviewChallengeCore? challengeCore = null,
-        Func<ReviewMeaning, TrustedReviewSource?>? trustedSourceReader = null)
+        ReviewChallengeCore? challengeCore = null)
     {
         _ledger = ledger ?? throw new ArgumentNullException(nameof(ledger));
         _credential = credential ?? throw new ArgumentNullException(nameof(credential));
         _challengeCore = challengeCore ?? new ReviewChallengeCore();
-        // A real service must inject its independently authenticated snapshot
-        // reader. Default OFF; it must not be an agent-controlled callback.
-        _trustedSourceReader = trustedSourceReader;
     }
 
     /// <summary>
@@ -72,10 +67,12 @@ public sealed class VerifiedReviewCoordinator
 
     /// <summary>
     /// The opt-in host-only protected Claim path. Every real confirmation
-    /// requires the exact UV assertion plus a separate, injected trusted
-    /// source reader. Without a trusted reader the default stays disabled.
-    /// A rejected proposal records an immutable decision but no Claim.
-    /// No standalone browser endpoint or source reader ships in this library.
+    /// requires the exact UV assertion plus a previously staged immutable
+    /// protected source row bound to the same request ID. No caller-provided
+    /// callback can supply or replace the current trusted source at decision
+    /// time. The only source writer currently exposed is synthetic CI, not
+    /// a source-verifying production import. Real E~ authorization remains OFF.
+    /// Rejection records an immutable decision but no Claim.
     /// </summary>
     public VerifiedReviewCompletion CompleteProtected(
         string ticketId, ReviewMeaning meaning, BrowserAssertion assertion)
@@ -85,14 +82,12 @@ public sealed class VerifiedReviewCoordinator
         var proof = _challengeCore.VerifyAndConsume(ticketId, meaning, assertion);
         if (!proof.Verified || !proof.UserVerified || !proof.UserPresent)
             return new(false, proof.Status);
-        if (_trustedSourceReader is null)
-            return new(false, "trusted_review_source_not_configured");
         try
         {
             VerifyPendingMeaning(meaning);
-            var trusted = _trustedSourceReader(meaning);
+            var trusted = _ledger.ReadCurrentServiceOwnedSource(meaning);
             if (trusted is null)
-                return new(false, "trusted_review_source_not_found");
+                return new(false, "protected_review_source_not_staged");
             var saved = _ledger.CommitReviewedDecision(
                 meaning, _credential, proof, trusted);
             return new(true,
