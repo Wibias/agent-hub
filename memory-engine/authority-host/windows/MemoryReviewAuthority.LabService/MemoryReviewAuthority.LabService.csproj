@@ -14,6 +14,5 @@
     <ProjectReference Include="../MemoryReviewAuthority.Core/MemoryReviewAuthority.Core.csproj" />
     <ProjectReference Include="../MemoryReviewAuthority.Store/MemoryReviewAuthority.Store.csproj" />
     <PackageReference Include="System.ServiceProcess.ServiceController" Version="10.0.14" />
-    <PackageReference Include="System.IO.Pipes.AccessControl" Version="5.0.0" />
   </ItemGroup>
 </Project>
