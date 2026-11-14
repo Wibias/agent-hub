@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "reviewedAt": "2026-11-12",
+  "reviewedAt": "2026-11-14",
   "sources": [
     {
       "id": "addy",
@@ -34,10 +34,10 @@
     {
       "id": "impeccable",
       "repository": "pbakaus/impeccable",
-      "reviewedCommit": "90b3072f0f7c9a7a85f64d6dd3db9cd94d364eff",
+      "reviewedCommit": "acb4cfe14470b1fdf51e855431af618d936b7db8",
       "scope": ".agents/skills/impeccable/",
       "decision": "update-pending",
-      "localPin": "90b3072f0f7c9a7a85f64d6dd3db9cd94d364eff"
+      "localPin": "acb4cfe14470b1fdf51e855431af618d936b7db8"
     }
   ]
 }

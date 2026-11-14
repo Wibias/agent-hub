@@ -1,27 +1,51 @@
 # Impeccable upstream
 
-Agent Hub vendors the Impeccable skill from `pbakaus/impeccable`.
+AgentHub selectively vendors the explicit Impeccable specialist from
+[pbakaus/impeccable](https://github.com/pbakaus/impeccable). Runtime binaries
+are **not** included in this repository. The local `SKILL.md` is an intentional
+AgentsHub overlay, not a source-byte-identical upstream copy.
 
-## Release sync candidate (2026-11-12)
+## Release candidate (2026-11-14)
 
-- Canonical source: `engine-v0.1.22`, commit `90b3072f0f7c9a7a85f64d6dd3db9cd94d364eff`.
-- Metadata in the source: Skill version: `4.8.2`; Engine version: `0.1.22`.
-- `skill-v4.8.2` is commit `035c8f319edd019936525a062fe99e83ca8d12c6`, 19 commits before the engine tag. The copied shared reference/runtime files come from the engine tag, **not** a mix of ad hoc HEAD files.
-- Exception: the engine tag still contained `scripts/VERSION` 0.1.21 and `scripts/engine-checksums.txt` with 0.1.21 digests. The 0.1.22 VERSION (upstream blob `7e72641b4bd1eeb711b63d83a55e913f24e3f6b8`) and binary digest manifest were recorded later upstream; the manifest is taken byte-for-byte from upstream `main` blob `956695b88090649ee8d6a3d27470066b38b62c8e` (verified upstream blob SHA). The 0.1.22 checksum manifest is essential for the launchers; never ship a 0.1.22 VERSION with 0.1.21 checksums.
-- Engine 0.1.22 source contains the previously deferred `cssAuthoring.styleClose` and `ignore_runtime_output` contracts; binary behavior still needs runtime verification.
-- Shared files changed since the last complete adoption were synchronized from the above release pin. The Agent Hub `SKILL.md` remains an intentional local overlay with only its metadata version updated.
-- This is a candidate until the versioned checksum/launcher tests, release-governance suite, source-byte checks and Windows launcher smoke have actually passed. Do not assert engine parity or executable readiness from source alone.
+- Pinned `skill-v4.9.1` and `cli-v4.9.1`: commit `acb4cfe14470b1fdf51e855431af618d936b7db8` (same release commit).
+- Source skill version: `4.9.1`; source `scripts/VERSION`: `0.1.24`.
+- Engine release `engine-v0.1.24`: commit `6418f185eeceddda2cdb6ea93c5c58c7f319416e`.
+- The `scripts/engine-checksums.txt` asset digests match the official
+  `engine-v0.1.24` release metadata. Windows x64 binary SHA-256:
+  `c4e71217677f53beaabec1cd4823a9bb2587355615f1170cf5508e69be4587bc`.
+- Shared files that differ from the prior vendor snapshot are copied **verbatim**
+  from the pinned skill release. `reference/foundations.md` was added; the
+  Windows and POSIX launchers, runtime-browser helper, release manifest, and
+  changed craft reference files are synchronized. Unchanged shared files
+  retain their existing Git blobs.
+- The local `SKILL.md` advances metadata to `4.9.1` and preserves
+  **explicit-only** routing, `design-with-ai` ownership of generic UI work,
+  repository instruction-injection handling, correct launcher failure evidence,
+  conditional craft-floor loading, and Skill Ratchet qualification.
+- New engine capabilities include opt-in `world`, `walkthrough`, and
+  `foundations`. They do **not** authorize starting remote/binary processes
+  without the selected host's permissions.
 
-## Scope and boundaries
+**Status: update-pending until test evidence.** Source integrity, a pinned
+manifest and structurally valid text are not proof that the Windows binary
+launches, that a downloaded artifact is trusted, or that the changed live
+browser path behaves correctly. The Windows workflow tests a positive
+engine-probe and a tampered-manifest rejection. Skill Ratchet model reviews
+and any user-specific native/browser E2E still need their own receipts.
 
-The previous complete vendor pin was `9fadc41729c38fd47d7ae622b501558653f9d2e9` (skill 4.8.0 / engine 0.1.18). A separate reviewed partial browser update came from `5af4319c4e7a7ee3e5e2b9fe899bcfb21c6190cb`. This candidate supersedes that patch without dropping later upstream fixes.
+## Boundaries and prior history
 
-Files shared with upstream under `.agents/skills/impeccable/` are byte-identical under `skills/impeccable/` when updated, except the intentional local `SKILL.md` and the explicit post-tag VERSION and checksum corrections above. Agent Hub-only runtime integrations, tests and evaluation assets remain local.
-
-The local `SKILL.md` preserves explicit-only invocation, design-with-ai routing ownership, repository instruction-injection handling, launcher failure evidence and Skill Ratchet qualification. Never replace it wholesale with upstream's broader auto-activation description.
-
-After changing the overlay, regenerate the knowledge catalog using `node knowledge/build-index.mjs`, commit `knowledge/index.json` and `knowledge/INDEX.md` only if content differs, and run the catalog validator.
-
-## Outstanding review
-
-The source registry remains `update-pending` until the sync passes executable verification. Upstream `main` has advanced beyond the selected engine tag and is deliberately not included in this candidate. Inspect later changes separately; do not label them already adopted.
+- Prior candidate: `engine-v0.1.22`, commit
+  `90b3072f0f7c9a7a85f64d6dd3db9cd94d364eff`, skill `4.8.2`.
+- Earlier complete source pin: `9fadc41729c38fd47d7ae622b501558653f9d2e9`.
+- Earlier independent browser patch: `5af4319c4e7a7ee3e2b9fe899bcfb21c6190cb`.
+- `skills/design-with-ai/scripts/providers/scan.mjs` still invokes AgentHub's
+  independently vendored JS detector, **not** this Rust release binary.
+  Do not claim detector parity between these paths.
+- `skills/impeccable/scripts/` also contains independent AgentHub integration
+  and test helpers, retained unchanged by this release sync.
+- Upstream `main` after the pinned release is outside this update. Avoid
+  mixing unreviewed post-release commits with the selected source set.
+- Regenerate `knowledge/index.json` and `knowledge/INDEX.md` after a
+  `SKILL.md` change. Do not declare installation or runtime parity solely
+  from a passing source-byte test.
