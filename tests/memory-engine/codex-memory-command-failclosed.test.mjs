@@ -159,6 +159,37 @@ test('candidate rejection syntax is recognized without depending on markdown esc
   assert.equal(explicitMemoryCommandFailure(event('/repo', exact), { enabled: false }), null);
 });
 
+test('reserved Evidence-Bound confirm/reject never becomes an agent turn even when disabled', () => {
+  const examples = [
+    'MEMORY EVIDENCE REVIEW CONFIRM E~0123456789',
+    'MEMORY EVIDENCE REVIEW REJECT E~0123456789',
+    'memory evidence review invalid',
+  ];
+  for (const prompt of examples) {
+    assert.equal(isExplicitMemoryCommandAttempt(prompt), true);
+    const blocked = explicitMemoryCommandFailure(event('/repo', prompt), { enabled: false });
+    assert.equal(blocked.decision, 'block');
+    assert.match(blocked.reason, /not enabled/);
+    assert.doesNotMatch(blocked.reason, /secret|internal path/);
+  }
+  assert.equal(isExplicitMemoryCommandAttempt('Review the evidence in memory.'), false);
+  fixture(({ cwd, dbPath, localAppData }) => {
+    const answer = JSON.parse(execHook({
+      cwd, dbPath, localAppData,
+      prompt: examples[0],
+    }));
+    assert.equal(answer.decision, 'block');
+    assert.match(answer.reason, /not enabled/);
+    const memory = new MemoryEngine({ dbPath, readOnly: true });
+    try {
+      assert.equal(memory.exportCanonical().claims.length, 0);
+      assert.notEqual(memory.getCandidate('memory-command-seed-candidate').status, 'ignored');
+    } finally {
+      memory.close();
+    }
+  });
+});
+
 test('adapter catches runtime exceptions and blocks an explicit command but not an ordinary prompt', async () => {
   const adapter = createCodexMemoryHookAdapter({
     protocol: { async handle() { throw new Error('unreachable'); } },

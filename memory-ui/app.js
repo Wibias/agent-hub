@@ -1658,6 +1658,7 @@ function evidenceReviewRow(proposal) {
       <span class="memory-value">${escapeHtml(proposal.value)}</span>
       <span class="review-meta">
         <span class="status-warn">needs confirmation</span>
+        ${proposal.reviewIntent ? '<span class="review-intent-state">Intent recorded · not approved</span>' : ''}
         <span>${number(proposal.sourceCount)} source(s)</span>
         <span>${escapeHtml(proposal.relation?.type || 'unclassified relation')}</span>
       </span>
@@ -1703,6 +1704,20 @@ function renderEvidenceReviewInspector(proposal) {
         <h3>Why this needs review</h3>
         <p class="inspect-value">${escapeHtml(proposal.support?.reason || proposal.importance?.reason || relation.reason || 'The evidence-bound pipeline did not authorize automatic promotion.')}</p>
       </section>
+      ${proposal.reviewIntent ? `
+        <section class="inspect-section">
+          <h3>Recorded review intent</h3>
+          ${definition([
+            ['Requested action', proposal.reviewIntent.decision],
+            ['Recorded', dateTime(proposal.reviewIntent.recordedAt)],
+            ['Status', 'Awaiting independent host authorization', 'status-warn'],
+          ])}
+          <p class="review-evidence-notice">
+            This is an unauthorised, non-final review intent. It is not proof of human
+            approval. The proposal still needs confirmation and no Claim was changed.
+          </p>
+        </section>
+      ` : ''}
       <section class="inspect-section">
         <h3>Approval boundary</h3>
         <p class="review-evidence-notice">

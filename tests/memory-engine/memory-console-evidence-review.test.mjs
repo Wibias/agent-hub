@@ -8,6 +8,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { MemoryEngine } from '../../memory-engine/index.mjs';
 import { memoryEvidenceReviewSnapshot } from '../../memory-engine/evidence-bound-review-readonly.mjs';
 import { EvidenceBoundProposalStore } from '../../memory-engine/evidence-bound-proposal-store.mjs';
+import { installEvidenceBoundReviewIntentSchema } from '../../memory-engine/evidence-bound-review-intent-staging.mjs';
 import { evidenceExtractionFingerprint } from '../../memory-engine/evidence-bound-extraction.mjs';
 import { createMemoryUiServer } from '../../scripts/memory-ui.mjs';
 
@@ -116,6 +117,61 @@ test('evidence-bound review lists only same-project same-branch confirmation pro
       assert.equal(db.prepare(
         "SELECT status FROM memory_evidence_proposals WHERE id = 'evidence-proposal-1'",
       ).get().status, 'needs_confirmation');
+    } finally {
+      db.close();
+    }
+  });
+});
+
+test('optional intent audit is visible as unapproved, without changing the review queue', () => {
+  withDb(({ dbPath, memory }) => {
+    seedProposal(dbPath);
+    memory.recordEvidence({
+      id: 'e-intent',
+      projectId,
+      harness: 'codex',
+      sessionId: 'fixture-intent',
+      sourceKind: 'session',
+      sourceRef: 'session:fixture-intent',
+      capturedAt: '2026-11-14T08:02:00.000Z',
+      branch: 'preview',
+      content: 'Synthetic exact review intent',
+      authorityClass: 'user_direct',
+      metadata: { event_type: 'user_prompt' },
+    });
+    const db = new DatabaseSync(dbPath, { enableForeignKeyConstraints: true });
+    try {
+      installEvidenceBoundReviewIntentSchema(db);
+      db.prepare(
+        'INSERT INTO memory_evidence_bound_review_intents '
+        + '(proposal_id,decision_evidence_id,project_id,branch,revision_sha,proposal_ref,'
+        + 'snapshot_sha256,canonical_fact_sha256,decision,policy_version,recorded_at,status) '
+        + 'VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
+      ).run(
+        'evidence-proposal-1', 'e-intent', projectId, 'preview',
+        'a'.repeat(40), 'E~1234567890', 'b'.repeat(64), 'c'.repeat(64),
+        'reject', 'evidence-bound-review-intent-v1',
+        '2026-11-14T08:03:00.000Z', 'awaiting_independent_host_authorization',
+      );
+      const review = memoryEvidenceReviewSnapshot({ dbPath, projectId, branch: 'preview' });
+      assert.equal(review.status, 'ready');
+      assert.equal(review.total, 1);
+      assert.equal(review.items.length, 1);
+      assert.deepEqual(review.items[0].reviewIntent, {
+        decision: 'reject',
+        status: 'awaiting_independent_host_authorization',
+        recordedAt: '2026-11-14T08:03:00.000Z',
+        humanApprovalVerified: false,
+        claimsModified: false,
+      });
+      assert.equal(review.items[0].status, 'needs_confirmation');
+      assert.equal(memoryEvidenceReviewSnapshot({
+        dbPath, projectId, branch: 'main',
+      }).items.length, 0);
+      assert.equal(db.prepare(
+        "SELECT status FROM memory_evidence_proposals WHERE id = 'evidence-proposal-1'",
+      ).get().status, 'needs_confirmation');
+      assert.equal(db.prepare('SELECT COUNT(*) AS n FROM claims').get().n, 0);
     } finally {
       db.close();
     }
