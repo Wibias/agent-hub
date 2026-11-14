@@ -163,10 +163,9 @@ try {
     }
     if (-not $running) {
         Write-Host ('DIAG SCM: ' + ((& $sc queryex $service) -join ' '))
-        Write-Host ('DIAG before cleanup: marker='
-            + (Test-Path -LiteralPath (Join-Path $stateRoot 'service-started.txt'))
-            + ' ledger='
-            + (Test-Path -LiteralPath (Join-Path $stateRoot 'review-authority.sqlite3')))
+        $labMarkerExists = Test-Path -LiteralPath (Join-Path $stateRoot 'service-started.txt')
+        $ledgerExists = Test-Path -LiteralPath (Join-Path $stateRoot 'review-authority.sqlite3')
+        Write-Host "DIAG before cleanup: marker=$labMarkerExists ledger=$ledgerExists"
         try {
             $failures = @(Get-WinEvent -FilterHashtable @{
                 LogName='Application'
@@ -176,8 +175,8 @@ try {
                 -and $_.Message -match 'MemoryReviewAuthority'
             } | Select-Object -First 2)
             foreach ($failure in $failures) {
-                Write-Host ('DIAG managed event ' + $failure.Id
-                    + ': ' + $failure.Message.Substring(0,[Math]::Min(1500,$failure.Message.Length)))
+                $detail = $failure.Message.Substring(0, [Math]::Min(1500, $failure.Message.Length))
+                Write-Host "DIAG managed event $($failure.Id): $detail"
             }
         } catch { Write-Host 'DIAG managed event unavailable' }
         throw 'service never reached RUNNING state'
