@@ -130,3 +130,10 @@ sind.
 
 **Nicht aus einem veränderbaren Repository erhöht starten. Nicht ohne
 echte menschliche Genehmigung zur Produktivfreigabe hochstufen.**
+
+## Echte Windows-11-Hello-Abnahme am Operator-PC
+
+Der genaue **nicht erhöhte Browser-Probelauf**, der echte E~-Export, die
+separat kontrollierte geschützte Installation und die PASS/FAIL-Kriterien
+stehen in [Windows 11 x64: physische Hello-Abnahme](memory-windows11-hello-field-acceptance.md).
+Die Windows-CI allein kann diese menschliche physische Prüfung nicht ersetzen.
