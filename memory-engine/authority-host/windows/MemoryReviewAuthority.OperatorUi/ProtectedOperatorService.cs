@@ -96,21 +96,24 @@ internal static class ProtectedOperatorService
             if (ace.AccessControlType != AccessControlType.Allow) continue;
             var sid = (SecurityIdentifier)ace.IdentityReference;
             if (sid.Value is "S-1-5-18" or "S-1-5-32-544") continue;
-            // Do not OR composite rights like Modify or FullControl here:
-            // they CONTAIN ordinary ReadAndExecute bits and would classify a
-            // Users READ-ONLY ACE as writeable. Inspect only the primitive
-            // actual mutation bits; FullControl still necessarily matches.
-            const FileSystemRights write =
-                FileSystemRights.WriteData | FileSystemRights.AppendData
-                | FileSystemRights.WriteExtendedAttributes
-                | FileSystemRights.WriteAttributes | FileSystemRights.Delete
-                | FileSystemRights.DeleteSubdirectoriesAndFiles
-                | FileSystemRights.ChangePermissions
-                | FileSystemRights.TakeOwnership;
-            if ((ace.FileSystemRights & write) != 0)
+            if (HasMutationRights(ace.FileSystemRights))
                 throw new InvalidOperationException(
                     "Nichtadministrativer Schreibzugriff auf Dienst-Pin-Verzeichnis");
         }
+    }
+
+    // Composite Modify/FullControl include READ bits, so testing those
+    // masks directly rejects legitimate read-only Users ACLs. Test only
+    // primitive mutation rights instead. This is covered by native CI.
+    internal static bool HasMutationRights(FileSystemRights rights)
+    {
+        const FileSystemRights mutation =
+            FileSystemRights.WriteData | FileSystemRights.AppendData
+            | FileSystemRights.WriteExtendedAttributes
+            | FileSystemRights.WriteAttributes | FileSystemRights.Delete
+            | FileSystemRights.DeleteSubdirectoriesAndFiles
+            | FileSystemRights.ChangePermissions | FileSystemRights.TakeOwnership;
+        return (rights & mutation) != 0;
     }
 
     private static string Encode(ReadOnlySpan<byte> bytes)
