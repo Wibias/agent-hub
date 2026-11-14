@@ -187,6 +187,11 @@ export class EvidenceWebAuthnLocalProbe {
     };
   }
 
+  peekMeaning(sessionId) {
+    const session = this.#require(sessionId, 'assertion');
+    return { ...session.meaning };
+  }
+
   async finish({
     sessionId, credentialId, clientDataJSON, authenticatorData,
     signature, freshMeaning,
