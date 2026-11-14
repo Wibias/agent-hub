@@ -97,6 +97,7 @@ export function isExplicitMemoryCommandAttempt(prompt) {
   return parseExplicitMemoryPrompt(prompt) !== null
     || /^\s*memory\s+candidate\s+(?:reject|confirm)(?=\s|:|$)/i.test(prompt)
     || /^\s*memory\s+(?:inspect|explain|forget|replace)\s*:/i.test(prompt)
+    || /^\s*memory\s+confirm\s+permanent\s+project\s+rule(?:\s|$)/i.test(prompt)
     || /^\s*memory\s*:/i.test(prompt);
 }
 
@@ -106,7 +107,7 @@ export function isExplicitMemoryCommandAttempt(prompt) {
 export function explicitMemoryCommandFailure(event, {
   enabled = false,
 } = {}) {
-  if (enabled !== true
+  if ((enabled !== true && !/^\s*memory\s+confirm\s+permanent\s+project\s+rule(?:\s|$)/i.test(String(event?.prompt ?? '')))
     || event?.hook_event_name !== 'UserPromptSubmit'
     || !isExplicitMemoryCommandAttempt(event?.prompt)) {
     return null;
