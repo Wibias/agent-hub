@@ -1,0 +1,43 @@
+name: Memory D12.3 default-off staging and read-only preflight
+on:
+  pull_request:
+    paths:
+      - 'memory-engine/memory-atomic-*.mjs'
+      - 'memory-engine/adapters/codex-hooks-core.mjs'
+      - 'scripts/inspect-memory-atomic-promotion-preflight.mjs'
+      - 'tests/memory-engine/memory-atomic-*.test.mjs'
+      - 'docs/memory-d12-3-*.md'
+      - '.github/workflows/verify-memory-d12-3-staging-preflight.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'memory-engine/memory-atomic-*.mjs'
+      - 'memory-engine/adapters/codex-hooks-core.mjs'
+      - 'scripts/inspect-memory-atomic-promotion-preflight.mjs'
+      - 'tests/memory-engine/memory-atomic-*.test.mjs'
+      - '.github/workflows/verify-memory-d12-3-staging-preflight.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+      - name: Test inactive confirmation, isolated staging, and non-authorizing preflight
+        run: >-
+          node --test
+          tests/memory-engine/memory-atomic-command-reserved.test.mjs
+          tests/memory-engine/memory-atomic-confirmed-staging.test.mjs
+          tests/memory-engine/memory-atomic-promotion-preflight.test.mjs
+          tests/memory-engine/codex-memory-command-failclosed.test.mjs
