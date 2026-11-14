@@ -16,9 +16,9 @@ const exportButton = $('export-operator-key');
 
 function pemFromSpki(spki) {
   const raw = btoa(String.fromCharCode(...new Uint8Array(spki)));
-  return '-----BEGIN PUBLIC KEY-----\\n'
-    + (raw.match(/.{1,64}/g) ?? []).join('\\n')
-    + '\\n-----END PUBLIC KEY-----\\n';
+  return '-----BEGIN PUBLIC KEY-----\n'
+    + (raw.match(/.{1,64}/g) ?? []).join('\n')
+    + '\n-----END PUBLIC KEY-----\n';
 }
 
 function clearExport() {
@@ -162,7 +162,7 @@ function enableButton() {
 }
 exportButton.addEventListener('click', () => {
   if (!unverifiedOperatorCredential || busy) return;
-  const content = JSON.stringify(unverifiedOperatorCredential, null, 2) + '\\n';
+  const content = JSON.stringify(unverifiedOperatorCredential, null, 2) + '\n';
   const url = URL.createObjectURL(new Blob([content], {
     type: 'application/json',
   }));
