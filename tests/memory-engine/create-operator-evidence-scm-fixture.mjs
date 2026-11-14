@@ -4,7 +4,7 @@
  * service. This constructs canonical E~ + linked Evidence tables, NOT a
  * fabricated approved Claim. Refuses outside GitHub Windows runner.
  */
-import { createHash } from 'node:crypto';
+import { createHash, generateKeyPairSync, randomBytes } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { DatabaseSync } from 'node:sqlite';
@@ -114,6 +114,17 @@ if (exported.protectedServiceImportCompleted
 // protects these copies; the actual service accepts no source input path.
 copyFileSync(join(exportDir, EVIDENCE_SNAPSHOT_NAME), targetSnapshot);
 copyFileSync(join(exportDir, EVIDENCE_MANIFEST_NAME), targetManifest);
+// A disposable P-256 PUBLIC KEY simulates a candidate registration source.
+// There is deliberately NO human or WebAuthn browser registration in CI;
+// it may only be staged with "operator_pinned_unverified" status.
+const publicKey = generateKeyPairSync('ec', { namedCurve: 'prime256v1' }).publicKey;
+writeFileSync(join(stateRoot, 'operator-webauthn-credential.json'),
+  JSON.stringify({
+    protocol: 'agenthub-operator-credential-pin-v1',
+    credentialId: randomBytes(32).toString('base64url'),
+    publicKeyPem: publicKey.export({ format: 'pem', type: 'spki' }),
+    expectedOrigin: 'http://localhost:4328',
+  }), { flag: 'wx' });
 rmSync(scratch, { recursive: true, force: true });
 process.stdout.write('REAL_EVIDENCE_GIT_TO_SERVICE_SOURCE_PREPARED_NO_AUTHORITY '
   + proposalRef + '\\n');
