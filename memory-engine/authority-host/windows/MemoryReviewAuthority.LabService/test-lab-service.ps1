@@ -17,6 +17,10 @@ if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) { throw 'published exe mi
 & $sc query $service 2>$null | Out-Null
 if ($LASTEXITCODE -eq 0) { throw 'service already exists: refuse to touch it' }
 
+$stateRoot = Join-Path $env:ProgramData 'AgentHubMemoryReviewLab-State'
+if (Test-Path -LiteralPath $stateRoot) {
+    throw 'preexisting state directory: refuse to touch it'
+}
 $root = Join-Path $env:ProgramData ("AgentHubMemoryReviewLab-" + [guid]::NewGuid().ToString('N'))
 $target = Join-Path $root 'MemoryReviewAuthority.LabService.exe'
 $created = $false
@@ -73,6 +77,51 @@ try {
         throw 'wrong SCM service identity'
     }
 
+    # The test's persistent-state boundary is protected by its OWN
+    # service SID. Do not grant the broad LocalService SID on this directory.
+    $serviceSid = [System.Security.Principal.NTAccount]::new(
+        'NT SERVICE', $service).Translate([System.Security.Principal.SecurityIdentifier])
+    if (-not $serviceSid.Value.StartsWith('S-1-5-80-')) {
+        throw 'invalid service-specific SID'
+    }
+    New-Item -ItemType Directory -Path $stateRoot | Out-Null
+    $stateAcl = Get-Acl -LiteralPath $stateRoot
+    $stateAcl.SetAccessRuleProtection($true, $false)
+    $stateAcl.Access | ForEach-Object { [void]$stateAcl.RemoveAccessRuleSpecific($_) }
+    foreach ($item in @(
+        @('S-1-5-18', [System.Security.AccessControl.FileSystemRights]::FullControl),
+        @('S-1-5-32-544', [System.Security.AccessControl.FileSystemRights]::FullControl)
+    )) {
+        $sid = [System.Security.Principal.SecurityIdentifier]::new($item[0])
+        $stateAcl.AddAccessRule(
+            [System.Security.AccessControl.FileSystemAccessRule]::new(
+                $sid, $item[1], $inherit, $propagate, $allow))
+    }
+    $stateAcl.AddAccessRule(
+        [System.Security.AccessControl.FileSystemAccessRule]::new(
+            $serviceSid, [System.Security.AccessControl.FileSystemRights]::Modify,
+            $inherit, $propagate, $allow))
+    Set-Acl -LiteralPath $stateRoot -AclObject $stateAcl
+    $actualState = Get-Acl -LiteralPath $stateRoot
+    if (-not $actualState.AreAccessRulesProtected) {
+        throw 'service state ACL inherits ordinary user rights'
+    }
+    $allowedStateSids = @('S-1-5-18', 'S-1-5-32-544', $serviceSid.Value)
+    foreach ($ace in $actualState.Access) {
+        $sid = $ace.IdentityReference.Translate(
+            [System.Security.Principal.SecurityIdentifier]).Value
+        if ($sid -notin $allowedStateSids) {
+            throw 'unexpected account allowed access to protected service state'
+        }
+    }
+    if (-not ($actualState.Access | Where-Object {
+        $_.IdentityReference.Translate(
+            [System.Security.Principal.SecurityIdentifier]).Value -eq $serviceSid.Value -and
+        ($_.FileSystemRights -band [System.Security.AccessControl.FileSystemRights]::WriteData) -ne 0
+    })) {
+        throw 'service-specific SID lacks necessary write access'
+    }
+
     & $sc start $service
     if ($LASTEXITCODE -ne 0) { throw 'LocalService lab host did not start' }
     $running = $false
@@ -82,7 +131,12 @@ try {
         Start-Sleep -Milliseconds 250
     }
     if (-not $running) { throw 'service never reached RUNNING state' }
-    Write-Host 'PASS: disposable LocalService restricted-SID lab host started; NO_PIPE NO_NETWORK NO_DB'
+    $markerFile = Join-Path $stateRoot 'service-started.txt'
+    if (-not (Test-Path -LiteralPath $markerFile -PathType Leaf) -or
+        ((Get-Content -LiteralPath $markerFile -Raw) -ne 'SERVICE_SID_STATE_WRITE_OK')) {
+        throw 'restricted service failed to write protected state marker'
+    }
+    Write-Host 'PASS: restricted LocalService wrote a service-SID-protected marker; NO_PIPE NO_NETWORK NO_DB'
 }
 finally {
     if ($created) {
@@ -104,10 +158,15 @@ finally {
         }
         if (-not $gone) { throw 'temporary SCM service was not fully removed' }
     }
+    if (Test-Path -LiteralPath $stateRoot) {
+        Remove-Item -LiteralPath $stateRoot -Force -Recurse -ErrorAction Stop
+    }
     if (Test-Path -LiteralPath $root) {
         Remove-Item -LiteralPath $root -Force -Recurse -ErrorAction Stop
     }
-    if (Test-Path -LiteralPath $root) { throw 'temporary executable directory still exists' }
-    Write-Host 'PASS: ephemeral SCM service and executable directory removed'
+    if ((Test-Path -LiteralPath $stateRoot) -or (Test-Path -LiteralPath $root)) {
+        throw 'temporary state or executable directory still exists'
+    }
+    Write-Host 'PASS: ephemeral SCM service, service-SID state and executable directory removed'
     # Runner is ephemeral; never delete any pre-existing operator service.
 }
