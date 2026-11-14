@@ -15,6 +15,7 @@ import {
   createCodexMemoryHookAdapter,
 } from '../memory-engine/adapters/codex-hooks.mjs';
 import { MemoryEngine } from '../memory-engine/index.mjs';
+import { memoryEvidenceReviewSnapshot } from '../memory-engine/evidence-bound-review-readonly.mjs';
 import {
   createAsyncGitGraphView,
   normalizeRepositoryRoots,
@@ -479,6 +480,11 @@ export function createMemoryUiServer({
         }
 
         const scope = memoryUiScope(engine, { projectId, branch });
+        scope.evidenceBoundReview = memoryEvidenceReviewSnapshot({
+          dbPath: resolvedDbPath,
+          projectId,
+          branch,
+        });
         if (includeRuntimeHealth) {
           scope.runtime = await runtimeHealth({
             dbPath: resolvedDbPath,
