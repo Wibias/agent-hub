@@ -20,8 +20,10 @@ if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) { throw 'published exe mi
 if ($LASTEXITCODE -eq 0) { throw 'service already exists: refuse to touch it' }
 
 $stateRoot = Join-Path $env:ProgramData 'AgentHubMemoryReviewLab-State'
-if (Test-Path -LiteralPath $stateRoot) {
-    throw 'preexisting state directory: refuse to touch it'
+$publicRoot = Join-Path $env:ProgramData 'AgentHubMemoryReviewLab-Public'
+if ((Test-Path -LiteralPath $stateRoot) -or
+    (Test-Path -LiteralPath $publicRoot)) {
+    throw 'preexisting lab state or admin-public-key directory: refuse to touch it'
 }
 $root = Join-Path $env:ProgramData ("AgentHubMemoryReviewLab-" + [guid]::NewGuid().ToString('N'))
 $target = Join-Path $root 'MemoryReviewAuthority.LabService.exe'
@@ -201,7 +203,7 @@ try {
     if (-not (Test-Path -LiteralPath $ledgerPath -PathType Leaf) -or
         ((Get-Item -LiteralPath $ledgerPath).Length -lt 4096) -or
         -not (Test-Path -LiteralPath $ledgerMarker -PathType Leaf) -or
-        ((Get-Content -LiteralPath $ledgerMarker -Raw) -ne 'PENDING_ONLY_NO_AUTHORIZATION')) {
+        ((Get-Content -LiteralPath $ledgerMarker -Raw) -ne 'SYNTHETIC_PROTECTED_CLAIM_NO_HUMAN_APPROVAL')) {
         throw 'service-owned pending-only SQLite ledger missing or incomplete'
     }
     $stateFiles = @(Get-ChildItem -LiteralPath $stateRoot -File)
@@ -225,7 +227,101 @@ try {
     $accessProbe = (Resolve-Path -LiteralPath $AccessProbeExe).Path
     & $accessProbe $stateRoot
     if ($LASTEXITCODE -ne 0) { throw 'same-account nonadmin SQLite access denial failed' }
-    Write-Host 'PASS: restricted LocalService wrote a pending-only WAL SQLite ledger under exact service-SID ACL; NO_IPC NO_CLAIMS'
+    # Publish ONLY the service-generated public key under a separate
+    # Administrators-owned directory. Ordinary users may read this key but
+    # cannot replace it with a forged same-account pipe server identity.
+    $sourcePin = Join-Path $stateRoot 'review-service-signing-key.pub.pem'
+    for ($attempt=0; $attempt -lt 30; $attempt++) {
+        if (Test-Path -LiteralPath $sourcePin -PathType Leaf) { break }
+        Start-Sleep -Milliseconds 150
+    }
+    if (-not (Test-Path -LiteralPath $sourcePin -PathType Leaf)) {
+        throw 'protected signing public key was not generated'
+    }
+    $privateKey = Join-Path $stateRoot 'review-service-signing-key.pk8'
+    if (-not (Test-Path -LiteralPath $privateKey -PathType Leaf)) {
+        throw 'protected signing private key was not generated'
+    }
+    New-Item -ItemType Directory -Path $publicRoot | Out-Null
+    $publicAcl = Get-Acl -LiteralPath $publicRoot
+    $publicAcl.SetAccessRuleProtection($true, $false)
+    $publicAcl.SetOwner([System.Security.Principal.SecurityIdentifier]::new('S-1-5-32-544'))
+    $publicAcl.Access | ForEach-Object { [void]$publicAcl.RemoveAccessRuleSpecific($_) }
+    foreach ($grant in @(
+        @('S-1-5-18', [System.Security.AccessControl.FileSystemRights]::FullControl),
+        @('S-1-5-32-544', [System.Security.AccessControl.FileSystemRights]::FullControl),
+        @('S-1-5-32-545', [System.Security.AccessControl.FileSystemRights]::ReadAndExecute)
+    )) {
+        $sid = [System.Security.Principal.SecurityIdentifier]::new($grant[0])
+        $publicAcl.AddAccessRule(
+            [System.Security.AccessControl.FileSystemAccessRule]::new(
+                $sid, $grant[1], $inherit, $propagate, $allow))
+    }
+    Set-Acl -LiteralPath $publicRoot -AclObject $publicAcl
+    $publishedPin = Join-Path $publicRoot 'review-service-signing-key.pub.pem'
+    Copy-Item -LiteralPath $sourcePin -Destination $publishedPin
+    # Force owner and DACL on the copied file (do not trust Copy-Item to
+    # inherit the destination directory security on all runner versions).
+    $pinAcl = Get-Acl -LiteralPath $publishedPin
+    $pinAcl.SetAccessRuleProtection($true, $false)
+    $pinAcl.SetOwner([System.Security.Principal.SecurityIdentifier]::new('S-1-5-32-544'))
+    $pinAcl.Access | ForEach-Object { [void]$pinAcl.RemoveAccessRuleSpecific($_) }
+    foreach ($grant in @(
+        @('S-1-5-18', [System.Security.AccessControl.FileSystemRights]::FullControl),
+        @('S-1-5-32-544', [System.Security.AccessControl.FileSystemRights]::FullControl),
+        @('S-1-5-32-545', [System.Security.AccessControl.FileSystemRights]::ReadAndExecute)
+    )) {
+        $sid = [System.Security.Principal.SecurityIdentifier]::new($grant[0])
+        $pinAcl.AddAccessRule([System.Security.AccessControl.FileSystemAccessRule]::new(
+            $sid, $grant[1], $allow))
+    }
+    Set-Acl -LiteralPath $publishedPin -AclObject $pinAcl
+    $actualPin = Get-Acl -LiteralPath $publishedPin
+    if (-not $actualPin.AreAccessRulesProtected -or
+        $actualPin.GetOwner([System.Security.Principal.SecurityIdentifier]).Value -ne 'S-1-5-32-544') {
+        throw 'published service identity pin has an unsafe ACL or owner'
+    }
+    foreach ($ace in $actualPin.Access) {
+        $sid = $ace.IdentityReference.Translate(
+            [System.Security.Principal.SecurityIdentifier]).Value
+        if ($sid -notin @('S-1-5-18','S-1-5-32-544','S-1-5-32-545')) {
+            throw 'published identity pin has an unexpected access rule'
+        }
+        if ($sid -eq 'S-1-5-32-545' -and
+            (($ace.FileSystemRights -band [System.Security.AccessControl.FileSystemRights]::WriteData) -ne 0)) {
+            throw 'ordinary users can replace the service identity pin'
+        }
+    }
+
+    $probeScript = Join-Path $repoRoot 'scripts/probe-protected-memory-lab.mjs'
+    # Resolve script path from GitHub checkout, never from service IPC input.
+    if (-not (Test-Path -LiteralPath $probeScript -PathType Leaf)) {
+        throw 'repository read probe not present'
+    }
+    $goodJson = & node $probeScript --pin $publishedPin
+    if ($LASTEXITCODE -ne 0) { throw 'signed service read failed' }
+    $good = $goodJson | ConvertFrom-Json
+    if ($good.status -ne 'found_lab_only' -or
+        -not $good.signed_response_verified -or
+        $good.trusted_for_production_recall -or
+        $good.real_human_approval_verified -or
+        @($good.items).Count -ne 1 -or
+        $good.items[0].value -ne 'Synthetic non-authorizing lab fact') {
+        throw 'verified protected read had incorrect content or authority flags'
+    }
+    $forgedPin = Join-Path $env:RUNNER_TEMP 'agenthub-review-forged-key.pem'
+    Set-Content -LiteralPath $forgedPin -Value 'not-a-valid-public-key'
+    $forgedJson = & node $probeScript --pin $forgedPin
+    $forgedExit = $LASTEXITCODE
+    $forged = $forgedJson | ConvertFrom-Json
+    if ($forgedExit -ne 2 -or
+        $forged.status -ne 'protected_lab_read_unverified' -or
+        @($forged.items).Count -ne 0) {
+        throw 'forged signing key was not rejected closed'
+    }
+    Write-Host 'PASS: SCM restricted service signed one synthetic protected Claim; Node verified Admin-pinned service origin, one nonce, and strict scope'
+    Write-Host 'PASS: forged pin rejected; NO REAL USER APPROVAL, NO PRODUCTION IPC'
+    Write-Host 'PASS: restricted LocalService protected SQLite ACL and same-account negative access'
 }
 finally {
     if ($created) {
@@ -247,13 +343,18 @@ finally {
         }
         if (-not $gone) { throw 'temporary SCM service was not fully removed' }
     }
+    if (Test-Path -LiteralPath $publicRoot) {
+        Remove-Item -LiteralPath $publicRoot -Force -Recurse -ErrorAction Stop
+    }
     if (Test-Path -LiteralPath $stateRoot) {
         Remove-Item -LiteralPath $stateRoot -Force -Recurse -ErrorAction Stop
     }
     if (Test-Path -LiteralPath $root) {
         Remove-Item -LiteralPath $root -Force -Recurse -ErrorAction Stop
     }
-    if ((Test-Path -LiteralPath $stateRoot) -or (Test-Path -LiteralPath $root)) {
+    if ((Test-Path -LiteralPath $stateRoot) -or
+        (Test-Path -LiteralPath $publicRoot) -or
+        (Test-Path -LiteralPath $root)) {
         throw 'temporary state or executable directory still exists'
     }
     Write-Host 'PASS: ephemeral SCM service, service-SID state and executable directory removed'
