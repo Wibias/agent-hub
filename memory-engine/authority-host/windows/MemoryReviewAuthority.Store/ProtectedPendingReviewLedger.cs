@@ -104,6 +104,7 @@ public sealed partial class ProtectedPendingReviewLedger : IDisposable
             }
             InitializeVerifiedReviewSchema(connection);
             InitializeProtectedClaimSchema(connection);
+            InitializeProtectedSourceSchema(connection);
             return new ProtectedPendingReviewLedger(connection);
         }
         catch
