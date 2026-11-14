@@ -143,6 +143,8 @@ internal static class NativeWindowsWebAuthn
     // and the native client binds clientDataJSON to precisely that origin.
     internal static bool ValidPinnedLocalOrigin(string? origin)
         => origin is not null
+            && Regex.IsMatch(origin, @"\Ahttp://localhost:[1-9][0-9]{0,4}\z",
+                RegexOptions.CultureInvariant)
             && Uri.TryCreate(origin, UriKind.Absolute, out var uri)
             && uri.Scheme == Uri.UriSchemeHttp
             && uri.Host.Equals("localhost", StringComparison.Ordinal)
