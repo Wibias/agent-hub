@@ -117,7 +117,16 @@ copyFileSync(join(exportDir, EVIDENCE_MANIFEST_NAME), targetManifest);
 // A disposable P-256 PUBLIC KEY simulates a candidate registration source.
 // There is deliberately NO human or WebAuthn browser registration in CI;
 // it may only be staged with "operator_pinned_unverified" status.
-const publicKey = generateKeyPairSync('ec', { namedCurve: 'prime256v1' }).publicKey;
+const keys = generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
+const publicKey = keys.publicKey;
+// The synthetic PRIVATE key remains OUTSIDE the LocalService's protected
+// state and is never sent over IPC. CI uses it solely to prove end-to-end
+// challenge transport, not real Windows Hello human consent.
+const privateFixture = join(process.env.RUNNER_TEMP,
+  'AgentHubMemoryReviewLab-TestOperatorPrivateKey.pem');
+writeFileSync(privateFixture, keys.privateKey.export({
+  format: 'pem', type: 'pkcs8',
+}), { flag: 'wx' });
 writeFileSync(join(stateRoot, 'operator-webauthn-credential.json'),
   JSON.stringify({
     protocol: 'agenthub-operator-credential-pin-v1',
