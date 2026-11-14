@@ -347,6 +347,11 @@ try {
     $nativeProject = Join-Path $repoRoot 'memory-engine/authority-host/windows/MemoryReviewAuthority.OperatorUi/MemoryReviewAuthority.OperatorUi.csproj'
     & dotnet run --project $nativeProject -c Release --runtime win-x64 --no-build --no-restore -- --service-smoke
     if ($LASTEXITCODE -ne 0) {
+        $operatorDiag = Join-Path $env:RUNNER_TEMP 'AgentHubNativeOperatorSmokeFailure.txt'
+        if (Test-Path -LiteralPath $operatorDiag -PathType Leaf) {
+            Write-Host ('Native Windows operator CI-only diagnostic: ' +
+                (Get-Content -LiteralPath $operatorDiag -Raw))
+        }
         throw 'native operator Windows GUI failed to verify signed real E~ from live service'
     }
     Write-Host 'PASS: native elevated operator Windows GUI client validates actual protected E~ and Admin-owned signer via SCM pipe; NO Hello, NO Claim'
