@@ -9,6 +9,8 @@ on:
       - 'tests/memory-engine/export-protected-evidence-review.test.mjs'
       - 'tests/memory-engine/memory-console-evidence-review.test.mjs'
       - 'tests/memory-engine/evidence-webauthn-local-probe.test.mjs'
+      - 'scripts/prepare-memory-evidence-shadow.mjs'
+      - 'tests/memory-engine/memory-evidence-shadow.test.mjs'
       - 'memory-engine/evidence-webauthn-local-probe.mjs'
       - 'memory-ui/webauthn-probe.html'
       - 'memory-ui/webauthn-probe.js'
@@ -28,6 +30,8 @@ on:
       - 'tests/memory-engine/export-protected-evidence-review.test.mjs'
       - 'tests/memory-engine/memory-console-evidence-review.test.mjs'
       - 'tests/memory-engine/evidence-webauthn-local-probe.test.mjs'
+      - 'scripts/prepare-memory-evidence-shadow.mjs'
+      - 'tests/memory-engine/memory-evidence-shadow.test.mjs'
       - 'memory-engine/evidence-webauthn-local-probe.mjs'
       - 'memory-ui/webauthn-probe.html'
       - 'memory-ui/webauthn-probe.js'
@@ -60,5 +64,6 @@ jobs:
           tests/memory-engine/export-protected-evidence-review.test.mjs
           tests/memory-engine/memory-console-evidence-review.test.mjs
           tests/memory-engine/evidence-webauthn-local-probe.test.mjs
+          tests/memory-engine/memory-evidence-shadow.test.mjs
           tests/memory-engine/evidence-bound-proposal-store.test.mjs
           tests/memory-engine/memory-local-proposal-evidence-review.test.mjs
