@@ -173,9 +173,10 @@ test('failure classifier reports only fixed quota/CLI/validation codes, never pe
   ).failure_code, 'shadow_preflight_or_storage_failure');
 });
 
-test('CLI reports sanitized attempted status with injected judge failure and zero real calls', async () => {
+test('CLI reports sanitized attempted status with injected judge failure and zero real calls', async t => {
+  const f = fixture(t);
   const argumentsList = [
-    '--shadow-db', '/tmp/AgentHub-Evidence-Shadow-' + 'a'.repeat(32) + '/memory-shadow.sqlite3',
+    '--shadow-db', f.dbPath,
     '--project-id', projectId, '--branch', 'main', '--run-model',
   ];
   let attempted = false;
