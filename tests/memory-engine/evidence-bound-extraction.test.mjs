@@ -463,7 +463,7 @@ test('v2 extraction prompt preserves named plan and build boundaries rather than
   });
   assert.match(prompt, /Policy version: evidence-extraction-v2/u);
   assert.match(prompt, /project_id\/branch only identifies where Evidence was recorded/u);
-  assert.match(prompt, /specific plan or build is NOT a standing procedure/u);
+  assert.match(prompt, /named plan or build is NOT a standing procedure/u);
   assert.match(prompt, /assertion change or test adjustment is NOT general authorization/u);
   assert.match(prompt, /scope just to make a memory appear durable/u);
   assert.match(prompt, /For the authorized Plan 44 build, update exactly one assertion/u);
