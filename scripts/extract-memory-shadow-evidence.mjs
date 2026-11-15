@@ -14,6 +14,7 @@ import { pathToFileURL } from 'node:url';
 import { createIsolatedCodexJsonJudge } from './codex-isolated-memory-judge.mjs';
 import { runEvidenceBoundExtractionPipeline } from '../memory-engine/evidence-bound-pipeline.mjs';
 import { inspectMemoryTextSensitivity } from '../memory-engine/index.mjs';
+import { classifyCodexJudgeSmokeFailure } from './smoke-codex-memory-judge.mjs';
 
 const MAX_EVIDENCE = 25;
 const ALLOWED = new Set(['user_direct', 'repo_trusted', 'tool_observation']);
@@ -104,9 +105,10 @@ export async function extractShadowEvidence({
   localAppData = process.env.LOCALAPPDATA,
   createJudge = createIsolatedCodexJsonJudge,
   runExtraction = runEvidenceBoundExtractionPipeline,
+  onModelCallAttempt = () => {},
 } = {}) {
   if (![dbPath, projectId, branch].every(x => typeof x === 'string' && x.trim())
-    || typeof runModel !== 'boolean') {
+    || typeof runModel !== 'boolean' || typeof onModelCallAttempt !== 'function') {
     throw new TypeError('exact shadow scope and explicit model mode required');
   }
   requireIsolatedShadow(dbPath, { localAppData });
@@ -197,6 +199,7 @@ export async function extractShadowEvidence({
       evidence,
       judge: async ({ prompt }) => {
         attempted = true;
+        onModelCallAttempt();
         return judge.judge(prompt);
       },
       evaluatorId: judge.evaluatorId,
@@ -222,18 +225,74 @@ export async function extractShadowEvidence({
   }
 }
 
+/**
+ * Return only fixed, content-free failure classifications. Raw Codex CLI
+ * stderr and judge output may contain personal prompts, source Evidence,
+ * filesystem paths or account details and must NEVER be printed here.
+ */
+export function sanitizeShadowExtractionFailure(error, {
+  modelCallAttempted = false,
+} = {}) {
+  const raw = String(error instanceof Error ? error.message : error ?? '');
+  const known = classifyCodexJudgeSmokeFailure(error);
+  let failureCode = known;
+  if (known === 'judge_failure_unclassified') {
+    if (/\bcodex isolated memory judge failed with exit\b/i.test(raw)) {
+      failureCode = 'codex_exec_nonzero_unclassified';
+    } else if (/evidence extraction response|unexpected field in memory proposal|missing field in memory proposal|unknown cited evidence|outside extraction scope|unsupported evidence extraction|memory proposal must be|kind must be preference|canonical_fact must be/i.test(raw)) {
+      failureCode = 'extraction_validation_failed';
+    } else if (/shadow|sqlite|database|schema|project is not registered|absolute path|unsupported|malformed argument|missing argument|eacces|eperm|enoent/i.test(raw)) {
+      failureCode = 'shadow_preflight_or_storage_failure';
+    } else {
+      failureCode = 'shadow_extraction_failure_unclassified';
+    }
+  }
+  const match = raw.match(/\bcodex isolated memory judge failed with exit (\d{1,3})\b/i);
+  const exitCode = match ? Number(match[1]) : null;
+
+  return {
+    status: 'shadow_extraction_failed',
+    failure_code: failureCode,
+    model_call_attempted: modelCallAttempted === true,
+    process_exit_code: exitCode !== null && exitCode >= 1 && exitCode <= 255
+      ? exitCode : null,
+    source_database_modified_by_tool: false,
+    shadow_proposals_may_have_changed: modelCallAttempted === true,
+    claims_created: 0,
+    protected_approval: false,
+    note: 'Classification is indicative, not a verified account status. Never upload source Evidence or raw CLI stderr.',
+  };
+}
+
+/**
+ * CLI boundary is intentionally injected so regression tests can exercise
+ * error classification without starting a real Codex model call.
+ */
+export async function runShadowExtractionCommand({
+  argv = process.argv.slice(2),
+  run = extractShadowEvidence,
+  write = text => process.stdout.write(text),
+} = {}) {
+  let modelCallAttempted = false;
+  try {
+    const args = parseShadowExtractionArgs(argv);
+    const result = await run({
+      ...args,
+      onModelCallAttempt: () => { modelCallAttempted = true; },
+    });
+    write(JSON.stringify(result, null, 2) + '\n');
+    return 0;
+  } catch (error) {
+    write(JSON.stringify(sanitizeShadowExtractionFailure(error, {
+      modelCallAttempted,
+    }), null, 2) + '\n');
+    return 2;
+  }
+}
+
 const isMain = process.argv[1]
   && pathToFileURL(resolve(process.argv[1])).href === import.meta.url;
 
 if (isMain) {
-  extractShadowEvidence(parseShadowExtractionArgs(process.argv.slice(2)))
-    .then(report => {
-      process.stdout.write(JSON.stringify(report, null, 2) + '\n');
-    })
-    .catch(() => {
-      // Never leak canonical facts, Evidence strings, CLI stderr, paths,
-      // tokens, credentials or model responses into the shared terminal log.
-      process.stderr.write('SHADOW_EXTRACTION_UNAVAILABLE: no approval or Claim was generated.\n');
-      process.exitCode = 1;
-    });
+  process.exitCode = await runShadowExtractionCommand();
 }
