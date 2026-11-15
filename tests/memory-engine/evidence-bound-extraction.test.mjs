@@ -455,8 +455,8 @@ test('unknown tool outcome remains available for analysis but is labelled in the
 test('v2 extraction prompt preserves named plan and build boundaries rather than inventing universal rules', () => {
   assert.equal(EVIDENCE_EXTRACTION_POLICY_VERSION, 'evidence-extraction-v2');
   const prompt = buildEvidenceBoundExtractionPrompt({
-    projectId: 'github.com/Wibias/streamer-content',
-    branch: 'fix5-plan44',
+    projectId: 'project-a',
+    branch: 'main',
     evidence: [evidence({
       content_redacted: 'For the authorized Plan 44 build, update exactly one assertion to the new visible target. Do not weaken checks.',
     })],
