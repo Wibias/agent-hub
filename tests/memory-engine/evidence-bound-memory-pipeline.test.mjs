@@ -299,7 +299,7 @@ test('judge bundle reuses one isolated runner and exposes stage-specific evaluat
     'extract prompt', 'importance prompt', 'support prompt', 'relation prompt',
   ]);
   assert.deepEqual(bundle.evaluatorIds, {
-    extraction: 'codex:gpt-test:evidence-extraction-v1',
+    extraction: 'codex:gpt-test:evidence-extraction-v2',
     importance: 'codex:gpt-test:evidence-importance-v1',
     support: 'codex:gpt-test:evidence-support-v1',
     relation: 'codex:gpt-test:evidence-relation-v1',

@@ -185,7 +185,7 @@ export async function createEvidenceBoundJudgeBundle({
 
   const evaluatorPrefix = 'codex:' + (model || 'default') + ':';
   const evaluatorIds = {
-    extraction: evaluatorPrefix + 'evidence-extraction-v1',
+    extraction: evaluatorPrefix + 'evidence-extraction-v2',
     importance: evaluatorPrefix + 'evidence-importance-v1',
     support: evaluatorPrefix + 'evidence-support-v1',
     relation: evaluatorPrefix + 'evidence-relation-v1',

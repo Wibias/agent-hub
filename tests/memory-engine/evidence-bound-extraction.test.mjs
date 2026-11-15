@@ -450,3 +450,23 @@ test('unknown tool outcome remains available for analysis but is labelled in the
   assert.match(prompt, /e-tool-unknown/u);
   assert.match(prompt, /"tool_outcome":"unknown"/u);
 });
+
+
+test('v2 extraction prompt preserves named plan and build boundaries rather than inventing universal rules', () => {
+  assert.equal(EVIDENCE_EXTRACTION_POLICY_VERSION, 'evidence-extraction-v2');
+  const prompt = buildEvidenceBoundExtractionPrompt({
+    projectId: 'project-a',
+    branch: 'main',
+    evidence: [evidence({
+      content_redacted: 'For the authorized Plan 44 build, update exactly one assertion to the new visible target. Do not weaken checks.',
+    })],
+  });
+  assert.match(prompt, /Policy version: evidence-extraction-v2/u);
+  assert.match(prompt, /project_id\/branch only identifies where Evidence was recorded/u);
+  assert.match(prompt, /named plan or build is NOT a standing procedure/u);
+  assert.match(prompt, /assertion change or test adjustment is NOT general authorization/u);
+  assert.match(prompt, /scope just to make a memory appear durable/u);
+  assert.match(prompt, /For the authorized Plan 44 build, update exactly one assertion/u);
+  assert.match(prompt, /Incorrect: All builds must keep checks X and Y/u);
+  assert.match(prompt, /Incorrect: Migrate test assertions whenever an approved plan changes the target/u);
+});

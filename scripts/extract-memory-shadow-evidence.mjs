@@ -184,7 +184,7 @@ export async function extractShadowEvidence({
   try {
     judge = await createJudge({
       workspaceLabel: 'evidence-shadow-extraction',
-      policyVersion: 'evidence-extraction-v1',
+      policyVersion: 'evidence-extraction-v2',
       reasoningEffort: 'medium',
     });
     if (!judge || typeof judge.judge !== 'function'
