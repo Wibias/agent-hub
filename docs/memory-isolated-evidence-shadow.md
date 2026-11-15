@@ -127,6 +127,44 @@ keine Claims, `needs_confirmation` oder Bestätigung. Das erzeugt also
 Klassische `memory_candidates` werden nicht in Evidence-Bound-Claims
 umgedeutet.
 
+## Importance separat, höchstens EIN Proposal pro Ausführung
+
+Nach erfolgreicher Extraktion können die vorhandenen `pending`-Vorschläge
+durch die Importance-Stufe einzeln bewertet werden. **Nicht** die komplette
+`runEvidenceBoundMemoryPipeline()` auf diesem Shadow starten, weil deren
+Promotion-Stufe sonst auch Claims erzeugen könnte.
+
+Zunächst ohne Modellkosten die Anzahl offener Importance-Fälle lesen:
+
+```powershell
+node "$review\scripts\judge-memory-shadow-importance.mjs" `
+  --shadow-db "$shadow\memory-shadow.sqlite3" `
+  --project-id "github.com/Wibias/streamer-content" `
+  --branch "fix5-plan44"
+```
+
+Der explizite Aufruf `--run-model` bewertet **genau den ältesten**
+noch nicht bewerteten `pending`-Vorschlag; er führt keine automatische
+Schleife aus. Der Prompt enthält dessen `canonical_fact`, die
+Evidence-IDs und Authorities, jedoch nicht die Originalbelege. Für
+`promote` wird der Status zunächst `pending` bleiben: Er wartet auf
+die gesonderte Support-/Relationsprüfung. `needs_confirmation`
+wechselt in den Review-Status, **ohne** menschliche Zustimmung oder
+Claim-Write. `ignore` wird als `ignored` vermerkt.
+
+```powershell
+# Nur nach bewusster Entscheidung, GENAU EIN Modellurteil:
+node "$review\scripts\judge-memory-shadow-importance.mjs" `
+  --shadow-db "$shadow\memory-shadow.sqlite3" `
+  --project-id "github.com/Wibias/streamer-content" `
+  --branch "fix5-plan44" `
+  --run-model
+```
+
+Der Bericht enthält keine Faktentexte und keine rohen CLI-Fehler.
+Nach jedem Modellurteil die lesende Inventar-CLI ausführen.
+Quotafehler und unerwartete Statusänderungen nicht blind wiederholen.
+
 Anschließend mit der eigentlichen Browser-Console und einem
 **tatsächlich vorhandenen, unabhängig geprüften E~-Vorschlag** fortfahren.
 Der bestehende künstliche Browser-Hello-Test ist nur ein Interaktionstest.
