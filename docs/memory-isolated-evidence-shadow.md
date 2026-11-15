@@ -127,6 +127,30 @@ keine Claims, `needs_confirmation` oder Bestätigung. Das erzeugt also
 Klassische `memory_candidates` werden nicht in Evidence-Bound-Claims
 umgedeutet.
 
+## Extraction v2: Geltungsbereiche nicht ausweiten
+
+Zwei echte Streamer-Content-Vorschläge aus dem alten `evidence-extraction-v1`
+wurden vom Evidence-Support als `unsupported` verworfen: einmal wurde
+eine konkrete autorisierte Assertion-Änderung zu einer allgemeinen
+Testmigrationsregel ausgeweitet, einmal wurden Regeln für Plan 44 auf
+alle Builds ausgedehnt. Die Support-Prüfung hat dabei korrekt gestoppt.
+
+Die neue `evidence-extraction-v2` präzisiert den Prompt:
+Geltungsbereiche wie Plan/Build, Phase, Ziel, Test, Pfad, Version,
+Autorisierungsgrenze und Ausnahme **müssen erhalten bleiben**. Eine
+einmalige Erlaubnis ist keine Dauerregel. Wenn ein präziser Fakt nur
+kurzzeitig gilt, wird er lieber ausgelassen, statt künstlich zu
+einer langlebigen allgemeinen Policy zu werden.
+
+Die Änderung ist **Prompt-Härtung, keine formale semantische Garantie**.
+Eine Modellantwort kann dennoch fehlerhaft sein. Der unabhängige
+Evidence-Support bleibt zwingend. Bereits als `ignored` bewertete
+v1-Vorschläge werden nicht heimlich repariert oder reaktiviert. Die
+noch offenen v1-`pending`-Einträge werden nicht ungeprüft als v2
+etikettiert. Eine spätere explizite v2-Extraktion auf dem Shadow
+braucht gesonderte Entscheidung und kann zusätzliche `pending`-
+Vorschläge anlegen; keine automatische Wiederholung.
+
 ## Importance separat, höchstens EIN Proposal pro Ausführung
 
 Nach erfolgreicher Extraktion können die vorhandenen `pending`-Vorschläge
