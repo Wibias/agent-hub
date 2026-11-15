@@ -109,6 +109,16 @@ node "$review\scripts\extract-memory-shadow-evidence.mjs" `
   --run-model
 ```
 
+Wenn der Aufruf fehlschlägt, gibt die CLI jetzt einen JSON-Status
+`shadow_extraction_failed` mit einem festen `failure_code`,
+`model_call_attempted` und gegebenenfalls `process_exit_code` zurück.
+Weder Source-Evidence noch rohe stderr-/Modellantworten werden ausgegeben.
+`usage_limit_reached_possible` ist ein Hinweis, kein sicher bestätigter
+Kontostand. Bei dieser Kategorie keinen automatischen Retry auslösen.
+`shadow_proposals_may_have_changed` ist vorsorglich `true`, sobald der
+Modellaufruf begonnen hat. Tatsächliche Vorschläge anschließend **nur**
+durch das lesende Inventar prüfen.
+
 Die Extraktion kann höchstens fünf neue Vorschläge erzeugen, **ausschließlich**
 mit `status=pending` und echter Modell-Evaluator-ID. Sie führt keine
 Importance-, Support-, Relation- oder Promotion-Stufe aus und schreibt
