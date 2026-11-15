@@ -1975,10 +1975,15 @@ button {
 
 /* Operator WebAuthn probe: editorial, browser-held and deliberately separate
    from the protected Claim authorization UI (which does not exist yet). */
-.webauthn-probe {
+body.webauthn-probe {
+  /* The Console shell locks viewport overflow; the standalone Hello page must
+     scroll naturally, including at 100% zoom and on short/narrow screens. */
+  min-width: 0;
+  min-height: 100dvh;
+  height: auto;
+  overflow: auto;
   background: #0e1114;
   color: #eceeef;
-  min-height: 100vh;
 }
 .webauthn-stage {
   max-width: 920px;
@@ -2076,7 +2081,7 @@ button {
   line-height: 1.6;
 }
 @media (max-width: 650px) {
-  .webauthn-top { margin-bottom: 54px; }
+  .webauthn-top { flex-wrap: wrap; margin-bottom: 54px; }
   .webauthn-details { grid-template-columns: 1fr; gap: 6px; }
   .webauthn-details dd { margin-bottom: 18px; }
 }
