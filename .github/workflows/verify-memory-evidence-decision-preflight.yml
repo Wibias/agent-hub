@@ -15,6 +15,8 @@ on:
       - 'tests/memory-engine/memory-shadow-extraction.test.mjs'
       - 'scripts/judge-memory-shadow-importance.mjs'
       - 'tests/memory-engine/memory-shadow-importance.test.mjs'
+      - 'scripts/judge-memory-shadow-support.mjs'
+      - 'tests/memory-engine/memory-shadow-support.test.mjs'
       - 'memory-engine/evidence-webauthn-local-probe.mjs'
       - 'memory-ui/webauthn-probe.html'
       - 'memory-ui/webauthn-probe.js'
@@ -40,6 +42,8 @@ on:
       - 'tests/memory-engine/memory-shadow-extraction.test.mjs'
       - 'scripts/judge-memory-shadow-importance.mjs'
       - 'tests/memory-engine/memory-shadow-importance.test.mjs'
+      - 'scripts/judge-memory-shadow-support.mjs'
+      - 'tests/memory-engine/memory-shadow-support.test.mjs'
       - 'memory-engine/evidence-webauthn-local-probe.mjs'
       - 'memory-ui/webauthn-probe.html'
       - 'memory-ui/webauthn-probe.js'
@@ -75,5 +79,6 @@ jobs:
           tests/memory-engine/memory-evidence-shadow.test.mjs
           tests/memory-engine/memory-shadow-extraction.test.mjs
           tests/memory-engine/memory-shadow-importance.test.mjs
+          tests/memory-engine/memory-shadow-support.test.mjs
           tests/memory-engine/evidence-bound-proposal-store.test.mjs
           tests/memory-engine/memory-local-proposal-evidence-review.test.mjs
