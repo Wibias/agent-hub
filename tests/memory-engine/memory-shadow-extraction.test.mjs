@@ -11,6 +11,8 @@ import {
   extractShadowEvidence,
   parseShadowExtractionArgs,
   requireIsolatedShadow,
+  runShadowExtractionCommand,
+  sanitizeShadowExtractionFailure,
 } from '../../scripts/extract-memory-shadow-evidence.mjs';
 
 const projectId = 'github.com/example/isolated-source';
@@ -131,4 +133,69 @@ test('invalid paths, canonical DB names, unsupported args and missing scope fail
     dbPath: f.dbPath, projectId: 'github.com/wrong', branch: 'main',
     localAppData: f.root,
   }), /not registered/);
+});
+
+test('failure classifier reports only fixed quota/CLI/validation codes, never personal output', () => {
+  const sensitive = 'PRIVATE_EVIDENCE_AND_SECRET_ACCOUNT_DETAIL';
+  const limit = sanitizeShadowExtractionFailure(new Error(
+    "codex isolated memory judge failed with exit 1: You've hit your usage limit " + sensitive,
+  ), { modelCallAttempted: true });
+  assert.equal(limit.status, 'shadow_extraction_failed');
+  assert.equal(limit.failure_code, 'usage_limit_reached_possible');
+  assert.equal(limit.process_exit_code, 1);
+  assert.equal(limit.model_call_attempted, true);
+  assert.equal(limit.shadow_proposals_may_have_changed, true);
+  assert.equal(limit.claims_created, 0);
+  assert.equal(limit.protected_approval, false);
+  assert.doesNotMatch(JSON.stringify(limit), /PRIVATE_EVIDENCE|SECRET_ACCOUNT_DETAIL/);
+
+  const unavailable = sanitizeShadowExtractionFailure(new Error(
+    'codex isolated memory judge failed with exit 7: ' + sensitive,
+  ), { modelCallAttempted: true });
+  assert.equal(unavailable.failure_code, 'codex_exec_nonzero_unclassified');
+  assert.equal(unavailable.process_exit_code, 7);
+  assert.doesNotMatch(JSON.stringify(unavailable), /PRIVATE_EVIDENCE|SECRET_ACCOUNT_DETAIL/);
+
+  const noAuth = sanitizeShadowExtractionFailure(new Error(
+    'isolated memory judge requires an authenticated Codex home containing auth.json',
+  ));
+  assert.equal(noAuth.failure_code, 'auth_file_missing_or_invalid');
+  assert.equal(noAuth.model_call_attempted, false);
+  assert.equal(noAuth.shadow_proposals_may_have_changed, false);
+
+  assert.equal(sanitizeShadowExtractionFailure(
+    new Error('evidence extraction response must be JSON: ' + sensitive),
+    { modelCallAttempted: true },
+  ).failure_code, 'extraction_validation_failed');
+
+  assert.equal(sanitizeShadowExtractionFailure(
+    new Error('shadow file missing from LOCALAPPDATA'),
+  ).failure_code, 'shadow_preflight_or_storage_failure');
+});
+
+test('CLI reports sanitized attempted status with injected judge failure and zero real calls', async () => {
+  const argumentsList = [
+    '--shadow-db', '/tmp/AgentHub-Evidence-Shadow-' + 'a'.repeat(32) + '/memory-shadow.sqlite3',
+    '--project-id', projectId, '--branch', 'main', '--run-model',
+  ];
+  let attempted = false;
+  let output = '';
+  const rc = await runShadowExtractionCommand({
+    argv: argumentsList,
+    run: async ({ runModel, onModelCallAttempt }) => {
+      assert.equal(runModel, true);
+      onModelCallAttempt();
+      attempted = true;
+      throw new Error('codex isolated memory judge failed with exit 1: usage_limit_reached ' + fact);
+    },
+    write: text => { output += text; },
+  });
+  assert.equal(attempted, true);
+  assert.equal(rc, 2);
+  const parsed = JSON.parse(output);
+  assert.equal(parsed.status, 'shadow_extraction_failed');
+  assert.equal(parsed.failure_code, 'usage_limit_reached_possible');
+  assert.equal(parsed.model_call_attempted, true);
+  assert.equal(parsed.process_exit_code, 1);
+  assert.doesNotMatch(output, /reviewed release checklist/);
 });
