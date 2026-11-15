@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createHash, generateKeyPairSync, sign } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { request as httpRequest } from 'node:http';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -30,6 +30,25 @@ const meaning = Object.freeze({
   decision: 'confirm',
 });
 const origin = 'http://localhost:4317';
+test('standalone WebAuthn page overrides Console viewport scroll lock', () => {
+  const css = readFileSync(new URL('../../memory-ui/styles.css', import.meta.url), 'utf8');
+  const html = readFileSync(new URL('../../memory-ui/webauthn-probe.html', import.meta.url), 'utf8');
+
+  assert.match(html, /<body class="webauthn-probe">/u);
+  // The full Console intentionally scroll-locks its shell; the standalone
+  // probe must escape those shared body rules at default and increased zoom.
+  assert.match(css, /body\s*\{[^}]*overflow:\s*hidden;/u);
+  const probeRule = css.match(/body\.webauthn-probe\s*\{([^}]+)\}/u)?.[1];
+  assert.ok(probeRule, 'standalone probe has a more specific body override');
+  assert.match(probeRule, /min-width:\s*0;/u);
+  assert.match(probeRule, /min-height:\s*100dvh;/u);
+  assert.match(probeRule, /(?:^|\s)height:\s*auto;/u);
+  assert.match(probeRule, /(?:^|\s)overflow:\s*auto;/u);
+  assert.match(css, /@media \(max-width: 650px\)\s*\{\s*\.webauthn-top\s*\{[^}]*flex-wrap:\s*wrap;/u);
+  assert.match(html, /id="start-hello"/u);
+  assert.match(html, /id="export-operator-key"/u);
+});
+
 const b64 = input => Buffer.from(input).toString('base64url');
 
 // Connect to loopback 127.0.0.1 while presenting the exact browser RP
