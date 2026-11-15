@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 
-export const EVIDENCE_EXTRACTION_POLICY_VERSION = 'evidence-extraction-v1';
+export const EVIDENCE_EXTRACTION_POLICY_VERSION = 'evidence-extraction-v2';
 
 const MEMORY_KINDS = new Set([
   'preference',
@@ -270,6 +270,18 @@ export function buildEvidenceBoundExtractionPrompt({
     'Do not return transient status, point-in-time metrics, task progress, secrets, guesses, or assistant-only conclusions.',
     'Every memory must cite one or more exact evidence_ids from EVIDENCE that directly support the canonical_fact.',
     'Do not strengthen, generalize, or combine evidence beyond what the cited records establish.',
+    'CRITICAL: Preserve the exact applicability scope of each source. A project_id/branch only identifies where Evidence was recorded; it does NOT mean the rule applies to every build or project-wide.',
+    'Copy or explicitly retain every material plan number, build/release target, phase, path, test, artifact, environment, version, timeframe, exception, approval boundary and condition stated by the cited evidence.',
+    'An instruction or authorization limited to one named plan or build is NOT a standing procedure for other builds or future plans.',
+    'A one-time approved assertion change or test adjustment is NOT general authorization to migrate assertions, remove coverage, change validation targets or relax checks.',
+    'Do not infer a prohibition on deleting coverage unless the cited source explicitly states that prohibition.',
+    'Do not convert specific project instructions into blanket rules using words such as always, every, all, any, whenever or never unless the sources explicitly support that breadth.',
+    'If a source is only useful for its specific plan/build, either preserve that exact scope in canonical_fact or omit the proposal. Do not remove scope just to make a memory appear durable.',
+    'Before returning each canonical_fact, check: (1) does every clause follow from its cited evidence? (2) are all original constraints and exceptions retained? (3) did I accidentally expand a plan-scoped fact into a global policy? If any answer is uncertain, omit the proposal.',
+    '',
+    'SCOPING EXAMPLES (illustrative only, not source evidence):',
+    'Source: For Plan 44 build, keep checks X and Y. Correct memory: For Plan 44 build, keep checks X and Y. Incorrect: All builds must keep checks X and Y.',
+    'Source: For this authorized plan, update one assertion to the new visible target; do not weaken the test. Incorrect: Migrate test assertions whenever an approved plan changes the target.',
     '',
     'Return JSON only with exactly this shape:',
     '{"memories":[{"kind":"preference|procedure|knowledge","canonical_fact":"string","evidence_ids":["evidence-id"]}]}',
