@@ -74,6 +74,49 @@ node "$review\scripts\inspect-memory-unresolved-proposals.mjs" `
   --branch "fix5-plan44"
 ```
 
+## Extraktion separat vorbereiten
+
+Die neue Extraction-CLI liest erst **nur** Metadaten aus dem vorhandenen
+Shadow. Das ist ohne Modellkonto, Tokenverbrauch oder SQLite-Änderung möglich:
+
+```powershell
+node "$review\scripts\extract-memory-shadow-evidence.mjs" `
+  --shadow-db "$shadow\memory-shadow.sqlite3" `
+  --project-id "github.com/Wibias/streamer-content" `
+  --branch "fix5-plan44"
+```
+
+Die Standardausgabe zeigt ausschließlich Anzahl/Eignung der gespeicherten
+Evidence. Mehr als 25 Evidence-Einträge im Scope führen zum Stopp, nicht zu
+stiller Auslassung. Die CLI akzeptiert nur eine echte Datei
+`%LOCALAPPDATA%\AgentHub-Evidence-Shadow-<32 hex>\memory-shadow.sqlite3`.
+Diese Pfadkontrolle schützt vor Verwechslungen mit der Live-Datenbank,
+**nicht** vor demselben Windows-Benutzerkonto oder manipulierten Shadow-Daten.
+
+Erst nach erneut verifiziertem Modellzugang und einer **bewussten**
+Nutzerentscheidung kann die optionale Flag `--run-model` einen einzelnen
+isolierten Codex-Extraction-Judge starten. Er liest `content_redacted`
+der geeigneten Evidence-Einträge und überträgt sie als Prompt an den
+konfigurierten Codex-Modellanbieter. Niemals automatisch wiederholen,
+wenn das Kontingent erschöpft ist.
+
+```powershell
+# NICHT ausführen, solange das Nutzungslimit erreicht ist:
+node "$review\scripts\extract-memory-shadow-evidence.mjs" `
+  --shadow-db "$shadow\memory-shadow.sqlite3" `
+  --project-id "github.com/Wibias/streamer-content" `
+  --branch "fix5-plan44" `
+  --run-model
+```
+
+Die Extraktion kann höchstens fünf neue Vorschläge erzeugen, **ausschließlich**
+mit `status=pending` und echter Modell-Evaluator-ID. Sie führt keine
+Importance-, Support-, Relation- oder Promotion-Stufe aus und schreibt
+keine Claims, `needs_confirmation` oder Bestätigung. Das erzeugt also
+**noch keinen** reviewbaren `E~`-Vorschlag für die native Abnahme.
+Klassische `memory_candidates` werden nicht in Evidence-Bound-Claims
+umgedeutet.
+
 Anschließend mit der eigentlichen Browser-Console und einem
 **tatsächlich vorhandenen, unabhängig geprüften E~-Vorschlag** fortfahren.
 Der bestehende künstliche Browser-Hello-Test ist nur ein Interaktionstest.
