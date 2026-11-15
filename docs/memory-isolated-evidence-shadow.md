@@ -165,6 +165,41 @@ Der Bericht enthält keine Faktentexte und keine rohen CLI-Fehler.
 Nach jedem Modellurteil die lesende Inventar-CLI ausführen.
 Quotafehler und unerwartete Statusänderungen nicht blind wiederholen.
 
+## Evidence-Support als eigener Schritt
+
+Nur ein bereits von Importance mit `promote` bewerteter, weiterhin
+`pending`-Vorschlag ist dafür berechtigt. Die Support-Stufe prüft
+gegen dessen tatsächlich zitierte Evidence-Texte, ob die vollständige
+Faktenformulierung ohne zusätzliche Schlussfolgerungen gestützt ist.
+
+```powershell
+# Ohne Modell: Anzahl der aktuell supportfähigen Vorschläge
+node "$review\scripts\judge-memory-shadow-support.mjs" `
+  --shadow-db "$shadow\memory-shadow.sqlite3" `
+  --project-id "github.com/Wibias/streamer-content" `
+  --branch "fix5-plan44"
+
+# Optional genau EIN echter Evidence-Support-Judge:
+node "$review\scripts\judge-memory-shadow-support.mjs" `
+  --shadow-db "$shadow\memory-shadow.sqlite3" `
+  --project-id "github.com/Wibias/streamer-content" `
+  --branch "fix5-plan44" `
+  --run-model
+```
+
+Dieser Aufruf übermittelt die exakt zitierten, lokal gespeicherten
+`content_redacted`-Texte an den konfigurierten Codex-Modellanbieter.
+Er startet höchstens einen Modellaufruf und keine Schleife.
+Bei `supported` bleibt der Vorschlag `pending` für eine spätere
+Relationsprüfung. `needs_confirmation` kennzeichnet nur eine
+**ungeprüfte, nicht autorisierte** Review-Pflicht. `unsupported`
+führt zu `ignored`, ohne Claims zu erstellen.
+
+Die Support-Stufe führt keine Relation, Promotion, nativen
+Windows-Hello-Schritt oder Claim-Änderung aus. Bei Fehlern oder
+quotabedingter Sperre nicht automatisch wiederholen. Nach dem Aufruf
+die bestehende lesende Inventar-CLI prüfen.
+
 Anschließend mit der eigentlichen Browser-Console und einem
 **tatsächlich vorhandenen, unabhängig geprüften E~-Vorschlag** fortfahren.
 Der bestehende künstliche Browser-Hello-Test ist nur ein Interaktionstest.
