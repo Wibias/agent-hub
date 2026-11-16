@@ -23,6 +23,7 @@ export function parseShadowImportanceArgs(argv = []) {
     ['--shadow-db', 'dbPath'],
     ['--project-id', 'projectId'],
     ['--branch', 'branch'],
+    ['--proposal-ref', 'targetProposalRef'],
   ]);
   for (let i = 0; i < argv.length; i++) {
     const flag = argv[i];
@@ -43,6 +44,9 @@ export function parseShadowImportanceArgs(argv = []) {
     throw new Error('exact shadow DB, project and branch required');
   }
   if (!isAbsolute(args.dbPath)) throw new Error('absolute shadow DB path required');
+  if (args.targetProposalRef && !/^~p[0-9a-f]{12}$/u.test(args.targetProposalRef)) {
+    throw new Error('invalid target proposal ref');
+  }
   args.dbPath = resolve(args.dbPath);
   return args;
 }
@@ -51,7 +55,7 @@ function proposalRef(id) {
   return '~p' + createHash('sha256').update(id).digest('hex').slice(0, 12);
 }
 
-function inspectQueue(dbPath, projectId, branch) {
+function inspectQueue(dbPath, projectId, branch, targetProposalRef = null) {
   const db = new DatabaseSync(dbPath, { readOnly: true, timeout: 5_000 });
   try {
     db.exec('PRAGMA query_only=ON');
@@ -66,8 +70,21 @@ function inspectQueue(dbPath, projectId, branch) {
       .get(projectId)) {
       throw new Error('scope project not registered in shadow');
     }
+    let targetProposalId = null;
+    if (targetProposalRef !== null) {
+      const rows = db.prepare(
+        "SELECT id FROM memory_evidence_proposals "
+        + "WHERE project_id=? AND branch=? AND status='pending' AND importance_json IS NULL",
+      ).all(projectId, branch);
+      const matching = rows.filter(row => proposalRef(row.id) === targetProposalRef);
+      if (matching.length !== 1) {
+        throw new Error('exact in-scope unevaluated proposal not found');
+      }
+      targetProposalId = matching[0].id;
+    }
     const count = query => Number(db.prepare(query).get(projectId, branch).n);
     return {
+      targetProposalId,
       importanceRemaining: count(
         "SELECT COUNT(*) AS n FROM memory_evidence_proposals WHERE project_id=? AND branch=? AND status='pending' AND importance_json IS NULL",
       ),
@@ -82,17 +99,19 @@ function inspectQueue(dbPath, projectId, branch) {
 
 export async function judgeShadowImportance({
   dbPath, projectId, branch, runModel = false,
+  targetProposalRef = null,
   localAppData = process.env.LOCALAPPDATA,
   createJudge = createIsolatedCodexJsonJudge,
   runPipeline = runEvidenceBoundImportancePipeline,
   onModelCallAttempt = () => {},
 } = {}) {
   if (![dbPath,projectId,branch].every(value => typeof value === 'string' && value.trim())
-    || typeof runModel !== 'boolean' || typeof onModelCallAttempt !== 'function') {
+    || typeof runModel !== 'boolean' || typeof onModelCallAttempt !== 'function'
+    || (targetProposalRef !== null && !/^~p[0-9a-f]{12}$/u.test(targetProposalRef))) {
     throw new TypeError('exact scope and model mode required');
   }
   requireIsolatedShadow(dbPath, { localAppData });
-  const before = inspectQueue(dbPath, projectId, branch);
+  const before = inspectQueue(dbPath, projectId, branch, targetProposalRef);
   const base = {
     scope: { projectId, branch },
     sourceDatabaseModifiedByTool: false,
@@ -102,6 +121,7 @@ export async function judgeShadowImportance({
     decisionsApplied: 0,
     stage: 'evidence_importance_only',
     importanceRemainingBefore: before.importanceRemaining,
+    ...(targetProposalRef !== null ? { targetProposalRef } : {}),
   };
   if (!runModel) {
     return {
@@ -130,6 +150,7 @@ export async function judgeShadowImportance({
     const result = await runPipeline({
       dbPath, projectId, branch,
       limit: 1,
+      proposalId: before.targetProposalId,
       evaluatorId: judge.evaluatorId,
       inspectTextSensitivity: inspectMemoryTextSensitivity,
       judge: async ({ prompt }) => {
@@ -144,6 +165,10 @@ export async function judgeShadowImportance({
       throw new Error(error);
     }
     const after = inspectQueue(dbPath, projectId, branch);
+    if (before.targetProposalId !== null
+      && result.results?.[0]?.proposal_id !== before.targetProposalId) {
+      throw new Error('target importance evaluation diverged from requested ref');
+    }
     if (after.claimsBefore !== before.claimsBefore) {
       throw new Error('shadow Claim count changed during importance stage');
     }

@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -205,4 +206,54 @@ test('malformed flags or canonical DB filename fail closed', async t => {
     dbPath: join(f.root, 'memory.sqlite3'), projectId, branch: 'main',
     localAppData: f.root, runModel: true,
   }));
+});
+
+
+test('opaque target ref evaluates only the chosen newer proposal and does not consume older v1 queue', async t => {
+  const f = fixture(t);
+  const targetRef = '~p' + createHash('sha256').update('pending-proposal-1').digest('hex').slice(0,12);
+  const cliArgs = ['--shadow-db',f.dbPath,'--project-id',projectId,'--branch','main'];
+  assert.equal(parseShadowImportanceArgs([...cliArgs,'--proposal-ref',targetRef]).targetProposalRef,targetRef);
+  assert.throws(()=>parseShadowImportanceArgs([...cliArgs,'--proposal-ref','~pbad']));
+  let judged=0;
+  const result=await judgeShadowImportance({
+    dbPath:f.dbPath,projectId,branch:'main',targetProposalRef:targetRef,
+    runModel:true,localAppData:f.root,
+    createJudge:async()=>({
+      evaluatorId:'synthetic-fixture:targeted-importance',
+      async judge(prompt) {
+        judged++;
+        assert.match(prompt,/signed off by the host/u);
+        assert.doesNotMatch(prompt,/reviewed release checklist/u);
+        return JSON.stringify(judgment);
+      },
+      async close() {},
+    }),
+  });
+  assert.equal(judged,1);
+  assert.equal(result.targetProposalRef,targetRef);
+  assert.equal(result.proposalRef,targetRef);
+  assert.equal(result.importanceRemainingAfter,1);
+  assert.deepEqual(counts(f.dbPath),{
+    claims:0,evaluated:1,support:0,relation:0,promotions:0,
+    statuses:['pending','pending'],
+  });
+  const db=new DatabaseSync(f.dbPath,{readOnly:true});
+  try {
+    assert.equal(db.prepare("SELECT importance_json FROM memory_evidence_proposals WHERE id='pending-proposal-0'").get().importance_json,null);
+    assert.ok(db.prepare("SELECT importance_json FROM memory_evidence_proposals WHERE id='pending-proposal-1'").get().importance_json);
+  } finally {db.close();}
+});
+
+test('wrong target is rejected before creating a model judge or mutating the Shadow',async t=>{
+  const f=fixture(t);
+  const before=counts(f.dbPath);
+  let invoked=false;
+  await assert.rejects(judgeShadowImportance({
+    dbPath:f.dbPath,projectId,branch:'main',targetProposalRef:'~p000000000000',
+    runModel:true,localAppData:f.root,
+    createJudge:()=>{invoked=true;throw Error('unreachable');},
+  }),/in-scope unevaluated proposal not found/u);
+  assert.equal(invoked,false);
+  assert.deepEqual(counts(f.dbPath),before);
 });

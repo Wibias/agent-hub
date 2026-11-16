@@ -207,6 +207,64 @@ wiederfinden; es werden keine alten Entscheidungen stillschweigend
 aufgehoben. Bei Fehler oder fehlenden neuen Vorschlägen nicht
 automatisch wiederholen.
 
+## Nach gescheiterter v2-Modellantwort: exakte Regel ohne erneuten Modellaufruf
+
+Ein echter, separat eingegrenzter v2-Extraktionslauf des allgemeinen
+Abnahmeregelblocks wurde mit `extraction_validation_failed` verworfen.
+Die genaue Regelverletzung ist aus der absichtlich bereinigten
+Modellausgabe nicht rekonstruierbar. Das folgende Inventar blieb
+unverändert (3 alte `pending`, 2 `ignored`, 0 Claims).
+Daher wird **kein automatischer oder blinder Modell-Retry** gestartet.
+
+Die vorhandene Original-Evidence enthält die allgemein geltende
+Überschrift `Harte Regeln für alle künftigen Abnahme-Prompts`,
+den `Pflichtblock in jedem Abnahme-Prompt:` und den wörtlichen Satz
+`- Laufzeit im Bericht aus zeit.txt messen, nicht schätzen.`.
+
+Statt erneut eine offene Modellantwort auszuwerten, legt die
+separate `seed-memory-shadow-verbatim-acceptance-rule.mjs` **genau
+einen** aus diesen zwei Originalfragmenten zusammengesetzten
+`procedure`-Kandidaten an. Sie prüft die beiden Originalzitate,
+ihren Geltungsbereich, das unveränderte `user_direct`-Belegobjekt,
+das Zielprojekt und den Branch. Sie kennzeichnet den Kandidaten als
+`evidence-verbatim-selection-v1` und *nicht* als vom v2-Modell
+extrahiert. Kein Evidence-Datensatz wird neu angelegt, keine alte
+Entscheidung geändert, kein Claim erstellt oder autorisiert.
+
+```powershell
+$scope = @(
+  '--shadow-db', "$shadow\memory-shadow.sqlite3",
+  '--project-id', 'github.com/Wibias/streamer-content',
+  '--branch', 'fix5-plan44',
+  '--source-proposal-ref', '~p9e1bd6d69139'
+)
+
+# 0 Modelle, 0 Schreibzugriffe:
+node "$review\scripts\seed-memory-shadow-verbatim-acceptance-rule.mjs" @scope
+
+# Bewusst genau EIN neuer pending Vorschlag in der isolierten Shadow-DB:
+node "$review\scripts\seed-memory-shadow-verbatim-acceptance-rule.mjs" @scope --record-proposal
+
+# Diesen Vorschlag anhand der ausgegebenen neuen proposalRef einzeln bewerten:
+node "$review\scripts\judge-memory-shadow-importance.mjs" `
+  --shadow-db "$shadow\memory-shadow.sqlite3" `
+  --project-id 'github.com/Wibias/streamer-content' `
+  --branch 'fix5-plan44' `
+  --proposal-ref '<NEUE_PROPOSAL_REF>' --run-model
+```
+
+Die Importance-Pipeline unterstützt dazu eine exakt adressierte,
+scopegebundene Proposal-ID. Ohne `--proposal-ref` bleibt die
+unveränderte chronologische Bearbeitung bestehen. Mit
+`--proposal-ref` darf **nur** ein noch unbewertetes `pending`
+Proposal des angegebenen Scopes ausgewählt werden. So werden die
+drei älteren v1-Proposals nicht versehentlich bewertet.
+
+`promote` in Importance ist lediglich ein Relevanzurteil.
+Evidence-Support, Relationsprüfung, menschliche Freigabe und produktive
+Memory-Writes bleiben getrennt. Eine manuell abgeleitete, exakt
+quellengestützte Kandidatenformulierung ist keine Benutzerfreigabe.
+
 ## Importance separat, höchstens EIN Proposal pro Ausführung
 
 Nach erfolgreicher Extraktion können die vorhandenen `pending`-Vorschläge

@@ -15,6 +15,8 @@ on:
       - 'tests/memory-engine/memory-shadow-extraction.test.mjs'
       - 'scripts/extract-memory-shadow-acceptance-rules.mjs'
       - 'tests/memory-engine/memory-shadow-acceptance-rules.test.mjs'
+      - 'scripts/seed-memory-shadow-verbatim-acceptance-rule.mjs'
+      - 'tests/memory-engine/memory-shadow-verbatim-rule.test.mjs'
       - 'scripts/judge-memory-shadow-importance.mjs'
       - 'tests/memory-engine/memory-shadow-importance.test.mjs'
       - 'scripts/judge-memory-shadow-support.mjs'
@@ -44,6 +46,8 @@ on:
       - 'tests/memory-engine/memory-shadow-extraction.test.mjs'
       - 'scripts/extract-memory-shadow-acceptance-rules.mjs'
       - 'tests/memory-engine/memory-shadow-acceptance-rules.test.mjs'
+      - 'scripts/seed-memory-shadow-verbatim-acceptance-rule.mjs'
+      - 'tests/memory-engine/memory-shadow-verbatim-rule.test.mjs'
       - 'scripts/judge-memory-shadow-importance.mjs'
       - 'tests/memory-engine/memory-shadow-importance.test.mjs'
       - 'scripts/judge-memory-shadow-support.mjs'
@@ -83,6 +87,7 @@ jobs:
           tests/memory-engine/memory-evidence-shadow.test.mjs
           tests/memory-engine/memory-shadow-extraction.test.mjs
           tests/memory-engine/memory-shadow-acceptance-rules.test.mjs
+          tests/memory-engine/memory-shadow-verbatim-rule.test.mjs
           tests/memory-engine/memory-shadow-importance.test.mjs
           tests/memory-engine/memory-shadow-support.test.mjs
           tests/memory-engine/evidence-bound-proposal-store.test.mjs
