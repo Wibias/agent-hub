@@ -245,7 +245,8 @@ internal sealed class OperatorReviewWindow : Form
                 throw new InvalidOperationException("Service-Challenge bereits abgelaufen");
             _offer = offer;
             _fact.Text = offer.CanonicalFact;
-            _meaning.Text = $"AKTION: {offer.Decision}    |    QUELLE: {offer.SourceOrigin}\n"
+            _meaning.Text = $"AKTION: {offer.Decision}    |    TYP: {offer.Kind}\n"
+                + $"QUELLE: {offer.SourceOrigin}\n"
                 + $"PROJEKT: {offer.ProjectId}    |    BRANCH: {offer.Branch}\n"
                 + $"COMMIT: {offer.RevisionSha}\n"
                 + $"E~: {offer.ProposalRef}    |    SNAPSHOT: {offer.ReviewSnapshotSha256}\n"

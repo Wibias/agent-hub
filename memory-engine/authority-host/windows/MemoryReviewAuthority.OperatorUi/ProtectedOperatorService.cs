@@ -23,6 +23,7 @@ internal sealed record ServiceOffer(
     string CanonicalFactSha256,
     string SourceEvidenceSha256,
     string SourceOrigin,
+    string Kind,
     string Decision,
     string CanonicalFact);
 
@@ -277,6 +278,9 @@ internal static class ProtectedOperatorService
         throw new InvalidOperationException("Unvollständige Dienstantwort");
     }
 
+    internal static bool ValidReviewKind(string? kind)
+        => kind is "knowledge" or "preference" or "procedure";
+
     internal static ServiceOffer Begin(string project, string branch, string proposalRef)
     {
         if (project.Length > 256 || branch.Length > 128
@@ -302,7 +306,7 @@ internal static class ProtectedOperatorService
             || !Hex64.IsMatch(Str(r, "evidence_sha256"))
             || Str(r, "source_origin") != "operator_pinned_unverified_evidence_v1"
             || Str(m, "decision") is not ("confirm" or "reject")
-            || Str(r, "kind") is not ("knowledge" or "preference"))
+            || !ValidReviewKind(Str(r, "kind")))
             throw new InvalidOperationException("Dienstquelle oder Scope ungültig");
         var fact = Str(m, "canonicalFact");
         if (fact.Length is < 1 or > 4000
@@ -327,7 +331,7 @@ internal static class ProtectedOperatorService
             project, branch, Str(m, "revisionSha"), proposalRef,
             Str(m, "reviewSnapshotSha256"), Str(m, "canonicalFactSha256"),
             Str(r, "evidence_sha256"), Str(r, "source_origin"),
-            Str(m, "decision"), fact);
+            Str(r, "kind"), Str(m, "decision"), fact);
     }
 
     internal static OperatorReceipt Complete(string ticketId, NativeAssertion assertion)
