@@ -194,6 +194,68 @@ weiterhin der authentifizierte Benutzer-Ursprung, ein geschütztes,
 echtes Windows-Hello-Enrolment und die native sichere
 Review-/Commit-/Codex-Recall-Kette.
 
+## Von einem beurteilten Shadow-Kandidaten zur Operator-Review (ohne Autoritätsaufwertung)
+
+Ein konkretes Szenario war `~p55fe6bbc8c89` aus einem **isolierten
+Shadow** für `github.com/Wibias/streamer-content` auf Branch
+`fix5-plan44`: Importance `promote`, Support `supported`, Relation
+`unrelated`, weiterhin `pending` und **0 neue Claims**.
+
+Das neue `export-reviewed-memory-shadow-to-operator.mjs` nimmt eine
+explizite `~p`-Referenz und den tatsächlichen lokalen Git-Checkout
+entgegen. Es löst die originale gespeicherte Proposal-ID nur in diesem
+Projekt/Branch auf und berechnet daraus **ohne Umbenennung von SQL-
+Status oder Fact** die alternative `E~`-Oberflächenreferenz
+`E~<erste 10 SHA256-Hexstellen der ORIGINAL-ID>`. Beide sind
+opaque Anzeigenamen **desselben Eintrags**, keine neue Identität.
+
+Die vorhandene Evidence-Bound-Preflight wird auf
+`status=pending` erweitert, lässt den Schutz aber nur passieren,
+wenn Importance, Support und `unrelated`-Relation vollständig und mit
+hoher Sicherheit belegt sind, keine Risiko-Flags vorliegen, kein
+aktiver Claim im **exakten** Projekt/Branch existiert, alle Original-
+Evidence referenziert und die Fakt-Fingerprint-Beziehung intakt ist.
+Auch der neue `procedure`-Typ bleibt unverändert.
+
+Beispiel in **normaler, nicht erhöhter** PowerShell 7, mit tatsächlich
+ausgechecktem Streamer-Content-Branch `fix5-plan44`:
+
+```powershell
+$shadow = "$env:LOCALAPPDATA\AgentHub-Evidence-Shadow-baf1e0aeba4848e884f0a0756b9e2138\memory-shadow.sqlite3"
+$review = "$env:LOCALAPPDATA\AgentHub-Support-Review-b695aee28d9b464484d38319f49fff06"
+$repo = 'C:\PFAD\ZU\streamer-content' # muss tatsächlich fix5-plan44 sein
+$out = Join-Path $env:LOCALAPPDATA (
+  'AgentHubOperatorSource-' + [guid]::NewGuid().ToString('N')
+)
+node "$review\scripts\export-reviewed-memory-shadow-to-operator.mjs" `
+  --shadow-db $shadow `
+  --repo-path $repo `
+  --proposal-ref '~p55fe6bbc8c89' `
+  --decision confirm `
+  --output-dir $out
+```
+
+Die Ausgabe nennt `operatorRef: E~...` und Hashes; das Quelldokument
+wird **nicht** in der Ausgabe veröffentlicht. Der Ordner enthält eine
+*vollständige private SQLite-Backup-Kopie*, einschließlich Daten anderer
+Projekte: nicht hochladen, committen oder per Chat teilen. Diese
+Sicherung stammt aus einer **vom selben Benutzer/Agenten beschreibbaren**
+Shadow-DB. Sie ist keine unabhängige, autoritative Canonical-Quelle.
+
+Der Windows-Dienst darf sie ausschließlich nach gesondert bestätigter
+Admin-Pin-Aktion als `operator_pinned_unverified_evidence_v1`
+zu einer weiteren **ungeprüften PENDING-Quelle** machen. Die
+WebAuthn-/Windows-Hello-Review-Oberfläche muss weiterhin den genauen
+Fakt, Projekt, Branch, Commit und Entscheidung anzeigen. Das Exportieren
+oder Signieren alleine erzeugt weder Human Consent noch Claims.
+
+**Sicherheitsstop:** Dies ist kein Ersatz für eine echte
+servicegeschützte Einschreibung, einen vertrauenswürdigen
+Human-Consent-Commit, den native Windows-x64-E2E-Beleg und die
+separat autorisierte Installation. Bis dahin Memory-Write NO-GO.
+Das Skript verändert die originale Shadow-DB und die kanonische
+Memory-DB nicht.
+
 ## Unverändert offen
 
 1. **Ein bedienbarer, sicherer Operator-Import** aus dem aktuellen
