@@ -33,6 +33,7 @@ internal static class OperatorSelfTest
             if (offer.CanonicalFact != expected
                 || offer.ProposalRef != actualRef
                 || offer.SourceOrigin != "operator_pinned_unverified_evidence_v1"
+                || offer.Kind != "procedure"
                 || offer.Decision != "confirm"
                 || offer.ExpiresUtc <= DateTimeOffset.UtcNow
                 || offer.CredentialId.Length < 16
