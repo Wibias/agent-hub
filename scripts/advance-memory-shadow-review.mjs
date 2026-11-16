@@ -17,6 +17,7 @@ import {
   sanitizeShadowExtractionFailure,
 } from './extract-memory-shadow-evidence.mjs';
 import { inspectMemoryTextSensitivity } from '../memory-engine/index.mjs';
+import { EvidenceBoundProposalStore } from '../memory-engine/evidence-bound-proposal-store.mjs';
 import { runEvidenceBoundImportancePipeline } from '../memory-engine/evidence-bound-importance-pipeline.mjs';
 import { runEvidenceBoundSupportPipeline } from '../memory-engine/evidence-bound-support-pipeline.mjs';
 import { runEvidenceBoundRelationPipeline } from '../memory-engine/evidence-bound-relation-pipeline.mjs';
@@ -226,39 +227,54 @@ export async function advanceShadowReview({
   }
 
   if (state.relation === null) {
-    // Existing relation pipeline uses a deterministic 'unrelated' verdict
-    // when no comparable active claims exist in this exact project/branch.
-    // The judge is lazy: do not create an isolated model unless needed.
+    // Avoid a model call only when there are zero comparable active
+    // project+branch claims. The relation pipeline independently rechecks.
+    const scopedStore = new EvidenceBoundProposalStore({
+        dbPath, readOnly: true, inspectTextSensitivity: inspectMemoryTextSensitivity,
+      });
+    let comparisonCount;
+    try {
+      comparisonCount = scopedStore.activeRelationClaims({ projectId, branch }).length;
+    } finally { scopedStore.close(); }
+
     let judge = null;
-    const result = await pipelines.relation({
-      dbPath, projectId, branch, proposalId: first.id, limit: 1,
-      inspectTextSensitivity: inspectMemoryTextSensitivity,
-      evaluatorId: 'shadow-auto-relation-v1',
-      judge: async ({ prompt }) => {
-        if (!judge) {
-          judge = await createJudge({
-            workspaceLabel: 'evidence-shadow-auto-relation',
-            policyVersion: STAGES[2][1], reasoningEffort: 'medium',
-          });
-        }
+    try {
+      if (comparisonCount > 0) {
+        judge = await createJudge({
+          workspaceLabel: 'evidence-shadow-auto-relation',
+          policyVersion: STAGES[2][1], reasoningEffort: 'medium',
+        });
         if (typeof judge?.judge !== 'function' || typeof judge?.close !== 'function'
           || typeof judge?.evaluatorId !== 'string' || !judge.evaluatorId.trim()) {
           throw new Error('isolated relation judge contract unavailable');
         }
-        if (modelCalls >= 3) throw new Error('model call cap exceeded');
-        modelCalls++;
-        onModelCallAttempt();
-        return judge.judge(prompt);
-      },
-    }).finally(async () => {
+      }
+      const result = await pipelines.relation({
+        dbPath, projectId, branch, proposalId: first.id, limit: 1,
+        inspectTextSensitivity: inspectMemoryTextSensitivity,
+        evaluatorId: comparisonCount === 0
+          ? 'deterministic:zero-comparable-active-claims' : judge.evaluatorId,
+        judge: async ({ prompt }) => {
+          if (!judge) {
+            // The comparable claim set changed between the checks;
+            // never silently start an unaccounted model call.
+            throw new Error('comparable claims appeared before relation judgment');
+          }
+          if (modelCalls >= 3) throw new Error('model call cap exceeded');
+          modelCalls++;
+          onModelCallAttempt();
+          return judge.judge(prompt);
+        },
+      });
+      if (result.total !== 1 || result.evaluated !== 1 || result.failed !== 0
+        || result.results?.length !== 1 || !result.results[0].ok
+        || result.results[0].proposal_id !== first.id) {
+        throw new Error('relation stage did not evaluate selected proposal');
+      }
+    } finally {
       if (judge?.close) {
         try { await judge.close(); } catch {}
       }
-    });
-    if (result.total !== 1 || result.evaluated !== 1 || result.failed !== 0
-      || result.results?.length !== 1 || !result.results[0].ok
-      || result.results[0].proposal_id !== first.id) {
-      throw new Error('relation stage did not evaluate selected proposal');
     }
     state = read();
   }
