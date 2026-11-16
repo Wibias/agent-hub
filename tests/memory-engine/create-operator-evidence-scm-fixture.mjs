@@ -97,18 +97,40 @@ try {
      content_redacted, metadata_json) VALUES (?,?,?,?,?,?,?)`
   ).run(evidenceId, projectId, branch, 'user_direct', 'normal',
     'User text submitted as Evidence, origin unverified.', '{"event_type":"user_prompt"}');
+  // Test the modern reviewed-pending PROCEDURE source through the same
+  // real-schema export and protected LocalService that production uses.
+  // These synthetic verdicts NEVER constitute human consent.
+  const importance = JSON.stringify({
+    decision:'promote',durability:'long',future_utility:'high',
+    confidence:'high',meaning_preserved:true,
+    reason:'Synthetic CI process rule',risk_flags:[],
+  });
+  const support = JSON.stringify({
+    decision:'supported',confidence:'high',meaning_preserved:true,
+    reason:'CI source remains unverified',risk_flags:[],
+  });
   db.prepare(`INSERT INTO memory_evidence_proposals
     (id,project_id,branch,kind,canonical_fact,status,policy_version,
-     evaluator_id,fingerprint,created_at)
-    VALUES (?,?,?,?,?,?,?,?,?,?)`
-  ).run(proposalId, projectId, branch, 'knowledge', fact,
-    'needs_confirmation', 'ci-canonical-evidence-v1',
-    'trusted-ci-fixture-builder',
-    evidenceExtractionFingerprint({ kind: 'knowledge', canonicalFact: fact }),
-    '2026-11-14T19:00:00.000Z');
+     evaluator_id,fingerprint,created_at,importance_json,support_json)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`
+  ).run(proposalId, projectId, branch, 'procedure', fact,
+    'pending', 'ci-canonical-reviewed-pending-v1',
+    'synthetic-ci-fixture-builder',
+    evidenceExtractionFingerprint({ kind: 'procedure', canonicalFact: fact }),
+    '2026-11-14T19:00:00.000Z', importance, support);
   db.prepare(`INSERT INTO memory_evidence_proposal_evidence
     (proposal_id,evidence_id,linked_at) VALUES (?,?,?)`)
     .run(proposalId, evidenceId, '2026-11-14T19:00:00.000Z');
+  db.prepare(`INSERT INTO memory_evidence_proposal_relations
+    (proposal_id,relation,related_claim_id,evaluator_id,policy_version,evaluated_at,result_json)
+    VALUES (?,'unrelated',NULL,?,?,?,?)`).run(
+      proposalId,'deterministic:zero-active-claims','evidence-relation-v1',
+      '2026-11-14T19:03:00.000Z',
+      JSON.stringify({
+        relation:'unrelated',target_ref:null,confidence:'high',
+        meaning_preserved:true,reason:'No active in-scope claims',
+      }),
+    );
 } finally {
   db.close();
 }
