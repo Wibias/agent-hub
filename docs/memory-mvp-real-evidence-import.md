@@ -157,6 +157,43 @@ Windows-native Selftests beweisen die Pending-Importierbarkeit,
 exakte Wiedereinlesbarkeit und die Verweigerung von UV-basierter
 Claim-Finalisierung mit einem synthetischen Schlüssel.
 
+## M2: Bewertete PENDING-Kandidaten zur geschützten Review-Anzeige zulassen
+
+Nach der vollständigen Modell- und Relationsprüfung verbleibt ein
+`proposal` bisher im Status `pending`. Der frühere geschützte
+Importer verlangte jedoch `needs_confirmation`; diesen Status
+künstlich zu setzen wäre kein legitimer Abschluss.
+
+Der geschützte Quellimport akzeptiert jetzt **nur für die
+unverifizierte PENDING-Anzeige** zusätzlich ein originales
+`pending`-Proposal aus dem konsistenten, ausdrücklich angehefteten
+kanonischen `E~`-Snapshot, wenn **alle** folgenden Bedingungen gelten:
+
+- Importance-JSON: `promote`, `long`, `high` Utility/Confidence,
+  `meaning_preserved=true`, keine Risiko-Flags.
+- Support-JSON: `supported`, `high` Confidence,
+  `meaning_preserved=true`, keine Risiko-Flags.
+- Exakt eine gespeicherte Relation `unrelated` ohne Ziel-Claim,
+  mit `high` Confidence, `meaning_preserved=true` und `target_ref=null`.
+- Kein aktiver Claim im exakten Projekt/Branch, gültiger Fakt-Fingerprint,
+  passende verknüpfte Original-Evidence ohne Secrets, intakter Snapshot.
+
+Ein unbewertetes `pending`-Proposal oder ein fehlerhaftes JSON wird
+verweigert. Der bisherige explizite `needs_confirmation`-Pfad bleibt
+separat. Die automatischen Modellurteile stammen weiterhin aus
+**unvertrauenswürdiger Benutzer-SQLite**. Sie berechtigen nur dazu,
+einen *vorgeschlagenen* Fakt im hostgeschützten Review anzuzeigen,
+**niemals** zur Freigabe. Der Import erzeugt keine Claims und
+verwendet keine synthetische UV-Signatur als echte Zustimmung.
+
+**Der vorhandene `~p`-Kandidat liegt derzeit nur im Shadow.**
+Dieser Import verarbeitet ausdrücklich eine vom Operator gepinnte
+**kanonische `E~`-Quelle**. Es gibt keine implizite Übernahme oder
+Autoritätsaufwertung der Shadow-SQLite. Für das tatsächliche Ziel fehlen
+weiterhin der authentifizierte Benutzer-Ursprung, ein geschütztes,
+echtes Windows-Hello-Enrolment und die native sichere
+Review-/Commit-/Codex-Recall-Kette.
+
 ## Unverändert offen
 
 1. **Ein bedienbarer, sicherer Operator-Import** aus dem aktuellen

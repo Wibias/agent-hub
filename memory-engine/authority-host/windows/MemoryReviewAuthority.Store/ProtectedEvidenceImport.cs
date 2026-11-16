@@ -46,6 +46,71 @@ public sealed partial class ProtectedPendingReviewLedger
         => text is not null && text.Length == length
             && text.All(c => c is >= '0' and <= '9' or >= 'a' and <= 'f');
 
+    // Only a *candidate admission* rule. These JSON verdicts originate in a
+    // user-writable SQLite snapshot; they never grant consent or protected
+    // Claim authority. Never relax the separate origin/credential guard.
+    private static bool VerifiedPendingVerdicts(string? importance, string? support)
+    {
+        if (importance is null || support is null
+            || importance.Length > 8192 || support.Length > 8192)
+            return false;
+        try
+        {
+            using var i = JsonDocument.Parse(importance);
+            using var s = JsonDocument.Parse(support);
+            static bool Fields(JsonElement root, string decision)
+            {
+                if (root.ValueKind != JsonValueKind.Object) return false;
+                if (!root.TryGetProperty("decision", out var d)
+                    || d.ValueKind != JsonValueKind.String || d.GetString() != decision
+                    || !root.TryGetProperty("meaning_preserved", out var preserved)
+                    || preserved.ValueKind != JsonValueKind.True
+                    || !root.TryGetProperty("confidence", out var confidence)
+                    || confidence.ValueKind != JsonValueKind.String
+                    || confidence.GetString() != "high"
+                    || !root.TryGetProperty("risk_flags", out var flags)
+                    || flags.ValueKind != JsonValueKind.Array
+                    || flags.GetArrayLength() != 0)
+                    return false;
+                return true;
+            }
+            if (!Fields(i.RootElement, "promote")
+                || !Fields(s.RootElement, "supported"))
+                return false;
+            if (!i.RootElement.TryGetProperty("durability", out var duration)
+                || duration.ValueKind != JsonValueKind.String
+                || duration.GetString() != "long"
+                || !i.RootElement.TryGetProperty("future_utility", out var utility)
+                || utility.ValueKind != JsonValueKind.String
+                || utility.GetString() != "high")
+                return false;
+            return true;
+        }
+        catch (JsonException) { return false; }
+    }
+
+    private static bool VerifiedPendingRelation(string text)
+    {
+        if (text.Length > 8192) return false;
+        try
+        {
+            using var doc = JsonDocument.Parse(text);
+            var r = doc.RootElement;
+            return r.ValueKind == JsonValueKind.Object
+                && r.TryGetProperty("relation", out var relation)
+                && relation.ValueKind == JsonValueKind.String
+                && relation.GetString() == "unrelated"
+                && r.TryGetProperty("target_ref", out var target)
+                && target.ValueKind == JsonValueKind.Null
+                && r.TryGetProperty("confidence", out var confidence)
+                && confidence.ValueKind == JsonValueKind.String
+                && confidence.GetString() == "high"
+                && r.TryGetProperty("meaning_preserved", out var preserved)
+                && preserved.ValueKind == JsonValueKind.True;
+        }
+        catch (JsonException) { return false; }
+    }
+
     /// <summary>
     /// Import exactly one REAL E~ proposal, reading ONLY the fixed files in
     /// the same pre-ACL-verified protected directory as this ledger.
@@ -120,7 +185,7 @@ public sealed partial class ProtectedPendingReviewLedger
             query.CommandText = """
                 SELECT id FROM memory_evidence_proposals
                 WHERE project_id=$p AND branch=$b
-                AND status='needs_confirmation'
+                AND status IN ('needs_confirmation','pending')
                 ORDER BY id LIMIT 10001;
                 """;
             query.Parameters.AddWithValue("$p", manifest.ProjectId!);
@@ -144,13 +209,18 @@ public sealed partial class ProtectedPendingReviewLedger
         string kind;
         string fact;
         string proposalFingerprint;
+        string proposalStatus;
+        string? importanceJson;
+        string? supportJson;
         using (var query = input.CreateCommand())
         {
             query.Transaction = pinnedRead;
             query.CommandText = """
-                SELECT kind, canonical_fact, fingerprint FROM memory_evidence_proposals
+                SELECT kind, canonical_fact, fingerprint, status,
+                       importance_json, support_json
+                FROM memory_evidence_proposals
                 WHERE id=$id AND project_id=$p AND branch=$b
-                  AND status='needs_confirmation';
+                  AND status IN ('needs_confirmation','pending');
                 """;
             query.Parameters.AddWithValue("$id", id);
             query.Parameters.AddWithValue("$p", manifest.ProjectId!);
@@ -161,6 +231,9 @@ public sealed partial class ProtectedPendingReviewLedger
             kind = reader.GetString(0);
             fact = reader.GetString(1);
             proposalFingerprint = reader.GetString(2);
+            proposalStatus = reader.GetString(3);
+            importanceJson = reader.IsDBNull(4) ? null : reader.GetString(4);
+            supportJson = reader.IsDBNull(5) ? null : reader.GetString(5);
             if (reader.Read())
                 throw new InvalidOperationException("operator_evidence_duplicate");
         }
@@ -175,6 +248,14 @@ public sealed partial class ProtectedPendingReviewLedger
         if (!Hex(proposalFingerprint, 64)
             || Sha(kind + "\0" + normalizedFact) != proposalFingerprint)
             throw new InvalidOperationException("operator_proposal_fingerprint_mismatch");
+
+        // A fully judged PENDING proposal can be offered for *human* review
+        // without a forged needs_confirmation transition. This accepts an
+        // unverified source into the protected PENDING ledger ONLY. The
+        // user's mutable DB verdicts are never authorization for a Claim.
+        if (proposalStatus == "pending"
+            && !VerifiedPendingVerdicts(importanceJson, supportJson))
+            throw new InvalidOperationException("operator_pending_verdict_not_reviewable");
 
         // If the original pipeline explicitly targeted an earlier Claim,
         // it cannot be silently converted into an unrelated Claim merely
@@ -191,15 +272,23 @@ public sealed partial class ProtectedPendingReviewLedger
                 using var relation = input.CreateCommand();
                 relation.Transaction = pinnedRead;
                 relation.CommandText = """
-                    SELECT relation, related_claim_id
+                    SELECT relation, related_claim_id, result_json
                     FROM memory_evidence_proposal_relations WHERE proposal_id=$id;
                     """;
                 relation.Parameters.AddWithValue("$id", id);
                 using var r = relation.ExecuteReader();
-                if (r.Read() && (r.GetString(0) != "unrelated"
-                    || !r.IsDBNull(1) || r.Read()))
+                var present = r.Read();
+                if (present && (r.GetString(0) != "unrelated"
+                    || !r.IsDBNull(1)
+                    || (proposalStatus == "pending"
+                        && (r.IsDBNull(2) || !VerifiedPendingRelation(r.GetString(2))))
+                    || r.Read()))
                     throw new InvalidOperationException("operator_targeted_relation_unsafe");
+                if (!present && proposalStatus == "pending")
+                    throw new InvalidOperationException("operator_pending_relation_missing");
             }
+            else if (proposalStatus == "pending")
+                throw new InvalidOperationException("operator_pending_relation_schema_missing");
         }
 
         // No automatic update/supersede/contradiction support. When any
