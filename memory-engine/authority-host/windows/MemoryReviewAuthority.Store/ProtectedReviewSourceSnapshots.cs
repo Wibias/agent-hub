@@ -35,7 +35,7 @@ public sealed partial class ProtectedPendingReviewLedger
                 snapshot_sha256 TEXT NOT NULL CHECK (length(snapshot_sha256)=64),
                 fact_sha256 TEXT NOT NULL CHECK (length(fact_sha256)=64),
                 evidence_sha256 TEXT NOT NULL CHECK (length(evidence_sha256)=64),
-                kind TEXT NOT NULL CHECK (kind IN ('knowledge','preference')),
+                kind TEXT NOT NULL CHECK (kind IN ('knowledge','preference','procedure')),
                 relation TEXT NOT NULL CHECK (
                     relation IN ('unrelated','same','update','contradict')
                 ),
@@ -76,7 +76,7 @@ public sealed partial class ProtectedPendingReviewLedger
             || review.CanonicalFactSha256 != Hash(source.CanonicalFact ?? "")
             || review.SourceEvidenceSha256 != source.SourceEvidenceSha256
             || source.CanonicalFact is not { Length: > 0 and <= 4000 }
-            || source.Kind is not ("knowledge" or "preference")
+            || source.Kind is not ("knowledge" or "preference" or "procedure")
             || source.Relation is not ("unrelated" or "same" or "update" or "contradict")
             || ((source.Relation == "unrelated") != (source.RelatedClaimId is null))
             || source.RelatedClaimId is { Length: > 256 })
