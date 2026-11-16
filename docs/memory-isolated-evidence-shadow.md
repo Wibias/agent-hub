@@ -151,6 +151,62 @@ etikettiert. Eine spätere explizite v2-Extraktion auf dem Shadow
 braucht gesonderte Entscheidung und kann zusätzliche `pending`-
 Vorschläge anlegen; keine automatische Wiederholung.
 
+## Gezielte v2-Extraktion aus dem vorhandenen Abnahme-Regelblock
+
+Die drei übrigen v1-`pending`-Vorschläge stammen aus einem langen
+Plan-44-Arbeitsauftrag. Zwei andere v1-Vorschläge sind zurecht
+`ignored`, weil sie Einzelanweisungen zu allgemeinen Policies
+verallgemeinert haben. Die frühere Suche nach lokalen
+`plans/regeln-abnahme.md`- und `plans/regeln-bau.md`-Dateien war
+unnötig: Der ursprüngliche Benutzerbeleg enthält die vollständigen
+Regelblöcke bereits im Text.
+
+Für den bekannten v1-Referenzvorschlag
+`~p9e1bd6d69139` enthält genau eine verknüpfte
+`user_direct`-Session-Evidence die allgemeinen Abnahmeregeln.
+Die neue CLI wählt daraus **als exakten, zusammenhängenden Ausschnitt**
+den Abschnitt von `Regeln aus plans/regeln-abnahme.md` bis vor
+`Repo Wibias/streamer-content.`. Bei fehlenden oder doppelten
+Überschriften wird gestoppt. Ausgewählte Regeltexte werden nicht
+umgeschrieben, umsortiert oder als neue `repo_trusted`-Evidence ausgegeben.
+Der gesamte Originalbeleg bleibt unter seiner unveränderten Evidence-ID
+gespeichert. Die spätere Support-Prüfung kann die **volle** Originalquelle
+prüfen. Das ist ein einmaliger, expliziter Shadow-Durchlauf, kein
+universeller Parser für künftige Aufgaben.
+
+Nach dem Update auf den dafür vorgesehenen Commit:
+
+```powershell
+$scope = @(
+  '--shadow-db', "$shadow\memory-shadow.sqlite3",
+  '--project-id', 'github.com/Wibias/streamer-content',
+  '--branch', 'fix5-plan44',
+  '--source-proposal-ref', '~p9e1bd6d69139'
+)
+
+# Erst ohne Modell oder Schreibzugriff:
+node "$review\scripts\extract-memory-shadow-acceptance-rules.mjs" @scope
+
+# Nur bei "shadow_acceptance_rules_inspected", bewusst EIN Modellaufruf:
+node "$review\scripts\extract-memory-shadow-acceptance-rules.mjs" @scope --run-model
+```
+
+`--run-model` erzeugt **nur** Evidence-Bound-Proposals im
+isolierten, vom Benutzer beschreibbaren Shadow. Er verändert weder
+die kanonische Datenbank noch den ursprünglichen Evidence-Beleg,
+bereits verworfene v1-Proposals oder Claims. Der Prompt trägt nur
+den exakten Abnahme-Abschnitt. Die neuen Proposals werden auf den
+vollen ursprünglichen Beleg verlinkt, nicht auf erfundene Ausschnitte.
+
+**Keine automatische Wichtigkeitsbewertung, kein Support-Judge,
+keine Relation, keine Claim-Promotion, keine Benutzerzustimmung.**
+Die Ergebnisse mit `inspect-memory-unresolved-proposals.mjs`
+sichten. Wegen Deduplikation anhand des kanonischen Fakten-Fingerprints
+können Modelle bei gleichen Fakten bereits vorhandene Vorschläge
+wiederfinden; es werden keine alten Entscheidungen stillschweigend
+aufgehoben. Bei Fehler oder fehlenden neuen Vorschlägen nicht
+automatisch wiederholen.
+
 ## Importance separat, höchstens EIN Proposal pro Ausführung
 
 Nach erfolgreicher Extraktion können die vorhandenen `pending`-Vorschläge
