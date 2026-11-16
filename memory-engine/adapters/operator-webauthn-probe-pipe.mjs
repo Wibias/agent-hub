@@ -64,7 +64,7 @@ export function verifyOperatorProofEnvelope({
         || !sha.test(m.canonicalFactSha256 ?? '')
         || !sha.test(payload.evidence_sha256 ?? '')
         || !['confirm','reject'].includes(m.decision)
-        || !['knowledge','preference'].includes(payload.kind)
+        || !['knowledge','preference','procedure'].includes(payload.kind)
         || payload.source_origin !== 'operator_pinned_unverified_evidence_v1'
         || typeof m.canonicalFact !== 'string'
         || m.canonicalFact.length < 1 || m.canonicalFact.length > 4000
