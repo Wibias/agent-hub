@@ -635,11 +635,11 @@ internal static class Program
             insert.Parameters.AddWithValue("$status",
                 fullyJudgedPending ? "pending" : "needs_confirmation");
             insert.Parameters.AddWithValue("$importance",
-                fullyJudgedPending ? """
+                fullyJudgedPending ? (object)"""
                   {"decision":"promote","durability":"long","future_utility":"high","confidence":"high","meaning_preserved":true,"risk_flags":[]}
                   """ : DBNull.Value);
             insert.Parameters.AddWithValue("$support",
-                fullyJudgedPending ? """
+                fullyJudgedPending ? (object)"""
                   {"decision":"supported","confidence":"high","meaning_preserved":true,"risk_flags":[]}
                   """ : DBNull.Value);
             insert.Parameters.AddWithValue("$fingerprint",
