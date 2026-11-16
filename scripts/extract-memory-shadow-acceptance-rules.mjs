@@ -83,7 +83,7 @@ export function selectVerbatimAcceptanceRules(sourceText) {
   return excerpt;
 }
 
-function inspectSource({ dbPath, projectId, branch, sourceProposalRef }) {
+export function inspectSource({ dbPath, projectId, branch, sourceProposalRef }) {
   const db = new DatabaseSync(dbPath, { readOnly: true, timeout: 5000 });
   try {
     db.exec('PRAGMA query_only=ON');
