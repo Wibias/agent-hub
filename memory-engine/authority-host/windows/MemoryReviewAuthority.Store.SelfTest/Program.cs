@@ -44,6 +44,7 @@ internal static class Program
         Run("protected_snapshot_immutable_and_reopens_with_same_request", SnapshotImmutable);
         Run("protected_targeted_confirmation_refused", TargetedConfirmDenied);
         Run("real_evidence_import_pending_without_claim", RealEvidenceImport);
+        Run("real_procedure_pending_without_claim_or_approval", RealProcedurePendingNoClaim);
         Run("real_evidence_wrong_scope_and_secret_denied", RealEvidenceScopeDenied);
         Run("real_evidence_relation_and_kind_denied", RealEvidenceUnsafeDenied);
         Run("real_evidence_changed_snapshot_denied", RealEvidenceChanged);
@@ -51,7 +52,7 @@ internal static class Program
         Run("operator_credential_counter_restart_replay_denied", OperatorCounter);
         Run("operator_credential_pin_conflict_and_sql_immutability", OperatorPinImmutable);
         Run("operator_credential_wrong_key_and_generic_approval_denied", OperatorDenied);
-        Console.WriteLine($"MEMORY_REVIEW_LEDGER PASS {_passed}/30; REAL_EVIDENCE_UV_PINNED_NO_APPROVAL");
+        Console.WriteLine($"MEMORY_REVIEW_LEDGER PASS {_passed}/31; REAL_EVIDENCE_UV_PINNED_NO_APPROVAL");
     }
 
     private static void Run(string label, Action test)
@@ -579,7 +580,7 @@ internal static class Program
     private static string RealSnapshotPath => Path.Combine(TestDirectory,
         ProtectedPendingReviewLedger.OperatorSnapshotFile);
 
-    private static void CreateRealEvidenceFixture()
+    private static void CreateRealEvidenceFixture(string kind = "knowledge")
     {
         using (var conn = new SqliteConnection(new SqliteConnectionStringBuilder
         {
@@ -611,7 +612,7 @@ internal static class Program
                 INSERT INTO memory_evidence_proposals
                  (id,project_id,branch,kind,canonical_fact,status,
                   policy_version,fingerprint)
-                VALUES ($id,$p,$b,'knowledge',$fact,'needs_confirmation',
+                VALUES ($id,$p,$b,$kind,$fact,'needs_confirmation',
                   'test-v1',$fingerprint);
                 INSERT INTO memory_evidence_proposal_evidence
                  (proposal_id,evidence_id) VALUES ($id,'real-evidence-1');
@@ -625,8 +626,9 @@ internal static class Program
             insert.Parameters.AddWithValue("$p", RealProject);
             insert.Parameters.AddWithValue("$b", RealBranch);
             insert.Parameters.AddWithValue("$fact", RealFact);
+            insert.Parameters.AddWithValue("$kind", kind);
             insert.Parameters.AddWithValue("$fingerprint",
-                Hash("knowledge\0" + RealFact.ToLowerInvariant()));
+                Hash(kind + "\0" + RealFact.ToLowerInvariant()));
             insert.ExecuteNonQuery();
         }
         File.WriteAllText(Path.Combine(TestDirectory,
@@ -694,6 +696,47 @@ internal static class Program
             Check(reopened.ReadPending(RealProject, RealBranch, RealERef)?.RequestId
                 == request);
             Check(reopened.ImportOperatorPinnedEvidence().PendingRequestId == request);
+            Check(reopened.ReadProtectedClaims(RealProject, RealBranch).Count == 0);
+        }
+    }
+
+    private static void RealProcedurePendingNoClaim()
+    {
+        CreateRealEvidenceFixture(kind: "procedure");
+        string request;
+        using (var store = Open())
+        {
+            var imported = store.ImportOperatorPinnedEvidence();
+            request = imported.PendingRequestId;
+            Check(imported.Kind == "procedure"
+                && imported.CanonicalFact == RealFact
+                && imported.SourceOrigin == ProtectedPendingReviewLedger.OperatorSourceOrigin
+                && !imported.HumanApprovalVerified && !imported.ClaimWritten);
+            var offer = store.ReadOperatorReviewOffer(
+                RealProject, RealBranch, RealERef);
+            Check(offer is not null && offer.Kind == "procedure"
+                && offer.SourceOrigin == ProtectedPendingReviewLedger.OperatorSourceOrigin
+                && offer.Meaning.CanonicalFact == RealFact);
+            Check(store.ReadProtectedClaims(RealProject, RealBranch).Count == 0);
+            Check(store.ReadVerifiedIntent(RealProject, RealBranch, RealERef) is null);
+
+            // A synthetic P-256 signature/UV bit is NEVER human consent.
+            using var credential = TestCredential.New();
+            var meaning = RealReviewMeaning(imported);
+            var coordinator = new VerifiedReviewCoordinator(store, credential.Pinned);
+            var ticket = coordinator.Begin(meaning);
+            var denied = coordinator.CompleteProtected(
+                ticket.TicketId, meaning, credential.Sign(ticket));
+            Check(!denied.Verified && !denied.ClaimWritten
+                && denied.Status == "protected_review_scope_or_commit_denied");
+            Check(store.ReadProtectedClaims(RealProject, RealBranch).Count == 0);
+            Check(store.ReadVerifiedIntent(RealProject, RealBranch, RealERef) is null);
+        }
+        using (var reopened = Open())
+        {
+            Check(reopened.ImportOperatorPinnedEvidence().PendingRequestId == request);
+            Check(reopened.ReadOperatorReviewOffer(
+                RealProject, RealBranch, RealERef)?.Kind == "procedure");
             Check(reopened.ReadProtectedClaims(RealProject, RealBranch).Count == 0);
         }
     }
