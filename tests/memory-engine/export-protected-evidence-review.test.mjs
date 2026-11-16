@@ -164,3 +164,80 @@ test('malformed ref/decision, duplicate keys, relative paths and unsafe flags de
     sample.map(x => x === join(tmpdir(),'operator-out') ? 'relative/path' : x)),
     /absolute_path_required/);
 });
+
+
+function makeFullyReviewedPendingProcedure(dbPath) {
+  const db = new DatabaseSync(dbPath);
+  try {
+    db.prepare(`UPDATE memory_evidence_proposals
+      SET status='pending',kind='procedure',fingerprint=?,
+          importance_json=?,support_json=? WHERE id=?`).run(
+      evidenceExtractionFingerprint({ kind:'procedure', canonicalFact:fact }),
+      JSON.stringify({
+        decision:'promote',durability:'long',future_utility:'high',
+        confidence:'high',meaning_preserved:true,
+        reason:'Long-term project acceptance instruction',risk_flags:[],
+      }),
+      JSON.stringify({
+        decision:'supported',confidence:'high',meaning_preserved:true,
+        reason:'Exact user evidence scope',risk_flags:[],
+      }),
+      proposalId,
+    );
+    db.prepare(`INSERT INTO memory_evidence_proposal_relations
+      (proposal_id,relation,related_claim_id,evaluator_id,policy_version,evaluated_at,result_json)
+      VALUES (?,'unrelated',NULL,?,?,?,?)`).run(
+        proposalId,'deterministic:zero-comparable-claims','evidence-relation-v1',
+        '2026-11-16T10:00:00.000Z',
+        JSON.stringify({
+          relation:'unrelated',target_ref:null,confidence:'high',
+          meaning_preserved:true,reason:'No active comparable claims in scope',
+        }),
+      );
+  } finally { db.close(); }
+}
+
+test('fully judged pending procedure exports as UNAPPROVED snapshot without any status coercion',async t=>{
+  const f=fixture(t);
+  makeFullyReviewedPendingProcedure(f.dbPath);
+  const result=await exportProtectedEvidenceReview(f.options);
+  assert.equal(result.status,'operator_transfer_ready_unverified_unapproved');
+  assert.equal(result.claimWritten,false);
+  const src=new DatabaseSync(f.dbPath,{readOnly:true});
+  const copy=new DatabaseSync(join(f.outputDir,EVIDENCE_SNAPSHOT_NAME),{readOnly:true});
+  try {
+    for(const db of [src,copy]){
+      const row=db.prepare('SELECT status,kind FROM memory_evidence_proposals WHERE id=?').get(proposalId);
+      assert.equal(row.status,'pending');
+      assert.equal(row.kind,'procedure');
+      assert.equal(db.prepare('SELECT COUNT(*) n FROM claims').get().n,0);
+    }
+    const m=JSON.parse((await import('node:fs')).readFileSync(
+      join(f.outputDir,EVIDENCE_MANIFEST_NAME),'utf8',
+    ));
+    assert.equal(m.proposalRef,proposalRef);
+  } finally {src.close();copy.close();}
+});
+
+test('pending without real Support or with targeted relation cannot be exported as operator review',async t=>{
+  const f=fixture(t);
+  makeFullyReviewedPendingProcedure(f.dbPath);
+  const db=new DatabaseSync(f.dbPath);
+  try {
+    db.prepare("UPDATE memory_evidence_proposals SET support_json=NULL WHERE id=?").run(proposalId);
+  } finally {db.close();}
+  await assert.rejects(exportProtectedEvidenceReview(f.options),/unavailable/u);
+  assert.equal(existsSync(f.outputDir),false);
+  const db2=new DatabaseSync(f.dbPath);
+  try{
+    db2.prepare('UPDATE memory_evidence_proposals SET support_json=? WHERE id=?').run(
+      JSON.stringify({
+        decision:'supported',confidence:'high',meaning_preserved:true,
+        reason:'Exact user evidence scope',risk_flags:[],
+      }),proposalId,
+    );
+    db2.prepare("UPDATE memory_evidence_proposal_relations SET relation='update' WHERE proposal_id=?").run(proposalId);
+  }finally{db2.close();}
+  await assert.rejects(exportProtectedEvidenceReview(f.options),/unavailable/u);
+  assert.equal(existsSync(f.outputDir),false);
+});

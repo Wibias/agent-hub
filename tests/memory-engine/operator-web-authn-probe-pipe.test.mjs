@@ -116,3 +116,14 @@ test('completion is still not human consent or protected Claim after valid ES256
     ...completed, status: 'protected_claim_written',
   }, { expectedOp: 'complete' }), /operator_proof_service_unverified/);
 });
+
+
+test('procedure signed offers reach the operator UI bridge, but cannot claim user consent', () => {
+  const procedure = check({...offer, kind:'procedure'});
+  assert.equal(procedure.kind,'procedure');
+  assert.equal(procedure.service_signature_verified,true);
+  assert.equal(procedure.trusted_human_approval,false);
+  assert.equal(procedure.production_claim_authorized,false);
+  assert.throws(()=>check({...offer,kind:'user_direct'}),/operator_proof_service_unverified/u);
+  assert.throws(()=>check({...offer,kind:'Procedure'}),/operator_proof_service_unverified/u);
+});

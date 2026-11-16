@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { getEvidenceBoundProposal } from './evidence-bound-proposal-store.mjs';
+import { evidenceExtractionFingerprint } from './evidence-bound-extraction.mjs';
 
 const REVIEW_REF = /^E~[0-9a-f]{10}$/u;
 const GIT_SHA = /^[0-9a-f]{40}$/u;
@@ -49,7 +50,7 @@ export function inspectEvidenceBoundDecision({
   try {
     const ids = db.prepare(
       "SELECT id FROM memory_evidence_proposals WHERE project_id=? AND branch=? "
-      + "AND status='needs_confirmation' ORDER BY id LIMIT ?",
+      + "AND status IN ('needs_confirmation','pending') ORDER BY id LIMIT ?",
     ).all(projectId, branch, MAX_PROPOSALS + 1);
     if (ids.length > MAX_PROPOSALS) {
       return { ...report, status: 'too_many_proposals_to_resolve_safely' };
@@ -59,7 +60,7 @@ export function inspectEvidenceBoundDecision({
       return { ...report, status: found.length ? 'opaque_ref_collision' : 'not_found' };
     }
     const proposal = getEvidenceBoundProposal(db, found[0].id);
-    if (!proposal || proposal.status !== 'needs_confirmation'
+    if (!proposal || !['needs_confirmation','pending'].includes(proposal.status)
       || proposal.project_id !== projectId || proposal.branch !== branch
       || typeof proposal.canonical_fact !== 'string' || !proposal.canonical_fact
       || !/^[0-9a-f]{64}$/u.test(proposal.fingerprint)) {
@@ -109,6 +110,25 @@ export function inspectEvidenceBoundDecision({
     if (relation !== null && !['same', 'update', 'contradict', 'unrelated'].includes(relation)) {
       return { ...report, status: 'relation_invalid' };
     }
+    // The normalized JSON verdict alone is insufficient: the protected
+    // importer also checks the persisted relation column and target.
+    // Reject a split-brain ledger before exporting a private snapshot.
+    if (hasTable('memory_evidence_proposal_relations')) {
+      const storedRelation = db.prepare(
+        'SELECT relation, related_claim_id, result_json FROM '
+        + 'memory_evidence_proposal_relations WHERE proposal_id=?',
+      ).get(proposal.id);
+      if ((storedRelation === undefined) !== (proposal.relation === null)
+        || (storedRelation && (
+          storedRelation.relation !== proposal.relation?.relation
+          || (storedRelation.related_claim_id ?? null) !== (proposal.related_claim_id ?? null)
+          || JSON.parse(storedRelation.result_json).relation !== storedRelation.relation
+        ))) {
+        return { ...report, status: 'relation_ledger_inconsistent' };
+      }
+    } else if (proposal.status === 'pending') {
+      return { ...report, status: 'relation_ledger_missing' };
+    }
     const matchingTarget = targetId === null
       ? null : claims.find(c => c.id === targetId);
     if ((relation === 'unrelated' && targetId !== null)
@@ -135,7 +155,39 @@ export function inspectEvidenceBoundDecision({
       ]),
       claims: claims.map(c => [c.id, SHA(c.value_text)]),
     }));
+    // A normal pending proposal is reviewable ONLY after strict, high
+    // confidence independent judgments and a non-targeted relation.
+    // This is an UNTRUSTED candidate admission gate, NOT authorization.
+    const importance = proposal.importance;
+    const support = proposal.support;
+    const relationJudgment = proposal.relation;
+    const pendingReady = (
+      proposal.status === 'pending'
+      && ['knowledge', 'preference', 'procedure'].includes(proposal.kind)
+      && proposal.fingerprint === evidenceExtractionFingerprint({
+        kind: proposal.kind, canonicalFact: proposal.canonical_fact,
+      })
+      && importance?.decision === 'promote'
+      && importance.durability === 'long'
+      && importance.future_utility === 'high'
+      && importance.confidence === 'high'
+      && importance.meaning_preserved === true
+      && Array.isArray(importance.risk_flags) && importance.risk_flags.length === 0
+      && support?.decision === 'supported'
+      && support.confidence === 'high'
+      && support.meaning_preserved === true
+      && Array.isArray(support.risk_flags) && support.risk_flags.length === 0
+      && relationJudgment?.relation === 'unrelated'
+      && relationJudgment.confidence === 'high'
+      && relationJudgment.meaning_preserved === true
+      && relationJudgment.target_ref === null
+      && targetId === null
+      && claimTotal === 0
+    );
     const blockers = [];
+    if (proposal.status === 'pending' && !pendingReady) {
+      blockers.push('pending_requires_complete_high_confidence_review');
+    }
     if (duplicates.length > 0) blockers.push('active_exact_duplicate');
     if (claimTotal > 0) blockers.push('independent_semantic_relation_review_required');
     if (proposal.importance?.decision !== 'promote') blockers.push('importance_requires_review');
@@ -157,6 +209,8 @@ export function inspectEvidenceBoundDecision({
       canonicalFactHash: SHA(proposal.canonical_fact),
       ...(showLocalContent ? { canonicalFact: proposal.canonical_fact, contentIncluded: true } : {}),
       kind: proposal.kind,
+      proposalStatus: proposal.status,
+      eligibleForProtectedPendingReview: pendingReady,
       evidence,
       relation: {
         type: relation,

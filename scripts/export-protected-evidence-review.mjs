@@ -68,7 +68,14 @@ function reviewable(report) {
   return report
     && ['requires_review','reviewable_no_write_authority'].includes(report.status)
     && report.scope?.revisionSha
-    && ['knowledge','preference'].includes(report.kind)
+    && ['knowledge','preference','procedure'].includes(report.kind)
+    && (report.proposalStatus === 'needs_confirmation'
+      || (report.proposalStatus === 'pending'
+        && report.eligibleForProtectedPendingReview === true
+        && report.blockers?.length === 0
+        && report.relation?.type === 'unrelated'
+        && report.relation.confidence === 'high'
+        && report.relation.meaningPreserved === true))
     && report.activeClaimsInScope === 0
     && report.exactDuplicateCount === 0
     && [null,'unrelated'].includes(report.relation?.type)
