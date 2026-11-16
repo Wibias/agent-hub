@@ -78,7 +78,7 @@ function counts(dbPath) {
       evidence:db.prepare('SELECT COUNT(*) n FROM evidence').get().n,
       claims:db.prepare('SELECT COUNT(*) n FROM claims').get().n,
       proposals:db.prepare('SELECT COUNT(*) n FROM memory_evidence_proposals').get().n,
-      oldState:db.prepare("SELECT status,policy_version FROM memory_evidence_proposals WHERE id='proposal-existing-v1'").get(),
+      oldState:{...db.prepare("SELECT status,policy_version FROM memory_evidence_proposals WHERE id='proposal-existing-v1'").get()},
     };
   } finally { db.close(); }
 }
