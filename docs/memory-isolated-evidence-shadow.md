@@ -265,6 +265,64 @@ Evidence-Support, Relationsprüfung, menschliche Freigabe und produktive
 Memory-Writes bleiben getrennt. Eine manuell abgeleitete, exakt
 quellengestützte Kandidatenformulierung ist keine Benutzerfreigabe.
 
+## Automatische Modellbewertungen für EINEN Kandidaten, freigabefrei (M2-Vorarbeit)
+
+Der isolierte Shadow besitzt jetzt `advance-memory-shadow-review.mjs`.
+Der Operator muss nicht mehr Importance, Support und Relation einzeln
+anstoßen oder den ältesten Queue-Eintrag riskieren. Die neue CLI
+verlangt **explizit** `--proposal-ref`, Projekt, Branch und die
+validierte Shadow-Datei. Ohne `--run-judges` wird rein lesend inventarisiert.
+Ein bewusster Aufruf mit `--run-judges` holt nur noch fehlende
+Bewertungen dieses EINEN Kandidaten nach:
+
+1. Importance (1 Modellaufruf), ausschließlich bei unbewertetem `pending`.
+2. Support (1 unabhängiger Modellaufruf), ausschließlich nach
+   `importance=promote`; sonst Ende.
+3. Relation: ohne vergleichbare aktive Claims desselben Projekts UND
+   Branches deterministisch `unrelated` (kein Modell). Andernfalls
+   genau ein isolierter Relations-Judge, mit exakter Scope-/Zielprüfung.
+
+Maximal drei Modellaufrufe pro Ausführung, keine Wiederholung nach
+einer fehlerhaften Antwort. Bereits abgeschlossene Schritte werden
+nicht erneut bewertet. Der bisherige `importance`-/`support`-Status
+wird nur aus der Shadow-Datenbank gelesen, niemals durch CLI-Argumente
+gesetzt. Bei Fehlern können einzelne **Shadow**-Bewertungen bereits
+gespeichert sein. Erst Inventar prüfen, nicht blind nochmals starten.
+
+```powershell
+$review = "$env:LOCALAPPDATA\AgentHub-Support-Review-b695aee28d9b464484d38319f49fff06"
+$shadow = "$env:LOCALAPPDATA\AgentHub-Evidence-Shadow-baf1e0aeba4848e884f0a0756b9e2138"
+
+$args = @(
+    '--shadow-db', "$shadow\memory-shadow.sqlite3",
+    '--project-id', 'github.com/Wibias/streamer-content',
+    '--branch', 'fix5-plan44',
+    '--proposal-ref', '~p55fe6bbc8c89'
+)
+node "$review\scripts\advance-memory-shadow-review.mjs" @args
+# Explizit, für einen NEUEN Kandidaten:
+node "$review\scripts\advance-memory-shadow-review.mjs" @args --run-judges
+```
+
+**Harte Grenzen:** Keine automatische Extraktion aus unbekannten
+Quellen, keine globale Queue-Verarbeitung, keine native Dienstinstallation,
+kein Claim-/Relation-Target-Override, keine automatische
+`needs_confirmation`-Statusänderung, keine Freigabe, keine produktiven
+DB-Writes. `complete_unapproved` bedeutet ausschließlich, dass
+Importance, Support und Relation im unvertrauenswürdigen Shadow geprüft
+wurden. Das neue Skript ist ein **M2-Vorarbeitsschritt, nicht die
+geschützte M2-Freigabe**.
+
+Die Host-Integration bleibt getrennt: Der reale geschützte Importer
+erwartet `E~` mit `needs_confirmation` in einer ausdrücklich
+gepinten kanonischen Quellkopie und akzeptiert bisher nur
+`knowledge`/`preference`; die Shadow-`~p`-Proposals (hier:
+`procedure`) sind **nicht** dafür freigeschaltet. Real
+Windows-Hello/FIDO2-Enrolment, hostkontrollierte Review-Anzeige und
+native sichere Commit-/Recall-E2E sind weiter erforderlich.
+Diese Grenzen dürfen weder per Status-/Typ-SQL noch durch den
+gewöhnlichen gleichen Windows-Benutzer umgangen werden.
+
 ## Importance separat, höchstens EIN Proposal pro Ausführung
 
 Nach erfolgreicher Extraktion können die vorhandenen `pending`-Vorschläge
