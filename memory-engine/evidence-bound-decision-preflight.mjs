@@ -110,6 +110,25 @@ export function inspectEvidenceBoundDecision({
     if (relation !== null && !['same', 'update', 'contradict', 'unrelated'].includes(relation)) {
       return { ...report, status: 'relation_invalid' };
     }
+    // The normalized JSON verdict alone is insufficient: the protected
+    // importer also checks the persisted relation column and target.
+    // Reject a split-brain ledger before exporting a private snapshot.
+    if (hasTable('memory_evidence_proposal_relations')) {
+      const storedRelation = db.prepare(
+        'SELECT relation, related_claim_id, result_json FROM '
+        + 'memory_evidence_proposal_relations WHERE proposal_id=?',
+      ).get(proposal.id);
+      if ((storedRelation === undefined) !== (proposal.relation === null)
+        || (storedRelation && (
+          storedRelation.relation !== proposal.relation?.relation
+          || (storedRelation.related_claim_id ?? null) !== (proposal.related_claim_id ?? null)
+          || JSON.parse(storedRelation.result_json).relation !== storedRelation.relation
+        ))) {
+        return { ...report, status: 'relation_ledger_inconsistent' };
+      }
+    } else if (proposal.status === 'pending') {
+      return { ...report, status: 'relation_ledger_missing' };
+    }
     const matchingTarget = targetId === null
       ? null : claims.find(c => c.id === targetId);
     if ((relation === 'unrelated' && targetId !== null)
