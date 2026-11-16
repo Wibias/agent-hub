@@ -38,6 +38,7 @@ export async function runEvidenceBoundRelationPipeline({
   inspectTextSensitivity,
   clock = () => new Date().toISOString(),
   limit = 20,
+  proposalId = null,
 }) {
   if (typeof judge !== 'function') {
     throw new TypeError('judge must be a function');
@@ -52,7 +53,23 @@ export async function runEvidenceBoundRelationPipeline({
     clock,
   });
   try {
-    const proposals = store.listRelationPending({ projectId, branch, limit });
+    let proposals;
+    if (proposalId === null) {
+      proposals = store.listRelationPending({ projectId, branch, limit });
+    } else {
+      if (typeof proposalId !== 'string' || !proposalId.trim()) {
+        throw new TypeError('proposalId must be nonempty');
+      }
+      const selected = store.get(proposalId);
+      if (!selected || selected.project_id !== projectId || selected.branch !== branch
+        || selected.status !== 'pending'
+        || selected.importance?.decision !== 'promote'
+        || selected.support?.decision !== 'supported'
+        || selected.relation !== null) {
+        throw new Error('target relation proposal not eligible in scope');
+      }
+      proposals = [selected];
+    }
     const memories = store.activeRelationClaims({ projectId, branch });
     const results = [];
     let evaluated = 0;
