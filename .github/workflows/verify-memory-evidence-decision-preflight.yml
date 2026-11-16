@@ -7,6 +7,8 @@ on:
       - 'tests/memory-engine/evidence-bound-decision-preflight.test.mjs'
       - 'scripts/export-protected-evidence-review.mjs'
       - 'tests/memory-engine/export-protected-evidence-review.test.mjs'
+      - 'scripts/export-reviewed-memory-shadow-to-operator.mjs'
+      - 'tests/memory-engine/export-reviewed-shadow-to-operator.test.mjs'
       - 'tests/memory-engine/memory-console-evidence-review.test.mjs'
       - 'tests/memory-engine/evidence-webauthn-local-probe.test.mjs'
       - 'scripts/prepare-memory-evidence-shadow.mjs'
@@ -42,6 +44,8 @@ on:
       - 'tests/memory-engine/evidence-bound-decision-preflight.test.mjs'
       - 'scripts/export-protected-evidence-review.mjs'
       - 'tests/memory-engine/export-protected-evidence-review.test.mjs'
+      - 'scripts/export-reviewed-memory-shadow-to-operator.mjs'
+      - 'tests/memory-engine/export-reviewed-shadow-to-operator.test.mjs'
       - 'tests/memory-engine/memory-console-evidence-review.test.mjs'
       - 'tests/memory-engine/evidence-webauthn-local-probe.test.mjs'
       - 'scripts/prepare-memory-evidence-shadow.mjs'
@@ -90,6 +94,7 @@ jobs:
           node --test
           tests/memory-engine/evidence-bound-decision-preflight.test.mjs
           tests/memory-engine/export-protected-evidence-review.test.mjs
+          tests/memory-engine/export-reviewed-shadow-to-operator.test.mjs
           tests/memory-engine/memory-console-evidence-review.test.mjs
           tests/memory-engine/evidence-webauthn-local-probe.test.mjs
           tests/memory-engine/memory-evidence-shadow.test.mjs
