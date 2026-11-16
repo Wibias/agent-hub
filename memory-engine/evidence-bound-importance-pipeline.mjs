@@ -21,6 +21,7 @@ export async function runEvidenceBoundImportancePipeline({
   inspectTextSensitivity,
   clock = () => new Date().toISOString(),
   limit = 20,
+  proposalId = null,
 }) {
   if (typeof judge !== 'function') {
     throw new TypeError('judge must be a function');
@@ -35,11 +36,21 @@ export async function runEvidenceBoundImportancePipeline({
     clock,
   });
   try {
-    const proposals = store.listUnevaluated({
-      projectId,
-      branch,
-      limit,
-    });
+    let proposals;
+    if (proposalId === null) {
+      proposals = store.listUnevaluated({ projectId, branch, limit });
+    } else {
+      if (typeof proposalId !== 'string' || !proposalId.trim()) {
+        throw new TypeError('proposalId must be a non-empty identifier');
+      }
+      const selected = store.get(proposalId);
+      if (!selected || selected.project_id !== projectId
+        || selected.branch !== branch || selected.status !== 'pending'
+        || selected.importance !== null) {
+        throw new Error('target importance proposal not eligible in scope');
+      }
+      proposals = [selected];
+    }
     const results = [];
     let evaluated = 0;
     let failed = 0;
