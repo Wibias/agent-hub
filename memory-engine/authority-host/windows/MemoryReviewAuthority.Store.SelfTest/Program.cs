@@ -45,6 +45,8 @@ internal static class Program
         Run("protected_targeted_confirmation_refused", TargetedConfirmDenied);
         Run("real_evidence_import_pending_without_claim", RealEvidenceImport);
         Run("real_procedure_pending_without_claim_or_approval", RealProcedurePendingNoClaim);
+        Run("fully_judged_pending_procedure_unverified_intake", RealJudgedPendingProcedure);
+        Run("unjudged_pending_and_invalid_relation_denied", RealPendingJudgmentDenied);
         Run("real_evidence_wrong_scope_and_secret_denied", RealEvidenceScopeDenied);
         Run("real_evidence_relation_and_kind_denied", RealEvidenceUnsafeDenied);
         Run("real_evidence_changed_snapshot_denied", RealEvidenceChanged);
@@ -52,7 +54,7 @@ internal static class Program
         Run("operator_credential_counter_restart_replay_denied", OperatorCounter);
         Run("operator_credential_pin_conflict_and_sql_immutability", OperatorPinImmutable);
         Run("operator_credential_wrong_key_and_generic_approval_denied", OperatorDenied);
-        Console.WriteLine($"MEMORY_REVIEW_LEDGER PASS {_passed}/31; REAL_EVIDENCE_UV_PINNED_NO_APPROVAL");
+        Console.WriteLine($"MEMORY_REVIEW_LEDGER PASS {_passed}/33; REAL_EVIDENCE_UV_PINNED_NO_APPROVAL");
     }
 
     private static void Run(string label, Action test)
@@ -580,7 +582,7 @@ internal static class Program
     private static string RealSnapshotPath => Path.Combine(TestDirectory,
         ProtectedPendingReviewLedger.OperatorSnapshotFile);
 
-    private static void CreateRealEvidenceFixture(string kind = "knowledge")
+    private static void CreateRealEvidenceFixture(string kind = "knowledge", bool fullyJudgedPending = false)
     {
         using (var conn = new SqliteConnection(new SqliteConnectionStringBuilder
         {
@@ -594,7 +596,10 @@ internal static class Program
                 CREATE TABLE memory_evidence_proposals (
                   id TEXT PRIMARY KEY, project_id TEXT, branch TEXT, kind TEXT,
                   canonical_fact TEXT, status TEXT, policy_version TEXT,
-                  fingerprint TEXT NOT NULL);
+                  fingerprint TEXT NOT NULL, importance_json TEXT, support_json TEXT);
+                CREATE TABLE memory_evidence_proposal_relations (
+                  proposal_id TEXT PRIMARY KEY, relation TEXT,
+                  related_claim_id TEXT, result_json TEXT);
                 CREATE TABLE memory_evidence_proposal_evidence (
                   proposal_id TEXT, evidence_id TEXT,
                   PRIMARY KEY(proposal_id, evidence_id));
@@ -611,9 +616,9 @@ internal static class Program
             insert.CommandText = """
                 INSERT INTO memory_evidence_proposals
                  (id,project_id,branch,kind,canonical_fact,status,
-                  policy_version,fingerprint)
-                VALUES ($id,$p,$b,$kind,$fact,'needs_confirmation',
-                  'test-v1',$fingerprint);
+                  policy_version,fingerprint,importance_json,support_json)
+                VALUES ($id,$p,$b,$kind,$fact,$status,
+                  'test-v1',$fingerprint,$importance,$support);
                 INSERT INTO memory_evidence_proposal_evidence
                  (proposal_id,evidence_id) VALUES ($id,'real-evidence-1');
                 INSERT INTO evidence
@@ -627,9 +632,33 @@ internal static class Program
             insert.Parameters.AddWithValue("$b", RealBranch);
             insert.Parameters.AddWithValue("$fact", RealFact);
             insert.Parameters.AddWithValue("$kind", kind);
+            insert.Parameters.AddWithValue("$status",
+                fullyJudgedPending ? "pending" : "needs_confirmation");
+            insert.Parameters.AddWithValue("$importance",
+                fullyJudgedPending ? """
+                  {"decision":"promote","durability":"long","future_utility":"high","confidence":"high","meaning_preserved":true,"risk_flags":[]}
+                  """ : DBNull.Value);
+            insert.Parameters.AddWithValue("$support",
+                fullyJudgedPending ? """
+                  {"decision":"supported","confidence":"high","meaning_preserved":true,"risk_flags":[]}
+                  """ : DBNull.Value);
             insert.Parameters.AddWithValue("$fingerprint",
                 Hash(kind + "\0" + RealFact.ToLowerInvariant()));
             insert.ExecuteNonQuery();
+            if (fullyJudgedPending)
+            {
+                using var relation = conn.CreateCommand();
+                relation.CommandText = """
+                    INSERT INTO memory_evidence_proposal_relations
+                     (proposal_id,relation,related_claim_id,result_json)
+                    VALUES ($id,'unrelated',NULL,$result);
+                    """;
+                relation.Parameters.AddWithValue("$id", RealProposalId);
+                relation.Parameters.AddWithValue("$result", """
+                    {"relation":"unrelated","target_ref":null,"confidence":"high","meaning_preserved":true}
+                    """);
+                relation.ExecuteNonQuery();
+            }
         }
         File.WriteAllText(Path.Combine(TestDirectory,
             ProtectedPendingReviewLedger.OperatorManifestFile),
@@ -739,6 +768,65 @@ internal static class Program
                 RealProject, RealBranch, RealERef)?.Kind == "procedure");
             Check(reopened.ReadProtectedClaims(RealProject, RealBranch).Count == 0);
         }
+    }
+
+    private static void RealJudgedPendingProcedure()
+    {
+        // This is a PENDING source with completed untrusted model judgments.
+        // The service accepts it for human REVIEW only, not as approval.
+        CreateRealEvidenceFixture(kind: "procedure", fullyJudgedPending: true);
+        string request;
+        using (var store = Open())
+        {
+            var imported = store.ImportOperatorPinnedEvidence();
+            request = imported.PendingRequestId;
+            Check(imported.Kind == "procedure"
+                && imported.CanonicalFact == RealFact
+                && imported.SourceOrigin == ProtectedPendingReviewLedger.OperatorSourceOrigin
+                && !imported.HumanApprovalVerified && !imported.ClaimWritten);
+            Check(store.ReadOperatorReviewOffer(
+                RealProject, RealBranch, RealERef)?.Kind == "procedure");
+            Check(store.ReadProtectedClaims(RealProject, RealBranch).Count == 0);
+
+            // Even a synthetically user-verified ES256 signature is not a
+            // trusted real user's approval or a protected Claim.
+            using var key = TestCredential.New();
+            var meaning = RealReviewMeaning(imported);
+            var coordinator = new VerifiedReviewCoordinator(store, key.Pinned);
+            var ticket = coordinator.Begin(meaning);
+            var denied = coordinator.CompleteProtected(
+                ticket.TicketId, meaning, key.Sign(ticket));
+            Check(!denied.Verified && !denied.ClaimWritten
+                && denied.Status == "protected_review_scope_or_commit_denied");
+            Check(store.ReadVerifiedIntent(RealProject, RealBranch, RealERef) is null);
+            Check(store.CountPending() == 1);
+        }
+        using (var reopened = Open())
+        {
+            Check(reopened.ImportOperatorPinnedEvidence().PendingRequestId == request);
+            Check(reopened.ReadOperatorReviewOffer(
+                RealProject, RealBranch, RealERef)?.Kind == "procedure");
+            Check(reopened.ReadProtectedClaims(RealProject, RealBranch).Count == 0);
+        }
+    }
+
+    private static void RealPendingJudgmentDenied()
+    {
+        CreateRealEvidenceFixture(kind: "procedure");
+        MutateRealSnapshot("UPDATE memory_evidence_proposals SET status='pending';");
+        using var store = Open();
+        Throws<InvalidOperationException>(() => store.ImportOperatorPinnedEvidence());
+        Check(store.CountPending() == 0);
+
+        // A syntactically plausible but incomplete model verdict cannot
+        // turn the unverified source into a review-ready candidate.
+        MutateRealSnapshot("""
+            UPDATE memory_evidence_proposals
+              SET importance_json='{"decision":"promote","confidence":"high"}',
+                  support_json='{"decision":"supported","confidence":"high"}';
+            """);
+        Throws<InvalidOperationException>(() => store.ImportOperatorPinnedEvidence());
+        Check(store.CountPending() == 0);
     }
 
     private static void RealEvidenceScopeDenied()
