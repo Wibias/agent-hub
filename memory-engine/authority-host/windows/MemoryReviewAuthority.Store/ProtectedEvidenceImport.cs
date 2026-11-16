@@ -164,7 +164,7 @@ public sealed partial class ProtectedPendingReviewLedger
             if (reader.Read())
                 throw new InvalidOperationException("operator_evidence_duplicate");
         }
-        if (kind is not ("knowledge" or "preference")
+        if (kind is not ("knowledge" or "preference" or "procedure")
             || string.IsNullOrWhiteSpace(fact) || fact.Length > 4000)
             throw new InvalidOperationException("operator_fact_kind_unsupported");
         // Compare with the extraction pipeline's kind + NUL + NFKC/lower

@@ -127,6 +127,36 @@ Prozeduren und eine nach dem Import veränderte Evidence-Quelle.
 Ein gültig signierter **synthetischer** UV-Nachweis wird gegen den realen
 PENDING-Datensatz getestet und muss scheitern.
 
+## Procedure als geschützte PENDING-Review-Quelle
+
+Der reale Quellimport kann nun neben `knowledge` und `preference`
+auch `procedure` als **unverifizierte, serviceeigene PENDING-Quelle**
+halten und in der ausschließlich administrativen Operator-Review-
+Anzeige mit dem originalen Kind präsentieren. Das ist notwendig,
+damit Arbeitsabläufe nicht fälschlich als Wissen oder persönliche
+Vorliebe umetikettiert werden müssen.
+
+Die geschützte SQLite-Schemaprüfung und `ValidateSource` erlauben
+`procedure` **nur für `protected_review_sources`**. Die Tabelle
+`protected_review_claims` und der bestehende
+`CompleteProtected`-Pfad bleiben unverändert: **keine**
+procedure-Claims, keine Signatur-/Windows-Hello-Zustimmung durch
+synthetische Schlüssel, keine Änderung an produktiven Daten.
+
+Der bisherige echte Importvertrag verlangt weiterhin
+`status=needs_confirmation` und eine konsistente,
+ausdrücklich operator-gepinnte kanonische `E~`-Quelle.
+Ein `~p`-Eintrag im Shadow mit `status=pending` wird damit
+**nicht** auf magische Weise importierbar oder genehmigt.
+
+Die neue SQL-`CREATE TABLE`-Erweiterung gilt für einen frisch
+initialisierten, disposable Service-Ledger; sie migriert absichtlich
+**keine bereits installierte geschützte Datenbank**. Vor einer
+Produktionsmigration sind Version-/Backup-/Rollback-Nachweise nötig.
+Windows-native Selftests beweisen die Pending-Importierbarkeit,
+exakte Wiedereinlesbarkeit und die Verweigerung von UV-basierter
+Claim-Finalisierung mit einem synthetischen Schlüssel.
+
 ## Unverändert offen
 
 1. **Ein bedienbarer, sicherer Operator-Import** aus dem aktuellen
