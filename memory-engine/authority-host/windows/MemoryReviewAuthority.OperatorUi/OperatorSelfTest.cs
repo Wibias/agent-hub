@@ -137,6 +137,12 @@ internal static class OperatorSelfTest
             });
             if (denied != 3)
                 throw new Exception("operator_envelope_negative_cases_missing");
+            foreach (var kind in new[] { "knowledge", "preference", "procedure" })
+                if (!ProtectedOperatorService.ValidReviewKind(kind))
+                    throw new Exception("native_supported_source_kind_rejected");
+            foreach (var kind in new[] { "", "user_direct", "tool_observation", "Procedure" })
+                if (ProtectedOperatorService.ValidReviewKind(kind))
+                    throw new Exception("native_untrusted_source_kind_accepted");
             foreach (var valid in new[]
                 { "http://localhost:4317", "http://localhost:4328",
                   "http://localhost:52348", "http://localhost:1" })
