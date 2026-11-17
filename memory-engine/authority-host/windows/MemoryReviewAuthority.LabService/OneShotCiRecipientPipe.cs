@@ -45,8 +45,8 @@ internal sealed class OneShotCiRecipientPipe : IDisposable
 
     internal sealed record Snapshot(
         string ProjectId, string Branch, string ProposalRef,
-        string PrincipalSid, uint KernelProcessId, string SessionSha256,
-        DateTimeOffset ExpiresUtc);
+        string PrincipalSid, uint KernelProcessId, string ClientNonce,
+        string SessionSha256, DateTimeOffset ExpiresUtc);
 
     private sealed class Pending : IDisposable
     {
@@ -108,6 +108,19 @@ internal sealed class OneShotCiRecipientPipe : IDisposable
     private static extern bool GetNamedPipeClientProcessId(
         SafePipeHandle pipe, out uint pid);
 
+    private static bool TryCanonicalClientNonce(string value)
+    {
+        try
+        {
+            var padded=value.Replace('-','+').Replace('_','/');
+            var bytes=Convert.FromBase64String(padded+"=");
+            return bytes.Length==32
+                &&Convert.ToBase64String(bytes).TrimEnd('=')
+                    .Replace('+','-').Replace('/','_')==value;
+        }
+        catch(FormatException){return false;}
+    }
+
     private static string? PrincipalSid(NamedPipeServerStream pipe)
     {
         string? sid = null;
@@ -162,15 +175,23 @@ internal sealed class OneShotCiRecipientPipe : IDisposable
                 var root = json.RootElement;
                 var names = root.ValueKind == JsonValueKind.Object
                     ? root.EnumerateObject().Select(x=>x.Name).ToArray() : [];
-                if (names.Length!=4 || names.Distinct(StringComparer.Ordinal).Count()!=4
+                if (names.Length!=5 || names.Distinct(StringComparer.Ordinal).Count()!=5
                     || !names.ToHashSet(StringComparer.Ordinal).SetEquals(
-                        ["protocol","projectId","branch","proposalRef"])
+                        ["protocol","projectId","branch","proposalRef","clientNonce"])
                     || root.GetProperty("protocol").GetString()!=Protocol
                     || root.GetProperty("projectId").GetString()!=Project
                     || root.GetProperty("branch").GetString()!=Branch
                     || !Regex.IsMatch(root.GetProperty("proposalRef").GetString() ?? "",
                         @"\AE~[a-f0-9]{10}\z"))
                     continue;
+                var clientNonce=root.GetProperty("clientNonce").GetString();
+                if (clientNonce is not {Length:43}
+                    || !Regex.IsMatch(clientNonce,@"\A[A-Za-z0-9_-]{43}\z")
+                    || !TryCanonicalClientNonce(clientNonce))
+                {
+                    Mark("recipient_nonce_invalid");
+                    continue;
+                }
                 Mark("recipient_scope_verified");
                 var proposal = root.GetProperty("proposalRef").GetString()!;
                 var challenge = RandomNumberGenerator.GetBytes(32);
@@ -178,10 +199,11 @@ internal sealed class OneShotCiRecipientPipe : IDisposable
                 {
                     Protocol,Project,Branch,proposal,actualSid,
                     kernelPid.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    clientNonce,
                     Convert.ToHexString(challenge).ToLowerInvariant(),
                 });
                 var snapshot = new Snapshot(Project,Branch,proposal,
-                    actualSid,kernelPid,
+                    actualSid,kernelPid,clientNonce,
                     Convert.ToHexString(SHA256.HashData(binding)).ToLowerInvariant(),
                     DateTimeOffset.UtcNow.AddSeconds(90));
                 using var pending = new Pending(pipe,snapshot);

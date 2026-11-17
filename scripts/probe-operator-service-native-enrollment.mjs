@@ -434,6 +434,117 @@ async function run(){
         'replayed_ci_one_shot_consent_accepted'))throw error;
   }
 
+  // Third consent: actual ORIGINAL Codex-compatible stdio memory_recall
+  // MCP server process is the held recipient. This remains synthetic CI;
+  // the process is NOT an independently authenticated real Codex session.
+  const mcp=fork(new URL('./run-codex-memory-mcp.mjs',import.meta.url),
+    ['--ci-one-shot-read','--pin',pinPath],{
+      stdio:['pipe','pipe','pipe','ipc'],
+    });
+  const rpcPending=new Map();
+  let stdoutBuffer='',mcpExit=null,mcpStderr='';
+  mcp.stderr.on('data',chunk=>{
+    mcpStderr+=(chunk.toString('utf8')).slice(0,400);
+  });
+  mcp.stdout.on('data',chunk=>{
+    stdoutBuffer+=chunk.toString('utf8');
+    if(stdoutBuffer.length>16384)
+      throw Error('ci_mcp_response_too_large');
+    let end;
+    while((end=stdoutBuffer.indexOf('\n'))>=0){
+      const line=stdoutBuffer.slice(0,end);stdoutBuffer=stdoutBuffer.slice(end+1);
+      let message;
+      try{message=JSON.parse(line);}
+      catch{throw Error('ci_mcp_invalid_json_rpc');}
+      const fn=rpcPending.get(message.id);
+      if(fn){rpcPending.delete(message.id);fn.resolve(message);}
+    }
+  });
+  mcp.on('exit',(code,signal)=>{
+    mcpExit={code,signal};
+    for(const fn of rpcPending.values())
+      fn.reject(Error('ci_mcp_exited_without_reply: '+mcpStderr.slice(0,120)));
+    rpcPending.clear();
+  });
+  function mcpCall(id,method,params){
+    if(mcpExit)throw Error('ci_mcp_already_exited');
+    return new Promise((resolve,reject)=>{
+      const timeout=setTimeout(()=>{
+        rpcPending.delete(id);reject(Error('ci_mcp_rpc_timeout_'+method));
+      },15000);
+      rpcPending.set(id,{
+        resolve:value=>{clearTimeout(timeout);resolve(value);},
+        reject:error=>{clearTimeout(timeout);reject(error);},
+      });
+      mcp.stdin.write(JSON.stringify({jsonrpc:'2.0',id,method,params})+'\n');
+    });
+  }
+  const init=await mcpCall(20,'initialize',{
+    protocolVersion:'2025-06-18',capabilities:{},clientInfo:{
+      name:'ci-original-codex-protocol-client',version:'0.1.0',
+    },
+  });
+  if(init?.result?.serverInfo?.name!=='agenthub-memory-readonly')
+    throw Error('ci_mcp_server_not_original_readonly_memory');
+  const tools=await mcpCall(21,'tools/list',{});
+  if(tools?.result?.tools?.length!==1
+    ||tools.result.tools[0].name!=='memory_recall'
+    ||!tools.result.tools[0].description.includes('CI ONLY'))
+    throw Error('ci_mcp_not_existing_memory_recall_or_unlabelled');
+  let readyResolve,readyReject;
+  const ready=new Promise((resolve,reject)=>{
+    readyResolve=resolve;readyReject=reject;
+  });
+  mcp.on('message',message=>{
+    if(message?.status==='ci_mcp_recipient_ready')readyResolve();
+  });
+  mcp.on('error',error=>readyReject(error));
+  let rpcDone=false;
+  const toolReply=mcpCall(22,'tools/call',{
+    name:'memory_recall',
+    arguments:{query:'exact-proposal:'+scope.proposalRef,max_items:1},
+  }).then(x=>{rpcDone=true;return x;});
+  await Promise.race([
+    ready,
+    new Promise((_,reject)=>setTimeout(
+      ()=>reject(Error('ci_mcp_pipe_ready_timeout')),12000)),
+  ]);
+  const mcpOffer=await send('ci_read_begin',scope);
+  if(mcpOffer.recipient_kernel_pid!==mcp.pid
+    ||mcpOffer.result_set_sha256!==selectedHash
+    ||mcpOffer.recipient_session_sha256===validOffer.recipient_session_sha256
+    ||mcpOffer.read_released!==false
+    ||mcpOffer.published_to_codex!==false)
+    throw Error('ci_mcp_exact_connected_recipient_not_bound');
+  await new Promise(resolve=>setTimeout(resolve,350));
+  if(rpcDone)throw Error('ci_mcp_disclosed_before_separate_uv');
+  const mcpConsent=await send('ci_read_complete',{
+    ticketId:mcpOffer.ticket_id,
+    assertion:proofAssertion(key,mcpOffer,7),
+  });
+  if(mcpConsent.status!=='ci_exact_one_shot_delivered_no_production_authority'
+    ||mcpConsent.read_released!==true
+    ||mcpConsent.published_to_codex!==false
+    ||mcpConsent.production_authorized!==false)
+    throw Error('ci_mcp_one_shot_release_not_verified');
+  const result=await toolReply;
+  if(result?.jsonrpc!=='2.0'||result.id!==22
+    ||result.result?.content?.length!==1
+    ||result.result.isError!==false)
+    throw Error('ci_mcp_memory_recall_response_invalid');
+  const recalled=JSON.parse(result.result.content[0].text);
+  if(recalled.status!=='found_ci_one_shot_not_production'
+    ||recalled.items?.length!==1
+    ||recalled.items[0].value!==fact
+    ||recalled.items[0].claim_id!==published.claim_id
+    ||recalled.items[0].fact_sha256!==sha(fact).toString('hex')
+    ||recalled.ci_mcp_delivered!==true
+    ||recalled.production_authorized!==false
+    ||recalled.trusted_for_production_recall!==false
+    ||recalled.physical_human_approval_verified!==false)
+    throw Error('ci_mcp_did_not_receive_exact_signed_claim');
+  mcp.stdin.end();
+
   process.stdout.write(JSON.stringify({
     status:'synthetic_native_enrollment_bridge_pass_not_human',
     source_kind:'knowledge',
@@ -446,6 +557,7 @@ async function run(){
     ci_denied_wrong_purpose_before_release:true,
     ci_exact_kernel_pid_receiver:true,
     ci_receiver_verified_signed_claim:true,
+    ci_existing_memory_recall_stdio_received_exact_once:true,
     read_released:false,
     published_to_codex:false,
     historical_evidence_verified:false,
