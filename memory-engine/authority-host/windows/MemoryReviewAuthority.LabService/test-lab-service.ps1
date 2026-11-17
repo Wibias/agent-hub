@@ -836,7 +836,7 @@ try {
         # Adversarial rollback: replace ONLY protected SQLite with its
         # consistent pre-read baseline; keep the newer HKLM checkpoint.
         $checkpointBefore = (Get-ItemProperty -Path $registryFencePath -ErrorAction Stop).Snapshot
-        if ($checkpointBefore -cnotmatch '^v1:[2-9][0-9]*:[a-f0-9]{64}$') {
+        if ($checkpointBefore -cnotmatch '^v1:(?:[2-9]|[1-9][0-9]+):[a-f0-9]{64}$') {
             throw 'CI HKLM checkpoint did not advance after protected one-shot reads'
         }
         & $sc stop $service | Out-Null
