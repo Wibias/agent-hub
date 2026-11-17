@@ -198,6 +198,27 @@ internal sealed class OperatorReviewWindow : Form
         Text = "Read-Zustimmung mit Windows Hello prüfen (KEINE Freigabe)",
         AutoSize = true, Height = 38, Enabled = false,
     };
+    private readonly Button _ciReadPrepare = new()
+    {
+        Text = "CI: Wartenden Test-Empfänger prüfen",
+        AutoSize = true, Height = 38,
+    };
+    private readonly CheckBox _ciReadAcknowledge = new()
+    {
+        Text = "CI-NUR: Ich habe den echten Claim und die Kernel-PID des "
+            + "wartenden Testempfängers gelesen. Diese PID attestiert KEINE "
+            + "sichere Codex-Sitzung. Einmalige Test-Übertragung erlauben.",
+        Dock = DockStyle.Fill, Enabled = false,
+    };
+    private readonly Button _ciReadConfirm = new()
+    {
+        Text = "CI: Einmalige Test-Übertragung mit Windows Hello erlauben",
+        AutoSize = true, Height = 38, Enabled = false,
+    };
+    private CiOneShotOffer? _ciReadOffer;
+    private static bool CiOnly => Environment.GetEnvironmentVariable(
+        "GITHUB_ACTIONS") == "true"
+        && Environment.GetEnvironmentVariable("RUNNER_OS") == "Windows";
     private ReadDisclosureOffer? _readOffer;
     private ServiceOffer? _publication;
     private ServiceOffer? _offer;
@@ -219,7 +240,7 @@ internal sealed class OperatorReviewWindow : Form
         {
             Dock = DockStyle.Fill, Padding = new Padding(28),
             AutoScroll = true,
-            ColumnCount = 1, RowCount = 14,
+            ColumnCount = 1, RowCount = 16,
         };
         outer.RowStyles.Add(new RowStyle(SizeType.Absolute, 80));
         outer.RowStyles.Add(new RowStyle(SizeType.Absolute, 74));
@@ -233,6 +254,8 @@ internal sealed class OperatorReviewWindow : Form
         outer.RowStyles.Add(new RowStyle(SizeType.Absolute, 65));
         outer.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
         outer.RowStyles.Add(new RowStyle(SizeType.Absolute, 65));
+        outer.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
+        outer.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
         outer.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
         outer.RowStyles.Add(new RowStyle(SizeType.Absolute, 55));
         var header = new Label
@@ -264,6 +287,8 @@ internal sealed class OperatorReviewWindow : Form
         loadActions.Controls.Add(_reaffirmPrepare);
         loadActions.Controls.Add(_publishPrepare);
         loadActions.Controls.Add(_readPrepare);
+        _ciReadPrepare.Visible = CiOnly;
+        loadActions.Controls.Add(_ciReadPrepare);
         outer.Controls.Add(loadActions, 0, 2);
         outer.Controls.Add(_fact, 0, 3);
         outer.Controls.Add(_meaning, 0, 4);
@@ -275,7 +300,11 @@ internal sealed class OperatorReviewWindow : Form
         outer.Controls.Add(_publishCommit, 0, 10);
         outer.Controls.Add(_readAcknowledge, 0, 11);
         outer.Controls.Add(_readConfirm, 0, 12);
-        outer.Controls.Add(_status, 0, 13);
+        _ciReadAcknowledge.Visible = CiOnly;
+        _ciReadConfirm.Visible = CiOnly;
+        outer.Controls.Add(_ciReadAcknowledge, 0, 13);
+        outer.Controls.Add(_ciReadConfirm, 0, 14);
+        outer.Controls.Add(_status, 0, 15);
         Controls.Add(outer);
 
         _load.Click += async (_, _) => await LoadOfferAsync();
@@ -287,6 +316,9 @@ internal sealed class OperatorReviewWindow : Form
         _readPrepare.Click += async (_, _) => await LoadReadDisclosureAsync();
         _readConfirm.Click += (_, _) => PerformReadDisclosure();
         _readAcknowledge.CheckedChanged += (_, _) => UpdateVerifyEnabled();
+        _ciReadPrepare.Click += async (_, _) => await LoadCiOneShotAsync();
+        _ciReadAcknowledge.CheckedChanged += (_, _) => UpdateVerifyEnabled();
+        _ciReadConfirm.Click += (_, _) => PerformCiOneShot();
         _publishCommit.Click += (_, _) => PerformPublish();
         _publishAcknowledge.CheckedChanged += (_, _) => UpdateVerifyEnabled();
         _verify.Click += (_, _) =>
@@ -326,6 +358,9 @@ internal sealed class OperatorReviewWindow : Form
         _reaffirmation = null;
         _publication = null;
         _readOffer = null;
+        _ciReadOffer = null;
+        _ciReadAcknowledge.Checked = false;
+        _ciReadAcknowledge.Enabled = false;
         _readAcknowledge.Checked = false;
         _readAcknowledge.Enabled = false;
         _publishAcknowledge.Checked = false;
@@ -353,6 +388,8 @@ internal sealed class OperatorReviewWindow : Form
             && _publication is { } p && p.ExpiresUtc > DateTimeOffset.UtcNow;
         _readConfirm.Enabled = !_busy && _readAcknowledge.Checked
             && _readOffer is { } read && read.ExpiresUtc > DateTimeOffset.UtcNow;
+        _ciReadConfirm.Enabled = CiOnly && !_busy && _ciReadAcknowledge.Checked
+            && _ciReadOffer is { } ci && ci.ExpiresUtc > DateTimeOffset.UtcNow;
     }
 
     private async Task LoadOfferAsync()
@@ -629,6 +666,115 @@ internal sealed class OperatorReviewWindow : Form
         }
     }
 
+
+
+    private async Task LoadCiOneShotAsync()
+    {
+        if (!CiOnly || _busy) return;
+        InvalidateOffer();
+        _busy = true;
+        _ciReadPrepare.Enabled = false;
+        _status.Text = "CI: Wartenden Kernel-gebundenen Empfänger und "
+            + "geschützten Claim prüfen ...";
+        try
+        {
+            var project = _project.Text.Trim();
+            var branch = _branch.Text.Trim();
+            var proposal = _reference.Text.Trim();
+            var offer = await Task.Run(() =>
+                ProtectedOperatorService.BeginCiOneShotRead(
+                    project,branch,proposal));
+            if (project != _project.Text.Trim()
+                || branch != _branch.Text.Trim()
+                || proposal != _reference.Text.Trim()
+                || offer.ExpiresUtc <= DateTimeOffset.UtcNow)
+                throw new InvalidOperationException(
+                    "CI: Claim oder Sitzungs-Kontext nach Laden verändert");
+            _ciReadOffer = offer;
+            _fact.Text = offer.Value;
+            _meaning.Text =
+                $"CI-TEST-EINMAL-ÜBERTRAGUNG (NICHT PRODUKTIV)\n"
+                + $"PROJEKT: {offer.ProjectId} | BRANCH: {offer.Branch}\n"
+                + $"COMMIT: {offer.RevisionSha}\n"
+                + $"CLAIM: {offer.ClaimId} | E~: {offer.ProposalRef}\n"
+                + $"QUERY: {offer.Query}\n"
+                + $"EMPFÄNGER: {offer.Recipient}\n"
+                + $"KERNEL-PID: {offer.KernelRecipientPid}\n"
+                + $"KONTO-SID: {offer.PrincipalSid}\n"
+                + $"SITZUNGS-FINGERABDRUCK: {offer.RecipientSessionSha256}\n"
+                + $"CLAIM-SHA256: {offer.FactSha256}\n"
+                + $"SNAPSHOT-SHA256: {offer.SnapshotSha256}\n"
+                + $"ERGEBNIS-SHA256: {offer.ResultSetSha256}\n"
+                + $"PROVENIENZ: {offer.Provenance}\n"
+                + "ACHTUNG: Gleiche Windows-SID/PID beweist keine "
+                + "unveränderte Original-Codex-Sitzung.";
+            _ciReadAcknowledge.Enabled = true;
+            _status.Text = "CI: Exakter Original-Claim und wartender Empfänger "
+                + "angezeigt. Kein Inhalt vor ausdrücklicher separater Zustimmung.";
+        }
+        catch (Exception error)
+        {
+            _ciReadOffer = null;
+            _status.Text = "CI-Einmal-Read-Angebot verweigert: "
+                + error.Message;
+        }
+        finally
+        {
+            _busy = false;
+            _ciReadPrepare.Enabled = true;
+            UpdateVerifyEnabled();
+        }
+    }
+
+    private void PerformCiOneShot()
+    {
+        if (!CiOnly || _busy || !_ciReadAcknowledge.Checked
+            || _ciReadOffer is not { } offer) return;
+        if (offer.ExpiresUtc <= DateTimeOffset.UtcNow)
+        {
+            InvalidateOffer();
+            _status.Text = "CI: Empfänger-Sitzung oder Read-Challenge abgelaufen";
+            return;
+        }
+        _busy = true;
+        _ciReadConfirm.Enabled = false;
+        _ciReadPrepare.Enabled = false;
+        _project.Enabled = false;
+        _branch.Enabled = false;
+        _reference.Enabled = false;
+        _status.Text = "CI-NUR: Reale native Windows-Hello-Interaktion "
+            + "für genau einen Test-Claim an die angezeigte Kernel-PID ...";
+        try
+        {
+            var assertion = NativeWindowsWebAuthn.GetAssertion(
+                Handle,offer.Challenge,offer.CredentialId,
+                offer.ExpectedOrigin,offer.ExpiresUtc);
+            var receipt = ProtectedOperatorService.CompleteCiOneShotRead(
+                offer.TicketId,assertion);
+            if (!receipt.Verified)
+                throw new InvalidOperationException(
+                    "Einmal-Read vom geschützten Dienst nicht bestätigt");
+            _status.Text = "CI: Geschützter Dienst hat genau eine signierte "
+                + "Testübertragung bestätigt. Keine produktive Freigabe.";
+        }
+        catch (Exception error)
+        {
+            _status.Text = "CI-Einmal-Read abgelehnt oder nicht bestätigt: "
+                + error.Message;
+        }
+        finally
+        {
+            _ciReadOffer = null;
+            _ciReadAcknowledge.Enabled = false;
+            _ciReadAcknowledge.Checked = false;
+            _ciReadPrepare.Enabled = true;
+            _project.Enabled = true;
+            _branch.Enabled = true;
+            _reference.Enabled = true;
+            _busy = false;
+            UpdateVerifyEnabled();
+        }
+    }
 
     private async Task LoadReadDisclosureAsync()
     {
