@@ -330,8 +330,9 @@ async function run(){
         stdio:['ignore','ignore','pipe','ipc'],
       });
     let events=[],next=null,stopped=false;
-    let childError='';
+    let childError='',deliveredMessage=false;
     const forward=message=>{
+      if(message?.status==='received_signed_exact_once')deliveredMessage=true;
       if(next){const r=next;next=null;r(message);}
       else events.push(message);
     };
@@ -356,7 +357,7 @@ async function run(){
           ()=>reject(Error('ci_receiver_wait_timed_out')),12000)),
       ]);
     };
-    return {child,receive};
+    return {child,receive,hasDelivery:()=>deliveredMessage};
   }
   const firstReceiver=startReceiver();
   const firstReady=await firstReceiver.receive();
@@ -396,11 +397,12 @@ async function run(){
     || validOffer.read_released!==false)
     throw Error('ci_second_recipient_not_exact_or_preapproved');
   // The actual protected text MUST NOT reach the waiting process before UV.
-  const before=await Promise.race([
-    secondReceiver.receive().then(()=>true),
-    new Promise(resolve=>setTimeout(()=>resolve(false),350)),
-  ]);
-  if(before)throw Error('ci_private_claim_transmitted_before_uv');
+  await new Promise(resolve=>setTimeout(resolve,350));
+  // A pre-consent check must never CONSUME the future message from
+  // the recipient. Otherwise the later signed-delivery assertion races
+  // with a discarded Promise.race waiter.
+  if(secondReceiver.hasDelivery())
+    throw Error('ci_private_claim_transmitted_before_uv');
 
   const release=await send('ci_read_complete',{
     ticketId:validOffer.ticket_id,
@@ -418,7 +420,8 @@ async function run(){
     || received.recipient_pid!==secondReceiver.child.pid
     || received.result_set_sha256!==selectedHash
     || received.claim_hash!==sha(fact).toString('hex'))
-    throw Error('ci_recipient_did_not_validate_exact_signed_claim');
+    throw Error('ci_recipient_did_not_validate_exact_signed_claim: '
+      +JSON.stringify(received));
   // Repeating the same approval cannot authorize another delivery.
   try {
     await send('ci_read_complete',{
