@@ -70,7 +70,11 @@ internal static class Program
         Run("project_read_candidate_exact_replay_and_conflict", ProjectReadCandidateConflicts);
         Run("project_read_candidate_withdraw_durable_no_reenroll", ProjectReadCandidateWithdraw);
         Run("project_read_candidate_schema_tamper_denied", ProjectReadCandidateSqlImmutable);
-        Console.WriteLine($"MEMORY_REVIEW_LEDGER PASS {_passed}/49; REAL_EVIDENCE_UV_PINNED_NO_APPROVAL");
+        Run("ci_read_once_consume_persists_after_reopen", CiReadOnceConsumedRestart);
+        Run("ci_read_once_abort_revocation_latches_after_reopen", CiReadOnceRevokeRestart);
+        Run("ci_read_once_foreign_binding_and_expiration_refused", CiReadOnceWrongBinding);
+        Run("ci_read_once_sql_receipt_and_tombstone_immutable", CiReadOnceSqlImmutable);
+        Console.WriteLine($"MEMORY_REVIEW_LEDGER PASS {_passed}/53; REAL_EVIDENCE_UV_PINNED_NO_APPROVAL");
     }
 
     private static void Run(string label, Action test)
@@ -95,6 +99,148 @@ internal static class Program
     private static string TestDirectory = string.Empty;
     private static ProtectedPendingReviewLedger Open()
         => ProtectedPendingReviewLedger.OpenInProtectedDirectory(TestDirectory);
+
+    private static ReadDisclosureMeaning CiReadMeaning(
+        string? request = null,string? recipient = null)
+        => new(ProtectedPendingReviewLedger.CiOneShotProject,
+            ProtectedPendingReviewLedger.CiOneShotBranch,
+            new string('c',40), "S-1-5-21-111-222-333-1001",
+            request??new string('a',48),new string('d',64),
+            new string('e',64),recipient??new string('b',64));
+
+    private const string CiReadClaim = "C~ffffffffffffffffffffffff";
+    private const string CiReadProposal = "E~0123456789";
+    private const uint CiReadPid = 1001;
+
+    private static void CiReadOnceConsumedRestart()
+    {
+        var m=CiReadMeaning();
+        var expiry=DateTimeOffset.UtcNow.AddSeconds(60);
+        using(var db=Open())
+        {
+            Check(!db.IsCiOneShotRevoked());
+            Check(db.ReserveCiOneShot(m,CiReadClaim,CiReadProposal,
+                CiReadPid,expiry));
+            Check(db.ReadCiOneShotState(m.RequestId)=="reserved");
+            Check(!db.ReserveCiOneShot(m,CiReadClaim,CiReadProposal,
+                CiReadPid,expiry));
+            Check(db.ConsumeCiOneShotBeforeIo(m,CiReadClaim,
+                CiReadProposal,CiReadPid));
+            Check(db.ReadCiOneShotState(m.RequestId)=="consumed_pre_io");
+            Check(!db.ConsumeCiOneShotBeforeIo(m,CiReadClaim,
+                CiReadProposal,CiReadPid));
+            Check(!db.AbortCiOneShot(m.RequestId));
+        }
+        using(var reopened=Open())
+        {
+            Check(reopened.ReadCiOneShotState(m.RequestId)=="consumed_pre_io");
+            Check(!reopened.ConsumeCiOneShotBeforeIo(
+                m,CiReadClaim,CiReadProposal,CiReadPid));
+            Check(!reopened.ReserveCiOneShot(m,CiReadClaim,
+                CiReadProposal,CiReadPid,expiry));
+        }
+    }
+
+    private static void CiReadOnceRevokeRestart()
+    {
+        var aborted=CiReadMeaning(new string('1',48),new string('2',64));
+        var pending=CiReadMeaning(new string('3',48),new string('4',64));
+        var future=CiReadMeaning(new string('5',48),new string('6',64));
+        var expiry=DateTimeOffset.UtcNow.AddMinutes(2);
+        using(var db=Open())
+        {
+            Check(db.ReserveCiOneShot(aborted,CiReadClaim,CiReadProposal,
+                CiReadPid,expiry));
+            Check(db.AbortCiOneShot(aborted.RequestId));
+            Check(db.ReadCiOneShotState(aborted.RequestId)=="aborted");
+            Check(!db.ConsumeCiOneShotBeforeIo(aborted,
+                CiReadClaim,CiReadProposal,CiReadPid));
+            Check(db.ReserveCiOneShot(pending,CiReadClaim,CiReadProposal,
+                CiReadPid+1,expiry));
+            Check(db.RevokeCiOneShot());
+            Check(!db.RevokeCiOneShot());
+            Check(db.IsCiOneShotRevoked());
+            Check(db.ReadCiOneShotState(pending.RequestId)=="aborted");
+            Check(!db.ReserveCiOneShot(future,CiReadClaim,CiReadProposal,
+                CiReadPid+2,expiry));
+            Check(!db.ConsumeCiOneShotBeforeIo(pending,
+                CiReadClaim,CiReadProposal,CiReadPid+1));
+        }
+        using(var db=Open())
+        {
+            Check(db.IsCiOneShotRevoked());
+            Check(db.ReadCiOneShotState(aborted.RequestId)=="aborted");
+            Check(db.ReadCiOneShotState(pending.RequestId)=="aborted");
+            Check(!db.ReserveCiOneShot(future,CiReadClaim,CiReadProposal,
+                CiReadPid+2,DateTimeOffset.UtcNow.AddSeconds(70)));
+        }
+    }
+
+    private static void CiReadOnceWrongBinding()
+    {
+        var m=CiReadMeaning();
+        using var db=Open();
+        Throws<ArgumentException>(()=>db.ReserveCiOneShot(
+            m with {ProjectId="github.com/unapproved/repo"},
+            CiReadClaim,CiReadProposal,CiReadPid,
+            DateTimeOffset.UtcNow.AddMinutes(1)));
+        Throws<ArgumentException>(()=>db.ReserveCiOneShot(
+            m,CiReadClaim,"E~not-a-ref",CiReadPid,
+            DateTimeOffset.UtcNow.AddMinutes(1)));
+        Check(db.ReserveCiOneShot(m,CiReadClaim,CiReadProposal,
+            CiReadPid,DateTimeOffset.UtcNow.AddSeconds(60)));
+        Check(!db.ConsumeCiOneShotBeforeIo(
+            m with {RecipientSessionSha256=new string('f',64)},
+            CiReadClaim,CiReadProposal,CiReadPid));
+        Check(!db.ConsumeCiOneShotBeforeIo(m,CiReadClaim,
+            CiReadProposal,CiReadPid+1));
+        Check(!db.ConsumeCiOneShotBeforeIo(m,CiReadClaim,
+            "E~1111111111",CiReadPid));
+        Check(db.ReadCiOneShotState(m.RequestId)=="reserved");
+        Check(db.ConsumeCiOneShotBeforeIo(m,CiReadClaim,
+            CiReadProposal,CiReadPid));
+        var expired=CiReadMeaning(new string('7',48),new string('8',64));
+        Check(db.ReserveCiOneShot(expired,CiReadClaim,CiReadProposal,
+            CiReadPid,DateTimeOffset.UtcNow.AddMilliseconds(250)));
+        Thread.Sleep(350);
+        Check(!db.ConsumeCiOneShotBeforeIo(expired,CiReadClaim,
+            CiReadProposal,CiReadPid));
+        Check(db.AbortCiOneShot(expired.RequestId));
+    }
+
+    private static void CiReadOnceSqlImmutable()
+    {
+        var m=CiReadMeaning();
+        using(var db=Open())
+        {
+            Check(db.ReserveCiOneShot(m,CiReadClaim,CiReadProposal,
+                CiReadPid,DateTimeOffset.UtcNow.AddMinutes(2)));
+            Check(db.ConsumeCiOneShotBeforeIo(m,CiReadClaim,
+                CiReadProposal,CiReadPid));
+            Check(db.RevokeCiOneShot());
+        }
+        using var connection=new SqliteConnection(
+            new SqliteConnectionStringBuilder
+            {
+                DataSource=Path.Combine(TestDirectory,"review-authority.sqlite3"),
+                Mode=SqliteOpenMode.ReadWrite,
+                Pooling=false, Cache=SqliteCacheMode.Private,
+            }.ToString());
+        connection.Open();
+        void InvalidSql(string sql)
+        {
+            using var command=connection.CreateCommand();
+            command.CommandText=sql;
+            Throws<SqliteException>(()=>command.ExecuteNonQuery());
+        }
+        InvalidSql("UPDATE protected_ci_read_once_receipts SET state='reserved';");
+        InvalidSql("DELETE FROM protected_ci_read_once_receipts;");
+        InvalidSql("DELETE FROM protected_ci_read_once_revocations;");
+        InvalidSql("UPDATE protected_ci_read_once_revocations SET revoked_utc='forged';");
+        using var reopened=Open();
+        Check(reopened.IsCiOneShotRevoked());
+        Check(reopened.ReadCiOneShotState(m.RequestId)=="consumed_pre_io");
+    }
 
     private static void DirectReadRevokeRestart()
     {

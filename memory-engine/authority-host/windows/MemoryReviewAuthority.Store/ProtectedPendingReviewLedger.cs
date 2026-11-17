@@ -111,6 +111,9 @@ public sealed partial class ProtectedPendingReviewLedger : IDisposable
             InitializeOperatorReaffirmationSchema(connection);
             InitializeOperatorDirectClaimSchema(connection);
             InitializeDirectReadEnrollmentSchema(connection);
+            // Audit-only CI scope. This schema does NOT authorize normal
+            // Memory requests, install a pipe or enable real-project Reads.
+            InitializeCiOneShotReceiptSchema(connection);
             return new ProtectedPendingReviewLedger(connection, directory);
         }
         catch

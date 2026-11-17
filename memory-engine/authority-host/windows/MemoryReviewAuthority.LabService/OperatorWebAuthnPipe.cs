@@ -219,7 +219,11 @@ internal sealed partial class OperatorWebAuthnPipe : IDisposable
         object? response = null;
         lock (_ledger)
         {
-            if (operation == "ci_read_begin")
+            if (operation == "ci_read_revoke")
+            {
+                response = RevokeCiOneShot(root,nonce);
+            }
+            else if (operation == "ci_read_begin")
             {
                 response = BeginCiOneShotRead(root, nonce,
                     stream as NamedPipeServerStream);
