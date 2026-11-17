@@ -162,6 +162,23 @@ internal sealed class OperatorReviewWindow : Form
         Text = "Diese neue Aussage mit Windows Hello bestätigen (kein Claim)",
         AutoSize = true, Height = 38, Enabled = false,
     };
+    private readonly Button _publishPrepare = new()
+    {
+        Text = "Memory-Claim vorbereiten", AutoSize = true, Height = 38,
+    };
+    private readonly CheckBox _publishAcknowledge = new()
+    {
+        Text = "Ich will diesen exakt angezeigten NEU bestätigten Fakt jetzt "
+            + "im geschützten Claim-Speicher aufnehmen. Historische Evidence "
+            + "bleibt unverifiziert. NICHT in Codex abrufbar.",
+        Dock = DockStyle.Fill, Enabled = false,
+    };
+    private readonly Button _publishCommit = new()
+    {
+        Text = "Jetzt mit Windows Hello als geschützten Claim speichern",
+        AutoSize = true, Height = 38, Enabled = false,
+    };
+    private ServiceOffer? _publication;
     private ServiceOffer? _offer;
     private ServiceOffer? _reaffirmation;
     private RegistrationOffer? _enrollment;
@@ -171,8 +188,8 @@ internal sealed class OperatorReviewWindow : Form
     {
         Text = "AgentHub Memory | Geschützter E~ Review | NO-GO";
         StartPosition = FormStartPosition.CenterScreen;
-        MinimumSize = new Size(860, 850);
-        Size = new Size(1060, 970);
+        MinimumSize = new Size(860, 920);
+        Size = new Size(1100, 1010);
         BackColor = Color.FromArgb(16, 19, 24);
         ForeColor = Color.FromArgb(243, 245, 246);
         Font = new Font("Segoe UI", 10);
@@ -180,7 +197,8 @@ internal sealed class OperatorReviewWindow : Form
         var outer = new TableLayoutPanel
         {
             Dock = DockStyle.Fill, Padding = new Padding(28),
-            ColumnCount = 1, RowCount = 10,
+            AutoScroll = true,
+            ColumnCount = 1, RowCount = 12,
         };
         outer.RowStyles.Add(new RowStyle(SizeType.Absolute, 80));
         outer.RowStyles.Add(new RowStyle(SizeType.Absolute, 74));
@@ -191,12 +209,14 @@ internal sealed class OperatorReviewWindow : Form
         outer.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
         outer.RowStyles.Add(new RowStyle(SizeType.Absolute, 50));
         outer.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
+        outer.RowStyles.Add(new RowStyle(SizeType.Absolute, 65));
+        outer.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
         outer.RowStyles.Add(new RowStyle(SizeType.Absolute, 55));
         var header = new Label
         {
             Dock = DockStyle.Fill,
             Text = "AGENTHUB  /  MEMORY REVIEW\n"
-                + "NATIVE WINDOWS HELLO PRÜFUNG    ·    KEINE CLAIMERSTELLUNG",
+                + "TEMPORÄRES NATIVE-HELLO-LAB    ·    KEIN CODEX-RECALL",
             Font = new Font("Segoe UI Semibold", 14),
             ForeColor = Color.White,
         };
@@ -219,6 +239,7 @@ internal sealed class OperatorReviewWindow : Form
         loadActions.Controls.Add(_load);
         loadActions.Controls.Add(_enrollPrepare);
         loadActions.Controls.Add(_reaffirmPrepare);
+        loadActions.Controls.Add(_publishPrepare);
         outer.Controls.Add(loadActions, 0, 2);
         outer.Controls.Add(_fact, 0, 3);
         outer.Controls.Add(_meaning, 0, 4);
@@ -226,7 +247,9 @@ internal sealed class OperatorReviewWindow : Form
         outer.Controls.Add(_verify, 0, 6);
         outer.Controls.Add(_reaffirmAcknowledge, 0, 7);
         outer.Controls.Add(_reaffirmConfirm, 0, 8);
-        outer.Controls.Add(_status, 0, 9);
+        outer.Controls.Add(_publishAcknowledge, 0, 9);
+        outer.Controls.Add(_publishCommit, 0, 10);
+        outer.Controls.Add(_status, 0, 11);
         Controls.Add(outer);
 
         _load.Click += async (_, _) => await LoadOfferAsync();
@@ -234,6 +257,9 @@ internal sealed class OperatorReviewWindow : Form
         _reaffirmPrepare.Click += async (_, _) => await LoadReaffirmationAsync();
         _reaffirmConfirm.Click += (_, _) => PerformReaffirmation();
         _reaffirmAcknowledge.CheckedChanged += (_, _) => UpdateVerifyEnabled();
+        _publishPrepare.Click += async (_, _) => await LoadPublishAsync();
+        _publishCommit.Click += (_, _) => PerformPublish();
+        _publishAcknowledge.CheckedChanged += (_, _) => UpdateVerifyEnabled();
         _verify.Click += (_, _) =>
         {
             if (_enrollment is not null) PerformNativeEnrollment();
@@ -269,6 +295,9 @@ internal sealed class OperatorReviewWindow : Form
         _offer = null;
         _enrollment = null;
         _reaffirmation = null;
+        _publication = null;
+        _publishAcknowledge.Checked = false;
+        _publishAcknowledge.Enabled = false;
         _reaffirmAcknowledge.Checked = false;
         _reaffirmAcknowledge.Enabled = false;
         _verify.Text = "Mit Windows Hello prüfen (keine Freigabe)";
@@ -288,6 +317,8 @@ internal sealed class OperatorReviewWindow : Form
                     && e.ExpiresUtc > DateTimeOffset.UtcNow));
         _reaffirmConfirm.Enabled = !_busy && _reaffirmAcknowledge.Checked
             && _reaffirmation is { } r && r.ExpiresUtc > DateTimeOffset.UtcNow;
+        _publishCommit.Enabled = !_busy && _publishAcknowledge.Checked
+            && _publication is { } p && p.ExpiresUtc > DateTimeOffset.UtcNow;
     }
 
     private async Task LoadOfferAsync()
@@ -501,6 +532,120 @@ internal sealed class OperatorReviewWindow : Form
             _load.Enabled = true;
             _enrollPrepare.Enabled = true;
             _reaffirmPrepare.Enabled = true;
+            _project.Enabled = true;
+            _branch.Enabled = true;
+            _reference.Enabled = true;
+            _busy = false;
+            UpdateVerifyEnabled();
+        }
+    }
+
+    private async Task LoadPublishAsync()
+    {
+        if (_busy) return;
+        InvalidateOffer();
+        _busy = true;
+        _load.Enabled = false;
+        _enrollPrepare.Enabled = false;
+        _reaffirmPrepare.Enabled = false;
+        _publishPrepare.Enabled = false;
+        _status.Text = "Lade gesonderten Dienstbeleg zum geschützten Claim-Commit …";
+        try
+        {
+            var project = _project.Text.Trim();
+            var branch = _branch.Text.Trim();
+            var proposal = _reference.Text.Trim();
+            var offer = await Task.Run(() =>
+                ProtectedOperatorService.BeginPublish(project, branch, proposal));
+            if (_project.Text.Trim() != project
+                || _branch.Text.Trim() != branch
+                || _reference.Text.Trim() != proposal
+                || offer.ExpiresUtc <= DateTimeOffset.UtcNow
+                || offer.Decision != "confirm"
+                || offer.Kind is not ("knowledge" or "preference"))
+                throw new InvalidOperationException(
+                    "Publikations-Kontext geändert oder nicht zulässig");
+            _publication = offer;
+            _fact.Text = offer.CanonicalFact;
+            _meaning.Text = $"CLAIM-PUBLIKATION: EIGENE NEUE AUSSAGE    |    TYP: {offer.Kind}\n"
+                + $"HISTORISCHER URSPRUNG: {offer.SourceOrigin} (UNVERIFIZIERT)\n"
+                + $"PROJEKT: {offer.ProjectId}    |    BRANCH: {offer.Branch}\n"
+                + $"COMMIT: {offer.RevisionSha}\n"
+                + $"E~: {offer.ProposalRef}    |    SNAPSHOT: {offer.ReviewSnapshotSha256}\n"
+                + $"FAKT-SHA256: {offer.CanonicalFactSha256}\n"
+                + $"HISTORISCHE EVIDENCE-SHA256: {offer.SourceEvidenceSha256}";
+            _publishAcknowledge.Enabled = true;
+            _status.Text = "Nur nach vorheriger persönlicher Bestätigung zulässig. "
+                + "Diese ZWEITE, unabhängige Aktion schreibt einen geschützten Claim. "
+                + "Er ist NICHT für Codex freigegeben.";
+        }
+        catch (Exception error)
+        {
+            _status.Text = "Claim-Publikation nicht vorbereitet: "
+                + error.Message + ". Kein Claim geschrieben.";
+        }
+        finally
+        {
+            _busy = false;
+            _load.Enabled = true;
+            _enrollPrepare.Enabled = true;
+            _reaffirmPrepare.Enabled = true;
+            _publishPrepare.Enabled = true;
+            UpdateVerifyEnabled();
+        }
+    }
+
+    private void PerformPublish()
+    {
+        if (_busy || !_publishAcknowledge.Checked
+            || _publication is not { } offer) return;
+        if (offer.ExpiresUtc <= DateTimeOffset.UtcNow)
+        {
+            InvalidateOffer();
+            _status.Text = "Claim-Commit-Challenge abgelaufen. Erneut vorbereiten.";
+            return;
+        }
+        _busy = true;
+        _load.Enabled = false;
+        _enrollPrepare.Enabled = false;
+        _reaffirmPrepare.Enabled = false;
+        _publishPrepare.Enabled = false;
+        _verify.Enabled = false;
+        _reaffirmConfirm.Enabled = false;
+        _publishCommit.Enabled = false;
+        _project.Enabled = false;
+        _branch.Enabled = false;
+        _reference.Enabled = false;
+        _status.Text = "Separate Windows-Hello-Prüfung zur Veröffentlichung "
+            + "als geschützter Claim. Kein Codex-Recall.";
+        try
+        {
+            var assertion = NativeWindowsWebAuthn.GetAssertion(Handle, offer);
+            var receipt = ProtectedOperatorService.CompletePublish(
+                offer.TicketId, assertion);
+            if (!receipt.Verified || receipt.ClaimId is null
+                || receipt.Status !=
+                    "protected_user_direct_claim_committed_not_published_to_codex")
+                throw new InvalidOperationException(
+                    "Dienst hat Claim-Publikation verweigert: " + receipt.Status);
+            _status.Text = "Geschützter persönlicher Claim gespeichert: "
+                + receipt.ClaimId + ". Alte Evidence UNVERIFIZIERT. "
+                + "NICHT in Codex abrufbar, kein produktiver Memory-Write.";
+        }
+        catch (Exception error)
+        {
+            _status.Text = "Claim-Veröffentlichung verweigert oder abgebrochen: "
+                + error.Message;
+        }
+        finally
+        {
+            _publication = null;
+            _publishAcknowledge.Enabled = false;
+            _publishAcknowledge.Checked = false;
+            _load.Enabled = true;
+            _enrollPrepare.Enabled = true;
+            _reaffirmPrepare.Enabled = true;
+            _publishPrepare.Enabled = true;
             _project.Enabled = true;
             _branch.Enabled = true;
             _reference.Enabled = true;
