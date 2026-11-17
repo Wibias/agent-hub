@@ -27,6 +27,17 @@ internal sealed record ServiceOffer(
     string Decision,
     string CanonicalFact);
 
+internal sealed record RegistrationOffer(
+    string RequestId, string TicketId, string Challenge, string UserId,
+    string ExpectedOrigin, string RpId, DateTimeOffset ExpiresUtc,
+    string ProjectId, string Branch, string ProposalRef,
+    string RevisionSha, string SnapshotSha256, string FactSha256,
+    string EvidenceSha256, string Kind, string SourceOrigin,
+    string Decision, string CanonicalFact);
+
+internal sealed record NativeRegistrationData(
+    string ClientDataJSON, string AuthenticatorData, string CredentialId);
+
 internal sealed record NativeAssertion(
     string CredentialId,
     string Type,
@@ -280,6 +291,137 @@ internal static class ProtectedOperatorService
 
     internal static bool ValidReviewKind(string? kind)
         => kind is "knowledge" or "preference" or "procedure";
+
+    private static void ValidateExactOperatorMeaning(
+        JsonElement m, string project, string branch, string proposalRef)
+    {
+        if (!HasExactFields(m, "projectId", "branch", "revisionSha",
+            "proposalRef", "reviewSnapshotSha256", "canonicalFactSha256",
+            "decision", "canonicalFact")
+            || Str(m, "projectId") != project
+            || Str(m, "branch") != branch
+            || Str(m, "proposalRef") != proposalRef
+            || !Hex40.IsMatch(Str(m, "revisionSha"))
+            || !Hex64.IsMatch(Str(m, "reviewSnapshotSha256"))
+            || !Hex64.IsMatch(Str(m, "canonicalFactSha256"))
+            || Str(m, "decision") is not ("confirm" or "reject"))
+            throw new InvalidOperationException("Dienstgebundener Einschreib-Kontext falsch");
+        var fact = Str(m, "canonicalFact");
+        if (fact.Length is < 1 or > 4000
+            || Convert.ToHexString(SHA256.HashData(Utf8.GetBytes(fact)))
+                .ToLowerInvariant() != Str(m, "canonicalFactSha256"))
+            throw new InvalidOperationException("Einschreib-Fakt SHA256 falsch");
+    }
+
+    internal static RegistrationOffer BeginNativeEnrollment(
+        string project, string branch, string proposalRef)
+    {
+        if (!Scope.IsMatch(project) || project.Length > 256
+            || !Scope.IsMatch(branch) || branch.Length > 128
+            || !Ref.IsMatch(proposalRef))
+            throw new InvalidOperationException("Ungültige native Einschreib-Referenz");
+        using var verified = Request("enroll_begin", new
+        {
+            projectId = project, branch, proposalRef,
+        });
+        var r = verified.RootElement;
+        var m = r.GetProperty("meaning");
+        ValidateExactOperatorMeaning(m, project, branch, proposalRef);
+        if (Str(r, "status") != "operator_native_registration_challenge_unapproved"
+            || Str(r, "expected_origin") != "http://localhost:4328"
+            || !ValidReviewKind(Str(r, "kind"))
+            || Str(r, "source_origin") != "operator_pinned_unverified_evidence_v1"
+            || !Hex64.IsMatch(Str(r, "evidence_sha256"))
+            || Decode(Str(r, "challenge"), 64).Length != 32
+            || Decode(Str(r, "user_id"), 64).Length != 32
+            || !Base64Url.IsMatch(Str(r, "ticket_id"))
+            || !DateTimeOffset.TryParse(Str(r, "expires_utc"), out var expiry)
+            || expiry <= DateTimeOffset.UtcNow
+            || expiry > DateTimeOffset.UtcNow.AddMinutes(2))
+            throw new InvalidOperationException("Ungültige signierte Einschreib-Challenge");
+        return new RegistrationOffer(
+            Str(r, "request_id"), Str(r, "ticket_id"),
+            Str(r, "challenge"), Str(r, "user_id"),
+            Str(r, "expected_origin"), "localhost", expiry,
+            project, branch, proposalRef,
+            Str(m, "revisionSha"), Str(m, "reviewSnapshotSha256"),
+            Str(m, "canonicalFactSha256"), Str(r, "evidence_sha256"),
+            Str(r, "kind"), Str(r, "source_origin"),
+            Str(m, "decision"), Str(m, "canonicalFact"));
+    }
+
+    internal static ServiceOffer VerifyNativeEnrollmentKey(
+        RegistrationOffer original, NativeRegistrationData data)
+    {
+        _ = Decode(original.TicketId, 64);
+        _ = Decode(data.CredentialId, 1024);
+        _ = Decode(data.ClientDataJSON, 8192);
+        _ = Decode(data.AuthenticatorData, 2048);
+        using var verified = Request("enroll_key", new
+        {
+            ticketId = original.TicketId,
+            clientDataJSON = data.ClientDataJSON,
+            authenticatorData = data.AuthenticatorData,
+            credentialId = data.CredentialId,
+        });
+        var r = verified.RootElement;
+        var m = r.GetProperty("meaning");
+        ValidateExactOperatorMeaning(m, original.ProjectId,
+            original.Branch, original.ProposalRef);
+        if (Str(r, "status") != "operator_native_possession_challenge_unapproved"
+            || Str(r, "request_id") != original.RequestId
+            || Str(r, "source_origin") != original.SourceOrigin
+            || Str(r, "kind") != original.Kind
+            || Str(r, "evidence_sha256") != original.EvidenceSha256
+            || Str(m, "revisionSha") != original.RevisionSha
+            || Str(m, "reviewSnapshotSha256") != original.SnapshotSha256
+            || Str(m, "canonicalFactSha256") != original.FactSha256
+            || Str(m, "decision") != original.Decision
+            || Str(m, "canonicalFact") != original.CanonicalFact
+            || Str(r, "credential_id") != data.CredentialId
+            || Str(r, "expected_origin") != original.ExpectedOrigin
+            || Decode(Str(r, "challenge"), 64).Length != 32
+            || !Base64Url.IsMatch(Str(r, "ticket_id"))
+            || !DateTimeOffset.TryParse(Str(r, "expires_utc"), out var expiry)
+            || expiry <= DateTimeOffset.UtcNow
+            || expiry > DateTimeOffset.UtcNow.AddMinutes(2))
+            throw new InvalidOperationException("Ungültige native Besitz-Challenge");
+        return new ServiceOffer(
+            original.RequestId, Str(r, "ticket_id"), Str(r, "challenge"),
+            Str(r, "credential_id"), original.ExpectedOrigin, expiry,
+            original.ProjectId, original.Branch, original.RevisionSha,
+            original.ProposalRef, original.SnapshotSha256, original.FactSha256,
+            original.EvidenceSha256, original.SourceOrigin, original.Kind,
+            original.Decision, original.CanonicalFact);
+    }
+
+    internal static OperatorReceipt CompleteNativeEnrollment(
+        string ticketId, NativeAssertion assertion)
+    {
+        _ = Decode(ticketId, 64);
+        using var verified = Request("enroll_finish", new
+        {
+            ticketId,
+            assertion = new
+            {
+                credentialId = assertion.CredentialId,
+                type = assertion.Type,
+                clientDataJSON = assertion.ClientDataJSON,
+                authenticatorData = assertion.AuthenticatorData,
+                signature = assertion.Signature,
+            },
+        });
+        var r = verified.RootElement;
+        var approved = r.GetProperty("signature_verified").GetBoolean();
+        var status = Str(r, "status");
+        if (approved && (
+                status != "operator_native_uv_enrolled_unapproved"
+                || Str(r, "enrollment_state")
+                    != "operator_native_uv_enrolled_unapproved_v1"))
+            throw new InvalidOperationException(
+                "Dienst behauptet fremde Einschreibung oder Genehmigung");
+        return new OperatorReceipt(approved, status);
+    }
 
     internal static ServiceOffer Begin(string project, string branch, string proposalRef)
     {
