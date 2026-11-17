@@ -65,6 +65,47 @@ node $manager --remove --cwd $otherProject --apply
 
 The Windows allowlist defaults to %LOCALAPPDATA%\agent-hub\codex-memory-scopes.json and the canonical database to %LOCALAPPDATA%\agent-hub\memory.sqlite3. If your existing Codex hooks use a different database, specify the **existing absolute path** with --db on the first --add. Changing a pinned database later is denied; do not silently switch the memory source.
 
+## Local quick check before changing anything (recommended)
+
+The new doctor launches the **real** `memory_recall` stdio MCP process
+for the current Git project, sends `initialize`, `tools/list`, and
+`tools/call`, and prints only the result **status and count**, not Claim
+texts, database paths, queries or personal evidence. It writes **nothing**
+and does not enroll a project or edit the Codex config.
+
+~~~powershell
+# Run in an EXISTING approved project directory (PowerShell 7 / Node 24+).
+# Replace with the exact checkout path of agent-hub on your PC.
+$hub = 'C:\path\to\agent-hub'
+$project = (Get-Location).Path
+node (Join-Path $hub 'scripts\doctor-codex-memory-read.mjs') --cwd $project --query 'Projektentscheidung'
+~~~
+
+If the output says `ready_with_memory`, the already approved project's
+current canonical Memory database has at least one matching usable Claim.
+`ready_no_matching_memory` means **MCP transport and scope worked**, but
+there is no eligible matching saved memory. **Do not generate a synthetic
+memory to make the test green.** A `not_ready` result includes a precise
+status like `project_not_approved`, `scope_not_configured` or
+`memory_database_unavailable`. The doctor exits nonzero in this case;
+follow the existing explicit per-project enrollment instructions above if
+appropriate.
+
+This direct stdio check is **not** proof that the original Codex CLI/Desktop
+has loaded the registration. For that, run `codex mcp list` in your
+existing non-administrator PowerShell, and then call the real
+`memory_recall` tool from an original Codex session in that SAME project.
+Inspect its actual tool result. If the tool is absent, use the existing
+`codex mcp add agenthub-memory-read -- node $server --global` registration
+procedure above, not another service or a new account.
+
+The doctor is **ordinary local read-only convenience**, using the
+user-writable canonical SQLite. It is not the protected service-owned
+human-approved Claim authority, a genuine original-Codex process
+attestation, or a production private-Claim release. No Windows Hello or
+another security broker is needed to **diagnose the existing ordinary
+read-only path**.
+
 ## Acceptance: actual global Codex project isolation
 
 1. Open AgentHub as a fresh Codex Desktop session. Invoke the real memory_recall tool with a project-specific query. The result must show the AgentHub project ID, its current branch, and exclude historical runtime-e2e-seed records.
