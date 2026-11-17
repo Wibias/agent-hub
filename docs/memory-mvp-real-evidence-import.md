@@ -256,6 +256,70 @@ separat autorisierte Installation. Bis dahin Memory-Write NO-GO.
 Das Skript verändert die originale Shadow-DB und die kanonische
 Memory-DB nicht.
 
+## Historischer Source-Branch ohne aktuelle Worktree-Referenz (M2)
+
+Eine echte Streamer-Content-Evidence kann aus einer inzwischen
+gelöschten Arbeitsbranch stammen. Beispiel: `~p55fe6bbc8c89`,
+`project=github.com/Wibias/streamer-content`,
+`sourceBranch=fix5-plan44`, `sourceCommit=c886d7a2d5dca85af3cbf3ab58c12599b021d83e`.
+Dieser Commit existiert im GitHub-Repository, obwohl derzeit
+kein `fix5-plan44`-Worktree/Branch vorhanden ist. **Der aktuelle
+Checkout ist nicht die ursprüngliche Quelle** und darf nicht durch
+`git switch`, eine fiktive Branch oder Umetikettierung ersetzt werden.
+
+Der neue, **ausdrücklich optionale** Modus von
+`scripts/export-reviewed-memory-shadow-to-operator.mjs`
+verlangt `--source-branch` und `--source-commit` zusammen.
+Damit bleiben das ursprüngliche Evidence-/Proposal-`branch` und
+die Original-`commit_sha` im `E~`-Exportmanifest erhalten. Der
+aktuelle Git-Checkout dient **nur** zur Projekt-/Origin-Prüfung
+und als Git-Objektdatenbank. Der Export verlangt:
+
+- exakt ein ausgewähltes `pending`-`~p` im ursprünglichen
+  Projekt/Branch, eine unveränderte Original-ID und die bekannte
+  `E~`-Ableitung;
+- einen in **diesem lokalen Git-Repository** vorhandenen Objekt-Typ
+  `commit` für den vollständig gepinnten SHA; kein automatischer
+  Fetch, Branch-Wechsel oder Objekt-Download;
+- genau einen verknüpften `user_direct`-Beleg vom Typ `session`,
+  dessen `project_id`, `branch` und `commit_sha` exakt
+  den beiden Pins und der Git-Projektidentität entsprechen;
+- die vollständigen bisherigen Importance-/Support-/Relation-,
+  Fingerprint-, Duplicate-/Conflict-, Snapshot- und
+  Quelle-nach-Export-Frischeprüfungen; ein Wechsel der Herkunfts-
+  Metadaten während des Backups wird durch einen separaten
+  Provenienz-Hash erkannt.
+
+Beispiel, nur in einer **normalen, nicht erhöhten PowerShell**, nachdem
+der Code auf einen geprüften `main`-Commit aktualisiert ist und
+der historische Commit im lokalen Git-Objektspeicher vorhanden ist:
+
+```powershell
+$review = "$env:LOCALAPPDATA\AgentHub-Support-Review-b695aee28d9b464484d38319f49fff06"
+$shadow = "$env:LOCALAPPDATA\AgentHub-Evidence-Shadow-baf1e0aeba4848e884f0a0756b9e2138\memory-shadow.sqlite3"
+$repo = "C:\Users\ws\Desktop\Anderes\GitHub\streamer-content"
+$out = Join-Path $env:LOCALAPPDATA ('AgentHub-Evidence-Export-' + [guid]::NewGuid().ToString('N'))
+node "$review\scripts\export-reviewed-memory-shadow-to-operator.mjs" `
+  --shadow-db $shadow --repo-path $repo `
+  --proposal-ref '~p55fe6bbc8c89' --decision confirm `
+  --source-branch fix5-plan44 `
+  --source-commit c886d7a2d5dca85af3cbf3ab58c12599b021d83e `
+  --output-dir $out
+```
+
+**Kein Commit im lokalen Objektstore bedeutet NO-EXPORT**, bis die
+Herkunft des Objekts separat geprüft wurde. Ein Browserfund allein
+stellt keine neue lokale Source-Authentisierung her.
+
+**Vertrauen bleibt begrenzt:** `user_direct` ist nur ein
+*unverifiziertes Metadatenfeld* der Shadow-SQLite. Ein Git-Commit
+beweist nicht, wer die spätere Chat-Sitzung geschrieben hat.
+Der Export speichert den **historischen Projekt-/Branch-Kontext**,
+überführt die Regel **nicht** in einen projektweiten aktiven Claim
+und macht weder einen Windows-Hello-Consent noch einen
+produktiven Memory-Write. Das muss die Benutzerin oder der Benutzer
+erst nach echter geschützter Review selbst entscheiden.
+
 ## Unverändert offen
 
 1. **Ein bedienbarer, sicherer Operator-Import** aus dem aktuellen
