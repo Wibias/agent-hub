@@ -450,6 +450,28 @@ try {
             throw 'same-account nonadmin signed Claim read denied or admin pipe exposed'
         }
         Write-Host 'PASS: non-elevated same-account token verifies signed user Claim and cannot reach admin, UV or SQLite'
+        # Simulate an exact administrator revocation while the existing
+        # LocalService remains running. A cached startup policy must not
+        # authorize later reads. The same-account restricted token must
+        # receive NO signed response. Restoring IDENTICAL bytes must not
+        # re-enable the old in-memory pipe without deliberate SCM restart.
+        $userReadEnrollment = Join-Path $stateRoot 'agenthub-user-direct-read-ci-only.json'
+        $originalUserPolicy = [IO.File]::ReadAllBytes($userReadEnrollment)
+        Remove-Item -LiteralPath $userReadEnrollment -Force
+        & $accessProbe $stateRoot --revoked-user-ci $sourceScope.revisionSha $publishedPin
+        if ($LASTEXITCODE -ne 0) {
+            throw 'service kept serving private Claim after live revocation'
+        }
+        [IO.File]::WriteAllBytes($userReadEnrollment, $originalUserPolicy)
+        & $accessProbe $stateRoot --revoked-user-ci $sourceScope.revisionSha $publishedPin
+        if ($LASTEXITCODE -ne 0) {
+            throw 'revoked private read was resurrected by policy file recreation'
+        }
+        $scStatus = & $sc query $service
+        if ($LASTEXITCODE -ne 0 -or ($scStatus -join ' ') -notmatch 'RUNNING') {
+            throw 'denied read was caused by stopped SCM service, not live revocation'
+        }
+        Write-Host 'PASS: protected policy withdrawal denies signed user read, latches until restart, SCM still RUNNING'
     } else {
     $operatorProbe = Join-Path $repoRoot 'scripts/probe-operator-service-web-authn.mjs'
     $operatorOutput = & node $operatorProbe $publishedPin
