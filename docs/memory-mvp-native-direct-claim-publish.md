@@ -3,6 +3,25 @@
 **Default-OFF laboratory feature. NOT installed on the operator PC.
 Never a production memory write, and NO Codex memory_recall read grant.**
 
+## Hard No-Write Preview safety gate
+
+The existing `claimsEnabled=false` temporary Preview must NEVER acquire a
+private Claim writer merely by upgrading the Git checkout or its package.
+The protected operator service therefore constructs its publication
+coordinator **only** when it sees the exact CI-only activation marker
+`agenthub-synthetic-direct-claim-ci-only.enable` inside its
+service-SID-protected state directory. Only
+`test-lab-service.ps1 -NativeEnrollmentMode` writes that marker, after
+checking protected ownership/DACL and before starting the **ephemeral**
+LocalService SCM fixture. The real No-Write Preview installer never writes
+it; both installed preview CI variants verify its absence. The native
+publish-preparation UI button is disabled in the ordinary No-Write Preview.
+
+No environment variable, untrusted Git checkout content, user-writable
+SQLite row or client IPC parameter can enable this feature. A future
+real-device publish test requires a separately reviewed installation policy
+and explicit activation authority. The no-write package is NOT that policy.
+
 ## Distinct human consent phases
 
 1. **Eigene Aussage vorbereiten** / explicitly reaffirm a precise

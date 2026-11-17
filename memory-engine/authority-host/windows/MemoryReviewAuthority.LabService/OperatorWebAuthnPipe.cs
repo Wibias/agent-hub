@@ -23,11 +23,29 @@ internal sealed class OperatorWebAuthnPipe : IDisposable
     internal const string PipeName = "AgentHubMemoryReviewLab-OperatorV1";
     internal const string Protocol = "agenthub-operator-uv-service-v1";
     private readonly ProtectedPendingReviewLedger _ledger;
+    private readonly string _stateDir;
     private VerifiedReviewCoordinator? _coordinator;
     private OperatorReaffirmationCoordinator? _reaffirmation;
     private ChallengeTicket? _activeReaffirmation;
     private OperatorDirectClaimCoordinator? _publisher;
     private ChallengeTicket? _activePublish;
+    private const string SyntheticPublishCiMarker =
+        "agenthub-synthetic-direct-claim-ci-only.enable";
+    private const string SyntheticPublishCiPolicy =
+        "AGENTHUB_SYNTHETIC_DIRECT_CLAIM_CI_ONLY_V1";
+
+    // Fail-closed: preview installers NEVER create this protected marker.
+    // Only the disposable Windows GitHub runner's SCM fixture can opt in
+    // to synthetic private Claim writes. Not a production feature flag.
+    private static bool IsExplicitSyntheticCiPublishFixture(string stateDir)
+    {
+        var path = Path.Combine(stateDir, SyntheticPublishCiMarker);
+        var item = new FileInfo(path);
+        if (!item.Exists || item.Length is < 10 or > 128
+            || (item.Attributes & FileAttributes.ReparsePoint) != 0)
+            return false;
+        return File.ReadAllText(path, Encoding.UTF8) == SyntheticPublishCiPolicy;
+    }
     private readonly ReviewChallengeCore _registrationProofCore = new();
     private RegistrationAttempt? _registration;
     private RegistrationPossession? _registrationPossession;
@@ -49,13 +67,15 @@ internal sealed class OperatorWebAuthnPipe : IDisposable
     internal OperatorWebAuthnPipe(ProtectedPendingReviewLedger ledger, string stateDir)
     {
         _ledger = ledger ?? throw new ArgumentNullException(nameof(ledger));
+        _stateDir = stateDir;
         var operatorCredential = _ledger.ReadOperatorCredential();
         if (operatorCredential is not null)
             _coordinator = VerifiedReviewCoordinator.ForOperatorCredentialProbe(ledger);
         if (operatorCredential?.EnrollmentState == ProtectedPendingReviewLedger.NativeEnrollmentState)
         {
             _reaffirmation = OperatorReaffirmationCoordinator.ForNativeCredential(ledger);
-            _publisher = OperatorDirectClaimCoordinator.ForNativeCredential(ledger);
+            if (IsExplicitSyntheticCiPublishFixture(stateDir))
+                _publisher = OperatorDirectClaimCoordinator.ForNativeCredential(ledger);
         }
         var privatePath = Path.Combine(stateDir, "review-service-signing-key.pk8");
         var publicPath = Path.Combine(stateDir, "review-service-signing-key.pub.pem");
@@ -560,8 +580,9 @@ internal sealed class OperatorWebAuthnPipe : IDisposable
                             _ledger);
                         _reaffirmation = OperatorReaffirmationCoordinator.ForNativeCredential(
                             _ledger);
-                        _publisher = OperatorDirectClaimCoordinator.ForNativeCredential(
-                            _ledger);
+                        if (IsExplicitSyntheticCiPublishFixture(_stateDir))
+                            _publisher = OperatorDirectClaimCoordinator.ForNativeCredential(
+                                _ledger);
                     }
                     response = new
                     {

@@ -164,7 +164,8 @@ internal sealed class OperatorReviewWindow : Form
     };
     private readonly Button _publishPrepare = new()
     {
-        Text = "Memory-Claim vorbereiten", AutoSize = true, Height = 38,
+        Text = "Memory-Claim (No-Write-Preview: gesperrt)",
+        AutoSize = true, Height = 38, Enabled = false,
     };
     private readonly CheckBox _publishAcknowledge = new()
     {
