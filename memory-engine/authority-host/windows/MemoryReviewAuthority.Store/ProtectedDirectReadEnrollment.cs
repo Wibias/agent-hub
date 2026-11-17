@@ -151,7 +151,7 @@ public sealed partial class ProtectedPendingReviewLedger
         {
             AppendDirectReadEvent(tx,lane,1,"enrolled",
                 new DirectReadEvent(1,"enrolled",policySha256,principalSid,
-                    project,branch,revisionSha));
+                    project,branch,revisionSha!));
             tx.Commit();
             return true;
         }
