@@ -23,6 +23,7 @@ internal static class Program
         Run("cross_language_challenge_vector", ChallengeVector);
         Run("valid_uv_assertion_is_not_claim_authority", ValidAssertion);
         Run("protected_approval_challenge_is_domain_separated_one_use_no_claim", ApprovalDomainSeparation);
+        Run("protected_claim_commit_challenge_separate_one_use_no_authority", ClaimCommitPurpose);
         Run("reject_missing_user_presence_and_verification", MissingUserVerification);
         Run("reject_wrong_signature_and_credential", WrongSignature);
         Run("reject_wrong_rp_and_origin", WrongOrigin);
@@ -38,7 +39,7 @@ internal static class Program
         Run("reject_invalid_fact_and_nonlocal_origin", InvalidInputs);
         Run("native_registration_parses_only_es256_not_approval", NativeRegistrationParse);
         Run("native_registration_denies_tampering_and_missing_uv", NativeRegistrationDeny);
-        Console.WriteLine($"MEMORY_AUTHORITY_CORE PASS {_passed}/18; NO_SERVICE NO_DB_WRITE NO_AUTHORIZATION");
+        Console.WriteLine($"MEMORY_AUTHORITY_CORE PASS {_passed}/19; NO_SERVICE NO_DB_WRITE NO_AUTHORIZATION");
     }
 
     private static void Run(string name, Action test)
@@ -109,6 +110,42 @@ internal static class Program
         Check(!result.ApprovedReviewDecision && !result.ClaimWritten);
         Check(!core.VerifyProtectedApprovalAndConsume(
             fresh.TicketId, Meaning, credential.Sign(fresh, counter: 4)).Verified);
+    }
+
+    private static void ClaimCommitPurpose()
+    {
+        var nonce = Enumerable.Range(0, 32).Select(i => (byte)i).ToArray();
+        var proof = ReviewChallengeCore.ComputeChallenge(Meaning, nonce);
+        var reaffirm = ReviewChallengeCore.ComputeProtectedApprovalChallenge(Meaning, nonce);
+        var commit = ReviewChallengeCore.ComputeProtectedClaimCommitChallenge(Meaning, nonce);
+        Check(commit != proof && commit != reaffirm);
+        Check(commit != ReviewChallengeCore.ComputeProtectedClaimCommitChallenge(
+            Meaning with { Decision = "reject" }, nonce));
+        Check(commit != ReviewChallengeCore.ComputeProtectedClaimCommitChallenge(
+            Meaning with { Branch = "other" }, nonce));
+        using var key = TestCredential.New();
+        var core = new ReviewChallengeCore();
+        var reaffirmTicket = core.BeginProtectedApproval(Meaning, key.Pinned);
+        var reaffirmSigned = key.Sign(reaffirmTicket);
+        Check(core.VerifyProtectedClaimCommitAndConsume(reaffirmTicket.TicketId,
+            Meaning, reaffirmSigned).Status == "challenge_purpose_mismatch");
+        Check(!core.VerifyProtectedApprovalAndConsume(
+            reaffirmTicket.TicketId, Meaning, reaffirmSigned).Verified);
+        var commitTicket = core.BeginProtectedClaimCommit(Meaning, key.Pinned);
+        var commitSigned = key.Sign(commitTicket, counter: 2);
+        Check(core.VerifyProtectedApprovalAndConsume(
+            commitTicket.TicketId, Meaning, commitSigned).Status ==
+            "challenge_purpose_mismatch");
+        Check(!core.VerifyProtectedClaimCommitAndConsume(
+            commitTicket.TicketId, Meaning, commitSigned).Verified);
+        var fresh = core.BeginProtectedClaimCommit(Meaning, key.Pinned);
+        var verified = core.VerifyProtectedClaimCommitAndConsume(
+            fresh.TicketId, Meaning, key.Sign(fresh, counter: 3));
+        Check(verified.Verified && verified.UserPresent && verified.UserVerified);
+        Check(verified.Status == "verified_protected_claim_commit_intent_only");
+        Check(!verified.ApprovedReviewDecision && !verified.ClaimWritten);
+        Check(!core.VerifyProtectedClaimCommitAndConsume(
+            fresh.TicketId, Meaning, key.Sign(fresh, counter: 4)).Verified);
     }
 
     private static void ValidAssertion()

@@ -60,7 +60,11 @@ internal static class Program
         Run("native_operator_reaffirmation_intent_persists_no_claim", ReaffirmationNoClaim);
         Run("operator_reaffirmation_unverified_pin_denied", ReaffirmationUnverifiedDenied);
         Run("operator_reaffirmation_procedure_denied", ReaffirmationProcedureDenied);
-        Console.WriteLine($"MEMORY_REVIEW_LEDGER PASS {_passed}/39; REAL_EVIDENCE_UV_PINNED_NO_APPROVAL");
+        Run("user_direct_claim_requires_prior_reaffirmation", DirectClaimNeedsReaffirmation);
+        Run("user_direct_claim_commit_wal_restart_scope_provenance", DirectClaimCommit);
+        Run("user_direct_claim_commit_cross_purpose_and_counter_replay_denied", DirectClaimBadPurpose);
+        Run("user_direct_claim_duplicate_denied_without_counter_advance", DirectClaimNoDuplicate);
+        Console.WriteLine($"MEMORY_REVIEW_LEDGER PASS {_passed}/43; REAL_EVIDENCE_UV_PINNED_NO_APPROVAL");
     }
 
     private static void Run(string label, Action test)
@@ -1106,6 +1110,155 @@ internal static class Program
             RealProject, RealBranch, RealERef) is null);
         Check(store.ReadProtectedClaims(RealProject, RealBranch).Count == 0);
         Check(store.ReadOperatorCredential()?.LastSignCount == 1);
+    }
+
+    private static ReviewMeaning PrepareNativeReaffirmation(
+        ProtectedPendingReviewLedger store, TestCredential key)
+    {
+        var imported = store.ImportOperatorPinnedEvidence();
+        var meaning = RealReviewMeaning(imported);
+        var enrolCore = new ReviewChallengeCore();
+        var enrolled = enrolCore.Begin(meaning, key.Pinned);
+        store.RecordNativeUvEnrollment(meaning, key.Pinned,
+            enrolCore.VerifyAndConsume(
+                enrolled.TicketId, meaning, key.Sign(enrolled)));
+        var reaffirmer = OperatorReaffirmationCoordinator.ForNativeCredential(store);
+        var ticket = reaffirmer.Begin(meaning);
+        var result = reaffirmer.Complete(ticket.TicketId,
+            meaning, key.Sign(ticket, forcedSignCount: 2));
+        Check(result.Verified && !result.ClaimWritten
+            && store.ReadProtectedClaims(RealProject, RealBranch).Count == 0);
+        return meaning;
+    }
+
+    private static void DirectClaimNeedsReaffirmation()
+    {
+        CreateRealEvidenceFixture();
+        using var key = TestCredential.New();
+        using var store = Open();
+        var imported = store.ImportOperatorPinnedEvidence();
+        Throws<InvalidOperationException>(() =>
+            OperatorDirectClaimCoordinator.ForNativeCredential(store));
+        var meaning = RealReviewMeaning(imported);
+        var enrolCore = new ReviewChallengeCore();
+        var ticket = enrolCore.Begin(meaning, key.Pinned);
+        store.RecordNativeUvEnrollment(meaning, key.Pinned,
+            enrolCore.VerifyAndConsume(ticket.TicketId, meaning, key.Sign(ticket)));
+        var coordinator = OperatorDirectClaimCoordinator.ForNativeCredential(store);
+        Throws<InvalidOperationException>(() => coordinator.Begin(meaning));
+        Check(store.ReadOperatorDirectClaims(RealProject, RealBranch).Count == 0);
+        Check(store.ReadOperatorCredential()?.LastSignCount == 1);
+    }
+
+    private static void DirectClaimCommit()
+    {
+        CreateRealEvidenceFixture();
+        using var key = TestCredential.New();
+        string claimId;
+        using (var store = Open())
+        {
+            var meaning = PrepareNativeReaffirmation(store, key);
+            var publisher = OperatorDirectClaimCoordinator.ForNativeCredential(store);
+            var ticket = publisher.Begin(meaning);
+            var saved = publisher.Complete(ticket.TicketId,
+                meaning, key.Sign(ticket, forcedSignCount: 3));
+            Check(saved.ClaimWritten
+                && !saved.PublishedToCodex
+                && !saved.HistoricalEvidenceVerified
+                && saved.Status ==
+                    "protected_user_direct_claim_committed_not_published_to_codex"
+                && saved.Provenance ==
+                    ProtectedPendingReviewLedger.OperatorDirectClaimOrigin);
+            claimId = saved.ClaimId ?? throw new Exception("no_direct_claim_id");
+            var claims = store.ReadOperatorDirectClaims(RealProject, RealBranch);
+            Check(claims.Count == 1 && claims[0].ClaimId == claimId
+                && claims[0].Value == RealFact
+                && claims[0].Provenance ==
+                    ProtectedPendingReviewLedger.OperatorDirectClaimOrigin
+                && claims[0].HistoricalSourceOrigin ==
+                    ProtectedPendingReviewLedger.OperatorSourceOrigin
+                && !claims[0].HistoricalEvidenceVerified);
+            Check(store.ReadOperatorDirectClaims(RealProject, "unrelated").Count == 0);
+            Check(store.ReadProtectedClaims(RealProject, RealBranch).Count == 0);
+            Check(store.ReadVerifiedIntent(RealProject, RealBranch, RealERef) is null);
+            Check(store.CountPending() == 1);
+            Check(store.ReadOperatorCredential()?.LastSignCount == 3);
+            Check(!publisher.Complete(ticket.TicketId,
+                meaning, key.Sign(ticket, forcedSignCount: 4)).ClaimWritten);
+            Throws<InvalidOperationException>(() => publisher.Begin(meaning));
+        }
+        using (var reopened = Open())
+        {
+            Check(reopened.ReadOperatorDirectClaims(RealProject, RealBranch)
+                .Single().ClaimId == claimId);
+            Check(reopened.ReadProtectedClaims(RealProject, RealBranch).Count == 0);
+            Check(reopened.ReadOperatorReaffirmationIntent(
+                RealProject, RealBranch, RealERef)?.ClaimWritten == false);
+            Check(reopened.ReadOperatorCredential()?.LastSignCount == 3);
+        }
+        using var sql = new SqliteConnection(new SqliteConnectionStringBuilder
+        {
+            DataSource = Path.Combine(TestDirectory, "review-authority.sqlite3"),
+            Mode = SqliteOpenMode.ReadWrite, Pooling = false,
+        }.ToString());
+        sql.Open();
+        using var update = sql.CreateCommand();
+        update.CommandText =
+            "UPDATE protected_operator_direct_claims SET source_origin='forged';";
+        Throws<SqliteException>(() => update.ExecuteNonQuery());
+        using var remove = sql.CreateCommand();
+        remove.CommandText = "DELETE FROM protected_operator_direct_claims;";
+        Throws<SqliteException>(() => remove.ExecuteNonQuery());
+    }
+
+    private static void DirectClaimBadPurpose()
+    {
+        CreateRealEvidenceFixture();
+        using var key = TestCredential.New();
+        using var store = Open();
+        var meaning = PrepareNativeReaffirmation(store, key);
+        var core = new ReviewChallengeCore();
+        var publisher = OperatorDirectClaimCoordinator.ForNativeCredential(store, core);
+        var wrong = core.BeginProtectedApproval(meaning, key.Pinned);
+        var denied = publisher.Complete(wrong.TicketId,
+            meaning, key.Sign(wrong, forcedSignCount: 3));
+        Check(!denied.ClaimWritten && denied.Status == "challenge_purpose_mismatch");
+        Check(!core.VerifyProtectedApprovalAndConsume(wrong.TicketId,
+            meaning, key.Sign(wrong, forcedSignCount: 3)).Verified);
+        var replay = publisher.Begin(meaning);
+        // Counter 2 was already consumed by the previous reaffirmation,
+        // despite this having a separate NEW commit-purpose challenge.
+        var stale = publisher.Complete(replay.TicketId,
+            meaning, key.Sign(replay, forcedSignCount: 2));
+        Check(!stale.ClaimWritten && stale.Status == "direct_claim_transaction_denied");
+        Check(store.ReadOperatorCredential()?.LastSignCount == 2);
+        Check(store.ReadOperatorDirectClaims(RealProject, RealBranch).Count == 0);
+        var fresh = publisher.Begin(meaning);
+        var good = publisher.Complete(fresh.TicketId,
+            meaning, key.Sign(fresh, forcedSignCount: 3));
+        Check(good.ClaimWritten);
+        Check(store.ReadOperatorCredential()?.LastSignCount == 3);
+    }
+
+    private static void DirectClaimNoDuplicate()
+    {
+        CreateRealEvidenceFixture();
+        using var key = TestCredential.New();
+        using var store = Open();
+        var meaning = PrepareNativeReaffirmation(store, key);
+        var publisher = OperatorDirectClaimCoordinator.ForNativeCredential(store);
+        var first = publisher.Begin(meaning);
+        Check(publisher.Complete(first.TicketId, meaning,
+            key.Sign(first, forcedSignCount: 3)).ClaimWritten);
+        var counter = store.ReadOperatorCredential()?.LastSignCount;
+        // The host-only coordinator must refuse a second consent ceremony,
+        // without exposing the internal SQLite transaction as a public API.
+        Throws<InvalidOperationException>(() => publisher.Begin(meaning));
+        var secondCoordinator = OperatorDirectClaimCoordinator.ForNativeCredential(store);
+        Throws<InvalidOperationException>(() => secondCoordinator.Begin(meaning));
+        Check(store.ReadOperatorDirectClaims(RealProject, RealBranch).Count == 1);
+        Check(store.ReadOperatorCredential()?.LastSignCount == counter);
+        Check(store.ReadProtectedClaims(RealProject, RealBranch).Count == 0);
     }
 
     private static ReviewMeaning RealReviewMeaning(OperatorEvidenceImport evidence)
