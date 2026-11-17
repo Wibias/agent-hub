@@ -6,6 +6,7 @@ using System.IO.Pipes;
 using System.Runtime.InteropServices;
 using System.Security.Principal;
 using Microsoft.Win32.SafeHandles;
+using Microsoft.Win32;
 
 // Ephemeral Windows GitHub runner ONLY. Attempts real filesystem operations
 // under a restricted token of the SAME account as the elevated CI runner.
@@ -28,13 +29,15 @@ internal static class Program
             var state = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
                 "AgentHubMemoryReviewLab-State");
+            var registryFenceMode = args.Length == 2
+                && args[1] == "--registry-fence-ci";
             var userReadMode = args.Length == 4
                 && args[1] is "--signed-user-ci" or "--revoked-user-ci"
                 && args[2].Length == 40
                 && args[2].All(ch => ch is >= '0' and <= '9' or >= 'a' and <= 'f')
                 && Path.IsPathFullyQualified(args[3]);
             var expectRevoked = userReadMode && args[1] == "--revoked-user-ci";
-            Require((args.Length == 1 || userReadMode)
+            Require((args.Length == 1 || userReadMode || registryFenceMode)
                 && string.Equals(Path.GetFullPath(args[0]), Path.GetFullPath(state),
                     StringComparison.OrdinalIgnoreCase)
                 && Directory.Exists(state), "unexpected_lab_state_path");
@@ -106,6 +109,34 @@ internal static class Program
                                     PipeDirection.InOut);
                                 pipe.Connect(1000);
                             });
+                            if (registryFenceMode)
+                            {
+                                // The HKLM checkpoint must be inaccessible
+                                // to the SAME account under its real restricted
+                                // non-admin token, not merely protected on
+                                // the fixture author's ACL inspection.
+                                ExpectRegistryAccessDenied("hklm_read_once_checkpoint_write", () =>
+                                {
+                                    using var hive = RegistryKey.OpenBaseKey(
+                                        RegistryHive.LocalMachine, RegistryView.Registry64);
+                                    using var key = hive.OpenSubKey(
+                                        @"SOFTWARE\AgentHubMemoryReviewLab-CiFence",
+                                        writable: true)
+                                        ?? throw new UnauthorizedAccessException();
+                                    key.SetValue("Snapshot",
+                                        "forge_attempt", RegistryValueKind.String);
+                                });
+                                ExpectRegistryAccessDenied("hklm_read_once_checkpoint_read", () =>
+                                {
+                                    using var hive = RegistryKey.OpenBaseKey(
+                                        RegistryHive.LocalMachine, RegistryView.Registry64);
+                                    using var key = hive.OpenSubKey(
+                                        @"SOFTWARE\AgentHubMemoryReviewLab-CiFence",
+                                        writable: false)
+                                        ?? throw new UnauthorizedAccessException();
+                                    _ = key.GetValue("Snapshot");
+                                });
+                            }
                             if (userReadMode)
                             {
                                 Action connectAdminDirect = () =>
@@ -132,7 +163,9 @@ internal static class Program
             {
                 Marshal.FreeHGlobal(adminPointer);
             }
-            Console.WriteLine(userReadMode
+            Console.WriteLine(registryFenceMode
+                ? "MEMORY_REVIEW_RESTRICTED_SAME_ACCOUNT_REGISTRY_FENCE PASS 2/2; NO_CHECKPOINT_READ_OR_WRITE"
+                : userReadMode
                 ? (expectRevoked
                     ? "MEMORY_REVIEW_SAME_ACCOUNT_RESTRICTED_TOKEN PASS 6/6; USER_DIRECT_READ_REVOKED, NO_ADMIN_OR_DB_ACCESS"
                     : "MEMORY_REVIEW_SAME_ACCOUNT_RESTRICTED_TOKEN PASS 6/6; ENROLLED_USER_READ_ONLY, NO_ADMIN_OR_DB_ACCESS")
@@ -289,6 +322,29 @@ internal static class Program
             return;
         }
         throw new InvalidOperationException(label + "_revoked_but_connectable");
+    }
+
+    private static void ExpectRegistryAccessDenied(string label, Action operation)
+    {
+        try { operation(); }
+        catch (UnauthorizedAccessException error)
+            when (error.HResult == unchecked((int)0x80070005))
+        {
+            Console.WriteLine("PASS " + label + " access_denied");
+            return;
+        }
+        catch (System.Security.SecurityException)
+        {
+            // RegistryKey.OpenSubKey can report the exact same Windows
+            // access denial as SecurityException rather than E_ACCESSDENIED.
+            // Only this registry-specific probe accepts that alternate
+            // managed exception; the CI parent verifies the anchor bytes
+            // were NOT modified by the restricted token.
+            Console.WriteLine("PASS " + label + " access_denied");
+            return;
+        }
+        throw new InvalidOperationException(
+            label + "_unexpectedly_allowed_or_wrong_error");
     }
 
     private static void ExpectAccessDenied(string label, Action operation)

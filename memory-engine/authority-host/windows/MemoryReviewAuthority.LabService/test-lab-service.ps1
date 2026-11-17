@@ -23,6 +23,11 @@ if ($LASTEXITCODE -eq 0) { throw 'service already exists: refuse to touch it' }
 
 $stateRoot = Join-Path $env:ProgramData 'AgentHubMemoryReviewLab-State'
 $publicRoot = Join-Path $env:ProgramData 'AgentHubMemoryReviewLab-Public'
+$registryFencePath = 'HKLM:\SOFTWARE\AgentHubMemoryReviewLab-CiFence'
+$registryFenceCreated = $false
+if (Test-Path -Path $registryFencePath) {
+    throw 'preexisting synthetic registry checkpoint: refuse to touch it'
+}
 if ((Test-Path -LiteralPath $stateRoot) -or
     (Test-Path -LiteralPath $publicRoot)) {
     throw 'preexisting lab state or admin-public-key directory: refuse to touch it'
@@ -232,6 +237,50 @@ try {
             [Text.UTF8Encoding]::new($false))
     }
 
+    if ($NativeEnrollmentMode.IsPresent) {
+        # Separate ADMIN-provisioned Windows Registry64 checkpoint, outside
+        # ProgramData/SQLite rollback scope. The exact restricted service
+        # SID may change the checkpoint, ordinary same-account users may not.
+        # No existing registry key is modified, and the key is deleted in
+        # this disposable runner's final cleanup.
+        New-Item -Path $registryFencePath -Force | Out-Null
+        $registryFenceCreated = $true
+        $registryAcl = Get-Acl -Path $registryFencePath
+        $registryAcl.SetAccessRuleProtection($true, $false)
+        $registryAcl.SetOwner(
+            [System.Security.Principal.SecurityIdentifier]::new('S-1-5-32-544'))
+        foreach ($ace in @($registryAcl.Access)) {
+            [void]$registryAcl.RemoveAccessRuleSpecific($ace)
+        }
+        $registryAllow = [System.Security.AccessControl.AccessControlType]::Allow
+        foreach ($sidText in @('S-1-5-18','S-1-5-32-544', $serviceSid.Value)) {
+            $sid = [System.Security.Principal.SecurityIdentifier]::new($sidText)
+            $rule = [System.Security.AccessControl.RegistryAccessRule]::new(
+                $sid, [System.Security.AccessControl.RegistryRights]::FullControl,
+                [System.Security.AccessControl.InheritanceFlags]::None,
+                [System.Security.AccessControl.PropagationFlags]::None,
+                $registryAllow)
+            $registryAcl.AddAccessRule($rule)
+        }
+        Set-Acl -Path $registryFencePath -AclObject $registryAcl
+        $actualRegistryAcl = Get-Acl -Path $registryFencePath
+        if (-not $actualRegistryAcl.AreAccessRulesProtected -or
+            $actualRegistryAcl.GetOwner(
+                [System.Security.Principal.SecurityIdentifier]).Value -cne 'S-1-5-32-544') {
+            throw 'protected registry fence owner/inheritance invalid'
+        }
+        foreach ($ace in $actualRegistryAcl.Access) {
+            $aceSid = $ace.IdentityReference.Translate(
+                [System.Security.Principal.SecurityIdentifier]).Value
+            if ($aceSid -notin @('S-1-5-18','S-1-5-32-544',$serviceSid.Value)) {
+                throw 'unexpected registry checkpoint ACE'
+            }
+        }
+        New-ItemProperty -Path $registryFencePath -Name Bootstrap `
+            -Value 'AGENTHUB_ONE_SHOT_REGISTRY_FENCE_CI_BOOTSTRAP_ONCE_V1' `
+            -PropertyType String -Force | Out-Null
+    }
+
     & $sc start $service
     if ($LASTEXITCODE -ne 0) { throw 'LocalService lab host did not start' }
     $running = $false
@@ -273,6 +322,21 @@ try {
         ((Get-Content -LiteralPath $ledgerMarker -Raw) -ne 'SYNTHETIC_PROTECTED_CLAIM_NO_HUMAN_APPROVAL')) {
         throw 'service-owned pending-only SQLite ledger missing or incomplete'
     }
+    if ($NativeEnrollmentMode.IsPresent) {
+        # Consistent SQLite online backup before any read-once activity.
+        $baselineScript = Join-Path $repoRoot 'scripts/save-ci-read-once-db-baseline.mjs'
+        $baselineOutput = & node $baselineScript
+        if ($LASTEXITCODE -ne 0) { throw 'baseline one-shot online SQLite backup failed' }
+        $baseline = $baselineOutput | ConvertFrom-Json
+        if ($baseline.status -cne
+                'ci_pre_read_sqlite_online_backup_exact_empty_journal' -or
+            $baseline.receipt_rows -ne 0 -or
+            $baseline.revocation_rows -ne 0 -or
+            $baseline.production_authorized) {
+            throw 'pre-read baseline backup was not empty and nonauthorizing'
+        }
+        Write-Host 'PASS: captured consistent pre-read protected SQLite baseline'
+    }
     $importMarker = Join-Path $stateRoot 'operator-evidence-imported.txt'
     if (-not (Test-Path -LiteralPath $importMarker -PathType Leaf) -or
         (Get-Content -LiteralPath $importMarker -Raw) -ne 'REAL_EVIDENCE_PENDING_NO_CLAIM') {
@@ -288,6 +352,12 @@ try {
             throw 'explicit CI one-shot recipient named-pipe listener never started'
         }
         Write-Host 'PASS: protected one-shot recipient listener explicitly started in ephemeral CI only'
+        $checkpoint = Get-ItemProperty -Path $registryFencePath -ErrorAction Stop
+        if ($checkpoint.Snapshot -cnotmatch '^v1:1:[a-f0-9]{64}$' -or
+            $null -ne $checkpoint.Bootstrap) {
+            throw 'service failed to bootstrap exact protected HKLM checkpoint'
+        }
+        Write-Host 'PASS: independent exact-SCM HKLM Registry64 rollback checkpoint initialized; bootstrap permission consumed'
         if (Test-Path -LiteralPath $pinnedCredentialMarker) {
             throw 'native enrollment lab must not stage unverified browser key'
         }
@@ -319,6 +389,16 @@ try {
     # Real negative I/O under a restricted token of the SAME CI account.
     # The Administrators SID is deny-only and elevated privileges are removed.
     $accessProbe = (Resolve-Path -LiteralPath $AccessProbeExe).Path
+    if ($NativeEnrollmentMode.IsPresent) {
+        $registryBeforeProbe = (Get-ItemProperty -Path $registryFencePath).Snapshot
+        & $accessProbe $stateRoot --registry-fence-ci
+        if ($LASTEXITCODE -ne 0 -or
+            (Get-ItemProperty -Path $registryFencePath).Snapshot -cne
+                $registryBeforeProbe) {
+            throw 'restricted same-account token could read or modify HKLM checkpoint'
+        }
+        Write-Host 'PASS: same-account restricted Windows token denied HKLM checkpoint read AND write'
+    }
     & $accessProbe $stateRoot
     if ($LASTEXITCODE -ne 0) { throw 'same-account nonadmin SQLite access denial failed' }
     # Publish ONLY the service-generated public key under a separate
@@ -750,6 +830,61 @@ try {
     Write-Host 'PASS: SCM restricted service signed one synthetic protected Claim; Node verified Admin-pinned service origin, one nonce, and strict scope'
     Write-Host 'PASS: forged pin rejected; NO REAL USER APPROVAL, NO PRODUCTION IPC'
     Write-Host 'PASS: restricted LocalService protected SQLite ACL and same-account negative access'
+    # Destructive full-DB rollback is LAST. Existing WinForms + MCP
+    # regressions above require the service still RUNNING.
+    if ($NativeEnrollmentMode.IsPresent) {
+        # Adversarial rollback: replace ONLY protected SQLite with its
+        # consistent pre-read baseline; keep the newer HKLM checkpoint.
+        $checkpointBefore = (Get-ItemProperty -Path $registryFencePath -ErrorAction Stop).Snapshot
+        if ($checkpointBefore -cnotmatch '^v1:(?:[2-9]|[1-9][0-9]+):[a-f0-9]{64}$') {
+            throw 'CI HKLM checkpoint did not advance after protected one-shot reads'
+        }
+        & $sc stop $service | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw 'CI service stop before SQLite rollback failed' }
+        $stoppedBeforeRollback = $false
+        for ($attempt = 0; $attempt -lt 30; $attempt++) {
+            $status = (& $sc query $service) -join ' '
+            if ($status -match 'STOPPED') { $stoppedBeforeRollback = $true; break }
+            Start-Sleep -Milliseconds 250
+        }
+        if (-not $stoppedBeforeRollback) {
+            throw 'CI service still running before protected SQLite rollback'
+        }
+        $preReadBackup = Join-Path $env:RUNNER_TEMP 'AgentHubMemoryReviewLab-PreRead-Baseline.sqlite3'
+        if (-not (Test-Path -LiteralPath $preReadBackup -PathType Leaf)) {
+            throw 'pre-read protected SQLite baseline missing'
+        }
+        foreach ($suffix in @('-wal','-shm')) {
+            $sidecar = $ledgerPath + $suffix
+            if (Test-Path -LiteralPath $sidecar) {
+                Remove-Item -LiteralPath $sidecar -Force -ErrorAction Stop
+            }
+        }
+        Copy-Item -LiteralPath $preReadBackup -Destination $ledgerPath -Force -ErrorAction Stop
+        $rollbackWitness = Join-Path $stateRoot 'registry-rollback-denied.txt'
+        if (Test-Path -LiteralPath $rollbackWitness) {
+            Remove-Item -LiteralPath $rollbackWitness -Force -ErrorAction Stop
+        }
+        & $sc start $service 2>$null | Out-Null
+        $deniedByRegistry = $false
+        for ($attempt = 0; $attempt -lt 35; $attempt++) {
+            $state = (& $sc query $service 2>$null) -join ' '
+            $witness = Test-Path -LiteralPath $rollbackWitness -PathType Leaf
+            if ($witness -and $state -match 'STOPPED') {
+                $deniedByRegistry = $true
+                break
+            }
+            Start-Sleep -Milliseconds 250
+        }
+        if (-not $deniedByRegistry -or
+            (Get-Content -LiteralPath $rollbackWitness -Raw) -cne
+                'CI_REGISTRY_FENCE_FAIL_CLOSED_BEFORE_RECIPIENT_LISTENER' -or
+            (Get-ItemProperty -Path $registryFencePath -ErrorAction Stop).Snapshot -cne
+                $checkpointBefore) {
+            throw 'restored SQLite resurrected private read or independent checkpoint changed'
+        }
+        Write-Host 'PASS: older whole-SQLite rollback refused by independent protected HKLM checkpoint; SCM stops BEFORE private recipient pipe'
+    }
 }
 finally {
     $ephemeralOperatorTestPrivateKey = Join-Path $env:RUNNER_TEMP 'AgentHubMemoryReviewLab-TestOperatorPrivateKey.pem'
@@ -774,6 +909,12 @@ finally {
             Start-Sleep -Milliseconds 300
         }
         if (-not $gone) { throw 'temporary SCM service was not fully removed' }
+    }
+    if ($registryFenceCreated) {
+        if (-not (Test-Path -Path $registryFencePath)) {
+            throw 'synthetic registry fence disappeared before final cleanup'
+        }
+        Remove-Item -Path $registryFencePath -Force -Recurse -ErrorAction Stop
     }
     if (Test-Path -LiteralPath $labGitRoot) {
         Remove-Item -LiteralPath $labGitRoot -Force -Recurse -ErrorAction Stop

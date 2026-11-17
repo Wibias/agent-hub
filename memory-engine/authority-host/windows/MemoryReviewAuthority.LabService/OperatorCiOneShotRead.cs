@@ -16,6 +16,7 @@ namespace MemoryReviewAuthority.LabService;
 internal sealed partial class OperatorWebAuthnPipe
 {
     private readonly OneShotCiRecipientPipe? _ciRecipient;
+    private readonly OneShotCiRegistryFence? _ciRegistryFence;
     private ActiveCiRead? _activeCiRead;
 
     private sealed record ActiveCiRead(
@@ -27,7 +28,8 @@ internal sealed partial class OperatorWebAuthnPipe
     private object? BeginCiOneShotRead(JsonElement root,string nonce,
         System.IO.Pipes.NamedPipeServerStream? operatorPipe)
     {
-        if (_ciRecipient is null || operatorPipe is null || !ExactKeys(root,
+        if (_ciRecipient is null || _ciRegistryFence is null
+            || operatorPipe is null || !ExactKeys(root,
             "protocol","op","nonce","projectId","branch","proposalRef"))
             return null;
         var project=Str(root,"projectId");
@@ -39,6 +41,9 @@ internal sealed partial class OperatorWebAuthnPipe
             || (_activeCiRead is not null
                 && _activeCiRead.Ticket.ExpiresUtc>DateTimeOffset.UtcNow))
             return null;
+        // A restored database, modified registry or interrupted
+        // SQLite->HKLM checkpoint update must deny BEFORE an offer.
+        _ciRegistryFence.VerifyBeforeMutation();
         var recipient=_ciRecipient.Peek(project!,branch!,proposal!);
         if(_ledger.IsCiOneShotRevoked())
         {
@@ -78,6 +83,9 @@ internal sealed partial class OperatorWebAuthnPipe
             _ciRecipient.Deny(recipient);
             return null;
         }
+        // Fail closed if registry cannot advance after WAL commit.
+        // A crash in this window leaves a mismatch at next service start.
+        _ciRegistryFence.AdvanceAfterMutation();
         _activeCiRead=new ActiveCiRead(ticket,claim.ClaimId,resultHash,recipient);
         return new
         {
@@ -109,12 +117,14 @@ internal sealed partial class OperatorWebAuthnPipe
 
     private object? RevokeCiOneShot(JsonElement root,string nonce)
     {
-        if(_ciRecipient is null
+        if(_ciRecipient is null || _ciRegistryFence is null
             || !ExactKeys(root,"protocol","op","nonce"))
             return null;
         // Deny-only administrative action. This cannot grant a read and
         // the protected WAL tombstone is never removed or reset on restart.
+        _ciRegistryFence.VerifyBeforeMutation();
         _ledger.RevokeCiOneShot();
+        _ciRegistryFence.AdvanceAfterMutation();
         if(_activeCiRead is { } active)
         {
             _ciRecipient.Deny(active.Recipient);
@@ -133,7 +143,8 @@ internal sealed partial class OperatorWebAuthnPipe
     {
         var active=_activeCiRead;
         _activeCiRead=null; // consume on the FIRST completion attempt
-        if(active is null || _ciRecipient is null)return null;
+        if(active is null || _ciRecipient is null
+            || _ciRegistryFence is null)return null;
         var delivered=false;
         var status="ci_read_denied";
         try
@@ -202,6 +213,7 @@ internal sealed partial class OperatorWebAuthnPipe
             // CRITICAL: commit a durable, irreversible consumed_pre_io row
             // before the first private byte can reach the recipient pipe.
             // No successful transfer is claimed merely by this journal.
+            _ciRegistryFence.VerifyBeforeMutation();
             if(!_ledger.ConsumeCiOneShotBeforeIo(
                 meaning,claim.ClaimId,claim.ProposalRef,
                 active.Recipient.KernelProcessId))
@@ -214,6 +226,10 @@ internal sealed partial class OperatorWebAuthnPipe
                     production_authorized=false,
                     request_id=meaning.RequestId,
                 };
+            // Both protected SQLite and independently provisioned HKLM
+            // now reflect the consumed ticket. This MUST succeed BEFORE
+            // the first protected Claim byte is written to any pipe.
+            _ciRegistryFence.AdvanceAfterMutation();
             delivered=_ciRecipient.TryDeliver(active.Recipient,wire);
             status=delivered?"ci_exact_one_shot_delivered_no_production_authority"
                 :"ci_one_shot_delivery_denied";
@@ -231,9 +247,12 @@ internal sealed partial class OperatorWebAuthnPipe
             // A failed/invalid completed request cannot leave its original
             // pending recipient available for a later unrelated ticket.
             _ciRecipient.Deny(active.Recipient);
-            // A wrong-purpose or failed assertion also leaves a durable
-            // terminal row. Already consumed_pre_io rows never regress.
-            _ledger.AbortCiOneShot(active.Ticket.Meaning.RequestId);
+            // Invalid UV aborts forever, with an independent rollback
+            // checkpoint. If a checkpoint has failed, latching makes
+            // further reads impossible until explicit safe recovery.
+            _ciRegistryFence.VerifyBeforeMutation();
+            if(_ledger.AbortCiOneShot(active.Ticket.Meaning.RequestId))
+                _ciRegistryFence.AdvanceAfterMutation();
         }
     }
 }

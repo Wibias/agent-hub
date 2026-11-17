@@ -65,11 +65,15 @@ internal sealed partial class OperatorWebAuthnPipe : IDisposable
     private ChallengeTicket? _active;
 
     internal OperatorWebAuthnPipe(ProtectedPendingReviewLedger ledger, string stateDir,
-        OneShotCiRecipientPipe? ciRecipient = null)
+        OneShotCiRecipientPipe? ciRecipient = null,
+        OneShotCiRegistryFence? ciRegistryFence = null)
     {
         _ledger = ledger ?? throw new ArgumentNullException(nameof(ledger));
         _stateDir = stateDir;
+        if ((ciRecipient is null) != (ciRegistryFence is null))
+            throw new InvalidOperationException("ci_one_shot_registry_fence_required");
         _ciRecipient = ciRecipient;
+        _ciRegistryFence = ciRegistryFence;
         var operatorCredential = _ledger.ReadOperatorCredential();
         if (operatorCredential is not null)
             _coordinator = VerifiedReviewCoordinator.ForOperatorCredentialProbe(ledger);
