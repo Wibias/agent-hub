@@ -4,7 +4,8 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$PublishedExe,
     [Parameter(Mandatory = $true)]
-    [string]$AccessProbeExe
+    [string]$AccessProbeExe,
+    [switch]$NativeEnrollmentMode
 )
 
 $ErrorActionPreference = 'Stop'
@@ -171,7 +172,10 @@ try {
     # Administrator-owned service directory ACL has been independently checked.
     # The service itself opens only the fixed file names, never a client path.
     $fixtureScript = Join-Path $repoRoot 'tests/memory-engine/create-operator-evidence-scm-fixture.mjs'
-    & node $fixtureScript $stateRoot
+    $fixtureArgs = if ($NativeEnrollmentMode.IsPresent) {
+        @('--native-enroll-only', $stateRoot)
+    } else { @($stateRoot) }
+    & node $fixtureScript @fixtureArgs
     if ($LASTEXITCODE -ne 0) {
         throw 'canonical E~ source fixture creation failed'
     }
@@ -224,12 +228,19 @@ try {
     }
     Write-Host 'PASS: real E~ canonical SQLite/Evidence imported by restricted LocalService as PENDING only; NO Claim, NO human approval'
     $pinnedCredentialMarker = Join-Path $stateRoot 'operator-credential-pinned.txt'
-    if (-not (Test-Path -LiteralPath $pinnedCredentialMarker -PathType Leaf) -or
-        (Get-Content -LiteralPath $pinnedCredentialMarker -Raw) -ne
-            'OPERATOR_CREDENTIAL_UNVERIFIED_NO_APPROVAL') {
-        throw 'restricted LocalService did not persist unverified WebAuthn credential under service SID'
+    if ($NativeEnrollmentMode.IsPresent) {
+        if (Test-Path -LiteralPath $pinnedCredentialMarker) {
+            throw 'native enrollment lab must not stage unverified browser key'
+        }
+        Write-Host 'PASS: native enrollment lab starts with zero existing operator credentials'
+    } else {
+        if (-not (Test-Path -LiteralPath $pinnedCredentialMarker -PathType Leaf) -or
+            (Get-Content -LiteralPath $pinnedCredentialMarker -Raw) -ne
+                'OPERATOR_CREDENTIAL_UNVERIFIED_NO_APPROVAL') {
+            throw 'restricted LocalService did not persist unverified WebAuthn credential under service SID'
+        }
+        Write-Host 'PASS: restricted LocalService pinned operator ES256 public key as unverified in protected SQLite; no claim or approval'
     }
-    Write-Host 'PASS: restricted LocalService pinned operator ES256 public key as unverified in protected SQLite; no claim or approval'
     $stateFiles = @(Get-ChildItem -LiteralPath $stateRoot -File)
     foreach ($stateFile in $stateFiles) {
         $fileAcl = Get-Acl -LiteralPath $stateFile.FullName
@@ -322,6 +333,28 @@ try {
     # LocalService, a software ECDSA test key gives UV proof, persisted
     # hardware-like nonzero sign-counter replay is rejected on next ticket.
     # Absolutely NO human approval and NO protected real Claim.
+    if ($NativeEnrollmentMode.IsPresent) {
+        # A generated software key exercises native-registration protocol,
+        # strict COSE, second possession challenge, persistence and replay.
+        # This is NOT a hardware/physical human test.
+        $enrollProbe = Join-Path $repoRoot 'scripts/probe-operator-service-native-enrollment.mjs'
+        $enrollOutput = & node $enrollProbe $publishedPin
+        if ($LASTEXITCODE -ne 0) {
+            throw 'native enrollment service E2E synthetic protocol failed'
+        }
+        $enroll = $enrollOutput | ConvertFrom-Json
+        if ($enroll.status -ne 'synthetic_native_enrollment_bridge_pass_not_human' -or
+            -not $enroll.original_fact_service_signed -or
+            -not $enroll.independent_create_and_get_challenges -or
+            -not $enroll.protected_key_persisted_for_probe -or
+            -not $enroll.nonzero_sign_counter_replay_denied -or
+            $enroll.hardware_attestation_verified -or
+            $enroll.human_approval_verified -or $enroll.claim_written -or
+            -not $enroll.production_no_go) {
+            throw 'synthetic native enrollment incorrectly granted approval'
+        }
+        Write-Host 'PASS: native Create/Get synthetic enrollment stored protected key and denied replay, no Claim or human approval'
+    } else {
     $operatorProbe = Join-Path $repoRoot 'scripts/probe-operator-service-web-authn.mjs'
     $operatorOutput = & node $operatorProbe $publishedPin
     if ($LASTEXITCODE -ne 0) {
@@ -338,6 +371,7 @@ try {
         throw 'operator proof wrongly classified synthetic CI assertion as human approval'
     }
     Write-Host 'PASS: real E~ protected exact fact -> admin-only LocalService WebAuthn challenge -> signed UV receipt; replay denied, NO Claim'
+    }
 
     # The *real native Windows GUI executable*, rather than a Node-simulated
     # browser, must itself connect with elevated token, verify Admin-owned
