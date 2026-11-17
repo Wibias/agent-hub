@@ -281,6 +281,13 @@ try {
     Write-Host 'PASS: real E~ canonical SQLite/Evidence imported by restricted LocalService as PENDING only; NO Claim, NO human approval'
     $pinnedCredentialMarker = Join-Path $stateRoot 'operator-credential-pinned.txt'
     if ($NativeEnrollmentMode.IsPresent) {
+        $readOnceListenerMarker = Join-Path $stateRoot 'read-once-ci-listener-started.txt'
+        if (-not (Test-Path -LiteralPath $readOnceListenerMarker -PathType Leaf) -or
+            (Get-Content -LiteralPath $readOnceListenerMarker -Raw) -cne
+                'READ_ONCE_CI_LISTENER_STARTED_NO_PRODUCTION_GRANT') {
+            throw 'explicit CI one-shot recipient named-pipe listener never started'
+        }
+        Write-Host 'PASS: protected one-shot recipient listener explicitly started in ephemeral CI only'
         if (Test-Path -LiteralPath $pinnedCredentialMarker) {
             throw 'native enrollment lab must not stage unverified browser key'
         }
