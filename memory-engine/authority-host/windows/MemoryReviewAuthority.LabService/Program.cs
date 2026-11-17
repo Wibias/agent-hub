@@ -54,6 +54,7 @@ internal sealed class ReviewAuthorityLabService : ServiceBase
 {
     private ProtectedPendingReviewLedger? _ledger;
     private SignedProtectedClaimPipe? _readPipe;
+    private SignedOperatorDirectReadCiPipe? _privateReadCiPipe;
     private OperatorWebAuthnPipe? _operatorProofPipe;
 
     internal ReviewAuthorityLabService()
@@ -129,10 +130,20 @@ internal sealed class ReviewAuthorityLabService : ServiceBase
         // The existing read-only Codex pipe remains unchanged.
         _operatorProofPipe = new OperatorWebAuthnPipe(_ledger, stateDir);
         _operatorProofPipe.Start();
+        // Independent CI-only signed private Claim reader. No arbitrary
+        // real repo and no nonadmin Codex read: protected SID + scoped
+        // enrollment must be installed before the service starts.
+        if (SignedOperatorDirectReadCiPipe.PolicyPresent(stateDir))
+        {
+            _privateReadCiPipe = new SignedOperatorDirectReadCiPipe(_ledger, stateDir);
+            _privateReadCiPipe.Start();
+        }
     }
 
     protected override void OnStop()
     {
+        _privateReadCiPipe?.Dispose();
+        _privateReadCiPipe = null;
         _operatorProofPipe?.Dispose();
         _operatorProofPipe = null;
         _readPipe?.Dispose();
