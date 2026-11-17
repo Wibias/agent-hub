@@ -4,7 +4,7 @@
  * Claim over a held named-pipe connection. Do not use this for personal Memory.
  */
 import {createConnection} from 'node:net';
-import {createHash,createPublicKey,verify} from 'node:crypto';
+import {createHash,createPublicKey,randomBytes,verify} from 'node:crypto';
 import {readFileSync} from 'node:fs';
 import {isAbsolute} from 'node:path';
 
@@ -17,6 +17,7 @@ if(process.platform!=='win32'||process.env.GITHUB_ACTIONS!=='true'
 const proto='agenthub-memory-read-once-ci-v1';
 const pin=createPublicKey(readFileSync(process.argv[2],'utf8'));
 const proposal=process.argv[3];
+const clientNonce=randomBytes(32).toString('base64url');
 const expectedValue='This knowledge statement is proposed from unverified historical Evidence.';
 const expectedHash=createHash('sha256').update(expectedValue).digest('hex');
 const pipe=createConnection('\\\\.\\pipe\\AgentHubMemoryReviewLab-ReadOnceCiV1');
@@ -31,7 +32,7 @@ pipe.setTimeout(20000,()=>{finish('timeout');process.exitCode=2;});
 pipe.on('connect',()=>{
   pipe.write(JSON.stringify({
     protocol:proto,projectId:'github.com/example/operator-evidence',
-    branch:'main',proposalRef:proposal,
+    branch:'main',proposalRef:proposal,clientNonce,
   })+'\n');
 });
 pipe.on('data',chunk=>{
@@ -66,6 +67,7 @@ pipe.on('data',chunk=>{
         ||!/^C~[a-f0-9]{24}$/.test(p.claim_id)
         ||!Number.isInteger(p.recipient_kernel_pid)
         ||p.recipient_kernel_pid!==process.pid
+        ||p.recipient_client_nonce!==clientNonce
         ||!/^([a-f0-9]{64})$/.test(p.result_set_sha256))
         throw Error('signed_claim_scope_or_recipient_invalid');
       finish('received_signed_exact_once',{
