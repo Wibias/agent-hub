@@ -23,7 +23,8 @@ internal sealed class SignedOperatorDirectReadCiPipe : IDisposable
     internal const string PolicyVersion = "agenthub-direct-read-ci-sid-scope-v1";
     private const string FixtureProject = "github.com/example/operator-evidence";
     private const string FixtureBranch = "main";
-    private static readonly string FixtureRevision = new('b', 40);
+    private static readonly Regex RevisionPattern = new(
+        @"\A[0-9a-f]{40}\z", RegexOptions.CultureInvariant);
 
     private sealed record Policy(
         string PrincipalSid, string ProjectId, string Branch, string RevisionSha);
@@ -72,8 +73,9 @@ internal sealed class SignedOperatorDirectReadCiPipe : IDisposable
         var branch = Str(root, "branch");
         var revision = Str(root, "revisionSha");
         if (Str(root, "policy") != PolicyVersion
+            || !RevisionPattern.IsMatch(revision ?? "")
             || !IsAuthorized(sid, sid, project, FixtureProject,
-                branch, FixtureBranch, revision, FixtureRevision))
+                branch, FixtureBranch, revision, revision))
             throw new InvalidOperationException("direct_ci_policy_wrong_scope");
         _policy = new Policy(sid!, project!, branch!, revision!);
         _ledger = ledger ?? throw new ArgumentNullException(nameof(ledger));
