@@ -224,6 +224,7 @@ internal static class Program
             {
                 DataSource=Path.Combine(TestDirectory,"review-authority.sqlite3"),
                 Mode=SqliteOpenMode.ReadWrite,
+                Pooling=false, Cache=SqliteCacheMode.Private,
             }.ToString());
         connection.Open();
         void InvalidSql(string sql)
