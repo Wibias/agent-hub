@@ -221,7 +221,8 @@ internal sealed partial class OperatorWebAuthnPipe : IDisposable
         {
             if (operation == "ci_read_begin")
             {
-                response = BeginCiOneShotRead(root, nonce);
+                response = BeginCiOneShotRead(root, nonce,
+                    stream as NamedPipeServerStream);
             }
             else if (operation == "ci_read_complete")
             {
