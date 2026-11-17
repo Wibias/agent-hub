@@ -17,6 +17,15 @@ internal static class Program
                 return 2;
             if (args.Length == 1 && args[0] == "--contract-selftest")
                 return OperatorSelfTest.Run();
+            if (args.Length == 1 && args[0] == "--ci-hold-uninstall-preflight"
+                && Environment.GetEnvironmentVariable("GITHUB_ACTIONS") == "true"
+                && Environment.GetEnvironmentVariable("RUNNER_OS") == "Windows")
+            {
+                // Read-only headless CI hold: no Hello, credentials or Claims.
+                ProtectedOperatorService.RequireProtectedInteractiveExecutable();
+                Thread.Sleep(TimeSpan.FromSeconds(30));
+                return 0;
+            }
 
             if ((args.Length != 0
                     && !(args.Length == 1
