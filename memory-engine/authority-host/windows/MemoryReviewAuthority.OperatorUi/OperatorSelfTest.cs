@@ -99,12 +99,14 @@ internal static class OperatorSelfTest
             var actualRef = "E~" + proposalHash[..10];
             var offer = ProtectedOperatorService.Begin(
                 "github.com/example/operator-evidence", "main", actualRef);
-            const string expected =
+            const string expectedProcedure =
                 "This real-schema E~ proposal has linked Evidence but no human approval.";
-            if (offer.CanonicalFact != expected
+            const string expectedKnowledge =
+                "This knowledge statement is proposed from unverified historical Evidence.";
+            if (!(offer.Kind == "procedure" && offer.CanonicalFact == expectedProcedure
+                || offer.Kind == "knowledge" && offer.CanonicalFact == expectedKnowledge)
                 || offer.ProposalRef != actualRef
                 || offer.SourceOrigin != "operator_pinned_unverified_evidence_v1"
-                || offer.Kind != "procedure"
                 || offer.Decision != "confirm"
                 || offer.ExpiresUtc <= DateTimeOffset.UtcNow
                 || offer.CredentialId.Length < 16
