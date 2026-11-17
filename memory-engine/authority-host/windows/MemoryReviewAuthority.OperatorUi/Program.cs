@@ -574,10 +574,7 @@ internal sealed class OperatorReviewWindow : Form
     {
         if (_busy || !_reaffirmAcknowledge.Checked
             || _reaffirmation is not { } offer) return;
-        if (offer.ExpiresUtc <= DateTimeOffset.UtcNow
-            || _ciObserved is not { } observed
-            || observed.KernelPid!=offer.KernelRecipientPid
-            || !observed.Matches())
+        if (offer.ExpiresUtc <= DateTimeOffset.UtcNow)
         {
             InvalidateOffer();
             _status.Text = "Bestätigungs-Challenge abgelaufen. Erneut vorbereiten.";
@@ -762,7 +759,10 @@ internal sealed class OperatorReviewWindow : Form
     {
         if (!CiOnly || _busy || !_ciReadAcknowledge.Checked
             || _ciReadOffer is not { } offer) return;
-        if (offer.ExpiresUtc <= DateTimeOffset.UtcNow)
+        if (offer.ExpiresUtc <= DateTimeOffset.UtcNow
+            || _ciObserved is not { } observed
+            || observed.KernelPid!=offer.KernelRecipientPid
+            || !observed.Matches())
         {
             InvalidateOffer();
             _status.Text = "CI: Empfänger-Sitzung oder Read-Challenge abgelaufen";
