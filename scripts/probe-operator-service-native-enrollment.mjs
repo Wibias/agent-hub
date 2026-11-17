@@ -249,12 +249,85 @@ async function run(){
     || published.human_approval_verified!==false)
     throw new Error('synthetic_direct_claim_not_committed');
 
+  // The service reuses the same ADMIN-only Windows pipe for a separate,
+  // one-read preview of EXACTLY this protected, previously committed Claim.
+  // Synthetic ES256 is a CI gesture, NEVER physical Hello or a Codex grant.
+  const read=await send('read_begin',scope);
+  const expectedClaim=[
+    published.claim_id,scope.projectId,scope.branch,
+    started.meaning.revisionSha,scope.proposalRef,
+    started.meaning.reviewSnapshotSha256,
+    started.meaning.canonicalFactSha256,'knowledge',
+    fact,'user_direct_reaffirmed_and_published_v1',
+  ];
+  const selectedHash=sha(Buffer.from(JSON.stringify(expectedClaim))).toString('hex');
+  if(read.status!=='protected_operator_read_preview_uv_challenge_no_release'
+    || read.service_signed!==true || read.claim_written!==false
+    || read.human_approval_verified!==false
+    || read.published_to_codex!==false || read.read_released!==false
+    || read.original_evidence_verified!==false
+    || read.project_id!==scope.projectId || read.branch!==scope.branch
+    || read.proposal_ref!==scope.proposalRef
+    || read.claim_id!==published.claim_id
+    || read.value!==fact || read.kind!=='knowledge'
+    || read.query!=='exact-proposal:'+scope.proposalRef
+    || read.result_set_sha256!==selectedHash
+    || read.query_sha256!==sha(read.query).toString('hex')
+    || read.recipient!=='Sealed operator UI only; no Codex recipient'
+    || read.recipient_session_sha256!==
+        sha('agenthub-local-operator-ui-preview-no-codex-v1').toString('hex')
+    || read.credential_id!==attestation.credentialId
+    || !/^S-1-5-21-(?:[0-9]+-){2,}[0-9]+$/.test(read.principal_sid)
+    || !/^[a-f0-9]{48}$/.test(read.request_id)
+    || Buffer.from(read.challenge,'base64url').length!==32)
+    throw new Error('untrusted_operator_read_offer_or_claim_text');
+
+  // A signed Claim-publication assertion CANNOT approve read disclosure.
+  const wrongPurpose=await send('read_complete',{
+    ticketId:read.ticket_id,assertion:proofAssertion(key,publish,5),
+  });
+  if(wrongPurpose.signature_verified!==false
+    || wrongPurpose.status!=='challenge_mismatch'
+    || wrongPurpose.read_released!==false
+    || wrongPurpose.published_to_codex!==false)
+    throw new Error('read_preview_accepted_claim_publication_assertion');
+  try {
+    await send('read_complete',{
+      ticketId:read.ticket_id,assertion:proofAssertion(key,read,5),
+    });
+    throw new Error('read_preview_consumed_ticket_replayed');
+  } catch(error) {
+    if(String(error?.message??'').includes('read_preview_consumed_ticket_replayed'))
+      throw error;
+  }
+
+  const secondRead=await send('read_begin',scope);
+  if(secondRead.result_set_sha256!==selectedHash
+    || secondRead.request_id===read.request_id)
+    throw new Error('read_preview_snapshot_or_nonce_reuse');
+  const consent=await send('read_complete',{
+    ticketId:secondRead.ticket_id,
+    assertion:proofAssertion(key,secondRead,5),
+  });
+  if(consent.status!=='verified_read_disclosure_intent_only'
+    || consent.signature_verified!==true
+    || consent.request_id!==secondRead.request_id
+    || consent.result_set_sha256!==selectedHash
+    || consent.claim_written!==false
+    || consent.read_released!==false
+    || consent.published_to_codex!==false
+    || consent.human_approval_verified!==false)
+    throw new Error('synthetic_read_intent_claimed_release_or_failed');
+
   process.stdout.write(JSON.stringify({
     status:'synthetic_native_enrollment_bridge_pass_not_human',
     source_kind:'knowledge',
     purpose_bound_reaffirmation_intent_recorded:true,
     separate_purpose_bound_claim_commit:true,
     private_direct_claim_committed:true,
+    protected_read_offer_exact_claim_and_query:true,
+    read_purpose_uv_one_use_only:true,
+    read_released:false,
     published_to_codex:false,
     historical_evidence_verified:false,
     original_fact_service_signed:true,
