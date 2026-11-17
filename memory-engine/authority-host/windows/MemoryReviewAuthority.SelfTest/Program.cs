@@ -35,7 +35,9 @@ internal static class Program
         Run("pending_is_not_persisted_over_restart", NoPersistence);
         Run("bounded_queue_capacity", Capacity);
         Run("reject_invalid_fact_and_nonlocal_origin", InvalidInputs);
-        Console.WriteLine($"MEMORY_AUTHORITY_CORE PASS {_passed}/15; NO_SERVICE NO_DB_WRITE NO_AUTHORIZATION");
+        Run("native_registration_parses_only_es256_not_approval", NativeRegistrationParse);
+        Run("native_registration_denies_tampering_and_missing_uv", NativeRegistrationDeny);
+        Console.WriteLine($"MEMORY_AUTHORITY_CORE PASS {_passed}/17; NO_SERVICE NO_DB_WRITE NO_AUTHORIZATION");
     }
 
     private static void Run(string name, Action test)
@@ -218,6 +220,77 @@ internal static class Program
             host.Begin(Meaning with { CanonicalFact = "Different content" }, credential.Pinned));
         Throws<ArgumentException>(() =>
             host.Begin(Meaning, credential.Pinned with { ExpectedOrigin = "http://evil.example" }));
+    }
+
+    private static (string Client, string Authenticator, string CredentialId,
+        string Challenge, byte[] AuthBytes) NativeRegistrationFixture(ECDsa key)
+    {
+        var handle = RandomNumberGenerator.GetBytes(32);
+        var nonce = Encode(RandomNumberGenerator.GetBytes(32));
+        var client = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new
+        {
+            type = "webauthn.create", challenge = nonce,
+            origin = NativeWebAuthnEnrollment.Origin, crossOrigin = false,
+        }));
+        var points = key.ExportParameters(false).Q;
+        Check(points.X is { Length: 32 } && points.Y is { Length: 32 });
+        var cose = new byte[] {
+            0xa5, 0x01, 0x02, 0x03, 0x26, 0x20, 0x01,
+            0x21, 0x58, 0x20,
+        }.Concat(points.X!).Concat(new byte[] { 0x22, 0x58, 0x20 })
+            .Concat(points.Y!).ToArray();
+        var auth = new byte[55 + handle.Length + cose.Length];
+        SHA256.HashData(Encoding.UTF8.GetBytes("localhost")).CopyTo(auth, 0);
+        auth[32] = 0x45; // UP, UV and attested credential data
+        BinaryPrimitives.WriteUInt16BigEndian(auth.AsSpan(53, 2), (ushort)handle.Length);
+        handle.CopyTo(auth, 55);
+        cose.CopyTo(auth, 55 + handle.Length);
+        return (Encode(client), Encode(auth), Encode(handle), nonce, auth);
+    }
+
+    private static void NativeRegistrationParse()
+    {
+        using var actual = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        var f = NativeRegistrationFixture(actual);
+        var parsed = NativeWebAuthnEnrollment.ParseUnverifiedRegistration(
+            f.Client, f.Authenticator, f.CredentialId, f.Challenge);
+        Check(parsed.CredentialIdBase64Url == f.CredentialId);
+        Check(parsed.ExpectedOrigin == NativeWebAuthnEnrollment.Origin);
+        using var imported = ECDsa.Create();
+        imported.ImportFromPem(parsed.PublicKeyPem);
+        var message = RandomNumberGenerator.GetBytes(32);
+        var signature = actual.SignData(message, HashAlgorithmName.SHA256);
+        Check(imported.VerifyData(message, signature, HashAlgorithmName.SHA256));
+        // Parsing a MakeCredential result is never user consent or a Claim.
+    }
+
+    private static void NativeRegistrationDeny()
+    {
+        using var actual = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        var f = NativeRegistrationFixture(actual);
+        var altered = (byte[])f.AuthBytes.Clone();
+        altered[32] = 0x41; // user-verified bit removed
+        Throws<InvalidOperationException>(() =>
+            NativeWebAuthnEnrollment.ParseUnverifiedRegistration(
+                f.Client, Encode(altered), f.CredentialId, f.Challenge));
+        altered[32] = 0x45;
+        altered[0] ^= 0xff; // forged RP
+        Throws<InvalidOperationException>(() =>
+            NativeWebAuthnEnrollment.ParseUnverifiedRegistration(
+                f.Client, Encode(altered), f.CredentialId, f.Challenge));
+        Throws<InvalidOperationException>(() =>
+            NativeWebAuthnEnrollment.ParseUnverifiedRegistration(
+                f.Client, f.Authenticator, f.CredentialId,
+                Encode(RandomNumberGenerator.GetBytes(32))));
+        Throws<InvalidOperationException>(() =>
+            NativeWebAuthnEnrollment.ParseUnverifiedRegistration(
+                f.Client, f.Authenticator,
+                Encode(RandomNumberGenerator.GetBytes(32)), f.Challenge));
+        altered = (byte[])f.AuthBytes.Clone();
+        altered[55 + 32] = 0xa4; // missing required COSE map member
+        Throws<InvalidOperationException>(() =>
+            NativeWebAuthnEnrollment.ParseUnverifiedRegistration(
+                f.Client, Encode(altered), f.CredentialId, f.Challenge));
     }
 
     private static string HashHex(string input)
