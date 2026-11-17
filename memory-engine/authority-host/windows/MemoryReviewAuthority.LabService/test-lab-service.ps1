@@ -193,6 +193,12 @@ try {
         [IO.File]::WriteAllText($publishGate,
             'AGENTHUB_SYNTHETIC_DIRECT_CLAIM_CI_ONLY_V1',
             [Text.UTF8Encoding]::new($false))
+        # CI only: no normal Preview installation is permitted to register
+        # even a test recipient or obtain an unconsented read channel.
+        $deliveryGate = Join-Path $stateRoot 'agenthub-read-once-ci-only.enable'
+        [IO.File]::WriteAllText($deliveryGate,
+            'AGENTHUB_READ_ONCE_CI_ONLY_NO_PRODUCTION_V1',
+            [Text.ASCIIEncoding]::new())
         $sourceScope = Get-Content -LiteralPath (Join-Path $stateRoot 'operator-evidence-manifest.json') -Raw | ConvertFrom-Json
         $ciSid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
         if ($sourceScope.projectId -cne 'github.com/example/operator-evidence' -or
