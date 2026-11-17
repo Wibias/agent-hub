@@ -40,6 +40,11 @@ internal sealed partial class OperatorWebAuthnPipe
                 && _activeCiRead.Ticket.ExpiresUtc>DateTimeOffset.UtcNow))
             return null;
         var recipient=_ciRecipient.Peek(project!,branch!,proposal!);
+        if(_ledger.IsCiOneShotRevoked())
+        {
+            _ciRecipient.Deny(recipient);
+            return null;
+        }
         var native=_ledger.ReadOperatorCredential();
         if(recipient is null || native is null
             || native.EnrollmentState != ProtectedPendingReviewLedger.NativeEnrollmentState
@@ -64,6 +69,15 @@ internal sealed partial class OperatorWebAuthnPipe
             ReadHash(query),resultHash,recipient.SessionSha256);
         var ticket=_readDisclosureCore.BeginProtectedReadDisclosure(
             meaning,native.Credential);
+        // Durable one-use reservation bound to the protected exact Claim,
+        // OS-observed session, signer challenge and short expiry. Failure
+        // denies the recipient; the in-memory challenge alone grants nothing.
+        if(!_ledger.ReserveCiOneShot(meaning,claim.ClaimId,
+            claim.ProposalRef,recipient.KernelProcessId,ticket.ExpiresUtc))
+        {
+            _ciRecipient.Deny(recipient);
+            return null;
+        }
         _activeCiRead=new ActiveCiRead(ticket,claim.ClaimId,resultHash,recipient);
         return new
         {
@@ -90,6 +104,28 @@ internal sealed partial class OperatorWebAuthnPipe
             historical_source_origin=claim.HistoricalSourceOrigin,
             provenance=claim.Provenance,
             recipient="CI ONLY: kernel-observed connected pipe, not verified Codex",
+        };
+    }
+
+    private object? RevokeCiOneShot(JsonElement root,string nonce)
+    {
+        if(_ciRecipient is null
+            || !ExactKeys(root,"protocol","op","nonce"))
+            return null;
+        // Deny-only administrative action. This cannot grant a read and
+        // the protected WAL tombstone is never removed or reset on restart.
+        _ledger.RevokeCiOneShot();
+        if(_activeCiRead is { } active)
+        {
+            _ciRecipient.Deny(active.Recipient);
+            _activeCiRead=null;
+        }
+        return new {
+            protocol=Protocol,op="ci_read_revoke",nonce,
+            status="ci_read_durably_revoked_no_claim",
+            service_signed=true,human_approval_verified=false,
+            claim_written=false,read_released=false,
+            published_to_codex=false,production_authorized=false,
         };
     }
 
@@ -163,6 +199,21 @@ internal sealed partial class OperatorWebAuthnPipe
             });
             var wire=new byte[encoded.Length+1];
             encoded.CopyTo(wire,0); wire[^1]=(byte)'\n';
+            // CRITICAL: commit a durable, irreversible consumed_pre_io row
+            // before the first private byte can reach the recipient pipe.
+            // No successful transfer is claimed merely by this journal.
+            if(!_ledger.ConsumeCiOneShotBeforeIo(
+                meaning,claim.ClaimId,claim.ProposalRef,
+                active.Recipient.KernelProcessId))
+                return new {
+                    protocol=Protocol,op="ci_read_complete",nonce,
+                    status="ci_read_durable_consume_denied",
+                    signature_verified=true,service_signed=true,
+                    human_approval_verified=false,claim_written=false,
+                    read_released=false,published_to_codex=false,
+                    production_authorized=false,
+                    request_id=meaning.RequestId,
+                };
             delivered=_ciRecipient.TryDeliver(active.Recipient,wire);
             status=delivered?"ci_exact_one_shot_delivered_no_production_authority"
                 :"ci_one_shot_delivery_denied";
@@ -180,6 +231,9 @@ internal sealed partial class OperatorWebAuthnPipe
             // A failed/invalid completed request cannot leave its original
             // pending recipient available for a later unrelated ticket.
             _ciRecipient.Deny(active.Recipient);
+            // A wrong-purpose or failed assertion also leaves a durable
+            // terminal row. Already consumed_pre_io rows never regress.
+            _ledger.AbortCiOneShot(active.Ticket.Meaning.RequestId);
         }
     }
 }
