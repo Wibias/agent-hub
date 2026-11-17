@@ -28,12 +28,13 @@ internal static class Program
             var state = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
                 "AgentHubMemoryReviewLab-State");
-            var signedUserRead = args.Length == 4
-                && args[1] == "--signed-user-ci"
+            var userReadMode = args.Length == 4
+                && args[1] is "--signed-user-ci" or "--revoked-user-ci"
                 && args[2].Length == 40
                 && args[2].All(ch => ch is >= '0' and <= '9' or >= 'a' and <= 'f')
                 && Path.IsPathFullyQualified(args[3]);
-            Require((args.Length == 1 || signedUserRead)
+            var expectRevoked = userReadMode && args[1] == "--revoked-user-ci";
+            Require((args.Length == 1 || userReadMode)
                 && string.Equals(Path.GetFullPath(args[0]), Path.GetFullPath(state),
                     StringComparison.OrdinalIgnoreCase)
                 && Directory.Exists(state), "unexpected_lab_state_path");
@@ -105,7 +106,7 @@ internal static class Program
                                     PipeDirection.InOut);
                                 pipe.Connect(1000);
                             });
-                            if (signedUserRead)
+                            if (userReadMode)
                             {
                                 ExpectAccessDenied("admin_only_direct_read_pipe", () =>
                                 {
@@ -115,7 +116,7 @@ internal static class Program
                                     pipe.Connect(1000);
                                 });
                                 VerifySignedUserDirectCiRead(
-                                    originalUserSid!, args[2], args[3]);
+                                    originalUserSid!, args[2], args[3], expectRevoked);
                             }
                         });
                     }
@@ -125,8 +126,10 @@ internal static class Program
             {
                 Marshal.FreeHGlobal(adminPointer);
             }
-            Console.WriteLine(signedUserRead
-                ? "MEMORY_REVIEW_SAME_ACCOUNT_RESTRICTED_TOKEN PASS 6/6; ENROLLED_USER_READ_ONLY, NO_ADMIN_OR_DB_ACCESS"
+            Console.WriteLine(userReadMode
+                ? (expectRevoked
+                    ? "MEMORY_REVIEW_SAME_ACCOUNT_RESTRICTED_TOKEN PASS 6/6; USER_DIRECT_READ_REVOKED, NO_ADMIN_OR_DB_ACCESS"
+                    : "MEMORY_REVIEW_SAME_ACCOUNT_RESTRICTED_TOKEN PASS 6/6; ENROLLED_USER_READ_ONLY, NO_ADMIN_OR_DB_ACCESS")
                 : "MEMORY_REVIEW_SAME_ACCOUNT_RESTRICTED_TOKEN PASS 4/4; SAME_USER NO_ADMIN NO_DIRECT_DB_OR_UV_PIPE_ACCESS");
             return 0;
         }
@@ -139,7 +142,8 @@ internal static class Program
     }
 
     private static void VerifySignedUserDirectCiRead(
-        string expectedSid, string revisionSha, string publicPinPath)
+        string expectedSid, string revisionSha, string publicPinPath,
+        bool expectRevoked = false)
     {
         const string protocol = "agenthub-protected-user-read-ci-v1";
         const string project = "github.com/example/operator-evidence";
@@ -163,8 +167,30 @@ internal static class Program
         pipe.Flush();
         using var reader = new StreamReader(pipe, Encoding.UTF8, leaveOpen: true);
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        var line = reader.ReadLineAsync(timeout.Token).AsTask()
-            .GetAwaiter().GetResult();
+        string? line;
+        try
+        {
+            line = reader.ReadLineAsync(timeout.Token).AsTask()
+                .GetAwaiter().GetResult();
+        }
+        catch (OperationCanceledException) when (expectRevoked)
+        {
+            line = null;
+        }
+        catch (IOException) when (expectRevoked)
+        {
+            line = null;
+        }
+        if (expectRevoked)
+        {
+            // The server must NOT return any valid or invalid data after
+            // revocation. A signed payload is not merely "untrusted"; it
+            // must not be emitted by a running revoked read service.
+            Require(line is null, "revoked_user_ci_returned_response");
+            Console.WriteLine(
+                "PASS revoked_same_account_nonadmin_user_read_no_response");
+            return;
+        }
         Require(line is { Length: >= 200 and <= 49152 },
             "enrolled_user_ci_read_missing_response");
         using var envelope = JsonDocument.Parse(line!);

@@ -450,6 +450,62 @@ try {
             throw 'same-account nonadmin signed Claim read denied or admin pipe exposed'
         }
         Write-Host 'PASS: non-elevated same-account token verifies signed user Claim and cannot reach admin, UV or SQLite'
+        # Simulate an exact administrator revocation while the existing
+        # LocalService remains running. A cached startup policy must not
+        # authorize later reads. The same-account restricted token must
+        # receive NO signed response. Restoring IDENTICAL bytes must not
+        # re-enable the old in-memory pipe without deliberate SCM restart.
+        $userReadEnrollment = Join-Path $stateRoot 'agenthub-user-direct-read-ci-only.json'
+        $originalUserPolicy = [IO.File]::ReadAllBytes($userReadEnrollment)
+        Remove-Item -LiteralPath $userReadEnrollment -Force
+        & $accessProbe $stateRoot --revoked-user-ci $sourceScope.revisionSha $publishedPin
+        if ($LASTEXITCODE -ne 0) {
+            throw 'service kept serving private Claim after live revocation'
+        }
+        [IO.File]::WriteAllBytes($userReadEnrollment, $originalUserPolicy)
+        & $accessProbe $stateRoot --revoked-user-ci $sourceScope.revisionSha $publishedPin
+        if ($LASTEXITCODE -ne 0) {
+            throw 'revoked private read was resurrected by policy file recreation'
+        }
+        $scStatus = & $sc query $service
+        if ($LASTEXITCODE -ne 0 -or ($scStatus -join ' ') -notmatch 'RUNNING') {
+            throw 'denied read was caused by stopped SCM service, not live revocation'
+        }
+        Write-Host 'PASS: protected policy withdrawal denies signed user read, latches until restart, SCM still RUNNING'
+        # The independent admin-only direct-read pipe must also revoke
+        # without requiring service shutdown. Mutate the protected policy
+        # (not the signed data) while the service is running, then prove
+        # that reintroducing the original bytes does not resurrect reads.
+        $adminReadEnrollment = Join-Path $stateRoot 'agenthub-direct-read-ci-only.json'
+        $originalAdminPolicy = [IO.File]::ReadAllBytes($adminReadEnrollment)
+        $tampered = [Text.Encoding]::UTF8.GetString($originalAdminPolicy) |
+            ConvertFrom-Json
+        $tampered.revisionSha = 'c' * 40
+        [IO.File]::WriteAllText($adminReadEnrollment,
+            ($tampered | ConvertTo-Json -Compress), [Text.UTF8Encoding]::new($false))
+        & node $directProbe --pin $publishedPin --sid $ciSid --revision $sourceScope.revisionSha *> $null
+        if ($LASTEXITCODE -eq 0) {
+            throw 'admin direct-read policy alteration did not revoke access'
+        }
+        [IO.File]::WriteAllBytes($adminReadEnrollment, $originalAdminPolicy)
+        & node $directProbe --pin $publishedPin --sid $ciSid --revision $sourceScope.revisionSha *> $null
+        if ($LASTEXITCODE -eq 0) {
+            throw 'admin direct read was resurrected without service restart'
+        }
+        $scStatus = & $sc query $service
+        if ($LASTEXITCODE -ne 0 -or ($scStatus -join ' ') -notmatch 'RUNNING') {
+            throw 'administrative read denial was due to stopped service'
+        }
+        Write-Host 'PASS: admin direct-read policy mutation revokes live read and cannot auto-reactivate'
+        $readbackAfterRevocation = & node (Join-Path $repoRoot 'scripts/verify-operator-reaffirmation-scm-state.mjs') |
+            ConvertFrom-Json
+        if ($LASTEXITCODE -ne 0 -or
+            $readbackAfterRevocation.status -cne 'protected_operator_direct_claim_scm_readback_pass' -or
+            $readbackAfterRevocation.real_claim_rows -ne 1 -or
+            $readbackAfterRevocation.credential_count -ne 4) {
+            throw 'read revocation unexpectedly affected protected direct Claim storage'
+        }
+        Write-Host 'PASS: all signed reads revoked, but one private direct Claim and credential counter remain unchanged'
     } else {
     $operatorProbe = Join-Path $repoRoot 'scripts/probe-operator-service-web-authn.mjs'
     $operatorOutput = & node $operatorProbe $publishedPin

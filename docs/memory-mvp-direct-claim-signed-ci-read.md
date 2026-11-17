@@ -56,8 +56,10 @@ labels itself:
 A genuine signed service response **does not** authenticate the original
 user-writable Evidence or imply a real human has used Windows Hello.
 
-The ordinary Codex `memory_recall` MCP still has **no mode to select**
-this CI-only reader. The current public signed read pipe is not changed.
+The ordinary Codex `memory_recall` MCP **defaults** to its original
+non-CI providers. Only the explicit `--ci-user-direct-read` diagnostic
+launcher can select the separately enrolled synthetic user reader.
+The current public signed read pipe is not changed.
 
 ## Separate same-account nonadmin Windows token acceptance
 
@@ -91,6 +93,34 @@ distinguish two projects or two processes belonging to the same user.**
 The service policy fixes one exact CI project/branch/revision; authentic
 per-project enrollment and native Codex session attribution remain
 separate requirements before using this design with real memories.
+
+## Live enrollment revocation in the protected CI service
+
+The currently running service used to cache its exact administrator-owned
+CI read policy at startup. **Deleting a read enrollment did not revoke
+already-running pipe access.** The CI reader now binds the exact original
+policy bytes using SHA-256 and rechecks the protected enrollment before
+reading a Claim and immediately before signing and emitting a response.
+A missing, reparse-pointed, resized or altered policy file is a **latched
+revocation for that service instance**. Recreating the same original file
+does not silently reenable the old active reader. An explicit, reviewed
+service lifecycle action is needed for any renewed enrollment.
+
+Disposable Windows SCM regression tests must demonstrate both mechanisms:
+the same-account nonadmin user initially reads one signed private test
+Claim, then loses access immediately after the protected user-policy file
+is removed and **remains denied** after exact bytes are recreated.
+The separate administrator read lane must refuse access after its
+protected policy revision is modified, and still refuse after those
+original bytes are restored. The service must stay RUNNING, and the
+protected Claim and credential counter must remain unchanged.
+
+This is a lab-only **observed-revocation** guarantee. A policy that is
+removed and replaced entirely between consecutive checks can escape the
+service's observation; a response already transmitted cannot be erased.
+A production system needs an independent monotonic, durable revocation
+authority and a specified in-flight response cutoff. No production
+re-enrollment or operator-PC activation is provided by these tests.
 
 ## Existing Codex memory_recall: explicitly isolated test mode
 
