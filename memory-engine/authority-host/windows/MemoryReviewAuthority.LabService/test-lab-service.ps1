@@ -355,29 +355,34 @@ try {
             -not $enroll.nonzero_sign_counter_replay_denied -or
             $enroll.source_kind -cne 'knowledge' -or
             -not $enroll.purpose_bound_reaffirmation_intent_recorded -or
+            -not $enroll.separate_purpose_bound_claim_commit -or
+            -not $enroll.private_direct_claim_committed -or
+            $enroll.published_to_codex -or
             $enroll.historical_evidence_verified -or
             $enroll.hardware_attestation_verified -or
-            $enroll.human_approval_verified -or $enroll.claim_written -or
+            $enroll.human_approval_verified -or -not $enroll.claim_written -or
             -not $enroll.production_no_go) {
             throw 'synthetic native enrollment incorrectly granted approval'
         }
-        Write-Host 'PASS: native Create/Get enrollment, purpose-bound reaffirmation intent IPC and replay denial, no Claim or human approval'
+        Write-Host 'PASS: native two-purpose UV commits private direct Claim, historical evidence still unverified, no Codex publication'
         $reaffirmAudit = Join-Path $repoRoot 'scripts/verify-operator-reaffirmation-scm-state.mjs'
         $readbackOutput = & node $reaffirmAudit
         if ($LASTEXITCODE -ne 0) {
             throw 'protected native reaffirmation SQLite audit failed'
         }
         $readback = $readbackOutput | ConvertFrom-Json
-        if ($readback.status -cne 'protected_operator_reaffirmation_scm_readback_pass' -or
+        if ($readback.status -cne 'protected_operator_direct_claim_scm_readback_pass' -or
             $readback.intent_rows -ne 1 -or
             $readback.original_source_verified -or
-            $readback.real_claim_rows -ne 0 -or
+            $readback.real_claim_rows -ne 1 -or
+            $readback.synthetic_claim_rows -ne 0 -or
+            $readback.codex_published -or
             $readback.verified_review_intent_rows -ne 0 -or
-            $readback.credential_count -ne 3 -or
+            $readback.credential_count -ne 4 -or
             $readback.protected_source_kind -cne 'knowledge') {
             throw 'Reaffirmation readback unexpectedly promoted historical source or Claim'
         }
-        Write-Host 'PASS: protected SQLite readback has exactly one reaffirmation intent, no real Claim, no verified original source'
+        Write-Host 'PASS: protected SQLite readback has exactly one private user-direct Claim, unverifiable old source, zero signed Codex publication'
     } else {
     $operatorProbe = Join-Path $repoRoot 'scripts/probe-operator-service-web-authn.mjs'
     $operatorOutput = & node $operatorProbe $publishedPin
