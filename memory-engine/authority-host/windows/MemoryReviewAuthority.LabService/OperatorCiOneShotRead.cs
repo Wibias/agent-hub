@@ -100,6 +100,11 @@ internal sealed partial class OperatorWebAuthnPipe
             expected_origin=native.Credential.ExpectedOrigin,
             principal_sid=meaning.PrincipalSid,
             recipient_kernel_pid=recipient.KernelProcessId,
+            recipient_process_image=recipient.ProcessImagePath,
+            recipient_process_created_filetime=recipient.ProcessCreatedFileTime,
+            // Measured process image and lifetime are NOT remote-code-
+            // injection protection or independent Codex attestation.
+            recipient_os_origin_attested=false,
             recipient_session_sha256=meaning.RecipientSessionSha256,
             query,query_sha256=meaning.QuerySha256,
             result_set_sha256=resultHash,
