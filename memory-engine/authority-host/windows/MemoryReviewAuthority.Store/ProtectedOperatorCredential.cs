@@ -233,6 +233,7 @@ public sealed partial class ProtectedPendingReviewLedger
         EnsureOpen();
         if (meaning is null || key is null || proof is null
             || !proof.Verified || !proof.UserPresent || !proof.UserVerified
+            || proof.Status != "verified_not_authorized"
             || proof.ApprovedReviewDecision || proof.ClaimWritten
             || key.ExpectedOrigin != NativeWebAuthnEnrollment.Origin)
             throw new InvalidOperationException("native_enrollment_uv_required");
