@@ -3,6 +3,7 @@ import { isAbsolute, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { serveCodexMemoryMcp } from '../memory-engine/adapters/codex-readonly-memory-mcp.mjs';
 import { readScopedProtectedLabMemory } from '../memory-engine/adapters/codex-protected-claim-pipe.mjs';
+import { readScopedUserDirectCi } from '../memory-engine/adapters/codex-protected-user-ci-mcp.mjs';
 import {
   defaultGlobalMemoryScopePath, readGlobalCodexMemory,
 } from '../memory-engine/adapters/codex-global-memory-scope.mjs';
@@ -25,6 +26,14 @@ export function parseMemoryMcpArgs(argv) {
       scopePath: argv.length === 3 ? resolve(argv[2]) : defaultGlobalMemoryScopePath() };
   }
   if (Array.isArray(argv) && argv.length === 5
+    && argv[0] === '--ci-user-direct-read'
+    && argv[1] === '--scope' && typeof argv[2] === 'string'
+    && isAbsolute(argv[2]) && argv[3] === '--pin'
+    && typeof argv[4] === 'string' && isAbsolute(argv[4])) {
+    return { mode: 'ci_user_direct_read',
+      scopePath: resolve(argv[2]), pinPath: resolve(argv[4]) };
+  }
+  if (Array.isArray(argv) && argv.length === 5
     && argv[0] === '--lab-protected-read'
     && argv[1] === '--scope' && typeof argv[2] === 'string'
     && isAbsolute(argv[2]) && argv[3] === '--pin'
@@ -32,7 +41,7 @@ export function parseMemoryMcpArgs(argv) {
     return { mode: 'protected_lab_read', scopePath: resolve(argv[2]),
       pinPath: resolve(argv[4]) };
   }
-  throw new Error('Usage: --global [--scope ABS_SCOPE] OR --cwd ABS_REPO OR --lab-protected-read --scope ABS_SCOPE --pin ABS_ADMIN_PIN');
+  throw new Error('Usage: --global [--scope ABS_SCOPE] OR --cwd ABS_REPO OR --lab-protected-read --scope ABS_SCOPE --pin ABS_ADMIN_PIN OR --ci-user-direct-read --scope ABS_SCOPE --pin ABS_ADMIN_PIN (CI ONLY)');
 }
 
 export async function runMemoryMcp(args, {
@@ -41,6 +50,15 @@ export async function runMemoryMcp(args, {
   const opts = parseMemoryMcpArgs(args);
   if (opts.mode === 'pinned_project') {
     return serveCodexMemoryMcp({ cwd: opts.cwd, input, output });
+  }
+  if (opts.mode === 'ci_user_direct_read') {
+    return serveCodexMemoryMcp({
+      cwd: hostCwd, input, output, env: {},
+      recall: ({ cwd, query, maxItems }) => readScopedUserDirectCi({
+        cwd, query, maxItems,
+        scopePath: opts.scopePath, pinPath: opts.pinPath,
+      }),
+    });
   }
   if (opts.mode === 'protected_lab_read') {
     return serveCodexMemoryMcp({
