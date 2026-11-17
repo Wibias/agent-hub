@@ -57,7 +57,10 @@ internal static class Program
         Run("operator_credential_wrong_key_and_generic_approval_denied", OperatorDenied);
         Run("native_operator_enrollment_persists_but_creates_no_claim", NativeOperatorEnrolled);
         Run("native_enrollment_does_not_upgrade_a_pinned_unverified_key", NativeOperatorCannotUpgrade);
-        Console.WriteLine($"MEMORY_REVIEW_LEDGER PASS {_passed}/36; REAL_EVIDENCE_UV_PINNED_NO_APPROVAL");
+        Run("native_operator_reaffirmation_intent_persists_no_claim", ReaffirmationNoClaim);
+        Run("operator_reaffirmation_unverified_pin_denied", ReaffirmationUnverifiedDenied);
+        Run("operator_reaffirmation_procedure_denied", ReaffirmationProcedureDenied);
+        Console.WriteLine($"MEMORY_REVIEW_LEDGER PASS {_passed}/39; REAL_EVIDENCE_UV_PINNED_NO_APPROVAL");
     }
 
     private static void Run(string label, Action test)
@@ -1007,6 +1010,102 @@ internal static class Program
             && !unchanged.HumanApprovalVerified);
         Check(store.ReadProtectedClaims(RealProject, RealBranch).Count == 0);
         Check(store.ReadVerifiedIntent(RealProject, RealBranch, RealERef) is null);
+    }
+
+    private static void ReaffirmationNoClaim()
+    {
+        CreateRealEvidenceFixture();
+        using var key = TestCredential.New();
+        string requestId;
+        using (var store = Open())
+        {
+            var imported = store.ImportOperatorPinnedEvidence();
+            var meaning = RealReviewMeaning(imported);
+            requestId = imported.PendingRequestId;
+            var enrollCore = new ReviewChallengeCore();
+            var enroll = enrollCore.Begin(meaning, key.Pinned);
+            var proof = enrollCore.VerifyAndConsume(
+                enroll.TicketId, meaning, key.Sign(enroll));
+            store.RecordNativeUvEnrollment(meaning, key.Pinned, proof);
+            var review = OperatorReaffirmationCoordinator.ForNativeCredential(store);
+            var ticket = review.Begin(meaning);
+            var result = review.Complete(ticket.TicketId,
+                meaning, key.Sign(ticket, forcedSignCount: 2));
+            Check(result.Verified && result.RequestId == requestId
+                && result.Status == "operator_reaffirmation_intent_recorded_no_claim"
+                && !result.HistoricalEvidenceVerified && !result.ClaimWritten);
+            var receipt = store.ReadOperatorReaffirmationIntent(
+                RealProject, RealBranch, RealERef);
+            Check(receipt is not null && receipt.RequestId == requestId
+                && receipt.OriginalSourceOrigin ==
+                    ProtectedPendingReviewLedger.OperatorSourceOrigin
+                && receipt.HistoricalEvidenceSha256 == imported.SourceEvidenceSha256
+                && receipt.SignCount == 2
+                && !receipt.HistoricalEvidenceVerified && !receipt.ClaimWritten);
+            Check(store.ReadOperatorCredential()?.LastSignCount == 2);
+            Check(store.ReadProtectedClaims(RealProject, RealBranch).Count == 0);
+            Check(store.ReadVerifiedIntent(RealProject, RealBranch, RealERef) is null);
+            Check(store.CountPending() == 1);
+            Throws<InvalidOperationException>(() => review.Begin(meaning));
+            Check(!review.Complete(ticket.TicketId,
+                meaning, key.Sign(ticket, forcedSignCount: 3)).Verified);
+        }
+        using (var reopened = Open())
+        {
+            var saved = reopened.ReadOperatorReaffirmationIntent(
+                RealProject, RealBranch, RealERef);
+            Check(saved?.RequestId == requestId
+                && saved.SignCount == 2 && !saved.ClaimWritten);
+            Check(reopened.ReadProtectedClaims(RealProject, RealBranch).Count == 0);
+        }
+        using var sql = new SqliteConnection(new SqliteConnectionStringBuilder
+        {
+            DataSource = Path.Combine(TestDirectory, "review-authority.sqlite3"),
+            Mode = SqliteOpenMode.ReadWrite, Pooling = false,
+        }.ToString());
+        sql.Open();
+        using var update = sql.CreateCommand();
+        update.CommandText =
+            "UPDATE protected_operator_reaffirmation_intents SET kind='preference';";
+        Throws<SqliteException>(() => update.ExecuteNonQuery());
+        using var delete = sql.CreateCommand();
+        delete.CommandText = "DELETE FROM protected_operator_reaffirmation_intents;";
+        Throws<SqliteException>(() => delete.ExecuteNonQuery());
+    }
+
+    private static void ReaffirmationUnverifiedDenied()
+    {
+        CreateRealEvidenceFixture();
+        using var key = TestCredential.New();
+        using var store = Open();
+        store.ImportOperatorPinnedEvidence();
+        WriteOperatorPin(key.Pinned);
+        store.StageUnverifiedOperatorCredential();
+        Throws<InvalidOperationException>(() =>
+            OperatorReaffirmationCoordinator.ForNativeCredential(store));
+        Check(store.ReadOperatorReaffirmationIntent(
+            RealProject, RealBranch, RealERef) is null);
+        Check(store.ReadProtectedClaims(RealProject, RealBranch).Count == 0);
+    }
+
+    private static void ReaffirmationProcedureDenied()
+    {
+        CreateRealEvidenceFixture(kind: "procedure", fullyJudgedPending: true);
+        using var key = TestCredential.New();
+        using var store = Open();
+        var imported = store.ImportOperatorPinnedEvidence();
+        var meaning = RealReviewMeaning(imported);
+        var enrollCore = new ReviewChallengeCore();
+        var enroll = enrollCore.Begin(meaning, key.Pinned);
+        var proof = enrollCore.VerifyAndConsume(
+            enroll.TicketId, meaning, key.Sign(enroll));
+        store.RecordNativeUvEnrollment(meaning, key.Pinned, proof);
+        var review = OperatorReaffirmationCoordinator.ForNativeCredential(store);
+        Throws<InvalidOperationException>(() => review.Begin(meaning));
+        Check(store.ReadOperatorReaffirmationIntent(
+            RealProject, RealBranch, RealERef) is null);
+        Check(store.ReadProtectedClaims(RealProject, RealBranch).Count == 0);
+        Check(store.ReadOperatorCredential()?.LastSignCount == 1);
     }
 
     private static ReviewMeaning RealReviewMeaning(OperatorEvidenceImport evidence)

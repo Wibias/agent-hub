@@ -108,6 +108,7 @@ public sealed partial class ProtectedPendingReviewLedger : IDisposable
             InitializeProtectedClaimSchema(connection);
             InitializeProtectedSourceSchema(connection);
             InitializeOperatorCredentialSchema(connection);
+            InitializeOperatorReaffirmationSchema(connection);
             return new ProtectedPendingReviewLedger(connection, directory);
         }
         catch
