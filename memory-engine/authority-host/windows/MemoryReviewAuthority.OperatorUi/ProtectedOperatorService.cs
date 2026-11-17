@@ -45,7 +45,7 @@ internal sealed record NativeAssertion(
     string AuthenticatorData,
     string Signature);
 
-internal sealed record OperatorReceipt(bool Verified, string Status);
+internal sealed record OperatorReceipt(bool Verified, string Status, string? ClaimId = null);
 
 /// <summary>
 /// Same existing Windows Service lab. Operator pipe is admin / exact SCM SID
@@ -196,7 +196,8 @@ internal static class ProtectedOperatorService
         => obj.GetProperty(name).GetString()
             ?? throw new InvalidOperationException("Dienstfeld fehlt: " + name);
 
-    /// <summary>Service signature, nonce, exact source bytes and NO authority.</summary>
+    /// <summary>Service-signed, nonce-bound answer. Only the separate publish
+    /// completion may report a Claim write, and it is NOT a Codex read grant.</summary>
     internal static JsonDocument VerifySignedResponse(
         string json, string pem, string nonce, string operation)
     {
@@ -228,7 +229,8 @@ internal static class ProtectedOperatorService
                 || Str(result, "nonce") != nonce
                 || result.GetProperty("service_signed").GetBoolean() != true
                 || result.GetProperty("human_approval_verified").GetBoolean()
-                || result.GetProperty("claim_written").GetBoolean())
+                || (operation != "publish_complete"
+                    && result.GetProperty("claim_written").GetBoolean()))
                 throw new InvalidOperationException("Dienstantwort nicht vertrauenswürdig");
             return document;
         }
@@ -435,6 +437,11 @@ internal static class ProtectedOperatorService
         => BeginSignedOffer(project, branch, proposalRef,
             "reaffirm_begin", "operator_reaffirmation_challenge_no_claim");
 
+    internal static ServiceOffer BeginPublish(
+        string project, string branch, string proposalRef)
+        => BeginSignedOffer(project, branch, proposalRef,
+            "publish_begin", "operator_direct_claim_publication_challenge");
+
     private static ServiceOffer BeginSignedOffer(
         string project, string branch, string proposalRef,
         string operation, string requiredStatus)
@@ -464,6 +471,15 @@ internal static class ProtectedOperatorService
             || Str(m, "decision") is not ("confirm" or "reject")
             || !ValidReviewKind(Str(r, "kind")))
             throw new InvalidOperationException("Dienstquelle oder Scope ungültig");
+        if (operation == "publish_begin"
+            && (Str(r, "confirmation_scope") != "publish_new_user_direct_memory_claim"
+                || Str(r, "provenance") != "user_direct_reaffirmed_and_published_v1"
+                || r.GetProperty("published_to_codex").GetBoolean()
+                || r.GetProperty("original_evidence_verified").GetBoolean()
+                || Str(m, "decision") != "confirm"
+                || Str(r, "kind") is not ("knowledge" or "preference")))
+            throw new InvalidOperationException(
+                "Dienstsignatur erlaubt keine eigene Claim-Veröffentlichung");
         if (operation == "reaffirm_begin"
             && (Str(r, "confirmation_scope") != "new_user_statement_only"
                 || r.GetProperty("reaffirmation_intent_recorded").GetBoolean()
@@ -498,6 +514,53 @@ internal static class ProtectedOperatorService
             Str(m, "reviewSnapshotSha256"), Str(m, "canonicalFactSha256"),
             Str(r, "evidence_sha256"), Str(r, "source_origin"),
             Str(r, "kind"), Str(m, "decision"), fact);
+    }
+
+    internal static OperatorReceipt CompletePublish(
+        string ticketId, NativeAssertion assertion)
+    {
+        _ = Decode(ticketId, 64);
+        using var verified = Request("publish_complete", new
+        {
+            ticketId,
+            assertion = new
+            {
+                credentialId = assertion.CredentialId,
+                type = assertion.Type,
+                clientDataJSON = assertion.ClientDataJSON,
+                authenticatorData = assertion.AuthenticatorData,
+                signature = assertion.Signature,
+            },
+        });
+        return ParsePublishReceipt(verified.RootElement);
+    }
+
+    internal static OperatorReceipt ParsePublishReceipt(JsonElement result)
+    {
+        if (result.GetProperty("human_approval_verified").GetBoolean()
+            || result.GetProperty("published_to_codex").GetBoolean()
+            || result.GetProperty("original_evidence_verified").GetBoolean())
+            throw new InvalidOperationException("Unzulässiger Claim- oder Herkunftsstatus");
+        var written = result.GetProperty("claim_written").GetBoolean();
+        var signed = result.GetProperty("signature_verified").GetBoolean();
+        var status = Str(result, "status");
+        var provenance = result.TryGetProperty("provenance", out var origin)
+            && origin.ValueKind == JsonValueKind.String
+            ? origin.GetString() : null;
+        var id = result.TryGetProperty("claim_id", out var identifier)
+            && identifier.ValueKind == JsonValueKind.String
+            ? identifier.GetString() : null;
+        if (signed != written
+            || written && (status !=
+                "protected_user_direct_claim_committed_not_published_to_codex"
+                || provenance != "user_direct_reaffirmed_and_published_v1"
+                || id is null
+                || !Regex.IsMatch(id, @"\AC~[0-9a-f]{24}\z",
+                    RegexOptions.CultureInvariant))
+            || !written && (id is not null || provenance is not null))
+            throw new InvalidOperationException(
+                "Der signierte Dienstbeleg enthält eine unzulässige Claim-Behauptung");
+        return new OperatorReceipt(written, status, id);
     }
 
     internal static OperatorReceipt CompleteReaffirmation(
