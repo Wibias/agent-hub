@@ -227,7 +227,7 @@ public sealed partial class ProtectedPendingReviewLedger
     /// protected LOCAL enrollment, NOT hardware attestation or Claim consent.
     /// Never upgrade any existing user/agent-pinned unverified key.
     /// </summary>
-    internal ProtectedOperatorCredential RecordNativeUvEnrollment(
+    public ProtectedOperatorCredential RecordNativeUvEnrollment(
         ReviewMeaning meaning, PinnedCredential key, VerificationResult proof)
     {
         EnsureOpen();
