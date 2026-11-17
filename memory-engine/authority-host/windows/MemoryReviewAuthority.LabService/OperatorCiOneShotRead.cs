@@ -145,6 +145,7 @@ internal sealed partial class OperatorWebAuthnPipe
                 revision_sha=claim.RevisionSha,proposal_ref=claim.ProposalRef,
                 fact_sha256=claim.FactSha256,result_set_sha256=meaning.ResultSetSha256,
                 recipient_session_sha256=active.Recipient.SessionSha256,
+                recipient_client_nonce=active.Recipient.ClientNonce,
                 recipient_kernel_pid=active.Recipient.KernelProcessId,
                 value=claim.Value,
                 provenance=claim.Provenance,
