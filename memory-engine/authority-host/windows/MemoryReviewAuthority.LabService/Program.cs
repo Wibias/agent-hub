@@ -57,6 +57,7 @@ internal sealed class ReviewAuthorityLabService : ServiceBase
     private SignedOperatorDirectReadCiPipe? _privateReadCiPipe;
     private SignedOperatorDirectReadCiPipe? _userReadCiPipe;
     private OperatorWebAuthnPipe? _operatorProofPipe;
+    private OneShotCiRecipientPipe? _oneShotCiRecipient;
 
     internal ReviewAuthorityLabService()
     {
@@ -129,7 +130,15 @@ internal sealed class ReviewAuthorityLabService : ServiceBase
         // enrollment handshake can then create a separately UV-verified
         // credential. Neither enrollment nor proof is Claim authorization.
         // The existing read-only Codex pipe remains unchanged.
-        _operatorProofPipe = new OperatorWebAuthnPipe(_ledger, stateDir);
+        // Explicit disposable SCM test marker only. An installed No-Write
+        // Preview never creates this marker or exposes a private delivery pipe.
+        if (OneShotCiRecipientPipe.Enabled(stateDir))
+        {
+            _oneShotCiRecipient = new OneShotCiRecipientPipe();
+            _oneShotCiRecipient.Start();
+        }
+        _operatorProofPipe = new OperatorWebAuthnPipe(
+            _ledger, stateDir, _oneShotCiRecipient);
         _operatorProofPipe.Start();
         // Independent CI-only signed private Claim reader. No arbitrary
         // real repo and no nonadmin Codex read: protected SID + scoped
@@ -165,6 +174,8 @@ internal sealed class ReviewAuthorityLabService : ServiceBase
         _privateReadCiPipe = null;
         _operatorProofPipe?.Dispose();
         _operatorProofPipe = null;
+        _oneShotCiRecipient?.Dispose();
+        _oneShotCiRecipient = null;
         _readPipe?.Dispose();
         _readPipe = null;
         _ledger?.Dispose();
