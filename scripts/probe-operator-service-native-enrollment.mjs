@@ -92,7 +92,8 @@ async function send(op, fields) {
   const p=JSON.parse(data.toString('utf8'));
   if(p.protocol!==protocol || p.op!==op || p.nonce!==nonce
     || p.service_signed!==true || p.human_approval_verified!==false
-    || p.claim_written!==false)
+    || (op!=='publish_complete' && p.claim_written!==false)
+    || (op==='publish_complete' && p.claim_written!==p.signature_verified))
     throw new Error('enrollment_reply_spoofed_authority');
   return p;
 }
@@ -221,10 +222,40 @@ async function run(){
     || affirmed.claim_written!==false)
     throw new Error('synthetic_reaffirmation_intent_not_recorded');
 
+  // New independent UV purpose for a protected direct Claim.
+  // The synthetic software key is not human consent or source validation.
+  const publish=await send('publish_begin',scope);
+  if(publish.status!=='operator_direct_claim_publication_challenge'
+    || publish.confirmation_scope!=='publish_new_user_direct_memory_claim'
+    || publish.provenance!=='user_direct_reaffirmed_and_published_v1'
+    || publish.meaning?.canonicalFact!==fact
+    || publish.meaning.canonicalFactSha256!==started.meaning.canonicalFactSha256
+    || publish.source_origin!=='operator_pinned_unverified_evidence_v1'
+    || publish.published_to_codex!==false
+    || publish.original_evidence_verified!==false
+    || publish.claim_written!==false)
+    throw new Error('synthetic_claim_commit_challenge_invalid');
+  const published=await send('publish_complete',{
+    ticketId:publish.ticket_id,
+    assertion:proofAssertion(key,publish,4),
+  });
+  if(published.status!=='protected_user_direct_claim_committed_not_published_to_codex'
+    || published.signature_verified!==true
+    || published.claim_written!==true
+    || published.provenance!=='user_direct_reaffirmed_and_published_v1'
+    || !/^C~[a-f0-9]{24}$/.test(published.claim_id)
+    || published.original_evidence_verified!==false
+    || published.published_to_codex!==false
+    || published.human_approval_verified!==false)
+    throw new Error('synthetic_direct_claim_not_committed');
+
   process.stdout.write(JSON.stringify({
     status:'synthetic_native_enrollment_bridge_pass_not_human',
     source_kind:'knowledge',
     purpose_bound_reaffirmation_intent_recorded:true,
+    separate_purpose_bound_claim_commit:true,
+    private_direct_claim_committed:true,
+    published_to_codex:false,
     historical_evidence_verified:false,
     original_fact_service_signed:true,
     independent_create_and_get_challenges:true,
