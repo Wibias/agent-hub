@@ -49,8 +49,9 @@ internal static class Program
         for (int i = 0; i < 2; i++)
         {
             using var pipe = new NamedPipeServerStream(pipeName,
-                PipeDirection.InOut,1,PipeTransmissionMode.Byte,PipeOptions.None);
-            pipe.WaitForConnection();
+                PipeDirection.InOut,1,PipeTransmissionMode.Byte,PipeOptions.Asynchronous);
+            using var connectDeadline = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+            pipe.WaitForConnectionAsync(connectDeadline.Token).GetAwaiter().GetResult();
             using var reader = new StreamReader(pipe,Encoding.UTF8,
                 detectEncodingFromByteOrderMarks:false,leaveOpen:true);
             var line = reader.ReadLine();
