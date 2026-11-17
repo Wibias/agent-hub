@@ -7,7 +7,7 @@ export const DIRECT_CI_PIPE = '\\\\.\\pipe\\AgentHubMemoryReviewLab-DirectReadCi
 export const DIRECT_CI_PROTOCOL = 'agenthub-protected-direct-read-ci-v1';
 export const DIRECT_CI_PROJECT = 'github.com/example/operator-evidence';
 export const DIRECT_CI_BRANCH = 'main';
-export const DIRECT_CI_REVISION = 'b'.repeat(40);
+export const DIRECT_CI_REVISION_FORMAT = /^[0-9a-f]{40}$/u;
 
 const NONCE = /^[A-Za-z0-9_-]{43}$/u;
 const SID = /^S-1-5-21-(?:[0-9]+-){2,}[0-9]+$/u;
@@ -31,7 +31,7 @@ export function verifySignedDirectCiEnvelope({
   const deny = () => { throw new Error('direct_ci_read_unverified'); };
   if (!NONCE.test(expectedNonce ?? '') || !SID.test(expectedSid ?? '')
     || projectId !== DIRECT_CI_PROJECT || branch !== DIRECT_CI_BRANCH
-    || revisionSha !== DIRECT_CI_REVISION
+    || !DIRECT_CI_REVISION_FORMAT.test(revisionSha ?? '')
     || typeof query !== 'string' || query.length < 1 || query.length > 500
     || !Number.isInteger(maxItems) || maxItems < 1 || maxItems > 3
     || typeof pinnedPublicKeyPem !== 'string'
@@ -103,7 +103,7 @@ export function verifySignedDirectCiEnvelope({
 /** CI-only physical LocalService pipe transport; no MCP/tool exposure. */
 export async function requestSignedDirectCi({
   pinPath, expectedSid, projectId = DIRECT_CI_PROJECT,
-  branch = DIRECT_CI_BRANCH, revisionSha = DIRECT_CI_REVISION,
+  branch = DIRECT_CI_BRANCH, revisionSha,
   query, maxItems = 3, timeoutMs = 3000,
 } = {}) {
   if (process.platform !== 'win32'
@@ -113,7 +113,7 @@ export async function requestSignedDirectCi({
   if (typeof pinPath !== 'string' || !isAbsolute(pinPath)
     || !SID.test(expectedSid ?? '')
     || projectId !== DIRECT_CI_PROJECT || branch !== DIRECT_CI_BRANCH
-    || revisionSha !== DIRECT_CI_REVISION
+    || !DIRECT_CI_REVISION_FORMAT.test(revisionSha ?? '')
     || typeof query !== 'string' || query.length < 1 || query.length > 500
     || !Number.isInteger(maxItems) || maxItems < 1 || maxItems > 3
     || !Number.isInteger(timeoutMs) || timeoutMs < 100 || timeoutMs > 5000)
