@@ -14,7 +14,8 @@ namespace MemoryReviewAuthority.LabService;
 /// An ADMINISTRATOR-ACL-only bridge from one REAL protected E~ pending source
 /// to the existing WebAuthn verification engine and persistent operator key.
 /// All replies are signed by the same service-owned key as memory_recall.
-/// This bridge has NO approval, Claim or source-registration operation.
+/// Enrollment writes only the service-owned local credential pin after
+/// two independent service challenges; it cannot grant Claim consent.
 /// Disposable GitHub SCM lab host ONLY, not a production-installed API.
 /// </summary>
 internal sealed class OperatorWebAuthnPipe : IDisposable
@@ -22,7 +23,20 @@ internal sealed class OperatorWebAuthnPipe : IDisposable
     internal const string PipeName = "AgentHubMemoryReviewLab-OperatorV1";
     internal const string Protocol = "agenthub-operator-uv-service-v1";
     private readonly ProtectedPendingReviewLedger _ledger;
-    private readonly VerifiedReviewCoordinator _coordinator;
+    private VerifiedReviewCoordinator? _coordinator;
+    private readonly ReviewChallengeCore _registrationProofCore = new();
+    private RegistrationAttempt? _registration;
+    private RegistrationPossession? _registrationPossession;
+
+    private sealed record RegistrationAttempt(
+        string TicketId, string Challenge, string UserId,
+        DateTimeOffset ExpiresUtc, string RequestId, ReviewMeaning Meaning);
+    private sealed record RegistrationPossession(
+        ChallengeTicket Ticket, PinnedCredential Credential, string RequestId);
+
+    private static string B64(ReadOnlySpan<byte> bytes)
+        => Convert.ToBase64String(bytes).TrimEnd('=')
+            .Replace('+', '-').Replace('/', '_');
     private readonly ECDsa _signer;
     private readonly CancellationTokenSource _stop = new();
     private Task? _loop;
@@ -31,7 +45,8 @@ internal sealed class OperatorWebAuthnPipe : IDisposable
     internal OperatorWebAuthnPipe(ProtectedPendingReviewLedger ledger, string stateDir)
     {
         _ledger = ledger ?? throw new ArgumentNullException(nameof(ledger));
-        _coordinator = VerifiedReviewCoordinator.ForOperatorCredentialProbe(ledger);
+        if (_ledger.ReadOperatorCredential() is not null)
+            _coordinator = VerifiedReviewCoordinator.ForOperatorCredentialProbe(ledger);
         var privatePath = Path.Combine(stateDir, "review-service-signing-key.pk8");
         var publicPath = Path.Combine(stateDir, "review-service-signing-key.pub.pem");
         var bytes = File.ReadAllBytes(privatePath);
@@ -136,6 +151,27 @@ internal sealed class OperatorWebAuthnPipe : IDisposable
         catch (FormatException) { return false; }
     }
 
+    private static object SignedMeaning(ReviewMeaning meaning) => new
+    {
+        projectId = meaning.ProjectId,
+        branch = meaning.Branch,
+        revisionSha = meaning.RevisionSha,
+        proposalRef = meaning.ProposalRef,
+        reviewSnapshotSha256 = meaning.ReviewSnapshotSha256,
+        canonicalFactSha256 = meaning.CanonicalFactSha256,
+        decision = meaning.Decision,
+        canonicalFact = meaning.CanonicalFact,
+    };
+
+    private static bool ExactKeys(JsonElement root, params string[] keys)
+    {
+        if (root.ValueKind != JsonValueKind.Object) return false;
+        var given = root.EnumerateObject().Select(x => x.Name).ToArray();
+        return given.Length == keys.Length
+            && given.Distinct(StringComparer.Ordinal).Count() == given.Length
+            && given.ToHashSet(StringComparer.Ordinal).SetEquals(keys);
+    }
+
     private async Task HandleAsync(Stream stream, CancellationToken stop)
     {
         var raw = await ReadOneLineAsync(stream, stop);
@@ -151,7 +187,9 @@ internal sealed class OperatorWebAuthnPipe : IDisposable
         object? response = null;
         lock (_ledger)
         {
-            if (operation == "begin" && root.EnumerateObject().Count() == 6)
+            if (operation == "begin" && ExactKeys(root,
+                "protocol", "op", "nonce", "projectId", "branch", "proposalRef")
+                && _coordinator is not null)
             {
                 var project = Str(root, "projectId");
                 var branch = Str(root, "branch");
@@ -187,22 +225,14 @@ internal sealed class OperatorWebAuthnPipe : IDisposable
                             kind = offer.Kind,
                             source_origin = offer.SourceOrigin,
                             evidence_sha256 = offer.SourceEvidenceSha256,
-                            meaning = new
-                            {
-                                projectId = meaning.ProjectId,
-                                branch = meaning.Branch,
-                                revisionSha = meaning.RevisionSha,
-                                proposalRef = meaning.ProposalRef,
-                                reviewSnapshotSha256 = meaning.ReviewSnapshotSha256,
-                                canonicalFactSha256 = meaning.CanonicalFactSha256,
-                                decision = meaning.Decision,
-                                canonicalFact = meaning.CanonicalFact,
-                            },
+                            meaning = SignedMeaning(meaning),
                         };
                     }
                 }
             }
-            else if (operation == "complete" && root.EnumerateObject().Count() == 5)
+            else if (operation == "complete" && ExactKeys(root,
+                "protocol", "op", "nonce", "ticketId", "assertion")
+                && _coordinator is not null)
             {
                 var ticketId = Str(root, "ticketId");
                 // Single-use even on malformed assertion, regardless of the
@@ -234,6 +264,135 @@ internal sealed class OperatorWebAuthnPipe : IDisposable
                             ? _ledger.ReadOperatorReviewOffer(
                                 pending.Meaning.ProjectId, pending.Meaning.Branch,
                                 pending.Meaning.ProposalRef)?.RequestId : null,
+                    };
+                }
+            }
+            else if (operation == "enroll_begin" && ExactKeys(root,
+                "protocol", "op", "nonce", "projectId", "branch", "proposalRef"))
+            {
+                // Enrollment never trusts a model-provided fact or key. Source
+                // and action come exclusively from the service-owned ledger.
+                var project = Str(root, "projectId");
+                var branch = Str(root, "branch");
+                var proposal = Str(root, "proposalRef");
+                if (_ledger.ReadOperatorCredential() is null
+                    && project is { Length: > 0 and <= 256 }
+                    && branch is { Length: > 0 and <= 128 }
+                    && Regex.IsMatch(proposal ?? "", @"\AE~[0-9a-f]{10}\z")
+                    && (_registration is null
+                        || _registration.ExpiresUtc <= DateTimeOffset.UtcNow)
+                    && _registrationPossession is null)
+                {
+                    var offer = _ledger.ReadOperatorReviewOffer(project, branch, proposal!);
+                    if (offer is not null)
+                    {
+                        var started = DateTimeOffset.UtcNow;
+                        var request = new RegistrationAttempt(
+                            B64(RandomNumberGenerator.GetBytes(24)),
+                            B64(RandomNumberGenerator.GetBytes(32)),
+                            B64(RandomNumberGenerator.GetBytes(32)),
+                            started.AddSeconds(90), offer.RequestId, offer.Meaning);
+                        _registration = request;
+                        response = new
+                        {
+                            protocol = Protocol, op = operation, nonce,
+                            status = "operator_native_registration_challenge_unapproved",
+                            service_signed = true, human_approval_verified = false,
+                            claim_written = false, request_id = offer.RequestId,
+                            ticket_id = request.TicketId,
+                            challenge = request.Challenge,
+                            user_id = request.UserId,
+                            expected_origin = NativeWebAuthnEnrollment.Origin,
+                            expires_utc = request.ExpiresUtc.ToString("O"),
+                            kind = offer.Kind,
+                            source_origin = offer.SourceOrigin,
+                            evidence_sha256 = offer.SourceEvidenceSha256,
+                            meaning = SignedMeaning(offer.Meaning),
+                        };
+                    }
+                }
+            }
+            else if (operation == "enroll_key" && ExactKeys(root,
+                "protocol", "op", "nonce", "ticketId", "clientDataJSON",
+                "authenticatorData", "credentialId"))
+            {
+                var attempt = _registration;
+                _registration = null; // consume even on malformed attestation
+                if (attempt is not null
+                    && Str(root, "ticketId") == attempt.TicketId
+                    && attempt.ExpiresUtc > DateTimeOffset.UtcNow
+                    && _ledger.ReadOperatorCredential() is null)
+                {
+                    var current = _ledger.ReadOperatorReviewOffer(
+                        attempt.Meaning.ProjectId, attempt.Meaning.Branch,
+                        attempt.Meaning.ProposalRef);
+                    if (current is not null && current.RequestId == attempt.RequestId
+                        && current.Meaning == attempt.Meaning)
+                    {
+                        var candidate = NativeWebAuthnEnrollment.ParseUnverifiedRegistration(
+                            Str(root, "clientDataJSON"),
+                            Str(root, "authenticatorData"),
+                            Str(root, "credentialId"), attempt.Challenge);
+                        var ticket = _registrationProofCore.Begin(attempt.Meaning, candidate);
+                        _registrationPossession = new RegistrationPossession(
+                            ticket, candidate, attempt.RequestId);
+                        response = new
+                        {
+                            protocol = Protocol, op = operation, nonce,
+                            status = "operator_native_possession_challenge_unapproved",
+                            service_signed = true, human_approval_verified = false,
+                            claim_written = false,
+                            request_id = current.RequestId,
+                            ticket_id = ticket.TicketId,
+                            challenge = ticket.ChallengeBase64Url,
+                            expires_utc = ticket.ExpiresUtc.ToString("O"),
+                            credential_id = candidate.CredentialIdBase64Url,
+                            expected_origin = candidate.ExpectedOrigin,
+                            kind = current.Kind,
+                            source_origin = current.SourceOrigin,
+                            evidence_sha256 = current.SourceEvidenceSha256,
+                            meaning = SignedMeaning(ticket.Meaning),
+                        };
+                    }
+                }
+            }
+            else if (operation == "enroll_finish" && ExactKeys(root,
+                "protocol", "op", "nonce", "ticketId", "assertion"))
+            {
+                var candidate = _registrationPossession;
+                _registrationPossession = null; // single-use, also on bad proof
+                if (candidate is not null
+                    && Str(root, "ticketId") == candidate.Ticket.TicketId
+                    && root.TryGetProperty("assertion", out var assertion)
+                    && ExactKeys(assertion, "credentialId", "type",
+                        "clientDataJSON", "authenticatorData", "signature"))
+                {
+                    var item = new BrowserAssertion(
+                        Str(assertion, "credentialId") ?? "",
+                        Str(assertion, "type") ?? "",
+                        Str(assertion, "clientDataJSON") ?? "",
+                        Str(assertion, "authenticatorData") ?? "",
+                        Str(assertion, "signature") ?? "");
+                    var proof = _registrationProofCore.VerifyAndConsume(
+                        candidate.Ticket.TicketId, candidate.Ticket.Meaning, item);
+                    var saved = proof.Verified && proof.UserPresent && proof.UserVerified
+                        ? _ledger.RecordNativeUvEnrollment(candidate.Ticket.Meaning,
+                            candidate.Credential, proof)
+                        : null;
+                    if (saved is not null)
+                        _coordinator = VerifiedReviewCoordinator.ForOperatorCredentialProbe(
+                            _ledger);
+                    response = new
+                    {
+                        protocol = Protocol, op = operation, nonce,
+                        status = saved is not null
+                            ? "operator_native_uv_enrolled_unapproved"
+                            : proof.Status,
+                        signature_verified = saved is not null,
+                        service_signed = true, human_approval_verified = false,
+                        claim_written = false,
+                        enrollment_state = saved?.EnrollmentState,
+                        request_id = saved is not null ? candidate.RequestId : null,
                     };
                 }
             }
