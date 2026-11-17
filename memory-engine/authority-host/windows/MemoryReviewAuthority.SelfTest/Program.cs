@@ -24,6 +24,10 @@ internal static class Program
         Run("valid_uv_assertion_is_not_claim_authority", ValidAssertion);
         Run("protected_approval_challenge_is_domain_separated_one_use_no_claim", ApprovalDomainSeparation);
         Run("protected_claim_commit_challenge_separate_one_use_no_authority", ClaimCommitPurpose);
+        Run("read_disclosure_exact_scope_and_purpose_challenge", ReadDisclosureDomainBinding);
+        Run("read_disclosure_wrong_scope_consumes_no_permission", ReadDisclosureWrongScope);
+        Run("read_disclosure_native_uv_one_time_not_authority", ReadDisclosureVerifiedOneUse);
+        Run("read_disclosure_rejects_counter_replay_missing_uv_and_expiry", ReadDisclosureDenials);
         Run("reject_missing_user_presence_and_verification", MissingUserVerification);
         Run("reject_wrong_signature_and_credential", WrongSignature);
         Run("reject_wrong_rp_and_origin", WrongOrigin);
@@ -39,7 +43,7 @@ internal static class Program
         Run("reject_invalid_fact_and_nonlocal_origin", InvalidInputs);
         Run("native_registration_parses_only_es256_not_approval", NativeRegistrationParse);
         Run("native_registration_denies_tampering_and_missing_uv", NativeRegistrationDeny);
-        Console.WriteLine($"MEMORY_AUTHORITY_CORE PASS {_passed}/19; NO_SERVICE NO_DB_WRITE NO_AUTHORIZATION");
+        Console.WriteLine($"MEMORY_AUTHORITY_CORE PASS {_passed}/23; NO_SERVICE NO_DB_WRITE NO_AUTHORIZATION");
     }
 
     private static void Run(string name, Action test)
@@ -146,6 +150,110 @@ internal static class Program
         Check(!verified.ApprovedReviewDecision && !verified.ClaimWritten);
         Check(!core.VerifyProtectedClaimCommitAndConsume(
             fresh.TicketId, Meaning, key.Sign(fresh, counter: 4)).Verified);
+    }
+
+
+    private static readonly ReadDisclosureMeaning ReadMeaning = new(
+        "github.com/wibias/agent-hub", "main", new string('a',40),
+        "S-1-5-21-111-222-333-1001",new string('d',48),
+        new string('b',64),new string('c',64),new string('e',64));
+
+    private static ChallengeTicket AsSignedChallenge(ReadDisclosureTicket ticket)
+        => new(ticket.TicketId,ticket.ChallengeBase64Url,ticket.ExpiresUtc,Meaning);
+
+    private static void ReadDisclosureDomainBinding()
+    {
+        var nonce=Enumerable.Range(0,32).Select(i=>(byte)i).ToArray();
+        var exact=ReviewChallengeCore.ComputeProtectedReadDisclosureChallenge(
+            ReadMeaning,nonce);
+        Check(exact.Length==43);
+        var changes=new []
+        {
+            ReadMeaning with {ProjectId="github.com/other/repo"},
+            ReadMeaning with {Branch="release"},
+            ReadMeaning with {RevisionSha=new string('f',40)},
+            ReadMeaning with {PrincipalSid="S-1-5-21-111-222-333-1002"},
+            ReadMeaning with {RequestId=new string('e',48)},
+            ReadMeaning with {QuerySha256=new string('f',64)},
+            ReadMeaning with {ResultSetSha256=new string('f',64)},
+            ReadMeaning with {RecipientSessionSha256=new string('f',64)},
+        };
+        foreach(var changed in changes)
+            Check(ReviewChallengeCore.ComputeProtectedReadDisclosureChallenge(
+                changed,nonce)!=exact);
+        Check(exact!=ReviewChallengeCore.ComputeChallenge(Meaning,nonce));
+        Check(exact!=ReviewChallengeCore.ComputeProtectedApprovalChallenge(Meaning,nonce));
+        Check(exact!=ReviewChallengeCore.ComputeProtectedClaimCommitChallenge(Meaning,nonce));
+        Throws<ArgumentException>(()=>ReviewChallengeCore.ComputeProtectedReadDisclosureChallenge(
+            ReadMeaning with {Branch="main/../evil"},nonce));
+        Throws<ArgumentException>(()=>ReviewChallengeCore.ComputeProtectedReadDisclosureChallenge(
+            ReadMeaning with {PrincipalSid="S-1-5-32-544"},nonce));
+        Throws<ArgumentException>(()=>ReviewChallengeCore.ComputeProtectedReadDisclosureChallenge(
+            ReadMeaning with {RecipientSessionSha256="not-attested"},nonce));
+        Throws<ArgumentOutOfRangeException>(()=>
+            ReviewChallengeCore.ComputeProtectedReadDisclosureChallenge(ReadMeaning,new byte[4]));
+    }
+
+    private static void ReadDisclosureWrongScope()
+    {
+        using var key=TestCredential.New();
+        var core=new ReviewChallengeCore();
+        var ticket=core.BeginProtectedReadDisclosure(ReadMeaning,key.Pinned);
+        var signed=key.Sign(AsSignedChallenge(ticket));
+        Check(!core.VerifyAndConsume(ticket.TicketId,Meaning,signed).Verified);
+        var denied=core.VerifyProtectedReadDisclosureAndConsume(ticket.TicketId,
+            ReadMeaning with {QuerySha256=new string('f',64)},signed);
+        Check(!denied.Verified && denied.Status=="read_disclosure_scope_changed");
+        Check(!core.VerifyProtectedReadDisclosureAndConsume(ticket.TicketId,
+            ReadMeaning,signed).Verified);
+    }
+
+    private static void ReadDisclosureVerifiedOneUse()
+    {
+        using var key=TestCredential.New();
+        var core=new ReviewChallengeCore();
+        var ticket=core.BeginProtectedReadDisclosure(ReadMeaning,key.Pinned);
+        var verified=core.VerifyProtectedReadDisclosureAndConsume(ticket.TicketId,
+            ReadMeaning,key.Sign(AsSignedChallenge(ticket),counter:7));
+        Check(verified.Verified && verified.UserPresent && verified.UserVerified);
+        Check(verified.Status=="verified_read_disclosure_intent_only"
+            && !verified.ApprovedReviewDecision && !verified.ClaimWritten);
+        Check(!core.VerifyProtectedReadDisclosureAndConsume(ticket.TicketId,
+            ReadMeaning,key.Sign(AsSignedChallenge(ticket),counter:8)).Verified);
+        var old=core.BeginProtectedClaimCommit(Meaning,key.Pinned);
+        var oldSigned=key.Sign(old,counter:8);
+        Check(!core.VerifyProtectedReadDisclosureAndConsume(old.TicketId,
+            ReadMeaning,oldSigned).Verified);
+        // A read assertion can never finalize a protected Claim purpose.
+        Check(core.VerifyProtectedClaimCommitAndConsume(old.TicketId,Meaning,
+            oldSigned).Verified);
+    }
+
+    private static void ReadDisclosureDenials()
+    {
+        using var key=TestCredential.New();
+        var core=new ReviewChallengeCore();
+        var noUv=core.BeginProtectedReadDisclosure(ReadMeaning,key.Pinned);
+        Check(!core.VerifyProtectedReadDisclosureAndConsume(noUv.TicketId,
+            ReadMeaning,key.Sign(AsSignedChallenge(noUv),flags:0x01)).Verified);
+        Check(!core.VerifyProtectedReadDisclosureAndConsume(noUv.TicketId,
+            ReadMeaning,key.Sign(AsSignedChallenge(noUv))).Verified);
+        var first=core.BeginProtectedReadDisclosure(ReadMeaning,key.Pinned);
+        Check(core.VerifyProtectedReadDisclosureAndConsume(first.TicketId,
+            ReadMeaning,key.Sign(AsSignedChallenge(first),counter:10)).Verified);
+        var sameCounter=core.BeginProtectedReadDisclosure(ReadMeaning,key.Pinned);
+        var result=core.VerifyProtectedReadDisclosureAndConsume(sameCounter.TicketId,
+            ReadMeaning,key.Sign(AsSignedChallenge(sameCounter),counter:10));
+        Check(!result.Verified && result.Status=="sign_counter_replay");
+        var clock=new FakeClock();
+        var expiring=new ReviewChallengeCore(clock);
+        var exp=expiring.BeginProtectedReadDisclosure(ReadMeaning,key.Pinned);
+        clock.Advance(ReviewChallengeCore.Lifetime);
+        Check(expiring.VerifyProtectedReadDisclosureAndConsume(exp.TicketId,
+            ReadMeaning,key.Sign(AsSignedChallenge(exp),counter:11)).Status
+            =="read_disclosure_expired");
+        Check(!expiring.VerifyProtectedReadDisclosureAndConsume(exp.TicketId,
+            ReadMeaning,key.Sign(AsSignedChallenge(exp),counter:12)).Verified);
     }
 
     private static void ValidAssertion()
