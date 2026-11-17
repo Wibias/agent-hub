@@ -516,7 +516,14 @@ internal static class ProtectedOperatorService
                 signature = assertion.Signature,
             },
         });
-        var result = verified.RootElement;
+        return ParseReaffirmationReceipt(verified.RootElement);
+    }
+
+    internal static OperatorReceipt ParseReaffirmationReceipt(JsonElement result)
+    {
+        if (result.GetProperty("human_approval_verified").GetBoolean()
+            || result.GetProperty("claim_written").GetBoolean())
+            throw new InvalidOperationException("Unzulässige Claim-Freigabe");
         var success = result.GetProperty("signature_verified").GetBoolean();
         var recorded = result.GetProperty("reaffirmation_intent_recorded").GetBoolean();
         var originalVerified = result.GetProperty("original_evidence_verified").GetBoolean();
