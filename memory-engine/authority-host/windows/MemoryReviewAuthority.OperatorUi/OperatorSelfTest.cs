@@ -209,6 +209,52 @@ internal static class OperatorSelfTest
             });
             if (denied != 3)
                 throw new Exception("operator_envelope_negative_cases_missing");
+
+            // A signed, purpose-bound response is STILL never a Claim and
+            // never validates the historical user-writable evidence.
+            var affirmative = new
+            {
+                status = "operator_reaffirmation_intent_recorded_no_claim",
+                signature_verified = true,
+                reaffirmation_intent_recorded = true,
+                original_evidence_verified = false,
+                human_approval_verified = false,
+                claim_written = false,
+            };
+            using (var approved = JsonDocument.Parse(JsonSerializer.Serialize(affirmative)))
+            {
+                var receipt = ProtectedOperatorService.ParseReaffirmationReceipt(
+                    approved.RootElement);
+                if (!receipt.Verified
+                    || receipt.Status != "operator_reaffirmation_intent_recorded_no_claim")
+                    throw new Exception("operator_reaffirmation_intent_receipt_invalid");
+            }
+            foreach (var bad in new[]
+            {
+                new { affirmative.status, affirmative.signature_verified,
+                    affirmative.reaffirmation_intent_recorded,
+                    original_evidence_verified = true,
+                    affirmative.human_approval_verified, affirmative.claim_written },
+                new { affirmative.status, affirmative.signature_verified,
+                    affirmative.reaffirmation_intent_recorded,
+                    original_evidence_verified = false,
+                    human_approval_verified = true, affirmative.claim_written },
+                new { affirmative.status, affirmative.signature_verified,
+                    affirmative.reaffirmation_intent_recorded,
+                    original_evidence_verified = false,
+                    affirmative.human_approval_verified, claim_written = true },
+                new { affirmative.status, signature_verified = false,
+                    affirmative.reaffirmation_intent_recorded,
+                    affirmative.original_evidence_verified,
+                    affirmative.human_approval_verified, affirmative.claim_written },
+            })
+            {
+                using var badDoc = JsonDocument.Parse(JsonSerializer.Serialize(bad));
+                MustDeny(() => { _ = ProtectedOperatorService.ParseReaffirmationReceipt(
+                    badDoc.RootElement); });
+            }
+            if (denied != 7)
+                throw new Exception("operator_reaffirmation_receipt_negative_cases_missing");
             foreach (var kind in new[] { "knowledge", "preference", "procedure" })
                 if (!ProtectedOperatorService.ValidReviewKind(kind))
                     throw new Exception("native_supported_source_kind_rejected");
