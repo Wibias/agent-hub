@@ -64,10 +64,12 @@ internal sealed partial class OperatorWebAuthnPipe : IDisposable
     private Task? _loop;
     private ChallengeTicket? _active;
 
-    internal OperatorWebAuthnPipe(ProtectedPendingReviewLedger ledger, string stateDir)
+    internal OperatorWebAuthnPipe(ProtectedPendingReviewLedger ledger, string stateDir,
+        OneShotCiRecipientPipe? ciRecipient = null)
     {
         _ledger = ledger ?? throw new ArgumentNullException(nameof(ledger));
         _stateDir = stateDir;
+        _ciRecipient = ciRecipient;
         var operatorCredential = _ledger.ReadOperatorCredential();
         if (operatorCredential is not null)
             _coordinator = VerifiedReviewCoordinator.ForOperatorCredentialProbe(ledger);
@@ -217,7 +219,15 @@ internal sealed partial class OperatorWebAuthnPipe : IDisposable
         object? response = null;
         lock (_ledger)
         {
-            if (operation == "read_begin")
+            if (operation == "ci_read_begin")
+            {
+                response = BeginCiOneShotRead(root, nonce);
+            }
+            else if (operation == "ci_read_complete")
+            {
+                response = CompleteCiOneShotRead(root, nonce);
+            }
+            else if (operation == "read_begin")
             {
                 response = BeginReadDisclosure(root, nonce,
                     stream as NamedPipeServerStream);
