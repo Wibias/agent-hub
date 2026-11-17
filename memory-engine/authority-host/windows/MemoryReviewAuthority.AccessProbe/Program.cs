@@ -166,7 +166,7 @@ internal static class Program
         var line = reader.ReadLine();
         Require(line is { Length: >= 200 and <= 49152 },
             "enrolled_user_ci_read_missing_response");
-        using var envelope = JsonDocument.Parse(line);
+        using var envelope = JsonDocument.Parse(line!);
         var outer = envelope.RootElement;
         Require(outer.GetProperty("protocol").GetString() == protocol,
             "signed_user_ci_wrong_protocol");
