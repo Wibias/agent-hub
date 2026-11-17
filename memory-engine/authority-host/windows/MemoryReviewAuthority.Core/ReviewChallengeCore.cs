@@ -63,6 +63,10 @@ public sealed record VerificationResult(
 public sealed class ReviewChallengeCore
 {
     public const string Protocol = "agenthub-evidence-bound-uv-v1";
+    // A separate challenge domain: ordinary possession proofs cannot be
+    // replayed as protected approval consent, even for the identical fact.
+    public const string ProtectedApprovalProtocol = "agenthub-evidence-bound-uv-approve-v1";
+    private enum ChallengePurpose { Proof, ProtectedApproval }
     public const int MaxPending = 32;
     public static readonly TimeSpan Lifetime = TimeSpan.FromSeconds(90);
 
@@ -76,7 +80,8 @@ public sealed class ReviewChallengeCore
         PinnedCredential Credential,
         string Challenge,
         long StartedTick,
-        DateTimeOffset ExpiresUtc);
+        DateTimeOffset ExpiresUtc,
+        ChallengePurpose Purpose);
 
     public ReviewChallengeCore(TimeProvider? clock = null)
     {
@@ -84,11 +89,23 @@ public sealed class ReviewChallengeCore
     }
 
     public ChallengeTicket Begin(ReviewMeaning meaning, PinnedCredential credential)
+        => BeginForPurpose(meaning, credential, ChallengePurpose.Proof);
+
+    // OFFLINE CRYPTO ONLY. This verifies a distinct approval-intent gesture,
+    // but is NOT a Claim permission, trusted source or service write endpoint.
+    public ChallengeTicket BeginProtectedApproval(
+        ReviewMeaning meaning, PinnedCredential credential)
+        => BeginForPurpose(meaning, credential, ChallengePurpose.ProtectedApproval);
+
+    private ChallengeTicket BeginForPurpose(
+        ReviewMeaning meaning, PinnedCredential credential, ChallengePurpose purpose)
     {
         ValidateMeaning(meaning);
         ValidateCredential(credential);
         var nonce = RandomNumberGenerator.GetBytes(32);
-        var challenge = ComputeChallenge(meaning, nonce);
+        var challenge = purpose == ChallengePurpose.ProtectedApproval
+            ? ComputeProtectedApprovalChallenge(meaning, nonce)
+            : ComputeChallenge(meaning, nonce);
         // Ticket ID and nonce are independently random. Neither is a portable
         // signature or any transferable Memory/Claim authorization.
         var id = Encode(RandomNumberGenerator.GetBytes(24));
@@ -101,7 +118,7 @@ public sealed class ReviewChallengeCore
                 throw new InvalidOperationException("review_challenge_already_pending");
             var now = _clock.GetUtcNow();
             _pending.Add(id, new Pending(
-                meaning, credential, challenge, _clock.GetTimestamp(), now.Add(Lifetime)));
+                meaning, credential, challenge, _clock.GetTimestamp(), now.Add(Lifetime), purpose));
             return new ChallengeTicket(id, challenge, now.Add(Lifetime), meaning);
         }
     }
@@ -113,6 +130,18 @@ public sealed class ReviewChallengeCore
     /// </summary>
     public VerificationResult VerifyAndConsume(
         string ticketId, ReviewMeaning expectedMeaning, BrowserAssertion assertion)
+        => VerifyForPurposeAndConsume(ticketId, expectedMeaning, assertion, ChallengePurpose.Proof);
+
+    // May only be used in a future host-owned atomic approval transaction.
+    // Success still returns ApprovedReviewDecision=false and ClaimWritten=false.
+    public VerificationResult VerifyProtectedApprovalAndConsume(
+        string ticketId, ReviewMeaning expectedMeaning, BrowserAssertion assertion)
+        => VerifyForPurposeAndConsume(ticketId, expectedMeaning, assertion,
+            ChallengePurpose.ProtectedApproval);
+
+    private VerificationResult VerifyForPurposeAndConsume(
+        string ticketId, ReviewMeaning expectedMeaning, BrowserAssertion assertion,
+        ChallengePurpose purpose)
     {
         if (string.IsNullOrWhiteSpace(ticketId) || expectedMeaning is null || assertion is null)
             return Denied("invalid_request");
@@ -126,6 +155,8 @@ public sealed class ReviewChallengeCore
         // This comparison deliberately includes fact text as well as hashes.
         if (pending is null || pending.Meaning != expectedMeaning)
             return Denied("meaning_changed");
+        if (pending.Purpose != purpose)
+            return Denied("challenge_purpose_mismatch");
         if (_clock.GetElapsedTime(pending.StartedTick) >= Lifetime
             || _clock.GetUtcNow() >= pending.ExpiresUtc)
             return Denied("ticket_expired");
@@ -216,13 +247,21 @@ public sealed class ReviewChallengeCore
     }
 
     public static string ComputeChallenge(ReviewMeaning meaning, ReadOnlySpan<byte> nonce)
+        => ComputeChallengeInDomain(meaning, nonce, Protocol);
+
+    public static string ComputeProtectedApprovalChallenge(
+        ReviewMeaning meaning, ReadOnlySpan<byte> nonce)
+        => ComputeChallengeInDomain(meaning, nonce, ProtectedApprovalProtocol);
+
+    private static string ComputeChallengeInDomain(
+        ReviewMeaning meaning, ReadOnlySpan<byte> nonce, string domain)
     {
         ValidateMeaning(meaning);
         if (nonce.Length < 32 || nonce.Length > 64)
             throw new ArgumentOutOfRangeException(nameof(nonce), "host nonce must be 32-64 bytes");
         var parts = new[]
         {
-            Protocol, meaning.ProjectId, meaning.Branch, meaning.RevisionSha,
+            domain, meaning.ProjectId, meaning.Branch, meaning.RevisionSha,
             meaning.ProposalRef, meaning.ReviewSnapshotSha256,
             meaning.CanonicalFactSha256, meaning.Decision,
         };
