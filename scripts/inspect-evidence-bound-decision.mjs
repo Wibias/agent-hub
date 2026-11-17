@@ -136,7 +136,8 @@ export function runEvidenceDecisionPreflight({
   ]);
   const context = gitResolve(input.repoPath);
   if (!context || context.projectId !== projectId
-      || typeof context.repoPath !== 'string') {
+      || (historicalSource !== null
+        && typeof context.repoPath !== 'string')) {
     throw new Error('current checkout project identity mismatch');
   }
   if (historicalSource === null) {
