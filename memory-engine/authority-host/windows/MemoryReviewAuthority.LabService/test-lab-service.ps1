@@ -398,6 +398,9 @@ try {
             -not $enroll.purpose_bound_reaffirmation_intent_recorded -or
             -not $enroll.separate_purpose_bound_claim_commit -or
             -not $enroll.private_direct_claim_committed -or
+            -not $enroll.protected_read_offer_exact_claim_and_query -or
+            -not $enroll.read_purpose_uv_one_use_only -or
+            $enroll.read_released -or
             $enroll.published_to_codex -or
             $enroll.historical_evidence_verified -or
             $enroll.hardware_attestation_verified -or
@@ -405,7 +408,21 @@ try {
             -not $enroll.production_no_go) {
             throw 'synthetic native enrollment incorrectly granted approval'
         }
-        Write-Host 'PASS: native two-purpose UV commits private direct Claim, historical evidence still unverified, no Codex publication'
+        Write-Host 'PASS: native claim commit then separate one-use read-preview UV, exact snapshot, no read release'
+        # Actual compiled WinForms client reads the exact protected Claim text
+        # from the running service and validates the administrator-owned pin.
+        # No physical Hello or Codex recipient is used by this headless mode.
+        $operatorUiProject = Join-Path $repoRoot 'memory-engine/authority-host/windows/MemoryReviewAuthority.OperatorUi/MemoryReviewAuthority.OperatorUi.csproj'
+        & dotnet run --project $operatorUiProject -c Release --runtime win-x64 --no-build --no-restore -- --read-preview-smoke
+        if ($LASTEXITCODE -ne 0) {
+            $readDiag = Join-Path $env:RUNNER_TEMP 'AgentHubNativeReadPreviewFailure.txt'
+            if (Test-Path -LiteralPath $readDiag -PathType Leaf) {
+                Write-Host ('Native read preview diagnosis: ' +
+                    (Get-Content -LiteralPath $readDiag -Raw))
+            }
+            throw 'native operator UI did not verify signed private Claim and recipient'
+        }
+        Write-Host 'PASS: native elevated operator UI independently verifies exact signed private Claim and recipient; NO Hello, NO Codex release'
         $reaffirmAudit = Join-Path $repoRoot 'scripts/verify-operator-reaffirmation-scm-state.mjs'
         $readbackOutput = & node $reaffirmAudit
         if ($LASTEXITCODE -ne 0) {
