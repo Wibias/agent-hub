@@ -39,6 +39,9 @@ internal sealed class SignedOperatorDirectReadCiPipe : IDisposable
     private readonly bool _userMode;
     private readonly string _pipeName;
     private readonly string _protocol;
+    private readonly string _policyPath;
+    private readonly byte[] _policySha256;
+    private bool _enrollmentRevoked;
     private readonly CancellationTokenSource _stop = new();
     private Task? _loop;
 
@@ -70,7 +73,8 @@ internal sealed class SignedOperatorDirectReadCiPipe : IDisposable
         if (!PolicyPresent(stateDir, userMode))
             throw new InvalidOperationException("direct_ci_read_not_enrolled");
         var path = Path.Combine(stateDir, userMode ? UserPolicyFile : PolicyFile);
-        using var doc = JsonDocument.Parse(File.ReadAllBytes(path));
+        var policyBytes = File.ReadAllBytes(path);
+        using var doc = JsonDocument.Parse(policyBytes);
         var root = doc.RootElement;
         if (root.ValueKind != JsonValueKind.Object
             || root.EnumerateObject().Count() != 5)
@@ -89,6 +93,11 @@ internal sealed class SignedOperatorDirectReadCiPipe : IDisposable
                 branch, FixtureBranch, revision, revision))
             throw new InvalidOperationException("direct_ci_policy_wrong_scope");
         _policy = new Policy(sid!, project!, branch!, revision!);
+        // A signed response must require this same protected enrollment
+        // to remain present, not merely have been valid at service start.
+        // Any observed revoke or replacement is latched until restart.
+        _policyPath = path;
+        _policySha256 = SHA256.HashData(policyBytes);
         _ledger = ledger ?? throw new ArgumentNullException(nameof(ledger));
 
         var privatePath = Path.Combine(stateDir, "review-service-signing-key.pk8");
@@ -112,6 +121,34 @@ internal sealed class SignedOperatorDirectReadCiPipe : IDisposable
         if (_loop is not null)
             throw new InvalidOperationException("direct_ci_read_pipe_started_twice");
         _loop = Task.Run(() => LoopAsync(_stop.Token));
+    }
+
+    // The single-connection service loop serializes calls. Fail closed if
+    // the protected administrator-enrolled policy is missing, replaced,
+    // malformed or changed. A revoked service instance cannot silently
+    // re-enable reads when someone recreates a file with the same bytes.
+    private bool EnrollmentStillActive()
+    {
+        if (_enrollmentRevoked) return false;
+        try
+        {
+            var file = new FileInfo(_policyPath);
+            if (!file.Exists || file.Length is < 100 or > 1024
+                || (file.Attributes & FileAttributes.ReparsePoint) != 0
+                || !CryptographicOperations.FixedTimeEquals(
+                    SHA256.HashData(File.ReadAllBytes(_policyPath)),
+                    _policySha256))
+            {
+                _enrollmentRevoked = true;
+                return false;
+            }
+            return true;
+        }
+        catch (Exception)
+        {
+            _enrollmentRevoked = true;
+            return false;
+        }
     }
 
     private PipeSecurity AccessRules()
@@ -192,7 +229,7 @@ internal sealed class SignedOperatorDirectReadCiPipe : IDisposable
         // Reject anonymous/nonimpersonating clients rather than accept any
         // SID claimed by the JSON request or by user-writable files.
         var data = await ReadOneLineAsync(pipe, stop);
-        if (data is null) return;
+        if (data is null || !EnrollmentStillActive()) return;
         string? actualSid = null;
         try
         {
@@ -276,7 +313,10 @@ internal sealed class SignedOperatorDirectReadCiPipe : IDisposable
             published_to_codex = false,
             items,
         });
-        if (payload.Length > 32768) return; // bounded signed CI envelope
+        // A withdrawal during Claim selection must also suppress the
+        // response before signing. Already delivered responses cannot be
+        // retroactively erased, but all later requests are denied.
+        if (payload.Length > 32768 || !EnrollmentStillActive()) return;
         var signature = _signer.SignData(payload, HashAlgorithmName.SHA256,
             DSASignatureFormat.Rfc3279DerSequence);
         var envelope = JsonSerializer.Serialize(new
@@ -285,6 +325,7 @@ internal sealed class SignedOperatorDirectReadCiPipe : IDisposable
             payload_b64 = Convert.ToBase64String(payload),
             signature_b64 = Convert.ToBase64String(signature),
         }) + "\n";
+        if (!EnrollmentStillActive()) return;
         await pipe.WriteAsync(Encoding.UTF8.GetBytes(envelope), stop);
         await pipe.FlushAsync(stop);
     }
