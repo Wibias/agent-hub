@@ -60,6 +60,7 @@ function fixture(t){
       CREATE TABLE evidence (
         id TEXT PRIMARY KEY,project_id TEXT,branch TEXT,
         authority_class TEXT,sensitivity TEXT,
+        source_kind TEXT,commit_sha TEXT,
         content_redacted TEXT,metadata_json TEXT
       );
       CREATE TABLE claims(
@@ -170,4 +171,102 @@ test('malformed alias, arbitrary source, write-like args and duplicate flags den
     sample.map(x=>x===shadowRef?'E~1234567890':x)),/invalid/u);
   assert.throws(()=>parseReviewedShadowTransferArgs(
     sample.map(x=>x==='confirm'?'approve':x)),/invalid/u);
+});
+
+
+function moveFixtureToHistoricalSource(f) {
+  // The source revision is the real first commit. The active checkout
+  // advances on 'main', and NO fix5-plan44 branch or worktree exists.
+  const historical = f.revision;
+  writeFileSync(join(f.repo,'README.md'),'current main after original session\n');
+  f.git('add','README.md');
+  f.git('commit','-m','later main');
+  const current = f.git('rev-parse','HEAD');
+  assert.notEqual(current,historical);
+  assert.equal(f.git('branch','--show-current'),'main');
+  assert.equal(f.git('branch','--list','fix5-plan44'),'');
+  const db = new DatabaseSync(f.dbPath);
+  try {
+    db.prepare('UPDATE memory_evidence_proposals SET branch=? WHERE id=?')
+      .run('fix5-plan44',proposalId);
+    db.prepare(`UPDATE evidence
+      SET branch=?,commit_sha=?,source_kind='session' WHERE id=?`)
+      .run('fix5-plan44',historical,'source-1');
+  } finally { db.close(); }
+  return {
+    ...f.options, sourceBranch:'fix5-plan44',sourceCommitSha:historical,
+  };
+}
+
+test('historical single-session Source commits export with source scope despite missing branch/worktree',async t=>{
+  const f=fixture(t);
+  const options=moveFixtureToHistoricalSource(f);
+  const current=f.git('rev-parse','HEAD');
+  const result=await exportReviewedShadowToOperator(options);
+  assert.equal(result.status,'shadow_operator_transfer_prepared_unverified_unapproved');
+  assert.equal(result.scope.branch,'fix5-plan44');
+  assert.equal(result.gitRevision,f.revision);
+  assert.equal(result.checkoutBranch,'main');
+  assert.equal(result.checkoutRevisionSha,current);
+  assert.equal(result.historicalSource,true);
+  assert.equal(result.historicalProvenance.status,'historical_user_direct_metadata_consistent_unverified');
+  assert.equal(result.historicalProvenance.identityAuthenticated,false);
+  assert.equal(result.originalShadowModifiedByTool,false);
+  assert.equal(result.canonicalSourceDatabaseModifiedByTool,false);
+  assert.equal(result.claimWritten,false);
+  assert.equal(result.humanApprovalVerified,false);
+  assert.equal(result.protectedServiceImportCompleted,false);
+  assert.equal(f.git('branch','--show-current'),'main');
+  const manifest=JSON.parse((await import('node:fs')).readFileSync(
+    join(f.outputDir,EVIDENCE_MANIFEST_NAME),'utf8'));
+  assert.deepEqual(Object.keys(manifest).sort(),[
+    'branch','decision','projectId','proposalRef','revisionSha',
+  ].sort());
+  assert.equal(manifest.branch,'fix5-plan44');
+  assert.equal(manifest.revisionSha,f.revision);
+  assert.equal(manifest.proposalRef,evidenceRef);
+  const src=new DatabaseSync(f.dbPath,{readOnly:true});
+  const copy=new DatabaseSync(join(f.outputDir,EVIDENCE_SNAPSHOT_NAME),{readOnly:true});
+  try {
+    for(const db of [src,copy]) {
+      assert.equal(db.prepare('SELECT status FROM memory_evidence_proposals WHERE id=?')
+        .get(proposalId).status,'pending');
+      assert.equal(db.prepare('SELECT branch FROM memory_evidence_proposals WHERE id=?')
+        .get(proposalId).branch,'fix5-plan44');
+      assert.equal(db.prepare('SELECT COUNT(*) n FROM claims').get().n,0);
+    }
+  } finally {src.close();copy.close();}
+});
+
+test('historical Source rejects forged branch, missing object, source-kind and mismatching evidence commit',async t=>{
+  const f=fixture(t);
+  const options=moveFixtureToHistoricalSource(f);
+  assert.throws(()=>parseReviewedShadowTransferArgs([
+    '--shadow-db',options.dbPath,'--repo-path',options.repoPath,
+    '--proposal-ref',shadowRef,'--decision','confirm',
+    '--output-dir',options.outputDir,'--source-branch','fix5-plan44',
+  ]),/historical/u);
+  assert.throws(()=>parseReviewedShadowTransferArgs([
+    '--shadow-db',options.dbPath,'--repo-path',options.repoPath,
+    '--proposal-ref',shadowRef,'--decision','confirm',
+    '--output-dir',options.outputDir,'--source-branch','../unsafe',
+    '--source-commit',f.revision,
+  ]),/historical/u);
+  await assert.rejects(exportReviewedShadowToOperator({
+    ...options,sourceCommitSha:'f'.repeat(40),
+  }));
+  assert.equal(existsSync(f.outputDir),false);
+  const db=new DatabaseSync(f.dbPath);
+  try {
+    db.prepare('UPDATE evidence SET commit_sha=?').run('d'.repeat(40));
+  } finally{db.close();}
+  await assert.rejects(exportReviewedShadowToOperator(options));
+  assert.equal(existsSync(f.outputDir),false);
+  const db2=new DatabaseSync(f.dbPath);
+  try {
+    db2.prepare('UPDATE evidence SET commit_sha=?,source_kind=?')
+      .run(f.revision,'agent_inference');
+  }finally{db2.close();}
+  await assert.rejects(exportReviewedShadowToOperator(options));
+  assert.equal(existsSync(f.outputDir),false);
 });
