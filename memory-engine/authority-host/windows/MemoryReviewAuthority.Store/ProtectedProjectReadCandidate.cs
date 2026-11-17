@@ -98,7 +98,7 @@ public sealed partial class ProtectedPendingReviewLedger
             || !ProjectReadBranchPattern.IsMatch(request.Branch ?? "")
             || request.Branch.Contains("..", StringComparison.Ordinal)
             || request.Branch.Contains("//", StringComparison.Ordinal)
-            || request.Branch.EndsWith('/', StringComparison.Ordinal)
+            || request.Branch.EndsWith("/", StringComparison.Ordinal)
             || request.Branch.EndsWith(".lock", StringComparison.OrdinalIgnoreCase)
             || !ProjectReadGitShaPattern.IsMatch(request.RevisionSha ?? "")
             || !ProjectReadSidPattern.IsMatch(request.PrincipalSid ?? "")
@@ -234,7 +234,8 @@ public sealed partial class ProtectedPendingReviewLedger
     {
         EnsureOpen();
         ValidateProjectReadRequest(request);
-        return FindProjectReadCandidate(request.ProjectId,request.Branch,
+        var item = FindProjectReadCandidate(request.ProjectId,request.Branch,
             request.RevisionSha,request.PrincipalSid,null);
+        return item?.Request == request ? item : null;
     }
 }
