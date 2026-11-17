@@ -58,29 +58,40 @@ try{
     throw Error('ci_read_once_audit_terminal_states_wrong');
 }finally{db.close();}
 
-function next(child){
-  return new Promise((resolve,reject)=>{
-    let settled=false;
-    const timer=setTimeout(()=>done(Error('ci_revocation_receiver_timeout')),12000);
-    function done(error,message){
-      if(settled)return;settled=true;clearTimeout(timer);
-      child.off('message',messageHandler);
-      child.off('error',errorHandler);
-      child.off('exit',exitHandler);
-      if(error)reject(error);else resolve(message);
-    }
-    const messageHandler=m=>done(null,m);
-    const errorHandler=e=>done(e);
-    const exitHandler=code=>done(Error('ci_revocation_receiver_exit_'+code));
-    child.on('message',messageHandler);
-    child.on('error',errorHandler);
-    child.on('exit',exitHandler);
-  });
-}
 const receiver=fork(new URL('./memory-read-once-ci-recipient.mjs',import.meta.url),
   [process.argv[3],proposal],{stdio:['ignore','ignore','pipe','ipc']});
+const receiverEvents=[];
+const receiverWaiters=[];
+let receiverExit=null;
+receiver.on('message',message=>{
+  const waiter=receiverWaiters.shift();
+  if(waiter)waiter.resolve(message);
+  else receiverEvents.push(message);
+});
+receiver.on('error',error=>{
+  receiverExit=error;
+  for(const waiter of receiverWaiters.splice(0))waiter.reject(error);
+});
+receiver.on('exit',code=>{
+  receiverExit=Error('ci_revocation_receiver_exited_'+code);
+  for(const waiter of receiverWaiters.splice(0))waiter.reject(receiverExit);
+});
+function next(){
+  if(receiverEvents.length)return Promise.resolve(receiverEvents.shift());
+  if(receiverExit)return Promise.reject(receiverExit);
+  return new Promise((resolve,reject)=>{
+    const timer=setTimeout(()=>{
+      const i=receiverWaiters.findIndex(w=>w.resolve===wrappedResolve);
+      if(i>=0)receiverWaiters.splice(i,1);
+      reject(Error('ci_revocation_receiver_timeout'));
+    },12000);
+    const wrappedResolve=value=>{clearTimeout(timer);resolve(value);};
+    const wrappedReject=error=>{clearTimeout(timer);reject(error);};
+    receiverWaiters.push({resolve:wrappedResolve,reject:wrappedReject});
+  });
+}
 try{
-  const ready=await next(receiver);
+  const ready=await next();
   if(ready?.status!=='ready')throw Error('ci_revocation_receiver_not_ready');
   const nonce=randomBytes(32).toString('base64url');
   const denied=await new Promise((resolve,reject)=>{
