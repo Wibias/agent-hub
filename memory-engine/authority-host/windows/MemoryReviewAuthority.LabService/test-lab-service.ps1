@@ -398,6 +398,25 @@ try {
             throw 'Reaffirmation readback unexpectedly promoted historical source or Claim'
         }
         Write-Host 'PASS: protected SQLite readback has exactly one private user-direct Claim, unverifiable old source, zero signed Codex publication'
+        # An independent admin-only pipe signs the PRIVATE direct Claim
+        # while verifying the OS token SID and protected Git scope.
+        $directProbe = Join-Path $repoRoot 'scripts/probe-protected-direct-read-ci.mjs'
+        $directOutput = & node $directProbe --pin $publishedPin --sid $ciSid --revision $sourceScope.revisionSha
+        if ($LASTEXITCODE -ne 0) { throw 'direct CI signed read failed' }
+        $direct = $directOutput | ConvertFrom-Json
+        if ($direct.status -cne 'protected_direct_read_ci_sid_scope_signature_pass' -or
+            $direct.claim_count -ne 1 -or
+            -not $direct.principal_sid_matches_os -or
+            -not $direct.signed_response_verified -or
+            -not $direct.wrong_revision_denied -or
+            -not $direct.wrong_sid_denied -or
+            $direct.actual_physical_hello_verified -or
+            $direct.trusted_for_production_recall -or
+            $direct.published_to_codex -or
+            -not $direct.production_no_go) {
+            throw 'direct CI signed read forged approval or wrong scope'
+        }
+        Write-Host 'PASS: separate admin-only signed direct Claim CI read binds actual OS SID, project, Git SHA and never Codex publication'
     } else {
     $operatorProbe = Join-Path $repoRoot 'scripts/probe-operator-service-web-authn.mjs'
     $operatorOutput = & node $operatorProbe $publishedPin
