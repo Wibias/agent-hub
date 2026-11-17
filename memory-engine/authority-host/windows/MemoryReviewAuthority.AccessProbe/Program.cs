@@ -108,13 +108,19 @@ internal static class Program
                             });
                             if (userReadMode)
                             {
-                                ExpectAccessDenied("admin_only_direct_read_pipe", () =>
+                                Action connectAdminDirect = () =>
                                 {
                                     using var pipe = new NamedPipeClientStream(".",
                                         "AgentHubMemoryReviewLab-DirectReadCiV1",
                                         PipeDirection.InOut);
                                     pipe.Connect(1000);
-                                });
+                                };
+                                if (expectRevoked)
+                                    ExpectRevokedPipeUnavailable(
+                                        "admin_only_direct_read_pipe", connectAdminDirect);
+                                else
+                                    ExpectAccessDenied(
+                                        "admin_only_direct_read_pipe", connectAdminDirect);
                                 VerifySignedUserDirectCiRead(
                                     originalUserSid!, args[2], args[3], expectRevoked);
                             }
@@ -265,6 +271,24 @@ internal static class Program
             "enrolled_user_ci_claim_not_authenticated");
         Console.WriteLine(
             "PASS enrolled_same_account_nonadmin_signed_direct_read; REAL_OS_SID AND SERVICE_SIGNATURE VERIFIED; NO_PRODUCTION_RECALL");
+    }
+
+    private static void ExpectRevokedPipeUnavailable(
+        string label, Action operation)
+    {
+        try { operation(); }
+        catch (TimeoutException)
+        {
+            Console.WriteLine("PASS " + label + " absent_after_revocation");
+            return;
+        }
+        catch (UnauthorizedAccessException ex)
+            when (ex.HResult == unchecked((int)0x80070005))
+        {
+            Console.WriteLine("PASS " + label + " access_denied_after_revocation");
+            return;
+        }
+        throw new InvalidOperationException(label + "_revoked_but_connectable");
     }
 
     private static void ExpectAccessDenied(string label, Action operation)
