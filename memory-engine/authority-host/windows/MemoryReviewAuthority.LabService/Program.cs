@@ -58,6 +58,7 @@ internal sealed class ReviewAuthorityLabService : ServiceBase
     private SignedOperatorDirectReadCiPipe? _userReadCiPipe;
     private OperatorWebAuthnPipe? _operatorProofPipe;
     private OneShotCiRecipientPipe? _oneShotCiRecipient;
+    private OneShotCiRegistryFence? _ciRegistryFence;
 
     internal ReviewAuthorityLabService()
     {
@@ -134,13 +135,19 @@ internal sealed class ReviewAuthorityLabService : ServiceBase
         // Preview never creates this marker or exposes a private delivery pipe.
         if (OneShotCiRecipientPipe.Enabled(stateDir))
         {
+            // Independently provisioned HKLM checkpoint MUST match the
+            // service-owned SQLite journal BEFORE any recipient IPC starts.
+            // Missing/stale Registry64 checkpoint after rollback => fail
+            // service startup closed, never re-bootstrap without one-time
+            // elevated CI fixture provisioning.
+            _ciRegistryFence = OneShotCiRegistryFence.OpenAndVerify(_ledger);
             _oneShotCiRecipient = new OneShotCiRecipientPipe(stateDir);
             _oneShotCiRecipient.Start();
             File.WriteAllText(Path.Combine(stateDir, "read-once-ci-listener-started.txt"),
                 "READ_ONCE_CI_LISTENER_STARTED_NO_PRODUCTION_GRANT");
         }
         _operatorProofPipe = new OperatorWebAuthnPipe(
-            _ledger, stateDir, _oneShotCiRecipient);
+            _ledger, stateDir, _oneShotCiRecipient, _ciRegistryFence);
         _operatorProofPipe.Start();
         // Independent CI-only signed private Claim reader. No arbitrary
         // real repo and no nonadmin Codex read: protected SID + scoped
@@ -178,6 +185,8 @@ internal sealed class ReviewAuthorityLabService : ServiceBase
         _operatorProofPipe = null;
         _oneShotCiRecipient?.Dispose();
         _oneShotCiRecipient = null;
+        _ciRegistryFence?.Dispose();
+        _ciRegistryFence = null;
         _readPipe?.Dispose();
         _readPipe = null;
         _ledger?.Dispose();
