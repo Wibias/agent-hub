@@ -34,6 +34,12 @@ const scope = {
     'actual-canonical-evidence-proposal-id').digest('hex').slice(0,10),
 };
 const fact='This knowledge statement is proposed from unverified historical Evidence.';
+const spawnedChildren=new Set();
+function tracked(child) {
+  spawnedChildren.add(child);
+  child.on('exit',()=>spawnedChildren.delete(child));
+  return child;
+}
 const sha = bytes => createHash('sha256').update(bytes).digest();
 const b64 = bytes => Buffer.from(bytes).toString('base64url');
 
@@ -326,10 +332,10 @@ async function run(){
   // pipe is held across the read-purpose UV challenge; it gets NO Claim
   // before an exact consent. This is NOT an attested Codex session.
   function startReceiver() {
-    const child=fork(new URL('./memory-read-once-ci-recipient.mjs',import.meta.url),
+    const child=tracked(fork(new URL('./memory-read-once-ci-recipient.mjs',import.meta.url),
       [pinPath,scope.proposalRef],{
         stdio:['ignore','ignore','pipe','ipc'],
-      });
+      }));
     let events=[],next=null,stopped=false;
     let childError='',deliveredMessage=false;
     const forward=message=>{
@@ -438,10 +444,10 @@ async function run(){
   // Third consent: actual ORIGINAL Codex-compatible stdio memory_recall
   // MCP server process is the held recipient. This remains synthetic CI;
   // the process is NOT an independently authenticated real Codex session.
-  const mcp=fork(new URL('./run-codex-memory-mcp.mjs',import.meta.url),
+  const mcp=tracked(fork(new URL('./run-codex-memory-mcp.mjs',import.meta.url),
     ['--ci-one-shot-read','--pin',pinPath],{
       stdio:['pipe','pipe','pipe','ipc'],
-    });
+    }));
   const rpcPending=new Map();
   let stdoutBuffer='',mcpExit=null,mcpStderr='';
   mcp.stderr.on('data',chunk=>{
@@ -602,6 +608,11 @@ async function run(){
 }
 try{await run();}
 catch(error){
+  // A failed assertion must not leave an IPC child keeping the CI fixture
+  // process alive, which would conceal the actual denial diagnostics.
+  for(const child of spawnedChildren){
+    try { child.kill(); } catch {}
+  }
   process.stderr.write('Synthetic native enrollment SCM check failed: '
     + String(error?.message??'unknown')+'\n');
   process.exitCode=2;
