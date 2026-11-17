@@ -428,6 +428,7 @@ try {
             -not $enroll.ci_receiver_verified_signed_claim -or
             -not $enroll.ci_existing_memory_recall_stdio_received_exact_once -or
             -not $enroll.ci_compiled_native_operator_verified_signed_receiver_offer -or
+            -not $enroll.ci_read_once_durable_revoke_denied_future_recipient -or
             $enroll.read_released -or
             $enroll.published_to_codex -or
             $enroll.historical_evidence_verified -or
@@ -440,6 +441,7 @@ try {
         Write-Host 'PASS: CI one-shot real second process receives signed exact private fixture only after separate synthetic UV; wrong purpose and replay denied; NOT a Codex grant'
         Write-Host 'PASS: original Codex-compatible memory_recall stdio MCP tool received the exact signed CI Claim after fresh UV, no production authorization'
         Write-Host 'PASS: compiled native operator validates full signed exact recipient offer before synthetic UV release; physical Hello not tested'
+        Write-Host 'PASS: protected one-shot CI read receipt consumed before bytes, wrong-purpose aborted, durable revoke denied future live receiver'
         # Actual compiled WinForms client reads the exact protected Claim text
         # from the running service and validates the administrator-owned pin.
         # No physical Hello or Codex recipient is used by this headless mode.
@@ -583,6 +585,28 @@ try {
         if ($LASTEXITCODE -eq 0) {
             throw 'administrator signed reader returned private Claim AFTER service restart'
         }
+        # Separate protected CI-only one-shot audit: test it AGAINST the
+        # restarted actual LocalService, not only against read-only SQLite.
+        # A new real recipient cannot obtain a protected Claim or even a
+        # signed challenge after the durable tombstone is committed.
+        $onceAuditScript = Join-Path $repoRoot 'scripts/verify-ci-read-once-revocation-ci.mjs'
+        $onceAuditOutput = & node $onceAuditScript --pin $publishedPin
+        if ($LASTEXITCODE -ne 0) {
+            throw 'protected CI one-shot audit/revocation failed across SCM restart'
+        }
+        $onceAudit = $onceAuditOutput | ConvertFrom-Json
+        if ($onceAudit.status -cne
+                'durable_ci_read_once_revoke_survived_real_scm_restart' -or
+            $onceAudit.receipt_rows -ne 3 -or
+            $onceAudit.aborted_rows -ne 1 -or
+            $onceAudit.pre_io_consumed_rows -ne 2 -or
+            $onceAudit.permanent_revocation_rows -ne 1 -or
+            -not $onceAudit.fresh_connected_recipient_denied -or
+            -not $onceAudit.no_private_bytes -or
+            -not $onceAudit.production_no_go) {
+            throw 'protected CI one-shot revoked data was resurrected after SCM restart'
+        }
+        Write-Host 'PASS: protected CI one-shot 3 immutable receipts, 2 pre-I/O consumed, 1 denied, durable tombstone and fresh recipient denied AFTER SCM restart'
         $auditPath = Join-Path $repoRoot 'scripts/verify-direct-read-revocation-ci.mjs'
         $journal = & node $auditPath | ConvertFrom-Json
         if ($LASTEXITCODE -ne 0 -or
