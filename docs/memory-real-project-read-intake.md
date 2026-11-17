@@ -15,6 +15,8 @@ A new service-owned SQLite `protected_project_read_candidates` table accepts rev
 - Proposed SHA-256 Git-root and service-signer fingerprints, **not verified attestation**;
 - Random candidate identifier, creation time and fixed policy version.
 
+The tables are **not created on normal Store open**. Only an explicit, host-owned `InitializeProjectReadIntakePreviewSchema()` call bootstraps them for disposable tests. An attempt to stage a candidate without this step fails closed. Existing protected DBs therefore receive no automatic new intake schema.
+
 Records are unique on project/branch/revision/SID. An exact repeat is idempotent; changed root or signer pins are refused. A separate append-only `protected_project_read_withdrawals` table stores permanent withdrawals. SQL UPDATE/DELETE of either table is rejected. Store transactions use the service's existing `synchronous=FULL` SQLite WAL. Restart does not reinstate a withdrawn candidate.
 
 There is **no `enrolled`, `approved`, `authorized` or `active` state, and no read or write API that consumes these candidates**. No service IPC exposes intake, no agent can select a Claim or provide an arbitrary grant flag, and no source file or credential is imported from a real user. The `ProtectedProjectReadRequest` fields are explicitly untrusted review inputs. The pre-existing real-project private reader remains impossible to activate through this schema. Existing synthetic CI readers are unaffected.
