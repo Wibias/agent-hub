@@ -281,7 +281,8 @@ internal sealed class OperatorWebAuthnPipe : IDisposable
                     && Regex.IsMatch(proposal ?? "", @"\AE~[0-9a-f]{10}\z")
                     && (_registration is null
                         || _registration.ExpiresUtc <= DateTimeOffset.UtcNow)
-                    && _registrationPossession is null)
+                    && (_registrationPossession is null
+                        || _registrationPossession.Ticket.ExpiresUtc <= DateTimeOffset.UtcNow))
                 {
                     var offer = _ledger.ReadOperatorReviewOffer(project, branch, proposal!);
                     if (offer is not null)
