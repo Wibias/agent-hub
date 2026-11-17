@@ -66,7 +66,10 @@ public sealed class ReviewChallengeCore
     // A separate challenge domain: ordinary possession proofs cannot be
     // replayed as protected approval consent, even for the identical fact.
     public const string ProtectedApprovalProtocol = "agenthub-evidence-bound-uv-approve-v1";
-    private enum ChallengePurpose { Proof, ProtectedApproval }
+    // Publishing to protected Memory is a NEW explicit user gesture, never
+    // implied by an earlier reaffirmation/possession assertion.
+    public const string ProtectedClaimCommitProtocol = "agenthub-evidence-bound-uv-commit-v1";
+    private enum ChallengePurpose { Proof, ProtectedApproval, ProtectedClaimCommit }
     public const int MaxPending = 32;
     public static readonly TimeSpan Lifetime = TimeSpan.FromSeconds(90);
 
@@ -97,15 +100,22 @@ public sealed class ReviewChallengeCore
         ReviewMeaning meaning, PinnedCredential credential)
         => BeginForPurpose(meaning, credential, ChallengePurpose.ProtectedApproval);
 
+    public ChallengeTicket BeginProtectedClaimCommit(
+        ReviewMeaning meaning, PinnedCredential credential)
+        => BeginForPurpose(meaning, credential, ChallengePurpose.ProtectedClaimCommit);
+
     private ChallengeTicket BeginForPurpose(
         ReviewMeaning meaning, PinnedCredential credential, ChallengePurpose purpose)
     {
         ValidateMeaning(meaning);
         ValidateCredential(credential);
         var nonce = RandomNumberGenerator.GetBytes(32);
-        var challenge = purpose == ChallengePurpose.ProtectedApproval
-            ? ComputeProtectedApprovalChallenge(meaning, nonce)
-            : ComputeChallenge(meaning, nonce);
+        var challenge = purpose switch
+        {
+            ChallengePurpose.ProtectedApproval => ComputeProtectedApprovalChallenge(meaning, nonce),
+            ChallengePurpose.ProtectedClaimCommit => ComputeProtectedClaimCommitChallenge(meaning, nonce),
+            _ => ComputeChallenge(meaning, nonce),
+        };
         // Ticket ID and nonce are independently random. Neither is a portable
         // signature or any transferable Memory/Claim authorization.
         var id = Encode(RandomNumberGenerator.GetBytes(24));
@@ -138,6 +148,14 @@ public sealed class ReviewChallengeCore
         string ticketId, ReviewMeaning expectedMeaning, BrowserAssertion assertion)
         => VerifyForPurposeAndConsume(ticketId, expectedMeaning, assertion,
             ChallengePurpose.ProtectedApproval);
+
+    // A separate one-time signed gesture strictly for publishing a new
+    // user-reaffirmed statement to the host's protected Claim ledger.
+    // The cryptographic verifier NEVER writes or authorizes a Claim.
+    public VerificationResult VerifyProtectedClaimCommitAndConsume(
+        string ticketId, ReviewMeaning expectedMeaning, BrowserAssertion assertion)
+        => VerifyForPurposeAndConsume(ticketId, expectedMeaning, assertion,
+            ChallengePurpose.ProtectedClaimCommit);
 
     private VerificationResult VerifyForPurposeAndConsume(
         string ticketId, ReviewMeaning expectedMeaning, BrowserAssertion assertion,
@@ -176,9 +194,14 @@ public sealed class ReviewChallengeCore
                 return verified with
                 {
                     Verified = true,
-                    Status = purpose == ChallengePurpose.ProtectedApproval
-                        ? "verified_protected_approval_intent_only"
-                        : "verified_not_authorized",
+                    Status = purpose switch
+                    {
+                        ChallengePurpose.ProtectedApproval =>
+                            "verified_protected_approval_intent_only",
+                        ChallengePurpose.ProtectedClaimCommit =>
+                            "verified_protected_claim_commit_intent_only",
+                        _ => "verified_not_authorized",
+                    },
                     ApprovedReviewDecision = false,
                     ClaimWritten = false,
                     SignCounterVerifiable = previous > 0 && verified.SignCount > 0,
@@ -254,6 +277,10 @@ public sealed class ReviewChallengeCore
     public static string ComputeProtectedApprovalChallenge(
         ReviewMeaning meaning, ReadOnlySpan<byte> nonce)
         => ComputeChallengeInDomain(meaning, nonce, ProtectedApprovalProtocol);
+
+    public static string ComputeProtectedClaimCommitChallenge(
+        ReviewMeaning meaning, ReadOnlySpan<byte> nonce)
+        => ComputeChallengeInDomain(meaning, nonce, ProtectedClaimCommitProtocol);
 
     private static string ComputeChallengeInDomain(
         ReviewMeaning meaning, ReadOnlySpan<byte> nonce, string domain)
