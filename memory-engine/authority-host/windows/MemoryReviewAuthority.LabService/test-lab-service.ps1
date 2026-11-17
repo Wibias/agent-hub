@@ -526,29 +526,7 @@ try {
             if ($status -match 'RUNNING') { $restarted = $true; break }
             Start-Sleep -Milliseconds 250
         }
-        if (-not $restarted) {
-            Write-Host ('DIAG RESTART SCM: ' + ((& $sc queryex $service) -join ' '))
-            $ciStartupError = Join-Path $stateRoot 'ci-only-service-startup-failure.txt'
-            if (Test-Path -LiteralPath $ciStartupError -PathType Leaf) {
-                Write-Host ('DIAG RESTART PROTECTED CI STARTUP: ' +
-                    (Get-Content -LiteralPath $ciStartupError -Raw))
-            }
-            try {
-                $startFailures = @(Get-WinEvent -FilterHashtable @{
-                    LogName='Application'
-                    StartTime=(Get-Date).AddMinutes(-3)
-                } -MaxEvents 35 -ErrorAction Stop | Where-Object {
-                    $_.ProviderName -in @('.NET Runtime','Application Error')
-                    -and $_.Message -match 'MemoryReviewAuthority'
-                } | Select-Object -First 3)
-                foreach ($event in $startFailures) {
-                    $detail = $event.Message.Substring(0,
-                        [Math]::Min(1800, $event.Message.Length))
-                    Write-Host "DIAG RESTART managed event $($event.Id): $detail"
-                }
-            } catch { Write-Host 'DIAG RESTART event log unavailable' }
-            throw 'CI service did not reach RUNNING after revocation'
-        }
+        if (-not $restarted) { throw 'CI service did not reach RUNNING after revocation' }
         & $accessProbe $stateRoot --revoked-user-ci $sourceScope.revisionSha $publishedPin
         if ($LASTEXITCODE -ne 0) {
             throw 'same-user signed reader returned a private Claim AFTER service restart'
