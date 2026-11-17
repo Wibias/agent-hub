@@ -25,6 +25,20 @@ internal sealed class OneShotCiRecipientPipe : IDisposable
     internal const string Project = "github.com/example/operator-evidence";
     internal const string Branch = "main";
     private readonly object _gate = new();
+    private readonly string _diagPath;
+
+    internal OneShotCiRecipientPipe(string protectedStateDirectory)
+    {
+        _diagPath = Path.Combine(protectedStateDirectory,
+            "read-once-ci-events.txt");
+    }
+
+    private void Mark(string eventName)
+    {
+        // Disposable CI-only diagnostic, NEVER PID/SID/Claim/token content.
+        try { File.AppendAllText(_diagPath,eventName + "\\n",Encoding.ASCII); }
+        catch { }
+    }
     private readonly CancellationTokenSource _stop = new();
     private Task? _loop;
     private Pending? _active;
@@ -129,15 +143,21 @@ internal sealed class OneShotCiRecipientPipe : IDisposable
                 using var pipe = NamedPipeServerStreamAcl.Create(
                     PipeName,PipeDirection.InOut,1,PipeTransmissionMode.Byte,
                     PipeOptions.Asynchronous,16384,2048,RestrictedAcl());
+                Mark("waiting_for_recipient");
                 await pipe.WaitForConnectionAsync(stop);
+                Mark("recipient_connected");
                 using var deadline = CancellationTokenSource.CreateLinkedTokenSource(stop);
                 deadline.CancelAfter(TimeSpan.FromSeconds(8));
                 var raw = await ReadLineAsync(pipe,deadline.Token);
-                if (raw is null || !GetNamedPipeClientProcessId(
+                if(raw is null){Mark("recipient_message_empty");continue;}
+                Mark("recipient_message_read");
+                if (!GetNamedPipeClientProcessId(
                     pipe.SafePipeHandle,out var kernelPid) || kernelPid == 0)
-                    continue;
+                {Mark("recipient_pid_unavailable");continue;}
+                Mark("recipient_kernel_pid_read");
                 var actualSid = PrincipalSid(pipe);
-                if (actualSid is null) continue;
+                if (actualSid is null){Mark("recipient_sid_unavailable");continue;}
+                Mark("recipient_sid_read");
                 using var json = JsonDocument.Parse(raw);
                 var root = json.RootElement;
                 var names = root.ValueKind == JsonValueKind.Object
@@ -151,6 +171,7 @@ internal sealed class OneShotCiRecipientPipe : IDisposable
                     || !Regex.IsMatch(root.GetProperty("proposalRef").GetString() ?? "",
                         @"\AE~[a-f0-9]{10}\z"))
                     continue;
+                Mark("recipient_scope_verified");
                 var proposal = root.GetProperty("proposalRef").GetString()!;
                 var challenge = RandomNumberGenerator.GetBytes(32);
                 var binding = JsonSerializer.SerializeToUtf8Bytes(new[]
@@ -169,6 +190,7 @@ internal sealed class OneShotCiRecipientPipe : IDisposable
                     if(_active is not null)continue;
                     _active=pending;
                 }
+                Mark("recipient_registered");
                 try
                 {
                     // A non-secret ACK lets the CI parent know that the
@@ -194,8 +216,9 @@ internal sealed class OneShotCiRecipientPipe : IDisposable
             {
                 return;
             }
-            catch
+            catch(Exception error)
             {
+                Mark("listener_exception_"+error.GetType().Name);
                 try { await Task.Delay(100,stop); }
                 catch(OperationCanceledException){return;}
             }
