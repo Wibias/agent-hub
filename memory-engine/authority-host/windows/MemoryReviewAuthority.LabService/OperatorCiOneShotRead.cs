@@ -86,6 +86,8 @@ internal sealed partial class OperatorWebAuthnPipe
             proposal_ref=claim.ProposalRef,claim_id=claim.ClaimId,
             kind=claim.Kind,value=claim.Value,
             fact_sha256=claim.FactSha256,
+            snapshot_sha256=claim.SnapshotSha256,
+            historical_source_origin=claim.HistoricalSourceOrigin,
             provenance=claim.Provenance,
             recipient="CI ONLY: kernel-observed connected pipe, not verified Codex",
         };
