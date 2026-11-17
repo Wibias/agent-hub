@@ -239,6 +239,8 @@ internal sealed class SignedOperatorDirectReadCiPipe : IDisposable
             branch = _policy.Branch,
             revision_sha = _policy.RevisionSha,
             principal_sid = _policy.PrincipalSid,
+            query,
+            max_items = limit,
             status = items.Length == 0 ? "no_match_direct_ci_only" : "found_direct_ci_only",
             service_signed = true,
             read_only = true,
