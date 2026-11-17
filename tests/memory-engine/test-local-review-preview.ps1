@@ -1,6 +1,7 @@
 # Genuine Windows SCM local opt-in Preview test. CI ONLY.
 # Invokes the SAME protected bootstrap, package, fixed service and native
 # operator UI that a human may later explicitly install. Never approves Claim.
+param([switch]$NativeEnrollmentMode)
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 if ($env:GITHUB_ACTIONS -ne 'true' -or $env:RUNNER_OS -ne 'Windows' -or
@@ -43,6 +44,13 @@ try {
     & node (Join-Path $repo 'tests/memory-engine/create-operator-evidence-scm-fixture.mjs') --preview-export $export
     if ($LASTEXITCODE -ne 0) { throw 'Real Git/E~ local preview export fixture failed' }
     $credential = Join-Path $export 'operator-webauthn-credential.json'
+    # Native mode deliberately has NO pre-pinned public-key JSON in service
+    # state. Keep the two installation modes mutually exclusive.
+    $credentialOptions = if ($NativeEnrollmentMode.IsPresent) {
+        @{ NativeEnrollOnly = $true }
+    } else {
+        @{ OperatorCredentialManifestPath = $credential }
+    }
 
     # Must reject an elevated installer launched from the agent-writable
     # Git checkout. Never use this form on the operator's real PC.
@@ -50,7 +58,7 @@ try {
     try {
         & $originalInstaller -Action Install -PackageDirectory $pkg `
             -ExpectedManifestSha256 $manifestHash -EvidenceExportDirectory $export `
-            -OperatorCredentialManifestPath $credential `
+            @credentialOptions `
             -Consent 'I_APPROVE_TEMPORARY_NO_WRITE_AGENTHUB_PREVIEW' *> $null
     } catch {
         $untrustedScriptDenied = $_.Exception.Message -match 'agent-writable checkout'
@@ -101,7 +109,7 @@ try {
     try {
         & $installer -Action Install -PackageDirectory $pkg `
             -ExpectedManifestSha256 ('0' * 64) -EvidenceExportDirectory $export `
-            -OperatorCredentialManifestPath $credential `
+            @credentialOptions `
             -Consent 'I_APPROVE_TEMPORARY_NO_WRITE_AGENTHUB_PREVIEW' *> $null
     } catch {
         $badPinDenied = $_.Exception.Message -match 'SHA mismatch'
@@ -112,11 +120,12 @@ try {
 
     $result = & $installer -Action Install -PackageDirectory $pkg `
         -ExpectedManifestSha256 $manifestHash -EvidenceExportDirectory $export `
-        -OperatorCredentialManifestPath $credential `
+        @credentialOptions `
         -Consent 'I_APPROVE_TEMPORARY_NO_WRITE_AGENTHUB_PREVIEW' |
         ConvertFrom-Json
     if ($result.status -cne 'temporary_restricted_operator_preview_ready' -or
         $result.claimsEnabled -or $result.humanApprovalVerified -or
+        ($result.nativeEnrollmentMode -ne $NativeEnrollmentMode.IsPresent) -or
         -not (Test-Path -LiteralPath $result.nativeOperatorExe -PathType Leaf)) {
         throw 'Protected local preview install did not establish correct no-Claim state'
     }
@@ -125,12 +134,21 @@ try {
 
     # Run the ACTUAL installed native WinForms binary against the ACTUAL
     # restricted LocalService and protected signing pin. No Hello/prompt in CI.
+    if ($NativeEnrollmentMode.IsPresent) {
+        if (Test-Path -LiteralPath (Join-Path $state 'operator-credential-pinned.txt')) {
+            throw 'native install must not pre-stage an unverified credential'
+        }
+    }
+    $smokeFlag = if ($NativeEnrollmentMode.IsPresent) {
+        '--installed-native-enrollment-selftest'
+    } else { '--installed-path-selftest' }
     $native = Start-Process -FilePath $result.nativeOperatorExe `
-        -ArgumentList @('--installed-path-selftest') -Wait -PassThru -NoNewWindow
+        -ArgumentList @($smokeFlag) -Wait -PassThru -NoNewWindow
     if ($native.ExitCode -ne 0) {
         throw 'Installed native UI failed to verify service-signed real E~'
     }
-    Write-Host 'PASS: installed, admin-owned native UI authenticates exact binary+ancestor ACL and signed real E~ over restricted SCM pipe, no Hello, no approval'
+    Write-Host ('PASS: installed, admin-owned native UI validates signed E~ over restricted SCM pipe; native_enrollment_mode=' +
+        $NativeEnrollmentMode.IsPresent + ', no physical Hello, no approval')
 
     $uninstall = & $installer -Action Remove `
         -Consent 'REMOVE_AGENTHUB_MEMORY_REVIEW_ONLY_PREVIEW' |
@@ -151,7 +169,9 @@ try {
         throw 'Sensitive E~ snapshot backup lost protected owner/DACL'
     }
     Write-Host 'PASS: exact own Windows preview service deleted, executable/public pin removed, source Evidence/SQLite preserved under protected owner/DACL'
-    Write-Host 'LOCAL_REVIEW_PREVIEW_WINDOWS_SCM PASS: protected_install native_signed_E_source_hash_pin_wrong_key_deny untrusted_bootstrap_deny no_claim backup_uninstall'
+    Write-Host ('LOCAL_REVIEW_PREVIEW_WINDOWS_SCM PASS: protected_install native_mode=' +
+        $NativeEnrollmentMode.IsPresent +
+        ' signed_E_source_hash_pin_wrong_key_deny untrusted_bootstrap_deny no_claim backup_uninstall')
 } finally {
     if ($installedSuccessfully -and -not $removed) {
         try {

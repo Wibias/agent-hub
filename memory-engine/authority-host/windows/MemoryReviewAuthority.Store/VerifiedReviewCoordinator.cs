@@ -48,8 +48,9 @@ public sealed class VerifiedReviewCoordinator
         if (ledger is null) throw new ArgumentNullException(nameof(ledger));
         var credential = ledger.ReadOperatorCredential();
         if (credential is null
-            || credential.EnrollmentState !=
-                ProtectedPendingReviewLedger.OperatorCredentialState)
+            || credential.EnrollmentState is not (
+                ProtectedPendingReviewLedger.OperatorCredentialState or
+                ProtectedPendingReviewLedger.NativeEnrollmentState))
             throw new InvalidOperationException("operator_credential_not_enrolled");
         return new VerifiedReviewCoordinator(ledger, credential.Credential,
             core ?? new ReviewChallengeCore(), true);

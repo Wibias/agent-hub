@@ -123,14 +123,12 @@ internal sealed class ReviewAuthorityLabService : ServiceBase
 
         _readPipe = new SignedProtectedClaimPipe(_ledger, stateDir);
         _readPipe.Start();
-        if (_ledger.ReadOperatorCredential() is not null)
-        {
-            // Admin-ACL only. This is a NON-AUTHORIZING browser UV probe:
-            // the only result is a signed "no-approval/no-Claim" receipt.
-            // The existing read-only Codex pipe remains unchanged.
-            _operatorProofPipe = new OperatorWebAuthnPipe(_ledger, stateDir);
-            _operatorProofPipe.Start();
-        }
+        // Also start when no key exists: the ADMIN-ACL-only native
+        // enrollment handshake can then create a separately UV-verified
+        // credential. Neither enrollment nor proof is Claim authorization.
+        // The existing read-only Codex pipe remains unchanged.
+        _operatorProofPipe = new OperatorWebAuthnPipe(_ledger, stateDir);
+        _operatorProofPipe.Start();
     }
 
     protected override void OnStop()

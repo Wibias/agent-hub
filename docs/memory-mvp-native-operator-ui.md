@@ -92,3 +92,73 @@ Software-Schlüssel aus dem Browser in JSON zu übernehmen.
 **Keine VM, kein zweiter Windows-Benutzer. Keine Änderungen am Benutzer-PC,
 an Codex-Hooks, am ursprünglichen SQLite-Memory oder an Diensten.
 Production Memory Write NO-GO.**
+
+
+## M2: Native Credential-Einschreibung ohne Claim-Freigabe
+
+Ein neuer, ausdrücklich aktivierter *frischer Labor-Preview* kann
+`-NativeEnrollOnly` statt `-OperatorCredentialManifestPath` erhalten.
+Beides gleichzeitig oder keines von beiden ist verboten. Das bestehende
+PowerShell-Bootstrap muss weiterhin separat geschützt, von der Person
+geprüft und bewusst mit dem bisherigen NO-WRITE-Consent gestartet werden.
+Alte Service-Datenbanken und bereits gepinnte Browser-Keys werden **nicht
+migriert oder aufgewertet**.
+
+Die geschützte WinForms-Oberfläche bietet jetzt zusätzlich
+**Neue Windows-Hello-Einschreibung vorbereiten** an:
+
+1. Der bereits signierte Service liefert den **originalen**, nur als PENDING
+   zugelassenen Fakt, Projekt, Branch, Revision, Hashes, Entscheidung
+   und eine einmalige **Registrierungs-Challenge**.
+2. Die Person kontrolliert den Wortlaut und aktiviert eine separate
+   Checkbox, bevor die versiegelte EXE nativ
+   `WebAuthNAuthenticatorMakeCredential` aufruft. Windows erstellt eine
+   neue Credential (ES256, User Verification REQUIRED), deren privater
+   Schlüssel niemals an die App oder den Service gesendet wird.
+3. Der eingeschränkte LocalService prüft `webauthn.create`-Challenge,
+   exakten `http://localhost:4328`-Origin, `localhost`-RP-Hash,
+   UP/UV/AT, Credential-ID und den beschränkten COSE-ES256-Public-Key.
+   Es gibt **keinen** Import eines unverifizierten fremden Schlüssels.
+4. Der Service stellt dann eine **neue, eigenständige**
+   `webauthn.get`-Challenge für denselben signierten Fakten-Kontext aus.
+   Erst nach einem zweiten tatsächlichen Windows-Hello-/FIDO2-Nachweis
+   mit korrekter Signatur und UP/UV wird der öffentliche Schlüssel im
+   geschützten Ledger als `operator_native_uv_enrolled_unapproved_v1`
+   gespeichert. Abbruch und manipulierte Tokens erzeugen keinen Eintrag.
+5. Auch danach bleiben `verified_review_intents`, `protected_review_claims`
+   und die produktive Memory-DB **unverändert**. Der vorhandene
+   `CompleteProtected`-Pfad bleibt für echte Operator-Quellen gesperrt.
+
+**Wichtige Präzisierung:** Eine OS-WebAuthn-Registrierung mit
+Attestation `none` ist **kein unabhängiger Nachweis der Hardwareherkunft**
+und eine korrekt gesetzte UV-Flag ist allein kein menschlich bestätigter
+Memory-Claim. Die neue Enrollment-Bezeichnung ist ein lokaler
+Host-Nachweis, kein Anspruch auf FIDO2-Hardware-Attestation. Die
+GitHub-Windows-CI kann nur synthetische ES256-Registration und
+Cross-Process-/ACL-Eigenschaften testen, **keine physische Person und
+kein echtes Windows-Hello-Gerät**.
+
+Verwendung, **erst nach eigenständig verifiziertem Paket- und
+Installer-Abgleich**, mit dem bereits geschützten Bootstrap (Pfad als
+Beispiel; nicht blind erhöht aus dem Checkout starten):
+
+```powershell
+$installer = Join-Path $env:ProgramData 'AgentHubMemoryReviewLab-Bootstrap\install-memory-review-local-preview.ps1'
+& $installer -Action Install `
+    -PackageDirectory $package `
+    -ExpectedManifestSha256 $independentManifestSha256 `
+    -EvidenceExportDirectory $export `
+    -NativeEnrollOnly `
+    -Consent I_APPROVE_TEMPORARY_NO_WRITE_AGENTHUB_PREVIEW
+```
+
+`$package`, `$export` und der **unabhängig** überprüfte Hash
+müssen zuvor tatsächlich vorbereitet sein. Den privaten Export
+nicht hochladen. Den exakt installierten, Administrator-owned Operator
+aus `%PROGRAMDATA%\AgentHubMemoryReviewLab-PreviewApp\Operator\`
+manuell starten und das E~-Review auswählen. Keine neue VM und kein
+zweiter Windows-Benutzer nötig.
+
+**Produktions-Claim-Commit, signierter realer Codex-Recall, physischer
+Windows-Hello-PASS und Aktivierung bleiben NO-GO**, bis der konkrete
+Gerätetest, die geschützte Approval-Semantik und Rollback geprüft sind.

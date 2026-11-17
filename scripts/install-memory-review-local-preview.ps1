@@ -10,6 +10,7 @@ param(
     [string] $ExpectedManifestSha256,
     [string] $EvidenceExportDirectory,
     [string] $OperatorCredentialManifestPath,
+    [switch] $NativeEnrollOnly,
     [string] $Consent
 )
 Set-StrictMode -Version Latest
@@ -290,22 +291,30 @@ Require ($Action -eq 'Install') 'Unknown action'
 Require ($Consent -ceq 'I_APPROVE_TEMPORARY_NO_WRITE_AGENTHUB_PREVIEW') `
     'Explicit temporary no-write Preview opt-in required'
 Require (-not [string]::IsNullOrWhiteSpace($PackageDirectory) -and
-    -not [string]::IsNullOrWhiteSpace($EvidenceExportDirectory) -and
-    -not [string]::IsNullOrWhiteSpace($OperatorCredentialManifestPath)) `
-    'Pinned package, real E~ snapshot and public credential source required'
+    -not [string]::IsNullOrWhiteSpace($EvidenceExportDirectory)) `
+    'Pinned package and real E~ snapshot required'
+# Explicit mutual exclusion. Never interpret a missing manifest alone as
+# permission to enroll another key. Native mode requires its own opt-in.
+$hasManifest = -not [string]::IsNullOrWhiteSpace($OperatorCredentialManifestPath)
+Require ($NativeEnrollOnly.IsPresent -xor $hasManifest) `
+    'Choose exactly one credential source: explicit -NativeEnrollOnly OR existing manifest'
 $pkg = (Resolve-Path -LiteralPath $PackageDirectory).Path
 $evidence = (Resolve-Path -LiteralPath $EvidenceExportDirectory).Path
-$publicCredential = (Resolve-Path -LiteralPath $OperatorCredentialManifestPath).Path
+$publicCredential = if ($hasManifest) {
+    (Resolve-Path -LiteralPath $OperatorCredentialManifestPath).Path
+} else { $null }
 $m = Verify-Package $pkg $ExpectedManifestSha256
 $sourceEvidence = Join-Path $evidence $stateSource
 $sourceManifest = Join-Path $evidence $stateManifest
 Require-File $sourceEvidence 512MB
 Require-File $sourceManifest 4096
-Require-File $publicCredential 8192
-$credentialPreview = Get-Content -LiteralPath $publicCredential -Raw |
-    ConvertFrom-Json -ErrorAction Stop
-Require ($credentialPreview.protocol -ceq 'agenthub-operator-credential-pin-v1') `
-    'Only the unapproved public WebAuthn candidate manifest may be staged'
+if ($hasManifest) {
+    Require-File $publicCredential 8192
+    $credentialPreview = Get-Content -LiteralPath $publicCredential -Raw |
+        ConvertFrom-Json -ErrorAction Stop
+    Require ($credentialPreview.protocol -ceq 'agenthub-operator-credential-pin-v1') `
+        'Only the unapproved public WebAuthn candidate manifest may be staged'
+}
 $requested = @($root,$stateRoot,$publicRoot)
 foreach ($path in $requested) {
     Require (-not (Test-Path -LiteralPath $path)) `
@@ -315,7 +324,7 @@ Require ($null -eq (Get-Service -Name $serviceName -ErrorAction SilentlyContinue
     'Refusing to modify any existing SCM service'
 $evidenceDigest = Sha $sourceEvidence
 $manifestDigest = Sha $sourceManifest
-$credentialDigest = Sha $publicCredential
+$credentialDigest = if ($hasManifest) { Sha $publicCredential } else { $null }
 $serviceMade = $false
 $machine = Machine-Permissions
 $program = Machine-And-ReadPermissions 'S-1-5-19'
@@ -351,8 +360,12 @@ try {
     Protect-Directory $stateRoot $stateRights
     Verify-Copy $sourceEvidence (Join-Path $stateRoot $stateSource) $evidenceDigest
     Verify-Copy $sourceManifest (Join-Path $stateRoot $stateManifest) $manifestDigest
-    Verify-Copy $publicCredential (Join-Path $stateRoot $stateCredential) $credentialDigest
-    foreach ($inputName in @($stateSource,$stateManifest,$stateCredential)) {
+    if ($hasManifest) {
+        Verify-Copy $publicCredential (Join-Path $stateRoot $stateCredential) $credentialDigest
+    }
+    $inputNames = @($stateSource,$stateManifest)
+    if ($hasManifest) { $inputNames += $stateCredential }
+    foreach ($inputName in $inputNames) {
         Set-File-Acl (Join-Path $stateRoot $inputName) $stateRights
     }
     & $sc start $serviceName | Out-Null
@@ -380,6 +393,7 @@ try {
         sha256=$ExpectedManifestSha256.ToLowerInvariant()
         commitSha=$m.commitSha; installedAt=(Get-Date).ToUniversalTime().ToString('O')
         originUnverified=$true
+        nativeEnrollmentMode=$NativeEnrollOnly.IsPresent
         humanApprovalVerified=$false
         productionWriteEnabled=$false
     }
@@ -392,6 +406,7 @@ try {
         service=$serviceName
         humanApprovalVerified=$false
         claimsEnabled=$false
+        nativeEnrollmentMode=$NativeEnrollOnly.IsPresent
         uninstallAction='Remove'
     } | ConvertTo-Json -Depth 4
 } catch {

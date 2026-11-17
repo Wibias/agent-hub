@@ -12,6 +12,44 @@ namespace MemoryReviewAuthority.OperatorUi;
 /// </summary>
 internal static class OperatorSelfTest
 {
+    internal static int RunNativeEnrollmentOffer()
+    {
+        // This is a source/transport smoke test in a disposable CI runner.
+        // It MUST NOT invoke Win32 MakeCredential or claim any human consent.
+        if (Environment.GetEnvironmentVariable("GITHUB_ACTIONS") != "true"
+            || Environment.GetEnvironmentVariable("RUNNER_OS") != "Windows")
+            return 2;
+        try
+        {
+            const string id = "actual-canonical-evidence-proposal-id";
+            var hash = Convert.ToHexString(
+                SHA256.HashData(Encoding.UTF8.GetBytes(id))).ToLowerInvariant();
+            var reference = "E~" + hash[..10];
+            var offer = ProtectedOperatorService.BeginNativeEnrollment(
+                "github.com/example/operator-evidence", "main", reference);
+            return offer.ProposalRef == reference
+                && offer.Kind == "procedure"
+                && offer.Decision == "confirm"
+                && offer.SourceOrigin == "operator_pinned_unverified_evidence_v1"
+                && offer.CanonicalFact ==
+                   "This real-schema E~ proposal has linked Evidence but no human approval."
+                && offer.ExpectedOrigin == "http://localhost:4328"
+                && offer.ExpiresUtc > DateTimeOffset.UtcNow
+                && offer.Challenge.Length == 43
+                && offer.UserId.Length == 43
+                ? 0 : 2;
+        }
+        catch (Exception error)
+        {
+            var temp = Environment.GetEnvironmentVariable("RUNNER_TEMP");
+            if (!string.IsNullOrEmpty(temp))
+                File.WriteAllText(Path.Combine(temp,
+                    "AgentHubNativeEnrollmentSmokeFailure.txt"),
+                    error.GetType().Name + ": " + error.Message);
+            return 2;
+        }
+    }
+
     internal static int RunServiceOffer()
     {
         try

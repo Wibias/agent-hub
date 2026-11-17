@@ -35,6 +35,7 @@ public sealed partial class ProtectedPendingReviewLedger
 {
     public const string OperatorCredentialFile = "operator-webauthn-credential.json";
     public const string OperatorCredentialState = "operator_pinned_unverified";
+    public const string NativeEnrollmentState = "operator_native_uv_enrolled_unapproved_v1";
     public const string OperatorCredentialPolicy = "agenthub-operator-credential-pin-v1";
     private static readonly Regex B64Url = new(
         @"\A[A-Za-z0-9_-]+\z", RegexOptions.CultureInvariant);
@@ -53,7 +54,10 @@ public sealed partial class ProtectedPendingReviewLedger
                 expected_origin TEXT NOT NULL,
                 key_sha256 TEXT NOT NULL CHECK(length(key_sha256)=64),
                 enrollment_state TEXT NOT NULL
-                    CHECK(enrollment_state='operator_pinned_unverified'),
+                    CHECK(enrollment_state IN (
+                      'operator_pinned_unverified',
+                      'operator_native_uv_enrolled_unapproved_v1'
+                    )),
                 last_sign_count INTEGER NOT NULL DEFAULT 0
                     CHECK(last_sign_count BETWEEN 0 AND 4294967295),
                 staged_at_utc TEXT NOT NULL,
@@ -149,6 +153,8 @@ public sealed partial class ProtectedPendingReviewLedger
         var existing = FindOperatorCredential(tx);
         if (existing is not null)
         {
+            if (existing.EnrollmentState != OperatorCredentialState)
+                throw new InvalidOperationException("native_enrollment_cannot_be_replaced_by_manifest");
             if (existing.Credential.CredentialIdBase64Url != pinned.CredentialIdBase64Url
                 || existing.Credential.PublicKeyPem != pinned.PublicKeyPem
                 || existing.Credential.ExpectedOrigin != pinned.ExpectedOrigin
@@ -191,7 +197,8 @@ public sealed partial class ProtectedPendingReviewLedger
         using var reader = cmd.ExecuteReader();
         if (!reader.Read()) return null;
         if (reader.GetString(7) != OperatorCredentialPolicy
-            || reader.GetString(4) != OperatorCredentialState)
+            || reader.GetString(4) is not
+                (OperatorCredentialState or NativeEnrollmentState))
             throw new InvalidOperationException("unrecognized_operator_credential_policy");
         var pinned = new PinnedCredential(reader.GetString(0),
             reader.GetString(1), reader.GetString(2));
@@ -211,6 +218,70 @@ public sealed partial class ProtectedPendingReviewLedger
     {
         EnsureOpen();
         return FindOperatorCredential(null);
+    }
+
+    /// <summary>
+    /// Store a freshly registered ES256 key only AFTER the admin-only service
+    /// bridge checked a service-owned MakeCredential challenge and a separate
+    /// service-owned, single-use GetAssertion proof with UP and UV. This is
+    /// protected LOCAL enrollment, NOT hardware attestation or Claim consent.
+    /// Never upgrade any existing user/agent-pinned unverified key.
+    /// </summary>
+    public ProtectedOperatorCredential RecordNativeUvEnrollment(
+        ReviewMeaning meaning, PinnedCredential key, VerificationResult proof)
+    {
+        EnsureOpen();
+        if (meaning is null || key is null || proof is null
+            || !proof.Verified || !proof.UserPresent || !proof.UserVerified
+            || proof.Status != "verified_not_authorized"
+            || proof.ApprovedReviewDecision || proof.ClaimWritten
+            || key.ExpectedOrigin != NativeWebAuthnEnrollment.Origin)
+            throw new InvalidOperationException("native_enrollment_uv_required");
+        var keySha = Convert.ToHexString(SHA256.HashData(
+            ValidateOperatorKey(key))).ToLowerInvariant();
+        using var tx = _connection.BeginTransaction(deferred: false);
+        if (FindOperatorCredential(tx) is not null)
+            throw new InvalidOperationException("operator_enrollment_already_exists");
+        var pending = Lookup(meaning.ProjectId, meaning.Branch,
+            meaning.ProposalRef, tx);
+        if (pending is null || pending.Status != PendingState
+            || pending.Review.RevisionSha != meaning.RevisionSha
+            || pending.Review.ReviewSnapshotSha256 != meaning.ReviewSnapshotSha256
+            || pending.Review.CanonicalFactSha256 != meaning.CanonicalFactSha256
+            || pending.Review.RequestedAction != meaning.Decision
+            || Hash(meaning.CanonicalFact) != meaning.CanonicalFactSha256
+            || FindVerifiedIntent(pending.RequestId, tx) is not null)
+            throw new InvalidOperationException("native_enrollment_pending_changed");
+        var source = FindServiceOwnedSource(pending.RequestId, tx);
+        if (source is null || source.SourceOrigin != OperatorSourceOrigin
+            || source.Source.CanonicalFact != meaning.CanonicalFact)
+            throw new InvalidOperationException("native_enrollment_evidence_missing");
+
+        using var cmd = _connection.CreateCommand();
+        cmd.Transaction = tx;
+        cmd.CommandText = """
+            INSERT INTO protected_operator_credentials
+            (singleton,credential_id,public_key_pem,expected_origin,key_sha256,
+             enrollment_state,last_sign_count,staged_at_utc,policy_version)
+            VALUES (1,$id,$key,$origin,$sha,$state,$count,$when,$policy);
+            """;
+        cmd.Parameters.AddWithValue("$id", key.CredentialIdBase64Url);
+        cmd.Parameters.AddWithValue("$key", key.PublicKeyPem);
+        cmd.Parameters.AddWithValue("$origin", key.ExpectedOrigin);
+        cmd.Parameters.AddWithValue("$sha", keySha);
+        cmd.Parameters.AddWithValue("$state", NativeEnrollmentState);
+        cmd.Parameters.AddWithValue("$count", (long)proof.SignCount);
+        cmd.Parameters.AddWithValue("$when", DateTimeOffset.UtcNow.ToString("O"));
+        cmd.Parameters.AddWithValue("$policy", OperatorCredentialPolicy);
+        if (cmd.ExecuteNonQuery() != 1)
+            throw new InvalidOperationException("native_enrollment_insert_failed");
+        tx.Commit();
+        var stored = ReadOperatorCredential()
+            ?? throw new InvalidOperationException("native_enrollment_missing_after_commit");
+        if (stored.EnrollmentState != NativeEnrollmentState
+            || stored.Credential != key || stored.KeySha256 != keySha)
+            throw new InvalidOperationException("native_enrollment_integrity_invalid");
+        return stored;
     }
 
     /// <summary>
