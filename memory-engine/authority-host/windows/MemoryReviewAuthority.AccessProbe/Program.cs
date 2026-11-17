@@ -151,9 +151,8 @@ internal static class Program
             .TrimEnd('=').Replace('+', '-').Replace('/', '_');
         using var pipe = new NamedPipeClientStream(".",
             "AgentHubMemoryReviewLab-UserReadCiV1", PipeDirection.InOut,
-            PipeOptions.None, TokenImpersonationLevel.Impersonation);
+            PipeOptions.Asynchronous, TokenImpersonationLevel.Impersonation);
         pipe.Connect(2500);
-        pipe.ReadTimeout = 5000;
         var bytes = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new
         {
             protocol, op = "read_user_ci", nonce,
@@ -163,7 +162,9 @@ internal static class Program
         pipe.Write(bytes);
         pipe.Flush();
         using var reader = new StreamReader(pipe, Encoding.UTF8, leaveOpen: true);
-        var line = reader.ReadLine();
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var line = reader.ReadLineAsync(timeout.Token).AsTask()
+            .GetAwaiter().GetResult();
         Require(line is { Length: >= 200 and <= 49152 },
             "enrolled_user_ci_read_missing_response");
         using var envelope = JsonDocument.Parse(line!);
