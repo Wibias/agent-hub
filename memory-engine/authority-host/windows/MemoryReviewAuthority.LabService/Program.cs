@@ -91,6 +91,28 @@ internal sealed class ReviewAuthorityLabService : ServiceBase
         // key verifies the UV check path, never an actual human or Windows Hello
         // user. Neither user-writable canonical SQLite nor MCP is opened here.
         _ledger = ProtectedPendingReviewLedger.OpenInProtectedDirectory(stateDir);
+        // Verify the independent HKLM fence immediately after opening the
+        // protected WAL, before seeding, importing, provisioning ANY pipe
+        // or accepting even a synthetic request. Never self-heal rollback.
+        if (OneShotCiRecipientPipe.Enabled(stateDir))
+        {
+            try
+            {
+                _ciRegistryFence = OneShotCiRegistryFence.OpenAndVerify(_ledger);
+            }
+            catch (InvalidOperationException error)
+                when (error.Message.StartsWith("ci_registry_fence_",
+                    StringComparison.Ordinal))
+            {
+                // Nonsecret, protected CI-only failure witness. The host
+                // still throws and SCM startup fails BEFORE a private pipe
+                // is created. A missing witness in E2E is a hard test fail.
+                File.WriteAllText(Path.Combine(stateDir,
+                    "registry-rollback-denied.txt"),
+                    "CI_REGISTRY_FENCE_FAIL_CLOSED_BEFORE_RECIPIENT_LISTENER");
+                throw;
+            }
+        }
         SyntheticLabClaim.Seed(_ledger);
         // A distinct REAL E~ pipeline input can be pinned by the elevated
         // operator into this service-owned directory. No input path, source
@@ -133,29 +155,8 @@ internal sealed class ReviewAuthorityLabService : ServiceBase
         // The existing read-only Codex pipe remains unchanged.
         // Explicit disposable SCM test marker only. An installed No-Write
         // Preview never creates this marker or exposes a private delivery pipe.
-        if (OneShotCiRecipientPipe.Enabled(stateDir))
+        if (_ciRegistryFence is not null)
         {
-            // Independently provisioned HKLM checkpoint MUST match the
-            // service-owned SQLite journal BEFORE any recipient IPC starts.
-            // Missing/stale Registry64 checkpoint after rollback => fail
-            // service startup closed, never re-bootstrap without one-time
-            // elevated CI fixture provisioning.
-            try
-            {
-                _ciRegistryFence = OneShotCiRegistryFence.OpenAndVerify(_ledger);
-            }
-            catch (InvalidOperationException error)
-                when (error.Message.StartsWith("ci_registry_fence_",
-                    StringComparison.Ordinal))
-            {
-                // Nonsecret, protected CI-only failure witness. The host
-                // still throws and SCM startup fails BEFORE a private pipe
-                // is created. A missing witness in E2E is a hard test fail.
-                File.WriteAllText(Path.Combine(stateDir,
-                    "registry-rollback-denied.txt"),
-                    "CI_REGISTRY_FENCE_FAIL_CLOSED_BEFORE_RECIPIENT_LISTENER");
-                throw;
-            }
             _oneShotCiRecipient = new OneShotCiRecipientPipe(stateDir);
             _oneShotCiRecipient.Start();
             File.WriteAllText(Path.Combine(stateDir, "read-once-ci-listener-started.txt"),
