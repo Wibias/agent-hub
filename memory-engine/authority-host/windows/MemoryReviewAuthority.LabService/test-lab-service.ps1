@@ -426,6 +426,7 @@ try {
             -not $enroll.ci_denied_wrong_purpose_before_release -or
             -not $enroll.ci_exact_kernel_pid_receiver -or
             -not $enroll.ci_receiver_verified_signed_claim -or
+            -not $enroll.ci_existing_memory_recall_stdio_received_exact_once -or
             $enroll.read_released -or
             $enroll.published_to_codex -or
             $enroll.historical_evidence_verified -or
@@ -436,6 +437,7 @@ try {
         }
         Write-Host 'PASS: native claim commit then separate one-use read-preview UV, exact snapshot, no read release'
         Write-Host 'PASS: CI one-shot real second process receives signed exact private fixture only after separate synthetic UV; wrong purpose and replay denied; NOT a Codex grant'
+        Write-Host 'PASS: original Codex-compatible memory_recall stdio MCP tool received the exact signed CI Claim after fresh UV, no production authorization'
         # Actual compiled WinForms client reads the exact protected Claim text
         # from the running service and validates the administrator-owned pin.
         # No physical Hello or Codex recipient is used by this headless mode.
