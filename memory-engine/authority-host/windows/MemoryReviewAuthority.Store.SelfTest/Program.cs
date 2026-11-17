@@ -210,6 +210,9 @@ internal static class Program
     {
         var request = RealReadCandidate();
         using var store = Open();
+        // Default OFF even for a service-owned Store open.
+        Throws<SqliteException>(() => store.RecordProjectReadCandidate(request));
+        store.InitializeProjectReadIntakePreviewSchema();
         var item = store.RecordProjectReadCandidate(request);
         Check(item.CandidateId.Length == 48);
         Check(item.State == ProtectedPendingReviewLedger.ProjectReadPending);
@@ -226,6 +229,7 @@ internal static class Program
     {
         var request = RealReadCandidate();
         using var store = Open();
+        store.InitializeProjectReadIntakePreviewSchema();
         var item = store.RecordProjectReadCandidate(request);
         Check(store.RecordProjectReadCandidate(request) == item);
         Throws<InvalidOperationException>(() =>
@@ -257,6 +261,7 @@ internal static class Program
         string id;
         using (var store = Open())
         {
+            store.InitializeProjectReadIntakePreviewSchema();
             id = store.RecordProjectReadCandidate(request).CandidateId;
             store.WithdrawProjectReadCandidate(request,"operator_denied");
             store.WithdrawProjectReadCandidate(request,"operator_denied");
@@ -287,6 +292,7 @@ internal static class Program
         var request = RealReadCandidate();
         using (var store = Open())
         {
+            store.InitializeProjectReadIntakePreviewSchema();
             store.RecordProjectReadCandidate(request);
             store.WithdrawProjectReadCandidate(request,"suspected_compromise");
         }
