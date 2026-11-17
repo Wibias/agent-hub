@@ -31,6 +31,8 @@ export function parseReviewedShadowTransferArgs(argv = []) {
     ['--proposal-ref', 'proposalRef'],
     ['--decision', 'decision'],
     ['--output-dir', 'outputDir'],
+    ['--source-branch', 'sourceBranch'],
+    ['--source-commit', 'sourceCommitSha'],
   ]);
   const result = {};
   for (let i = 0; i < argv.length; i++) {
@@ -50,6 +52,15 @@ export function parseReviewedShadowTransferArgs(argv = []) {
     if (!isAbsolute(result[key])) throw new Error('absolute paths required');
     result[key] = resolve(result[key]);
   }
+  const explicitHistorical = result.sourceBranch !== undefined
+    || result.sourceCommitSha !== undefined;
+  if (explicitHistorical && (
+    typeof result.sourceBranch !== 'string'
+    || typeof result.sourceCommitSha !== 'string'
+    || !/^[a-zA-Z0-9][a-zA-Z0-9._/-]{0,127}$/u.test(result.sourceBranch)
+    || result.sourceBranch.includes('..') || result.sourceBranch.includes('//')
+    || !/^[0-9a-f]{40}$/u.test(result.sourceCommitSha)
+  )) throw new Error('both exact historical source pins required');
   if (!REF.test(result.proposalRef)
       || !['confirm','reject'].includes(result.decision)) {
     throw new Error('invalid reference or decision');
@@ -58,7 +69,7 @@ export function parseReviewedShadowTransferArgs(argv = []) {
 }
 
 export function resolveReviewedShadowAlias({
-  dbPath, repoPath, proposalRef,
+  dbPath, repoPath, proposalRef, sourceBranch, sourceCommitSha,
   localAppData = process.env.LOCALAPPDATA,
   getGitContext = resolveGitContext,
   resolveIdentity = resolveGitRepositoryIdentity,
@@ -76,7 +87,15 @@ export function resolveReviewedShadowAlias({
     }),
   });
   const projectId = identity.projectId;
-  const branch = git.branch;
+  if (sourceBranch !== undefined !== (sourceCommitSha !== undefined)) {
+    throw new Error('historical source branch and commit required together');
+  }
+  const historical = sourceBranch !== undefined;
+  const branch = historical ? sourceBranch : git.branch;
+  const revisionSha = historical ? sourceCommitSha : git.revisionSha;
+  // Do not invent a branch ref, move HEAD, or re-label historical Evidence.
+  // The exporter independently checks the exact commit object and source
+  // record for this explicit pair before creating a usable manifest.
   const db = new DatabaseSync(dbPath, { readOnly: true, timeout: 5000 });
   try {
     db.exec('PRAGMA query_only=ON');
@@ -89,7 +108,9 @@ export function resolveReviewedShadowAlias({
     const selected = rows.filter(p => opaque(p.id) === proposalRef);
     if (selected.length !== 1) throw new Error('shadow ref not unique in current Git scope');
     return Object.freeze({
-      projectId, branch, revisionSha: git.revisionSha,
+      projectId, branch, revisionSha,
+      checkoutBranch: git.branch, checkoutRevisionSha: git.revisionSha,
+      historical,
       shadowRef: proposalRef,
       evidenceRef: evidenceBoundDecisionRef(selected[0].id),
     });
@@ -98,6 +119,7 @@ export function resolveReviewedShadowAlias({
 
 export async function exportReviewedShadowToOperator({
   dbPath, repoPath, proposalRef, decision, outputDir,
+  sourceBranch, sourceCommitSha,
   localAppData = process.env.LOCALAPPDATA,
   exportReview = exportProtectedEvidenceReview,
   resolveAlias = resolveReviewedShadowAlias,
@@ -106,12 +128,18 @@ export async function exportReviewedShadowToOperator({
     '--shadow-db', dbPath, '--repo-path', repoPath,
     '--proposal-ref', proposalRef, '--decision', decision,
     '--output-dir', outputDir,
+    ...(sourceBranch === undefined && sourceCommitSha === undefined
+      ? [] : ['--source-branch', sourceBranch,
+        '--source-commit', sourceCommitSha]),
   ]);
   const source = resolveAlias({ ...args, localAppData });
   const exported = await exportReview({
     dbPath: args.dbPath, repoPath: args.repoPath,
     proposalRef: source.evidenceRef,
     decision: args.decision, outputDir: args.outputDir,
+    historicalSource: source.historical
+      ? { branch: source.branch, revisionSha: source.revisionSha }
+      : null,
   });
   if (exported.proposalRef !== source.evidenceRef
     || exported.projectId !== source.projectId
@@ -129,6 +157,10 @@ export async function exportReviewedShadowToOperator({
     operatorRef: source.evidenceRef,
     factSha256: exported.factSha256,
     gitRevision: source.revisionSha,
+    checkoutBranch: source.checkoutBranch,
+    checkoutRevisionSha: source.checkoutRevisionSha,
+    historicalSource: source.historical,
+    historicalProvenance: exported.historicalProvenance,
     sourceIsUserWritableShadow: true,
     completePrivateDatabaseExported: true,
     sourceOutputDirectory: exported.sourceOutputDirectory,
