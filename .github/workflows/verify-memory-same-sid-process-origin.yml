@@ -1,0 +1,43 @@
+name: Memory Review Authority native same-SID process-origin diagnostic (default OFF)
+
+on:
+  pull_request:
+    paths:
+      - 'memory-engine/authority-host/windows/MemoryReviewAuthority.LabService/ClientProcessObservationPin.cs'
+      - 'memory-engine/authority-host/windows/MemoryReviewAuthority.ProcessOrigin.SelfTest/**'
+      - 'docs/memory-native-same-sid-process-origin.md'
+      - '.github/workflows/verify-memory-same-sid-process-origin.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'memory-engine/authority-host/windows/MemoryReviewAuthority.LabService/ClientProcessObservationPin.cs'
+      - 'memory-engine/authority-host/windows/MemoryReviewAuthority.ProcessOrigin.SelfTest/**'
+      - '.github/workflows/verify-memory-same-sid-process-origin.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native-two-process-negative:
+    runs-on: windows-2022
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
+        with:
+          dotnet-version: '10.0.x'
+          dotnet-quality: 'ga'
+      - name: Real same-account two-process negative; no service or memory access
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $project = 'memory-engine/authority-host/windows/MemoryReviewAuthority.ProcessOrigin.SelfTest/MemoryReviewAuthority.ProcessOrigin.SelfTest.csproj'
+          dotnet restore $project --runtime win-x64
+          if ($LASTEXITCODE -ne 0) { throw 'restore failed' }
+          dotnet build $project --runtime win-x64 -c Release --no-restore
+          if ($LASTEXITCODE -ne 0) { throw 'build failed' }
+          dotnet run --project $project --runtime win-x64 -c Release --no-build --no-restore
+          if ($LASTEXITCODE -ne 0) { throw 'native kernel process origin denial failed' }
