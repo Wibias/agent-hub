@@ -60,7 +60,7 @@ public sealed record VerificationResult(
 /// credential registration, persistent key store or Memory write capability.
 /// All challenges are invalidated on a process restart.
 /// </summary>
-public sealed class ReviewChallengeCore
+public sealed partial class ReviewChallengeCore
 {
     public const string Protocol = "agenthub-evidence-bound-uv-v1";
     // A separate challenge domain: ordinary possession proofs cannot be
@@ -122,7 +122,8 @@ public sealed class ReviewChallengeCore
         lock (_gate)
         {
             RemoveExpired();
-            if (_pending.Count >= MaxPending)
+            RemoveExpiredReadDisclosures();
+            if (_pending.Count + _readDisclosurePending.Count >= MaxPending)
                 throw new InvalidOperationException("review_challenge_capacity_exceeded");
             if (_pending.Values.Any(p => SameProposal(p.Meaning, meaning)))
                 throw new InvalidOperationException("review_challenge_already_pending");
