@@ -165,9 +165,13 @@ internal sealed class SignedOperatorDirectReadCiPipe : IDisposable
         // Windows named-pipe impersonation happens on the CURRENT thread.
         // Reject anonymous/nonimpersonating clients rather than accept any
         // SID claimed by the JSON request or by user-writable files.
+        var data = await ReadOneLineAsync(pipe, stop);
+        if (data is null) return;
         string? actualSid = null;
         try
         {
+            // ImpersonateNamedPipeClient uses the most recent message READ
+            // by the server. Never resolve identity before receiving input.
             pipe.RunAsClient(() =>
             {
                 using var caller = WindowsIdentity.GetCurrent(ifImpersonating: true);
@@ -175,9 +179,6 @@ internal sealed class SignedOperatorDirectReadCiPipe : IDisposable
             });
         }
         catch { return; }
-
-        var data = await ReadOneLineAsync(pipe, stop);
-        if (data is null) return;
         using var json = JsonDocument.Parse(data);
         var root = json.RootElement;
         if (root.ValueKind != JsonValueKind.Object
