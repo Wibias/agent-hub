@@ -21,6 +21,10 @@ internal sealed class SignedOperatorDirectReadCiPipe : IDisposable
     internal const string Protocol = "agenthub-protected-direct-read-ci-v1";
     internal const string PolicyFile = "agenthub-direct-read-ci-only.json";
     internal const string PolicyVersion = "agenthub-direct-read-ci-sid-scope-v1";
+    internal const string UserPipeName = "AgentHubMemoryReviewLab-UserReadCiV1";
+    internal const string UserProtocol = "agenthub-protected-user-read-ci-v1";
+    internal const string UserPolicyFile = "agenthub-user-direct-read-ci-only.json";
+    internal const string UserPolicyVersion = "agenthub-user-direct-read-ci-sid-scope-v1";
     private const string FixtureProject = "github.com/example/operator-evidence";
     private const string FixtureBranch = "main";
     private static readonly Regex RevisionPattern = new(
@@ -32,6 +36,9 @@ internal sealed class SignedOperatorDirectReadCiPipe : IDisposable
     private readonly Policy _policy;
     private readonly ProtectedPendingReviewLedger _ledger;
     private readonly ECDsa _signer;
+    private readonly bool _userMode;
+    private readonly string _pipeName;
+    private readonly string _protocol;
     private readonly CancellationTokenSource _stop = new();
     private Task? _loop;
 
@@ -46,19 +53,23 @@ internal sealed class SignedOperatorDirectReadCiPipe : IDisposable
             && project == pinnedProject && branch == pinnedBranch
             && revision == pinnedRevision;
 
-    internal static bool PolicyPresent(string stateDir)
+    internal static bool PolicyPresent(string stateDir, bool userMode = false)
     {
-        var file = new FileInfo(Path.Combine(stateDir, PolicyFile));
+        var file = new FileInfo(Path.Combine(stateDir,
+            userMode ? UserPolicyFile : PolicyFile));
         return file.Exists && file.Length is >= 100 and <= 1024
             && (file.Attributes & FileAttributes.ReparsePoint) == 0;
     }
 
     internal SignedOperatorDirectReadCiPipe(
-        ProtectedPendingReviewLedger ledger, string stateDir)
+        ProtectedPendingReviewLedger ledger, string stateDir, bool userMode = false)
     {
-        if (!PolicyPresent(stateDir))
+        _userMode = userMode;
+        _pipeName = userMode ? UserPipeName : PipeName;
+        _protocol = userMode ? UserProtocol : Protocol;
+        if (!PolicyPresent(stateDir, userMode))
             throw new InvalidOperationException("direct_ci_read_not_enrolled");
-        var path = Path.Combine(stateDir, PolicyFile);
+        var path = Path.Combine(stateDir, userMode ? UserPolicyFile : PolicyFile);
         using var doc = JsonDocument.Parse(File.ReadAllBytes(path));
         var root = doc.RootElement;
         if (root.ValueKind != JsonValueKind.Object
@@ -72,7 +83,7 @@ internal sealed class SignedOperatorDirectReadCiPipe : IDisposable
         var project = Str(root, "projectId");
         var branch = Str(root, "branch");
         var revision = Str(root, "revisionSha");
-        if (Str(root, "policy") != PolicyVersion
+        if (Str(root, "policy") != (userMode ? UserPolicyVersion : PolicyVersion)
             || !RevisionPattern.IsMatch(revision ?? "")
             || !IsAuthorized(sid, sid, project, FixtureProject,
                 branch, FixtureBranch, revision, revision))
@@ -103,22 +114,35 @@ internal sealed class SignedOperatorDirectReadCiPipe : IDisposable
         _loop = Task.Run(() => LoopAsync(_stop.Token));
     }
 
-    private static PipeSecurity AccessRules()
+    private PipeSecurity AccessRules()
     {
         var acl = new PipeSecurity();
         acl.SetAccessRuleProtection(isProtected: true, preserveInheritance: false);
         static SecurityIdentifier Sid(WellKnownSidType sid) => new(sid, null);
         acl.AddAccessRule(new PipeAccessRule(Sid(WellKnownSidType.LocalSystemSid),
             PipeAccessRights.FullControl, AccessControlType.Allow));
-        acl.AddAccessRule(new PipeAccessRule(Sid(WellKnownSidType.BuiltinAdministratorsSid),
-            PipeAccessRights.FullControl, AccessControlType.Allow));
+        if (_userMode)
+        {
+            // Exact enrolled account SID only. In the CI runner we later
+            // disable the Administrators group on the SAME user token.
+            // No BuiltinUsers / authenticated users / world grant.
+            acl.AddAccessRule(new PipeAccessRule(
+                new SecurityIdentifier(_policy.PrincipalSid),
+                PipeAccessRights.ReadWrite, AccessControlType.Allow));
+        }
+        else
+        {
+            acl.AddAccessRule(new PipeAccessRule(
+                Sid(WellKnownSidType.BuiltinAdministratorsSid),
+                PipeAccessRights.FullControl, AccessControlType.Allow));
+        }
         var serviceSid = (SecurityIdentifier)new NTAccount(
             "NT SERVICE", ReviewHostIdentity.ServiceName)
             .Translate(typeof(SecurityIdentifier));
         acl.AddAccessRule(new PipeAccessRule(serviceSid,
             PipeAccessRights.FullControl, AccessControlType.Allow));
-        // NO BuiltinUsers, AuthenticatedUsers, World or low-privilege
-        // same-account agents. This is not the future nonadmin Codex lane.
+        // Strict split: admin-only CI read or exact *enrolled* user SID.
+        // Neither endpoint exists in the normal No-Write Preview.
         return acl;
     }
 
@@ -129,7 +153,7 @@ internal sealed class SignedOperatorDirectReadCiPipe : IDisposable
             try
             {
                 using var pipe = NamedPipeServerStreamAcl.Create(
-                    PipeName, PipeDirection.InOut, 1, PipeTransmissionMode.Byte,
+                    _pipeName, PipeDirection.InOut, 1, PipeTransmissionMode.Byte,
                     PipeOptions.Asynchronous, 4096, 16384, AccessRules());
                 await pipe.WaitForConnectionAsync(stopping);
                 using var timeout = CancellationTokenSource.CreateLinkedTokenSource(stopping);
@@ -197,8 +221,8 @@ internal sealed class SignedOperatorDirectReadCiPipe : IDisposable
         var branch = Str(root, "branch");
         var revision = Str(root, "revisionSha");
         var query = Str(root, "query");
-        if (Str(root, "protocol") != Protocol
-            || Str(root, "op") != "read_direct_ci"
+        if (Str(root, "protocol") != _protocol
+            || Str(root, "op") != (_userMode ? "read_user_ci" : "read_direct_ci")
             || nonce is null || !Regex.IsMatch(nonce, @"\A[A-Za-z0-9_-]{43}\z")
             || query is not { Length: >= 1 and <= 500 }
             || !root.TryGetProperty("maxItems", out var max)
@@ -235,7 +259,7 @@ internal sealed class SignedOperatorDirectReadCiPipe : IDisposable
             }).ToArray();
         var payload = JsonSerializer.SerializeToUtf8Bytes(new
         {
-            protocol = Protocol,
+            protocol = _protocol,
             nonce,
             project_id = _policy.ProjectId,
             branch = _policy.Branch,
@@ -257,7 +281,7 @@ internal sealed class SignedOperatorDirectReadCiPipe : IDisposable
             DSASignatureFormat.Rfc3279DerSequence);
         var envelope = JsonSerializer.Serialize(new
         {
-            protocol = Protocol,
+            protocol = _protocol,
             payload_b64 = Convert.ToBase64String(payload),
             signature_b64 = Convert.ToBase64String(signature),
         }) + "\n";
