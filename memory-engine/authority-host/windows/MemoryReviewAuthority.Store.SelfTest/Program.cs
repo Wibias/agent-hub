@@ -54,7 +54,9 @@ internal static class Program
         Run("operator_credential_counter_restart_replay_denied", OperatorCounter);
         Run("operator_credential_pin_conflict_and_sql_immutability", OperatorPinImmutable);
         Run("operator_credential_wrong_key_and_generic_approval_denied", OperatorDenied);
-        Console.WriteLine($"MEMORY_REVIEW_LEDGER PASS {_passed}/33; REAL_EVIDENCE_UV_PINNED_NO_APPROVAL");
+        Run("native_operator_enrollment_persists_but_creates_no_claim", NativeOperatorEnrolled);
+        Run("native_enrollment_does_not_upgrade_a_pinned_unverified_key", NativeOperatorCannotUpgrade);
+        Console.WriteLine($"MEMORY_REVIEW_LEDGER PASS {_passed}/35; REAL_EVIDENCE_UV_PINNED_NO_APPROVAL");
     }
 
     private static void Run(string label, Action test)
@@ -886,6 +888,81 @@ internal static class Program
                 publicKeyPem = credential.PublicKeyPem,
                 expectedOrigin = credential.ExpectedOrigin,
             }));
+    }
+
+    private static void NativeOperatorEnrolled()
+    {
+        CreateRealEvidenceFixture(kind: "procedure", fullyJudgedPending: true);
+        using var user = TestCredential.New();
+        ReviewMeaning meaning;
+        using (var store = Open())
+        {
+            var candidate = store.ImportOperatorPinnedEvidence();
+            meaning = RealReviewMeaning(candidate);
+            var challenges = new ReviewChallengeCore();
+            var ticket = challenges.Begin(meaning, user.Pinned);
+            var proof = challenges.VerifyAndConsume(
+                ticket.TicketId, meaning, user.Sign(ticket));
+            Check(proof.Verified && proof.UserVerified && proof.UserPresent
+                && !proof.ApprovedReviewDecision && !proof.ClaimWritten);
+            var saved = store.RecordNativeUvEnrollment(meaning, user.Pinned, proof);
+            Check(saved.EnrollmentState ==
+                ProtectedPendingReviewLedger.NativeEnrollmentState);
+            Check(saved.Credential == user.Pinned);
+            Check(saved.LastSignCount == 1);
+            Check(!saved.HumanApprovalVerified);
+            Check(store.ReadVerifiedIntent(RealProject, RealBranch, RealERef) is null);
+            Check(store.ReadProtectedClaims(RealProject, RealBranch).Count == 0);
+            Throws<InvalidOperationException>(() =>
+                store.RecordNativeUvEnrollment(meaning, user.Pinned, proof));
+            var coordinator = VerifiedReviewCoordinator.ForOperatorCredentialProbe(store);
+            var subsequent = coordinator.BeginOperatorProof(meaning);
+            var verified = coordinator.CompleteOperatorProof(
+                subsequent.TicketId, meaning, user.Sign(subsequent, forcedSignCount: 2));
+            Check(verified.Verified && !verified.ApprovedClaim && !verified.ClaimWritten);
+            Check(store.ReadOperatorCredential()?.LastSignCount == 2);
+            Check(store.ReadProtectedClaims(RealProject, RealBranch).Count == 0);
+        }
+        using (var reopened = Open())
+        {
+            var key = reopened.ReadOperatorCredential();
+            Check(key?.EnrollmentState ==
+                ProtectedPendingReviewLedger.NativeEnrollmentState);
+            Check(key?.LastSignCount == 2);
+            Check(key?.Credential == user.Pinned);
+            Check(reopened.ReadProtectedClaims(RealProject, RealBranch).Count == 0);
+            Check(reopened.ReadVerifiedIntent(RealProject, RealBranch, RealERef) is null);
+            WriteOperatorPin(user.Pinned);
+            // An unsigned/browser-exported candidate cannot overwrite or
+            // retroactively upgrade a native-enrolled protected key.
+            Throws<InvalidOperationException>(() =>
+                reopened.StageUnverifiedOperatorCredential());
+        }
+    }
+
+    private static void NativeOperatorCannotUpgrade()
+    {
+        CreateRealEvidenceFixture(kind: "procedure", fullyJudgedPending: true);
+        using var original = TestCredential.New();
+        using var different = TestCredential.New();
+        WriteOperatorPin(original.Pinned);
+        using var store = Open();
+        var imported = store.ImportOperatorPinnedEvidence();
+        store.StageUnverifiedOperatorCredential();
+        var meaning = RealReviewMeaning(imported);
+        var core = new ReviewChallengeCore();
+        var challenge = core.Begin(meaning, different.Pinned);
+        var proof = core.VerifyAndConsume(
+            challenge.TicketId, meaning, different.Sign(challenge));
+        Throws<InvalidOperationException>(() =>
+            store.RecordNativeUvEnrollment(meaning, different.Pinned, proof));
+        var unchanged = store.ReadOperatorCredential();
+        Check(unchanged?.Credential == original.Pinned
+            && unchanged.EnrollmentState ==
+                ProtectedPendingReviewLedger.OperatorCredentialState
+            && !unchanged.HumanApprovalVerified);
+        Check(store.ReadProtectedClaims(RealProject, RealBranch).Count == 0);
+        Check(store.ReadVerifiedIntent(RealProject, RealBranch, RealERef) is null);
     }
 
     private static ReviewMeaning RealReviewMeaning(OperatorEvidenceImport evidence)
