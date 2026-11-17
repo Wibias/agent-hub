@@ -165,8 +165,9 @@ public sealed partial class ProtectedPendingReviewLedger
         if (meaning is null || credential is null || proof is null
             || !proof.Verified
             || !proof.UserPresent || !proof.UserVerified
+            || proof.Status != "verified_protected_approval_intent_only"
             || proof.ApprovedReviewDecision || proof.ClaimWritten)
-            throw new InvalidOperationException("verified_host_proof_required");
+            throw new InvalidOperationException("verified_host_approval_purpose_required");
         if (meaning.CanonicalFact is null
             || meaning.CanonicalFact.Length is < 1 or > 4000
             || Hash(meaning.CanonicalFact) != meaning.CanonicalFactSha256)
