@@ -61,13 +61,28 @@ export function diagnoseCodexMemory({
   if(scopePath)args.push('--scope',scopePath);
   // The server itself derives project identity from the ACTUAL cwd.
   // Passing project/branch IDs as MCP arguments would be an invalid test.
-  const stdout=run(process.execPath,args,{
-    cwd:resolve(cwd),
-    input:calls.map(x=>JSON.stringify(x)).join('\n')+'\n',
-    encoding:'utf8',timeout:15000,maxBuffer:256*1024,
-    windowsHide:true,stdio:['pipe','pipe','pipe'],
-  });
-  const lines=String(stdout).trim().split(/\r?\n/u).map(x=>JSON.parse(x));
+  let stdout;
+  try{
+    stdout=run(process.execPath,args,{
+      cwd:resolve(cwd),
+      input:calls.map(x=>JSON.stringify(x)).join('\n')+'\n',
+      encoding:'utf8',timeout:15000,maxBuffer:256*1024,
+      windowsHide:true,stdio:['pipe','pipe','pipe'],
+    });
+  }catch(error){
+    // Don't copy the exception message or child stdout/stderr: those may
+    // contain paths, user data or a private Recall result.
+    const reason=error?.code==='ENOENT'?'doctor_runtime_unavailable'
+      :error?.code==='ETIMEDOUT'?'doctor_stdio_timeout'
+      :'doctor_mcp_process_failed';
+    throw Error(reason);
+  }
+  let lines;
+  try{
+    lines=String(stdout).trim().split(/\r?\n/u).map(x=>JSON.parse(x));
+  }catch{
+    throw Error('doctor_stdio_json_invalid');
+  }
   if(lines.length!==3 || lines.some((r,i)=>r?.jsonrpc!=='2.0'||r?.id!==i+1)
     ||lines[0]?.result?.serverInfo?.name!=='agenthub-memory-readonly'
     ||lines[1]?.result?.tools?.length!==1
@@ -105,9 +120,19 @@ function main(){
     const result=diagnoseCodexMemory(parseDoctorArgs(process.argv.slice(2)));
     process.stdout.write(JSON.stringify(result,null,2)+'\n');
     if(result.status==='not_ready')process.exitCode=2;
-  }catch{
-    // No user query, Claim contents, SQLite paths or stderr in output.
-    process.stderr.write('CODEX_MEMORY_DOCTOR_FAILED: local stdio read unavailable or invalid. No memory/config files changed.\n');
+  }catch(error){
+    // Expose only fixed diagnosis codes. Never echo original error,
+    // query, memory contents, process stderr or filesystem paths.
+    const safe=new Set([
+      'doctor_arguments_invalid','doctor_argument_invalid',
+      'absolute_project_directory_required',
+      'doctor_runtime_unavailable','doctor_stdio_timeout',
+      'doctor_mcp_process_failed','doctor_stdio_json_invalid',
+      'doctor_stdio_protocol_invalid','doctor_readonly_reply_invalid',
+    ]);
+    const code=safe.has(error?.message)?error.message:'doctor_unknown_failure';
+    process.stderr.write('CODEX_MEMORY_DOCTOR_FAILED: '+code
+      + '. No memory/config files changed.\n');
     process.exitCode=2;
   }
 }

@@ -100,6 +100,42 @@ test('real stdio doctor does not silently enroll a foreign repo',()=>{
   }finally{f.cleanup();}
 });
 
+test('an enrolled Git project without a canonical project row gives an actionable status',()=>{
+  const f=fixture();
+  try{
+    const oldDbHash=sha(f.dbPath);
+    // The Git root is allowed, but no MemoryEngine registerProject row exists.
+    manageGlobalMemoryProject({
+      cwd:f.other,operation:'add',dbPath:f.dbPath,
+      scopePath:f.scopePath,apply:true,
+    });
+    const response=diagnoseCodexMemory({
+      cwd:f.other,scopePath:f.scopePath,query:'database',
+    });
+    assert.deepEqual([
+      response.status,response.memory_status,response.matching_items,
+      response.read_only,
+    ],['not_ready','project_not_registered',0,true]);
+    assert.equal(sha(f.dbPath),oldDbHash);
+  }finally{f.cleanup();}
+});
+
+test('missing existing SQLite DB is a not-ready status, not a fatal doctor exception',()=>{
+  const f=fixture();
+  try{
+    const scopeHash=sha(f.scopePath);
+    rmSync(f.dbPath,{force:true});
+    const response=diagnoseCodexMemory({
+      cwd:f.project,scopePath:f.scopePath,query:'database',
+    });
+    assert.deepEqual([
+      response.status,response.memory_status,response.matching_items,
+      response.read_only,
+    ],['not_ready','memory_database_unavailable',0,true]);
+    assert.equal(sha(f.scopePath),scopeHash);
+  }finally{f.cleanup();}
+});
+
 test('CLI emits only bounded read status, no user facts',()=>{
   const f=fixture();
   try{

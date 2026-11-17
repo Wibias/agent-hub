@@ -77,12 +77,12 @@ export function readCodexMemory({
   const config = parseCodexMemoryConfig(env);
   const scope = scopeResolver({ event: { cwd: resolve(cwd) }, config });
   if (missingDatabase(config.dbPath) !== null) {
-    return { status: 'memory_database_unavailable', items: [] };
+    return { status: 'memory_database_unavailable', items: [], read_only: true };
   }
   const memory = createEngine(config.dbPath);
   try {
     if (!memory.getProject(scope.projectId)) {
-      return { status: 'project_not_registered', items: [] };
+      return { status: 'project_not_registered', items: [], read_only: true };
     }
     const found = memory.recall({
       projectId: scope.projectId,
