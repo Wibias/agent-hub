@@ -136,6 +136,8 @@ internal sealed class ReviewAuthorityLabService : ServiceBase
         {
             _oneShotCiRecipient = new OneShotCiRecipientPipe();
             _oneShotCiRecipient.Start();
+            File.WriteAllText(Path.Combine(stateDir, "read-once-ci-listener-started.txt"),
+                "READ_ONCE_CI_LISTENER_STARTED_NO_PRODUCTION_GRANT");
         }
         _operatorProofPipe = new OperatorWebAuthnPipe(
             _ledger, stateDir, _oneShotCiRecipient);
