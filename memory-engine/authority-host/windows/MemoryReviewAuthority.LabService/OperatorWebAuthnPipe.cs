@@ -28,6 +28,23 @@ internal sealed class OperatorWebAuthnPipe : IDisposable
     private ChallengeTicket? _activeReaffirmation;
     private OperatorDirectClaimCoordinator? _publisher;
     private ChallengeTicket? _activePublish;
+    private const string SyntheticPublishCiMarker =
+        "agenthub-synthetic-direct-claim-ci-only.enable";
+    private const string SyntheticPublishCiPolicy =
+        "AGENTHUB_SYNTHETIC_DIRECT_CLAIM_CI_ONLY_V1";
+
+    // Fail-closed: preview installers NEVER create this protected marker.
+    // Only the disposable Windows GitHub runner's SCM fixture can opt in
+    // to synthetic private Claim writes. Not a production feature flag.
+    private static bool IsExplicitSyntheticCiPublishFixture(string stateDir)
+    {
+        var path = Path.Combine(stateDir, SyntheticPublishCiMarker);
+        var item = new FileInfo(path);
+        if (!item.Exists || item.Length is < 10 or > 128
+            || (item.Attributes & FileAttributes.ReparsePoint) != 0)
+            return false;
+        return File.ReadAllText(path, Encoding.UTF8) == SyntheticPublishCiPolicy;
+    }
     private readonly ReviewChallengeCore _registrationProofCore = new();
     private RegistrationAttempt? _registration;
     private RegistrationPossession? _registrationPossession;
@@ -55,7 +72,8 @@ internal sealed class OperatorWebAuthnPipe : IDisposable
         if (operatorCredential?.EnrollmentState == ProtectedPendingReviewLedger.NativeEnrollmentState)
         {
             _reaffirmation = OperatorReaffirmationCoordinator.ForNativeCredential(ledger);
-            _publisher = OperatorDirectClaimCoordinator.ForNativeCredential(ledger);
+            if (IsExplicitSyntheticCiPublishFixture(stateDir))
+                _publisher = OperatorDirectClaimCoordinator.ForNativeCredential(ledger);
         }
         var privatePath = Path.Combine(stateDir, "review-service-signing-key.pk8");
         var publicPath = Path.Combine(stateDir, "review-service-signing-key.pub.pem");
@@ -560,8 +578,10 @@ internal sealed class OperatorWebAuthnPipe : IDisposable
                             _ledger);
                         _reaffirmation = OperatorReaffirmationCoordinator.ForNativeCredential(
                             _ledger);
-                        _publisher = OperatorDirectClaimCoordinator.ForNativeCredential(
-                            _ledger);
+                        if (IsExplicitSyntheticCiPublishFixture(
+                                ReviewHostIdentity.GetStateRoot()))
+                            _publisher = OperatorDirectClaimCoordinator.ForNativeCredential(
+                                _ledger);
                     }
                     response = new
                     {
