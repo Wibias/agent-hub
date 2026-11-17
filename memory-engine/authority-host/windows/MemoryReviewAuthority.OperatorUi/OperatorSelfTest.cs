@@ -257,6 +257,66 @@ internal static class OperatorSelfTest
             }
             if (denied != 7)
                 throw new Exception("operator_reaffirmation_receipt_negative_cases_missing");
+            // Only publish_complete is allowed to report a *signed*
+            // protected Claim write, never user memory_recall availability.
+            var claimId = "C~" + new string('a', 24);
+            var publishRaw = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new
+            {
+                protocol = "agenthub-operator-uv-service-v1",
+                op = "publish_complete", nonce,
+                service_signed = true,
+                human_approval_verified = false,
+                claim_written = true,
+                signature_verified = true,
+                published_to_codex = false,
+                original_evidence_verified = false,
+                status = "protected_user_direct_claim_committed_not_published_to_codex",
+                provenance = "user_direct_reaffirmed_and_published_v1",
+                claim_id = claimId,
+            }));
+            using (var signed = ProtectedOperatorService.VerifySignedResponse(
+                MakeEnvelope(key, publishRaw), key.ExportSubjectPublicKeyInfoPem(),
+                nonce, "publish_complete"))
+            {
+                var receipt = ProtectedOperatorService.ParsePublishReceipt(signed.RootElement);
+                if (!receipt.Verified || receipt.ClaimId != claimId)
+                    throw new Exception("native_claim_receipt_not_accepted");
+            }
+            MustDeny(() =>
+            {
+                using var unused = ProtectedOperatorService.VerifySignedResponse(
+                    MakeEnvelope(key, publishRaw), key.ExportSubjectPublicKeyInfoPem(),
+                    nonce, "complete");
+            });
+            void RejectPublish(bool verifiedOriginal, bool codexPublished,
+                string? value, string? provenance, bool written = true)
+            {
+                using var doc = JsonDocument.Parse(JsonSerializer.Serialize(new
+                {
+                    status = "protected_user_direct_claim_committed_not_published_to_codex",
+                    human_approval_verified = false,
+                    claim_written = written,
+                    signature_verified = true,
+                    published_to_codex = codexPublished,
+                    original_evidence_verified = verifiedOriginal,
+                    claim_id = value,
+                    provenance,
+                }));
+                MustDeny(() =>
+                {
+                    _ = ProtectedOperatorService.ParsePublishReceipt(doc.RootElement);
+                });
+            }
+            RejectPublish(true, false, claimId, "user_direct_reaffirmed_and_published_v1");
+            RejectPublish(false, true, claimId, "user_direct_reaffirmed_and_published_v1");
+            RejectPublish(false, false, "C~not-a-canonical-claim-id",
+                "user_direct_reaffirmed_and_published_v1");
+            RejectPublish(false, false, claimId, "operator_pinned_unverified_evidence_v1");
+            RejectPublish(false, false, claimId, "user_direct_reaffirmed_and_published_v1",
+                written: false);
+            if (denied != 13)
+                throw new Exception("operator_publish_receipt_negative_cases_missing");
+
             foreach (var kind in new[] { "knowledge", "preference", "procedure" })
                 if (!ProtectedOperatorService.ValidReviewKind(kind))
                     throw new Exception("native_supported_source_kind_rejected");
