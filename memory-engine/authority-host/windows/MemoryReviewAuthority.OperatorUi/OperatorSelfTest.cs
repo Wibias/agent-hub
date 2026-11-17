@@ -127,6 +127,8 @@ internal static class OperatorSelfTest
                 status="ci_native_operator_signed_recipient_offer_verified_only",
                 ticket_id=offer.TicketId,
                 challenge=offer.Challenge,
+                credential_id=offer.CredentialId,
+                expected_origin=offer.ExpectedOrigin,
                 recipient_kernel_pid=offer.KernelRecipientPid,
                 principal_sid=offer.PrincipalSid,
                 recipient_session_sha256=offer.RecipientSessionSha256,
