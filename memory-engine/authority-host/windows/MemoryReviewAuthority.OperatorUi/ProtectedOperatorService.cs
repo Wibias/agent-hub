@@ -239,6 +239,9 @@ internal static class ProtectedOperatorService
         }
     }
 
+    // Called synchronously from the WinForms WebAuthn completion handler.
+    // RequestAsync must never capture its SynchronizationContext: the caller
+    // is blocked waiting for this result and cannot pump UI continuations.
     private static JsonDocument Request(string operation, object fields)
         => RequestAsync(operation, fields).GetAwaiter().GetResult();
 
@@ -264,9 +267,9 @@ internal static class ProtectedOperatorService
             PipeDirection.InOut, PipeOptions.Asynchronous,
             TokenImpersonationLevel.Identification);
         using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(6));
-        await pipe.ConnectAsync(3000, deadline.Token);
-        await pipe.WriteAsync(message, deadline.Token);
-        await pipe.FlushAsync(deadline.Token);
+        await pipe.ConnectAsync(3000, deadline.Token).ConfigureAwait(false);
+        await pipe.WriteAsync(message, deadline.Token).ConfigureAwait(false);
+        await pipe.FlushAsync(deadline.Token).ConfigureAwait(false);
         // The server's response is one ASCII JSON envelope line. Enforce an
         // absolute response-size cap even if a compromised pipe never sends
         // a newline, and an actual cancellation deadline on every read.
@@ -274,7 +277,7 @@ internal static class ProtectedOperatorService
         var buffer = new byte[1024];
         while (bytes.Length < 16_384)
         {
-            var count = await pipe.ReadAsync(buffer, deadline.Token);
+            var count = await pipe.ReadAsync(buffer, deadline.Token).ConfigureAwait(false);
             if (count == 0)
                 throw new InvalidOperationException("Leere Dienstantwort");
             var lineEnd = Array.IndexOf(buffer, (byte)'\n', 0, count);
