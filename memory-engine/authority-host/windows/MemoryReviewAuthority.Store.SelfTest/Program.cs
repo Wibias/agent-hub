@@ -361,21 +361,21 @@ internal static class Program
         // approval-purpose ticket and later replay it as a Claim.
         var approval = coordinator.BeginProtectedApproval(meaning);
         var wrongPath = coordinator.Complete(approval.TicketId, meaning,
-            key.Sign(approval, counter: 2));
+            key.Sign(approval, forcedSignCount: 2));
         Check(!wrongPath.Verified && wrongPath.Status == "challenge_purpose_mismatch");
         Check(!coordinator.CompleteProtected(approval.TicketId,
-            meaning, key.Sign(approval, counter: 2)).Verified);
+            meaning, key.Sign(approval, forcedSignCount: 2)).Verified);
         Check(store.ReadProtectedClaims(Example.ProjectId, Example.Branch).Count == 0);
 
         // A fresh, distinct approval-purpose ticket can still commit the
         // synthetic lab fixture once, never a real operator-pinned E~.
         var fresh = coordinator.BeginProtectedApproval(meaning);
         var saved = coordinator.CompleteProtected(fresh.TicketId,
-            meaning, key.Sign(fresh, counter: 3));
+            meaning, key.Sign(fresh, forcedSignCount: 3));
         Check(saved.Verified && saved.ClaimWritten && !saved.ApprovedClaim);
         Check(store.ReadProtectedClaims(Example.ProjectId, Example.Branch).Count == 1);
         Check(!coordinator.CompleteProtected(fresh.TicketId,
-            meaning, key.Sign(fresh, counter: 4)).Verified);
+            meaning, key.Sign(fresh, forcedSignCount: 4)).Verified);
     }
 
     private static void ProtectedConfirm()
