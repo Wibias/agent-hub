@@ -91,6 +91,7 @@ function reviewable(report) {
  */
 export async function exportProtectedEvidenceReview({
   dbPath, repoPath, proposalRef, decision, outputDir,
+  historicalSource = null,
   sqliteBackup = backup,
 } = {}) {
   const opts = parseOperatorEvidenceExportArgs([
@@ -103,12 +104,22 @@ export async function exportProtectedEvidenceReview({
     throw new Error('input_missing_or_export_directory_already_exists');
   }
   const firstGit = currentGit(opts.repoPath);
+  if (historicalSource !== null && (
+    typeof historicalSource !== 'object'
+    || !/^[a-zA-Z0-9][a-zA-Z0-9._/-]{0,127}$/u.test(historicalSource.branch ?? '')
+    || historicalSource.branch.includes('..')
+    || historicalSource.branch.includes('//')
+    || !/^[0-9a-f]{40}$/u.test(historicalSource.revisionSha ?? '')
+  )) throw new Error('explicit_historical_scope_invalid');
+  const sourceBranch = historicalSource?.branch ?? firstGit.branch;
+  const sourceRevision = historicalSource?.revisionSha ?? firstGit.revisionSha;
   const context = {
     dbPath: opts.dbPath,
     repoPath: firstGit.root,
     projectId: firstGit.projectId,
-    branch: firstGit.branch,
-    revisionSha: firstGit.revisionSha,
+    branch: sourceBranch,
+    revisionSha: sourceRevision,
+    historicalSource,
     selectedRef: opts.proposalRef,
     showLocalContent: false,
     isTty: false,
@@ -146,7 +157,14 @@ export async function exportProtectedEvidenceReview({
       || firstGit.projectId !== secondGit.projectId
       || firstGit.branch !== secondGit.branch
       || firstGit.revisionSha !== secondGit.revisionSha
-      || firstGit.root !== secondGit.root) {
+      || firstGit.root !== secondGit.root
+      || (historicalSource !== null && (
+        !before.historicalProvenance?.provenanceSha256
+        || before.historicalProvenance?.provenanceSha256
+          !== after.historicalProvenance?.provenanceSha256
+        || before.historicalProvenance?.provenanceSha256
+          !== current.historicalProvenance?.provenanceSha256
+      ))) {
     throw new Error('evidence_or_git_changed_during_export_manifest_not_created');
   }
   // Five exact fields. No paths or credentials in the elevated-service
@@ -155,8 +173,8 @@ export async function exportProtectedEvidenceReview({
   writeFileSync(join(opts.outputDir, EVIDENCE_MANIFEST_NAME),
     JSON.stringify({
       projectId: firstGit.projectId,
-      branch: firstGit.branch,
-      revisionSha: firstGit.revisionSha,
+      branch: sourceBranch,
+      revisionSha: sourceRevision,
       proposalRef: opts.proposalRef,
       decision: opts.decision,
     }), { encoding: 'utf8', flag: 'wx', mode: 0o600 });
@@ -165,8 +183,12 @@ export async function exportProtectedEvidenceReview({
     status: 'operator_transfer_ready_unverified_unapproved',
     proposalRef: opts.proposalRef,
     projectId: firstGit.projectId,
-    branch: firstGit.branch,
-    revisionSha: firstGit.revisionSha,
+    branch: sourceBranch,
+    revisionSha: sourceRevision,
+    historicalProvenance: historicalSource !== null
+      ? before.historicalProvenance : null,
+    checkoutRevisionSha: firstGit.revisionSha,
+    checkoutBranch: firstGit.branch,
     factSha256: after.canonicalFactHash,
     consoleReviewSnapshotSha256: after.reviewSnapshotSha256,
     evidenceCount: after.evidence.length,
