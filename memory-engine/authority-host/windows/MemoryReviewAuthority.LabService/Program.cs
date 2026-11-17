@@ -134,7 +134,7 @@ internal sealed class ReviewAuthorityLabService : ServiceBase
         // Preview never creates this marker or exposes a private delivery pipe.
         if (OneShotCiRecipientPipe.Enabled(stateDir))
         {
-            _oneShotCiRecipient = new OneShotCiRecipientPipe();
+            _oneShotCiRecipient = new OneShotCiRecipientPipe(stateDir);
             _oneShotCiRecipient.Start();
             File.WriteAllText(Path.Combine(stateDir, "read-once-ci-listener-started.txt"),
                 "READ_ONCE_CI_LISTENER_STARTED_NO_PRODUCTION_GRANT");
