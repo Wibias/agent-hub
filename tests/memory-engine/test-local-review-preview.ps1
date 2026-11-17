@@ -130,6 +130,15 @@ try {
         throw 'Protected local preview install did not establish correct no-Claim state'
     }
     $installedSuccessfully = $true
+    # The shared preview installer claims claimsEnabled=false. This must
+    # remain true EVEN AFTER the codebase gains a private Claim writer.
+    # Only the separate disposable SCM fixture may create its exact
+    # protected opt-in marker; no installed No-Write preview may get it.
+    if (Test-Path -LiteralPath (Join-Path $state
+        'agenthub-synthetic-direct-claim-ci-only.enable')) {
+        throw 'No-Write Preview unexpectedly enabled protected Claim writes'
+    }
+    Write-Host 'PASS: No-Write Preview has no protected Claim-publish activation marker'
     Write-Host 'PASS: pinned manifest + Administrator-protected service and native UI installed from actual clean Git package, NO Claim'
 
     # Run the ACTUAL installed native WinForms binary against the ACTUAL
