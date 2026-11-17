@@ -1,4 +1,4 @@
-import { createHash, createPublicKey, verify } from 'node:crypto';
+import { createHash, createPublicKey, randomBytes, verify } from 'node:crypto';
 import { lstatSync, readFileSync } from 'node:fs';
 import { createConnection } from 'node:net';
 import { isAbsolute } from 'node:path';
@@ -18,18 +18,25 @@ const exact=(x,keys)=>isRecord(x)
   &&Object.keys(x).length===keys.length
   &&keys.every(k=>Object.hasOwn(x,k));
 const sha=text=>createHash('sha256').update(text).digest('hex');
+const typeofNonce=x=>typeof x==='string'
+  &&/^[A-Za-z0-9_-]{43}$/u.test(x)
+  &&Buffer.from(x,'base64url').length===32
+  &&Buffer.from(x,'base64url').toString('base64url')===x;
 const denied=status=>Object.freeze({
   status,items:[],read_only:true,ci_simulation_only:true,
   trusted_for_production_recall:false,
   physical_human_approval_verified:false,production_authorized:false,
 });
 
-export function verifySignedOnceCi({envelope,pinnedKey,expectedPid=process.pid}={}) {
+export function verifySignedOnceCi({
+  envelope,pinnedKey,expectedPid=process.pid,expectedClientNonce,
+}={}) {
   function deny(){throw new Error('ci_read_once_invalid_signed_recipient_payload');}
   if(!exact(envelope,['protocol','payload_b64','signature_b64'])
     ||envelope.protocol!==CI_READ_ONCE_PROTOCOL
     ||typeof pinnedKey!=='string'||pinnedKey.length>8192
-    ||typeof expectedPid!=='number'||!Number.isSafeInteger(expectedPid))
+    ||typeof expectedPid!=='number'||!Number.isSafeInteger(expectedPid)
+    ||!typeofNonce(expectedClientNonce))
     deny();
   let payload;
   try {
@@ -50,7 +57,8 @@ export function verifySignedOnceCi({envelope,pinnedKey,expectedPid=process.pid}=
     'protocol','status','request_id','claim_id','project_id',
     'branch','revision_sha','proposal_ref','fact_sha256',
     'result_set_sha256','recipient_session_sha256',
-    'recipient_kernel_pid','value','provenance','production_authorized',
+    'recipient_client_nonce','recipient_kernel_pid',
+    'value','provenance','production_authorized',
   ])||payload.protocol!==CI_READ_ONCE_PROTOCOL
     ||payload.status!=='exact_one_shot_synthetic_ci_claim'
     ||payload.project_id!==CI_READ_ONCE_PROJECT
@@ -63,6 +71,7 @@ export function verifySignedOnceCi({envelope,pinnedKey,expectedPid=process.pid}=
     ||!REQUEST.test(payload.request_id??'')
     ||!CLAIM.test(payload.claim_id??'')
     ||payload.recipient_kernel_pid!==expectedPid
+    ||payload.recipient_client_nonce!==expectedClientNonce
     ||payload.provenance!=='user_direct_reaffirmed_and_published_v1'
     ||payload.production_authorized!==false
     ||typeof payload.value!=='string'
@@ -82,6 +91,7 @@ export async function requestCiReadOnce({pinPath,timeoutMs=40000}={}) {
   if(!stat.isFile()||stat.isSymbolicLink()||stat.size<100||stat.size>8192)
     throw Error('ci_read_once_pin_invalid');
   const pem=readFileSync(pinPath,'utf8');
+  const clientNonce=randomBytes(32).toString('base64url');
   return await new Promise((resolve,reject)=>{
     const pipe=createConnection(CI_READ_ONCE_PIPE);
     let buffer='',ack=false,settled=false;
@@ -96,7 +106,7 @@ export async function requestCiReadOnce({pinPath,timeoutMs=40000}={}) {
     pipe.on('connect',()=>pipe.write(JSON.stringify({
       protocol:CI_READ_ONCE_PROTOCOL,
       projectId:CI_READ_ONCE_PROJECT,branch:CI_READ_ONCE_BRANCH,
-      proposalRef:CI_READ_ONCE_PROPOSAL,
+      proposalRef:CI_READ_ONCE_PROPOSAL,clientNonce,
     })+'\n'));
     pipe.on('end',()=>done(Error('ci_read_once_denied_without_release')));
     pipe.on('data',chunk=>{
@@ -121,6 +131,7 @@ export async function requestCiReadOnce({pinPath,timeoutMs=40000}={}) {
           }else{
             const verified=verifySignedOnceCi({
               envelope:message,pinnedKey:pem,expectedPid:process.pid,
+              expectedClientNonce:clientNonce,
             });
             done(null,verified);
           }
