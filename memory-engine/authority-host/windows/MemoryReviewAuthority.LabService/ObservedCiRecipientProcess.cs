@@ -105,7 +105,8 @@ internal sealed class ObservedCiRecipientProcess : IDisposable
     [return:MarshalAs(UnmanagedType.Bool)]
     private static extern bool GetNamedPipeClientProcessId(
         SafePipeHandle pipe,out uint pid);
-    [DllImport("kernel32.dll",ExactSpelling=true,SetLastError=true)]
+    [DllImport("kernel32.dll",EntryPoint="QueryFullProcessImageNameW",
+        CharSet=CharSet.Unicode,ExactSpelling=true,SetLastError=true)]
     [return:MarshalAs(UnmanagedType.Bool)]
     private static extern bool QueryFullProcessImageName(
         SafeProcessHandle process,uint flags,StringBuilder path,ref uint size);
