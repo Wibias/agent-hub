@@ -108,6 +108,12 @@ internal static class OperatorSelfTest
                 || offer.Value !=
                     "This knowledge statement is proposed from unverified historical Evidence."
                 || offer.KernelRecipientPid == 0
+                || offer.RecipientOsOriginAttested
+                || offer.RecipientProcessCreatedFileTime == 0
+                || !Path.IsPathFullyQualified(offer.RecipientProcessImagePath)
+                || !string.Equals(
+                    Path.GetFileName(offer.RecipientProcessImagePath),
+                    "node.exe",StringComparison.OrdinalIgnoreCase)
                 || offer.RecipientSessionSha256.Length != 64
                 || offer.ResultSetSha256.Length != 64
                 || offer.Recipient !=
@@ -130,6 +136,7 @@ internal static class OperatorSelfTest
                 credential_id=offer.CredentialId,
                 expected_origin=offer.ExpectedOrigin,
                 recipient_kernel_pid=offer.KernelRecipientPid,
+                recipient_os_origin_attested=false,
                 principal_sid=offer.PrincipalSid,
                 recipient_session_sha256=offer.RecipientSessionSha256,
                 result_set_sha256=offer.ResultSetSha256,
