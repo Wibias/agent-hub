@@ -185,6 +185,16 @@ try {
         throw 'canonical E~ source fixture creation failed'
     }
 
+    if ($NativeEnrollmentMode.IsPresent) {
+        # Created ONLY by this ephemeral CI script after the protected
+        # service SID DACL has been independently verified. The regular
+        # No-Write Preview installer never creates this marker.
+        $publishGate = Join-Path $stateRoot 'agenthub-synthetic-direct-claim-ci-only.enable'
+        [IO.File]::WriteAllText($publishGate,
+            'AGENTHUB_SYNTHETIC_DIRECT_CLAIM_CI_ONLY_V1',
+            [Text.UTF8Encoding]::new($false))
+    }
+
     & $sc start $service
     if ($LASTEXITCODE -ne 0) { throw 'LocalService lab host did not start' }
     $running = $false
