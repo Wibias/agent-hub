@@ -24,6 +24,27 @@ counter. Counter zero is accepted as *not* proving replay resistance; the
 ticket itself remains single use. Counter rollback for reporting credentials
 is rejected.
 
+## Distinct approval-intent challenge (default OFF)
+
+A future claim-writing gesture must not reuse an assertion issued for
+credential possession/enrollment or a no-approval operator proof.
+
+The offline core now provides `BeginProtectedApproval` and
+`VerifyProtectedApprovalAndConsume`, using
+`agenthub-evidence-bound-uv-approve-v1` instead of the existing proof
+challenge domain. Exact scope, snapshot, fact hash, action and nonce remain
+bound. A ticket from either domain is consumed and denied if presented to the
+other verifier. Separate fresh signed assertions are required.
+
+**This is not a service approval endpoint.** The native operator window and
+protected host do not call these methods. Even a valid approval-purpose
+WebAuthn assertion still returns `ApprovedReviewDecision = false` and
+`ClaimWritten = false`. A future protected owner must independently verify
+the actual source (the existing operator-pinned SQLite export is **unverified**),
+enrolled credential and exact decision, then atomically commit one-use
+approval with a protected Claim. The ordinary same-user cache is never a
+source of authority.
+
 Every successful result explicitly has:
 
 - `Status = verified_not_authorized`
