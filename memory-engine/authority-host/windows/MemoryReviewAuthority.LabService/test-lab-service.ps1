@@ -212,6 +212,18 @@ try {
         } | ConvertTo-Json -Compress
         [IO.File]::WriteAllText($directPolicy, $policy,
             [Text.UTF8Encoding]::new($false))
+        # Separate CI-only exact-Windows-account reader. The normal
+        # installed Preview NEVER provisions this protected enrollment.
+        $userReadPolicyPath = Join-Path $stateRoot 'agenthub-user-direct-read-ci-only.json'
+        $userReadPolicy = @{
+            policy = 'agenthub-user-direct-read-ci-sid-scope-v1'
+            principalSid = $ciSid
+            projectId = $sourceScope.projectId
+            branch = $sourceScope.branch
+            revisionSha = $sourceScope.revisionSha
+        } | ConvertTo-Json -Compress
+        [IO.File]::WriteAllText($userReadPolicyPath, $userReadPolicy,
+            [Text.UTF8Encoding]::new($false))
     }
 
     & $sc start $service
@@ -429,6 +441,15 @@ try {
             throw 'direct CI signed read falsely claimed authority'
         }
         Write-Host 'PASS: signed direct CI read binds OS SID and Git revision'
+        # SAME logged-in account, but with the Administrators group
+        # disabled by a real restricted Windows impersonation token.
+        # A successful signed read MUST coexist with denial of direct DB
+        # access and both admin-only operator/read pipes.
+        & $accessProbe $stateRoot --signed-user-ci $sourceScope.revisionSha $publishedPin
+        if ($LASTEXITCODE -ne 0) {
+            throw 'same-account nonadmin signed Claim read denied or admin pipe exposed'
+        }
+        Write-Host 'PASS: non-elevated same-account token verifies signed user Claim and cannot reach admin, UV or SQLite'
     } else {
     $operatorProbe = Join-Path $repoRoot 'scripts/probe-operator-service-web-authn.mjs'
     $operatorOutput = & node $operatorProbe $publishedPin

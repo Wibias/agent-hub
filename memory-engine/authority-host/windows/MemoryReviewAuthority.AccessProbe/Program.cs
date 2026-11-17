@@ -1,4 +1,7 @@
 using System.ComponentModel;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
 using System.IO.Pipes;
 using System.Runtime.InteropServices;
 using System.Security.Principal;
@@ -25,7 +28,12 @@ internal static class Program
             var state = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
                 "AgentHubMemoryReviewLab-State");
-            Require(args.Length == 1
+            var signedUserRead = args.Length == 4
+                && args[1] == "--signed-user-ci"
+                && args[2].Length == 40
+                && args[2].All(ch => ch is >= '0' and <= '9' or >= 'a' and <= 'f')
+                && Path.IsPathFullyQualified(args[3]);
+            Require((args.Length == 1 || signedUserRead)
                 && string.Equals(Path.GetFullPath(args[0]), Path.GetFullPath(state),
                     StringComparison.OrdinalIgnoreCase)
                 && Directory.Exists(state), "unexpected_lab_state_path");
@@ -97,6 +105,18 @@ internal static class Program
                                     PipeDirection.InOut);
                                 pipe.Connect(1000);
                             });
+                            if (signedUserRead)
+                            {
+                                ExpectAccessDenied("admin_only_direct_read_pipe", () =>
+                                {
+                                    using var pipe = new NamedPipeClientStream(".",
+                                        "AgentHubMemoryReviewLab-DirectReadCiV1",
+                                        PipeDirection.InOut);
+                                    pipe.Connect(1000);
+                                });
+                                VerifySignedUserDirectCiRead(
+                                    originalUserSid!, args[2], args[3]);
+                            }
                         });
                     }
                 }
@@ -105,7 +125,9 @@ internal static class Program
             {
                 Marshal.FreeHGlobal(adminPointer);
             }
-            Console.WriteLine("MEMORY_REVIEW_SAME_ACCOUNT_RESTRICTED_TOKEN PASS 4/4; SAME_USER NO_ADMIN NO_DIRECT_DB_OR_UV_PIPE_ACCESS");
+            Console.WriteLine(signedUserRead
+                ? "MEMORY_REVIEW_SAME_ACCOUNT_RESTRICTED_TOKEN PASS 6/6; ENROLLED_USER_READ_ONLY, NO_ADMIN_OR_DB_ACCESS"
+                : "MEMORY_REVIEW_SAME_ACCOUNT_RESTRICTED_TOKEN PASS 4/4; SAME_USER NO_ADMIN NO_DIRECT_DB_OR_UV_PIPE_ACCESS");
             return 0;
         }
         catch (Exception ex)
@@ -114,6 +136,94 @@ internal static class Program
                 + ex.GetType().Name + ": " + ex.Message);
             return 1;
         }
+    }
+
+    private static void VerifySignedUserDirectCiRead(
+        string expectedSid, string revisionSha, string publicPinPath)
+    {
+        const string protocol = "agenthub-protected-user-read-ci-v1";
+        const string project = "github.com/example/operator-evidence";
+        const string fact =
+            "This knowledge statement is proposed from unverified historical Evidence.";
+        const string query = "knowledge";
+
+        var nonce = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32))
+            .TrimEnd('=').Replace('+', '-').Replace('/', '_');
+        using var pipe = new NamedPipeClientStream(".",
+            "AgentHubMemoryReviewLab-UserReadCiV1", PipeDirection.InOut,
+            PipeOptions.Asynchronous, TokenImpersonationLevel.Impersonation);
+        pipe.Connect(2500);
+        var bytes = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new
+        {
+            protocol, op = "read_user_ci", nonce,
+            projectId = project, branch = "main", revisionSha,
+            query, maxItems = 3,
+        }) + "\n");
+        pipe.Write(bytes);
+        pipe.Flush();
+        using var reader = new StreamReader(pipe, Encoding.UTF8, leaveOpen: true);
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var line = reader.ReadLineAsync(timeout.Token).AsTask()
+            .GetAwaiter().GetResult();
+        Require(line is { Length: >= 200 and <= 49152 },
+            "enrolled_user_ci_read_missing_response");
+        using var envelope = JsonDocument.Parse(line!);
+        var outer = envelope.RootElement;
+        Require(outer.GetProperty("protocol").GetString() == protocol,
+            "signed_user_ci_wrong_protocol");
+        var raw = Convert.FromBase64String(
+            outer.GetProperty("payload_b64").GetString()!);
+        var signature = Convert.FromBase64String(
+            outer.GetProperty("signature_b64").GetString()!);
+        using var key = ECDsa.Create();
+        key.ImportFromPem(File.ReadAllText(publicPinPath));
+        Require(key.ExportParameters(false).Curve.Oid.Value ==
+                "1.2.840.10045.3.1.7"
+            && key.VerifyData(raw, signature, HashAlgorithmName.SHA256,
+                DSASignatureFormat.Rfc3279DerSequence),
+            "enrolled_user_ci_signer_invalid");
+        using var signed = JsonDocument.Parse(raw);
+        var response = signed.RootElement;
+        Require(response.GetProperty("protocol").GetString() == protocol
+            && response.GetProperty("nonce").GetString() == nonce
+            && response.GetProperty("principal_sid").GetString() == expectedSid
+            && response.GetProperty("project_id").GetString() == project
+            && response.GetProperty("branch").GetString() == "main"
+            && response.GetProperty("revision_sha").GetString() == revisionSha
+            && response.GetProperty("query").GetString() == query
+            && response.GetProperty("max_items").GetInt32() == 3
+            && response.GetProperty("status").GetString() == "found_direct_ci_only"
+            && response.GetProperty("service_signed").GetBoolean()
+            && response.GetProperty("read_only").GetBoolean()
+            && response.GetProperty("ci_simulation_only").GetBoolean()
+            && !response.GetProperty("trusted_for_production_recall").GetBoolean()
+            && !response.GetProperty("physical_human_approval_verified").GetBoolean()
+            && !response.GetProperty("published_to_codex").GetBoolean(),
+            "enrolled_user_ci_scope_or_authority_invalid");
+        var claims = response.GetProperty("items");
+        Require(claims.ValueKind == JsonValueKind.Array
+            && claims.GetArrayLength() == 1,
+            "enrolled_user_ci_claim_count_invalid");
+        var claim = claims[0];
+        var statement = claim.GetProperty("value").GetString();
+        var digest = Convert.ToHexString(
+            SHA256.HashData(Encoding.UTF8.GetBytes(statement ?? "")))
+            .ToLowerInvariant();
+        Require(statement == fact
+            && claim.GetProperty("project_id").GetString() == project
+            && claim.GetProperty("branch").GetString() == "main"
+            && claim.GetProperty("revision_sha").GetString() == revisionSha
+            && claim.GetProperty("fact_sha256").GetString() == digest
+            && claim.GetProperty("provenance").GetString() ==
+                "user_direct_reaffirmed_and_published_v1"
+            && claim.GetProperty("historical_source_origin").GetString() ==
+                "operator_pinned_unverified_evidence_v1"
+            && !claim.GetProperty("historical_evidence_verified").GetBoolean()
+            && !claim.GetProperty("physical_human_approval_verified").GetBoolean()
+            && !claim.GetProperty("published_to_codex").GetBoolean(),
+            "enrolled_user_ci_claim_not_authenticated");
+        Console.WriteLine(
+            "PASS enrolled_same_account_nonadmin_signed_direct_read; REAL_OS_SID AND SERVICE_SIGNATURE VERIFIED; NO_PRODUCTION_RECALL");
     }
 
     private static void ExpectAccessDenied(string label, Action operation)
