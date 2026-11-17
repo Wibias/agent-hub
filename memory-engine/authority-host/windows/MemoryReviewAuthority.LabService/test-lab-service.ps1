@@ -193,6 +193,25 @@ try {
         [IO.File]::WriteAllText($publishGate,
             'AGENTHUB_SYNTHETIC_DIRECT_CLAIM_CI_ONLY_V1',
             [Text.UTF8Encoding]::new($false))
+        $sourceScope = Get-Content -LiteralPath (Join-Path $stateRoot 'operator-evidence-manifest.json') -Raw | ConvertFrom-Json
+        $ciSid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+        if ($sourceScope.projectId -cne 'github.com/example/operator-evidence' -or
+            $sourceScope.branch -cne 'main' -or
+            $sourceScope.revisionSha.Length -ne 40 -or
+            $sourceScope.revisionSha -notmatch '^[0-9a-f]+$' -or
+            $ciSid -notmatch '^S-1-5-21-') {
+            throw 'CI direct read enrollment scope invalid'
+        }
+        $directPolicy = Join-Path $stateRoot 'agenthub-direct-read-ci-only.json'
+        $policy = @{
+            policy = 'agenthub-direct-read-ci-sid-scope-v1'
+            principalSid = $ciSid
+            projectId = $sourceScope.projectId
+            branch = $sourceScope.branch
+            revisionSha = $sourceScope.revisionSha
+        } | ConvertTo-Json -Compress
+        [IO.File]::WriteAllText($directPolicy, $policy,
+            [Text.UTF8Encoding]::new($false))
     }
 
     & $sc start $service
@@ -393,6 +412,23 @@ try {
             throw 'Reaffirmation readback unexpectedly promoted historical source or Claim'
         }
         Write-Host 'PASS: protected SQLite readback has exactly one private user-direct Claim, unverifiable old source, zero signed Codex publication'
+        $directProbe = Join-Path $repoRoot 'scripts/probe-protected-direct-read-ci.mjs'
+        $directOutput = & node $directProbe --pin $publishedPin --sid $ciSid --revision $sourceScope.revisionSha
+        if ($LASTEXITCODE -ne 0) { throw 'direct CI signed read failed' }
+        $direct = $directOutput | ConvertFrom-Json
+        if ($direct.status -cne 'protected_direct_read_ci_sid_scope_signature_pass' -or
+            $direct.claim_count -ne 1 -or
+            -not $direct.principal_sid_matches_os -or
+            -not $direct.signed_response_verified -or
+            -not $direct.wrong_revision_denied -or
+            -not $direct.wrong_sid_denied -or
+            $direct.actual_physical_hello_verified -or
+            $direct.trusted_for_production_recall -or
+            $direct.published_to_codex -or
+            -not $direct.production_no_go) {
+            throw 'direct CI signed read falsely claimed authority'
+        }
+        Write-Host 'PASS: signed direct CI read binds OS SID and Git revision'
     } else {
     $operatorProbe = Join-Path $repoRoot 'scripts/probe-operator-service-web-authn.mjs'
     $operatorOutput = & node $operatorProbe $publishedPin
