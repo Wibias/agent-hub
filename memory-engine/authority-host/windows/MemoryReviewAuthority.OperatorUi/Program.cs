@@ -179,6 +179,23 @@ internal sealed class OperatorReviewWindow : Form
         Text = "Jetzt mit Windows Hello als geschützten Claim speichern",
         AutoSize = true, Height = 38, Enabled = false,
     };
+    private readonly Button _readPrepare = new()
+    {
+        Text = "Geschützten Claim zur Read-Prüfung laden",
+        AutoSize = true, Height = 38,
+    };
+    private readonly CheckBox _readAcknowledge = new()
+    {
+        Text = "Ich habe den konkreten Claim, das Projekt und den Empfänger gelesen. "
+            + "Nur separate Windows-Hello-Absicht, KEIN Codex-Recall.",
+        Dock = DockStyle.Fill, Enabled = false,
+    };
+    private readonly Button _readConfirm = new()
+    {
+        Text = "Read-Zustimmung mit Windows Hello prüfen (KEINE Freigabe)",
+        AutoSize = true, Height = 38, Enabled = false,
+    };
+    private ReadDisclosureOffer? _readOffer;
     private ServiceOffer? _publication;
     private ServiceOffer? _offer;
     private ServiceOffer? _reaffirmation;
@@ -199,7 +216,7 @@ internal sealed class OperatorReviewWindow : Form
         {
             Dock = DockStyle.Fill, Padding = new Padding(28),
             AutoScroll = true,
-            ColumnCount = 1, RowCount = 12,
+            ColumnCount = 1, RowCount = 14,
         };
         outer.RowStyles.Add(new RowStyle(SizeType.Absolute, 80));
         outer.RowStyles.Add(new RowStyle(SizeType.Absolute, 74));
@@ -209,6 +226,8 @@ internal sealed class OperatorReviewWindow : Form
         outer.RowStyles.Add(new RowStyle(SizeType.Absolute, 50));
         outer.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
         outer.RowStyles.Add(new RowStyle(SizeType.Absolute, 50));
+        outer.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
+        outer.RowStyles.Add(new RowStyle(SizeType.Absolute, 65));
         outer.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
         outer.RowStyles.Add(new RowStyle(SizeType.Absolute, 65));
         outer.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
@@ -241,6 +260,7 @@ internal sealed class OperatorReviewWindow : Form
         loadActions.Controls.Add(_enrollPrepare);
         loadActions.Controls.Add(_reaffirmPrepare);
         loadActions.Controls.Add(_publishPrepare);
+        loadActions.Controls.Add(_readPrepare);
         outer.Controls.Add(loadActions, 0, 2);
         outer.Controls.Add(_fact, 0, 3);
         outer.Controls.Add(_meaning, 0, 4);
@@ -250,7 +270,9 @@ internal sealed class OperatorReviewWindow : Form
         outer.Controls.Add(_reaffirmConfirm, 0, 8);
         outer.Controls.Add(_publishAcknowledge, 0, 9);
         outer.Controls.Add(_publishCommit, 0, 10);
-        outer.Controls.Add(_status, 0, 11);
+        outer.Controls.Add(_readAcknowledge, 0, 11);
+        outer.Controls.Add(_readConfirm, 0, 12);
+        outer.Controls.Add(_status, 0, 13);
         Controls.Add(outer);
 
         _load.Click += async (_, _) => await LoadOfferAsync();
@@ -259,6 +281,9 @@ internal sealed class OperatorReviewWindow : Form
         _reaffirmConfirm.Click += (_, _) => PerformReaffirmation();
         _reaffirmAcknowledge.CheckedChanged += (_, _) => UpdateVerifyEnabled();
         _publishPrepare.Click += async (_, _) => await LoadPublishAsync();
+        _readPrepare.Click += async (_, _) => await LoadReadDisclosureAsync();
+        _readConfirm.Click += (_, _) => PerformReadDisclosure();
+        _readAcknowledge.CheckedChanged += (_, _) => UpdateVerifyEnabled();
         _publishCommit.Click += (_, _) => PerformPublish();
         _publishAcknowledge.CheckedChanged += (_, _) => UpdateVerifyEnabled();
         _verify.Click += (_, _) =>
@@ -297,6 +322,9 @@ internal sealed class OperatorReviewWindow : Form
         _enrollment = null;
         _reaffirmation = null;
         _publication = null;
+        _readOffer = null;
+        _readAcknowledge.Checked = false;
+        _readAcknowledge.Enabled = false;
         _publishAcknowledge.Checked = false;
         _publishAcknowledge.Enabled = false;
         _reaffirmAcknowledge.Checked = false;
@@ -320,6 +348,8 @@ internal sealed class OperatorReviewWindow : Form
             && _reaffirmation is { } r && r.ExpiresUtc > DateTimeOffset.UtcNow;
         _publishCommit.Enabled = !_busy && _publishAcknowledge.Checked
             && _publication is { } p && p.ExpiresUtc > DateTimeOffset.UtcNow;
+        _readConfirm.Enabled = !_busy && _readAcknowledge.Checked
+            && _readOffer is { } read && read.ExpiresUtc > DateTimeOffset.UtcNow;
     }
 
     private async Task LoadOfferAsync()
@@ -592,6 +622,113 @@ internal sealed class OperatorReviewWindow : Form
             _enrollPrepare.Enabled = true;
             _reaffirmPrepare.Enabled = true;
             _publishPrepare.Enabled = true;
+            UpdateVerifyEnabled();
+        }
+    }
+
+
+    private async Task LoadReadDisclosureAsync()
+    {
+        if (_busy) return;
+        InvalidateOffer();
+        _busy = true;
+        _readPrepare.Enabled = false;
+        _load.Enabled = false;
+        _status.Text = "Lade signierte geschützte Claim-Vorschau aus dem LocalService ...";
+        try
+        {
+            var project = _project.Text.Trim();
+            var branch = _branch.Text.Trim();
+            var proposal = _reference.Text.Trim();
+            var read = await Task.Run(() =>
+                ProtectedOperatorService.BeginReadDisclosure(
+                    project, branch, proposal));
+            if (project != _project.Text.Trim()
+                || branch != _branch.Text.Trim()
+                || proposal != _reference.Text.Trim()
+                || read.ExpiresUtc <= DateTimeOffset.UtcNow)
+                throw new InvalidOperationException("Read-Scope während des Ladens geändert");
+            _readOffer = read;
+            _fact.Text = read.Value;
+            _meaning.Text =
+                $"READ-VORSCHAU (NICHT AN CODEX) | {read.Kind}\n"
+                + $"PROJEKT: {read.ProjectId} | BRANCH: {read.Branch}\n"
+                + $"COMMIT: {read.RevisionSha}\n"
+                + $"CLAIM: {read.ClaimId} | E~: {read.ProposalRef}\n"
+                + $"QUERY: {read.Query}\n"
+                + $"EMPFÄNGER: {read.Recipient}\n"
+                + $"PRINCIPAL-SID: {read.PrincipalSid}\n"
+                + $"SNAPSHOT: {read.SnapshotSha256}\n"
+                + $"CLAIM-SHA256: {read.FactSha256}\n"
+                + $"ERGEBNIS-SHA256: {read.ResultSetSha256}\n"
+                + $"PROVENIENZ: {read.Provenance}";
+            _readAcknowledge.Enabled = true;
+            _status.Text = "Genau einen dienstsignierten Claim geprüft. "
+                + "Diese Operation prüft NUR den separaten Read-Zustimmungszweck. "
+                + "Die Antwort geht NICHT an Codex.";
+        }
+        catch (Exception error)
+        {
+            _readOffer = null;
+            _status.Text = "Geschützter Read-Vorschlag abgelehnt: "
+                + error.Message + ". KEINE private Freigabe.";
+        }
+        finally
+        {
+            _busy = false;
+            _readPrepare.Enabled = true;
+            _load.Enabled = true;
+            UpdateVerifyEnabled();
+        }
+    }
+
+    private void PerformReadDisclosure()
+    {
+        if (_busy || !_readAcknowledge.Checked
+            || _readOffer is not { } offer) return;
+        if (offer.ExpiresUtc <= DateTimeOffset.UtcNow)
+        {
+            InvalidateOffer();
+            _status.Text = "Read-Zustimmungs-Challenge abgelaufen";
+            return;
+        }
+        _busy = true;
+        _readConfirm.Enabled = false;
+        _readPrepare.Enabled = false;
+        _project.Enabled = false;
+        _branch.Enabled = false;
+        _reference.Enabled = false;
+        _status.Text = "Native Windows Hello: Zustimmung nur zur angezeigten "
+            + "Read-Vorschau, kein Claim-Release.";
+        try
+        {
+            var assertion = NativeWindowsWebAuthn.GetAssertion(
+                Handle,offer.Challenge,offer.CredentialId,
+                offer.ExpectedOrigin,offer.ExpiresUtc);
+            var receipt = ProtectedOperatorService.CompleteReadDisclosure(
+                offer.TicketId,assertion);
+            if (!receipt.Verified
+                || receipt.Status != "verified_read_disclosure_intent_only")
+                throw new InvalidOperationException(
+                    "Read-Zustimmungsnachweis verweigert: "+receipt.Status);
+            _status.Text = "Separate Windows-Hello-Read-Absicht geprüft. "
+                + "NICHT freigegeben, NICHT an Codex gesendet.";
+        }
+        catch (Exception error)
+        {
+            _status.Text = "Read-Zustimmung abgebrochen/verweigert: "
+                + error.Message + ". Kein Codex-Recall.";
+        }
+        finally
+        {
+            _readOffer = null;
+            _readAcknowledge.Enabled = false;
+            _readAcknowledge.Checked = false;
+            _readPrepare.Enabled = true;
+            _project.Enabled = true;
+            _branch.Enabled = true;
+            _reference.Enabled = true;
+            _busy = false;
             UpdateVerifyEnabled();
         }
     }
