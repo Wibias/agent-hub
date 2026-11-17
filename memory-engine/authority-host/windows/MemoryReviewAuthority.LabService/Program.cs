@@ -68,6 +68,8 @@ internal sealed class ReviewAuthorityLabService : ServiceBase
 
     protected override void OnStart(string[] args)
     {
+        try
+        {
         // No non-service user, wrong LocalService token or wrong service SID
         // may activate the process. A failure reports service start failure.
         if (!ReviewHostIdentity.IsCurrentScmIdentity())
@@ -154,6 +156,33 @@ internal sealed class ReviewAuthorityLabService : ServiceBase
             _userReadCiPipe = new SignedOperatorDirectReadCiPipe(
                 _ledger, stateDir, userMode: true);
             _userReadCiPipe.Start();
+        }
+        }
+        catch (Exception startupError)
+        {
+            // Diagnostic ONLY when the service-SID-protected disposable CI
+            // fixture has explicitly installed its exact synthetic marker.
+            // No generic error log is written for the installed Preview.
+            try
+            {
+                var ciRoot = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+                    "AgentHubMemoryReviewLab-State");
+                var ciMarker = Path.Combine(ciRoot,
+                    "agenthub-synthetic-direct-claim-ci-only.enable");
+                if (File.Exists(ciMarker)
+                    && File.ReadAllText(ciMarker) ==
+                        "AGENTHUB_SYNTHETIC_DIRECT_CLAIM_CI_ONLY_V1")
+                {
+                    var message = startupError.GetType().Name + ": " +
+                        startupError.Message + "\n" + startupError.StackTrace;
+                    File.WriteAllText(Path.Combine(ciRoot,
+                        "ci-only-service-startup-failure.txt"),
+                        message[..Math.Min(message.Length, 3500)]);
+                }
+            }
+            catch { /* no diagnostic may change the fail-closed path */ }
+            throw;
         }
     }
 
