@@ -297,7 +297,7 @@ der historische Commit im lokalen Git-Objektspeicher vorhanden ist:
 ```powershell
 $review = "$env:LOCALAPPDATA\AgentHub-Support-Review-b695aee28d9b464484d38319f49fff06"
 $shadow = "$env:LOCALAPPDATA\AgentHub-Evidence-Shadow-baf1e0aeba4848e884f0a0756b9e2138\memory-shadow.sqlite3"
-$repo = "C:\Users\ws\Desktop\Anderes\GitHub\streamer-content"
+$repo = "C:\Pfad\zum\streamer-content"
 $out = Join-Path $env:LOCALAPPDATA ('AgentHub-Evidence-Export-' + [guid]::NewGuid().ToString('N'))
 node "$review\scripts\export-reviewed-memory-shadow-to-operator.mjs" `
   --shadow-db $shadow --repo-path $repo `
