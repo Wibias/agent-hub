@@ -115,7 +115,7 @@ internal static class Program
                                 // to the SAME account under its real restricted
                                 // non-admin token, not merely protected on
                                 // the fixture author's ACL inspection.
-                                ExpectAccessDenied("hklm_read_once_checkpoint_write", () =>
+                                ExpectRegistryAccessDenied("hklm_read_once_checkpoint_write", () =>
                                 {
                                     using var hive = RegistryKey.OpenBaseKey(
                                         RegistryHive.LocalMachine, RegistryView.Registry64);
@@ -126,7 +126,7 @@ internal static class Program
                                     key.SetValue("Snapshot",
                                         "forge_attempt", RegistryValueKind.String);
                                 });
-                                ExpectAccessDenied("hklm_read_once_checkpoint_read", () =>
+                                ExpectRegistryAccessDenied("hklm_read_once_checkpoint_read", () =>
                                 {
                                     using var hive = RegistryKey.OpenBaseKey(
                                         RegistryHive.LocalMachine, RegistryView.Registry64);
@@ -322,6 +322,29 @@ internal static class Program
             return;
         }
         throw new InvalidOperationException(label + "_revoked_but_connectable");
+    }
+
+    private static void ExpectRegistryAccessDenied(string label, Action operation)
+    {
+        try { operation(); }
+        catch (UnauthorizedAccessException error)
+            when (error.HResult == unchecked((int)0x80070005))
+        {
+            Console.WriteLine("PASS " + label + " access_denied");
+            return;
+        }
+        catch (System.Security.SecurityException)
+        {
+            // RegistryKey.OpenSubKey can report the exact same Windows
+            // access denial as SecurityException rather than E_ACCESSDENIED.
+            // Only this registry-specific probe accepts that alternate
+            // managed exception; the CI parent verifies the anchor bytes
+            // were NOT modified by the restricted token.
+            Console.WriteLine("PASS " + label + " access_denied");
+            return;
+        }
+        throw new InvalidOperationException(
+            label + "_unexpectedly_allowed_or_wrong_error");
     }
 
     private static void ExpectAccessDenied(string label, Action operation)
