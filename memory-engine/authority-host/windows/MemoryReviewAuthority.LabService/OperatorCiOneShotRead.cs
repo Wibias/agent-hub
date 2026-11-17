@@ -24,9 +24,10 @@ internal sealed partial class OperatorWebAuthnPipe
         string OriginalResultHash,
         OneShotCiRecipientPipe.Snapshot Recipient);
 
-    private object? BeginCiOneShotRead(JsonElement root,string nonce)
+    private object? BeginCiOneShotRead(JsonElement root,string nonce,
+        System.IO.Pipes.NamedPipeServerStream? operatorPipe)
     {
-        if (_ciRecipient is null || !ExactKeys(root,
+        if (_ciRecipient is null || operatorPipe is null || !ExactKeys(root,
             "protocol","op","nonce","projectId","branch","proposalRef"))
             return null;
         var project=Str(root,"projectId");
@@ -41,7 +42,11 @@ internal sealed partial class OperatorWebAuthnPipe
         var recipient=_ciRecipient.Peek(project!,branch!,proposal!);
         var native=_ledger.ReadOperatorCredential();
         if(recipient is null || native is null
-            || native.EnrollmentState != ProtectedPendingReviewLedger.NativeEnrollmentState)
+            || native.EnrollmentState != ProtectedPendingReviewLedger.NativeEnrollmentState
+            // The administrator-nominated recipient must at least share
+            // the actual pipe-caller Windows account; an attacker cannot
+            // inject a SID into JSON to authorize a different recipient.
+            || VerifiedPipePrincipalSid(operatorPipe)!=recipient.PrincipalSid)
             return null;
         // Explicit operator admin pipe and receiver must be same account in
         // the lab. The receiver PID is obtained by the Windows kernel, not
