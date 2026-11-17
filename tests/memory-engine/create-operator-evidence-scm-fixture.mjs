@@ -16,14 +16,18 @@ import { isAbsolute, join } from 'node:path';
 
 const previewExport = process.argv.length === 4
     && process.argv[2] === '--preview-export';
+const nativeEnrollment = process.argv.length === 4
+    && process.argv[2] === '--native-enroll-only';
 if (process.env.GITHUB_ACTIONS !== 'true' || process.env.RUNNER_OS !== 'Windows'
     || ![3, 4].includes(process.argv.length)
-    || (process.argv.length === 4 && !previewExport)
-    || !isAbsolute(previewExport ? process.argv[3] : process.argv[2])) {
+    || (process.argv.length === 4 && !previewExport && !nativeEnrollment)
+    || !isAbsolute((previewExport || nativeEnrollment)
+        ? process.argv[3] : process.argv[2])) {
   process.stderr.write('Disposable Windows CI fixture only.\\n');
   process.exit(2);
 }
-const stateRoot = previewExport ? null : process.argv[2];
+const stateRoot = previewExport ? null
+  : nativeEnrollment ? process.argv[3] : process.argv[2];
 const expectedExport = previewExport ? process.argv[3] : null;
 if (previewExport) {
   if (existsSync(expectedExport)) {
@@ -158,14 +162,14 @@ const publicKey = keys.publicKey;
 // The synthetic PRIVATE key remains OUTSIDE the LocalService's protected
 // state and is never sent over IPC. CI uses it solely to prove end-to-end
 // challenge transport, not real Windows Hello human consent.
-if (!previewExport) {
+if (!previewExport && !nativeEnrollment) {
   const privateFixture = join(process.env.RUNNER_TEMP,
     'AgentHubMemoryReviewLab-TestOperatorPrivateKey.pem');
   writeFileSync(privateFixture, keys.privateKey.export({
     format: 'pem', type: 'pkcs8',
   }), { flag: 'wx' });
 }
-writeFileSync(join(previewExport ? exportDir : stateRoot,
+if (!nativeEnrollment) writeFileSync(join(previewExport ? exportDir : stateRoot,
   'operator-webauthn-credential.json'),
   JSON.stringify({
     protocol: 'agenthub-operator-credential-pin-v1',
