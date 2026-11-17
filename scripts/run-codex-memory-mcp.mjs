@@ -60,6 +60,7 @@ export async function runMemoryMcp(args, {
   if (opts.mode === 'ci_one_shot_read') {
     return serveCodexMemoryMcp({
       cwd: hostCwd, input, output, env: {},
+      toolFlavor: 'ci_one_shot',
       recall: ({ query, maxItems }) => readScopedCiOneShot({
         query, maxItems, pinPath: opts.pinPath,
       }),
