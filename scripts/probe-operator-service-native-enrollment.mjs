@@ -12,7 +12,7 @@ import {
   createHash, createPublicKey, generateKeyPairSync,
   randomBytes, sign, verify,
 } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { readFileSync, rmSync } from 'node:fs';
 import { dirname, isAbsolute, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync, fork } from 'node:child_process';
@@ -517,16 +517,20 @@ async function run(){
     '..','memory-engine','authority-host','windows',
     'MemoryReviewAuthority.OperatorUi','MemoryReviewAuthority.OperatorUi.csproj');
   let mcpOffer;
+  const ciReceipt=join(process.env.RUNNER_TEMP,
+    'AgentHubCiOneShotNativeOffer.json');
+  rmSync(ciReceipt,{force:true});
   try {
-    const lines=execFileSync('dotnet',[
+    execFileSync('dotnet',[
       'run','--project',nativeProject,'-c','Release','--runtime',
       'win-x64','--no-build','--no-restore','--',
       '--ci-one-shot-offer-smoke',
     ],{
       encoding:'utf8',timeout:20000,windowsHide:true,
       stdio:['ignore','pipe','pipe'],
-    }).trim().split(/\r?\n/u).filter(Boolean);
-    mcpOffer=JSON.parse(lines.at(-1));
+    });
+    mcpOffer=JSON.parse(readFileSync(ciReceipt,'utf8'));
+    rmSync(ciReceipt,{force:true});
   } catch(error) {
     throw Error('native_compiled_ci_one_shot_offer_failed: '
       +String(error?.message??'unknown').slice(0,180));
