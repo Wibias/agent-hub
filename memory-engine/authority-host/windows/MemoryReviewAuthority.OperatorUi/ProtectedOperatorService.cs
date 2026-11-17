@@ -427,12 +427,23 @@ internal static class ProtectedOperatorService
     }
 
     internal static ServiceOffer Begin(string project, string branch, string proposalRef)
+        => BeginSignedOffer(project, branch, proposalRef,
+            "begin", "operator_service_uv_challenge_not_approval");
+
+    internal static ServiceOffer BeginReaffirmation(
+        string project, string branch, string proposalRef)
+        => BeginSignedOffer(project, branch, proposalRef,
+            "reaffirm_begin", "operator_reaffirmation_challenge_no_claim");
+
+    private static ServiceOffer BeginSignedOffer(
+        string project, string branch, string proposalRef,
+        string operation, string requiredStatus)
     {
         if (project.Length > 256 || branch.Length > 128
             || !Scope.IsMatch(project) || !Scope.IsMatch(branch)
             || !Ref.IsMatch(proposalRef))
             throw new InvalidOperationException("Projekt, Branch oder E~-Ref ungültig");
-        using var verified = Request("begin", new
+        using var verified = Request(operation, new
         {
             projectId = project, branch, proposalRef,
         });
@@ -441,7 +452,7 @@ internal static class ProtectedOperatorService
         if (!HasExactFields(m, "projectId", "branch", "revisionSha",
             "proposalRef", "reviewSnapshotSha256", "canonicalFactSha256",
             "decision", "canonicalFact")
-            || Str(r, "status") != "operator_service_uv_challenge_not_approval"
+            || Str(r, "status") != requiredStatus
             || Str(m, "projectId") != project
             || Str(m, "branch") != branch
             || Str(m, "proposalRef") != proposalRef
@@ -453,6 +464,14 @@ internal static class ProtectedOperatorService
             || Str(m, "decision") is not ("confirm" or "reject")
             || !ValidReviewKind(Str(r, "kind")))
             throw new InvalidOperationException("Dienstquelle oder Scope ungültig");
+        if (operation == "reaffirm_begin"
+            && (Str(r, "confirmation_scope") != "new_user_statement_only"
+                || r.GetProperty("reaffirmation_intent_recorded").GetBoolean()
+                || r.GetProperty("original_evidence_verified").GetBoolean()
+                || Str(m, "decision") != "confirm"
+                || Str(r, "kind") is not ("knowledge" or "preference")))
+            throw new InvalidOperationException(
+                "Keine eindeutige persönliche Bestätigungs-Challenge");
         var fact = Str(m, "canonicalFact");
         if (fact.Length is < 1 or > 4000
             || Convert.ToHexString(SHA256.HashData(Utf8.GetBytes(fact)))
@@ -468,7 +487,9 @@ internal static class ProtectedOperatorService
         if (Decode(Str(r, "challenge"), 64).Length != 32)
             throw new InvalidOperationException("Challenge muss 32 Bytes sein");
         _ = Decode(Str(r, "ticket_id"), 64);
-        if (!DateTimeOffset.TryParse(Str(r, "expires_utc"), out var expires))
+        if (!DateTimeOffset.TryParse(Str(r, "expires_utc"), out var expires)
+            || expires <= DateTimeOffset.UtcNow
+            || expires > DateTimeOffset.UtcNow.AddMinutes(2))
             throw new InvalidOperationException("Challenge-Ablauf unzulässig");
         return new ServiceOffer(
             Str(r, "request_id"), Str(r, "ticket_id"), Str(r, "challenge"),
@@ -477,6 +498,34 @@ internal static class ProtectedOperatorService
             Str(m, "reviewSnapshotSha256"), Str(m, "canonicalFactSha256"),
             Str(r, "evidence_sha256"), Str(r, "source_origin"),
             Str(r, "kind"), Str(m, "decision"), fact);
+    }
+
+    internal static OperatorReceipt CompleteReaffirmation(
+        string ticketId, NativeAssertion assertion)
+    {
+        _ = Decode(ticketId, 64);
+        using var verified = Request("reaffirm_complete", new
+        {
+            ticketId,
+            assertion = new
+            {
+                credentialId = assertion.CredentialId,
+                type = assertion.Type,
+                clientDataJSON = assertion.ClientDataJSON,
+                authenticatorData = assertion.AuthenticatorData,
+                signature = assertion.Signature,
+            },
+        });
+        var result = verified.RootElement;
+        var success = result.GetProperty("signature_verified").GetBoolean();
+        var recorded = result.GetProperty("reaffirmation_intent_recorded").GetBoolean();
+        var originalVerified = result.GetProperty("original_evidence_verified").GetBoolean();
+        var status = Str(result, "status");
+        if (originalVerified || success != recorded
+            || (success && status != "operator_reaffirmation_intent_recorded_no_claim"))
+            throw new InvalidOperationException(
+                "Dienst behauptet eine unzulässige Quellenfreigabe oder einen Claim");
+        return new OperatorReceipt(success, status);
     }
 
     internal static OperatorReceipt Complete(string ticketId, NativeAssertion assertion)
