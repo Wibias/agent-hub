@@ -508,6 +508,7 @@ try {
             -not $enroll.ci_receiver_verified_signed_claim -or
             -not $enroll.ci_existing_memory_recall_stdio_received_exact_once -or
             -not $enroll.ci_compiled_native_operator_verified_signed_receiver_offer -or
+            -not $enroll.ci_receiver_os_observed_image_lifetime_not_attested -or
             -not $enroll.ci_read_once_durable_revoke_denied_future_recipient -or
             $enroll.read_released -or
             $enroll.published_to_codex -or
@@ -521,6 +522,7 @@ try {
         Write-Host 'PASS: CI one-shot real second process receives signed exact private fixture only after separate synthetic UV; wrong purpose and replay denied; NOT a Codex grant'
         Write-Host 'PASS: original Codex-compatible memory_recall stdio MCP tool received the exact signed CI Claim after fresh UV, no production authorization'
         Write-Host 'PASS: compiled native operator validates full signed exact recipient offer before synthetic UV release; physical Hello not tested'
+        Write-Host 'PASS: native OS-observed recipient image/creation is checked and shown to operator but never claimed to attest original Codex'
         Write-Host 'PASS: protected one-shot CI read receipt consumed before bytes, wrong-purpose aborted, durable revoke denied future live receiver'
         # Actual compiled WinForms client reads the exact protected Claim text
         # from the running service and validates the administrator-owned pin.
