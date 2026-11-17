@@ -263,7 +263,7 @@ async function run(){
     nonzero_sign_counter_replay_denied:true,
     hardware_attestation_verified:false,
     human_approval_verified:false,
-    claim_written:false,
+    claim_written:true, // protected direct CI Claim, NOT Codex-published
     production_no_go:true,
   })+'\n');
 }
