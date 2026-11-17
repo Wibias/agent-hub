@@ -100,6 +100,13 @@ internal static class OperatorSelfTest
             var offer=OnBlockedUiThread(() =>
                 ProtectedOperatorService.BeginCiOneShotRead(
                     "github.com/example/operator-evidence","main",reference));
+            // Real compiled elevated WinForms code separately measures the
+            // Windows process object returned by signed LocalService scope.
+            using var observed=OperatorObservedRecipient.Observe(
+                offer.KernelRecipientPid);
+            if (!observed.Matches()
+                || observed.KernelPid!=offer.KernelRecipientPid)
+                return 2;
             if (offer.ProjectId != "github.com/example/operator-evidence"
                 || offer.Branch != "main"
                 || offer.ProposalRef != reference
@@ -108,6 +115,10 @@ internal static class OperatorSelfTest
                 || offer.Value !=
                     "This knowledge statement is proposed from unverified historical Evidence."
                 || offer.KernelRecipientPid == 0
+                || observed.CreatedFileTime == 0
+                || !Path.IsPathFullyQualified(observed.ImagePath)
+                || !string.Equals(Path.GetFileName(observed.ImagePath),
+                    "node.exe",StringComparison.OrdinalIgnoreCase)
                 || offer.RecipientSessionSha256.Length != 64
                 || offer.ResultSetSha256.Length != 64
                 || offer.Recipient !=
@@ -130,6 +141,9 @@ internal static class OperatorSelfTest
                 credential_id=offer.CredentialId,
                 expected_origin=offer.ExpectedOrigin,
                 recipient_kernel_pid=offer.KernelRecipientPid,
+                recipient_os_origin_attested=false,
+                observed_original_codex_identity=false,
+                native_operator_process_handle_alive=observed.Matches(),
                 principal_sid=offer.PrincipalSid,
                 recipient_session_sha256=offer.RecipientSessionSha256,
                 result_set_sha256=offer.ResultSetSha256,

@@ -16,6 +16,10 @@ internal static class Program
                 || Environment.GetEnvironmentVariable("GITHUB_ACTIONS") != "true"
                 || Environment.GetEnvironmentVariable("RUNNER_OS") != "Windows")
                 throw new InvalidOperationException("windows_ci_only");
+            if (args.Length == 3 && args[0] == "--relay-approved")
+                return RelayApproved(args[1],args[2]);
+            if (args.Length == 2 && args[0] == "--relay-sibling")
+                return RelaySibling(args[1]);
             if (args.Length == 4 && args[0] == "--child")
                 return Client(args[1],args[2],args[3]);
             if (args.Length != 0)
@@ -103,7 +107,115 @@ internal static class Program
             "PASS: same Windows SID, kernel-derived connected pipe PID matches only trusted child, sibling PID spoof denied");
         Console.WriteLine(
             "PASS: pinned process handle becomes unusable after exit; no project, Claim or memory read");
-        Console.WriteLine("MEMORY_PROCESS_ORIGIN PASS 2/2; DIAGNOSTIC_ONLY_NOT_AUTHORIZATION");
+        VerifySameAccountRelayedIntent(exe,expectedSid!);
+        Console.WriteLine("MEMORY_PROCESS_ORIGIN PASS 3/3; PID_OR_SIGNED_IMAGE_NOT_SESSION_ATTESTATION");
+        return 0;
+    }
+
+    private static void VerifySameAccountRelayedIntent(
+        string exe,string expectedSid)
+    {
+        // Two distinct processes execute the EXACT SAME native executable.
+        // A non-approved sibling passes an instruction to the host-pinned
+        // process. The pinned process then legitimately connects and relays
+        // the sibling's text. Kernel PID and image still match, exposing
+        // why process provenance is NOT user intent or injection defense.
+        var origin="AgentHubOriginRelayCi-"+Guid.NewGuid().ToString("N");
+        var control="AgentHubSiblingControlCi-"+Guid.NewGuid().ToString("N");
+        using var approved=StartRole(exe,"--relay-approved",origin,control);
+        using var pin=ClientProcessObservationPin.CaptureTrustedLaunch(approved);
+        using var sibling=StartRole(exe,"--relay-sibling",control);
+        Check(approved.Id!=sibling.Id,"relay_sibling_pid_not_distinct");
+        Check(approved.StartInfo.FileName==sibling.StartInfo.FileName,
+            "relay_clients_not_identical_executable");
+        using var pipe=new NamedPipeServerStream(origin,PipeDirection.InOut,
+            1,PipeTransmissionMode.Byte,PipeOptions.Asynchronous);
+        using var deadline=new CancellationTokenSource(TimeSpan.FromSeconds(15));
+        pipe.WaitForConnectionAsync(deadline.Token).GetAwaiter().GetResult();
+        using var reader=new StreamReader(pipe,Encoding.UTF8,
+            detectEncodingFromByteOrderMarks:false,leaveOpen:true);
+        var text=reader.ReadLine();
+        Check(text=="sibling-request-for-private-data",
+            "relay_test_did_not_forward_sibling_payload");
+        string? sid=null;
+        pipe.RunAsClient(()=>
+        {
+            using var identity=WindowsIdentity.GetCurrent(ifImpersonating:true);
+            sid=identity?.User?.Value;
+        });
+        Check(sid==expectedSid,"relay_process_wrong_same_account_sid");
+        // The pinned OS connection is legitimate, but the instruction
+        // originated from the attacker-controlled same-SID sibling.
+        Check(pin.MatchesConnectedClient(pipe),
+            "relay_expected_pin_match_missing");
+        using(var writer=new StreamWriter(pipe,new UTF8Encoding(false),
+            1024,leaveOpen:true){AutoFlush=true})
+            writer.WriteLine("origin_matched_but_intent_untrusted");
+        Check(approved.WaitForExit(10000),"relay_approved_hung");
+        Check(sibling.WaitForExit(10000),"relay_sibling_hung");
+        var aOut=approved.StandardOutput.ReadToEnd();
+        var bOut=sibling.StandardOutput.ReadToEnd();
+        var aErr=approved.StandardError.ReadToEnd();
+        var bErr=sibling.StandardError.ReadToEnd();
+        Check(approved.ExitCode==0 && sibling.ExitCode==0,
+            "relay_child_fail: "+aErr+" "+bErr);
+        Check(aOut.Contains("PASS relayed",StringComparison.Ordinal)
+            && bOut.Contains("PASS sibling_instruction",StringComparison.Ordinal),
+            "relay_child_verdict_missing");
+        Console.WriteLine(
+            "PASS: identical-image same-SID sibling caused a host-pinned process to relay attacker text; kernel PID still matched");
+        Console.WriteLine(
+            "PASS: provenance is NOT operator intent, original Codex attestation, or protection against process automation/injection");
+    }
+
+    private static Process StartRole(string exe,params string[] args)
+    {
+        var start=new ProcessStartInfo(exe)
+        {
+            UseShellExecute=false,RedirectStandardOutput=true,
+            RedirectStandardError=true,CreateNoWindow=true,
+        };
+        foreach(var arg in args)start.ArgumentList.Add(arg);
+        return Process.Start(start)
+            ?? throw new InvalidOperationException("relay_process_start_failed");
+    }
+
+    private static int RelayApproved(string origin,string control)
+    {
+        using var server=new NamedPipeServerStream(control,PipeDirection.InOut,
+            1,PipeTransmissionMode.Byte,PipeOptions.Asynchronous);
+        using var ct=new CancellationTokenSource(TimeSpan.FromSeconds(15));
+        server.WaitForConnectionAsync(ct.Token).GetAwaiter().GetResult();
+        using var reader=new StreamReader(server,Encoding.UTF8,
+            detectEncodingFromByteOrderMarks:false,leaveOpen:true);
+        var text=reader.ReadLine();
+        Check(text=="sibling-request-for-private-data",
+            "approved_caller_did_not_receive_sibling_message");
+        using var pipe=new NamedPipeClientStream(".",origin,
+            PipeDirection.InOut,PipeOptions.None,
+            TokenImpersonationLevel.Impersonation);
+        pipe.Connect(15000);
+        using(var writer=new StreamWriter(pipe,new UTF8Encoding(false),
+            1024,leaveOpen:true){AutoFlush=true})
+            writer.WriteLine(text);
+        using var result=new StreamReader(pipe,Encoding.UTF8,
+            detectEncodingFromByteOrderMarks:false,leaveOpen:true);
+        Check(result.ReadLine()=="origin_matched_but_intent_untrusted",
+            "relayed_request_origin_verdict_wrong");
+        Console.WriteLine("PASS relayed");
+        return 0;
+    }
+
+    private static int RelaySibling(string control)
+    {
+        using var client=new NamedPipeClientStream(".",control,
+            PipeDirection.InOut,PipeOptions.None,
+            TokenImpersonationLevel.Impersonation);
+        client.Connect(15000);
+        using var writer=new StreamWriter(client,new UTF8Encoding(false),
+            1024,leaveOpen:true){AutoFlush=true};
+        writer.WriteLine("sibling-request-for-private-data");
+        Console.WriteLine("PASS sibling_instruction");
         return 0;
     }
 

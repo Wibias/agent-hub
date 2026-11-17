@@ -219,6 +219,7 @@ internal sealed class OperatorReviewWindow : Form
         AutoSize = true, Height = 38, Enabled = false,
     };
     private CiOneShotOffer? _ciReadOffer;
+    private OperatorObservedRecipient? _ciObserved;
     private static bool CiOnly => Environment.GetEnvironmentVariable(
         "GITHUB_ACTIONS") == "true"
         && Environment.GetEnvironmentVariable("RUNNER_OS") == "Windows";
@@ -335,6 +336,13 @@ internal sealed class OperatorReviewWindow : Form
         _reference.TextChanged += (_, _) => InvalidateOffer();
     }
 
+    protected override void OnFormClosed(FormClosedEventArgs e)
+    {
+        _ciObserved?.Dispose();
+        _ciObserved = null;
+        base.OnFormClosed(e);
+    }
+
     private static Control Captioned(string name, TextBox input)
     {
         var panel = new FlowLayoutPanel
@@ -362,6 +370,8 @@ internal sealed class OperatorReviewWindow : Form
         _publication = null;
         _readOffer = null;
         _ciReadOffer = null;
+        _ciObserved?.Dispose();
+        _ciObserved = null;
         _ciReadAcknowledge.Checked = false;
         _ciReadAcknowledge.Enabled = false;
         _readAcknowledge.Checked = false;
@@ -392,7 +402,9 @@ internal sealed class OperatorReviewWindow : Form
         _readConfirm.Enabled = !_busy && _readAcknowledge.Checked
             && _readOffer is { } read && read.ExpiresUtc > DateTimeOffset.UtcNow;
         _ciReadConfirm.Enabled = CiOnly && !_busy && _ciReadAcknowledge.Checked
-            && _ciReadOffer is { } ci && ci.ExpiresUtc > DateTimeOffset.UtcNow;
+            && _ciReadOffer is { } ci && ci.ExpiresUtc > DateTimeOffset.UtcNow
+            && _ciObserved is { } observed && observed.Matches()
+            && observed.KernelPid == ci.KernelRecipientPid;
     }
 
     private async Task LoadOfferAsync()
@@ -693,6 +705,15 @@ internal sealed class OperatorReviewWindow : Form
                 || offer.ExpiresUtc <= DateTimeOffset.UtcNow)
                 throw new InvalidOperationException(
                     "CI: Claim oder Sitzungs-Kontext nach Laden verändert");
+            // The protected elevated GUI measures the actual OS process
+            // independently. The service-signed PID is kernel-derived but
+            // only a *recipient hint*, not a Codex identity credential.
+            _ciObserved = await Task.Run(() =>
+                OperatorObservedRecipient.Observe(offer.KernelRecipientPid));
+            if (!_ciObserved.Matches()
+                || _ciObserved.KernelPid!=offer.KernelRecipientPid)
+                throw new InvalidOperationException(
+                    "CI-Empfängerprozess seit Angebot verändert");
             _ciReadOffer = offer;
             _fact.Text = offer.Value;
             _meaning.Text =
@@ -703,6 +724,9 @@ internal sealed class OperatorReviewWindow : Form
                 + $"QUERY: {offer.Query}\n"
                 + $"EMPFÄNGER: {offer.Recipient}\n"
                 + $"KERNEL-PID: {offer.KernelRecipientPid}\n"
+                + $"GEMESSENES PROZESSABBILD (NATIVE UI, KEINE ATTESTIERUNG): {_ciObserved.ImagePath}\n"
+                + $"PROZESS-ERSTELLZEIT (NATIVE FILETIME): {_ciObserved.CreatedFileTime}\n"
+                + $"ORIGINAL-CODEX-IDENTITÄT BEWIESEN: NEIN\n"
                 + $"KONTO-SID: {offer.PrincipalSid}\n"
                 + $"SITZUNGS-FINGERABDRUCK: {offer.RecipientSessionSha256}\n"
                 + $"CLAIM-SHA256: {offer.FactSha256}\n"
@@ -718,6 +742,8 @@ internal sealed class OperatorReviewWindow : Form
         catch (Exception error)
         {
             _ciReadOffer = null;
+            _ciObserved?.Dispose();
+            _ciObserved = null;
             _status.Text = "CI-Einmal-Read-Angebot verweigert: "
                 + error.Message;
         }
@@ -733,7 +759,10 @@ internal sealed class OperatorReviewWindow : Form
     {
         if (!CiOnly || _busy || !_ciReadAcknowledge.Checked
             || _ciReadOffer is not { } offer) return;
-        if (offer.ExpiresUtc <= DateTimeOffset.UtcNow)
+        if (offer.ExpiresUtc <= DateTimeOffset.UtcNow
+            || _ciObserved is not { } observed
+            || observed.KernelPid!=offer.KernelRecipientPid
+            || !observed.Matches())
         {
             InvalidateOffer();
             _status.Text = "CI: Empfänger-Sitzung oder Read-Challenge abgelaufen";
@@ -752,6 +781,11 @@ internal sealed class OperatorReviewWindow : Form
             var assertion = NativeWindowsWebAuthn.GetAssertion(
                 Handle,offer.Challenge,offer.CredentialId,
                 offer.ExpectedOrigin,offer.ExpiresUtc);
+            // Hello can take time: recheck the SAME held kernel process
+            // immediately before the request that may release any bytes.
+            if (!observed.Matches() || offer.ExpiresUtc<=DateTimeOffset.UtcNow)
+                throw new InvalidOperationException(
+                    "CI-Empfänger ist nach Windows Hello nicht mehr derselbe Prozess");
             var receipt = ProtectedOperatorService.CompleteCiOneShotRead(
                 offer.TicketId,assertion);
             if (!receipt.Verified)
@@ -768,6 +802,8 @@ internal sealed class OperatorReviewWindow : Form
         finally
         {
             _ciReadOffer = null;
+            _ciObserved?.Dispose();
+            _ciObserved = null;
             _ciReadAcknowledge.Enabled = false;
             _ciReadAcknowledge.Checked = false;
             _ciReadPrepare.Enabled = true;
