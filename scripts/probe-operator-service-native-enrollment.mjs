@@ -542,6 +542,7 @@ async function run(){
       +String(error?.message??'unknown').slice(0,180));
   }
   if(mcpOffer.status!=='ci_native_operator_signed_recipient_offer_verified_only'
+    ||mcpOffer.recipient_os_origin_attested!==false
     ||mcpOffer.production_authorized!==false)
     throw Error('native_ci_one_shot_offer_not_verified');
   if(mcpOffer.recipient_kernel_pid!==mcp.pid
@@ -619,6 +620,7 @@ async function run(){
     ci_receiver_verified_signed_claim:true,
     ci_existing_memory_recall_stdio_received_exact_once:true,
     ci_compiled_native_operator_verified_signed_receiver_offer:true,
+    ci_receiver_os_observed_image_lifetime_not_attested:true,
     ci_read_once_durable_revoke_denied_future_recipient:true,
     read_released:false,
     published_to_codex:false,
