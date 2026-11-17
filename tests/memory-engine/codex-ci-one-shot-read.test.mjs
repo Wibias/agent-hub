@@ -8,6 +8,7 @@ import {
   verifySignedOnceCi,readScopedCiOneShot,
 } from '../../memory-engine/adapters/codex-ci-one-shot-read.mjs';
 import {parseMemoryMcpArgs} from '../../scripts/run-codex-memory-mcp.mjs';
+import {createCodexMemoryMcpDispatcher} from '../../memory-engine/adapters/codex-readonly-memory-mcp.mjs';
 
 const key=generateKeyPairSync('ec',{namedCurve:'prime256v1'});
 const evil=generateKeyPairSync('ec',{namedCurve:'prime256v1'});
@@ -114,4 +115,23 @@ test('CI-only adapter denies other environments and wrong queries before any IPC
   assert.equal(result.trusted_for_production_recall,false);
   assert.equal(result.physical_human_approval_verified,false);
   assert.equal(result.ci_mcp_delivered,true);
+});
+
+test('CI one-shot MCP tool descriptor is explicitly synthetic, canonical default unchanged',async()=>{
+  const cwd=resolve('.');
+  const synthetic=createCodexMemoryMcpDispatcher({
+    cwd,toolFlavor:'ci_one_shot',recall:async()=>({status:'ci_one_shot_only'}),
+  });
+  const standard=createCodexMemoryMcpDispatcher({
+    cwd,recall:async()=>({status:'no_current_authorized_match'}),
+  });
+  const message={jsonrpc:'2.0',id:1,method:'tools/list'};
+  const ci=await synthetic(message),normal=await standard(message);
+  assert.equal(ci.result.tools[0].name,'memory_recall');
+  assert.match(ci.result.tools[0].description,/CI ONLY/);
+  assert.match(normal.result.tools[0].description,/canonical SQLite only/);
+  assert.doesNotMatch(normal.result.tools[0].description,/CI ONLY/);
+  assert.throws(()=>createCodexMemoryMcpDispatcher({
+    cwd,toolFlavor:'production_read_without_consent',
+  }),/unrecognized_mcp_tool_flavor/);
 });
