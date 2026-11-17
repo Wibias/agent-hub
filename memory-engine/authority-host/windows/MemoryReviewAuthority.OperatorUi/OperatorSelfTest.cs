@@ -83,6 +83,73 @@ internal static class OperatorSelfTest
         }
     }
 
+    internal static int RunCiOneShotOffer()
+    {
+        // The compiled WinForms executable actually reads the live protected
+        // LocalService's signed CI recipient offer and verifies original
+        // Claim text and kernel-derived recipient binding. No Hello call or
+        // delivery occurs here; the synthetic test later completes the offer.
+        if (Environment.GetEnvironmentVariable("GITHUB_ACTIONS") != "true"
+            || Environment.GetEnvironmentVariable("RUNNER_OS") != "Windows")
+            return 2;
+        try
+        {
+            var hash=Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(
+                "actual-canonical-evidence-proposal-id"))).ToLowerInvariant();
+            var reference="E~"+hash[..10];
+            var offer=OnBlockedUiThread(() =>
+                ProtectedOperatorService.BeginCiOneShotRead(
+                    "github.com/example/operator-evidence","main",reference));
+            if (offer.ProjectId != "github.com/example/operator-evidence"
+                || offer.Branch != "main"
+                || offer.ProposalRef != reference
+                || offer.Query != "exact-proposal:"+reference
+                || offer.Kind != "knowledge"
+                || offer.Value !=
+                    "This knowledge statement is proposed from unverified historical Evidence."
+                || offer.KernelRecipientPid == 0
+                || offer.RecipientSessionSha256.Length != 64
+                || offer.ResultSetSha256.Length != 64
+                || offer.Recipient !=
+                    "CI ONLY: kernel-observed connected pipe, not verified Codex"
+                || offer.ExpiresUtc <= DateTimeOffset.UtcNow)
+                return 2;
+            var outputDirectory=Environment.GetEnvironmentVariable("RUNNER_TEMP");
+            if (string.IsNullOrWhiteSpace(outputDirectory)
+                || !Directory.Exists(outputDirectory))
+                throw new InvalidOperationException("CI-Ausgabeverzeichnis fehlt");
+            // WinForms is a WinExe: stdout may be detached from parent.
+            // Write ONLY signed-offer metadata, NEVER the private Claim.
+            var receiptPath=Path.Combine(outputDirectory,
+                "AgentHubCiOneShotNativeOffer.json");
+            File.WriteAllText(receiptPath,JsonSerializer.Serialize(new
+            {
+                status="ci_native_operator_signed_recipient_offer_verified_only",
+                ticket_id=offer.TicketId,
+                challenge=offer.Challenge,
+                credential_id=offer.CredentialId,
+                expected_origin=offer.ExpectedOrigin,
+                recipient_kernel_pid=offer.KernelRecipientPid,
+                principal_sid=offer.PrincipalSid,
+                recipient_session_sha256=offer.RecipientSessionSha256,
+                result_set_sha256=offer.ResultSetSha256,
+                read_released=false,
+                published_to_codex=false,
+                production_authorized=false,
+            }),new UTF8Encoding(false));
+            return 0;
+        }
+        catch(Exception error)
+        {
+            var directory=Environment.GetEnvironmentVariable("RUNNER_TEMP");
+            if(!string.IsNullOrWhiteSpace(directory))
+                File.WriteAllText(Path.Combine(directory,
+                    "AgentHubNativeCiReadOfferSmokeFailure.txt"),
+                    error.GetType().Name+": "+error.Message);
+            return 2;
+        }
+    }
+
     internal static int RunReadDisclosureOffer()
     {
         // A real protected Claim was placed in the disposable CI service

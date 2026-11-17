@@ -12,9 +12,10 @@ import {
   createHash, createPublicKey, generateKeyPairSync,
   randomBytes, sign, verify,
 } from 'node:crypto';
-import { readFileSync } from 'node:fs';
-import { isAbsolute } from 'node:path';
-import { fork } from 'node:child_process';
+import { readFileSync, rmSync } from 'node:fs';
+import { dirname, isAbsolute, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { execFileSync, fork } from 'node:child_process';
 
 if (process.platform !== 'win32' || process.env.GITHUB_ACTIONS !== 'true'
   || process.env.RUNNER_OS !== 'Windows' || process.argv.length !== 3
@@ -33,6 +34,12 @@ const scope = {
     'actual-canonical-evidence-proposal-id').digest('hex').slice(0,10),
 };
 const fact='This knowledge statement is proposed from unverified historical Evidence.';
+const spawnedChildren=new Set();
+function tracked(child) {
+  spawnedChildren.add(child);
+  child.on('exit',()=>spawnedChildren.delete(child));
+  return child;
+}
 const sha = bytes => createHash('sha256').update(bytes).digest();
 const b64 = bytes => Buffer.from(bytes).toString('base64url');
 
@@ -325,10 +332,10 @@ async function run(){
   // pipe is held across the read-purpose UV challenge; it gets NO Claim
   // before an exact consent. This is NOT an attested Codex session.
   function startReceiver() {
-    const child=fork(new URL('./memory-read-once-ci-recipient.mjs',import.meta.url),
+    const child=tracked(fork(new URL('./memory-read-once-ci-recipient.mjs',import.meta.url),
       [pinPath,scope.proposalRef],{
         stdio:['ignore','ignore','pipe','ipc'],
-      });
+      }));
     let events=[],next=null,stopped=false;
     let childError='',deliveredMessage=false;
     const forward=message=>{
@@ -437,10 +444,10 @@ async function run(){
   // Third consent: actual ORIGINAL Codex-compatible stdio memory_recall
   // MCP server process is the held recipient. This remains synthetic CI;
   // the process is NOT an independently authenticated real Codex session.
-  const mcp=fork(new URL('./run-codex-memory-mcp.mjs',import.meta.url),
+  const mcp=tracked(fork(new URL('./run-codex-memory-mcp.mjs',import.meta.url),
     ['--ci-one-shot-read','--pin',pinPath],{
       stdio:['pipe','pipe','pipe','ipc'],
-    });
+    }));
   const rpcPending=new Map();
   let stdoutBuffer='',mcpExit=null,mcpStderr='';
   mcp.stderr.on('data',chunk=>{
@@ -509,7 +516,34 @@ async function run(){
     new Promise((_,reject)=>setTimeout(
       ()=>reject(Error('ci_mcp_pipe_ready_timeout')),12000)),
   ]);
-  const mcpOffer=await send('ci_read_begin',scope);
+  // The actual compiled native WinForms operator binary now obtains and
+  // validates the signed offer, not the JS probe. No physical Windows
+  // Hello is invoked in CI; JS still signs a synthetic assertion afterwards.
+  const nativeProject=join(dirname(fileURLToPath(import.meta.url)),
+    '..','memory-engine','authority-host','windows',
+    'MemoryReviewAuthority.OperatorUi','MemoryReviewAuthority.OperatorUi.csproj');
+  let mcpOffer;
+  const ciReceipt=join(process.env.RUNNER_TEMP,
+    'AgentHubCiOneShotNativeOffer.json');
+  rmSync(ciReceipt,{force:true});
+  try {
+    execFileSync('dotnet',[
+      'run','--project',nativeProject,'-c','Release','--runtime',
+      'win-x64','--no-build','--no-restore','--',
+      '--ci-one-shot-offer-smoke',
+    ],{
+      encoding:'utf8',timeout:20000,windowsHide:true,
+      stdio:['ignore','pipe','pipe'],
+    });
+    mcpOffer=JSON.parse(readFileSync(ciReceipt,'utf8'));
+    rmSync(ciReceipt,{force:true});
+  } catch(error) {
+    throw Error('native_compiled_ci_one_shot_offer_failed: '
+      +String(error?.message??'unknown').slice(0,180));
+  }
+  if(mcpOffer.status!=='ci_native_operator_signed_recipient_offer_verified_only'
+    ||mcpOffer.production_authorized!==false)
+    throw Error('native_ci_one_shot_offer_not_verified');
   if(mcpOffer.recipient_kernel_pid!==mcp.pid
     ||mcpOffer.result_set_sha256!==selectedHash
     ||mcpOffer.recipient_session_sha256===validOffer.recipient_session_sha256
@@ -558,6 +592,7 @@ async function run(){
     ci_exact_kernel_pid_receiver:true,
     ci_receiver_verified_signed_claim:true,
     ci_existing_memory_recall_stdio_received_exact_once:true,
+    ci_compiled_native_operator_verified_signed_receiver_offer:true,
     read_released:false,
     published_to_codex:false,
     historical_evidence_verified:false,
@@ -573,6 +608,11 @@ async function run(){
 }
 try{await run();}
 catch(error){
+  // A failed assertion must not leave an IPC child keeping the CI fixture
+  // process alive, which would conceal the actual denial diagnostics.
+  for(const child of spawnedChildren){
+    try { child.kill(); } catch {}
+  }
   process.stderr.write('Synthetic native enrollment SCM check failed: '
     + String(error?.message??'unknown')+'\n');
   process.exitCode=2;
