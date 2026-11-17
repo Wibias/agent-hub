@@ -118,12 +118,18 @@ internal sealed class OperatorReviewWindow : Form
         Text = "Signierten Vorschlag laden",
         AutoSize = true, Height = 38,
     };
+    private readonly Button _enrollPrepare = new()
+    {
+        Text = "Neue Windows-Hello-Einschreibung vorbereiten",
+        AutoSize = true, Height = 38,
+    };
     private readonly Button _verify = new()
     {
         Text = "Mit Windows Hello prüfen (keine Freigabe)",
         AutoSize = true, Height = 38, Enabled = false,
     };
     private ServiceOffer? _offer;
+    private RegistrationOffer? _enrollment;
     private bool _busy;
 
     internal OperatorReviewWindow()
@@ -168,7 +174,14 @@ internal sealed class OperatorReviewWindow : Form
         scope.Controls.Add(Captioned("BRANCH", _branch));
         scope.Controls.Add(Captioned("E~ REFERENZ", _reference));
         outer.Controls.Add(scope, 0, 1);
-        outer.Controls.Add(_load, 0, 2);
+        var loadActions = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill, WrapContents = false,
+            FlowDirection = FlowDirection.LeftToRight,
+        };
+        loadActions.Controls.Add(_load);
+        loadActions.Controls.Add(_enrollPrepare);
+        outer.Controls.Add(loadActions, 0, 2);
         outer.Controls.Add(_fact, 0, 3);
         outer.Controls.Add(_meaning, 0, 4);
         outer.Controls.Add(_acknowledge, 0, 5);
@@ -177,7 +190,12 @@ internal sealed class OperatorReviewWindow : Form
         Controls.Add(outer);
 
         _load.Click += async (_, _) => await LoadOfferAsync();
-        _verify.Click += (_, _) => PerformWindowsHelloProof();
+        _enrollPrepare.Click += async (_, _) => await LoadEnrollmentAsync();
+        _verify.Click += (_, _) =>
+        {
+            if (_enrollment is not null) PerformNativeEnrollment();
+            else PerformWindowsHelloProof();
+        };
         _acknowledge.CheckedChanged += (_, _) => UpdateVerifyEnabled();
         _project.TextChanged += (_, _) => InvalidateOffer();
         _branch.TextChanged += (_, _) => InvalidateOffer();
@@ -206,6 +224,8 @@ internal sealed class OperatorReviewWindow : Form
     private void InvalidateOffer()
     {
         _offer = null;
+        _enrollment = null;
+        _verify.Text = "Mit Windows Hello prüfen (keine Freigabe)";
         _fact.Clear();
         _meaning.Text = "";
         _acknowledge.Checked = false;
@@ -217,7 +237,9 @@ internal sealed class OperatorReviewWindow : Form
     private void UpdateVerifyEnabled()
     {
         _verify.Enabled = !_busy && _acknowledge.Checked
-            && _offer is { } o && o.ExpiresUtc > DateTimeOffset.UtcNow;
+            && ((_offer is { } o && o.ExpiresUtc > DateTimeOffset.UtcNow)
+                || (_enrollment is { } e
+                    && e.ExpiresUtc > DateTimeOffset.UtcNow));
     }
 
     private async Task LoadOfferAsync()
@@ -226,6 +248,7 @@ internal sealed class OperatorReviewWindow : Form
         InvalidateOffer();
         _busy = true;
         _load.Enabled = false;
+        _enrollPrepare.Enabled = false;
         _status.Text = "Frage den geschützten Windows-Dienst ab …";
         try
         {
@@ -267,6 +290,118 @@ internal sealed class OperatorReviewWindow : Form
         {
             _busy = false;
             _load.Enabled = true;
+            _enrollPrepare.Enabled = true;
+            UpdateVerifyEnabled();
+        }
+    }
+
+    /// <summary>First physical step: show a signed E~ fact and separate action.</summary>
+    private async Task LoadEnrollmentAsync()
+    {
+        if (_busy) return;
+        InvalidateOffer();
+        _busy = true;
+        _load.Enabled = false;
+        _enrollPrepare.Enabled = false;
+        _status.Text = "Frage den Dienst nach einer neuen Einschreib-Challenge …";
+        try
+        {
+            var project = _project.Text.Trim();
+            var branch = _branch.Text.Trim();
+            var proposalRef = _reference.Text.Trim();
+            var offer = await Task.Run(() =>
+                ProtectedOperatorService.BeginNativeEnrollment(
+                    project, branch, proposalRef));
+            if (_project.Text.Trim() != project
+                || _branch.Text.Trim() != branch
+                || _reference.Text.Trim() != proposalRef
+                || offer.ExpiresUtc <= DateTimeOffset.UtcNow)
+                throw new InvalidOperationException(
+                    "Auswahl geändert oder Dienst-Challenge abgelaufen");
+            _enrollment = offer;
+            _fact.Text = offer.CanonicalFact;
+            _meaning.Text =
+                $"AKTION: {offer.Decision}    |    TYP: {offer.Kind}\n"
+                + $"QUELLE: {offer.SourceOrigin}\n"
+                + $"PROJEKT: {offer.ProjectId}    |    BRANCH: {offer.Branch}\n"
+                + $"COMMIT: {offer.RevisionSha}\n"
+                + $"E~: {offer.ProposalRef}    |    SNAPSHOT: {offer.SnapshotSha256}\n"
+                + $"FAKT-SHA256: {offer.FactSha256}\n"
+                + $"EVIDENCE-SHA256: {offer.EvidenceSha256}";
+            _verify.Text = "Windows Hello einschreiben und Besitz prüfen (kein Claim)";
+            _acknowledge.Enabled = true;
+            _status.Text = "Signierter Originalfakt geladen. Einschreibung ist "
+                + "KEINE Genehmigung. Challenge bis "
+                + offer.ExpiresUtc.ToLocalTime().ToString("HH:mm:ss");
+        }
+        catch (Exception error)
+        {
+            _status.Text = "Einschreibung nicht vorbereitet: " + error.Message
+                + ". Kein Credential oder Claim geschrieben.";
+        }
+        finally
+        {
+            _busy = false;
+            _load.Enabled = true;
+            _enrollPrepare.Enabled = true;
+            UpdateVerifyEnabled();
+        }
+    }
+
+    private void PerformNativeEnrollment()
+    {
+        if (_busy || !_acknowledge.Checked
+            || _enrollment is not { } original) return;
+        if (original.ExpiresUtc <= DateTimeOffset.UtcNow)
+        {
+            InvalidateOffer();
+            _status.Text = "Einschreib-Challenge abgelaufen. Neu vorbereiten.";
+            return;
+        }
+        _busy = true;
+        _load.Enabled = false;
+        _enrollPrepare.Enabled = false;
+        _verify.Enabled = false;
+        _project.Enabled = false;
+        _branch.Enabled = false;
+        _reference.Enabled = false;
+        _status.Text = "Windows WebAuthn erstellt eine neue lokale Credential. "
+            + "Danach folgt eine ZWEITE Windows-Hello-Besitzprüfung.";
+        try
+        {
+            var attestation = NativeWindowsWebAuthnRegistration.MakeCredential(
+                Handle, original);
+            var proofOffer = ProtectedOperatorService.VerifyNativeEnrollmentKey(
+                original, attestation);
+            var assertion = NativeWindowsWebAuthn.GetAssertion(
+                Handle, proofOffer);
+            var receipt = ProtectedOperatorService.CompleteNativeEnrollment(
+                proofOffer.TicketId, assertion);
+            if (!receipt.Verified
+                || receipt.Status != "operator_native_uv_enrolled_unapproved")
+                throw new InvalidOperationException(
+                    "Dienst verweigerte die Einschreibung: " + receipt.Status);
+            _status.Text = "Windows-Hello-Credential mit zweitem UV-Nachweis "
+                + "geschützt eingeschrieben. KEIN Claim und KEINE "
+                + "Freigabe einer Erinnerung erteilt.";
+        }
+        catch (Exception error)
+        {
+            _status.Text = "Einschreibung abgebrochen oder verweigert: "
+                + error.Message + ". Kein Claim geschrieben.";
+        }
+        finally
+        {
+            _enrollment = null;
+            _offer = null;
+            _acknowledge.Enabled = false;
+            _acknowledge.Checked = false;
+            _load.Enabled = true;
+            _enrollPrepare.Enabled = true;
+            _project.Enabled = true;
+            _branch.Enabled = true;
+            _reference.Enabled = true;
+            _busy = false;
             UpdateVerifyEnabled();
         }
     }
