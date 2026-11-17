@@ -38,28 +38,49 @@ const b64 = bytes => Buffer.from(bytes).toString('base64url');
 async function send(op, fields) {
   const nonce=b64(randomBytes(32));
   const input=JSON.stringify({protocol,op,nonce,...fields})+'\n';
-  const reply=await new Promise((resolve,reject)=>{
-    const pipe=createConnection(pipePath);
-    let output='', settled=false;
-    const fail=error=>{
-      if(settled)return;settled=true;pipe.destroy();reject(error);
-    };
-    pipe.setTimeout(4000,()=>fail(new Error('native_enrollment_pipe_timeout')));
-    pipe.on('error',fail);
-    pipe.on('connect',()=>pipe.write(input));
-    pipe.on('data',chunk=>{
-      if(settled)return;
-      output+=chunk.toString('utf8');
-      if(output.length>16384)return fail(new Error('native_enrollment_response_too_large'));
-      const end=output.indexOf('\n');
-      if(end>=0){
-        settled=true;pipe.destroy();resolve(output.slice(0,end));
-      }
-    });
-    pipe.on('end',()=>{
-      if(!settled)fail(new Error('native_enrollment_pipe_closed'));
-    });
-  });
+  // Service uses one NamedPipeServerStream per request. Between requests
+  // the previous instance can close before its successor starts listening.
+  // Only retry a connection that FAILED BEFORE on('connect'); once a request
+  // could have been delivered, absolutely no retry is permitted.
+  let reply;
+  for (let attempt=0;attempt<20;attempt++) {
+    try {
+      reply=await new Promise((resolve,reject)=>{
+        const pipe=createConnection(pipePath);
+        let output='',settled=false,connected=false;
+        const fail=error=>{
+          if(settled)return;
+          settled=true;pipe.destroy();
+          if(connected) {
+            const delivered=new Error('native_enrollment_response_failed_after_connect');
+            delivered.code='DELIVERED_OR_UNKNOWN';
+            reject(delivered);
+          } else reject(error);
+        };
+        pipe.setTimeout(4000,()=>fail(new Error('native_enrollment_pipe_timeout')));
+        pipe.on('error',fail);
+        pipe.on('connect',()=>{connected=true;pipe.write(input);});
+        pipe.on('data',chunk=>{
+          if(settled)return;
+          output+=chunk.toString('utf8');
+          if(output.length>16384)
+            return fail(new Error('native_enrollment_response_too_large'));
+          const end=output.indexOf('\n');
+          if(end>=0){
+            settled=true;pipe.destroy();resolve(output.slice(0,end));
+          }
+        });
+        pipe.on('end',()=>{
+          if(!settled)fail(new Error('native_enrollment_pipe_closed'));
+        });
+      });
+      break;
+    } catch(error) {
+      if (attempt===19 || !['ENOENT','ECONNREFUSED'].includes(error?.code))
+        throw error;
+      await new Promise(resolve=>setTimeout(resolve,180));
+    }
+  }
   const envelope=JSON.parse(reply);
   if(envelope.protocol!==protocol)throw new Error('enrollment_envelope_protocol');
   const data=Buffer.from(envelope.payload_b64,'base64');
@@ -119,19 +140,7 @@ function proofAssertion(key, offer, counter){
 }
 
 async function run(){
-  // The restricted SCM service may still be opening its admin-only pipe.
-  // Retry ONLY connection refusal before the first enrollment request is
-  // delivered. Never retry a challenge or a state-changing operation.
-  let started;
-  for(let attempt=0;attempt<20;attempt++){
-    try { started=await send('enroll_begin',scope); break; }
-    catch(error) {
-      const code=error?.code;
-      if(attempt===19 || !['ENOENT','ECONNREFUSED'].includes(code))
-        throw error;
-      await new Promise(resolve=>setTimeout(resolve,180));
-    }
-  }
+  const started=await send('enroll_begin',scope);
   if(started.status!=='operator_native_registration_challenge_unapproved'
     || started.kind!=='procedure'
     || started.source_origin!=='operator_pinned_unverified_evidence_v1'
