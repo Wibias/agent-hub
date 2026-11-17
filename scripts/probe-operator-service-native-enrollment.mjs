@@ -488,8 +488,9 @@ async function run(){
     throw Error('ci_mcp_server_not_original_readonly_memory');
   const tools=await mcpCall(21,'tools/list',{});
   if(tools?.result?.tools?.length!==1
-    ||tools.result.tools[0].name!=='memory_recall')
-    throw Error('ci_mcp_not_existing_memory_recall');
+    ||tools.result.tools[0].name!=='memory_recall'
+    ||!tools.result.tools[0].description.includes('CI ONLY'))
+    throw Error('ci_mcp_not_existing_memory_recall_or_unlabelled');
   let readyResolve,readyReject;
   const ready=new Promise((resolve,reject)=>{
     readyResolve=resolve;readyReject=reject;
