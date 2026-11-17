@@ -202,10 +202,11 @@ internal sealed class OneShotCiRecipientPipe : IDisposable
                 // handle, NEVER from the untrusted recipient's JSON.
                 // This is a consistency diagnostic, NOT Codex attestation.
                 using var observedProcess =
-                    ObservedCiRecipientProcess.Observe(pipe,kernelPid);
+                    ObservedCiRecipientProcess.Observe(pipe,kernelPid,
+                        out var originFailure);
                 if(observedProcess is null)
                 {
-                    Mark("recipient_process_origin_unavailable");
+                    Mark("recipient_process_origin_"+originFailure);
                     continue;
                 }
                 Mark("recipient_process_origin_observed");
@@ -229,9 +230,10 @@ internal sealed class OneShotCiRecipientPipe : IDisposable
                 using var pending = new Pending(pipe,snapshot,
                     // Ownership of this kernel handle is duplicated by a
                     // new observation owned by Pending (never caller JSON).
-                    ObservedCiRecipientProcess.Observe(pipe,kernelPid)
+                    ObservedCiRecipientProcess.Observe(pipe,kernelPid,
+                        out var secondOrigin)
                         ?? throw new InvalidOperationException(
-                            "recipient_process_reobservation_failed"));
+                            "recipient_process_reobservation_failed_"+secondOrigin));
                 lock(_gate)
                 {
                     if(_active is not null)continue;
