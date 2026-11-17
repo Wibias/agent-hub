@@ -46,24 +46,29 @@ internal sealed class OneShotCiRecipientPipe : IDisposable
     internal sealed record Snapshot(
         string ProjectId, string Branch, string ProposalRef,
         string PrincipalSid, uint KernelProcessId, string ClientNonce,
+        string ProcessImagePath, ulong ProcessCreatedFileTime,
         string SessionSha256, DateTimeOffset ExpiresUtc);
 
     private sealed class Pending : IDisposable
     {
         internal NamedPipeServerStream Stream { get; }
         internal Snapshot Metadata { get; }
+        internal ObservedCiRecipientProcess Observed { get; }
         internal TaskCompletionSource<bool> Finished { get; } =
             new(TaskCreationOptions.RunContinuationsAsynchronously);
         internal bool Consumed { get; set; }
 
-        internal Pending(NamedPipeServerStream stream, Snapshot metadata)
+        internal Pending(NamedPipeServerStream stream, Snapshot metadata,
+            ObservedCiRecipientProcess observed)
         {
             Stream = stream;
             Metadata = metadata;
+            Observed = observed;
         }
         public void Dispose()
         {
             Finished.TrySetResult(true);
+            Observed.Dispose();
             Stream.Dispose();
         }
     }
@@ -193,6 +198,17 @@ internal sealed class OneShotCiRecipientPipe : IDisposable
                     continue;
                 }
                 Mark("recipient_scope_verified");
+                // The actual image/creation come from a kernel process
+                // handle, NEVER from the untrusted recipient's JSON.
+                // This is a consistency diagnostic, NOT Codex attestation.
+                using var observedProcess =
+                    ObservedCiRecipientProcess.Observe(pipe,kernelPid);
+                if(observedProcess is null)
+                {
+                    Mark("recipient_process_origin_unavailable");
+                    continue;
+                }
+                Mark("recipient_process_origin_observed");
                 var proposal = root.GetProperty("proposalRef").GetString()!;
                 var challenge = RandomNumberGenerator.GetBytes(32);
                 var binding = JsonSerializer.SerializeToUtf8Bytes(new[]
@@ -200,13 +216,22 @@ internal sealed class OneShotCiRecipientPipe : IDisposable
                     Protocol,Project,Branch,proposal,actualSid,
                     kernelPid.ToString(System.Globalization.CultureInfo.InvariantCulture),
                     clientNonce,
+                    observedProcess.ImagePath,
+                    observedProcess.CreationFileTime.ToString(
+                        System.Globalization.CultureInfo.InvariantCulture),
                     Convert.ToHexString(challenge).ToLowerInvariant(),
                 });
                 var snapshot = new Snapshot(Project,Branch,proposal,
                     actualSid,kernelPid,clientNonce,
+                    observedProcess.ImagePath,observedProcess.CreationFileTime,
                     Convert.ToHexString(SHA256.HashData(binding)).ToLowerInvariant(),
                     DateTimeOffset.UtcNow.AddSeconds(90));
-                using var pending = new Pending(pipe,snapshot);
+                using var pending = new Pending(pipe,snapshot,
+                    // Ownership of this kernel handle is duplicated by a
+                    // new observation owned by Pending (never caller JSON).
+                    ObservedCiRecipientProcess.Observe(pipe,kernelPid)
+                        ?? throw new InvalidOperationException(
+                            "recipient_process_reobservation_failed"));
                 lock(_gate)
                 {
                     if(_active is not null)continue;
@@ -283,7 +308,8 @@ internal sealed class OneShotCiRecipientPipe : IDisposable
                     || !GetNamedPipeClientProcessId(
                         p.Stream.SafePipeHandle,out var currentPid)
                     || currentPid!=original.KernelProcessId
-                    || PrincipalSid(p.Stream)!=original.PrincipalSid)
+                    || PrincipalSid(p.Stream)!=original.PrincipalSid
+                    || !p.Observed.Matches(p.Stream))
                     return false;
                 p.Stream.Write(signedEnvelope);
                 p.Stream.Flush();
