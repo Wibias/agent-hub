@@ -61,7 +61,7 @@ internal sealed record OperatorReceipt(bool Verified, string Status, string? Cla
 /// Administrator-owned public pin path, never an IPC response, model argument
 /// or a user-selected file. NO access to the protected SQLite from this UI.
 /// </summary>
-internal static class ProtectedOperatorService
+internal static partial class ProtectedOperatorService
 {
     private const string PipeName = "AgentHubMemoryReviewLab-OperatorV1";
     private const string Protocol = "agenthub-operator-uv-service-v1";
