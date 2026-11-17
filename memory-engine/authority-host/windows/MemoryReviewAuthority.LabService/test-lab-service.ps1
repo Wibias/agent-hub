@@ -212,6 +212,18 @@ try {
         } | ConvertTo-Json -Compress
         [IO.File]::WriteAllText($directPolicy, $policy,
             [Text.UTF8Encoding]::new($false))
+        # Separate CI-only exact-Windows-account reader. The normal
+        # installed Preview NEVER provisions this protected enrollment.
+        $userReadPolicyPath = Join-Path $stateRoot 'agenthub-user-direct-read-ci-only.json'
+        $userReadPolicy = @{
+            policy = 'agenthub-user-direct-read-ci-sid-scope-v1'
+            principalSid = $ciSid
+            projectId = $sourceScope.projectId
+            branch = $sourceScope.branch
+            revisionSha = $sourceScope.revisionSha
+        } | ConvertTo-Json -Compress
+        [IO.File]::WriteAllText($userReadPolicyPath, $userReadPolicy,
+            [Text.UTF8Encoding]::new($false))
     }
 
     & $sc start $service
