@@ -528,6 +528,11 @@ try {
         }
         if (-not $restarted) {
             Write-Host ('DIAG RESTART SCM: ' + ((& $sc queryex $service) -join ' '))
+            $ciStartupError = Join-Path $stateRoot 'ci-only-service-startup-failure.txt'
+            if (Test-Path -LiteralPath $ciStartupError -PathType Leaf) {
+                Write-Host ('DIAG RESTART PROTECTED CI STARTUP: ' +
+                    (Get-Content -LiteralPath $ciStartupError -Raw))
+            }
             try {
                 $startFailures = @(Get-WinEvent -FilterHashtable @{
                     LogName='Application'
