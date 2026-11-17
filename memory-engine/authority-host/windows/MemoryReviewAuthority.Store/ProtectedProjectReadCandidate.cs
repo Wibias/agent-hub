@@ -93,14 +93,15 @@ public sealed partial class ProtectedPendingReviewLedger
 
     private static void ValidateProjectReadRequest(ProtectedProjectReadRequest? request)
     {
+        var branch = request?.Branch;
         if (request is null
+            || branch is null
             || !ProjectReadProjectPattern.IsMatch(request.ProjectId ?? "")
-            || request.Branch is null
-            || !ProjectReadBranchPattern.IsMatch(request.Branch ?? "")
-            || request.Branch.Contains("..", StringComparison.Ordinal)
-            || request.Branch.Contains("//", StringComparison.Ordinal)
-            || request.Branch.EndsWith("/", StringComparison.Ordinal)
-            || request.Branch.EndsWith(".lock", StringComparison.OrdinalIgnoreCase)
+            || !ProjectReadBranchPattern.IsMatch(branch)
+            || branch.Contains("..", StringComparison.Ordinal)
+            || branch.Contains("//", StringComparison.Ordinal)
+            || branch.EndsWith("/", StringComparison.Ordinal)
+            || branch.EndsWith(".lock", StringComparison.OrdinalIgnoreCase)
             || !ProjectReadGitShaPattern.IsMatch(request.RevisionSha ?? "")
             || !ProjectReadSidPattern.IsMatch(request.PrincipalSid ?? "")
             || !ProjectReadSha256Pattern.IsMatch(request.ProposedGitRootSha256 ?? "")
