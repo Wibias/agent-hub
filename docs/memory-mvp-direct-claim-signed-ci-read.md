@@ -92,6 +92,36 @@ The service policy fixes one exact CI project/branch/revision; authentic
 per-project enrollment and native Codex session attribution remain
 separate requirements before using this design with real memories.
 
+## Existing Codex memory_recall: explicitly isolated test mode
+
+The existing `memory_recall` MCP tool now has an extra, CI-only
+**diagnostic launcher mode**:
+
+`--ci-user-direct-read --scope ABS_SCOPE --pin ABS_ADMIN_PIN`
+
+The original `--global`, `--cwd`, and synthetic `--lab-protected-read`
+modes remain independent and unchanged. The CI mode refuses all
+non-Windows / non-GitHub-Actions calls and does **not** accept a
+model-supplied project, branch, revision, SID, signer key or source path.
+
+The provider resolves the actual MCP process Git checkout root,
+checks its enrollment in the explicit read-only scope manifest,
+reobserves Git identity, current branch and FULL commit hash, derives
+the Windows SID via `whoami /user` and asks only the separately enrolled
+protected per-user pipe. The service is still the final authority for
+the actual impersonated client SID, fixed CI project, exact Git SHA
+and protected Claim provenance. The client verifies service signature,
+nonce and all identity/scope/fact fields. A failed pipe or signature
+produces an empty fail-closed result; **no canonical SQLite fallback**.
+
+The result stays labeled `found_direct_ci_only`, not a production
+`found` memory decision, and asserts
+`trusted_for_production_recall=false` and
+`physical_human_approval_verified=false`. This **does not** install
+the adapter in Codex Desktop or CLI on the operator PC. Actual
+nonadmin process-level Codex acceptance and enrollment remain
+separate mandatory gates.
+
 ## Security and readiness limitations
 
 The CI-only pipe ACL intentionally permits **Administrators only**

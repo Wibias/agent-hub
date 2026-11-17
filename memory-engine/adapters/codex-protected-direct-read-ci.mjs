@@ -5,6 +5,8 @@ import { isAbsolute } from 'node:path';
 
 export const DIRECT_CI_PIPE = '\\\\.\\pipe\\AgentHubMemoryReviewLab-DirectReadCiV1';
 export const DIRECT_CI_PROTOCOL = 'agenthub-protected-direct-read-ci-v1';
+export const DIRECT_USER_CI_PIPE = '\\\\.\\pipe\\AgentHubMemoryReviewLab-UserReadCiV1';
+export const DIRECT_USER_CI_PROTOCOL = 'agenthub-protected-user-read-ci-v1';
 export const DIRECT_CI_PROJECT = 'github.com/example/operator-evidence';
 export const DIRECT_CI_BRANCH = 'main';
 export const DIRECT_CI_REVISION_FORMAT = /^[0-9a-f]{40}$/u;
@@ -27,8 +29,10 @@ const sameKeys = (value, keys) => isRecord(value)
 export function verifySignedDirectCiEnvelope({
   envelope, pinnedPublicKeyPem, expectedNonce, expectedSid,
   projectId, branch, revisionSha, query, maxItems,
+  expectedProtocol = DIRECT_CI_PROTOCOL,
 } = {}) {
   const deny = () => { throw new Error('direct_ci_read_unverified'); };
+  if (![DIRECT_CI_PROTOCOL, DIRECT_USER_CI_PROTOCOL].includes(expectedProtocol)) deny();
   if (!NONCE.test(expectedNonce ?? '') || !SID.test(expectedSid ?? '')
     || projectId !== DIRECT_CI_PROJECT || branch !== DIRECT_CI_BRANCH
     || !DIRECT_CI_REVISION_FORMAT.test(revisionSha ?? '')
@@ -36,7 +40,7 @@ export function verifySignedDirectCiEnvelope({
     || !Number.isInteger(maxItems) || maxItems < 1 || maxItems > 3
     || typeof pinnedPublicKeyPem !== 'string'
     || !sameKeys(envelope, ['protocol', 'payload_b64', 'signature_b64'])
-    || envelope.protocol !== DIRECT_CI_PROTOCOL) deny();
+    || envelope.protocol !== expectedProtocol) deny();
   let payload;
   try {
     const raw = Buffer.from(envelope.payload_b64, 'base64');
@@ -53,7 +57,7 @@ export function verifySignedDirectCiEnvelope({
   } catch { deny(); }
 
   if (!isRecord(payload)
-    || payload.protocol !== DIRECT_CI_PROTOCOL
+    || payload.protocol !== expectedProtocol
     || payload.nonce !== expectedNonce
     || payload.principal_sid !== expectedSid
     || payload.project_id !== projectId || payload.branch !== branch
@@ -100,12 +104,22 @@ export function verifySignedDirectCiEnvelope({
   });
 }
 
-/** CI-only physical LocalService pipe transport; no MCP/tool exposure. */
-export async function requestSignedDirectCi({
+/** CI-only private host transport. Explicitly NOT a default MCP provider. */
+export async function requestSignedDirectCi(args = {}) {
+  return requestSignedCiTransport(args, false);
+}
+export async function requestSignedUserCi(args = {}) {
+  return requestSignedCiTransport(args, true);
+}
+
+async function requestSignedCiTransport({
   pinPath, expectedSid, projectId = DIRECT_CI_PROJECT,
   branch = DIRECT_CI_BRANCH, revisionSha,
   query, maxItems = 3, timeoutMs = 3000,
-} = {}) {
+} = {}, userMode) {
+  const protocol = userMode ? DIRECT_USER_CI_PROTOCOL : DIRECT_CI_PROTOCOL;
+  const pipePath = userMode ? DIRECT_USER_CI_PIPE : DIRECT_CI_PIPE;
+  const operation = userMode ? 'read_user_ci' : 'read_direct_ci';
   if (process.platform !== 'win32'
     || process.env.GITHUB_ACTIONS !== 'true'
     || process.env.RUNNER_OS !== 'Windows')
@@ -123,11 +137,11 @@ export async function requestSignedDirectCi({
   const pinnedPublicKeyPem = readFileSync(pinPath, 'utf8');
   const nonce = randomBytes(32).toString('base64url');
   const request = JSON.stringify({
-    protocol: DIRECT_CI_PROTOCOL, op: 'read_direct_ci', nonce,
+    protocol, op: operation, nonce,
     projectId, branch, revisionSha, query, maxItems,
   }) + '\n';
   const text = await new Promise((resolve, reject) => {
-    const client = createConnection(DIRECT_CI_PIPE);
+    const client = createConnection(pipePath);
     let response = '';
     let settled = false;
     const fail = error => {
@@ -158,5 +172,6 @@ export async function requestSignedDirectCi({
     envelope: JSON.parse(text), pinnedPublicKeyPem,
     expectedNonce: nonce, expectedSid, projectId, branch,
     revisionSha, query, maxItems,
+    expectedProtocol: protocol,
   });
 }
