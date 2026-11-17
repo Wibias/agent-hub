@@ -150,6 +150,38 @@ try {
     Write-Host ('PASS: installed, admin-owned native UI validates signed E~ over restricted SCM pipe; native_enrollment_mode=' +
         $NativeEnrollmentMode.IsPresent + ', no physical Hello, no approval')
 
+    # CI reproduces the operator-PC cleanup failure without Hello or Claims.
+    # Removal must fail BEFORE stopping SCM or archiving the evidence.
+    $activeOperator = Start-Process -FilePath $result.nativeOperatorExe -ArgumentList '--ci-hold-uninstall-preflight' -PassThru
+    try {
+        Start-Sleep -Milliseconds 700
+        $activeOperator.Refresh()
+        if ($activeOperator.HasExited) {
+            throw 'CI operator lock probe exited before uninstall preflight'
+        }
+        $lockedDenied = $false
+        try {
+            & $installer -Action Remove -Consent 'REMOVE_AGENTHUB_MEMORY_REVIEW_ONLY_PREVIEW' *> $null
+        } catch {
+            $lockedDenied = $_.Exception.Message -match 'Installed Operator UI still running'
+        }
+        if (-not $lockedDenied -or
+            -not (Get-Service -Name $service -ErrorAction SilentlyContinue) -or
+            -not (Test-Path -LiteralPath $installed) -or
+            -not (Test-Path -LiteralPath $state) -or
+            -not (Test-Path -LiteralPath $pub)) {
+            throw 'Live UI removal did not fail closed before mutating service state'
+        }
+        Write-Host 'PASS: live operator prevents partial uninstall; protected state unchanged'
+    } finally {
+        $activeOperator.Refresh()
+        if (-not $activeOperator.HasExited) {
+            Stop-Process -Id $activeOperator.Id -Force -ErrorAction Stop
+            $activeOperator.WaitForExit()
+        }
+        $activeOperator.Dispose()
+    }
+
     $uninstall = & $installer -Action Remove `
         -Consent 'REMOVE_AGENTHUB_MEMORY_REVIEW_ONLY_PREVIEW' |
         ConvertFrom-Json
