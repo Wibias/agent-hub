@@ -91,6 +91,17 @@ public sealed partial class ProtectedPendingReviewLedger
         cmd.ExecuteNonQuery();
     }
 
+    /// <summary>
+    /// Deliberate non-production schema bootstrap. The normal Store open
+    /// path MUST NOT add real-project intake tables or enable read access.
+    /// An explicit host-owned preview/testing call is required.
+    /// </summary>
+    public void InitializeProjectReadIntakePreviewSchema()
+    {
+        EnsureOpen();
+        InitializeProjectReadIntakeSchema(_connection);
+    }
+
     private static void ValidateProjectReadRequest(ProtectedProjectReadRequest? request)
     {
         var branch = request?.Branch;
