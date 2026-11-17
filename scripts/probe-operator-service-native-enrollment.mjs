@@ -14,6 +14,7 @@ import {
 } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { isAbsolute } from 'node:path';
+import { fork } from 'node:child_process';
 
 if (process.platform !== 'win32' || process.env.GITHUB_ACTIONS !== 'true'
   || process.env.RUNNER_OS !== 'Windows' || process.argv.length !== 3
@@ -319,6 +320,120 @@ async function run(){
     || consent.human_approval_verified!==false)
     throw new Error('synthetic_read_intent_claimed_release_or_failed');
 
+  // Only the ephemeral Windows CI host has a protected one-shot marker.
+  // Start a REAL separate receiver process. Its already-connected kernel
+  // pipe is held across the read-purpose UV challenge; it gets NO Claim
+  // before an exact consent. This is NOT an attested Codex session.
+  function startReceiver() {
+    const child=fork(new URL('./memory-read-once-ci-recipient.mjs',import.meta.url),
+      [pinPath,scope.proposalRef],{
+        stdio:['ignore','ignore','pipe','ipc'],
+      });
+    let events=[],next=null,stopped=false;
+    let childError='',deliveredMessage=false;
+    const forward=message=>{
+      if(message?.status==='received_signed_exact_once')deliveredMessage=true;
+      if(next){const r=next;next=null;r(message);}
+      else events.push(message);
+    };
+    child.stderr.on('data',chunk=>{
+      childError+=(chunk.toString('utf8')).slice(0,512);
+    });
+    child.on('message',forward);
+    child.on('error',error=>forward({
+      status:'spawn_error',detail:String(error?.message??'unknown').slice(0,140),
+    }));
+    child.on('exit',(code,signal)=>{
+      stopped=true;
+      forward({status:'child_exit',code,signal,
+        stderr:childError.slice(0,280)});
+    });
+    const receive=async()=>{
+      if(events.length)return events.shift();
+      if(stopped)throw Error('ci_receiver_exited_without_result: '+childError.slice(0,180));
+      return await Promise.race([
+        new Promise(resolve=>{next=resolve;}),
+        new Promise((_,reject)=>setTimeout(
+          ()=>reject(Error('ci_receiver_wait_timed_out')),12000)),
+      ]);
+    };
+    return {child,receive,hasDelivery:()=>deliveredMessage};
+  }
+  const firstReceiver=startReceiver();
+  const firstReady=await firstReceiver.receive();
+  if(firstReady?.status!=='ready')
+    throw Error('ci_receiver_first_not_ready: '+JSON.stringify(firstReady));
+  const deniedOffer=await send('ci_read_begin',scope);
+  if(deniedOffer.status!=='ci_one_shot_exact_recipient_uv_challenge_no_release'
+    || deniedOffer.recipient_kernel_pid!==firstReceiver.child.pid
+    || deniedOffer.result_set_sha256!==selectedHash
+    || deniedOffer.read_released!==false
+    || deniedOffer.published_to_codex!==false)
+    throw Error('ci_one_shot_first_recipient_binding_invalid');
+  const wrongCi=await send('ci_read_complete',{
+    ticketId:deniedOffer.ticket_id,
+    assertion:proofAssertion(key,publish,6), // publication purpose is NOT read consent
+  });
+  if(wrongCi.status!=='challenge_mismatch'
+    || wrongCi.read_released!==false)
+    throw Error('wrong_purpose_ci_claim_released');
+  const deniedReceiver=await firstReceiver.receive();
+  if(deniedReceiver?.status!=='denied_without_bytes')
+    throw Error('ci_wrong_purpose_did_not_close_recipient');
+
+  const secondReceiver=startReceiver();
+  const secondReady=await secondReceiver.receive();
+  if(secondReady?.status!=='ready')
+    throw Error('ci_receiver_second_not_ready: '+JSON.stringify(secondReady));
+  const validOffer=await send('ci_read_begin',scope);
+  if(validOffer.recipient_kernel_pid!==secondReceiver.child.pid
+    || validOffer.principal_sid!==deniedOffer.principal_sid
+    || validOffer.result_set_sha256!==selectedHash
+    || validOffer.request_id===deniedOffer.request_id
+    || validOffer.recipient_session_sha256===deniedOffer.recipient_session_sha256
+    || validOffer.claim_id!==published.claim_id
+    || validOffer.value!==fact
+    || validOffer.published_to_codex!==false
+    || validOffer.read_released!==false)
+    throw Error('ci_second_recipient_not_exact_or_preapproved');
+  // The actual protected text MUST NOT reach the waiting process before UV.
+  await new Promise(resolve=>setTimeout(resolve,350));
+  // A pre-consent check must never CONSUME the future message from
+  // the recipient. Otherwise the later signed-delivery assertion races
+  // with a discarded Promise.race waiter.
+  if(secondReceiver.hasDelivery())
+    throw Error('ci_private_claim_transmitted_before_uv');
+
+  const release=await send('ci_read_complete',{
+    ticketId:validOffer.ticket_id,
+    assertion:proofAssertion(key,validOffer,6),
+  });
+  if(release.status!=='ci_exact_one_shot_delivered_no_production_authority'
+    || release.read_released!==true
+    || release.published_to_codex!==false
+    || release.production_authorized!==false
+    || release.request_id!==validOffer.request_id)
+    throw Error('ci_delivery_not_bound_to_fresh_uv');
+  const received=await secondReceiver.receive();
+  if(received?.status!=='received_signed_exact_once'
+    || received.claim_id!==published.claim_id
+    || received.recipient_pid!==secondReceiver.child.pid
+    || received.result_set_sha256!==selectedHash
+    || received.claim_hash!==sha(fact).toString('hex'))
+    throw Error('ci_recipient_did_not_validate_exact_signed_claim: '
+      +JSON.stringify(received));
+  // Repeating the same approval cannot authorize another delivery.
+  try {
+    await send('ci_read_complete',{
+      ticketId:validOffer.ticket_id,
+      assertion:proofAssertion(key,validOffer,7),
+    });
+    throw Error('replayed_ci_one_shot_consent_accepted');
+  } catch(error) {
+    if(String(error?.message??'').includes(
+        'replayed_ci_one_shot_consent_accepted'))throw error;
+  }
+
   process.stdout.write(JSON.stringify({
     status:'synthetic_native_enrollment_bridge_pass_not_human',
     source_kind:'knowledge',
@@ -327,6 +442,10 @@ async function run(){
     private_direct_claim_committed:true,
     protected_read_offer_exact_claim_and_query:true,
     read_purpose_uv_one_use_only:true,
+    ci_one_shot_separate_process_delivery:true,
+    ci_denied_wrong_purpose_before_release:true,
+    ci_exact_kernel_pid_receiver:true,
+    ci_receiver_verified_signed_claim:true,
     read_released:false,
     published_to_codex:false,
     historical_evidence_verified:false,

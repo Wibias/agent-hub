@@ -193,6 +193,12 @@ try {
         [IO.File]::WriteAllText($publishGate,
             'AGENTHUB_SYNTHETIC_DIRECT_CLAIM_CI_ONLY_V1',
             [Text.UTF8Encoding]::new($false))
+        # CI only: no normal Preview installation is permitted to register
+        # even a test recipient or obtain an unconsented read channel.
+        $deliveryGate = Join-Path $stateRoot 'agenthub-read-once-ci-only.enable'
+        [IO.File]::WriteAllText($deliveryGate,
+            'AGENTHUB_READ_ONCE_CI_ONLY_NO_PRODUCTION_V1',
+            [Text.ASCIIEncoding]::new())
         $sourceScope = Get-Content -LiteralPath (Join-Path $stateRoot 'operator-evidence-manifest.json') -Raw | ConvertFrom-Json
         $ciSid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
         if ($sourceScope.projectId -cne 'github.com/example/operator-evidence' -or
@@ -275,6 +281,13 @@ try {
     Write-Host 'PASS: real E~ canonical SQLite/Evidence imported by restricted LocalService as PENDING only; NO Claim, NO human approval'
     $pinnedCredentialMarker = Join-Path $stateRoot 'operator-credential-pinned.txt'
     if ($NativeEnrollmentMode.IsPresent) {
+        $readOnceListenerMarker = Join-Path $stateRoot 'read-once-ci-listener-started.txt'
+        if (-not (Test-Path -LiteralPath $readOnceListenerMarker -PathType Leaf) -or
+            (Get-Content -LiteralPath $readOnceListenerMarker -Raw) -cne
+                'READ_ONCE_CI_LISTENER_STARTED_NO_PRODUCTION_GRANT') {
+            throw 'explicit CI one-shot recipient named-pipe listener never started'
+        }
+        Write-Host 'PASS: protected one-shot recipient listener explicitly started in ephemeral CI only'
         if (Test-Path -LiteralPath $pinnedCredentialMarker) {
             throw 'native enrollment lab must not stage unverified browser key'
         }
@@ -386,6 +399,15 @@ try {
         $enrollProbe = Join-Path $repoRoot 'scripts/probe-operator-service-native-enrollment.mjs'
         $enrollOutput = & node $enrollProbe $publishedPin
         if ($LASTEXITCODE -ne 0) {
+            $ciTrace = Join-Path $stateRoot 'read-once-ci-events.txt'
+            if (Test-Path -LiteralPath $ciTrace -PathType Leaf) {
+                Write-Host 'CI recipient channel events (no private bytes):'
+                Get-Content -LiteralPath $ciTrace | Select-Object -Last 30 | ForEach-Object {
+                    Write-Host ('  ' + $_)
+                }
+            } else {
+                Write-Host 'CI recipient channel events: no listener trace file'
+            }
             throw 'native enrollment service E2E synthetic protocol failed'
         }
         $enroll = $enrollOutput | ConvertFrom-Json
@@ -400,6 +422,10 @@ try {
             -not $enroll.private_direct_claim_committed -or
             -not $enroll.protected_read_offer_exact_claim_and_query -or
             -not $enroll.read_purpose_uv_one_use_only -or
+            -not $enroll.ci_one_shot_separate_process_delivery -or
+            -not $enroll.ci_denied_wrong_purpose_before_release -or
+            -not $enroll.ci_exact_kernel_pid_receiver -or
+            -not $enroll.ci_receiver_verified_signed_claim -or
             $enroll.read_released -or
             $enroll.published_to_codex -or
             $enroll.historical_evidence_verified -or
@@ -409,6 +435,7 @@ try {
             throw 'synthetic native enrollment incorrectly granted approval'
         }
         Write-Host 'PASS: native claim commit then separate one-use read-preview UV, exact snapshot, no read release'
+        Write-Host 'PASS: CI one-shot real second process receives signed exact private fixture only after separate synthetic UV; wrong purpose and replay denied; NOT a Codex grant'
         # Actual compiled WinForms client reads the exact protected Claim text
         # from the running service and validates the administrator-owned pin.
         # No physical Hello or Codex recipient is used by this headless mode.
