@@ -330,14 +330,26 @@ async function run(){
         stdio:['ignore','ignore','pipe','ipc'],
       });
     let events=[],next=null,stopped=false;
-    child.on('message',message=>{
+    let childError='';
+    const forward=message=>{
       if(next){const r=next;next=null;r(message);}
       else events.push(message);
+    };
+    child.stderr.on('data',chunk=>{
+      childError+=(chunk.toString('utf8')).slice(0,512);
     });
-    child.on('exit',()=>{stopped=true;});
+    child.on('message',forward);
+    child.on('error',error=>forward({
+      status:'spawn_error',detail:String(error?.message??'unknown').slice(0,140),
+    }));
+    child.on('exit',(code,signal)=>{
+      stopped=true;
+      forward({status:'child_exit',code,signal,
+        stderr:childError.slice(0,280)});
+    });
     const receive=async()=>{
       if(events.length)return events.shift();
-      if(stopped)throw Error('ci_receiver_exited_without_result');
+      if(stopped)throw Error('ci_receiver_exited_without_result: '+childError.slice(0,180));
       return await Promise.race([
         new Promise(resolve=>{next=resolve;}),
         new Promise((_,reject)=>setTimeout(
@@ -348,7 +360,8 @@ async function run(){
   }
   const firstReceiver=startReceiver();
   const firstReady=await firstReceiver.receive();
-  if(firstReady?.status!=='ready')throw Error('ci_receiver_first_not_ready');
+  if(firstReady?.status!=='ready')
+    throw Error('ci_receiver_first_not_ready: '+JSON.stringify(firstReady));
   const deniedOffer=await send('ci_read_begin',scope);
   if(deniedOffer.status!=='ci_one_shot_exact_recipient_uv_challenge_no_release'
     || deniedOffer.recipient_kernel_pid!==firstReceiver.child.pid
@@ -369,7 +382,8 @@ async function run(){
 
   const secondReceiver=startReceiver();
   const secondReady=await secondReceiver.receive();
-  if(secondReady?.status!=='ready')throw Error('ci_receiver_second_not_ready');
+  if(secondReady?.status!=='ready')
+    throw Error('ci_receiver_second_not_ready: '+JSON.stringify(secondReady));
   const validOffer=await send('ci_read_begin',scope);
   if(validOffer.recipient_kernel_pid!==secondReceiver.child.pid
     || validOffer.principal_sid!==deniedOffer.principal_sid
