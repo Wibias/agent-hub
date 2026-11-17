@@ -171,6 +171,13 @@ internal sealed class OneShotCiRecipientPipe : IDisposable
                 }
                 try
                 {
+                    // A non-secret ACK lets the CI parent know that the
+                    // kernel-observed recipient is connected. It contains
+                    // NO private Claim, authorization or bearer token.
+                    var ack=Encoding.ASCII.GetBytes(
+                        "{\"protocol\":\"agenthub-memory-read-once-ci-v1\",\"status\":\"pending_no_claim\"}\\n");
+                    await pipe.WriteAsync(ack,stop);
+                    await pipe.FlushAsync(stop);
                     await pending.Finished.Task.WaitAsync(
                         TimeSpan.FromSeconds(90),stop);
                 }
