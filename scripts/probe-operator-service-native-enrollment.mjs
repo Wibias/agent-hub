@@ -579,6 +579,32 @@ async function run(){
     throw Error('ci_mcp_did_not_receive_exact_signed_claim');
   mcp.stdin.end();
 
+  // Explicit ADMIN-ONLY deny action. It writes an immutable tombstone
+  // into the protected service SQLite, then no later recipient can be
+  // authorized even while the fixture marker and service still exist.
+  const revoke=await send('ci_read_revoke',{});
+  if(revoke.status!=='ci_read_durably_revoked_no_claim'
+    ||revoke.read_released!==false
+    ||revoke.published_to_codex!==false
+    ||revoke.production_authorized!==false)
+    throw Error('ci_read_revocation_not_durably_confirmed');
+  const afterRevoke=startReceiver();
+  const waiting=await afterRevoke.receive();
+  if(waiting?.status!=='ready')
+    throw Error('ci_revocation_recipient_not_ready: '+JSON.stringify(waiting));
+  let signedOfferAfterRevoke=false;
+  try {
+    await send('ci_read_begin',scope);
+    signedOfferAfterRevoke=true;
+  } catch {
+    // A revoked synthetic offer is denied with no signed challenge.
+  }
+  if(signedOfferAfterRevoke)
+    throw Error('ci_read_revoked_scope_offered_new_challenge');
+  const deniedAfterRevoke=await afterRevoke.receive();
+  if(deniedAfterRevoke?.status!=='denied_without_bytes')
+    throw Error('ci_read_revoked_recipient_not_closed_without_claim');
+
   process.stdout.write(JSON.stringify({
     status:'synthetic_native_enrollment_bridge_pass_not_human',
     source_kind:'knowledge',
@@ -593,6 +619,7 @@ async function run(){
     ci_receiver_verified_signed_claim:true,
     ci_existing_memory_recall_stdio_received_exact_once:true,
     ci_compiled_native_operator_verified_signed_receiver_offer:true,
+    ci_read_once_durable_revoke_denied_future_recipient:true,
     read_released:false,
     published_to_codex:false,
     historical_evidence_verified:false,
