@@ -15,6 +15,7 @@ const pem=key.publicKey.export({format:'pem',type:'spki'});
 const value='Synthetic CI only; not a personal user memory.';
 const sha=text=>createHash('sha256').update(text).digest('hex');
 const pid=process.pid;
+const clientNonce=Buffer.alloc(32,7).toString('base64url');
 
 function signed(overrides={},privateKey=key.privateKey) {
   const payload={
@@ -27,6 +28,7 @@ function signed(overrides={},privateKey=key.privateKey) {
     fact_sha256:sha(value),
     result_set_sha256:'d'.repeat(64),
     recipient_session_sha256:'e'.repeat(64),
+    recipient_client_nonce:clientNonce,
     recipient_kernel_pid:pid,value,
     provenance:'user_direct_reaffirmed_and_published_v1',
     production_authorized:false,
@@ -41,7 +43,10 @@ function signed(overrides={},privateKey=key.privateKey) {
 }
 
 test('exact one-shot synthetic CI receipt verifies P256 signature and actual process ID',()=>{
-  const p=verifySignedOnceCi({envelope:signed(),pinnedKey:pem,expectedPid:pid});
+  const p=verifySignedOnceCi({
+    envelope:signed(),pinnedKey:pem,expectedPid:pid,
+    expectedClientNonce:clientNonce,
+  });
   assert.equal(p.value,value);
   assert.equal(p.recipient_kernel_pid,pid);
   assert.equal(p.production_authorized,false);
@@ -50,6 +55,7 @@ test('exact one-shot synthetic CI receipt verifies P256 signature and actual pro
 test('forged PID, content, project, signer, scope and production flag are denied',()=>{
   const forged=[
     signed({recipient_kernel_pid:pid+1}),
+    signed({recipient_client_nonce:Buffer.alloc(32,9).toString('base64url')}),
     signed({value:'changed'}),
     signed({project_id:'github.com/foreign/repo'}),
     signed({revision_sha:'not-a-full-git-sha'}),
@@ -60,10 +66,12 @@ test('forged PID, content, project, signer, scope and production flag are denied
   for(const envelope of forged)
     assert.throws(()=>verifySignedOnceCi({
       envelope,pinnedKey:pem,expectedPid:pid,
+      expectedClientNonce:clientNonce,
     }),/ci_read_once_invalid_signed_recipient_payload/);
   assert.throws(()=>verifySignedOnceCi({
     envelope:{...signed(),signature_b64:'malformed'},
     pinnedKey:pem,expectedPid:pid,
+    expectedClientNonce:clientNonce,
   }),/ci_read_once_invalid_signed_recipient_payload/);
 });
 
@@ -84,6 +92,7 @@ test('CI-only adapter denies other environments and wrong queries before any IPC
     invoked++;
     return verifySignedOnceCi({
       envelope:signed(),pinnedKey:pem,expectedPid:pid,
+      expectedClientNonce:clientNonce,
     });
   };
   const base={pinPath:pin,query:CI_READ_ONCE_QUERY,
