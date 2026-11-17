@@ -147,7 +147,23 @@ internal sealed class OperatorReviewWindow : Form
         Text = "Mit Windows Hello prüfen (keine Freigabe)",
         AutoSize = true, Height = 38, Enabled = false,
     };
+    private readonly Button _reaffirmPrepare = new()
+    {
+        Text = "Eigene Aussage vorbereiten", AutoSize = true, Height = 38,
+    };
+    private readonly CheckBox _reaffirmAcknowledge = new()
+    {
+        Text = "Ich bestätige den angezeigten Fakt JETZT als eigene Aussage. "
+            + "Historische Evidence bleibt UNVERIFIZIERT. KEIN Claim.",
+        Dock = DockStyle.Fill, Enabled = false,
+    };
+    private readonly Button _reaffirmConfirm = new()
+    {
+        Text = "Diese neue Aussage mit Windows Hello bestätigen (kein Claim)",
+        AutoSize = true, Height = 38, Enabled = false,
+    };
     private ServiceOffer? _offer;
+    private ServiceOffer? _reaffirmation;
     private RegistrationOffer? _enrollment;
     private bool _busy;
 
@@ -155,8 +171,8 @@ internal sealed class OperatorReviewWindow : Form
     {
         Text = "AgentHub Memory | Geschützter E~ Review | NO-GO";
         StartPosition = FormStartPosition.CenterScreen;
-        MinimumSize = new Size(860, 700);
-        Size = new Size(1030, 790);
+        MinimumSize = new Size(860, 850);
+        Size = new Size(1060, 970);
         BackColor = Color.FromArgb(16, 19, 24);
         ForeColor = Color.FromArgb(243, 245, 246);
         Font = new Font("Segoe UI", 10);
@@ -164,13 +180,15 @@ internal sealed class OperatorReviewWindow : Form
         var outer = new TableLayoutPanel
         {
             Dock = DockStyle.Fill, Padding = new Padding(28),
-            ColumnCount = 1, RowCount = 8,
+            ColumnCount = 1, RowCount = 10,
         };
         outer.RowStyles.Add(new RowStyle(SizeType.Absolute, 80));
         outer.RowStyles.Add(new RowStyle(SizeType.Absolute, 74));
         outer.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
         outer.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         outer.RowStyles.Add(new RowStyle(SizeType.Absolute, 125));
+        outer.RowStyles.Add(new RowStyle(SizeType.Absolute, 50));
+        outer.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
         outer.RowStyles.Add(new RowStyle(SizeType.Absolute, 50));
         outer.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
         outer.RowStyles.Add(new RowStyle(SizeType.Absolute, 55));
@@ -200,16 +218,22 @@ internal sealed class OperatorReviewWindow : Form
         };
         loadActions.Controls.Add(_load);
         loadActions.Controls.Add(_enrollPrepare);
+        loadActions.Controls.Add(_reaffirmPrepare);
         outer.Controls.Add(loadActions, 0, 2);
         outer.Controls.Add(_fact, 0, 3);
         outer.Controls.Add(_meaning, 0, 4);
         outer.Controls.Add(_acknowledge, 0, 5);
         outer.Controls.Add(_verify, 0, 6);
-        outer.Controls.Add(_status, 0, 7);
+        outer.Controls.Add(_reaffirmAcknowledge, 0, 7);
+        outer.Controls.Add(_reaffirmConfirm, 0, 8);
+        outer.Controls.Add(_status, 0, 9);
         Controls.Add(outer);
 
         _load.Click += async (_, _) => await LoadOfferAsync();
         _enrollPrepare.Click += async (_, _) => await LoadEnrollmentAsync();
+        _reaffirmPrepare.Click += async (_, _) => await LoadReaffirmationAsync();
+        _reaffirmConfirm.Click += (_, _) => PerformReaffirmation();
+        _reaffirmAcknowledge.CheckedChanged += (_, _) => UpdateVerifyEnabled();
         _verify.Click += (_, _) =>
         {
             if (_enrollment is not null) PerformNativeEnrollment();
@@ -244,6 +268,9 @@ internal sealed class OperatorReviewWindow : Form
     {
         _offer = null;
         _enrollment = null;
+        _reaffirmation = null;
+        _reaffirmAcknowledge.Checked = false;
+        _reaffirmAcknowledge.Enabled = false;
         _verify.Text = "Mit Windows Hello prüfen (keine Freigabe)";
         _fact.Clear();
         _meaning.Text = "";
@@ -259,6 +286,8 @@ internal sealed class OperatorReviewWindow : Form
             && ((_offer is { } o && o.ExpiresUtc > DateTimeOffset.UtcNow)
                 || (_enrollment is { } e
                     && e.ExpiresUtc > DateTimeOffset.UtcNow));
+        _reaffirmConfirm.Enabled = !_busy && _reaffirmAcknowledge.Checked
+            && _reaffirmation is { } r && r.ExpiresUtc > DateTimeOffset.UtcNow;
     }
 
     private async Task LoadOfferAsync()
@@ -367,6 +396,119 @@ internal sealed class OperatorReviewWindow : Form
         }
     }
 
+    /// <summary>
+    /// Separate, deliberate gesture. This records only an operator INTENT,
+    /// never an approved Claim or verified historical source.
+    /// </summary>
+    private async Task LoadReaffirmationAsync()
+    {
+        if (_busy) return;
+        InvalidateOffer();
+        _busy = true;
+        _load.Enabled = false;
+        _enrollPrepare.Enabled = false;
+        _reaffirmPrepare.Enabled = false;
+        _status.Text = "Lade die separate, dienstsignierte Bestätigungs-Challenge …";
+        try
+        {
+            var project = _project.Text.Trim();
+            var branch = _branch.Text.Trim();
+            var proposal = _reference.Text.Trim();
+            var offer = await Task.Run(() =>
+                ProtectedOperatorService.BeginReaffirmation(project, branch, proposal));
+            if (_project.Text.Trim() != project
+                || _branch.Text.Trim() != branch
+                || _reference.Text.Trim() != proposal
+                || offer.ExpiresUtc <= DateTimeOffset.UtcNow
+                || offer.Kind is not ("knowledge" or "preference")
+                || offer.Decision != "confirm")
+                throw new InvalidOperationException(
+                    "Bestätigungs-Kontext geändert oder nicht unterstützt");
+            _reaffirmation = offer;
+            _fact.Text = offer.CanonicalFact;
+            _meaning.Text = $"NEUE PERSÖNLICHE AUSSAGE: confirm    |    TYP: {offer.Kind}\n"
+                + $"ORIGINALQUELLE: {offer.SourceOrigin} (NICHT VERIFIZIERT)\n"
+                + $"PROJEKT: {offer.ProjectId}    |    BRANCH: {offer.Branch}\n"
+                + $"COMMIT: {offer.RevisionSha}\n"
+                + $"E~: {offer.ProposalRef}    |    SNAPSHOT: {offer.ReviewSnapshotSha256}\n"
+                + $"FAKT-SHA256: {offer.CanonicalFactSha256}\n"
+                + $"HISTORISCHE EVIDENCE-SHA256: {offer.SourceEvidenceSha256}";
+            _reaffirmAcknowledge.Enabled = true;
+            _status.Text = "Bitte den gesamten Fakt lesen. Diese Aktion bestätigt "
+                + "NUR Ihre neue Aussage, NICHT den historischen Beleg. "
+                + "KEIN Claim oder Codex-Memory-Write.";
+        }
+        catch (Exception error)
+        {
+            _status.Text = "Keine persönliche Bestätigung vorbereitet: "
+                + error.Message + ". Kein Intent und kein Claim.";
+        }
+        finally
+        {
+            _busy = false;
+            _load.Enabled = true;
+            _enrollPrepare.Enabled = true;
+            _reaffirmPrepare.Enabled = true;
+            UpdateVerifyEnabled();
+        }
+    }
+
+    private void PerformReaffirmation()
+    {
+        if (_busy || !_reaffirmAcknowledge.Checked
+            || _reaffirmation is not { } offer) return;
+        if (offer.ExpiresUtc <= DateTimeOffset.UtcNow)
+        {
+            InvalidateOffer();
+            _status.Text = "Bestätigungs-Challenge abgelaufen. Erneut vorbereiten.";
+            return;
+        }
+        _busy = true;
+        _load.Enabled = false;
+        _enrollPrepare.Enabled = false;
+        _reaffirmPrepare.Enabled = false;
+        _verify.Enabled = false;
+        _reaffirmConfirm.Enabled = false;
+        _project.Enabled = false;
+        _branch.Enabled = false;
+        _reference.Enabled = false;
+        _status.Text = "Windows Hello bestätigt nur diese NEUE Aussage. "
+            + "Die historische Evidence bleibt unverifiziert. Kein Claim.";
+        try
+        {
+            var assertion = NativeWindowsWebAuthn.GetAssertion(Handle, offer);
+            var receipt = ProtectedOperatorService.CompleteReaffirmation(
+                offer.TicketId, assertion);
+            if (!receipt.Verified
+                || receipt.Status != "operator_reaffirmation_intent_recorded_no_claim")
+                throw new InvalidOperationException(
+                    "Der geschützte Dienst hat die Bestätigung nicht gespeichert: "
+                    + receipt.Status);
+            _status.Text = "Persönliche Bestätigungsabsicht geschützt gespeichert. "
+                + "Historische Evidence NICHT verifiziert. "
+                + "KEIN Claim erstellt und KEINE Erinnerung freigegeben.";
+        }
+        catch (Exception error)
+        {
+            _status.Text = "Bestätigung verweigert oder abgebrochen: "
+                + error.Message + ". Kein Claim erstellt.";
+        }
+        finally
+        {
+            _reaffirmation = null;
+            _reaffirmAcknowledge.Enabled = false;
+            _reaffirmAcknowledge.Checked = false;
+            _load.Enabled = true;
+            _enrollPrepare.Enabled = true;
+            _reaffirmPrepare.Enabled = true;
+            _project.Enabled = true;
+            _branch.Enabled = true;
+            _reference.Enabled = true;
+            _busy = false;
+            UpdateVerifyEnabled();
+        }
+    }
+
     private void PerformNativeEnrollment()
     {
         if (_busy || !_acknowledge.Checked
@@ -380,6 +522,7 @@ internal sealed class OperatorReviewWindow : Form
         _busy = true;
         _load.Enabled = false;
         _enrollPrepare.Enabled = false;
+        _reaffirmPrepare.Enabled = false;
         _verify.Enabled = false;
         _project.Enabled = false;
         _branch.Enabled = false;
@@ -420,6 +563,7 @@ internal sealed class OperatorReviewWindow : Form
             _acknowledge.Checked = false;
             _load.Enabled = true;
             _enrollPrepare.Enabled = true;
+            _reaffirmPrepare.Enabled = true;
             _project.Enabled = true;
             _branch.Enabled = true;
             _reference.Enabled = true;
