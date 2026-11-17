@@ -13,8 +13,9 @@ import {
   randomBytes, sign, verify,
 } from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import { isAbsolute } from 'node:path';
-import { fork } from 'node:child_process';
+import { dirname, isAbsolute, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { execFileSync, fork } from 'node:child_process';
 
 if (process.platform !== 'win32' || process.env.GITHUB_ACTIONS !== 'true'
   || process.env.RUNNER_OS !== 'Windows' || process.argv.length !== 3
@@ -509,7 +510,30 @@ async function run(){
     new Promise((_,reject)=>setTimeout(
       ()=>reject(Error('ci_mcp_pipe_ready_timeout')),12000)),
   ]);
-  const mcpOffer=await send('ci_read_begin',scope);
+  // The actual compiled native WinForms operator binary now obtains and
+  // validates the signed offer, not the JS probe. No physical Windows
+  // Hello is invoked in CI; JS still signs a synthetic assertion afterwards.
+  const nativeProject=join(dirname(fileURLToPath(import.meta.url)),
+    '..','memory-engine','authority-host','windows',
+    'MemoryReviewAuthority.OperatorUi','MemoryReviewAuthority.OperatorUi.csproj');
+  let mcpOffer;
+  try {
+    const lines=execFileSync('dotnet',[
+      'run','--project',nativeProject,'-c','Release','--runtime',
+      'win-x64','--no-build','--no-restore','--',
+      '--ci-one-shot-offer-smoke',
+    ],{
+      encoding:'utf8',timeout:20000,windowsHide:true,
+      stdio:['ignore','pipe','pipe'],
+    }).trim().split(/\r?\n/u).filter(Boolean);
+    mcpOffer=JSON.parse(lines.at(-1));
+  } catch(error) {
+    throw Error('native_compiled_ci_one_shot_offer_failed: '
+      +String(error?.message??'unknown').slice(0,180));
+  }
+  if(mcpOffer.status!=='ci_native_operator_signed_recipient_offer_verified_only'
+    ||mcpOffer.production_authorized!==false)
+    throw Error('native_ci_one_shot_offer_not_verified');
   if(mcpOffer.recipient_kernel_pid!==mcp.pid
     ||mcpOffer.result_set_sha256!==selectedHash
     ||mcpOffer.recipient_session_sha256===validOffer.recipient_session_sha256
@@ -558,6 +582,7 @@ async function run(){
     ci_exact_kernel_pid_receiver:true,
     ci_receiver_verified_signed_claim:true,
     ci_existing_memory_recall_stdio_received_exact_once:true,
+    ci_compiled_native_operator_verified_signed_receiver_offer:true,
     read_released:false,
     published_to_codex:false,
     historical_evidence_verified:false,
