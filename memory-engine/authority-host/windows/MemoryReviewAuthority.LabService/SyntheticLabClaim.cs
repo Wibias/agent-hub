@@ -47,13 +47,14 @@ internal static class SyntheticLabClaim
             pending.ProposalRef, pending.ReviewSnapshotSha256,
             pending.CanonicalFactSha256, pending.RequestedAction, value);
         // Stage the exact synthetic source once in the service-owned SQLite.
+        // Even synthetic Claim creation requires a purpose-bound approval ticket.
         // The coordinator no longer accepts an arbitrary per-call reader.
         store.StageSyntheticLabSource(pending, new TrustedReviewSource(
             pending.ProjectId, pending.Branch, pending.RevisionSha,
             pending.ProposalRef, pending.ReviewSnapshotSha256, value,
             pending.SourceEvidenceSha256, "knowledge", "unrelated", null));
         var coordinator = new VerifiedReviewCoordinator(store, credential);
-        var ticket = coordinator.Begin(meaning);
+        var ticket = coordinator.BeginProtectedApproval(meaning);
         var client = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(
             new Dictionary<string, object>
             {
