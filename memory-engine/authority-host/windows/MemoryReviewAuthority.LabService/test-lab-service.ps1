@@ -699,58 +699,6 @@ try {
         }
         Write-Host 'PASS: both private CI read scopes revoked durably after SCM restart with original policy files restored'
         Write-Host 'PASS: immutable protected journal 4 events, 2 revoked lanes, Claim and counter unchanged'
-        # Adversarial rollback: replace ONLY protected SQLite with its
-        # consistent pre-read baseline; keep the newer HKLM checkpoint.
-        $checkpointBefore = (Get-ItemProperty -Path $registryFencePath -ErrorAction Stop).Snapshot
-        if ($checkpointBefore -cnotmatch '^v1:[2-9][0-9]*:[a-f0-9]{64}$') {
-            throw 'CI HKLM checkpoint did not advance after protected one-shot reads'
-        }
-        & $sc stop $service | Out-Null
-        if ($LASTEXITCODE -ne 0) { throw 'CI service stop before SQLite rollback failed' }
-        $stoppedBeforeRollback = $false
-        for ($attempt = 0; $attempt -lt 30; $attempt++) {
-            $status = (& $sc query $service) -join ' '
-            if ($status -match 'STOPPED') { $stoppedBeforeRollback = $true; break }
-            Start-Sleep -Milliseconds 250
-        }
-        if (-not $stoppedBeforeRollback) {
-            throw 'CI service still running before protected SQLite rollback'
-        }
-        $preReadBackup = Join-Path $env:RUNNER_TEMP 'AgentHubMemoryReviewLab-PreRead-Baseline.sqlite3'
-        if (-not (Test-Path -LiteralPath $preReadBackup -PathType Leaf)) {
-            throw 'pre-read protected SQLite baseline missing'
-        }
-        foreach ($suffix in @('-wal','-shm')) {
-            $sidecar = $ledgerPath + $suffix
-            if (Test-Path -LiteralPath $sidecar) {
-                Remove-Item -LiteralPath $sidecar -Force -ErrorAction Stop
-            }
-        }
-        Copy-Item -LiteralPath $preReadBackup -Destination $ledgerPath -Force -ErrorAction Stop
-        $rollbackWitness = Join-Path $stateRoot 'registry-rollback-denied.txt'
-        if (Test-Path -LiteralPath $rollbackWitness) {
-            Remove-Item -LiteralPath $rollbackWitness -Force -ErrorAction Stop
-        }
-        & $sc start $service 2>$null | Out-Null
-        $deniedByRegistry = $false
-        for ($attempt = 0; $attempt -lt 35; $attempt++) {
-            $state = (& $sc query $service 2>$null) -join ' '
-            $witness = Test-Path -LiteralPath $rollbackWitness -PathType Leaf
-            if ($witness -and $state -match 'STOPPED') {
-                $deniedByRegistry = $true
-                break
-            }
-            Start-Sleep -Milliseconds 250
-        }
-        if (-not $deniedByRegistry -or
-            (Get-Content -LiteralPath $rollbackWitness -Raw) -cne
-                'CI_REGISTRY_FENCE_FAIL_CLOSED_BEFORE_RECIPIENT_LISTENER' -or
-            (Get-ItemProperty -Path $registryFencePath -ErrorAction Stop).Snapshot -cne
-                $checkpointBefore) {
-            throw 'restored SQLite resurrected private read or independent checkpoint changed'
-        }
-        Write-Host 'PASS: older whole-SQLite rollback refused by independent protected HKLM checkpoint; SCM stops BEFORE private recipient pipe'
-
     } else {
     $operatorProbe = Join-Path $repoRoot 'scripts/probe-operator-service-web-authn.mjs'
     $operatorOutput = & node $operatorProbe $publishedPin
@@ -882,6 +830,61 @@ try {
     Write-Host 'PASS: SCM restricted service signed one synthetic protected Claim; Node verified Admin-pinned service origin, one nonce, and strict scope'
     Write-Host 'PASS: forged pin rejected; NO REAL USER APPROVAL, NO PRODUCTION IPC'
     Write-Host 'PASS: restricted LocalService protected SQLite ACL and same-account negative access'
+    # Destructive full-DB rollback is LAST. Existing WinForms + MCP
+    # regressions above require the service still RUNNING.
+    if ($NativeEnrollmentMode.IsPresent) {
+        # Adversarial rollback: replace ONLY protected SQLite with its
+        # consistent pre-read baseline; keep the newer HKLM checkpoint.
+        $checkpointBefore = (Get-ItemProperty -Path $registryFencePath -ErrorAction Stop).Snapshot
+        if ($checkpointBefore -cnotmatch '^v1:[2-9][0-9]*:[a-f0-9]{64}$') {
+            throw 'CI HKLM checkpoint did not advance after protected one-shot reads'
+        }
+        & $sc stop $service | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw 'CI service stop before SQLite rollback failed' }
+        $stoppedBeforeRollback = $false
+        for ($attempt = 0; $attempt -lt 30; $attempt++) {
+            $status = (& $sc query $service) -join ' '
+            if ($status -match 'STOPPED') { $stoppedBeforeRollback = $true; break }
+            Start-Sleep -Milliseconds 250
+        }
+        if (-not $stoppedBeforeRollback) {
+            throw 'CI service still running before protected SQLite rollback'
+        }
+        $preReadBackup = Join-Path $env:RUNNER_TEMP 'AgentHubMemoryReviewLab-PreRead-Baseline.sqlite3'
+        if (-not (Test-Path -LiteralPath $preReadBackup -PathType Leaf)) {
+            throw 'pre-read protected SQLite baseline missing'
+        }
+        foreach ($suffix in @('-wal','-shm')) {
+            $sidecar = $ledgerPath + $suffix
+            if (Test-Path -LiteralPath $sidecar) {
+                Remove-Item -LiteralPath $sidecar -Force -ErrorAction Stop
+            }
+        }
+        Copy-Item -LiteralPath $preReadBackup -Destination $ledgerPath -Force -ErrorAction Stop
+        $rollbackWitness = Join-Path $stateRoot 'registry-rollback-denied.txt'
+        if (Test-Path -LiteralPath $rollbackWitness) {
+            Remove-Item -LiteralPath $rollbackWitness -Force -ErrorAction Stop
+        }
+        & $sc start $service 2>$null | Out-Null
+        $deniedByRegistry = $false
+        for ($attempt = 0; $attempt -lt 35; $attempt++) {
+            $state = (& $sc query $service 2>$null) -join ' '
+            $witness = Test-Path -LiteralPath $rollbackWitness -PathType Leaf
+            if ($witness -and $state -match 'STOPPED') {
+                $deniedByRegistry = $true
+                break
+            }
+            Start-Sleep -Milliseconds 250
+        }
+        if (-not $deniedByRegistry -or
+            (Get-Content -LiteralPath $rollbackWitness -Raw) -cne
+                'CI_REGISTRY_FENCE_FAIL_CLOSED_BEFORE_RECIPIENT_LISTENER' -or
+            (Get-ItemProperty -Path $registryFencePath -ErrorAction Stop).Snapshot -cne
+                $checkpointBefore) {
+            throw 'restored SQLite resurrected private read or independent checkpoint changed'
+        }
+        Write-Host 'PASS: older whole-SQLite rollback refused by independent protected HKLM checkpoint; SCM stops BEFORE private recipient pipe'
+    }
 }
 finally {
     $ephemeralOperatorTestPrivateKey = Join-Path $env:RUNNER_TEMP 'AgentHubMemoryReviewLab-TestOperatorPrivateKey.pem'
