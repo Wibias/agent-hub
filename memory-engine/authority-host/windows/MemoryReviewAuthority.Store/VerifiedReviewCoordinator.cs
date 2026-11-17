@@ -87,6 +87,23 @@ public sealed class VerifiedReviewCoordinator
     }
 
     /// <summary>
+    /// Distinct approval-purpose challenge for the existing SYNTHETIC
+    /// protected Claim lab only. The existing operator credential probe is
+    /// forbidden, and unverified real E~ sources remain unwritable.
+    /// A challenge is not consent and creates no Claim by itself.
+    /// </summary>
+    public ChallengeTicket BeginProtectedApproval(ReviewMeaning meaning)
+    {
+        if (_operatorProbeOnly)
+            throw new InvalidOperationException("operator_probe_has_no_review_authority");
+        VerifyPendingMeaning(meaning);
+        // Source is re-read inside the final protected transaction. A
+        // missing source still consumes the approved-purpose ticket on
+        // completion, so no approval can be saved or replayed later.
+        return _challengeCore.BeginProtectedApproval(meaning, _credential);
+    }
+
+    /// <summary>
     /// Verify a real browser WebAuthn assertion using the protected pinned
     /// key. Consume the ticket once, persist a monotonic nonzero sign counter
     /// across restart, but NEVER create an approval intent or protected Claim.
@@ -143,7 +160,7 @@ public sealed class VerifiedReviewCoordinator
     }
 
     /// <summary>
-    /// The opt-in host-only protected Claim path. Every real confirmation
+    /// The opt-in host-only SYNTHETIC protected Claim path. Every confirmation
     /// requires the exact UV assertion plus a previously staged immutable
     /// protected source row bound to the same request ID. No caller-provided
     /// callback can supply or replace the current trusted source at decision
@@ -158,8 +175,10 @@ public sealed class VerifiedReviewCoordinator
             return new(false, "operator_probe_has_no_review_authority");
         // Consume on first attempt, even when no host source is installed or
         // the assertion is invalid. No reusable "approved" token is returned.
-        var proof = _challengeCore.VerifyAndConsume(ticketId, meaning, assertion);
-        if (!proof.Verified || !proof.UserVerified || !proof.UserPresent)
+        var proof = _challengeCore.VerifyProtectedApprovalAndConsume(
+            ticketId, meaning, assertion);
+        if (!proof.Verified || !proof.UserVerified || !proof.UserPresent
+            || proof.Status != "verified_protected_approval_intent_only")
             return new(false, proof.Status);
         try
         {

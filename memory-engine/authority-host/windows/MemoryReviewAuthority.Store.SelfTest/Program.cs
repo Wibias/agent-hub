@@ -36,6 +36,7 @@ internal static class Program
         Run("verified_intent_survives_restart_once_only", VerifiedRestart);
         Run("second_coordinator_cannot_reuse_completed_proposal", CompetingCoordinators);
         Run("protected_confirm_claim_and_scoped_read_persist_reopen", ProtectedConfirm);
+        Run("protected_claim_requires_approval_purpose_not_possession", ProtectedPurposeGate);
         Run("protected_rejection_never_creates_claim", ProtectedReject);
         Run("protected_write_requires_independent_trusted_source", SourceRequired);
         Run("protected_write_rejects_stale_and_targeted_source", SourceMismatch);
@@ -56,7 +57,7 @@ internal static class Program
         Run("operator_credential_wrong_key_and_generic_approval_denied", OperatorDenied);
         Run("native_operator_enrollment_persists_but_creates_no_claim", NativeOperatorEnrolled);
         Run("native_enrollment_does_not_upgrade_a_pinned_unverified_key", NativeOperatorCannotUpgrade);
-        Console.WriteLine($"MEMORY_REVIEW_LEDGER PASS {_passed}/35; REAL_EVIDENCE_UV_PINNED_NO_APPROVAL");
+        Console.WriteLine($"MEMORY_REVIEW_LEDGER PASS {_passed}/36; REAL_EVIDENCE_UV_PINNED_NO_APPROVAL");
     }
 
     private static void Run(string label, Action test)
@@ -334,6 +335,49 @@ internal static class Program
             "Synthetic fact", pending.SourceEvidenceSha256, "knowledge",
             relation, target);
 
+    private static void ProtectedPurposeGate()
+    {
+        using var store = Open();
+        using var key = TestCredential.New();
+        store.RecordPending(Example);
+        store.StageSyntheticLabSource(Example, SourceFor(Example));
+        var coordinator = new VerifiedReviewCoordinator(store, key.Pinned);
+        var meaning = MeaningFor(Example);
+
+        // Even the same UV credential and exact E~ meaning cannot turn
+        // a possession-proof ticket into a durable Claim approval.
+        var ordinary = coordinator.Begin(meaning);
+        var denied = coordinator.CompleteProtected(ordinary.TicketId,
+            meaning, key.Sign(ordinary));
+        Check(!denied.Verified && !denied.ClaimWritten
+            && denied.Status == "challenge_purpose_mismatch");
+        Check(!coordinator.Complete(ordinary.TicketId,
+            meaning, key.Sign(ordinary)).Verified);
+        Check(store.ReadVerifiedIntent(Example.ProjectId, Example.Branch,
+            Example.ProposalRef) is null);
+        Check(store.ReadProtectedClaims(Example.ProjectId, Example.Branch).Count == 0);
+
+        // Nor can the regular non-authorizing completion consume a real
+        // approval-purpose ticket and later replay it as a Claim.
+        var approval = coordinator.BeginProtectedApproval(meaning);
+        var wrongPath = coordinator.Complete(approval.TicketId, meaning,
+            key.Sign(approval, forcedSignCount: 2));
+        Check(!wrongPath.Verified && wrongPath.Status == "challenge_purpose_mismatch");
+        Check(!coordinator.CompleteProtected(approval.TicketId,
+            meaning, key.Sign(approval, forcedSignCount: 2)).Verified);
+        Check(store.ReadProtectedClaims(Example.ProjectId, Example.Branch).Count == 0);
+
+        // A fresh, distinct approval-purpose ticket can still commit the
+        // synthetic lab fixture once, never a real operator-pinned E~.
+        var fresh = coordinator.BeginProtectedApproval(meaning);
+        var saved = coordinator.CompleteProtected(fresh.TicketId,
+            meaning, key.Sign(fresh, forcedSignCount: 3));
+        Check(saved.Verified && saved.ClaimWritten && !saved.ApprovedClaim);
+        Check(store.ReadProtectedClaims(Example.ProjectId, Example.Branch).Count == 1);
+        Check(!coordinator.CompleteProtected(fresh.TicketId,
+            meaning, key.Sign(fresh, forcedSignCount: 4)).Verified);
+    }
+
     private static void ProtectedConfirm()
     {
         using var key = TestCredential.New();
@@ -345,7 +389,7 @@ internal static class Program
             store.StageSyntheticLabSource(Example, SourceFor(Example));
             var coordinator = new VerifiedReviewCoordinator(store, key.Pinned);
             var meaning = MeaningFor(Example);
-            var ticket = coordinator.Begin(meaning);
+            var ticket = coordinator.BeginProtectedApproval(meaning);
             var result = coordinator.CompleteProtected(ticket.TicketId,
                 meaning, key.Sign(ticket));
             Check(result.Verified && result.ClaimWritten && !result.ApprovedClaim);
@@ -393,7 +437,7 @@ internal static class Program
             SourceFor(proposal, "contradict", "foreign-claim"));
         var coordinator = new VerifiedReviewCoordinator(store, key.Pinned);
         var meaning = MeaningFor(proposal);
-        var ticket = coordinator.Begin(meaning);
+        var ticket = coordinator.BeginProtectedApproval(meaning);
         var result = coordinator.CompleteProtected(ticket.TicketId, meaning, key.Sign(ticket));
         Check(result.Verified && !result.ClaimWritten && !result.ApprovedClaim);
         Check(result.Status == "verified_rejection_no_claim");
@@ -409,7 +453,7 @@ internal static class Program
         store.RecordPending(Example);
         var meaning = MeaningFor(Example);
         var coordinator = new VerifiedReviewCoordinator(store, key.Pinned);
-        var ticket = coordinator.Begin(meaning);
+        var ticket = coordinator.BeginProtectedApproval(meaning);
         var denied = coordinator.CompleteProtected(ticket.TicketId,
             meaning, key.Sign(ticket));
         Check(!denied.Verified
@@ -424,7 +468,7 @@ internal static class Program
         // Staging the original source in protected SQLite permits a NEW
         // one-time challenge. A consumed proof cannot be replayed.
         store.StageSyntheticLabSource(Example, SourceFor(Example));
-        var another = coordinator.Begin(meaning);
+        var another = coordinator.BeginProtectedApproval(meaning);
         Check(coordinator.CompleteProtected(another.TicketId, meaning,
             key.Sign(another)).Verified);
         Check(store.CountPending() == 0);
@@ -455,7 +499,7 @@ internal static class Program
 
         var coordinator = new VerifiedReviewCoordinator(store, key.Pinned);
         var meaning = MeaningFor(Example);
-        var ticket = coordinator.Begin(meaning);
+        var ticket = coordinator.BeginProtectedApproval(meaning);
         Check(!coordinator.CompleteProtected(ticket.TicketId, meaning,
             key.Sign(ticket)).Verified);
         Check(store.CountPending() == 1);
@@ -474,12 +518,12 @@ internal static class Program
         var firstCoordinator = new VerifiedReviewCoordinator(store, key.Pinned);
         var secondCoordinator = new VerifiedReviewCoordinator(store, key.Pinned);
         var firstMeaning = MeaningFor(first);
-        var firstTicket = firstCoordinator.Begin(firstMeaning);
+        var firstTicket = firstCoordinator.BeginProtectedApproval(firstMeaning);
         Check(firstCoordinator.CompleteProtected(firstTicket.TicketId,
             firstMeaning, key.Sign(firstTicket)).Verified);
 
         var secondMeaning = MeaningFor(second);
-        var secondTicket = secondCoordinator.Begin(secondMeaning);
+        var secondTicket = secondCoordinator.BeginProtectedApproval(secondMeaning);
         var rejected = secondCoordinator.CompleteProtected(secondTicket.TicketId,
             secondMeaning, key.Sign(secondTicket));
         Check(!rejected.Verified
@@ -502,8 +546,8 @@ internal static class Program
         var first = new VerifiedReviewCoordinator(firstStore, key.Pinned);
         var second = new VerifiedReviewCoordinator(secondStore, key.Pinned);
         var meaning = MeaningFor(Example);
-        var firstTicket = first.Begin(meaning);
-        var secondTicket = second.Begin(meaning);
+        var firstTicket = first.BeginProtectedApproval(meaning);
+        var secondTicket = second.BeginProtectedApproval(meaning);
         Check(first.CompleteProtected(firstTicket.TicketId, meaning,
             key.Sign(firstTicket)).Verified);
         Check(!second.CompleteProtected(secondTicket.TicketId, meaning,
@@ -531,7 +575,7 @@ internal static class Program
             using var key = TestCredential.New();
             var coordinator = new VerifiedReviewCoordinator(reopened, key.Pinned);
             var meaning = MeaningFor(reference);
-            var ticket = coordinator.Begin(meaning);
+            var ticket = coordinator.BeginProtectedApproval(meaning);
             var confirmed = coordinator.CompleteProtected(ticket.TicketId,
                 meaning, key.Sign(ticket));
             Check(confirmed.Verified && confirmed.ClaimWritten);
@@ -564,7 +608,7 @@ internal static class Program
             SourceFor(Example, "update", "existing-other-claim"));
         var coordinator = new VerifiedReviewCoordinator(store, key.Pinned);
         var meaning = MeaningFor(Example);
-        var ticket = coordinator.Begin(meaning);
+        var ticket = coordinator.BeginProtectedApproval(meaning);
         var result = coordinator.CompleteProtected(ticket.TicketId,
             meaning, key.Sign(ticket));
         Check(!result.Verified);
@@ -714,7 +758,7 @@ internal static class Program
                 new string('b', 40), RealERef, review.ReviewSnapshotSha256,
                 review.CanonicalFactSha256, "confirm", RealFact);
             var coordinator = new VerifiedReviewCoordinator(store, credential.Pinned);
-            var ticket = coordinator.Begin(meaning);
+            var ticket = coordinator.BeginProtectedApproval(meaning);
             var denied = coordinator.CompleteProtected(
                 ticket.TicketId, meaning, credential.Sign(ticket));
             Check(!denied.Verified && !denied.ClaimWritten
@@ -755,7 +799,7 @@ internal static class Program
             using var credential = TestCredential.New();
             var meaning = RealReviewMeaning(imported);
             var coordinator = new VerifiedReviewCoordinator(store, credential.Pinned);
-            var ticket = coordinator.Begin(meaning);
+            var ticket = coordinator.BeginProtectedApproval(meaning);
             var denied = coordinator.CompleteProtected(
                 ticket.TicketId, meaning, credential.Sign(ticket));
             Check(!denied.Verified && !denied.ClaimWritten
@@ -795,7 +839,7 @@ internal static class Program
             using var key = TestCredential.New();
             var meaning = RealReviewMeaning(imported);
             var coordinator = new VerifiedReviewCoordinator(store, key.Pinned);
-            var ticket = coordinator.Begin(meaning);
+            var ticket = coordinator.BeginProtectedApproval(meaning);
             var denied = coordinator.CompleteProtected(
                 ticket.TicketId, meaning, key.Sign(ticket));
             Check(!denied.Verified && !denied.ClaimWritten

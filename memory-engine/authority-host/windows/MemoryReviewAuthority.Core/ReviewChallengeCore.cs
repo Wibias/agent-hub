@@ -176,7 +176,9 @@ public sealed class ReviewChallengeCore
                 return verified with
                 {
                     Verified = true,
-                    Status = "verified_not_authorized",
+                    Status = purpose == ChallengePurpose.ProtectedApproval
+                        ? "verified_protected_approval_intent_only"
+                        : "verified_not_authorized",
                     ApprovedReviewDecision = false,
                     ClaimWritten = false,
                     SignCounterVerifiable = previous > 0 && verified.SignCount > 0,

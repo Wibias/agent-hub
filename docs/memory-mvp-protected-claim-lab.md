@@ -11,8 +11,10 @@ create another service, canonical MemoryEngine, identity or approval mechanism.
 
 The opt-in `CompleteProtected` flow requires:
 1. A pending `E~` review already staged in the service-owned ledger.
-2. The existing short-lived P-256 WebAuthn assertion, with user presence and
-   user verification. Its ticket is consumed before any write attempt.
+2. A **distinct approval-purpose** short-lived P-256 WebAuthn assertion
+   (`BeginProtectedApproval`), with user presence and user verification.
+   A possession/probe ticket cannot authorize this transaction. The ticket
+   is consumed even on a wrong-purpose or otherwise failed attempt.
 3. An exact source snapshot **already staged by the protected host** in
    its own SQLite WAL, bound immutably to the same pending request ID, project,
    branch, revision, proposal reference, original fact, relationship and
@@ -35,6 +37,13 @@ Evidence/branch/revision, or failed SQL insert causes a full transaction
 rollback. A rejected or invalid request cannot be replayed into an approved
 Claim. No update or delete API exists. Pending and final decisions continue
 to be distinguishable.
+
+Only the dedicated `verified_protected_approval_intent_only` proof status
+reaches the atomic commit method. This status still carries
+`ApprovedReviewDecision=false`; authorization to release a real Claim
+requires separate protected-origin verification and a trusted human approval
+ceremony. The existing local synthetic fixture remains the only currently
+writable origin.
 
 The native `ReadProtectedClaims(projectId, branch, maxItems)` is a bounded,
 scope-filtered, read-only projection from the service-owned DB. It excludes
