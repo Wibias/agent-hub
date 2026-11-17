@@ -22,6 +22,7 @@ internal static class Program
     {
         Run("cross_language_challenge_vector", ChallengeVector);
         Run("valid_uv_assertion_is_not_claim_authority", ValidAssertion);
+        Run("protected_approval_challenge_is_domain_separated_one_use_no_claim", ApprovalDomainSeparation);
         Run("reject_missing_user_presence_and_verification", MissingUserVerification);
         Run("reject_wrong_signature_and_credential", WrongSignature);
         Run("reject_wrong_rp_and_origin", WrongOrigin);
@@ -37,7 +38,7 @@ internal static class Program
         Run("reject_invalid_fact_and_nonlocal_origin", InvalidInputs);
         Run("native_registration_parses_only_es256_not_approval", NativeRegistrationParse);
         Run("native_registration_denies_tampering_and_missing_uv", NativeRegistrationDeny);
-        Console.WriteLine($"MEMORY_AUTHORITY_CORE PASS {_passed}/17; NO_SERVICE NO_DB_WRITE NO_AUTHORIZATION");
+        Console.WriteLine($"MEMORY_AUTHORITY_CORE PASS {_passed}/18; NO_SERVICE NO_DB_WRITE NO_AUTHORIZATION");
     }
 
     private static void Run(string name, Action test)
@@ -65,6 +66,49 @@ internal static class Program
             ReviewChallengeCore.ComputeChallenge(Meaning, new byte[4]));
         Check(ReviewChallengeCore.ComputeChallenge(Meaning with { Decision = "reject" }, nonce) != challenge);
         Check(ReviewChallengeCore.ComputeChallenge(Meaning with { RevisionSha = new string('c', 40) }, nonce) != challenge);
+    }
+
+    private static void ApprovalDomainSeparation()
+    {
+        // Same context and nonce must NEVER produce the same challenge:
+        // a possession/registration proof is not review-write consent.
+        var nonce = Enumerable.Range(0, 32).Select(i => (byte)i).ToArray();
+        var proof = ReviewChallengeCore.ComputeChallenge(Meaning, nonce);
+        var approval = ReviewChallengeCore.ComputeProtectedApprovalChallenge(Meaning, nonce);
+        Check(proof != approval);
+        Check(approval != ReviewChallengeCore.ComputeProtectedApprovalChallenge(
+            Meaning with { Decision = "reject" }, nonce));
+        Check(approval != ReviewChallengeCore.ComputeProtectedApprovalChallenge(
+            Meaning with { RevisionSha = new string('c', 40) }, nonce));
+
+        using var credential = TestCredential.New();
+        var core = new ReviewChallengeCore();
+
+        var ordinary = core.Begin(Meaning, credential.Pinned);
+        var ordinaryAssertion = credential.Sign(ordinary);
+        var deniedApproval = core.VerifyProtectedApprovalAndConsume(
+            ordinary.TicketId, Meaning, ordinaryAssertion);
+        Check(!deniedApproval.Verified
+            && deniedApproval.Status == "challenge_purpose_mismatch");
+        Check(!core.VerifyAndConsume(
+            ordinary.TicketId, Meaning, ordinaryAssertion).Verified);
+
+        var explicitApproval = core.BeginProtectedApproval(Meaning, credential.Pinned);
+        var approvalAssertion = credential.Sign(explicitApproval, counter: 2);
+        var deniedProof = core.VerifyAndConsume(
+            explicitApproval.TicketId, Meaning, approvalAssertion);
+        Check(!deniedProof.Verified
+            && deniedProof.Status == "challenge_purpose_mismatch");
+        Check(!core.VerifyProtectedApprovalAndConsume(
+            explicitApproval.TicketId, Meaning, approvalAssertion).Verified);
+
+        var fresh = core.BeginProtectedApproval(Meaning, credential.Pinned);
+        var result = core.VerifyProtectedApprovalAndConsume(
+            fresh.TicketId, Meaning, credential.Sign(fresh, counter: 3));
+        Check(result.Verified && result.UserPresent && result.UserVerified);
+        Check(!result.ApprovedReviewDecision && !result.ClaimWritten);
+        Check(!core.VerifyProtectedApprovalAndConsume(
+            fresh.TicketId, Meaning, credential.Sign(fresh, counter: 4)).Verified);
     }
 
     private static void ValidAssertion()
