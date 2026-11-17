@@ -399,6 +399,15 @@ try {
         $enrollProbe = Join-Path $repoRoot 'scripts/probe-operator-service-native-enrollment.mjs'
         $enrollOutput = & node $enrollProbe $publishedPin
         if ($LASTEXITCODE -ne 0) {
+            $ciTrace = Join-Path $stateRoot 'read-once-ci-events.txt'
+            if (Test-Path -LiteralPath $ciTrace -PathType Leaf) {
+                Write-Host 'CI recipient channel events (no private bytes):'
+                Get-Content -LiteralPath $ciTrace | Select-Object -Last 30 | ForEach-Object {
+                    Write-Host ('  ' + $_)
+                }
+            } else {
+                Write-Host 'CI recipient channel events: no listener trace file'
+            }
             throw 'native enrollment service E2E synthetic protocol failed'
         }
         $enroll = $enrollOutput | ConvertFrom-Json
