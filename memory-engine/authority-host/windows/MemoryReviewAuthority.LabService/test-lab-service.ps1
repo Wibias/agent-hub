@@ -497,7 +497,7 @@ try {
             throw 'administrative read denial was due to stopped service'
         }
         Write-Host 'PASS: admin direct-read policy mutation revokes live read and cannot auto-reactivate'
-        $readbackAfterRevocation = & node (Join-Path $repoRoot 'scripts/verify-operator-reaffirmation-scm-state.mjs') $stateRoot |
+        $readbackAfterRevocation = & node (Join-Path $repoRoot 'scripts/verify-operator-reaffirmation-scm-state.mjs') |
             ConvertFrom-Json
         if ($LASTEXITCODE -ne 0 -or
             $readbackAfterRevocation.status -cne 'protected_operator_direct_claim_scm_readback_pass' -or
