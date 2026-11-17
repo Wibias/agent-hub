@@ -12,6 +12,38 @@ namespace MemoryReviewAuthority.OperatorUi;
 /// </summary>
 internal static class OperatorSelfTest
 {
+    // Regression for an actual WinForms UI-thread deadlock observed after
+    // MakeCredential completed. No message loop is pumped while Request()
+    // waits: every asynchronous named-pipe continuation must be context-free.
+    private sealed class NonPumpingUiContext : SynchronizationContext
+    {
+        public override void Post(SendOrPostCallback callback, object? state)
+        {
+            // An actual blocked UI thread cannot dispatch this callback.
+        }
+    }
+
+    private static T OnBlockedUiThread<T>(Func<T> call)
+    {
+        var completion = new TaskCompletionSource<T>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var worker = new Thread(() =>
+        {
+            SynchronizationContext.SetSynchronizationContext(
+                new NonPumpingUiContext());
+            try { completion.TrySetResult(call()); }
+            catch (Exception error) { completion.TrySetException(error); }
+        })
+        {
+            IsBackground = true,
+            Name = "AgentHub-NonPumping-Ui-Deadlock-Regression",
+        };
+        worker.Start();
+        // Never hang a Windows CI runner if context capture regresses.
+        return completion.Task.WaitAsync(TimeSpan.FromSeconds(9))
+            .GetAwaiter().GetResult();
+    }
+
     internal static int RunNativeEnrollmentOffer()
     {
         // This is a source/transport smoke test in a disposable CI runner.
@@ -25,8 +57,9 @@ internal static class OperatorSelfTest
             var hash = Convert.ToHexString(
                 SHA256.HashData(Encoding.UTF8.GetBytes(id))).ToLowerInvariant();
             var reference = "E~" + hash[..10];
-            var offer = ProtectedOperatorService.BeginNativeEnrollment(
-                "github.com/example/operator-evidence", "main", reference);
+            var offer = OnBlockedUiThread(() =>
+                ProtectedOperatorService.BeginNativeEnrollment(
+                    "github.com/example/operator-evidence", "main", reference));
             return offer.ProposalRef == reference
                 && offer.Kind == "procedure"
                 && offer.Decision == "confirm"
