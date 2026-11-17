@@ -156,7 +156,22 @@ internal static class Program
         using var pipe = new NamedPipeClientStream(".",
             "AgentHubMemoryReviewLab-UserReadCiV1", PipeDirection.InOut,
             PipeOptions.Asynchronous, TokenImpersonationLevel.Impersonation);
-        pipe.Connect(2500);
+        try
+        {
+            pipe.Connect(expectRevoked ? 1200 : 2500);
+        }
+        catch (TimeoutException) when (expectRevoked)
+        {
+            Console.WriteLine(
+                "PASS revoked_same_account_nonadmin_user_pipe_absent_after_restart");
+            return;
+        }
+        catch (IOException) when (expectRevoked)
+        {
+            Console.WriteLine(
+                "PASS revoked_same_account_nonadmin_user_pipe_denied_after_restart");
+            return;
+        }
         var bytes = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new
         {
             protocol, op = "read_user_ci", nonce,
