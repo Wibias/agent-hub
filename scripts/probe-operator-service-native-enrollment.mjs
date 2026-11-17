@@ -543,6 +543,8 @@ async function run(){
   }
   if(mcpOffer.status!=='ci_native_operator_signed_recipient_offer_verified_only'
     ||mcpOffer.recipient_os_origin_attested!==false
+    ||mcpOffer.observed_original_codex_identity!==false
+    ||mcpOffer.native_operator_process_handle_alive!==true
     ||mcpOffer.production_authorized!==false)
     throw Error('native_ci_one_shot_offer_not_verified');
   if(mcpOffer.recipient_kernel_pid!==mcp.pid
