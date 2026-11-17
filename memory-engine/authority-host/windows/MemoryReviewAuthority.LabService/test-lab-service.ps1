@@ -25,7 +25,7 @@ $stateRoot = Join-Path $env:ProgramData 'AgentHubMemoryReviewLab-State'
 $publicRoot = Join-Path $env:ProgramData 'AgentHubMemoryReviewLab-Public'
 $registryFencePath = 'HKLM:\SOFTWARE\AgentHubMemoryReviewLab-CiFence'
 $registryFenceCreated = $false
-if (Test-Path -LiteralPath $registryFencePath) {
+if (Test-Path -Path $registryFencePath) {
     throw 'preexisting synthetic registry checkpoint: refuse to touch it'
 }
 if ((Test-Path -LiteralPath $stateRoot) -or
@@ -245,7 +245,7 @@ try {
         # this disposable runner's final cleanup.
         New-Item -Path $registryFencePath -Force | Out-Null
         $registryFenceCreated = $true
-        $registryAcl = Get-Acl -LiteralPath $registryFencePath
+        $registryAcl = Get-Acl -Path $registryFencePath
         $registryAcl.SetAccessRuleProtection($true, $false)
         $registryAcl.SetOwner(
             [System.Security.Principal.SecurityIdentifier]::new('S-1-5-32-544'))
@@ -262,8 +262,8 @@ try {
                 $registryAllow)
             $registryAcl.AddAccessRule($rule)
         }
-        Set-Acl -LiteralPath $registryFencePath -AclObject $registryAcl
-        $actualRegistryAcl = Get-Acl -LiteralPath $registryFencePath
+        Set-Acl -Path $registryFencePath -AclObject $registryAcl
+        $actualRegistryAcl = Get-Acl -Path $registryFencePath
         if (-not $actualRegistryAcl.AreAccessRulesProtected -or
             $actualRegistryAcl.GetOwner(
                 [System.Security.Principal.SecurityIdentifier]).Value -cne 'S-1-5-32-544') {
@@ -276,7 +276,7 @@ try {
                 throw 'unexpected registry checkpoint ACE'
             }
         }
-        New-ItemProperty -LiteralPath $registryFencePath -Name Bootstrap `
+        New-ItemProperty -Path $registryFencePath -Name Bootstrap `
             -Value 'AGENTHUB_ONE_SHOT_REGISTRY_FENCE_CI_BOOTSTRAP_ONCE_V1' `
             -PropertyType String -Force | Out-Null
     }
@@ -352,7 +352,7 @@ try {
             throw 'explicit CI one-shot recipient named-pipe listener never started'
         }
         Write-Host 'PASS: protected one-shot recipient listener explicitly started in ephemeral CI only'
-        $checkpoint = Get-ItemProperty -LiteralPath $registryFencePath -ErrorAction Stop
+        $checkpoint = Get-ItemProperty -Path $registryFencePath -ErrorAction Stop
         if ($checkpoint.Snapshot -cnotmatch '^v1:1:[a-f0-9]{64}$' -or
             $null -ne $checkpoint.Bootstrap) {
             throw 'service failed to bootstrap exact protected HKLM checkpoint'
@@ -390,10 +390,10 @@ try {
     # The Administrators SID is deny-only and elevated privileges are removed.
     $accessProbe = (Resolve-Path -LiteralPath $AccessProbeExe).Path
     if ($NativeEnrollmentMode.IsPresent) {
-        $registryBeforeProbe = (Get-ItemProperty -LiteralPath $registryFencePath).Snapshot
+        $registryBeforeProbe = (Get-ItemProperty -Path $registryFencePath).Snapshot
         & $accessProbe $stateRoot --registry-fence-ci
         if ($LASTEXITCODE -ne 0 -or
-            (Get-ItemProperty -LiteralPath $registryFencePath).Snapshot -cne
+            (Get-ItemProperty -Path $registryFencePath).Snapshot -cne
                 $registryBeforeProbe) {
             throw 'restricted same-account token could read or modify HKLM checkpoint'
         }
@@ -701,7 +701,7 @@ try {
         Write-Host 'PASS: immutable protected journal 4 events, 2 revoked lanes, Claim and counter unchanged'
         # Adversarial rollback: replace ONLY protected SQLite with its
         # consistent pre-read baseline; keep the newer HKLM checkpoint.
-        $checkpointBefore = (Get-ItemProperty -LiteralPath $registryFencePath -ErrorAction Stop).Snapshot
+        $checkpointBefore = (Get-ItemProperty -Path $registryFencePath -ErrorAction Stop).Snapshot
         if ($checkpointBefore -cnotmatch '^v1:[2-9][0-9]*:[a-f0-9]{64}$') {
             throw 'CI HKLM checkpoint did not advance after protected one-shot reads'
         }
@@ -745,7 +745,7 @@ try {
         if (-not $deniedByRegistry -or
             (Get-Content -LiteralPath $rollbackWitness -Raw) -cne
                 'CI_REGISTRY_FENCE_FAIL_CLOSED_BEFORE_RECIPIENT_LISTENER' -or
-            (Get-ItemProperty -LiteralPath $registryFencePath -ErrorAction Stop).Snapshot -cne
+            (Get-ItemProperty -Path $registryFencePath -ErrorAction Stop).Snapshot -cne
                 $checkpointBefore) {
             throw 'restored SQLite resurrected private read or independent checkpoint changed'
         }
@@ -908,10 +908,10 @@ finally {
         if (-not $gone) { throw 'temporary SCM service was not fully removed' }
     }
     if ($registryFenceCreated) {
-        if (-not (Test-Path -LiteralPath $registryFencePath)) {
+        if (-not (Test-Path -Path $registryFencePath)) {
             throw 'synthetic registry fence disappeared before final cleanup'
         }
-        Remove-Item -LiteralPath $registryFencePath -Force -Recurse -ErrorAction Stop
+        Remove-Item -Path $registryFencePath -Force -Recurse -ErrorAction Stop
     }
     if (Test-Path -LiteralPath $labGitRoot) {
         Remove-Item -LiteralPath $labGitRoot -Force -Recurse -ErrorAction Stop
