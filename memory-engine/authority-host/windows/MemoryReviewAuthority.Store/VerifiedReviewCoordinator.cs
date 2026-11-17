@@ -97,8 +97,9 @@ public sealed class VerifiedReviewCoordinator
         if (_operatorProbeOnly)
             throw new InvalidOperationException("operator_probe_has_no_review_authority");
         VerifyPendingMeaning(meaning);
-        if (_ledger.ReadCurrentServiceOwnedSource(meaning) is null)
-            throw new InvalidOperationException("protected_review_source_not_staged");
+        // Source is re-read inside the final protected transaction. A
+        // missing source still consumes the approved-purpose ticket on
+        // completion, so no approval can be saved or replayed later.
         return _challengeCore.BeginProtectedApproval(meaning, _credential);
     }
 
