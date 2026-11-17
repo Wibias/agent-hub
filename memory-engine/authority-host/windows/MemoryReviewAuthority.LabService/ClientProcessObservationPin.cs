@@ -16,6 +16,7 @@ namespace MemoryReviewAuthority.LabService;
 internal sealed class ClientProcessObservationPin : IDisposable
 {
     private const uint ProcessQueryLimitedInformation = 0x1000;
+    private const uint Synchronize = 0x00100000;
     private const uint WaitTimeout = 0x102;
     private readonly SafeProcessHandle _processHandle;
     private readonly uint _processId;
@@ -40,7 +41,7 @@ internal sealed class ClientProcessObservationPin : IDisposable
         uint processId = checked((uint)launched.Id);
         if (processId == 0)
             throw new InvalidOperationException("process_observation_invalid_pid");
-        var handle = OpenProcess(ProcessQueryLimitedInformation, false, processId);
+        var handle = OpenProcess(ProcessQueryLimitedInformation | Synchronize, false, processId);
         if (handle.IsInvalid)
         {
             handle.Dispose();
