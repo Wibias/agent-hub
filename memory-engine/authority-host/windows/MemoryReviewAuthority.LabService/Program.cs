@@ -134,7 +134,12 @@ internal sealed class ReviewAuthorityLabService : ServiceBase
         // Independent CI-only signed private Claim reader. No arbitrary
         // real repo and no nonadmin Codex read: protected SID + scoped
         // enrollment must be installed before the service starts.
-        if (SignedOperatorDirectReadCiPipe.PolicyPresent(stateDir))
+        // Reconcile both protected CI enrollment lanes even when their
+        // original policy files are absent: this can persist a revocation
+        // tombstone before any private read pipe is instantiated.
+        if (_ledger.ReconcileDirectReadCiStartup(
+            ProtectedPendingReviewLedger.AdminDirectReadCiLane,
+            SignedOperatorDirectReadCiPipe.PolicySha256OrNull(stateDir)))
         {
             _privateReadCiPipe = new SignedOperatorDirectReadCiPipe(_ledger, stateDir);
             _privateReadCiPipe.Start();
@@ -142,7 +147,9 @@ internal sealed class ReviewAuthorityLabService : ServiceBase
         // A different, explicit protected CI enrollment permits ONLY the
         // named Windows account SID, never a generic Users group.
         // Neither this file nor its pipe exists in the No-Write Preview.
-        if (SignedOperatorDirectReadCiPipe.PolicyPresent(stateDir, userMode: true))
+        if (_ledger.ReconcileDirectReadCiStartup(
+            ProtectedPendingReviewLedger.UserDirectReadCiLane,
+            SignedOperatorDirectReadCiPipe.PolicySha256OrNull(stateDir, userMode: true)))
         {
             _userReadCiPipe = new SignedOperatorDirectReadCiPipe(
                 _ledger, stateDir, userMode: true);

@@ -1,8 +1,9 @@
 # Protected user-direct Claim: signed, Windows-principal-bound READ (CI prototype)
 
-**Current status: CI-only, default OFF, NOT a Codex memory_recall provider and
-NOT a production release. No real user source or Windows Hello consent is
-readable through this feature.**
+**Current status: CI-only, default OFF, not a DEFAULT or production
+Codex memory_recall provider. The explicitly isolated diagnostic launcher
+is permitted only in Windows GitHub Actions. No real user's source or
+physical Windows Hello consent is readable through this feature.**
 
 ## Why not reuse the existing signed lab read pipe?
 
@@ -122,6 +123,48 @@ A production system needs an independent monotonic, durable revocation
 authority and a specified in-flight response cutoff. No production
 re-enrollment or operator-PC activation is provided by these tests.
 
+## Durable CI enrollment history (protected FULL-WAL)
+
+An observed file revocation was previously latched **only for one service
+instance** (#382). Recreating the original protected JSON policy and
+restarting the service could restore access. The protected SQLite owner
+now maintains an additional, append-only
+`protected_direct_read_enrollment_events` journal, with precisely two
+possible events for each synthetic CI lane: generation 1 `enrolled`,
+followed by generation 2 `revoked`. Both event types retain the exact
+policy SHA-256, Windows SID, fixed test project, branch, Git SHA and
+policy version. SQLite rejects direct UPDATE/DELETE attempts.
+
+On the initial eligible service startup, the service validates the
+original CI-only scope and binds it to one immutable enrollment event
+before opening the named pipe. Each read requires that event to remain
+active. An observed missing/replaced/read-inconsistent policy causes
+a **transactional durable revocation event** under
+`PRAGMA synchronous=FULL` + WAL, then refuses the response. Startup
+reconciliation runs **even when a policy file is absent**; it revokes
+an earlier enrolled lane on disappearance/mismatch. When a revocation
+event exists, a later process refuses to open the same reader even
+if the original JSON bytes have been restored. There is deliberately
+**no re-enrollment API** for this disposable CI fixture.
+
+The real disposable Windows SCM test must stop and restart LocalService
+after both separate reader policies have been revoked, confirm the
+service stays RUNNING, and require both admin and restricted same-user
+read clients to fail. An independent read-only SQLite audit must find
+exactly four immutable events (two enrollments and two revocations),
+one unchanged private synthetic direct Claim and unchanged credential
+sign counter.
+
+**Remaining limits:** revocation must first be observed by the running
+service or at startup. If a protected file is removed and restored
+entirely between checks without a journaled revoke, the service can
+miss it. A malicious privileged actor with authority over both the
+service-owned SQLite and backup state is outside this CI model. Already
+returned Claim text and signatures cannot be recalled. This fixed
+single-generation fixture is NOT a production policy management,
+re-enrollment, key rotation, crash-consistent multi-party authorization
+or per-project identity solution. Production remains NO-GO.
+
 ## Existing Codex memory_recall: explicitly isolated test mode
 
 The existing `memory_recall` MCP tool now has an extra, CI-only
@@ -154,11 +197,13 @@ separate mandatory gates.
 
 ## Security and readiness limitations
 
-The CI-only pipe ACL intentionally permits **Administrators only**
-plus SYSTEM and the particular LocalService service SID, with no
-BuiltinUsers, same-account nonadmin, authenticated users or world
-access. A normal Codex CLI/Desktop process is not an administrator
-and therefore cannot use this route.
+The original `DirectReadCiV1` CI reader grants **Administrators,
+SYSTEM and the particular LocalService service SID only**. The separate
+`UserReadCiV1` CI reader instead allows the **exact enrolled Windows
+account SID**, SYSTEM and the restricted service SID, with no
+BuiltinUsers, AuthenticatedUsers, World or generic Administrators grants.
+Neither reader is enrolled in a normal installed No-Write Preview, and
+neither is authorized as a production Codex memory source.
 
 A real same-account user-ready read lane needs a **separately enrolled
 per-user SID ACL**, protected project-root/branch/revision binding that

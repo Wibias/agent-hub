@@ -506,6 +506,47 @@ try {
             throw 'read revocation unexpectedly affected protected direct Claim storage'
         }
         Write-Host 'PASS: all signed reads revoked, but one private direct Claim and credential counter remain unchanged'
+        # A fresh SERVICE PROCESS must not resurrect the same read
+        # enrollment when the operator restores the original JSON bytes.
+        # The service-owned FULL-WAL append-only tombstone is authoritative.
+        & $sc stop $service | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw 'CI service stop for durable revoke test failed' }
+        $stopped = $false
+        for ($attempt = 0; $attempt -lt 30; $attempt++) {
+            $status = (& $sc query $service) -join ' '
+            if ($status -match 'STOPPED') { $stopped = $true; break }
+            Start-Sleep -Milliseconds 250
+        }
+        if (-not $stopped) { throw 'CI service failed to stop before durable restart test' }
+        & $sc start $service | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw 'CI service restart failed after revocation' }
+        $restarted = $false
+        for ($attempt = 0; $attempt -lt 30; $attempt++) {
+            $status = (& $sc query $service) -join ' '
+            if ($status -match 'RUNNING') { $restarted = $true; break }
+            Start-Sleep -Milliseconds 250
+        }
+        if (-not $restarted) { throw 'CI service did not reach RUNNING after revocation' }
+        & $accessProbe $stateRoot --revoked-user-ci $sourceScope.revisionSha $publishedPin
+        if ($LASTEXITCODE -ne 0) {
+            throw 'same-user signed reader returned a private Claim AFTER service restart'
+        }
+        & node $directProbe --pin $publishedPin --sid $ciSid --revision $sourceScope.revisionSha *> $null
+        if ($LASTEXITCODE -eq 0) {
+            throw 'administrator signed reader returned private Claim AFTER service restart'
+        }
+        $auditPath = Join-Path $repoRoot 'scripts/verify-direct-read-revocation-ci.mjs'
+        $journal = & node $auditPath | ConvertFrom-Json
+        if ($LASTEXITCODE -ne 0 -or
+            $journal.status -cne 'durable_direct_ci_read_revocation_survived_scm_restart' -or
+            $journal.event_rows -ne 4 -or $journal.revoked_lanes -ne 2 -or
+            $journal.private_direct_claim_rows -ne 1 -or
+            $journal.credential_sign_count -ne 4 -or
+            $journal.reenable_authorized -or -not $journal.production_no_go) {
+            throw 'protected revoke journal or Claim changed after SCM restart'
+        }
+        Write-Host 'PASS: both private CI read scopes revoked durably after SCM restart with original policy files restored'
+        Write-Host 'PASS: immutable protected journal 4 events, 2 revoked lanes, Claim and counter unchanged'
     } else {
     $operatorProbe = Join-Path $repoRoot 'scripts/probe-operator-service-web-authn.mjs'
     $operatorOutput = & node $operatorProbe $publishedPin

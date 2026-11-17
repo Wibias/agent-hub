@@ -64,7 +64,9 @@ internal static class Program
         Run("user_direct_claim_commit_wal_restart_scope_provenance", DirectClaimCommit);
         Run("user_direct_claim_commit_cross_purpose_and_counter_replay_denied", DirectClaimBadPurpose);
         Run("user_direct_claim_duplicate_denied_without_counter_advance", DirectClaimNoDuplicate);
-        Console.WriteLine($"MEMORY_REVIEW_LEDGER PASS {_passed}/43; REAL_EVIDENCE_UV_PINNED_NO_APPROVAL");
+        Run("read_enrollment_atomic_revoke_survives_sqlite_reopen", DirectReadRevokeRestart);
+        Run("read_enrollment_wrong_pin_and_scope_deny_no_reenable", DirectReadWrongPinAndScope);
+        Console.WriteLine($"MEMORY_REVIEW_LEDGER PASS {_passed}/45; REAL_EVIDENCE_UV_PINNED_NO_APPROVAL");
     }
 
     private static void Run(string label, Action test)
@@ -89,6 +91,111 @@ internal static class Program
     private static string TestDirectory = string.Empty;
     private static ProtectedPendingReviewLedger Open()
         => ProtectedPendingReviewLedger.OpenInProtectedDirectory(TestDirectory);
+
+    private static void DirectReadRevokeRestart()
+    {
+        const string user = ProtectedPendingReviewLedger.UserDirectReadCiLane;
+        const string admin = ProtectedPendingReviewLedger.AdminDirectReadCiLane;
+        const string sid = "S-1-5-21-111-222-333-1001";
+        const string project = "github.com/example/operator-evidence";
+        var revision = new string('a',40);
+        var pin = new string('b',64);
+        using (var store = Open())
+        {
+            Check(store.ReadDirectReadCiEnrollmentState(user) == "never_enrolled");
+            Check(store.BindInitialDirectReadCiEnrollment(
+                user,pin,sid,project,"main",revision));
+            Check(store.BindInitialDirectReadCiEnrollment(
+                admin,pin,sid,project,"main",revision));
+            Check(store.DirectReadCiEnrollmentActive(user,pin));
+            Check(store.DirectReadCiEnrollmentActive(admin,pin));
+            store.RevokeDirectReadCiEnrollment(user,pin);
+            Check(store.ReadDirectReadCiEnrollmentState(user) ==
+                "revoked_durable_ci_only");
+            Check(!store.DirectReadCiEnrollmentActive(user,pin));
+            Check(!store.BindInitialDirectReadCiEnrollment(
+                user,pin,sid,project,"main",revision));
+            Check(store.DirectReadCiEnrollmentActive(admin,pin));
+        }
+        using (var reopened = Open())
+        {
+            Check(reopened.ReadDirectReadCiEnrollmentState(user) ==
+                "revoked_durable_ci_only");
+            Check(!reopened.ReconcileDirectReadCiStartup(user,pin));
+            Check(!reopened.BindInitialDirectReadCiEnrollment(
+                user,pin,sid,project,"main",revision));
+            Check(reopened.ReconcileDirectReadCiStartup(admin,pin));
+            Check(!reopened.ReconcileDirectReadCiStartup(admin,null));
+            Check(reopened.ReadDirectReadCiEnrollmentState(admin) ==
+                "revoked_durable_ci_only");
+        }
+        using var last = Open();
+        Check(last.ReadDirectReadCiEnrollmentState(user) ==
+            "revoked_durable_ci_only");
+        Check(last.ReadDirectReadCiEnrollmentState(admin) ==
+            "revoked_durable_ci_only");
+        Check(!last.ReconcileDirectReadCiStartup(user,pin));
+        Check(!last.ReconcileDirectReadCiStartup(admin,pin));
+        Check(!last.BindInitialDirectReadCiEnrollment(
+            user,pin,sid,project,"main",revision));
+    }
+
+    private static void DirectReadWrongPinAndScope()
+    {
+        const string user = ProtectedPendingReviewLedger.UserDirectReadCiLane;
+        const string sid = "S-1-5-21-111-222-333-1001";
+        const string project = "github.com/example/operator-evidence";
+        var rev = new string('c',40);
+        var pin = new string('d',64);
+        using (var store = Open())
+        {
+            Throws<ArgumentException>(() =>
+                store.BindInitialDirectReadCiEnrollment(
+                    "other",pin,sid,project,"main",rev));
+            Throws<ArgumentException>(() =>
+                store.BindInitialDirectReadCiEnrollment(
+                    user,pin,sid,"github.com/unapproved/repo","main",rev));
+            Throws<ArgumentException>(() =>
+                store.BindInitialDirectReadCiEnrollment(
+                    user,pin,"S-1-5-32-544",project,"main",rev));
+            Check(store.ReadDirectReadCiEnrollmentState(user) == "never_enrolled");
+            Check(store.BindInitialDirectReadCiEnrollment(
+                user,pin,sid,project,"main",rev));
+            Check(!store.BindInitialDirectReadCiEnrollment(
+                user,new string('e',64),sid,project,"main",rev));
+            Check(!store.BindInitialDirectReadCiEnrollment(
+                user,pin,"S-1-5-21-111-222-333-1002",project,"main",rev));
+            Check(!store.ReconcileDirectReadCiStartup(
+                user,new string('f',64)));
+            Check(!store.ReconcileDirectReadCiStartup(user,pin));
+            Check(store.ReadDirectReadCiEnrollmentState(user) ==
+                "revoked_durable_ci_only");
+        }
+        using (var reopened = Open())
+        {
+            Check(!reopened.BindInitialDirectReadCiEnrollment(
+                user,pin,sid,project,"main",rev));
+            Check(!reopened.DirectReadCiEnrollmentActive(user,pin));
+        }
+        using var sql = new SqliteConnection(new SqliteConnectionStringBuilder
+        {
+            DataSource = Path.Combine(TestDirectory, "review-authority.sqlite3"),
+            Mode = SqliteOpenMode.ReadWrite, Pooling = false,
+        }.ToString());
+        sql.Open();
+        using var update = sql.CreateCommand();
+        update.CommandText = """
+            UPDATE protected_direct_read_enrollment_events
+            SET event_kind='enrolled' WHERE event_number=2;
+            """;
+        Throws<SqliteException>(() => update.ExecuteNonQuery());
+        using var remove = sql.CreateCommand();
+        remove.CommandText = """
+            DELETE FROM protected_direct_read_enrollment_events
+            WHERE event_number=2;
+            """;
+        Throws<SqliteException>(() => remove.ExecuteNonQuery());
+    }
 
     private static void PendingOnly()
     {

@@ -32,6 +32,37 @@ internal static class SyntheticLabClaim
             Hash(value),
             Hash("Synthetic non-authorizing lab Evidence"),
             "confirm");
+        // A real SCM restart retains the already finalized synthetic
+        // Claim. Never create another approval gesture, replay a ticket
+        // or relax RecordPending's "review_already_finalized" guard.
+        // Only the exact immutable, signed-read-eligible synthetic
+        // fixture is accepted as the idempotent bootstrap result.
+        var prior = store.ReadProtectedClaims(pending.ProjectId, pending.Branch, 100);
+        if (prior.Count != 0)
+        {
+            if (prior.Count != 1) throw new InvalidOperationException(
+                "synthetic_restart_ambiguous_claim");
+            var claim = prior[0];
+            var expectedId = "C~" + Hash(
+                "agenthub-protected-claim-v1\n" + claim.RequestId + "\n" +
+                pending.CanonicalFactSha256)[..24];
+            if (claim.ClaimId != expectedId
+                || claim.RequestId.Length != 48
+                || claim.ProjectId != pending.ProjectId
+                || claim.Branch != pending.Branch
+                || claim.RevisionSha != pending.RevisionSha
+                || claim.ProposalRef != pending.ProposalRef
+                || claim.ReviewSnapshotSha256 != pending.ReviewSnapshotSha256
+                || claim.CanonicalFactSha256 != pending.CanonicalFactSha256
+                || claim.SourceEvidenceSha256 != pending.SourceEvidenceSha256
+                || claim.Kind != "knowledge"
+                || claim.Value != value
+                || claim.PolicyVersion !=
+                    ProtectedPendingReviewLedger.ProtectedClaimPolicyVersion)
+                throw new InvalidOperationException(
+                    "synthetic_restart_claim_not_exact_fixture");
+            return;
+        }
         var first = store.RecordPending(pending);
         if (first != store.RecordPending(pending) || store.CountPending() != 1)
             throw new InvalidOperationException("synthetic_pending_fixture_failed");
