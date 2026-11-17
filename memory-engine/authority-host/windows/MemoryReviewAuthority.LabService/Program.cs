@@ -55,6 +55,7 @@ internal sealed class ReviewAuthorityLabService : ServiceBase
     private ProtectedPendingReviewLedger? _ledger;
     private SignedProtectedClaimPipe? _readPipe;
     private SignedOperatorDirectReadCiPipe? _privateReadCiPipe;
+    private SignedOperatorDirectReadCiPipe? _userReadCiPipe;
     private OperatorWebAuthnPipe? _operatorProofPipe;
 
     internal ReviewAuthorityLabService()
@@ -138,10 +139,21 @@ internal sealed class ReviewAuthorityLabService : ServiceBase
             _privateReadCiPipe = new SignedOperatorDirectReadCiPipe(_ledger, stateDir);
             _privateReadCiPipe.Start();
         }
+        // A different, explicit protected CI enrollment permits ONLY the
+        // named Windows account SID, never a generic Users group.
+        // Neither this file nor its pipe exists in the No-Write Preview.
+        if (SignedOperatorDirectReadCiPipe.PolicyPresent(stateDir, userMode: true))
+        {
+            _userReadCiPipe = new SignedOperatorDirectReadCiPipe(
+                _ledger, stateDir, userMode: true);
+            _userReadCiPipe.Start();
+        }
     }
 
     protected override void OnStop()
     {
+        _userReadCiPipe?.Dispose();
+        _userReadCiPipe = null;
         _privateReadCiPipe?.Dispose();
         _privateReadCiPipe = null;
         _operatorProofPipe?.Dispose();
