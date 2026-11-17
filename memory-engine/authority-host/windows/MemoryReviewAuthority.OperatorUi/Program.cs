@@ -20,7 +20,8 @@ internal static class Program
 
             if ((args.Length != 0
                     && !(args.Length == 1
-                        && args[0] is "--service-smoke" or "--installed-path-selftest"))
+                        && args[0] is "--service-smoke" or "--installed-path-selftest"
+                            or "--installed-native-enrollment-selftest"))
                 || !new WindowsPrincipal(WindowsIdentity.GetCurrent())
                     .IsInRole(WindowsBuiltInRole.Administrator))
             {
@@ -50,6 +51,15 @@ internal static class Program
                 // that every INTERACTIVE Hello operation must pass.
                 ProtectedOperatorService.RequireProtectedInteractiveExecutable();
                 return OperatorSelfTest.RunServiceOffer();
+            }
+
+            if (args.Length == 1 && args[0] == "--installed-native-enrollment-selftest")
+            {
+                // Same protected installed-path check as the interactive UI,
+                // then read only a service-signed enrollment challenge in CI.
+                // No physical MakeCredential, no credential store or Claim.
+                ProtectedOperatorService.RequireProtectedInteractiveExecutable();
+                return OperatorSelfTest.RunNativeEnrollmentOffer();
             }
 
             // No real human-originating Hello gesture from an executable
