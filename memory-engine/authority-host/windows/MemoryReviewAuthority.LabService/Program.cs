@@ -140,7 +140,22 @@ internal sealed class ReviewAuthorityLabService : ServiceBase
             // Missing/stale Registry64 checkpoint after rollback => fail
             // service startup closed, never re-bootstrap without one-time
             // elevated CI fixture provisioning.
-            _ciRegistryFence = OneShotCiRegistryFence.OpenAndVerify(_ledger);
+            try
+            {
+                _ciRegistryFence = OneShotCiRegistryFence.OpenAndVerify(_ledger);
+            }
+            catch (InvalidOperationException error)
+                when (error.Message.StartsWith("ci_registry_fence_",
+                    StringComparison.Ordinal))
+            {
+                // Nonsecret, protected CI-only failure witness. The host
+                // still throws and SCM startup fails BEFORE a private pipe
+                // is created. A missing witness in E2E is a hard test fail.
+                File.WriteAllText(Path.Combine(stateDir,
+                    "registry-rollback-denied.txt"),
+                    "CI_REGISTRY_FENCE_FAIL_CLOSED_BEFORE_RECIPIENT_LISTENER");
+                throw;
+            }
             _oneShotCiRecipient = new OneShotCiRecipientPipe(stateDir);
             _oneShotCiRecipient.Start();
             File.WriteAllText(Path.Combine(stateDir, "read-once-ci-listener-started.txt"),
