@@ -134,8 +134,8 @@ try {
     # remain true EVEN AFTER the codebase gains a private Claim writer.
     # Only the separate disposable SCM fixture may create its exact
     # protected opt-in marker; no installed No-Write preview may get it.
-    if (Test-Path -LiteralPath (Join-Path $state
-        'agenthub-synthetic-direct-claim-ci-only.enable')) {
+    $publishMarker = Join-Path $state 'agenthub-synthetic-direct-claim-ci-only.enable'
+    if (Test-Path -LiteralPath $publishMarker) {
         throw 'No-Write Preview unexpectedly enabled protected Claim writes'
     }
     Write-Host 'PASS: No-Write Preview has no protected Claim-publish activation marker'
