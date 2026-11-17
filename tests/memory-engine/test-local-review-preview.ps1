@@ -138,6 +138,10 @@ try {
     if (Test-Path -LiteralPath $publishMarker) {
         throw 'No-Write Preview unexpectedly enabled protected Claim writes'
     }
+    $directReadMarker = Join-Path $state 'agenthub-direct-read-ci-only.json'
+    if (Test-Path -LiteralPath $directReadMarker) {
+        throw 'No-Write Preview unexpectedly enabled private direct read'
+    }
     Write-Host 'PASS: No-Write Preview has no protected Claim-publish activation marker'
     Write-Host 'PASS: pinned manifest + Administrator-protected service and native UI installed from actual clean Git package, NO Claim'
 
