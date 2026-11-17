@@ -18,7 +18,7 @@ namespace MemoryReviewAuthority.LabService;
 /// two independent service challenges; it cannot grant Claim consent.
 /// Disposable GitHub SCM lab host ONLY, not a production-installed API.
 /// </summary>
-internal sealed class OperatorWebAuthnPipe : IDisposable
+internal sealed partial class OperatorWebAuthnPipe : IDisposable
 {
     internal const string PipeName = "AgentHubMemoryReviewLab-OperatorV1";
     internal const string Protocol = "agenthub-operator-uv-service-v1";
@@ -217,7 +217,16 @@ internal sealed class OperatorWebAuthnPipe : IDisposable
         object? response = null;
         lock (_ledger)
         {
-            if (operation == "begin" && ExactKeys(root,
+            if (operation == "read_begin")
+            {
+                response = BeginReadDisclosure(root, nonce,
+                    stream as NamedPipeServerStream);
+            }
+            else if (operation == "read_complete")
+            {
+                response = CompleteReadDisclosure(root, nonce);
+            }
+            else if (operation == "begin" && ExactKeys(root,
                 "protocol", "op", "nonce", "projectId", "branch", "proposalRef")
                 && _coordinator is not null)
             {

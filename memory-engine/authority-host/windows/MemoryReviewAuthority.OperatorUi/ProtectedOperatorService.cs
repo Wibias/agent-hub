@@ -45,6 +45,14 @@ internal sealed record NativeAssertion(
     string AuthenticatorData,
     string Signature);
 
+internal sealed record ReadDisclosureOffer(
+    string RequestId, string TicketId, string Challenge,
+    string CredentialId, string ExpectedOrigin, DateTimeOffset ExpiresUtc,
+    string ProjectId, string Branch, string RevisionSha, string ProposalRef,
+    string PrincipalSid, string Query, string ClaimId, string Kind,
+    string Value, string FactSha256, string SnapshotSha256,
+    string ResultSetSha256, string Recipient, string Provenance);
+
 internal sealed record OperatorReceipt(bool Verified, string Status, string? ClaimId = null);
 
 /// <summary>
@@ -514,6 +522,132 @@ internal static class ProtectedOperatorService
             Str(m, "reviewSnapshotSha256"), Str(m, "canonicalFactSha256"),
             Str(r, "evidence_sha256"), Str(r, "source_origin"),
             Str(r, "kind"), Str(m, "decision"), fact);
+    }
+
+
+    /// <summary>
+    /// Live service-owned protected Claim preview. Strictly an ADMIN-only
+    /// UI offer, NOT a Codex read enrollment or model-facing projection.
+    /// </summary>
+    internal static ReadDisclosureOffer BeginReadDisclosure(
+        string project, string branch, string proposalRef)
+    {
+        if (!Scope.IsMatch(project) || !Scope.IsMatch(branch)
+            || project.Length > 256 || branch.Length > 128
+            || !Ref.IsMatch(proposalRef))
+            throw new InvalidOperationException("Ungültiger Read-Vorschau-Scope");
+        using var verified = Request("read_begin", new
+        {
+            projectId = project, branch, proposalRef,
+        });
+        var r = verified.RootElement;
+        if (!HasExactFields(r,
+            "protocol","op","nonce","status","service_signed",
+            "human_approval_verified","claim_written","read_released",
+            "published_to_codex","original_evidence_verified",
+            "request_id","ticket_id","challenge","expires_utc",
+            "credential_id","expected_origin","principal_sid","query",
+            "recipient","project_id","branch","revision_sha",
+            "proposal_ref","claim_id","kind","value","fact_sha256",
+            "snapshot_sha256","result_set_sha256","query_sha256",
+            "recipient_session_sha256","provenance","historical_source_origin")
+            || Str(r,"status") !=
+                "protected_operator_read_preview_uv_challenge_no_release"
+            || r.GetProperty("read_released").GetBoolean()
+            || r.GetProperty("published_to_codex").GetBoolean()
+            || r.GetProperty("original_evidence_verified").GetBoolean()
+            || Str(r,"project_id") != project
+            || Str(r,"branch") != branch
+            || Str(r,"proposal_ref") != proposalRef
+            || !Regex.IsMatch(project,
+                @"\Agithub\.com/[a-z0-9][a-z0-9_.-]{0,99}/[a-z0-9][a-z0-9_.-]{0,99}\z")
+            || !Hex40.IsMatch(Str(r,"revision_sha"))
+            || !Hex64.IsMatch(Str(r,"fact_sha256"))
+            || !Hex64.IsMatch(Str(r,"snapshot_sha256"))
+            || !Hex64.IsMatch(Str(r,"result_set_sha256"))
+            || !Regex.IsMatch(Str(r,"principal_sid"),
+                @"\AS-1-5-21-(?:[0-9]+-){2,}[0-9]+\z")
+            || !Regex.IsMatch(Str(r,"request_id"),@"\A[0-9a-f]{48}\z")
+            || !Regex.IsMatch(Str(r,"claim_id"),@"\AC~[0-9a-f]{24}\z")
+            || Str(r,"kind") is not ("knowledge" or "preference")
+            || Str(r,"provenance") != "user_direct_reaffirmed_and_published_v1"
+            || Str(r,"historical_source_origin") !=
+                "operator_pinned_unverified_evidence_v1")
+            throw new InvalidOperationException("Dienstantwort zur Read-Vorschau unzulässig");
+        var query = "exact-proposal:" + proposalRef;
+        const string recipient = "Sealed operator UI only; no Codex recipient";
+        if (Str(r,"query") != query || Str(r,"recipient") != recipient)
+            throw new InvalidOperationException("Read-Ziel oder Query stimmt nicht");
+        var selected = new[]
+        {
+            Str(r,"claim_id"),project,branch,Str(r,"revision_sha"),
+            proposalRef,Str(r,"snapshot_sha256"),Str(r,"fact_sha256"),
+            Str(r,"kind"),Str(r,"value"),Str(r,"provenance"),
+        };
+        var actualHash = Convert.ToHexString(SHA256.HashData(
+            JsonSerializer.SerializeToUtf8Bytes(selected))).ToLowerInvariant();
+        if (actualHash != Str(r,"result_set_sha256")
+            || Convert.ToHexString(SHA256.HashData(Utf8.GetBytes(query)))
+                .ToLowerInvariant() != Str(r,"query_sha256")
+            || Convert.ToHexString(SHA256.HashData(
+                Utf8.GetBytes("agenthub-local-operator-ui-preview-no-codex-v1")))
+                .ToLowerInvariant() != Str(r,"recipient_session_sha256")
+            || Convert.ToHexString(SHA256.HashData(
+                Utf8.GetBytes(Str(r,"value")))).ToLowerInvariant()
+                != Str(r,"fact_sha256")
+            || Str(r,"value").Length is < 1 or > 4000
+            || !NativeWindowsWebAuthn.ValidPinnedLocalOrigin(
+                Str(r,"expected_origin")))
+            throw new InvalidOperationException("Read-Daten, Signaturkontext oder Empfänger ungültig");
+        _ = Decode(Str(r,"ticket_id"),64);
+        _ = Decode(Str(r,"credential_id"),1024);
+        if (Decode(Str(r,"challenge"),64).Length != 32
+            || !DateTimeOffset.TryParse(Str(r,"expires_utc"),out var expiry)
+            || expiry <= DateTimeOffset.UtcNow
+            || expiry > DateTimeOffset.UtcNow.AddMinutes(2))
+            throw new InvalidOperationException("Read-Challenge veraltet oder ungültig");
+        return new ReadDisclosureOffer(
+            Str(r,"request_id"),Str(r,"ticket_id"),
+            Str(r,"challenge"),Str(r,"credential_id"),
+            Str(r,"expected_origin"),expiry,project,branch,
+            Str(r,"revision_sha"),proposalRef,Str(r,"principal_sid"),
+            query,Str(r,"claim_id"),Str(r,"kind"),Str(r,"value"),
+            Str(r,"fact_sha256"),Str(r,"snapshot_sha256"),
+            actualHash,recipient,Str(r,"provenance"));
+    }
+
+    internal static OperatorReceipt CompleteReadDisclosure(
+        string ticketId, NativeAssertion assertion)
+    {
+        _ = Decode(ticketId,64);
+        using var verified = Request("read_complete",new
+        {
+            ticketId,
+            assertion = new
+            {
+                credentialId = assertion.CredentialId,
+                type = assertion.Type,
+                clientDataJSON = assertion.ClientDataJSON,
+                authenticatorData = assertion.AuthenticatorData,
+                signature = assertion.Signature,
+            },
+        });
+        var r = verified.RootElement;
+        if (!HasExactFields(r,"protocol","op","nonce","status",
+            "signature_verified","service_signed","human_approval_verified",
+            "claim_written","read_released","published_to_codex",
+            "request_id","result_set_sha256")
+            || r.GetProperty("read_released").GetBoolean()
+            || r.GetProperty("published_to_codex").GetBoolean()
+            || !Hex64.IsMatch(Str(r,"result_set_sha256")))
+            throw new InvalidOperationException("Dienst behauptet unzulässige Read-Freigabe");
+        var success = r.GetProperty("signature_verified").GetBoolean();
+        var status = Str(r,"status");
+        if (success != (status == "verified_read_disclosure_intent_only")
+            || success && !Regex.IsMatch(Str(r,"request_id"),
+                @"\A[0-9a-f]{48}\z"))
+            throw new InvalidOperationException("Read-Zustimmungsnachweis ungültig");
+        return new OperatorReceipt(success,status);
     }
 
     internal static OperatorReceipt CompletePublish(

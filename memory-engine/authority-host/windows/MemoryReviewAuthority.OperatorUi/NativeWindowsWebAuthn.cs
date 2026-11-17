@@ -154,11 +154,19 @@ internal static class NativeWindowsWebAuthn
             && uri.GetLeftPart(UriPartial.Authority) == origin;
 
     internal static NativeAssertion GetAssertion(IntPtr ownerWindow, ServiceOffer offer)
+        => GetAssertion(ownerWindow, offer.Challenge, offer.CredentialId,
+            offer.ExpectedOrigin, offer.ExpiresUtc);
+
+    // A read-preview consent is a separate purpose, but uses the SAME
+    // native Windows WebAuthn API and the SAME pinned credential.
+    internal static NativeAssertion GetAssertion(IntPtr ownerWindow,
+        string challenge, string credentialIdText,
+        string expectedOrigin, DateTimeOffset expiresUtc)
     {
         if (!OperatingSystem.IsWindowsVersionAtLeast(10)
             || !Environment.Is64BitProcess || ownerWindow == IntPtr.Zero
-            || offer.ExpiresUtc <= DateTimeOffset.UtcNow
-            || !ValidPinnedLocalOrigin(offer.ExpectedOrigin))
+            || expiresUtc <= DateTimeOffset.UtcNow
+            || !ValidPinnedLocalOrigin(expectedOrigin))
         {
             throw new InvalidOperationException(
                 "Windows-Hello-Kontext, Ursprung oder Challenge ungültig");
@@ -166,12 +174,12 @@ internal static class NativeWindowsWebAuthn
         if (WebAuthNGetApiVersionNumber() < 1)
             throw new InvalidOperationException("Windows-WebAuthn API nicht vorhanden");
 
-        var credentialId = DecodeCredential(offer.CredentialId);
+        var credentialId = DecodeCredential(credentialIdText);
         var clientJson = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new
         {
             type = "webauthn.get",
-            challenge = offer.Challenge,
-            origin = offer.ExpectedOrigin,
+            challenge,
+            origin = expectedOrigin,
             crossOrigin = false,
         }));
         IntPtr jsonPtr = IntPtr.Zero, keyIdPtr = IntPtr.Zero;
@@ -229,7 +237,7 @@ internal static class NativeWindowsWebAuthn
                 header.AuthenticatorDataSize, 1024);
             var signature = ReadBytes(header.Signature, header.SignatureSize, 256);
             return new NativeAssertion(
-                offer.CredentialId, CredentialType,
+                credentialIdText, CredentialType,
                 Encode(clientJson), Encode(auth), Encode(signature));
         }
         finally
