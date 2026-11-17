@@ -95,6 +95,7 @@ public sealed partial class ProtectedPendingReviewLedger
     {
         if (request is null
             || !ProjectReadProjectPattern.IsMatch(request.ProjectId ?? "")
+            || request.Branch is null
             || !ProjectReadBranchPattern.IsMatch(request.Branch ?? "")
             || request.Branch.Contains("..", StringComparison.Ordinal)
             || request.Branch.Contains("//", StringComparison.Ordinal)
