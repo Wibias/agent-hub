@@ -228,6 +228,25 @@ function Stop-And-Delete-Own-Service {
     }
     throw 'Preview service deletion not confirmed'
 }
+function Refuse-ActiveOperatorUi {
+    # Abort before SCM deletion, archival or signer-pin removal.
+    $expected = [IO.Path]::GetFullPath((Join-Path $root 'Operator/MemoryReviewAuthority.OperatorUi.exe'))
+    $active = @(Get-Process -Name 'MemoryReviewAuthority.OperatorUi' -ErrorAction SilentlyContinue)
+    foreach ($process in $active) {
+        try { $actual = $process.Path }
+        catch {
+            throw 'Operator process identity cannot be verified; close UI before removal'
+        }
+        if ([string]::IsNullOrWhiteSpace($actual)) {
+            throw 'Operator process identity unavailable; close UI before removal'
+        }
+        if ([string]::Equals([IO.Path]::GetFullPath($actual), $expected,
+                [StringComparison]::OrdinalIgnoreCase)) {
+            throw 'Installed Operator UI still running; close it before removing preview'
+        }
+    }
+}
+
 function Preserve-Protected-State([string]$sid = '') {
     if (-not (Test-Path -LiteralPath $stateRoot -PathType Container)) { return $null }
     $writers = @('S-1-5-18','S-1-5-32-544')
@@ -270,6 +289,7 @@ if ($Action -eq 'Remove') {
         $record.productionWriteEnabled -eq $false) `
         'Own preview state marker invalid'
     Check-ServiceOwnership
+    Refuse-ActiveOperatorUi
     $oldServiceSid = [Security.Principal.NTAccount]::new(
         'NT SERVICE',$serviceName).Translate(
         [Security.Principal.SecurityIdentifier]).Value
