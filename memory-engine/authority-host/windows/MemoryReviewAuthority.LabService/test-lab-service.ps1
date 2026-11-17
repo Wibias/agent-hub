@@ -172,9 +172,14 @@ try {
     # Administrator-owned service directory ACL has been independently checked.
     # The service itself opens only the fixed file names, never a client path.
     $fixtureScript = Join-Path $repoRoot 'tests/memory-engine/create-operator-evidence-scm-fixture.mjs'
-    $fixtureArgs = if ($NativeEnrollmentMode.IsPresent) {
-        @('--native-enroll-only', $stateRoot)
-    } else { @($stateRoot) }
+    # PowerShell enumerates arrays returned by if expressions. Always keep
+    # a real object[] for native-argv splatting, including legacy one-item mode.
+    [object[]]$fixtureArgs = @()
+    if ($NativeEnrollmentMode.IsPresent) {
+        $fixtureArgs = @('--native-enroll-only', $stateRoot)
+    } else {
+        $fixtureArgs = @($stateRoot)
+    }
     & node $fixtureScript @fixtureArgs
     if ($LASTEXITCODE -ne 0) {
         throw 'canonical E~ source fixture creation failed'
