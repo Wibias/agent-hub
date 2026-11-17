@@ -223,7 +223,7 @@ internal sealed class OperatorReviewWindow : Form
         };
         outer.RowStyles.Add(new RowStyle(SizeType.Absolute, 80));
         outer.RowStyles.Add(new RowStyle(SizeType.Absolute, 74));
-        outer.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
+        outer.RowStyles.Add(new RowStyle(SizeType.Absolute, 80));
         outer.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         outer.RowStyles.Add(new RowStyle(SizeType.Absolute, 125));
         outer.RowStyles.Add(new RowStyle(SizeType.Absolute, 50));
@@ -256,7 +256,7 @@ internal sealed class OperatorReviewWindow : Form
         outer.Controls.Add(scope, 0, 1);
         var loadActions = new FlowLayoutPanel
         {
-            Dock = DockStyle.Fill, WrapContents = false,
+            Dock = DockStyle.Fill, WrapContents = true, AutoScroll = true,
             FlowDirection = FlowDirection.LeftToRight,
         };
         loadActions.Controls.Add(_load);
