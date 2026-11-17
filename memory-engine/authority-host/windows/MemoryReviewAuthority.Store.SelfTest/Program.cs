@@ -1251,13 +1251,11 @@ internal static class Program
         Check(publisher.Complete(first.TicketId, meaning,
             key.Sign(first, forcedSignCount: 3)).ClaimWritten);
         var counter = store.ReadOperatorCredential()?.LastSignCount;
-        var core = new ReviewChallengeCore();
-        var second = core.BeginProtectedClaimCommit(meaning, key.Pinned);
-        var secondProof = core.VerifyProtectedClaimCommitAndConsume(
-            second.TicketId, meaning, key.Sign(second, forcedSignCount: 4));
-        Check(secondProof.Verified);
-        Throws<SqliteException>(() =>
-            store.CommitOperatorDirectClaim(meaning, key.Pinned, secondProof));
+        // The host-only coordinator must refuse a second consent ceremony,
+        // without exposing the internal SQLite transaction as a public API.
+        Throws<InvalidOperationException>(() => publisher.Begin(meaning));
+        var secondCoordinator = OperatorDirectClaimCoordinator.ForNativeCredential(store);
+        Throws<InvalidOperationException>(() => secondCoordinator.Begin(meaning));
         Check(store.ReadOperatorDirectClaims(RealProject, RealBranch).Count == 1);
         Check(store.ReadOperatorCredential()?.LastSignCount == counter);
         Check(store.ReadProtectedClaims(RealProject, RealBranch).Count == 0);
