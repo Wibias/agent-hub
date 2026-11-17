@@ -231,6 +231,8 @@ internal static class Program
         Throws<InvalidOperationException>(() =>
             store.RecordProjectReadCandidate(request with {
                 ProposedSignerSha256 = new string('d',64) }));
+        Check(store.ReadProjectReadCandidate(request with {
+            ProposedSignerSha256 = new string('d',64) }) is null);
         Throws<InvalidOperationException>(() =>
             store.RecordProjectReadCandidate(request with {
                 ProposedGitRootSha256 = new string('d',64) }));
@@ -257,6 +259,9 @@ internal static class Program
         {
             id = store.RecordProjectReadCandidate(request).CandidateId;
             store.WithdrawProjectReadCandidate(request,"operator_denied");
+            store.WithdrawProjectReadCandidate(request,"operator_denied");
+            Throws<InvalidOperationException>(() =>
+                store.WithdrawProjectReadCandidate(request,"scope_superseded"));
             Check(store.ReadProjectReadCandidate(request)?.State ==
                 ProtectedPendingReviewLedger.ProjectReadWithdrawn);
             Throws<InvalidOperationException>(() =>
