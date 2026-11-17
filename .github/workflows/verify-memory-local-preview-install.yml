@@ -29,6 +29,10 @@ jobs:
   protected-temporary-preview:
     runs-on: windows-2022
     timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        enrollment: [existing-unverified, native-enroll-only]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -44,4 +48,8 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          ./tests/memory-engine/test-local-review-preview.ps1
+          if ('${{ matrix.enrollment }}' -eq 'native-enroll-only') {
+            ./tests/memory-engine/test-local-review-preview.ps1 -NativeEnrollmentMode
+          } else {
+            ./tests/memory-engine/test-local-review-preview.ps1
+          }
