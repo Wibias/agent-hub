@@ -1,8 +1,9 @@
 # Protected user-direct Claim: signed, Windows-principal-bound READ (CI prototype)
 
-**Current status: CI-only, default OFF, NOT a Codex memory_recall provider and
-NOT a production release. No real user source or Windows Hello consent is
-readable through this feature.**
+**Current status: CI-only, default OFF, not a DEFAULT or production
+Codex memory_recall provider. The explicitly isolated diagnostic launcher
+is permitted only in Windows GitHub Actions. No real user's source or
+physical Windows Hello consent is readable through this feature.**
 
 ## Why not reuse the existing signed lab read pipe?
 
@@ -196,11 +197,13 @@ separate mandatory gates.
 
 ## Security and readiness limitations
 
-The CI-only pipe ACL intentionally permits **Administrators only**
-plus SYSTEM and the particular LocalService service SID, with no
-BuiltinUsers, same-account nonadmin, authenticated users or world
-access. A normal Codex CLI/Desktop process is not an administrator
-and therefore cannot use this route.
+The original `DirectReadCiV1` CI reader grants **Administrators,
+SYSTEM and the particular LocalService service SID only**. The separate
+`UserReadCiV1` CI reader instead allows the **exact enrolled Windows
+account SID**, SYSTEM and the restricted service SID, with no
+BuiltinUsers, AuthenticatedUsers, World or generic Administrators grants.
+Neither reader is enrolled in a normal installed No-Write Preview, and
+neither is authorized as a production Codex memory source.
 
 A real same-account user-ready read lane needs a **separately enrolled
 per-user SID ACL**, protected project-root/branch/revision binding that
