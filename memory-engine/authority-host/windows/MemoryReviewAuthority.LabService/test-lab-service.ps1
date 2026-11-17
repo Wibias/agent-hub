@@ -353,12 +353,15 @@ try {
             -not $enroll.independent_create_and_get_challenges -or
             -not $enroll.protected_key_persisted_for_probe -or
             -not $enroll.nonzero_sign_counter_replay_denied -or
+            $enroll.source_kind -cne 'knowledge' -or
+            -not $enroll.purpose_bound_reaffirmation_intent_recorded -or
+            $enroll.historical_evidence_verified -or
             $enroll.hardware_attestation_verified -or
             $enroll.human_approval_verified -or $enroll.claim_written -or
             -not $enroll.production_no_go) {
             throw 'synthetic native enrollment incorrectly granted approval'
         }
-        Write-Host 'PASS: native Create/Get synthetic enrollment stored protected key and denied replay, no Claim or human approval'
+        Write-Host 'PASS: native Create/Get enrollment, purpose-bound reaffirmation intent IPC and replay denial, no Claim or human approval'
     } else {
     $operatorProbe = Join-Path $repoRoot 'scripts/probe-operator-service-web-authn.mjs'
     $operatorOutput = & node $operatorProbe $publishedPin
