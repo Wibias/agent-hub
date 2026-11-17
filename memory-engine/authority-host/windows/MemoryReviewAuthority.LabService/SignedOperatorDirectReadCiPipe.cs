@@ -41,6 +41,8 @@ internal sealed class SignedOperatorDirectReadCiPipe : IDisposable
     private readonly string _protocol;
     private readonly string _policyPath;
     private readonly byte[] _policySha256;
+    private readonly string _policySha256Hex;
+    private readonly string _enrollmentLane;
     private bool _enrollmentRevoked;
     private readonly CancellationTokenSource _stop = new();
     private Task? _loop;
@@ -62,6 +64,19 @@ internal sealed class SignedOperatorDirectReadCiPipe : IDisposable
             userMode ? UserPolicyFile : PolicyFile));
         return file.Exists && file.Length is >= 100 and <= 1024
             && (file.Attributes & FileAttributes.ReparsePoint) == 0;
+    }
+
+    internal static string? PolicySha256OrNull(string stateDir, bool userMode = false)
+    {
+        try
+        {
+            if (!PolicyPresent(stateDir, userMode)) return null;
+            var path = Path.Combine(stateDir,
+                userMode ? UserPolicyFile : PolicyFile);
+            return Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path)))
+                .ToLowerInvariant();
+        }
+        catch { return null; } // missing/invalid CI enrollment is a denial
     }
 
     internal SignedOperatorDirectReadCiPipe(
@@ -98,6 +113,10 @@ internal sealed class SignedOperatorDirectReadCiPipe : IDisposable
         // Any observed revoke or replacement is latched until restart.
         _policyPath = path;
         _policySha256 = SHA256.HashData(policyBytes);
+        _policySha256Hex = Convert.ToHexString(_policySha256).ToLowerInvariant();
+        _enrollmentLane = userMode
+            ? ProtectedPendingReviewLedger.UserDirectReadCiLane
+            : ProtectedPendingReviewLedger.AdminDirectReadCiLane;
         _ledger = ledger ?? throw new ArgumentNullException(nameof(ledger));
 
         var privatePath = Path.Combine(stateDir, "review-service-signing-key.pk8");
@@ -114,6 +133,15 @@ internal sealed class SignedOperatorDirectReadCiPipe : IDisposable
                 throw new InvalidOperationException("direct_ci_service_pin_changed");
         }
         finally { CryptographicOperations.ZeroMemory(privateBytes); }
+        // Only the trusted LocalService can bind a synthetic CI enrollment.
+        // A durable revocation or changed policy pin is never reinstated.
+        lock (_ledger)
+        {
+            if (!_ledger.BindInitialDirectReadCiEnrollment(
+                _enrollmentLane,_policySha256Hex,_policy.PrincipalSid,
+                _policy.ProjectId,_policy.Branch,_policy.RevisionSha))
+                throw new InvalidOperationException("direct_ci_enrollment_durably_revoked");
+        }
     }
 
     internal void Start()
@@ -121,6 +149,20 @@ internal sealed class SignedOperatorDirectReadCiPipe : IDisposable
         if (_loop is not null)
             throw new InvalidOperationException("direct_ci_read_pipe_started_twice");
         _loop = Task.Run(() => LoopAsync(_stop.Token));
+    }
+
+    private bool RevokeAndDeny()
+    {
+        // Never send a signed response on any observed policy failure.
+        // Persist the tombstone in the service-owned FULL-WAL ledger before
+        // a later process has a chance to load restored file bytes.
+        _enrollmentRevoked = true;
+        lock (_ledger)
+        {
+            _ledger.RevokeDirectReadCiEnrollment(_enrollmentLane,
+                _policySha256Hex);
+        }
+        return false;
     }
 
     // The single-connection service loop serializes calls. Fail closed if
@@ -132,6 +174,15 @@ internal sealed class SignedOperatorDirectReadCiPipe : IDisposable
         if (_enrollmentRevoked) return false;
         try
         {
+            lock (_ledger)
+            {
+                if (!_ledger.DirectReadCiEnrollmentActive(
+                    _enrollmentLane, _policySha256Hex))
+                {
+                    _enrollmentRevoked = true;
+                    return false;
+                }
+            }
             var file = new FileInfo(_policyPath);
             if (!file.Exists || file.Length is < 100 or > 1024
                 || (file.Attributes & FileAttributes.ReparsePoint) != 0
@@ -139,13 +190,14 @@ internal sealed class SignedOperatorDirectReadCiPipe : IDisposable
                     SHA256.HashData(File.ReadAllBytes(_policyPath)),
                     _policySha256))
             {
-                _enrollmentRevoked = true;
-                return false;
+                return RevokeAndDeny();
             }
             return true;
         }
         catch (Exception)
         {
+            // Fail closed if the protected WAL cannot be read or updated.
+            // Storage errors cannot be construed as an authorization.
             _enrollmentRevoked = true;
             return false;
         }
