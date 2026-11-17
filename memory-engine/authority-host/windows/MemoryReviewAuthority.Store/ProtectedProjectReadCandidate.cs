@@ -190,6 +190,23 @@ public sealed partial class ProtectedPendingReviewLedger
         return candidate;
     }
 
+    private string? ReadProjectReadWithdrawalReason(string candidateId,
+        SqliteTransaction tx)
+    {
+        using var cmd = _connection.CreateCommand();
+        cmd.Transaction = tx;
+        cmd.CommandText = """
+            SELECT reason,policy_version FROM protected_project_read_withdrawals
+            WHERE candidate_id=$id;
+            """;
+        cmd.Parameters.AddWithValue("$id",candidateId);
+        using var reader = cmd.ExecuteReader();
+        if (!reader.Read()) return null;
+        if (reader.GetString(1) != ProjectReadIntakePolicy)
+            throw new InvalidOperationException("project_read_withdraw_bad_policy");
+        return reader.GetString(0);
+    }
+
     /// <summary>
     /// Irreversibly withdraws an intake candidate. There was never an
     /// access grant to revoke. Replaying or restoring a candidate cannot
@@ -210,6 +227,8 @@ public sealed partial class ProtectedPendingReviewLedger
             throw new InvalidOperationException("project_read_unknown_candidate");
         if (candidate.State == ProjectReadWithdrawn)
         {
+            if (ReadProjectReadWithdrawalReason(candidate.CandidateId,tx) != reason)
+                throw new InvalidOperationException("project_read_withdraw_reason_conflict");
             tx.Commit();
             return;
         }
