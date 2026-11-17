@@ -200,7 +200,7 @@ internal sealed class SignedOperatorDirectReadCiPipe : IDisposable
             || nonce is null || !Regex.IsMatch(nonce, @"\A[A-Za-z0-9_-]{43}\z")
             || query is not { Length: >= 1 and <= 500 }
             || !root.TryGetProperty("maxItems", out var max)
-            || !max.TryGetInt32(out var limit) || limit is < 1 or > 10
+            || !max.TryGetInt32(out var limit) || limit is < 1 or > 3
             || !IsAuthorized(actualSid, _policy.PrincipalSid, project,
                 _policy.ProjectId, branch, _policy.Branch,
                 revision, _policy.RevisionSha))
@@ -250,6 +250,7 @@ internal sealed class SignedOperatorDirectReadCiPipe : IDisposable
             published_to_codex = false,
             items,
         });
+        if (payload.Length > 32768) return; // bounded signed CI envelope
         var signature = _signer.SignData(payload, HashAlgorithmName.SHA256,
             DSASignatureFormat.Rfc3279DerSequence);
         var envelope = JsonSerializer.Serialize(new
