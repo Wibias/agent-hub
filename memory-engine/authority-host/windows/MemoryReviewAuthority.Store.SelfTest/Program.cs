@@ -74,7 +74,9 @@ internal static class Program
         Run("ci_read_once_abort_revocation_latches_after_reopen", CiReadOnceRevokeRestart);
         Run("ci_read_once_foreign_binding_and_expiration_refused", CiReadOnceWrongBinding);
         Run("ci_read_once_sql_receipt_and_tombstone_immutable", CiReadOnceSqlImmutable);
-        Console.WriteLine($"MEMORY_REVIEW_LEDGER PASS {_passed}/53; REAL_EVIDENCE_UV_PINNED_NO_APPROVAL");
+        Run("ci_read_once_full_snapshot_digest_changes_on_every_state_transition",
+            CiReadOnceFenceSnapshotChanges);
+        Console.WriteLine($"MEMORY_REVIEW_LEDGER PASS {_passed}/54; REAL_EVIDENCE_UV_PINNED_NO_APPROVAL");
     }
 
     private static void Run(string label, Action test)
@@ -111,6 +113,43 @@ internal static class Program
     private const string CiReadClaim = "C~ffffffffffffffffffffffff";
     private const string CiReadProposal = "E~0123456789";
     private const uint CiReadPid = 1001;
+
+    private static void CiReadOnceFenceSnapshotChanges()
+    {
+        var meaning=CiReadMeaning();
+        string previous;
+        using(var db=Open())
+        {
+            var baseline=db.ReadCiOneShotFenceSnapshot();
+            Check(baseline.Receipts==0 && !baseline.Revoked
+                && baseline.Sha256.Length==64);
+            previous=baseline.Sha256;
+            Check(db.ReserveCiOneShot(meaning,CiReadClaim,CiReadProposal,
+                CiReadPid,DateTimeOffset.UtcNow.AddMinutes(1)));
+            var reserved=db.ReadCiOneShotFenceSnapshot();
+            Check(reserved.Receipts==1 && !reserved.Revoked
+                && reserved.Sha256!=previous);
+            previous=reserved.Sha256;
+            Check(db.AbortCiOneShot(meaning.RequestId));
+            var aborted=db.ReadCiOneShotFenceSnapshot();
+            Check(aborted.Receipts==1 && !aborted.Revoked
+                && aborted.Sha256!=previous);
+            previous=aborted.Sha256;
+            Check(db.RevokeCiOneShot());
+            var revoked=db.ReadCiOneShotFenceSnapshot();
+            Check(revoked.Receipts==1 && revoked.Revoked
+                && revoked.Sha256!=previous);
+            previous=revoked.Sha256;
+        }
+        using(var reopened=Open())
+        {
+            var persisted=reopened.ReadCiOneShotFenceSnapshot();
+            Check(persisted.Receipts==1 && persisted.Revoked
+                && persisted.Sha256==previous);
+            Check(!reopened.RevokeCiOneShot());
+            Check(reopened.ReadCiOneShotFenceSnapshot().Sha256==previous);
+        }
+    }
 
     private static void CiReadOnceConsumedRestart()
     {
