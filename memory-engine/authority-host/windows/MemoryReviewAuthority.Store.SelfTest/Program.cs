@@ -66,7 +66,11 @@ internal static class Program
         Run("user_direct_claim_duplicate_denied_without_counter_advance", DirectClaimNoDuplicate);
         Run("read_enrollment_atomic_revoke_survives_sqlite_reopen", DirectReadRevokeRestart);
         Run("read_enrollment_wrong_pin_and_scope_deny_no_reenable", DirectReadWrongPinAndScope);
-        Console.WriteLine($"MEMORY_REVIEW_LEDGER PASS {_passed}/45; REAL_EVIDENCE_UV_PINNED_NO_APPROVAL");
+        Run("project_read_candidate_pending_never_grants", ProjectReadCandidatePending);
+        Run("project_read_candidate_exact_replay_and_conflict", ProjectReadCandidateConflicts);
+        Run("project_read_candidate_withdraw_durable_no_reenroll", ProjectReadCandidateWithdraw);
+        Run("project_read_candidate_schema_tamper_denied", ProjectReadCandidateSqlImmutable);
+        Console.WriteLine($"MEMORY_REVIEW_LEDGER PASS {_passed}/49; REAL_EVIDENCE_UV_PINNED_NO_APPROVAL");
     }
 
     private static void Run(string label, Action test)
@@ -195,6 +199,120 @@ internal static class Program
             WHERE event_number=2;
             """;
         Throws<SqliteException>(() => remove.ExecuteNonQuery());
+    }
+
+
+    private static ProtectedProjectReadRequest RealReadCandidate() => new(
+        "github.com/wibias/agent-hub", "main", new string('a',40),
+        "S-1-5-21-111-222-333-1001",new string('b',64),new string('c',64));
+
+    private static void ProjectReadCandidatePending()
+    {
+        var request = RealReadCandidate();
+        using var store = Open();
+        // Default OFF even for a service-owned Store open.
+        Throws<SqliteException>(() => store.RecordProjectReadCandidate(request));
+        store.InitializeProjectReadIntakePreviewSchema();
+        var item = store.RecordProjectReadCandidate(request);
+        Check(item.CandidateId.Length == 48);
+        Check(item.State == ProtectedPendingReviewLedger.ProjectReadPending);
+        Check(item.Request == request);
+        Check(store.ReadProjectReadCandidate(request) == item);
+        Check(store.ReadProjectReadCandidate(request with {
+            Branch = "feature/new-branch" }) is null);
+        // There is intentionally no activation/Claim/read-authorization API.
+        Check(store.ReadDirectReadCiEnrollmentState(
+            ProtectedPendingReviewLedger.UserDirectReadCiLane) == "never_enrolled");
+    }
+
+    private static void ProjectReadCandidateConflicts()
+    {
+        var request = RealReadCandidate();
+        using var store = Open();
+        store.InitializeProjectReadIntakePreviewSchema();
+        var item = store.RecordProjectReadCandidate(request);
+        Check(store.RecordProjectReadCandidate(request) == item);
+        Throws<InvalidOperationException>(() =>
+            store.RecordProjectReadCandidate(request with {
+                ProposedSignerSha256 = new string('d',64) }));
+        Check(store.ReadProjectReadCandidate(request with {
+            ProposedSignerSha256 = new string('d',64) }) is null);
+        Throws<InvalidOperationException>(() =>
+            store.RecordProjectReadCandidate(request with {
+                ProposedGitRootSha256 = new string('d',64) }));
+        Throws<ArgumentException>(() =>
+            store.RecordProjectReadCandidate(request with {
+                ProjectId = "github.com/x/../unsafe" }));
+        Throws<ArgumentException>(() =>
+            store.RecordProjectReadCandidate(request with {
+                PrincipalSid = "S-1-5-32-544" }));
+        Throws<ArgumentException>(() =>
+            store.RecordProjectReadCandidate(request with {
+                RevisionSha = new string('x',40) }));
+        Throws<ArgumentException>(() =>
+            store.RecordProjectReadCandidate(request with {
+                Branch = "feature/../malicious" }));
+        Check(store.ReadProjectReadCandidate(request) == item);
+    }
+
+    private static void ProjectReadCandidateWithdraw()
+    {
+        var request = RealReadCandidate();
+        string id;
+        using (var store = Open())
+        {
+            store.InitializeProjectReadIntakePreviewSchema();
+            id = store.RecordProjectReadCandidate(request).CandidateId;
+            store.WithdrawProjectReadCandidate(request,"operator_denied");
+            store.WithdrawProjectReadCandidate(request,"operator_denied");
+            Throws<InvalidOperationException>(() =>
+                store.WithdrawProjectReadCandidate(request,"scope_superseded"));
+            Check(store.ReadProjectReadCandidate(request)?.State ==
+                ProtectedPendingReviewLedger.ProjectReadWithdrawn);
+            Throws<InvalidOperationException>(() =>
+                store.RecordProjectReadCandidate(request));
+        }
+        using (var reopened = Open())
+        {
+            Check(reopened.ReadProjectReadCandidate(request)?.CandidateId == id);
+            Check(reopened.ReadProjectReadCandidate(request)?.State ==
+                ProtectedPendingReviewLedger.ProjectReadWithdrawn);
+            Throws<InvalidOperationException>(() =>
+                reopened.RecordProjectReadCandidate(request));
+            Throws<InvalidOperationException>(() =>
+                reopened.WithdrawProjectReadCandidate(request with {
+                    ProposedSignerSha256=new string('d',64)}, "operator_denied"));
+            Check(reopened.ReadDirectReadCiEnrollmentState(
+                ProtectedPendingReviewLedger.UserDirectReadCiLane) == "never_enrolled");
+        }
+    }
+
+    private static void ProjectReadCandidateSqlImmutable()
+    {
+        var request = RealReadCandidate();
+        using (var store = Open())
+        {
+            store.InitializeProjectReadIntakePreviewSchema();
+            store.RecordProjectReadCandidate(request);
+            store.WithdrawProjectReadCandidate(request,"suspected_compromise");
+        }
+        using var sql = new SqliteConnection(new SqliteConnectionStringBuilder
+        {
+            DataSource = Path.Combine(TestDirectory,"review-authority.sqlite3"),
+            Mode = SqliteOpenMode.ReadWrite,Pooling = false,
+        }.ToString());
+        sql.Open();
+        foreach (var commandText in new [] {
+            "UPDATE protected_project_read_candidates SET branch='other';",
+            "DELETE FROM protected_project_read_candidates;",
+            "UPDATE protected_project_read_withdrawals SET reason='operator_denied';",
+            "DELETE FROM protected_project_read_withdrawals;"
+        })
+        {
+            using var cmd = sql.CreateCommand();
+            cmd.CommandText = commandText;
+            Throws<SqliteException>(() => cmd.ExecuteNonQuery());
+        }
     }
 
     private static void PendingOnly()
