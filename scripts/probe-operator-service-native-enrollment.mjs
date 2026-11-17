@@ -119,7 +119,19 @@ function proofAssertion(key, offer, counter){
 }
 
 async function run(){
-  const started=await send('enroll_begin',scope);
+  // The restricted SCM service may still be opening its admin-only pipe.
+  // Retry ONLY connection refusal before the first enrollment request is
+  // delivered. Never retry a challenge or a state-changing operation.
+  let started;
+  for(let attempt=0;attempt<20;attempt++){
+    try { started=await send('enroll_begin',scope); break; }
+    catch(error) {
+      const code=error?.code;
+      if(attempt===19 || !['ENOENT','ECONNREFUSED'].includes(code))
+        throw error;
+      await new Promise(resolve=>setTimeout(resolve,180));
+    }
+  }
   if(started.status!=='operator_native_registration_challenge_unapproved'
     || started.kind!=='procedure'
     || started.source_origin!=='operator_pinned_unverified_evidence_v1'
