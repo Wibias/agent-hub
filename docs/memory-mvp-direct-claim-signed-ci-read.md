@@ -59,6 +59,39 @@ user-writable Evidence or imply a real human has used Windows Hello.
 The ordinary Codex `memory_recall` MCP still has **no mode to select**
 this CI-only reader. The current public signed read pipe is not changed.
 
+## Separate same-account nonadmin Windows token acceptance
+
+A **second** CI-only policy `agenthub-user-direct-read-ci-only.json`
+starts `AgentHubMemoryReviewLab-UserReadCiV1`, with a separate
+`agenthub-protected-user-read-ci-v1` wire protocol. The policy is
+created only by the same disposable protected SCM fixture; it pins the
+real GitHub runner Windows account SID and the fixed synthetic
+project/branch/revision. It is absent from both normal installed
+No-Write Preview matrices.
+
+The new pipe ACL permits SYSTEM, the precise restricted SCM service
+SID and **exactly that enrolled account SID**. It does not grant
+BuiltinUsers, AuthenticatedUsers or Administrators as a broad group.
+The service still independently impersonates the caller after receiving
+its pipe message, verifies its real SID and uses the same signed,
+non-authorizing direct Claim projection.
+
+A native CI probe creates a restricted token of the **same Windows
+account**, disables the Administrators group, then verifies a real
+nonce-bound, ES256/P-256 service signature on one protected synthetic
+direct Claim. In the same restricted token it must still fail to read or
+write the service SQLite, create state files, connect to the
+administrator-only WebAuthn pipe, or connect to the administrator-only
+direct-read pipe. It does **not** create another user account or VM.
+
+This establishes an OS-token and ACL boundary only. It does NOT prove
+that a model, terminal process or Codex agent running with the same
+Windows SID belongs to a specific repository. **The Windows SID cannot
+distinguish two projects or two processes belonging to the same user.**
+The service policy fixes one exact CI project/branch/revision; authentic
+per-project enrollment and native Codex session attribution remain
+separate requirements before using this design with real memories.
+
 ## Security and readiness limitations
 
 The CI-only pipe ACL intentionally permits **Administrators only**
