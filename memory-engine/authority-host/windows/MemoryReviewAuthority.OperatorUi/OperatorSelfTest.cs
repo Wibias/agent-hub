@@ -114,7 +114,15 @@ internal static class OperatorSelfTest
                     "CI ONLY: kernel-observed connected pipe, not verified Codex"
                 || offer.ExpiresUtc <= DateTimeOffset.UtcNow)
                 return 2;
-            Console.WriteLine(JsonSerializer.Serialize(new
+            var outputDirectory=Environment.GetEnvironmentVariable("RUNNER_TEMP");
+            if (string.IsNullOrWhiteSpace(outputDirectory)
+                || !Directory.Exists(outputDirectory))
+                throw new InvalidOperationException("CI-Ausgabeverzeichnis fehlt");
+            // WinForms is a WinExe: stdout may be detached from parent.
+            // Write ONLY signed-offer metadata, NEVER the private Claim.
+            var receiptPath=Path.Combine(outputDirectory,
+                "AgentHubCiOneShotNativeOffer.json");
+            File.WriteAllText(receiptPath,JsonSerializer.Serialize(new
             {
                 status="ci_native_operator_signed_recipient_offer_verified_only",
                 ticket_id=offer.TicketId,
@@ -126,7 +134,7 @@ internal static class OperatorSelfTest
                 read_released=false,
                 published_to_codex=false,
                 production_authorized=false,
-            }));
+            }),new UTF8Encoding(false));
             return 0;
         }
         catch(Exception error)
