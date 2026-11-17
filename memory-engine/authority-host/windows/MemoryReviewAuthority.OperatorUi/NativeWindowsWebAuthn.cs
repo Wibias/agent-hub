@@ -237,7 +237,7 @@ internal static class NativeWindowsWebAuthn
                 header.AuthenticatorDataSize, 1024);
             var signature = ReadBytes(header.Signature, header.SignatureSize, 256);
             return new NativeAssertion(
-                offer.CredentialId, CredentialType,
+                credentialIdText, CredentialType,
                 Encode(clientJson), Encode(auth), Encode(signature));
         }
         finally
