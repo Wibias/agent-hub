@@ -23,6 +23,7 @@ internal sealed class OperatorWebAuthnPipe : IDisposable
     internal const string PipeName = "AgentHubMemoryReviewLab-OperatorV1";
     internal const string Protocol = "agenthub-operator-uv-service-v1";
     private readonly ProtectedPendingReviewLedger _ledger;
+    private readonly string _stateDir;
     private VerifiedReviewCoordinator? _coordinator;
     private OperatorReaffirmationCoordinator? _reaffirmation;
     private ChallengeTicket? _activeReaffirmation;
@@ -66,6 +67,7 @@ internal sealed class OperatorWebAuthnPipe : IDisposable
     internal OperatorWebAuthnPipe(ProtectedPendingReviewLedger ledger, string stateDir)
     {
         _ledger = ledger ?? throw new ArgumentNullException(nameof(ledger));
+        _stateDir = stateDir;
         var operatorCredential = _ledger.ReadOperatorCredential();
         if (operatorCredential is not null)
             _coordinator = VerifiedReviewCoordinator.ForOperatorCredentialProbe(ledger);
@@ -578,8 +580,7 @@ internal sealed class OperatorWebAuthnPipe : IDisposable
                             _ledger);
                         _reaffirmation = OperatorReaffirmationCoordinator.ForNativeCredential(
                             _ledger);
-                        if (IsExplicitSyntheticCiPublishFixture(
-                                ReviewHostIdentity.GetStateRoot()))
+                        if (IsExplicitSyntheticCiPublishFixture(_stateDir))
                             _publisher = OperatorDirectClaimCoordinator.ForNativeCredential(
                                 _ledger);
                     }
