@@ -17,9 +17,7 @@ internal sealed record CiOneShotOffer(
     string PrincipalSid, string Query, string ClaimId, string Kind,
     string Value, string FactSha256, string SnapshotSha256,
     string ResultSetSha256, string Recipient, string Provenance,
-    uint KernelRecipientPid, string RecipientSessionSha256,
-    string RecipientProcessImagePath, ulong RecipientProcessCreatedFileTime,
-    bool RecipientOsOriginAttested);
+    uint KernelRecipientPid, string RecipientSessionSha256);
 
 internal static partial class ProtectedOperatorService
 {
@@ -46,9 +44,7 @@ internal static partial class ProtectedOperatorService
             "human_approval_verified","claim_written","read_released",
             "published_to_codex","request_id","ticket_id","challenge",
             "expires_utc","credential_id","expected_origin","principal_sid",
-            "recipient_kernel_pid","recipient_session_sha256",
-            "recipient_process_image","recipient_process_created_filetime",
-            "recipient_os_origin_attested","query",
+            "recipient_kernel_pid","recipient_session_sha256","query",
             "query_sha256","result_set_sha256","project_id","branch",
             "revision_sha","proposal_ref","claim_id","kind","value",
             "fact_sha256","snapshot_sha256","historical_source_origin",
@@ -59,7 +55,6 @@ internal static partial class ProtectedOperatorService
             || r.GetProperty("published_to_codex").GetBoolean()
             || r.GetProperty("claim_written").GetBoolean()
             || Str(r,"recipient") != CiOneShotRecipient
-            || r.GetProperty("recipient_os_origin_attested").GetBoolean()
             || Str(r,"project_id") != project || Str(r,"branch") != branch
             || Str(r,"proposal_ref") != proposalRef
             || Str(r,"kind") is not ("knowledge" or "preference")
@@ -86,13 +81,6 @@ internal static partial class ProtectedOperatorService
         var pid = r.GetProperty("recipient_kernel_pid").GetUInt32();
         if (pid == 0 || pid > int.MaxValue)
             throw new InvalidOperationException("Kernel-Empfänger-PID ungültig");
-        var observedImage=Str(r,"recipient_process_image");
-        var creation=r.GetProperty("recipient_process_created_filetime").GetUInt64();
-        if (!Path.IsPathFullyQualified(observedImage)
-            || observedImage.Length>2048 || creation==0
-            || observedImage.Contains('\n') || observedImage.Contains('\r'))
-            throw new InvalidOperationException(
-                "Kernel-Prozessherkunft nicht verifizierbar");
         var query = "exact-proposal:" + proposalRef;
         var expectedResult = new[]
         {
@@ -129,7 +117,7 @@ internal static partial class ProtectedOperatorService
             currentSid,query,Str(r,"claim_id"),Str(r,"kind"),
             originalValue,Str(r,"fact_sha256"),Str(r,"snapshot_sha256"),
             hash,CiOneShotRecipient,Str(r,"provenance"),pid,
-            Str(r,"recipient_session_sha256"),observedImage,creation,false);
+            Str(r,"recipient_session_sha256"));
     }
 
     internal static OperatorReceipt CompleteCiOneShotRead(
