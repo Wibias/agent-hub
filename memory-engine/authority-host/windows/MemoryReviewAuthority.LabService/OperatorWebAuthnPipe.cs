@@ -24,6 +24,8 @@ internal sealed class OperatorWebAuthnPipe : IDisposable
     internal const string Protocol = "agenthub-operator-uv-service-v1";
     private readonly ProtectedPendingReviewLedger _ledger;
     private VerifiedReviewCoordinator? _coordinator;
+    private OperatorReaffirmationCoordinator? _reaffirmation;
+    private ChallengeTicket? _activeReaffirmation;
     private readonly ReviewChallengeCore _registrationProofCore = new();
     private RegistrationAttempt? _registration;
     private RegistrationPossession? _registrationPossession;
@@ -45,8 +47,11 @@ internal sealed class OperatorWebAuthnPipe : IDisposable
     internal OperatorWebAuthnPipe(ProtectedPendingReviewLedger ledger, string stateDir)
     {
         _ledger = ledger ?? throw new ArgumentNullException(nameof(ledger));
-        if (_ledger.ReadOperatorCredential() is not null)
+        var operatorCredential = _ledger.ReadOperatorCredential();
+        if (operatorCredential is not null)
             _coordinator = VerifiedReviewCoordinator.ForOperatorCredentialProbe(ledger);
+        if (operatorCredential?.EnrollmentState == ProtectedPendingReviewLedger.NativeEnrollmentState)
+            _reaffirmation = OperatorReaffirmationCoordinator.ForNativeCredential(ledger);
         var privatePath = Path.Combine(stateDir, "review-service-signing-key.pk8");
         var publicPath = Path.Combine(stateDir, "review-service-signing-key.pub.pem");
         var bytes = File.ReadAllBytes(privatePath);
@@ -267,6 +272,87 @@ internal sealed class OperatorWebAuthnPipe : IDisposable
                     };
                 }
             }
+            else if (operation == "reaffirm_begin" && ExactKeys(root,
+                "protocol", "op", "nonce", "projectId", "branch", "proposalRef")
+                && _reaffirmation is not null)
+            {
+                // Admin-only surface. Scope/fact are read from protected
+                // state, never supplied over IPC. Nothing here grants Claim
+                // authority or verifies the ORIGINAL historical evidence.
+                var project = Str(root, "projectId");
+                var branch = Str(root, "branch");
+                var proposal = Str(root, "proposalRef");
+                if (project is { Length: > 0 and <= 256 }
+                    && branch is { Length: > 0 and <= 128 }
+                    && Regex.IsMatch(proposal ?? "", @"\AE~[0-9a-f]{10}\z")
+                    && (_activeReaffirmation is null
+                        || _activeReaffirmation.ExpiresUtc <= DateTimeOffset.UtcNow))
+                {
+                    var offer = _ledger.ReadOperatorReviewOffer(project, branch, proposal!);
+                    if (offer is not null && offer.Meaning.Decision == "confirm"
+                        && offer.Kind is "knowledge" or "preference")
+                    {
+                        var ticket = _reaffirmation.Begin(offer.Meaning);
+                        _activeReaffirmation = ticket;
+                        var native = _ledger.ReadOperatorCredential()
+                            ?? throw new InvalidOperationException("native_credential_missing");
+                        response = new
+                        {
+                            protocol = Protocol, op = operation, nonce,
+                            status = "operator_reaffirmation_challenge_no_claim",
+                            service_signed = true, human_approval_verified = false,
+                            claim_written = false,
+                            reaffirmation_intent_recorded = false,
+                            original_evidence_verified = false,
+                            confirmation_scope = "new_user_statement_only",
+                            request_id = offer.RequestId,
+                            ticket_id = ticket.TicketId,
+                            challenge = ticket.ChallengeBase64Url,
+                            expires_utc = ticket.ExpiresUtc.ToString("O"),
+                            credential_id = native.Credential.CredentialIdBase64Url,
+                            expected_origin = native.Credential.ExpectedOrigin,
+                            kind = offer.Kind,
+                            source_origin = offer.SourceOrigin,
+                            evidence_sha256 = offer.SourceEvidenceSha256,
+                            meaning = SignedMeaning(ticket.Meaning),
+                        };
+                    }
+                }
+            }
+            else if (operation == "reaffirm_complete" && ExactKeys(root,
+                "protocol", "op", "nonce", "ticketId", "assertion")
+                && _reaffirmation is not null)
+            {
+                // Consume on the first attempt, including malformed input.
+                var pending = _activeReaffirmation;
+                _activeReaffirmation = null;
+                if (pending is not null
+                    && Str(root, "ticketId") == pending.TicketId
+                    && root.TryGetProperty("assertion", out var assertion)
+                    && ExactKeys(assertion, "credentialId", "type",
+                        "clientDataJSON", "authenticatorData", "signature"))
+                {
+                    var item = new BrowserAssertion(
+                        Str(assertion, "credentialId") ?? "",
+                        Str(assertion, "type") ?? "",
+                        Str(assertion, "clientDataJSON") ?? "",
+                        Str(assertion, "authenticatorData") ?? "",
+                        Str(assertion, "signature") ?? "");
+                    var result = _reaffirmation.Complete(
+                        pending.TicketId, pending.Meaning, item);
+                    response = new
+                    {
+                        protocol = Protocol, op = operation, nonce,
+                        status = result.Status,
+                        signature_verified = result.Verified,
+                        service_signed = true, human_approval_verified = false,
+                        claim_written = false,
+                        reaffirmation_intent_recorded = result.Verified,
+                        original_evidence_verified = false,
+                        request_id = result.RequestId,
+                    };
+                }
+            }
             else if (operation == "enroll_begin" && ExactKeys(root,
                 "protocol", "op", "nonce", "projectId", "branch", "proposalRef"))
             {
@@ -381,8 +467,12 @@ internal sealed class OperatorWebAuthnPipe : IDisposable
                             candidate.Credential, proof)
                         : null;
                     if (saved is not null)
+                    {
                         _coordinator = VerifiedReviewCoordinator.ForOperatorCredentialProbe(
                             _ledger);
+                        _reaffirmation = OperatorReaffirmationCoordinator.ForNativeCredential(
+                            _ledger);
+                    }
                     response = new
                     {
                         protocol = Protocol, op = operation, nonce,

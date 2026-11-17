@@ -31,7 +31,7 @@ const scope = {
   proposalRef:'E~'+createHash('sha256').update(
     'actual-canonical-evidence-proposal-id').digest('hex').slice(0,10),
 };
-const fact='This real-schema E~ proposal has linked Evidence but no human approval.';
+const fact='This knowledge statement is proposed from unverified historical Evidence.';
 const sha = bytes => createHash('sha256').update(bytes).digest();
 const b64 = bytes => Buffer.from(bytes).toString('base64url');
 
@@ -142,7 +142,7 @@ function proofAssertion(key, offer, counter){
 async function run(){
   const started=await send('enroll_begin',scope);
   if(started.status!=='operator_native_registration_challenge_unapproved'
-    || started.kind!=='procedure'
+    || started.kind!=='knowledge'
     || started.source_origin!=='operator_pinned_unverified_evidence_v1'
     || started.meaning?.canonicalFact!==fact
     || started.meaning.projectId!==scope.projectId
@@ -193,9 +193,39 @@ async function run(){
     || !['sign_counter_replay','operator_proof_scope_or_counter_denied'].includes(denied.status))
     throw new Error('native_enrollment_sign_counter_replay_accepted');
 
+  // Separate operator-INTENT gesture: a new purpose-bound challenge and
+  // a fresh UV signature, never a real human or verified historic source.
+  const affirmation=await send('reaffirm_begin',scope);
+  if(affirmation.status!=='operator_reaffirmation_challenge_no_claim'
+    || affirmation.kind!=='knowledge'
+    || affirmation.confirmation_scope!=='new_user_statement_only'
+    || affirmation.meaning?.canonicalFact!==fact
+    || affirmation.meaning.canonicalFactSha256!==started.meaning.canonicalFactSha256
+    || affirmation.credential_id!==attestation.credentialId
+    || affirmation.source_origin!=='operator_pinned_unverified_evidence_v1'
+    || affirmation.reaffirmation_intent_recorded!==false
+    || affirmation.original_evidence_verified!==false
+    || affirmation.human_approval_verified!==false
+    || affirmation.claim_written!==false)
+    throw new Error('synthetic_reaffirmation_challenge_invalid');
+  const affirmed=await send('reaffirm_complete',{
+    ticketId:affirmation.ticket_id,
+    assertion:proofAssertion(key,affirmation,3),
+  });
+  if(affirmed.status!=='operator_reaffirmation_intent_recorded_no_claim'
+    || affirmed.signature_verified!==true
+    || affirmed.reaffirmation_intent_recorded!==true
+    || affirmed.request_id!==started.request_id
+    || affirmed.original_evidence_verified!==false
+    || affirmed.human_approval_verified!==false
+    || affirmed.claim_written!==false)
+    throw new Error('synthetic_reaffirmation_intent_not_recorded');
+
   process.stdout.write(JSON.stringify({
     status:'synthetic_native_enrollment_bridge_pass_not_human',
-    source_kind:'procedure',
+    source_kind:'knowledge',
+    purpose_bound_reaffirmation_intent_recorded:true,
+    historical_evidence_verified:false,
     original_fact_service_signed:true,
     independent_create_and_get_challenges:true,
     protected_key_persisted_for_probe:true,

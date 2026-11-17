@@ -73,7 +73,10 @@ const branch = 'main';
 const revisionSha = git('rev-parse', 'HEAD');
 const proposalId = 'actual-canonical-evidence-proposal-id';
 const evidenceId = 'actual-canonical-evidence-id';
-const fact = 'This real-schema E~ proposal has linked Evidence but no human approval.';
+const kind = nativeEnrollment ? 'knowledge' : 'procedure';
+const fact = nativeEnrollment
+  ? 'This knowledge statement is proposed from unverified historical Evidence.'
+  : 'This real-schema E~ proposal has linked Evidence but no human approval.';
 const proposalRef = 'E~' + createHash('sha256')
   .update(proposalId, 'utf8').digest('hex').slice(0, 10);
 const db = new DatabaseSync(source);
@@ -117,10 +120,10 @@ try {
     (id,project_id,branch,kind,canonical_fact,status,policy_version,
      evaluator_id,fingerprint,created_at,importance_json,support_json)
     VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`
-  ).run(proposalId, projectId, branch, 'procedure', fact,
+  ).run(proposalId, projectId, branch, kind, fact,
     'pending', 'ci-canonical-reviewed-pending-v1',
     'synthetic-ci-fixture-builder',
-    evidenceExtractionFingerprint({ kind: 'procedure', canonicalFact: fact }),
+    evidenceExtractionFingerprint({ kind, canonicalFact: fact }),
     '2026-11-14T19:00:00.000Z', importance, support);
   db.prepare(`INSERT INTO memory_evidence_proposal_evidence
     (proposal_id,evidence_id,linked_at) VALUES (?,?,?)`)

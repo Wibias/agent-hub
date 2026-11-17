@@ -353,12 +353,31 @@ try {
             -not $enroll.independent_create_and_get_challenges -or
             -not $enroll.protected_key_persisted_for_probe -or
             -not $enroll.nonzero_sign_counter_replay_denied -or
+            $enroll.source_kind -cne 'knowledge' -or
+            -not $enroll.purpose_bound_reaffirmation_intent_recorded -or
+            $enroll.historical_evidence_verified -or
             $enroll.hardware_attestation_verified -or
             $enroll.human_approval_verified -or $enroll.claim_written -or
             -not $enroll.production_no_go) {
             throw 'synthetic native enrollment incorrectly granted approval'
         }
-        Write-Host 'PASS: native Create/Get synthetic enrollment stored protected key and denied replay, no Claim or human approval'
+        Write-Host 'PASS: native Create/Get enrollment, purpose-bound reaffirmation intent IPC and replay denial, no Claim or human approval'
+        $reaffirmAudit = Join-Path $repoRoot 'scripts/verify-operator-reaffirmation-scm-state.mjs'
+        $readbackOutput = & node $reaffirmAudit
+        if ($LASTEXITCODE -ne 0) {
+            throw 'protected native reaffirmation SQLite audit failed'
+        }
+        $readback = $readbackOutput | ConvertFrom-Json
+        if ($readback.status -cne 'protected_operator_reaffirmation_scm_readback_pass' -or
+            $readback.intent_rows -ne 1 -or
+            $readback.original_source_verified -or
+            $readback.real_claim_rows -ne 0 -or
+            $readback.verified_review_intent_rows -ne 0 -or
+            $readback.credential_count -ne 3 -or
+            $readback.protected_source_kind -cne 'knowledge') {
+            throw 'Reaffirmation readback unexpectedly promoted historical source or Claim'
+        }
+        Write-Host 'PASS: protected SQLite readback has exactly one reaffirmation intent, no real Claim, no verified original source'
     } else {
     $operatorProbe = Join-Path $repoRoot 'scripts/probe-operator-service-web-authn.mjs'
     $operatorOutput = & node $operatorProbe $publishedPin
