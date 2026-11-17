@@ -83,6 +83,50 @@ internal static class OperatorSelfTest
         }
     }
 
+    internal static int RunReadDisclosureOffer()
+    {
+        // A real protected Claim was placed in the disposable CI service
+        // by the synthetic native enrollment/confirmation/commit fixture.
+        // This test makes a real native IPC call, but never issues Hello.
+        if (Environment.GetEnvironmentVariable("GITHUB_ACTIONS") != "true"
+            || Environment.GetEnvironmentVariable("RUNNER_OS") != "Windows")
+            return 2;
+        try
+        {
+            var hash = Convert.ToHexString(SHA256.HashData(
+                Encoding.UTF8.GetBytes("actual-canonical-evidence-proposal-id")))
+                .ToLowerInvariant();
+            var proposal = "E~" + hash[..10];
+            var offer = OnBlockedUiThread(() =>
+                ProtectedOperatorService.BeginReadDisclosure(
+                    "github.com/example/operator-evidence", "main", proposal));
+            return offer.ProposalRef == proposal
+                && offer.ProjectId == "github.com/example/operator-evidence"
+                && offer.Branch == "main"
+                && offer.Query == "exact-proposal:" + proposal
+                && offer.Recipient ==
+                    "Sealed operator UI only; no Codex recipient"
+                && offer.Kind == "knowledge"
+                && offer.Value ==
+                    "This knowledge statement is proposed from unverified historical Evidence."
+                && offer.Provenance == "user_direct_reaffirmed_and_published_v1"
+                && offer.CredentialId.Length >= 16
+                && offer.Challenge.Length == 43
+                && offer.ResultSetSha256.Length == 64
+                && offer.ExpiresUtc > DateTimeOffset.UtcNow
+                ? 0 : 2;
+        }
+        catch (Exception error)
+        {
+            var temp = Environment.GetEnvironmentVariable("RUNNER_TEMP");
+            if (!string.IsNullOrWhiteSpace(temp))
+                File.WriteAllText(Path.Combine(temp,
+                    "AgentHubNativeReadPreviewFailure.txt"),
+                    error.GetType().Name + ": " + error.Message);
+            return 2;
+        }
+    }
+
     internal static int RunServiceOffer()
     {
         try
