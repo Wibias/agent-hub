@@ -37,26 +37,48 @@ internal sealed class ObservedCiRecipientProcess : IDisposable
     /// sibling process with the same Windows account and integrity level.
     /// </summary>
     internal static ObservedCiRecipientProcess? Observe(
-        NamedPipeServerStream pipe,uint expectedKernelPid)
+        NamedPipeServerStream pipe,uint expectedKernelPid,out string reason)
     {
+        reason="unmeasured";
         if(!OperatingSystem.IsWindows() || expectedKernelPid==0
             || !pipe.IsConnected
             || !GetNamedPipeClientProcessId(pipe.SafePipeHandle,out var observed)
             || observed!=expectedKernelPid)
+        {
+            reason="kernel_pid_not_connected";
             return null;
+        }
+        // No PROCESS_VM_READ/WRITE/OPERATION or privilege elevation.
+        // The restricted service must not gain invasive process access.
         var handle=OpenProcess(QueryLimited|Synchronize,false,observed);
         if(handle.IsInvalid)
         {
+            reason=Marshal.GetLastPInvokeError()==5
+                ? "query_handle_access_denied":"query_handle_unavailable";
             handle.Dispose();
             return null;
         }
-        if(WaitForSingleObject(handle,0)!=WaitTimeout
-            || !TryCreation(handle,out var created)
-            || !TryImage(handle,out var image))
+        if(WaitForSingleObject(handle,0)!=WaitTimeout)
         {
+            reason="process_not_live";
             handle.Dispose();
             return null;
         }
+        if(!TryCreation(handle,out var created))
+        {
+            reason=Marshal.GetLastPInvokeError()==5
+                ? "creation_access_denied":"creation_unavailable";
+            handle.Dispose();
+            return null;
+        }
+        if(!TryImage(handle,out var image))
+        {
+            reason=Marshal.GetLastPInvokeError()==5
+                ? "image_access_denied":"image_unavailable";
+            handle.Dispose();
+            return null;
+        }
+        reason="origin_observed";
         return new ObservedCiRecipientProcess(handle,observed,created,image);
     }
 
