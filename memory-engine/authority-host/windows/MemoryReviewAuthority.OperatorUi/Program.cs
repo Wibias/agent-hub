@@ -381,10 +381,13 @@ internal sealed class OperatorReviewWindow : Form
         {
             var attestation = NativeWindowsWebAuthnRegistration.MakeCredential(
                 Handle, original);
+            _status.Text = "Windows-Hello-Credential erstellt. Prüfe signierte Dienst-Challenge …";
             var proofOffer = ProtectedOperatorService.VerifyNativeEnrollmentKey(
                 original, attestation);
+            _status.Text = "Credential geprüft. Starte zweite Windows-Hello-Besitzprüfung …";
             var assertion = NativeWindowsWebAuthn.GetAssertion(
                 Handle, proofOffer);
+            _status.Text = "Zweiter Besitznachweis erhalten. Prüfe Dienstabschluss …";
             var receipt = ProtectedOperatorService.CompleteNativeEnrollment(
                 proofOffer.TicketId, assertion);
             if (!receipt.Verified
