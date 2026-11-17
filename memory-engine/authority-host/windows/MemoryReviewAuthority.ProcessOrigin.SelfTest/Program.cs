@@ -67,7 +67,7 @@ internal static class Program
             pipe.RunAsClient(() =>
             {
                 using var identity = WindowsIdentity.GetCurrent(ifImpersonating:true);
-                actualSid = identity.User?.Value;
+                actualSid = identity?.User?.Value;
             });
             Check(actualSid == expectedSid,"two_clients_not_same_windows_sid");
             var matched = pin.MatchesConnectedClient(pipe);
