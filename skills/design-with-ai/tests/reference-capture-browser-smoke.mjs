@@ -93,6 +93,63 @@ try {
   process.stdout.write(JSON.stringify({ status: 'PASS', source: 'loopback-live-browser',
     segments: manifest.segments.length, lazyDomObserved: true,
     manifestStatus: result.status, visualContentAttested: false }) + '\n');
+  // Optional, one-off public-reference exercise; never stores images in Git.
+  // This is browser/geometry verification, not a visual-craft or rights verdict.
+  if (process.env.DWA_PUBLIC_REFERENCE_URL) {
+    const externalUrl = process.env.DWA_PUBLIC_REFERENCE_URL;
+    if (!externalUrl.startsWith('https://design-system.service.gov.uk/')) {
+      throw new Error('Unexpected external reference origin');
+    }
+    const res = await page.goto(externalUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+    assert.equal(res.status(), 200, 'External reference must respond successfully');
+    await page.locator('h1').first().waitFor({ state: 'visible', timeout: 10000 });
+    const heading = await page.locator('h1').first().innerText();
+    assert.match(heading, /Accordion|Components/i, 'Expected real design system documentation');
+    await page.evaluate(() => document.fonts.ready);
+    let firstHeight = await page.evaluate(() => Math.max(
+      document.documentElement.scrollHeight, document.body.scrollHeight,
+    ));
+    for (let y = 0; y < firstHeight; y += 540) {
+      await page.evaluate(pos => scrollTo(0, pos), y);
+      await page.waitForTimeout(120);
+    }
+    await page.evaluate(() => scrollTo(0, 0));
+    await page.waitForTimeout(350);
+    const fullHeight = await page.evaluate(() => Math.max(
+      document.documentElement.scrollHeight, document.body.scrollHeight,
+    ));
+    assert.ok(fullHeight > 1800 && fullHeight <= 30000,
+      'External reference height must be in bounded long-page range');
+    const manifestExternal = {
+      schemaVersion: 1,
+      sourceUrl: externalUrl,
+      capturedAt: new Date().toISOString(),
+      viewport: { width: 800, height: 600 },
+      documentHeight: fullHeight,
+      segments: [],
+    };
+    for (let y = 0, index = 0; index < 100; index++) {
+      await page.evaluate(pos => scrollTo(0, pos), y);
+      const top = await page.evaluate(() => scrollY);
+      if (manifestExternal.segments.at(-1)?.top === top) break;
+      await page.waitForTimeout(200);
+      const file = 'public-reference-' + String(index).padStart(2, '0') + '.png';
+      await page.screenshot({ path: path.join(out, file), fullPage: false });
+      manifestExternal.segments.push({
+        file, top, bottom: Math.min(fullHeight, top + 600), settled: true,
+      });
+      if (top + 600 >= fullHeight) break;
+      y = Math.min(fullHeight - 600, top + 500);
+    }
+    const checked = checkReferenceCapture(manifestExternal, out);
+    assert.equal(checked.status, 'GEOMETRY_CHECKED', JSON.stringify(checked));
+    assert.ok(manifestExternal.segments.length >= 4);
+    process.stdout.write(JSON.stringify({
+      status: 'PASS', source: 'external-public-design-reference',
+      url: externalUrl, heading, frames: manifestExternal.segments.length,
+      coverage: checked.status, visualContentAttested: false,
+    }) + '\\n');
+  }
   await context.close();
 } finally {
   await browser?.close();
