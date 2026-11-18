@@ -44,7 +44,7 @@ test('upstream update check tracks the five canonical sources and decisions', ()
 
   const pstack = registry.sources.find((source) => source.id === 'pstack');
   assert.equal(pstack.scope, 'pstack/');
-  assert.equal(pstack.localPin, 'c742dd61706fbacc1b95f1a20b7b988cf096ce6c');
+  assert.equal(pstack.localPin, '93b916d4a1e806507e22f4716b352fa91f2b227e');
 
   const impeccable = registry.sources.find((source) => source.id === 'impeccable');
   assert.equal(impeccable.scope, '.agents/skills/impeccable/');
