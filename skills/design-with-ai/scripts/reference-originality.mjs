@@ -2,7 +2,7 @@
 // Bounded, read-only evidence for exact file and long-copy overlaps.
 // A match is a review lead, never an automated plagiarism or legal verdict.
 import { createHash } from 'node:crypto';
-import { lstatSync, readFileSync, readdirSync, realpathSync } from 'node:fs';
+import { lstatSync, readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -59,13 +59,13 @@ function collect(source) {
         if (!SKIP.has(child.name) && !child.name.startsWith('.')) visit(path.join(p, child.name));
       }
     } else if (stat.isFile()) {
-      if (stat.size > MAX_FILE_BYTES) return;
+      if (stat.size > MAX_FILE_BYTES) throw new Error('Oversized file; narrow the inspected scope: ' + path.basename(p));
       paths.push(p);
       if (paths.length > MAX_FILES) throw new Error('Too many files; narrow the inspected scope');
     }
   };
   visit(root);
-  const rootReal = realpathSync(root);
+  if (paths.length === 0) throw new Error('No regular files were inspected; narrow or correct the scope');
   return paths.map(file => {
     const bytes = readFileSync(file);
     const extension = path.extname(file).toLowerCase();
