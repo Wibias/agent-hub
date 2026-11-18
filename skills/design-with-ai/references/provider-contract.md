@@ -27,7 +27,7 @@ The Impeccable `live` workflow is **not** part of this contract and must not be 
 
 ## Phase 3: optional Taste Skill rendered provider
 
-`createTasteSkillProvider()` integrates the **current** upstream `tasteskill 2.5.0` `scripts/consistency.mjs`, not obsolete `draw.mjs`, `lint.mjs` or `inspect.mjs` commands. It runs only on an explicitly selected local HTML file with Node 22+, a preinstalled compatible skill, and Chrome. The required viewport set is 1440/768/390 px plus the upstream first-screen sweep. The adapter enforces per-run output isolation, checks the complete report and coverage, and emits normalized evidence; it does not override canonical DWA verification. See `references/taste-skill-provider.md`.
+`createTasteSkillProvider()` integrates the reviewed upstream `tasteskill 2.5.0` or `2.5.1` `scripts/consistency.mjs`, not obsolete `draw.mjs`, `lint.mjs` or `inspect.mjs` commands. It runs only on an explicitly selected local HTML file with Node 22+, a preinstalled compatible skill, and Chrome. The required viewport set is 1440/768/390 px plus the upstream first-screen sweep; version 2.5.1 also requires the 320 px narrow-phone pass. The adapter enforces per-run output isolation, checks the complete report and coverage, and emits normalized evidence; it does not override canonical DWA verification. See `references/taste-skill-provider.md`.
 
 ## Phase 5: optional profile orchestrator
 

@@ -49,6 +49,19 @@ jobs:
           TASTE_SKILL_ROOT: ${{ runner.temp }}/taste-skill/skills/taste-skill
         run: node skills/design-with-ai/tests/providers/browser-live-smoke.mjs
 
+      - name: Fetch exact reviewed Taste Skill 2.5.1 source
+        run: |
+          set -euo pipefail
+          git -C "$RUNNER_TEMP/taste-skill" fetch -q --depth=1 origin f6b76575f949707b4e3c37cd86cb44b0b98643e8
+          git -C "$RUNNER_TEMP/taste-skill" checkout -q --detach FETCH_HEAD
+          test "$(git -C "$RUNNER_TEMP/taste-skill" rev-parse HEAD)" = "f6b76575f949707b4e3c37cd86cb44b0b98643e8"
+          grep -q 'tasteskill 2.5.1' "$RUNNER_TEMP/taste-skill/skills/taste-skill/SKILL.md"
+
+      - name: Real Taste 2.5.1 narrow-phone evidence browser end-to-end
+        env:
+          TASTE_SKILL_ROOT: ${{ runner.temp }}/taste-skill/skills/taste-skill
+        run: node skills/design-with-ai/tests/providers/browser-live-smoke.mjs
+
       - name: Real Chrome declared DOM-state regression cases
         run: node skills/design-with-ai/tests/providers/rendered-state-chrome-smoke.mjs
 

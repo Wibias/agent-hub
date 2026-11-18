@@ -11,7 +11,7 @@ const EXPECTED_TASTE_ROUTE = "/settings";
 const EXPECTED_TASTE_FILE = "settings/index.html";
 const skillRoot = process.env.TASTE_SKILL_ROOT;
 if (!skillRoot) {
-  process.stderr.write("TASTE_SKILL_ROOT must point to the reviewed Taste Skill 2.5.0 checkout\n");
+  process.stderr.write("TASTE_SKILL_ROOT must point to the reviewed Taste Skill checkout\n");
   process.exit(2);
 }
 const root = mkdtempSync(join(tmpdir(), "dwa-browser-live-"));
@@ -135,6 +135,16 @@ try {
   // Compare against the upstream JSON itself. Comparing fusion only to
   // normalized findings can miss a normalization bug that drops both.
   const upstream = readArtifact(taste.provenance.report);
+  const skillManifest = readFileSync(join(skillRoot, "SKILL.md"), "utf8");
+  const version = skillManifest.match(/\btasteskill 2\.5\.(?:0|1)\b/)?.[0].split(" ").at(-1);
+  assert.ok(version === "2.5.0" || version === "2.5.1", "Only reviewed versions can run");
+  assert.equal(taste.provenance.version, version);
+  if (version === "2.5.1") {
+    assert.equal(upstream.narrow?.width, 320);
+    assert.deepEqual(upstream.narrow?.errors, []);
+  } else {
+    assert.equal(upstream.narrow, undefined);
+  }
   const upstreamRows = [
     ...upstream.widths.flatMap((width, wi) =>
       width.findings.map((finding, fi) => ({
@@ -145,9 +155,13 @@ try {
       raw: finding, width: finding.width || 0,
       ref: taste.provenance.report + "#/sweep/findings/" + fi,
     })),
+    ...(upstream.narrow?.findings ?? []).map((finding, fi) => ({
+      raw: finding, width: upstream.narrow.width,
+      ref: taste.provenance.report + "#/narrow/findings/" + fi,
+    })),
   ];
   assert.equal(upstreamRows.length, taste.findings.length,
-    "Normalization must retain every upstream width/sweep finding");
+    "Normalization must retain every upstream width/sweep/narrow finding");
   assert.equal(upstream.counts.FAIL, taste.summary.counts.FAIL);
   assert.equal(upstream.counts.WARN, taste.summary.counts.WARN);
   assert.ok(upstreamRows.some(({ raw }) =>
@@ -201,7 +215,7 @@ try {
   process.stdout.write(JSON.stringify({
     status: result.status, coverage: statuses,
     artifactDirectory: result.artifacts.directory,
-    browser: "real Chrome / upstream consistency.mjs, 1440/768/390",
+    browser: "real Chrome / upstream consistency.mjs, 1440/768/390 with 320 for 2.5.1",
     productCompletionEligible: false,
     integratedEvidence: {
       impeccableFilesScanned: impeccable.summary.filesScanned,

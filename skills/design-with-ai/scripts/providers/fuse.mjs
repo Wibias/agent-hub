@@ -99,7 +99,7 @@ function tasteMemberMetadata(report, finding) {
 
 function tasteFusionSummary(report) {
   if (report.provider !== "taste-skill") return {};
-  // The pinned Taste 2.5.0 checker does not prove SPA hydration or game phase.
+  // The reviewed Taste 2.5.0/2.5.1 checkers do not prove SPA hydration or game phase.
   // Never treat an upstream PASS as a ready-state assertion.
   const result = {
     renderedStateVerified: false,
