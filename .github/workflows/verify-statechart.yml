@@ -40,7 +40,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          pin='c742dd61706fbacc1b95f1a20b7b988cf096ce6c'
+          pin='93b916d4a1e806507e22f4716b352fa91f2b227e'
           upstream="$RUNNER_TEMP/cursor-plugins"
           git clone --filter=blob:none --no-checkout https://github.com/cursor/plugins.git "$upstream"
           git -C "$upstream" fetch --depth=1 origin "$pin"
