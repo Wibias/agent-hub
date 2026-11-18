@@ -48,6 +48,8 @@ jobs:
           node --check skills/design-with-ai/scripts/reference-originality.mjs
       - name: Verify manifest coverage and originality boundaries
         run: node --test skills/design-with-ai/tests/reference-evidence.test.mjs
+      - name: Structural Skill Ratchet validation (not the two-model qualification)
+        run: node skills/skill-ratchet/scripts/skill-ratchet.mjs validate --skill-root skills/design-with-ai --json
 
   browser-capture:
     runs-on: ubuntu-latest
