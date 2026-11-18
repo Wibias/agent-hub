@@ -130,3 +130,41 @@ test(
     assert.doesNotMatch(result.stderr, /from-chart|--against|--fixed/);
   },
 );
+
+test(
+  'nested statechart transitions enter the parent once and retain distinct child choices',
+  { skip: canExecuteTypeScript ? false : 'requires a TypeScript-capable Node runtime' },
+  async () => {
+    const { drawnEdges } = await import(
+      new URL('../statechart/scripts/backends/mermaid.ts', import.meta.url).href
+    );
+    const region = {
+      states: [
+        { path: ['Ask'], start: true },
+        { path: ['Layout', 'Flat'], start: false },
+        { path: ['Layout', 'Parents'], start: false },
+        { path: ['Layout', 'Regions'], start: false },
+      ],
+      steps: [
+        { from: ['Ask'], to: ['Layout', 'Flat'], label: 'String' },
+        { from: ['Ask'], to: ['Layout', 'Parents'], label: 'Array' },
+        { from: ['Ask'], to: ['Layout', 'Regions'], label: 'Object' },
+      ],
+    };
+    const edges = drawnEdges(region);
+    const parentEntries = edges.filter(
+      (edge) => !edge.start && edge.to.join('/') === 'Layout',
+    );
+    assert.equal(parentEntries.length, 1, 'a nested composite needs one external entry');
+    assert.deepEqual(parentEntries[0].from, ['Ask']);
+    assert.equal(parentEntries[0].label, undefined);
+    const choices = edges
+      .filter((edge) => edge.start && edge.from.join('/') === 'Layout')
+      .map((edge) => [edge.to.join('/'), edge.label]);
+    assert.deepEqual(choices, [
+      ['Layout/Flat', 'String'],
+      ['Layout/Parents', 'Array'],
+      ['Layout/Regions', 'Object'],
+    ]);
+  },
+);
