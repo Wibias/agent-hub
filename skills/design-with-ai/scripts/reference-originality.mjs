@@ -59,6 +59,8 @@ function collect(source) {
         if (!SKIP.has(child.name) && !child.name.startsWith('.')) visit(path.join(p, child.name));
       }
     } else if (stat.isFile()) {
+      // Empty placeholders carry no meaningful originality signal.
+      if (stat.size === 0) return;
       if (stat.size > MAX_FILE_BYTES) throw new Error('Oversized file; narrow the inspected scope: ' + path.basename(p));
       paths.push(p);
       if (paths.length > MAX_FILES) throw new Error('Too many files; narrow the inspected scope');
