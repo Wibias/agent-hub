@@ -14,7 +14,7 @@ import { createTasteSkillProvider } from "../../scripts/providers/taste-skill.mj
 const CLI = fileURLToPath(new URL("../../scripts/providers/scan.mjs", import.meta.url));
 const WIDTHS = [1440, 768, 390];
 
-async function fixture(fn) {
+async function fixture(fn, version = "2.5.0") {
   const root = mkdtempSync(join(tmpdir(), "taste-provider-test-"));
   const projectRoot = join(root, "site");
   const skillRoot = join(root, "taste");
@@ -24,7 +24,7 @@ async function fixture(fn) {
   mkdirSync(join(skillRoot, "scripts"), { recursive: true });
   mkdirSync(outputRoot);
   writeFileSync(page, "<!doctype html><title>Fixture</title><main>Hi</main>");
-  writeFileSync(join(skillRoot, "SKILL.md"), "---\nname: design-taste-frontend\n---\ntasteskill 2.5.0\n");
+  writeFileSync(join(skillRoot, "SKILL.md"), "---\nname: design-taste-frontend\n---\ntasteskill " + version + "\n");
   writeFileSync(join(skillRoot, "scripts", "consistency.mjs"),
     "// Stubbed by the test runner. No browser/network execution.\n");
   try { return await fn({ root, projectRoot, skillRoot, outputRoot, page }); }
@@ -404,4 +404,75 @@ test("explicit CLI requires a local, installed Taste Skill; existing static CLI 
     "--path", "index.html", "--route", "/", "--page-kind", "place"], { encoding: "utf8" });
   assert.equal(other.status, 2);
   assert.match(JSON.parse(other.stdout).error, /Rendered-only/);
+});
+
+test("Taste 2.5.1 keeps 320px narrow-phone findings and truthful provenance", async () => {
+  await fixture(async (fx) => {
+    const harness = mockRunner(fx, (report) => {
+      report.narrow = {
+        width: 320, height: 640, errors: [],
+        findings: [{ check: "collide", sev: "FAIL", sel: ".cta", msg: "Two actions overlap" }],
+      };
+      report.counts.FAIL = 1;
+      report.checks.collide = "FAIL";
+    });
+    const provider = createTasteSkillProvider({
+      skillRoot: fx.skillRoot, runner: harness.runner, nodeMajor: 22,
+    });
+    const probe = await provider.probe();
+    assert.equal(probe.available, true, probe.reason);
+    assert.equal(probe.version, "2.5.1");
+    const report = await provider.inspect(opts(fx));
+    assert.equal(report.status, ProviderStatus.FINDINGS, report.reason);
+    assert.equal(report.provenance.version, "2.5.1");
+    assert.equal(report.summary.counts.FAIL, 1);
+    assert.equal(report.findings.length, 1);
+    assert.equal(report.findings[0].priority, "P1");
+    assert.equal(report.findings[0].reviewClass, "POTENTIAL_USABILITY");
+    assert.equal(report.findings[0].location.width, 320);
+    assert.ok(report.findings[0].evidence[0].ref.includes("#/narrow/findings/0"));
+    const cmd = harness.lastCommand();
+    assert.equal(cmd.args[cmd.args.indexOf("--narrow") + 1], "320");
+    assert.equal(report.summary.renderedStateVerified, false);
+  }, "2.5.1");
+});
+
+test("Taste 2.5.1 fails closed on missing, incomplete, or miscounted narrow evidence", async () => {
+  await fixture(async (fx) => {
+    const base = () => ({ width: 320, height: 640, errors: [], findings: [] });
+    for (const invalidate of [
+      (r) => { delete r.narrow; },
+      (r) => { r.narrow.width = 390; },
+      (r) => { r.narrow.errors.push("CDP connection lost"); },
+      (r) => { r.narrow.findings.push({
+        check: "tap-size", sev: "WARN", sel: "button", msg: "Target is too small",
+      }); },
+    ]) {
+      const harness = mockRunner(fx, (r) => { r.narrow = base(); invalidate(r); });
+      const provider = createTasteSkillProvider({
+        skillRoot: fx.skillRoot, runner: harness.runner, nodeMajor: 22,
+      });
+      const report = await provider.inspect(opts(fx));
+      assert.equal(report.status, ProviderStatus.ERROR, String(invalidate));
+      assert.equal(report.findings.length, 0);
+    }
+  }, "2.5.1");
+});
+
+test("Taste 2.5.0 cannot claim 2.5.1 narrow coverage and unknown versions are unavailable", async () => {
+  await fixture(async (fx) => {
+    const harness = mockRunner(fx, (report) => {
+      report.narrow = { width: 320, height: 640, errors: [], findings: [] };
+    });
+    const provider = createTasteSkillProvider({
+      skillRoot: fx.skillRoot, runner: harness.runner, nodeMajor: 22,
+    });
+    assert.equal((await provider.inspect(opts(fx))).status, ProviderStatus.ERROR);
+  });
+  await fixture(async (fx) => {
+    const provider = createTasteSkillProvider({ skillRoot: fx.skillRoot, nodeMajor: 22 });
+    const result = await provider.probe();
+    assert.equal(result.available, false);
+    assert.match(result.reason, /version must be reviewed/);
+  }, "2.5.2");
 });
