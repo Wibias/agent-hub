@@ -5,10 +5,21 @@
 ## Reviewed source
 
 - Repository: `cathrynlavery/diagram-design`
-- Commit: `0cf73c3fcc56667ad91a9a04c439ac6ccfabc9d1`
-- Release manifest at review: `2.6.136`
-- Reviewed: 2026-10-28
+- Commit: `f6db0decea96de66b901331a0f79a8d4b147ebae`
+- Release manifest at review: `2.6.164`
+- Reviewed: 2026-11-18
 - Licence: MIT, preserved in `LICENSE.upstream`
+
+## November 2026 refresh
+
+Reviewed the 56-commit upstream delta since the prior pinned snapshot.
+Updated all 43 changed files in the vendored assets, references and scripts
+surfaces, and preserved the upstream `SKILL.md` as
+`references/upstream-skill.md`. The new shared files include a bounded,
+non-executing PlantUML extractor, geometry verifier, diagram-type references,
+and matching gallery examples. The local top-level `SKILL.md` remains Agent
+Hub-owned and only exposes supported new paths. Upstream CI is not equivalent
+to Agent Hub's integration, routing or Windows evidence.
 
 ## Vendored surfaces
 
