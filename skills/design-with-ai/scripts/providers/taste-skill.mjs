@@ -1,4 +1,4 @@
-// Optional rendered evidence from Taste Skill 2.5.0. Not a DWA gate or design authority.
+// Optional rendered evidence from Taste Skill 2.5.0/2.5.1. Not a DWA gate or design authority.
 import { createHash } from "node:crypto";
 import {
   existsSync, lstatSync, mkdtempSync, mkdirSync, readFileSync, realpathSync,
@@ -10,7 +10,7 @@ import { runProcess } from "./process-runner.mjs";
 
 const WIDTHS = [1440, 768, 390];
 const PAGE_KINDS = new Set(["software", "gaming", "tech", "product", "service", "place"]);
-// Conservative *review* hints for the pinned Taste Skill 2.5.0 check IDs.
+// Conservative *review* hints for the reviewed Taste 2.5.0/2.5.1 check IDs.
 // Never suppress, downgrade, approve or turn an upstream FAIL into DWA P0.
 const CONTEXTUAL_TASTE_RULES = new Set([
   "visual-caption", "section-height", "one-section", "hero-screen", "hero-fill",
@@ -25,7 +25,7 @@ const GEOMETRY_REVIEW_RULES = new Set([
 const POTENTIAL_USABILITY_RULES = new Set([
   "contrast", "cut-text", "off-viewport", "overlap-text", "fold-cut", "forms",
   "links", "assets", "empty-visual", "visual-empty", "no-visual",
-  "busy-ground", "nav-covers", "fake-button", "broken-image",
+  "busy-ground", "nav-covers", "fake-button", "broken-image", "collide", "tap-size",
 ]);
 function tasteReviewClass(check) {
   if (POTENTIAL_USABILITY_RULES.has(check)) return "POTENTIAL_USABILITY";
@@ -132,7 +132,7 @@ function validatedFinding(raw, { width, route, file, reportPath, pointer, runDir
   };
 }
 
-function parseReport(report, { exitCode, route, page, project, runDir, trustedRun }) {
+function parseReport(report, { exitCode, version, route, page, project, runDir, trustedRun }) {
   const reportPath = join(runDir, "report", "report.json");
   if (!isObject(report) || resolve(String(report.page ?? "")) !== page ||
       resolve(String(report.out ?? "")) !== dirname(reportPath)) {
@@ -159,6 +159,17 @@ function parseReport(report, { exitCode, route, page, project, runDir, trustedRu
       report.sweep.errors.length || !Array.isArray(report.sweep.findings)) {
     throw new Error("Taste Skill first-screen sweep is incomplete");
   }
+  if (version === "2.5.1") {
+    const narrow = report.narrow;
+    if (!isObject(narrow) || narrow.width !== 320 ||
+        !Number.isInteger(narrow.height) || narrow.height <= 0 ||
+        !Array.isArray(narrow.errors) || narrow.errors.length ||
+        !Array.isArray(narrow.findings)) {
+      throw new Error("Taste Skill 2.5.1 narrow-phone coverage is incomplete");
+    }
+  } else if (report.narrow !== undefined) {
+    throw new Error("Unexpected narrow-phone evidence for Taste Skill 2.5.0");
+  }
   if ((Array.isArray(report.notChecked) && report.notChecked.length) ||
       (Array.isArray(report.notCheckedAt) && report.notCheckedAt.length) ||
       !isObject(report.checks) || !Object.keys(report.checks).length ||
@@ -184,6 +195,15 @@ function parseReport(report, { exitCode, route, page, project, runDir, trustedRu
       pointer: "/sweep/findings/" + index, runDir, trustedRun, occurrences,
     }));
   }
+  if (version === "2.5.1") {
+    for (const [index, finding] of report.narrow.findings.entries()) {
+      if (finding?.sev === "FAIL" || finding?.sev === "WARN") counters[finding.sev]++;
+      normalized.push(validatedFinding(finding, {
+        width: report.narrow.width, route, file, reportPath,
+        pointer: "/narrow/findings/" + index, runDir, trustedRun, occurrences,
+      }));
+    }
+  }
   if (!isObject(report.counts) || report.counts.FAIL !== counters.FAIL ||
       report.counts.WARN !== counters.WARN ||
       (exitCode === 0 && counters.FAIL !== 0) ||
@@ -202,7 +222,7 @@ function parseReport(report, { exitCode, route, page, project, runDir, trustedRu
     status: normalized.length ? ProviderStatus.FINDINGS : ProviderStatus.PASS,
     provenance: {
       upstream: "Leonxlnx/taste-skill",
-      version: "2.5.0",
+      version,
       script: "scripts/consistency.mjs",
       command: "node consistency.mjs <local-html> --json --widths 1440,768,390",
       report: reportPath,
@@ -234,7 +254,7 @@ export function createTasteSkillProvider({ skillRoot, runner = runProcess, nodeM
     async probe() {
       const major = nodeMajor;
       if (!Number.isFinite(major) || major < 22) {
-        return { available: false, reason: "Taste Skill 2.5.0 needs Node 22+" };
+        return { available: false, reason: "Taste Skill 2.5.x needs Node 22+" };
       }
       if (!filled(skillRoot)) {
         return { available: false, reason: "An explicit locally installed Taste Skill root is required" };
@@ -245,11 +265,15 @@ export function createTasteSkillProvider({ skillRoot, runner = runProcess, nodeM
         const manifest = join(root, "SKILL.md");
         if (!existsSync(script) || !existsSync(manifest) ||
             !lstatSync(script).isFile() || lstatSync(script).isSymbolicLink() ||
-            !lstatSync(manifest).isFile() ||
-            !readFileSync(manifest, "utf8").includes("tasteskill 2.5.0")) {
-          return { available: false, reason: "Taste Skill v2.5.0 consistency.mjs is not installed" };
+            !lstatSync(manifest).isFile()) {
+          return { available: false, reason: "Taste Skill 2.5.0/2.5.1 consistency.mjs is not installed" };
         }
-        return { available: true, implementation: "consistency-2.5.0" };
+        const version = readFileSync(manifest, "utf8")
+          .match(/\\btasteskill 2\\.5\\.(?:0|1)\\b/)?.[0].split(" ").at(-1);
+        if (!version) {
+          return { available: false, reason: "Taste Skill version must be reviewed 2.5.0 or 2.5.1" };
+        }
+        return { available: true, implementation: "consistency-" + version, version };
       } catch {
         return { available: false, reason: "Taste Skill root cannot be read" };
       }
@@ -298,6 +322,7 @@ export function createTasteSkillProvider({ skillRoot, runner = runProcess, nodeM
         "--rhythm-widths", WIDTHS.join(","),
         "--root", project, "--out", dirname(reportPath), "--profile", join(runDir, "chrome"),
       ];
+      if (probe.version === "2.5.1") args.push("--narrow", "320");
       if (pageKind) args.push("--page", pageKind);
       if (category) args.push("--category", category);
       if (primary) args.push("--primary", primary);
@@ -323,7 +348,7 @@ export function createTasteSkillProvider({ skillRoot, runner = runProcess, nodeM
           throw new Error("Browser stdout and on-disk report disagree");
         }
         return parseReport(report, {
-          exitCode: processResult.exitCode, route, page, project, runDir, trustedRun,
+          exitCode: processResult.exitCode, version: probe.version, route, page, project, runDir, trustedRun,
         });
       } catch (error) {
         return fail(ProviderStatus.ERROR,
