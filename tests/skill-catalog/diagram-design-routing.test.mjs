@@ -22,7 +22,7 @@ test('live skill catalog satisfies the diagram-design routing boundary', async (
   const result = JSON.parse(stdout);
   const byId = new Map(result.cases.map((row) => [row.id, row]));
 
-  for (const id of ['DG1', 'DG2', 'DG3']) {
+  for (const id of ['DG1', 'DG2', 'DG3', 'DG4', 'DG5']) {
     assert.equal(byId.get(id)?.actual_skill, 'diagram-design', `${id} must route to diagram-design`);
     assert.equal(byId.get(id)?.ambiguous, false, `${id} must not be ambiguous`);
   }
