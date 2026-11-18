@@ -269,7 +269,7 @@ export function createTasteSkillProvider({ skillRoot, runner = runProcess, nodeM
           return { available: false, reason: "Taste Skill 2.5.0/2.5.1 consistency.mjs is not installed" };
         }
         const version = readFileSync(manifest, "utf8")
-          .match(/\\btasteskill 2\\.5\\.(?:0|1)\\b/)?.[0].split(" ").at(-1);
+          .match(/\btasteskill 2\.5\.(?:0|1)\b/)?.[0].split(" ").at(-1);
         if (!version) {
           return { available: false, reason: "Taste Skill version must be reviewed 2.5.0 or 2.5.1" };
         }
