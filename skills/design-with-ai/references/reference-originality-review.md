@@ -15,7 +15,7 @@ This is a **read-only evidence and design review**, not a copyright judgment or 
 node skills/design-with-ai/scripts/reference-originality.mjs --candidate <local-build-or-component> --reference <authorized-local-reference> --json
 ```
 
-Add up to five explicit `--reference` paths. It is read-only, skips symlinks and common build dependency folders, bounds file count/size, and reports file paths and hashes rather than copying text into a published report. A detected exact match needs human interpretation: it could be a reused open-source component or legitimately licensed media. No match means **only** that the bounded exact detector found none.
+Add up to five explicit `--reference` paths. It is read-only, skips symlinks, zero-byte placeholders and common build dependency folders, bounds file count/size, and reports file paths and hashes rather than copying text into a published report. A detected exact match needs human interpretation: it could be a reused open-source component or legitimately licensed media. No match means **only** that the bounded exact detector found none.
 5. For a material red flag, pair exact current evidence with exact reference evidence, state observable overlap and difference, assign priority, and propose the smallest change that establishes a genuinely new identity while preserving product function. Recoloring copied logos, copy, imagery, or distinctive compositions is not sufficient.
 6. Report checked scope and unchecked categories. Do not claim full originality, legal compliance, cleared branding, or functional correctness. Treat unavailable history, frame sequences, and pixels as **not checked**, never as clean.
 
