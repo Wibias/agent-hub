@@ -7,6 +7,7 @@ on:
       - 'skills/design-with-ai/scripts/reference-originality.mjs'
       - 'skills/design-with-ai/tests/reference-evidence.test.mjs'
       - 'skills/design-with-ai/tests/reference-capture-browser-smoke.mjs'
+      - 'skills/design-with-ai/tests/evals/**'
       - 'skills/design-with-ai/references/settled-reference-capture.md'
       - 'skills/design-with-ai/references/reference-originality-review.md'
       - 'skills/design-with-ai/references/source-evidence.md'
@@ -20,6 +21,7 @@ on:
       - 'skills/design-with-ai/scripts/reference-originality.mjs'
       - 'skills/design-with-ai/tests/reference-evidence.test.mjs'
       - 'skills/design-with-ai/tests/reference-capture-browser-smoke.mjs'
+      - 'skills/design-with-ai/tests/evals/**'
       - 'skills/design-with-ai/references/settled-reference-capture.md'
       - 'skills/design-with-ai/references/reference-originality-review.md'
       - 'skills/design-with-ai/references/source-evidence.md'
@@ -73,7 +75,5 @@ jobs:
           npm install --prefix "$RUNNER_TEMP/dwa-reference-playwright" --no-save --no-audit --no-fund --ignore-scripts --package-lock=false playwright-core@1.64.1
           node -e "const p=require(process.env.RUNNER_TEMP+'/dwa-reference-playwright/node_modules/playwright-core/package.json'); if(p.version !== '1.64.1') process.exit(1)"
           echo "DWA_PLAYWRIGHT_ROOT=$RUNNER_TEMP/dwa-reference-playwright/node_modules/playwright-core" >> "$GITHUB_ENV"
-      - name: Capture actual Chrome viewports and a public long reference page
-        env:
-          DWA_PUBLIC_REFERENCE_URL: https://design-system.service.gov.uk/components/accordion/
+      - name: Capture actual Chrome viewports after lazy-load and reject gaps
         run: node skills/design-with-ai/tests/reference-capture-browser-smoke.mjs
