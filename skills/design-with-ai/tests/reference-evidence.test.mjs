@@ -167,3 +167,29 @@ test('originality check rejects missing, empty, oversized and symlinked scopes',
     assert.equal(execute().status, 0);
   });
 });
+
+test('empty placeholder files cannot trigger false-positive exact-copy review', () => {
+  withDir(dir => {
+    const candidate = path.join(dir, 'candidate');
+    const reference = path.join(dir, 'reference');
+    mkdirSync(candidate);
+    mkdirSync(reference);
+    writeFileSync(path.join(candidate, 'empty.txt'), '');
+    writeFileSync(path.join(reference, 'empty.txt'), '');
+    let cli = spawnSync(process.execPath, [
+      originalityCli, '--candidate', candidate, '--reference', reference,
+    ], { encoding: 'utf8' });
+    assert.equal(cli.status, 2, 'An all-empty scan must not claim valid coverage');
+    writeFileSync(path.join(candidate, 'actual.txt'), 'This is candidate content');
+    writeFileSync(path.join(reference, 'actual.txt'), 'This is different reference content');
+    cli = spawnSync(process.execPath, [
+      originalityCli, '--candidate', candidate, '--reference', reference,
+    ], { encoding: 'utf8' });
+    assert.equal(cli.status, 0, cli.stderr);
+    const result = JSON.parse(cli.stdout);
+    assert.equal(result.status, 'NO_EXACT_OVERLAPS_DETECTED');
+    assert.equal(result.checkedCandidateFiles, 1);
+    assert.equal(result.checkedReferenceFiles, 1);
+    assert.equal(result.signals.length, 0);
+  });
+});
