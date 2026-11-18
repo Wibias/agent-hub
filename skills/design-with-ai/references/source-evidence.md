@@ -64,6 +64,12 @@ visual-domain sample until the line is present.
 | Is body typography sound? | Butterick's Practical Typography plus rendered content | Joint review of font, size, line-height, measure, hierarchy, and optical fit | A universal font blacklist |
 | Which visual defaults should be challenged? | Anthropic frontend-design/Cookbook; SmoothUI; Developers Digest; local `anti-slop-gates.md` and `taste-workflow.md` | Prompt dimensions, contextual refusals, and closed-loop critique | Proof that a pattern is always bad |
 
+## Conditional reference capture and originality evidence
+
+For a material reference page that is long, lazy-loaded, scroll-animated, or incomplete in a one-shot full-page screenshot, load `settled-reference-capture.md` before declaring that the visual evidence represents the whole page. Use the existing `playwright` browser owner for settled viewport-by-viewport captures. The optional `scripts/reference-capture-check.mjs` only checks declared coverage geometry and file headers; it cannot prove actual rendered content, source identity, or visual completeness. Missing browser access is a coverage limitation, not a pass.
+
+When the brief explicitly involves recreating/inspiring from a named reference and a material question concerns copied brand identity, text, assets, or distinctive compositions, load `reference-originality-review.md`. Inspect both current render and actual reference. Use the bounded `scripts/reference-originality.mjs` only for local exact-byte and long-text overlap leads; a clean exact scan does not establish originality, legal compliance, or clearance of visual/motion similarities. Do not add a global visual blacklist or create a new approval owner.
+
 ## Reference-access contract
 
 Before claiming a source was used, record `AVAILABLE`, `PAYWALLED`,

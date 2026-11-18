@@ -8,7 +8,7 @@ are maintained here.
 |---|---|---|---|
 | LexnLin design-with-AI thread | accessed 2026-07-12; URL recorded historically | Methods 1-3 and component-by-component framing | public thread, historical local note |
 | emilkowalski/skills | commit `0f2e23b32bb1265e84cff8d3e75785fec953fb1b` reviewed 2026-11-14 (previous `4061b67b8d976a186aca118594f54b638c5f718a` reviewed 2026-11-12; original choreograph lineage `c8a79627b59d72d764d6ab6f2c87c09a48169833`) | motion craft, removal-safety, runtime motion advice and selectively adapted `choreograph` coordination guidance; no new skill route and no wholesale recipe import; `break-ui` remains owned by `fortify worst-case` | MIT |
-| MengTo/Skills | commit `321c769739b823de5eb94eb3a52aa1974fe783a2` reviewed 2026-09-04 | design-first prompting and runtime animation profiling | MIT |
+| MengTo/skills | original commit `321c769739b823de5eb94eb3a52aa1974fe783a2` reviewed 2026-09-04; scoped new review `3cc93458c4949c39a04e938ea7892a1d6d3d40bf` on 2026-11-18 | prior design-first prompting and animation profiling; additive reference capture completeness and originality-risk evidence procedures. Only local methods and optional built-in Node checkers adapted; no code, screenshot corpus, or browser runtime vendored | MIT |
 | ibelick/ui-skills `baseline-ui` | local adapted snapshot | baseline UI floor | MIT |
 | jakubkrehel/make-interfaces-feel-better | local adapted snapshot | micro craft | MIT |
 | nextlevelbuilder/ui-ux-pro-max-skill | commit `28b3b8dee8c976df4fa3e94aed4e092ad43fcb03` reviewed 2026-10-28 | bounded guidance retrieval, chart/native interaction guidance, master/override persistence, provenance/freshness and relevance-regression concepts | MIT; selectively adapted, no wholesale corpus import |
@@ -36,6 +36,18 @@ memory store. Corrected motion assumptions are adopted selectively:
 `transform` and `opacity` are the portable compositor-friendly properties.
 `filter`, `clip-path`, and background color need actual browser evidence.
 Other framework-specific examples and selectors are not blindly copied.
+
+## 2026-11-18 MengTo scoped reference-evidence review
+
+Reviewed `agent-skills/codex/stitched-full-page-capture/SKILL.md` and
+`agent-skills/codex/audit-reference-originality/SKILL.md` from commit
+`3cc93458c4949c39a04e938ea7892a1d6d3d40bf`. Verdict: EXTEND the
+existing `design-with-ai` source-evidence workflow, with `playwright`
+retaining browser control. Add conditional procedures and read-only local
+geometry and exact-overlap diagnostics. These do not certify screenshot
+pixels, automatically stitch images, judge legal originality, or replace the
+current user-directed design acceptance. No upstream browser code or assets
+were copied, and no new shared skill or global gate was created.
 
 ## Consolidation history
 
