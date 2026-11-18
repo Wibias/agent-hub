@@ -136,7 +136,7 @@ try {
   // normalized findings can miss a normalization bug that drops both.
   const upstream = readArtifact(taste.provenance.report);
   const skillManifest = readFileSync(join(skillRoot, "SKILL.md"), "utf8");
-  const version = skillManifest.match(/\\btasteskill 2\\.5\\.(?:0|1)\\b/)?.[0].split(" ").at(-1);
+  const version = skillManifest.match(/\btasteskill 2\.5\.(?:0|1)\b/)?.[0].split(" ").at(-1);
   assert.ok(version === "2.5.0" || version === "2.5.1", "Only reviewed versions can run");
   assert.equal(taste.provenance.version, version);
   if (version === "2.5.1") {
