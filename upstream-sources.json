@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "reviewedAt": "2026-11-14",
+  "reviewedAt": "2026-11-18",
   "sources": [
     {
       "id": "addy",
@@ -29,7 +29,7 @@
       "reviewedCommit": "bb68f2365eceafa0cb2d253112f675acf5f144cc",
       "scope": "pstack/",
       "decision": "current",
-      "localPin": "c742dd61706fbacc1b95f1a20b7b988cf096ce6c"
+      "localPin": "93b916d4a1e806507e22f4716b352fa91f2b227e"
     },
     {
       "id": "impeccable",
