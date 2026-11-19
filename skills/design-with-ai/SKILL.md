@@ -2,7 +2,7 @@
 name: design-with-ai
 description: >-
   Canonical default owner for visible product-UI design, audit, polish,
-  restyling, redesign, new surfaces, product-UI data visualization, native/mobile
+  restyling, redesign, new surfaces, design-to-code handoff specs, product-UI data visualization, native/mobile
   UI, motion review, and Penpot MCP product-design work including design-system
   audits, visual-token cleanup, screen design, components, variants, palette,
   component style, spacing, and typography. Use for ordinary "make this look
@@ -36,7 +36,7 @@ Then load only the selected workflow bundle.
 | `restyle-existing [quick|standard|deep] <target>` | standard | `references/existing-ui-workflows.md`, `references/taste-workflow.md` |
 | `redesign-existing [standard|deep] <target>` | deep | `references/existing-ui-workflows.md`, `references/taste-workflow.md` |
 | `build-product-surface [standard|deep] <surface>` | deep | `references/new-product-surface.md`, `references/taste-workflow.md` |
-| `design-spec <target>` | standard | `references/design-first-prompting.md` |
+| `design-spec [handoff] <target>` | standard | `references/design-first-prompting.md`; in handoff mode also `references/developer-handoff.md` |
 | `motion-build <target-or-description>` | standard | `references/motion-build.md`, `references/standards.md` |
 | `motion-opportunities [quick|standard|deep] <target>` | standard | `references/motion-workflows.md`, `references/opportunities.md` |
 | `motion-audit [quick|standard|deep] <scope>` | standard | `references/motion-workflows.md`, `references/standards.md`, `references/audit-playbook.md` |
@@ -83,7 +83,10 @@ For `audit-surface` standard/deep, also load
 route evidence or making an accessibility claim.
 
 `design-spec` is a bounded spec/prompt route after direction is known; it does
-not automatically reopen the full design workflow.
+not automatically reopen the full design workflow. Only explicit `design-spec handoff <target>`
+or an implementation-ready UI handoff request loads `references/developer-handoff.md`.
+Do not confuse a developer design handoff with `skills/handoff`, which preserves
+session context for another agent rather than specifying UI implementation.
 
 ## Motion-build load order
 
@@ -210,6 +213,7 @@ host-specific guide for ordinary cross-host design work.
 - `references/baseline-ui.md`: baseline interaction/layout/typography floor plus task-first operator acceptance
 - `references/micro-craft.md`: optical and component-level finish
 - `references/design-first-prompting.md`: locked UI generation/spec prompt
+- `references/developer-handoff.md`: evidence-graded, implementation-ready UI spec when handoff is requested
 - `references/motion-build.md`: motion construction gate and implementation sequence
 - `references/motion-workflows.md`: motion opportunities/audit/review routing
 - `references/motion-performance.md`: live animation profiling/repair
@@ -245,6 +249,7 @@ host-specific guide for ordinary cross-host design work.
 - references/baseline-ui.md -- when to read: baseline quality pass; also applicable read-only operator-surface audit for task-first acceptance
 - references/micro-craft.md -- when to read: craft quality pass
 - references/design-first-prompting.md -- when to read: design-spec
+- references/developer-handoff.md -- when to read: explicit design-spec handoff or a developer implementation handoff for a resolved UI design
 - references/motion-build.md -- when to read: motion-build
 - references/motion-workflows.md -- when to read: motion-opportunities; motion-audit; motion-review
 - references/motion-performance.md -- when to read: motion-optimize
