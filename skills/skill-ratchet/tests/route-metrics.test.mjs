@@ -79,3 +79,17 @@ test('duplicate, unknown and ungrounded rows are rejected', () => {
     });
   }
 });
+
+test('mixed models are reported as separate cohorts, never one accuracy score', () => {
+  const first = observations();
+  const second = observations().map(row => ({ ...row, run_id: 'second-run', model: 'another-synthetic-cli-test' }));
+  second.find(row => row.case_id === 'D1').selected_skills = [];
+  withInput([...first, ...second], result => {
+    assert.equal(result.status, 0, result.stderr);
+    const out = JSON.parse(result.stdout);
+    assert.equal(out.complete_runs, 2);
+    assert.equal(out.cohorts.length, 2);
+    assert.equal(out.summary, null);
+    assert.ok(out.cohorts.some(cohort => cohort.metrics.fn === 1));
+  });
+});
