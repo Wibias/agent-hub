@@ -4,3 +4,6 @@ reference-graph/evidence/*.json text eol=lf
 # Keep qualification digests stable across Windows/Linux; binary files stay binary.
 skills/design-with-ai/** text=auto eol=lf
 skills/prototype/** text=auto eol=lf
+skills/skill-ratchet/** text=auto eol=lf
+skills/test-quality/** text=auto eol=lf
+skills/deprecation-and-migration/** text=auto eol=lf

@@ -1,0 +1,55 @@
+name: AgentHub P2 P3 skill improvements
+
+on:
+  pull_request:
+    paths:
+      - '.gitattributes'
+      - 'skills/design-with-ai/SKILL.md'
+      - 'skills/design-with-ai/references/ux-copy-research-evidence.md'
+      - 'skills/design-with-ai/tests/evals/**'
+      - 'skills/skill-ratchet/**'
+      - 'skills/test-quality/**'
+      - 'skills/deprecation-and-migration/**'
+      - '.github/workflows/verify-agenthub-p2-p3-skills.yml'
+  push:
+    branches: [main]
+    paths:
+      - '.gitattributes'
+      - 'skills/design-with-ai/SKILL.md'
+      - 'skills/design-with-ai/references/ux-copy-research-evidence.md'
+      - 'skills/design-with-ai/tests/evals/**'
+      - 'skills/skill-ratchet/**'
+      - 'skills/test-quality/**'
+      - 'skills/deprecation-and-migration/**'
+      - '.github/workflows/verify-agenthub-p2-p3-skills.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: focused (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.18.0
+      - name: Check optional route metrics script syntax
+        run: node --check skills/skill-ratchet/scripts/route-metrics.mjs
+      - name: Verify routing metrics parser and acceptance boundaries
+        run: node --test skills/skill-ratchet/tests/route-metrics.test.mjs
+      - name: Structural Skill Ratchet validation (not independent model reviews)
+        shell: bash
+        run: |
+          set -euo pipefail
+          for skill in design-with-ai skill-ratchet test-quality deprecation-and-migration; do
+            node skills/skill-ratchet/scripts/skill-ratchet.mjs validate --skill-root "skills/$skill" --json
+          done

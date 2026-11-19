@@ -154,6 +154,10 @@ distinct concrete models, the same full Git revision, and the exact
 Skill Ratchet scripts remain deterministic. They never launch Codex, another
 agent, a judge model, or any model API.
 
+## Optional routing-performance measurement
+
+When asked to quantify actual activation accuracy, load `references/route-performance.md` and run the optional deterministic `scripts/route-metrics.mjs` on externally captured real-model routing observations. Do not run model trials as a prerequisite to ordinary qualification, treat missing traces as pass, or turn descriptive metrics into a release approval. The mandatory two-model review and `validate --run-evidence` remain unchanged.
+
 ## 5. Validate
 
 Run the structural gate:
@@ -209,6 +213,9 @@ outside the scripts. Paths passed on the command line must be absolute except
 
 ## References
 <!-- eval:references -->
+- references/route-performance.md -- when to read: explicitly requested empirical skill routing accuracy or missed/false activations from actual model traces
+- scripts/route-metrics.mjs -- when to read: requested optional metrics over externally supplied observed runs; never automatic qualification
+- tests/route-metrics.test.mjs -- when to read: deterministic checker regression validation
 - references/capability-preflight.md -- when to read: inventory roots, ranking, deduplication, or classification policy
 - references/extended-checklists.md -- when to read: publication readiness or third-party security review
 - references/evaluation-contract.md -- when to read: every non-trivial create, edit, merge, audit, or release

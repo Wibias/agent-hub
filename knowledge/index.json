@@ -328,7 +328,7 @@
       ],
       "status": "active",
       "canonicalId": null,
-      "contentHash": "d4e284ffefff6372c04fdb0d0a8978370c262ba10f03c6ce4eb2b4b1d817a2c6"
+      "contentHash": "2355c4a3759233ecfe1ebfdf703367cf4f861fc235afe0df9a807633d87fdd4d"
     },
     {
       "id": "agents/design-with-ai",
@@ -355,7 +355,7 @@
       ],
       "status": "active",
       "canonicalId": null,
-      "contentHash": "189e80f1d2e2ddfeddb0dce815905ae91b4a194b71258497953ddfdb291747c2"
+      "contentHash": "9877ce21afeb3f05bd5bdd00747953844f78152c551facfed05125e311aaa809"
     },
     {
       "id": "agents/diagnose",
@@ -1098,7 +1098,7 @@
       ],
       "status": "active",
       "canonicalId": null,
-      "contentHash": "acf04a152b540232bc63c32aa26400e7f3124e7d6ad2cea68ceea294db311157"
+      "contentHash": "7c420a30e309e16d1379ceed776605f79f6788aa55fc6b42d23c262eacab9cbb"
     },
     {
       "id": "agents/soul",
@@ -1218,7 +1218,7 @@
       ],
       "status": "active",
       "canonicalId": null,
-      "contentHash": "dff588385dcb052b4edcc114ee65e1833efdbf77bf65747004857b0fcefede2d"
+      "contentHash": "4042fe8db921a7e36aae2f3eae319e049176e506bc3530c5b2d34dd3d16948f2"
     },
     {
       "id": "agents/understand",
