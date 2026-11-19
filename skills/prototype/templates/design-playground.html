@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Design Playground | Illustrative Starter</title>
+  <style>
+    :root { color-scheme: dark; font: 16px/1.5 system-ui, sans-serif; }
+    * { box-sizing: border-box; }
+    body { margin: 0; color: #e9edf3; background: #11151c; }
+    button, input, select, textarea { font: inherit; }
+    button { cursor: pointer; }
+    :focus-visible { outline: 3px solid #79baff; outline-offset: 3px; }
+    .skip { position: absolute; left: -9999px; }
+    .skip:focus { left: 12px; top: 12px; z-index: 5; background: #fff; color: #111; padding: 8px; }
+    .shell { min-height: 100vh; display: grid; grid-template-columns: minmax(280px, 330px) minmax(0, 1fr); }
+    .controls { padding: 26px 23px; border-right: 1px solid #394150; background: #1a2029; }
+    .controls h1 { font-size: 1.35rem; line-height: 1.2; margin: 0 0 10px; }
+    .subtext { color: #b9c4d4; font-size: .9rem; margin: 0 0 22px; }
+    fieldset { border: 0; padding: 0; margin: 0 0 20px; min-width: 0; }
+    legend { font-weight: 700; margin-bottom: 9px; }
+    .presets { display: flex; flex-wrap: wrap; gap: 7px; }
+    .presets button, #reset { color: #f5f7fb; border: 1px solid #687488; background: #283140; border-radius: 7px; padding: 8px 11px; }
+    .presets button[aria-pressed="true"] { border-color: #a4d8ff; background: #244661; }
+    .control { display: grid; gap: 6px; margin: 0 0 18px; }
+    .control label { display: flex; justify-content: space-between; gap: 12px; font-weight: 600; }
+    output { color: #d0d9e6; font-variant-numeric: tabular-nums; font-weight: 400; }
+    input[type="range"] { width: 100%; accent-color: #8dc7ff; min-height: 28px; }
+    select { width: 100%; padding: 9px; color: #fff; background: #283140; border: 1px solid #8d9aac; border-radius: 6px; }
+    #reset { margin-top: 5px; }
+    .workspace { min-width: 0; display: grid; align-content: start; gap: 24px; padding: 30px clamp(16px, 4vw, 56px); }
+    .workspace h2 { margin: 0; font-size: 1.22rem; }
+    .preview-frame { padding: clamp(18px, 4vw, 45px); border-radius: 13px; background: #e9edf3; }
+    .preview-card {
+      --demo-space: 20px; --demo-radius: 12px; --demo-font: 16px; --demo-accent: #2563eb;
+      max-width: 680px; padding: var(--demo-space); border-radius: var(--demo-radius);
+      font-size: var(--demo-font); color: #182435; background: #fff; border: 1px solid #aeb9c6;
+      box-shadow: 0 12px 28px rgba(13, 25, 42, .1);
+    }
+    .preview-card h3 { margin: 0 0 .5em; font-size: 1.45em; line-height: 1.25; }
+    .preview-card p { margin: 0 0 1.2em; }
+    .preview-card button {
+      background: var(--demo-accent); color: #fff; border: 0;
+      padding: .65em 1em; border-radius: max(3px, calc(var(--demo-radius) / 2));
+    }
+    #more { margin-top: 1em; padding: 1em; background: #edf2f7; border-radius: 6px; }
+    [hidden] { display: none !important; }
+    .output-area { border: 1px solid #4d586a; border-radius: 12px; padding: 20px; background: #1d2530; }
+    .output-area h2 { margin-bottom: 7px; }
+    .output-area p { margin: 0 0 12px; color: #c0cbda; font-size: .88rem; }
+    textarea { width: 100%; min-height: 140px; resize: vertical; border: 1px solid #8999ad; color: #f5f7fb; background: #10161f; border-radius: 7px; padding: 12px; }
+    #copy { margin-top: 10px; padding: 9px 14px; color: #102236; background: #a4d8ff; border: 0; border-radius: 7px; font-weight: 700; }
+    #copy-status { min-height: 1.5em; margin: 8px 0 0; }
+    @media (max-width: 760px) {
+      .shell { grid-template-columns: minmax(0, 1fr); }
+      .controls { border-right: 0; border-bottom: 1px solid #394150; }
+      .workspace { padding: 18px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; animation: none !important; }
+    }
+  </style>
+</head>
+<body>
+  <a class="skip" href="#preview-title">Skip to preview</a>
+  <main class="shell">
+    <aside class="controls" aria-labelledby="controls-title">
+      <h1 id="controls-title">Design Playground</h1>
+      <p class="subtext">Illustrative starter, not a captured product UI. Replace the sample with the authorized component and measured baseline before making a product recommendation.</p>
+      <fieldset>
+        <legend>Exploration presets</legend>
+        <div class="presets">
+          <button type="button" data-preset="compact" aria-pressed="false">Compact</button>
+          <button type="button" data-preset="balanced" aria-pressed="true">Balanced</button>
+          <button type="button" data-preset="expressive" aria-pressed="false">Expressive</button>
+        </div>
+      </fieldset>
+      <div class="control">
+        <label for="spacing">Card spacing <output id="spacing-value" for="spacing">20px</output></label>
+        <input id="spacing" type="range" min="8" max="36" step="2" value="20">
+      </div>
+      <div class="control">
+        <label for="radius">Corner radius <output id="radius-value" for="radius">12px</output></label>
+        <input id="radius" type="range" min="0" max="24" step="2" value="12">
+      </div>
+      <div class="control">
+        <label for="font-size">Base type size <output id="font-size-value" for="font-size">16px</output></label>
+        <input id="font-size" type="range" min="14" max="20" step="1" value="16">
+      </div>
+      <div class="control">
+        <label for="accent">Illustrative accent</label>
+        <select id="accent">
+          <option value="#2563eb">Blue</option>
+          <option value="#0f766e">Teal</option>
+          <option value="#7c3aed">Violet</option>
+        </select>
+      </div>
+      <button type="button" id="reset">Reset to baseline</button>
+    </aside>
+    <div class="workspace">
+      <section aria-labelledby="preview-title">
+        <h2 id="preview-title">Live preview</h2>
+        <p class="subtext">Demo content. Controls change the card immediately; they do not modify your real app.</p>
+        <div class="preview-frame">
+          <article class="preview-card" id="preview-card">
+            <h3>Example task overview</h3>
+            <p>This illustrative card shows spacing, typography and a primary action in context.</p>
+            <button type="button" id="details" aria-expanded="false" aria-controls="more">Show details</button>
+            <div id="more" hidden>Example details only. The real component must preserve its own data and state behavior.</div>
+          </article>
+        </div>
+      </section>
+      <section class="output-area" aria-labelledby="output-title">
+        <h2 id="output-title">Change request</h2>
+        <p>Only differences from this illustrative baseline are included. Review before implementation.</p>
+        <label for="change-request">Read-only design change request</label>
+        <textarea id="change-request" readonly rows="5"></textarea>
+        <button type="button" id="copy">Copy change request</button>
+        <p role="status" id="copy-status" aria-live="polite"></p>
+      </section>
+    </div>
+  </main>
+  <script>
+    (() => {
+      'use strict';
+      const baseline = Object.freeze({ spacing: 20, radius: 12, fontSize: 16, accent: '#2563eb' });
+      const presets = Object.freeze({
+        compact: { spacing: 12, radius: 6, fontSize: 14, accent: '#2563eb' },
+        balanced: { ...baseline },
+        expressive: { spacing: 28, radius: 20, fontSize: 18, accent: '#0f766e' }
+      });
+      const fields = [
+        { id: 'spacing', key: 'spacing', numeric: true, unit: 'px' },
+        { id: 'radius', key: 'radius', numeric: true, unit: 'px' },
+        { id: 'font-size', key: 'fontSize', numeric: true, unit: 'px' },
+        { id: 'accent', key: 'accent', numeric: false, unit: '' }
+      ];
+      const preview = document.getElementById('preview-card');
+      const proposal = document.getElementById('change-request');
+      const copyStatus = document.getElementById('copy-status');
+      let state = { ...baseline };
+
+      function matches(a, b) {
+        return Object.keys(b).every(key => a[key] === b[key]);
+      }
+
+      function update() {
+        preview.style.setProperty('--demo-space', state.spacing + 'px');
+        preview.style.setProperty('--demo-radius', state.radius + 'px');
+        preview.style.setProperty('--demo-font', state.fontSize + 'px');
+        preview.style.setProperty('--demo-accent', state.accent);
+        for (const field of fields) {
+          const input = document.getElementById(field.id);
+          input.value = String(state[field.key]);
+          const output = document.getElementById(field.id + '-value');
+          if (output) output.textContent = state[field.key] + field.unit;
+        }
+        for (const button of document.querySelectorAll('[data-preset]')) {
+          button.setAttribute('aria-pressed', String(matches(state, presets[button.dataset.preset])));
+        }
+        const changes = [];
+        if (state.spacing !== baseline.spacing) changes.push('card spacing ' + state.spacing + 'px');
+        if (state.radius !== baseline.radius) changes.push('corner radius ' + state.radius + 'px');
+        if (state.fontSize !== baseline.fontSize) changes.push('base type size ' + state.fontSize + 'px');
+        if (state.accent !== baseline.accent) changes.push('demo accent color ' + state.accent);
+        const intro = 'For the selected UI component, preserve the current product copy, behaviors, approved design tokens and accessibility constraints. ';
+        proposal.value = intro + (changes.length
+          ? 'Proposed changes relative to the illustrative baseline: ' + changes.join('; ') + '.'
+          : 'No changes selected relative to the illustrative baseline.')
+          + ' Confirm actual project tokens and constraints before implementation. This exploration is not an implementation approval.';
+        copyStatus.textContent = '';
+      }
+
+      for (const field of fields) {
+        document.getElementById(field.id).addEventListener('input', event => {
+          state = { ...state, [field.key]: field.numeric ? Number(event.target.value) : event.target.value };
+          update();
+        });
+      }
+      for (const button of document.querySelectorAll('[data-preset]')) {
+        button.addEventListener('click', () => {
+          state = { ...presets[button.dataset.preset] };
+          update();
+        });
+      }
+      document.getElementById('reset').addEventListener('click', () => {
+        state = { ...baseline };
+        update();
+      });
+      const details = document.getElementById('details');
+      const more = document.getElementById('more');
+      details.addEventListener('click', () => {
+        const open = details.getAttribute('aria-expanded') !== 'true';
+        details.setAttribute('aria-expanded', String(open));
+        details.textContent = open ? 'Hide details' : 'Show details';
+        more.hidden = !open;
+      });
+      document.getElementById('copy').addEventListener('click', async () => {
+        try {
+          if (!navigator.clipboard || !navigator.clipboard.writeText) throw new Error('Clipboard unavailable');
+          await navigator.clipboard.writeText(proposal.value);
+          copyStatus.textContent = 'Change request copied.';
+        } catch {
+          proposal.focus();
+          proposal.select();
+          copyStatus.textContent = 'Clipboard unavailable. Copy the selected text manually.';
+        }
+      });
+      update();
+    })();
+  </script>
+</body>
+</html>

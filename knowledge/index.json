@@ -337,7 +337,7 @@
       "harness": "agents",
       "scope": "global",
       "name": "design-with-ai",
-      "description": "Canonical default owner for visible product-UI design, audit, polish, restyling, redesign, new surfaces, product-UI data visualization, native/mobile UI, motion review, and Penpot MCP product-design work including design-system audits, visual-token cleanup, screen design, components, variants, palette, component style, spacing, and typography. Use for ordinary \"make this look better\" work. Not for backend/server infrastructure, authentication or protocol deployment, general code review, non-UI chart/report generation, module/API interface design (route those to codebase-design), or copy-only edits. Explicit Impeccable requests stay with Impeccable.",
+      "description": "Canonical default owner for visible product-UI design, audit, polish, restyling, redesign, new surfaces, design-to-code handoff specs, product-UI data visualization, native/mobile UI, motion review, and Penpot MCP product-design work including design-system audits, visual-token cleanup, screen design, components, variants, palette, component style, spacing, and typography. Use for ordinary \"make this look better\" work. Not for backend/server infrastructure, authentication or protocol deployment, general code review, non-UI chart/report generation, module/API interface design (route those to codebase-design), or copy-only edits. Explicit Impeccable requests stay with Impeccable.",
       "tags": [
         "design",
         "with",
@@ -350,12 +350,12 @@
         "restyling",
         "redesign",
         "new surfaces",
-        "product-UI data visualization",
-        "native/mobile UI"
+        "design-to-code handoff specs",
+        "product-UI data visualization"
       ],
       "status": "active",
       "canonicalId": null,
-      "contentHash": "8a35f02d6a3c818e38a9d0580033aba9610c437590a32e26815f92cd15e05705"
+      "contentHash": "9877ce21afeb3f05bd5bdd00747953844f78152c551facfed05125e311aaa809"
     },
     {
       "id": "agents/diagnose",
@@ -809,23 +809,23 @@
       "harness": "agents",
       "scope": "global",
       "name": "prototype",
-      "description": "Build a throwaway prototype to flesh out a design before committing to it. Routes between two branches — a runnable terminal app for state/business-logic questions, or several radically different UI variations toggleable from one route. Use when the user wants to prototype, sanity-check a data model or state machine, mock up a UI, explore design options, says \"prototype this\", \"let me play with it\", or \"try a few designs\", or when a technical fork can be settled cheaply and safely by observing behavior, output, timing, rendering, or performance instead of asking the user.",
+      "description": "Build a throwaway prototype to flesh out a design before committing to it. Routes between two branches — a runnable terminal app for state/business-logic questions, or UI exploration through structurally distinct toggleable variants or an interactive design playground. Use when the user wants to prototype, sanity-check a data model or state machine, mock up a UI, explore design options, says \"prototype this\", \"let me play with it\", \"adjust the spacing live\", or \"try a few designs\", or when a technical fork can be settled cheaply and safely by observing behavior, output, timing, rendering, or performance instead of asking the user.",
       "tags": [
         "prototype"
       ],
       "triggers": [
-        "or several radically different UI variations toggleable from one route.",
+        "or UI exploration through structurally distinct toggleable variants or an interactive design playground.",
         "the user wants to prototype",
         "sanity-check a data model or state machine",
         "mock up a UI",
         "explore design options",
         "says \"prototype this\"",
         "\"let me play with it\"",
-        "or \"try a few designs\""
+        "\"adjust the spacing live\""
       ],
       "status": "active",
       "canonicalId": null,
-      "contentHash": "74da2b88b0266db55437988f795338f57f69512546ef4a24504eddad9e2270cc"
+      "contentHash": "c6248a32727d93ad4d64710009c63f3bc408666d0cdc46d4fcac9a7906d435fc"
     },
     {
       "id": "agents/quality-constraints",
