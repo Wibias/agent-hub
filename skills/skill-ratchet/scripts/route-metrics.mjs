@@ -79,7 +79,6 @@ function summarize(skillRoot, observations) {
     run.rows.set(id, { chosen: row.selected_skills.includes(skill), evidence_ref: evidenceRef });
   }
   const output = [];
-  const aggregate = { tp: 0, fp: 0, tn: 0, fn: 0 };
   for (const [runId, run] of [...runs].sort(([a], [b]) => a.localeCompare(b))) {
     const counts = { tp: 0, fp: 0, tn: 0, fn: 0 };
     const misses = [], falseTriggers = [], missingCases = [];
@@ -92,7 +91,6 @@ function summarize(skillRoot, observations) {
       else counts.tn++;
     }
     const complete = missingCases.length === 0;
-    if (complete) for (const key of Object.keys(aggregate)) aggregate[key] += counts[key];
     output.push({
       run_id: runId, model: run.model, revision: run.revision, status: complete ? 'COMPLETE' : 'INCOMPLETE',
       observed_cases: run.rows.size, expected_cases: byId.size, missing_cases: missingCases,
@@ -101,10 +99,20 @@ function summarize(skillRoot, observations) {
     });
   }
   const completeRuns = output.filter(run => run.status === 'COMPLETE').length;
+  const cohorts = new Map();
+  for (const run of output.filter(item => item.status === 'COMPLETE')) {
+    const key = JSON.stringify([run.model, run.revision]);
+    if (!cohorts.has(key)) cohorts.set(key, { model: run.model, revision: run.revision, runs: 0, counts: { tp: 0, fp: 0, tn: 0, fn: 0 } });
+    const cohort = cohorts.get(key);
+    cohort.runs++;
+    for (const countKey of Object.keys(cohort.counts)) cohort.counts[countKey] += run.metrics[countKey];
+  }
+  const cohortSummaries = [...cohorts.values()].map(cohort => ({ model: cohort.model, revision: cohort.revision, complete_runs: cohort.runs, metrics: metrics(cohort.counts) }));
   return {
     status: completeRuns === 0 ? 'NO_COMPLETE_RUNS' : completeRuns === output.length ? 'DESCRIPTIVE_ONLY' : 'INCOMPLETE_RUNS_EXCLUDED',
     skill, canonical_cases: byId.size, run_count: output.length, complete_runs: completeRuns,
-    summary: completeRuns ? metrics(aggregate) : null, runs: output,
+    summary: cohortSummaries.length === 1 ? cohortSummaries[0].metrics : null,
+    cohorts: cohortSummaries, runs: output,
     evidence_boundary: 'User-provided traces are not attested. Metrics describe supplied runs only. Not an independent model review, Skill Ratchet qualification, or release pass.',
   };
 }
