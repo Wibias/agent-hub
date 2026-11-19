@@ -113,6 +113,7 @@ concrete target evidence or explicit user intent:
 - actual native/mobile target (SwiftUI, Compose, React Native, Flutter, etc.) or platform-specific safe-area, text-scaling, native gesture, or system-control behavior -> `references/native-mobile.md`; query `references/design-guidance.md` only for a specific unresolved outcome;
 - React Native/Expo motion implementation/review -> `references/react-native-motion.md`; exact package/API claims remain current-source questions rather than frozen skill truth;
 - direct drag/swipe/throw/reorder/sheet manipulation -> `references/direct-manipulation.md`;
+- observed UI labels, error/empty/loading messages, permission/recovery copy or supplied user-research findings that materially affect the resolved interface -> `references/ux-copy-research-evidence.md`; this is not a general copywriting or standalone research skill;
 - long-token/chip/focus/drag/interruption edge case not already resolved by project primitives -> `references/design-guidance.md`;
 - concrete hierarchy, grouping, figure/ground, or visual-salience defect that remains unresolved after inspecting the target -> `references/perceptual-hierarchy.md`; it is a diagnostic, not evidence of usability;
 - explicit reusable multi-surface design-system/design-contract request -> `references/durable-design-contract.md`.
@@ -194,6 +195,7 @@ host-specific guide for ordinary cross-host design work.
 - `references/reference-library.md`: curated reference reuse
 - `references/penpot-integration.md`: Penpot MCP target/session, read/write, authority, capability, and secret-handling adapter
 - `references/design-guidance.md`: bounded deterministic heuristic retrieval
+- `references/ux-copy-research-evidence.md`: conditional, source-linked UX microcopy and user-feedback synthesis for product UI
 - `references/perceptual-hierarchy.md`: grouping, figure/ground, salience, and blur/thumbnail hierarchy diagnostics
 - `references/data-visualization.md`: chart and analytical visualization decisions inside product UI
 - `references/mobile-web.md`: browser/PWA-on-phone platform behavior
@@ -229,6 +231,7 @@ host-specific guide for ordinary cross-host design work.
 - references/reference-library.md -- when to read: after source-evidence for standard/deep non-motion surface workflows
 - references/penpot-integration.md -- when to read: resolved target/source is a Penpot file, design system, or MCP session for product-design work
 - references/design-guidance.md -- when to read: unresolved chart/native/interaction/text-layout/accessibility guidance question
+- references/ux-copy-research-evidence.md -- when to read: actual UI copy defect or supplied user research that affects a resolved product interface
 - references/perceptual-hierarchy.md -- when to read: concrete hierarchy, grouping, figure/ground, or visual-salience question remains unresolved
 - references/data-visualization.md -- when to read: target contains charts or analytical visualizations
 - references/mobile-web.md -- when to read: browser/PWA target has material phone/tablet platform behavior
