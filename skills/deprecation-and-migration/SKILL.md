@@ -33,10 +33,11 @@ This skill owns the **engineering migration/removal lifecycle**: consumer invent
 3. **Choose advisory vs compulsory migration.** Advisory means the old path remains supported for now. Compulsory requires a concrete reason, deadline/removal condition, migration path, and support/tooling proportional to consumer cost.
 4. **Design a reversible migration sequence.** Load `references/migration-patterns.md`. Prefer additive/canary/adapter/dual-run approaches when risk or consumer count warrants them.
 5. **For database/schema change, load `references/database-expand-contract.md`.** Additive first, backfill separately, switch reads/writes deliberately, destructive contract last.
-6. **Migrate incrementally.** For each consumer: identify touchpoints, switch, verify behavior/data, remove old references, and record blockers. Do not big-bang a change merely because the code diff is small.
-7. **Measure zero-use before deletion.** Static search alone is insufficient when runtime/external consumers may exist. Use logs/metrics/registry/dependency evidence appropriate to the system.
-8. **Remove the old system completely.** Code, compatibility adapters no longer needed, tests for retired behavior, config, docs and operational artifacts should disappear together unless history/provenance must remain.
-9. **Verify the successor and rollback/cutback path.** A migration is incomplete while a known consumer remains or destructive cleanup ran before the replacement proved stable.
+6. **For a behavior-preserving replacement, compare the old/new observable contract.** Load `references/behavior-parity-review.md` when an established execution path is being replaced and equivalence is a requirement. Check real outputs, errors, side effects, lifecycle and consumer compatibility where applicable; record approved behavior deltas separately. This is conditional, not a mandatory comparison for pure advisory deprecations or compatible dependency patches.
+7. **Migrate incrementally.** For each consumer: identify touchpoints, switch, verify behavior/data, remove old references, and record blockers. Do not big-bang a change merely because the code diff is small.
+8. **Measure zero-use before deletion.** Static search alone is insufficient when runtime/external consumers may exist. Use logs/metrics/registry/dependency evidence appropriate to the system.
+9. **Remove the old system completely.** Code, compatibility adapters no longer needed, tests for retired behavior, config, docs and operational artifacts should disappear together unless history/provenance must remain.
+10. **Verify the successor and rollback/cutback path.** A migration is incomplete while a known consumer remains or destructive cleanup ran before the replacement proved stable.
 
 ## Dependency updates
 
@@ -58,6 +59,7 @@ major upgrades or changed runtime behavior require explicit consumer review.
 <!-- eval:references -->
 - references/dependency-updates.md - measured, pinned, incremental dependency upgrades and rollback evidence
 - references/migration-patterns.md - strangler, adapter, flag/canary, dual-run and consumer sequencing
+- references/behavior-parity-review.md - when to read: behavior-preserving replacement or rewrite risks observable contract drift
 - references/database-expand-contract.md - safe database/schema expand/backfill/contract lifecycle
 - tests/evals/cases.jsonl - discovery and adversarial qualification cases
 - tests/evals/regression-cases.jsonl - retained skill regression cases
