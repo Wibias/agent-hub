@@ -119,7 +119,7 @@ function summarize(skillRoot, observations) {
 try {
   const opts = parseArgs(process.argv.slice(2));
   const result = summarize(path.resolve(opts['skill-root']), path.resolve(opts.observations));
-  const plain = 'Skill: ' + result.skill + '\nStatus: ' + result.status + '\nComplete runs: ' + result.complete_runs + '/' + result.run_count + '\n' + (result.summary ? 'Observed accuracy: ' + result.summary.accuracy : 'No complete observations to score') + '\n';
+  const plain = 'Skill: ' + result.skill + '\nStatus: ' + result.status + '\nComplete runs: ' + result.complete_runs + '/' + result.run_count + '\n' + (result.summary ? 'Observed accuracy: ' + result.summary.accuracy : result.complete_runs > 0 ? 'Multiple model/revision cohorts; inspect --json output' : 'No complete observations to score') + '\n';
   process.stdout.write(opts.json ? JSON.stringify(result, null, 2) + '\n' : plain);
 } catch (error) {
   process.stderr.write('route-metrics: ' + error.message + '\n');
