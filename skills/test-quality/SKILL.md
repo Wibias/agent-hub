@@ -58,6 +58,11 @@ rewriting the test, answer all four questions:
 A missing answer is a signal to stop and inspect the code, tests, and real owner.
 Do not create a test merely to increase test count or coverage.
 
+When the changed contract concerns error propagation, swallowed failures, recovery,
+fall-back success states or partial writes, load `references/failure-path-contracts.md`
+to verify the actual caller-visible negative contract rather than a mocked catch.
+Do not add this extra lens for ordinary happy-path tests.
+
 Prefer one primary test owner for each contract. Another layer needs a distinct
 risk that the primary owner cannot observe, such as transport, persistence,
 lifecycle, browser, packaging, or platform behaviour.
@@ -77,7 +82,8 @@ owner, entry point, non-test callers, sibling implementations, overlapping
 tests, relevant CI routing, and useful history before deciding to edit.
 
 Load `references/audit.md` for the candidate ledger, test smells, retention bar,
-and edit rules.
+and edit rules. Load `references/failure-path-contracts.md` only when a concrete
+failure-propagation or recovery contract is in scope.
 
 Prefer a few high-confidence candidates over a speculative deletion inventory.
 Optimise for confidence and simpler ownership, not deletion count.
@@ -180,6 +186,7 @@ ownership and neighbouring skills. See `NOTICE.md`.
 <!-- eval:references -->
 - references/audit.md -- when to read: focused test-quality audits, consolidation, deletion, or test-only production seam cleanup
 - references/campaign.md -- when to read: whole-subsystem or similarly bounded test-pruning campaigns
+- references/failure-path-contracts.md -- when to read: tests or test audits specifically concern silent failures, error propagation, recovery or partial success
 - tests/evals/cases.jsonl -- when to read: canonical routing and behaviour acceptance cases during Skill Ratchet qualification
 - tests/evals/regression-cases.jsonl -- when to read: retained failures after a real skill regression is fixed
 - tests/evals/regression-lock.json -- when to read: validating immutable retained regression cases
