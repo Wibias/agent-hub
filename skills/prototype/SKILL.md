@@ -1,6 +1,6 @@
 ---
 name: prototype
-description: Build a throwaway prototype to flesh out a design before committing to it. Routes between two branches — a runnable terminal app for state/business-logic questions, or several radically different UI variations toggleable from one route. Use when the user wants to prototype, sanity-check a data model or state machine, mock up a UI, explore design options, says "prototype this", "let me play with it", or "try a few designs", or when a technical fork can be settled cheaply and safely by observing behavior, output, timing, rendering, or performance instead of asking the user.
+description: Build a throwaway prototype to flesh out a design before committing to it. Routes between two branches — a runnable terminal app for state/business-logic questions, or UI exploration through structurally distinct toggleable variants or an interactive design playground. Use when the user wants to prototype, sanity-check a data model or state machine, mock up a UI, explore design options, says "prototype this", "let me play with it", "adjust the spacing live", or "try a few designs", or when a technical fork can be settled cheaply and safely by observing behavior, output, timing, rendering, or performance instead of asking the user.
 ---
 
 # Prototype
@@ -13,11 +13,12 @@ Identify which question is being answered — from the user's prompt, the surrou
 
 - **"Does this logic / state model feel right?"** → [LOGIC.md](LOGIC.md). Build a tiny interactive terminal app that pushes the state machine through cases that are hard to reason about on paper.
 - **"What should this look like?"** → [UI.md](UI.md). Generate several radically different UI variations on a single route, switchable via a URL search param and a floating bottom bar.
+- **"Let me tune this chosen layout live and copy the settings."** → [PLAYGROUND.md](PLAYGROUND.md), a bounded interactive variant of the **UI branch** using [templates/design-playground.html](templates/design-playground.html) as an offline starter. Use only when structure is already chosen; do not collapse true UI alternatives into style sliders.
 - **"Which technical option actually behaves better?"** → use the lightest branch that exposes the decision. Use [LOGIC.md](LOGIC.md) for behavior, output, timing, or performance questions. Use [UI.md](UI.md) for layout, rendering, or interaction questions.
 
 An empirical fork does not need an explicit "prototype" request. During already-authorized implementation work, prototype when a small isolated run can settle a reversible technical choice more reliably than asking the user. Do not use an experiment to decide product intent, taste, authority, compatibility policy, or another value judgment that only the user can make.
 
-The two branches produce very different artifacts — getting this wrong wastes the whole prototype. If the question is genuinely ambiguous and the user isn't reachable, default to whichever branch better matches the surrounding code (a backend module → logic; a page or component → UI) and state the assumption at the top of the prototype.
+The two branches produce very different artifacts; the UI branch has two distinct shapes (structural variants or a tuning playground). Getting this wrong wastes the whole prototype. If the question is genuinely ambiguous and the user isn't reachable, default to whichever branch better matches the surrounding code (a backend module → logic; a page or component → UI) and state the assumption at the top of the prototype.
 
 ## Rules that apply to both
 
@@ -33,7 +34,7 @@ The two branches produce very different artifacts — getting this wrong wastes 
 A prototype only earns a conclusion from an observable run. Fail closed around missing context or failed execution:
 
 - If the target module, route, or other required context does not exist, surface that and stop instead of inventing a location or claiming a result.
-- If the selected branch requires `LOGIC.md` or `UI.md` and that reference is unavailable, surface the missing reference instead of silently switching methods.
+- If the selected branch requires `LOGIC.md`, `UI.md`, `PLAYGROUND.md` or its named starter template and that resource is unavailable, surface the missing reference instead of silently switching methods.
 - If the prototype command exits non-zero or otherwise produces no valid observation, report the failure and do not choose a winner from that run.
 - If the prototype cannot be written where required, report the denied write and do not claim the artifact or comparison succeeded.
 - When another capability plausibly owns product direction or visual exploration, keep that ownership separate from Prototype's empirical behavior question rather than letting one silently replace the other.
@@ -45,6 +46,8 @@ The _answer_ is the only thing worth keeping from a prototype. Capture it somewh
 
 ## Evaluation resources
 <!-- eval:references -->
+- PLAYGROUND.md -- when to read: the user wants interactive tuning of a chosen UI direction (not structural variants)
+- templates/design-playground.html -- when to read: a standalone offline UI tuning starter is appropriate
 - tests/evals/cases.jsonl -- when to read: as canonical acceptance criteria during qualification review
 - tests/evals/regression-cases.jsonl -- when to read: when reviewing retained failures and successors
 - tests/evals/regression-lock.json -- when to read: when validating immutable retained regressions
