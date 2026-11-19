@@ -1,0 +1,77 @@
+name: DWA handoff and prototype playground verification
+
+on:
+  pull_request:
+    paths:
+      - 'skills/design-with-ai/SKILL.md'
+      - 'skills/design-with-ai/references/developer-handoff.md'
+      - 'skills/design-with-ai/references/design-first-prompting.md'
+      - 'skills/design-with-ai/UPSTREAM.md'
+      - 'skills/design-with-ai/tests/evals/cases.jsonl'
+      - 'skills/prototype/SKILL.md'
+      - 'skills/prototype/PLAYGROUND.md'
+      - 'skills/prototype/templates/design-playground.html'
+      - 'skills/prototype/tests/**'
+      - '.github/workflows/verify-dwa-handoff-playground.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'skills/design-with-ai/SKILL.md'
+      - 'skills/design-with-ai/references/developer-handoff.md'
+      - 'skills/design-with-ai/references/design-first-prompting.md'
+      - 'skills/design-with-ai/UPSTREAM.md'
+      - 'skills/design-with-ai/tests/evals/cases.jsonl'
+      - 'skills/prototype/SKILL.md'
+      - 'skills/prototype/PLAYGROUND.md'
+      - 'skills/prototype/templates/design-playground.html'
+      - 'skills/prototype/tests/**'
+      - '.github/workflows/verify-dwa-handoff-playground.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  structural:
+    name: structural (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.18.0
+      - name: Check browser smoke test syntax
+        run: node --check skills/prototype/tests/playground-browser-smoke.mjs
+      - name: Validate DWA skill structure and locked regressions (not model reviews)
+        run: node skills/skill-ratchet/scripts/skill-ratchet.mjs validate --skill-root skills/design-with-ai --json
+      - name: Validate Prototype skill structure and locked regressions (not model reviews)
+        run: node skills/skill-ratchet/scripts/skill-ratchet.mjs validate --skill-root skills/prototype --json
+
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Find preinstalled Chrome
+        run: |
+          set -euo pipefail
+          CHROME="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium || true)"
+          test -n "$CHROME"
+          echo "CHROME_PATH=$CHROME" >> "$GITHUB_ENV"
+      - name: Install pinned test-only browser transport
+        run: |
+          set -euo pipefail
+          npm install --prefix "$RUNNER_TEMP/agenthub-prototype-playwright" --no-save --no-audit --no-fund --ignore-scripts --package-lock=false playwright-core@1.64.1
+          node -e "const p=require(process.env.RUNNER_TEMP+'/agenthub-prototype-playwright/node_modules/playwright-core/package.json'); if(p.version !== '1.64.1') process.exit(1)"
+          echo "PROTOTYPE_PLAYWRIGHT_ROOT=$RUNNER_TEMP/agenthub-prototype-playwright/node_modules/playwright-core" >> "$GITHUB_ENV"
+      - name: Exercise offline playground controls, presets, copy and responsive Chrome rendering
+        run: node skills/prototype/tests/playground-browser-smoke.mjs
