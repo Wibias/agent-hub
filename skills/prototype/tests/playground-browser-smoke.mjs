@@ -9,11 +9,11 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const template = path.resolve(here, '../templates/design-playground.html');
-const playwrightRoot = process.env.DWA_PLAYWRIGHT_ROOT;
+const playwrightRoot = process.env.PROTOTYPE_PLAYWRIGHT_ROOT;
 const chromePath = process.env.CHROME_PATH;
 assert.ok(existsSync(template), 'The versioned playground starter must exist');
 assert.ok(playwrightRoot && existsSync(path.join(playwrightRoot, 'index.mjs')),
-  'DWA_PLAYWRIGHT_ROOT must name the pinned playwright-core install');
+  'PROTOTYPE_PLAYWRIGHT_ROOT must name the pinned playwright-core install');
 assert.ok(chromePath && existsSync(chromePath),
   'CHROME_PATH must name a runnable Chrome/Chromium browser');
 
