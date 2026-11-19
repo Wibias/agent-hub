@@ -50,6 +50,9 @@ NEGATIVE
 5. Carry the selected `design-with-ai` direction and quality constraints into the prompt.
 
 This workflow creates a spec/prompt. It does not take over implementation routing.
+For an explicit `design-spec handoff <target>` or developer implementation handoff,
+load `developer-handoff.md` as well and distinguish measured, approved, proposed,
+and unknown implementation details. Regular `design-spec` remains unchanged.
 After generation, the result still passes the normal quality stack and verification.
 
 Source lineage: MengTo/Skills `design-first-ui-prompting` (MIT), adapted into
