@@ -38,7 +38,12 @@ test('hook activation is explicit, migrates old entries and preserves unrelated 
       }, null, 2));
       const configPath = path.join(project, '.impeccable', 'config.json');
 
-      assert.match(invoke(project, 'status'), /disabled/);
+      // Legacy config defaults to enabled, but merely asking for status
+      // must not write config or activate/update hook manifests.
+      const beforeStatus = readFileSync(hookFile, 'utf8');
+      assert.match(invoke(project, 'status'), /state:\\s+enabled/);
+      assert.equal(readFileSync(hookFile, 'utf8'), beforeStatus,
+        'status must be read-only');
       assert.equal(existsSync(configPath), false, 'status must not create configuration');
       assert.match(invoke(project, 'on'), /enabled for this project/);
       const raw = readFileSync(hookFile, 'utf8');
