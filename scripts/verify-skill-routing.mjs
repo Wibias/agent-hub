@@ -25,7 +25,7 @@ const verificationContractPath = resolve(root, "skills/design-with-ai/references
 const antiSlopPath = resolve(root, "skills/design-with-ai/references/anti-slop-gates.md");
 const hardInvariantsPath = resolve(root, "skills/design-with-ai/references/hard-invariants.md");
 const designMethodsPath = resolve(root, "skills/design-with-ai/references/design-methods.md");
-const impeccableSkillPath = resolve(root, "skills/impeccable/SKILL.md");
+const impeccableRoutesPath = resolve(root, "skills/design-with-ai/references/impeccable-routes.md");
 const existingUiWorkflowsPath = resolve(root, "skills/design-with-ai/references/existing-ui-workflows.md");
 const motionVocabularyPath = resolve(root, "skills/design-with-ai/references/motion-vocabulary.md");
 const motionVocabularySourcePath = resolve(root, "skills/design-with-ai/references/motion-vocabulary-source.md");
@@ -536,29 +536,21 @@ function assertReleaseGovernanceWorkflowContract() {
 
 function assertCompetingSkillClassificationContract() {
   const hard = readFileSync(hardInvariantsPath, "utf8");
-  const methods = readFileSync(designMethodsPath, "utf8");
-  const impeccable = readFileSync(impeccableSkillPath, "utf8");
+  const routes = readFileSync(impeccableRoutesPath, "utf8");
+  const design = readFileSync(resolve(root, "skills/design-with-ai/SKILL.md"), "utf8");
 
-  if (!hard.includes("user names another installed skill as an optional candidate"))
-    throw new Error("hard invariants must classify a user-named optional competing skill");
   if (!hard.includes("do not treat the optional mention as specialist invocation"))
-    throw new Error("optional specialist mention must not become invocation");
-
-  for (const token of [
-    "Named optional specialist classification",
-    "COMPETING-SKILL CLASSIFICATION",
-    "owner:",
-    "candidate:",
-    "classification:",
-    "bounded-specialist",
-    "Classification is not execution",
-  ]) {
-    if (!methods.includes(token))
-      throw new Error(`design methods missing competing-skill classification token: ${token}`);
+    throw new Error("optional mention must never activate a specialist or engine");
+  for (const token of ["design-with-ai", "internal/impeccable", "no second design-skill", "NOT_VERIFIED"]) {
+    if (!routes.includes(token))
+      throw new Error(`integrated command map missing required boundary: ${token}`);
   }
-
-  if (!impeccable.includes("name: impeccable"))
-    throw new Error("A5 competing specialist contract must remain inspectable through impeccable/SKILL.md");
+  if (!design.includes("impeccable <verb>"))
+    throw new Error("explicit Impeccable command must be a canonical DWA subroute");
+  if (existsSync(resolve(root, "skills/impeccable/SKILL.md")))
+    throw new Error("retired standalone Impeccable SKILL.md must not remain discoverable");
+  if (existsSync(resolve(root, "skills/design-with-ai/internal/impeccable/SKILL.md")))
+    throw new Error("nested Impeccable SKILL.md would create another discovery entry");
 }
 
 function assertRepositoryInjectionContract() {
@@ -669,8 +661,9 @@ for (const required of ["references/hard-invariants.md","references/standards.md
     throw new Error(`D3 missing internal motion audit resource ${required}`);
 
 const n3 = cases.find((row) => row.id === "N3");
-if (n3.expected_skill !== "impeccable")
-  throw new Error("N3 must preserve explicit impeccable ownership");
+if (n3.expected_skill !== "design-with-ai" ||
+    !n3.expected_resources?.includes("references/impeccable-routes.md"))
+  throw new Error("N3 must route explicit Impeccable commands into DWA");
 const n4 = cases.find((row) => row.id === "N4");
 if (n4.expected_skill !== null)
   throw new Error("N4 must keep standalone analytical/report chart generation outside design-with-ai");
@@ -881,11 +874,11 @@ for (const assertion of ["evidence-source-ids-resolve","local-policy-provenance-
 }
 
 const a5 = cases.find((row) => row.id === "A5");
-for (const assertion of ["both-plausible-skills-opened","classification-recorded","design-with-ai-owns-general-visual-work","impeccable-remains-bounded-specialist"]) {
+for (const assertion of ["optional-adjective-not-engine-invocation","canonical-dwa-owner","no-retired-specialist-routing"]) {
   if (!a5?.assertion_ids?.includes(assertion))
     throw new Error(`A5 missing competing-skill assertion: ${assertion}`);
 }
-for (const required of ["references/hard-invariants.md","references/design-methods.md",".agents/skills/impeccable/SKILL.md"]) {
+for (const required of ["SKILL.md","references/hard-invariants.md","references/design-methods.md"]) {
   if (!a5?.expected_resources?.includes(required))
     throw new Error(`A5 missing competing-skill classification resource: ${required}`);
 }
@@ -908,8 +901,9 @@ if (JSON.stringify(uir1.expected_leaf_sequence) !== JSON.stringify(["taste-workf
   throw new Error("UIR1 must express the internal quality phase sequence");
 
 const uir4 = ownership.find((row) => row.id === "UIR4");
-if (uir4.expected_skill !== "impeccable" || uir4.expected_owner !== "impeccable")
-  throw new Error("UIR4 must preserve explicit Impeccable ownership");
+if (uir4.expected_skill !== "design-with-ai" || uir4.expected_owner !== "design-with-ai" ||
+    !uir4.expected_resources?.includes("references/impeccable-routes.md"))
+  throw new Error("UIR4 must preserve explicit command access under DWA");
 
 const uir6 = ownership.find((row) => row.id === "UIR6");
 if (uir6.expected_skill !== "design-with-ai" || !uir6.expected_resources?.includes(".agents/skills/conversion-pages/SKILL.md"))
@@ -951,8 +945,10 @@ if (checkIndex) {
   }
   const canonical = index.entries?.find((entry) => entry.id === "agents/design-with-ai" && entry.status === "active");
   if (!canonical) throw new Error("generated knowledge index missing active agents/design-with-ai");
+  if (index.entries?.some((entry) => entry.id === "agents/impeccable" && entry.status === "active"))
+    throw new Error("legacy Impeccable remains discoverable in the generated index");
 }
 
-const report = `# Remaining functional overlap candidates\n\nGenerated by \`scripts/verify-skill-routing.mjs\`.\n\n## High priority\n\n- \`github-delivery\`, \`review\`, \`pre-ship-review\`, and \`security-review\`: review policy and evidence rules remain duplicated across lifecycle and leaf skills.\n- \`ceo\` and \`codex-dynamic-workflows\`: both may claim complex orchestration; host-specific execution must remain subordinate to one policy owner.\n\n## Medium priority\n\n- \`code-simplification\` and \`ponytail-review\`: preserve a read-only diagnosis versus mutation boundary.\n- \`vault-research\` and \`source-driven-development\`: preserve durable knowledge maintenance versus task-local source grounding.\n\n## Resolved\n\n- General visible UI, taste, baseline polish, micro craft, UI prompting, motion craft, runtime animation performance, motion vocabulary, bounded product-UI data visualization, native/mobile UI guidance, and design-guidance retrieval are canonical in \`design-with-ai\`.\n- The seven former UI leaf skills are retired as discovery surfaces.\n- \`impeccable\` remains an independently managed explicit/delegated specialist and is not vendored into \`design-with-ai\`.\n- Module/API interface design remains canonical in \`codebase-design\`.\n`;
+const report = `# Remaining functional overlap candidates\n\nGenerated by \`scripts/verify-skill-routing.mjs\`.\n\n## High priority\n\n- \`github-delivery\`, \`review\`, \`pre-ship-review\`, and \`security-review\`: review policy and evidence rules remain duplicated across lifecycle and leaf skills.\n- \`ceo\` and \`codex-dynamic-workflows\`: both may claim complex orchestration; host-specific execution must remain subordinate to one policy owner.\n\n## Medium priority\n\n- \`code-simplification\` and \`ponytail-review\`: preserve a read-only diagnosis versus mutation boundary.\n- \`vault-research\` and \`source-driven-development\`: preserve durable knowledge maintenance versus task-local source grounding.\n\n## Resolved\n\n- General visible UI, taste, baseline polish, micro craft, UI prompting, motion craft, runtime animation performance, motion vocabulary, bounded product-UI data visualization, native/mobile UI guidance, and design-guidance retrieval are canonical in \`design-with-ai\`.\n- The seven former UI leaf skills are retired as discovery surfaces.\n- \`impeccable\` is an internal command/runtime adapter of \`design-with-ai\`.\n- Module/API interface design remains canonical in \`codebase-design\`.\n`;
 writeFileSync(reportPath, report);
 console.log(`validated ${cases.length} design-with-ai routing cases, ${ownership.length} UI ownership cases, ${regressionRows.length} locked regressions, retired live-reference handoffs, cluster-aware source/render/fused/receipt/cross-surface taste-gate ownership, source/render calibration, closed evidence provenance, and read-only release governance, motion-vocabulary ownership, and bounded design-guidance ownership${checkIndex ? ", plus generated index" : ""}`);
