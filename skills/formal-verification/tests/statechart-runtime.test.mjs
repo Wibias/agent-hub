@@ -24,6 +24,8 @@ const expectedRuntimeFiles = [
   'frontends/verdict.ts',
   'frontends/view.ts',
   'ir.ts',
+  'janitor.ts',
+  'kill.ts',
   'package.json',
   'passes/annotate.ts',
   'passes/label.ts',
