@@ -1,6 +1,6 @@
 # Impeccable source detector adapter (phase 2)
 
-This adapter is **not** the separately invokable Impeccable skill and does not import its workflow instructions. `design-with-ai` remains the default UI workflow owner.
+This is the source-only detector adapter inside `design-with-ai`. It does not invoke the optional internal engine or load the explicit command workflows. DWA is the only UI workflow owner.
 
 ## Explicit pilot
 
@@ -12,7 +12,7 @@ The command writes a normalized JSON report. Exit codes: `0` for a scoped detect
 
 ## Execution and provenance
 
-The default adapter executes `node skills/impeccable/scripts/detect.mjs --json --dwa-scan-proof <local-target>` and reads its JSON findings array. The opt-in `--dwa-scan-proof` emits a separate, versioned receipt on stderr; ordinary Impeccable CLI output is unchanged. This is the **vendored JS detector** from the Agent Hub skill distribution, not the separately published Rust engine. Agent Hub's `skills/impeccable/UPSTREAM.md` records the released skill 4.9.1 / engine 0.1.24 candidate at commit `acb4cfe14470b1fdf51e855431af618d936b7db8` and separately documents its verification gate. The vendored standalone engine is distinct from this adapter's JS detector. **Do not treat these as identical detector implementations or claim full engine parity.** A later upgrade needs an independently verified engine/provenance path.
+The default adapter executes `node skills/design-with-ai/internal/impeccable/scripts/detect.mjs --json --dwa-scan-proof <local-target>` and reads its JSON findings array. The opt-in `--dwa-scan-proof` emits a separate, versioned receipt on stderr; ordinary Impeccable CLI output is unchanged. This is the **vendored JS detector** from the Agent Hub skill distribution, not the separately published Rust engine. Agent Hub's `skills/design-with-ai/internal/impeccable/UPSTREAM.md` records the released skill 4.9.1 / engine 0.1.24 candidate at commit `acb4cfe14470b1fdf51e855431af618d936b7db8` and separately documents its verification gate. The retained internal Rust engine is distinct from this adapter's JS detector. **Do not treat these as identical detector implementations or claim full engine parity.** A later upgrade needs an independently verified engine/provenance path.
 
 This opt-in source scan uses only local files and directories. It rejects URLs, CDP and path escape. It never invokes `npx`, the vendored `scripts/impeccable` launcher, a binary auto-download, Impeccable `live`, or agent-spawning commands. The child uses the foundation process runner's `shell: false`, explicit environment allowlist, 120-second timeout and output cap. This timeout is a bounded allowance for large source trees, not a performance guarantee. The child is **not sandboxed**; run against trusted projects with a reviewed vendored detector. Project-local config can affect findings and must be treated as task data.
 
