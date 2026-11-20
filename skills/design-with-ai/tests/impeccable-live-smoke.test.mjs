@@ -61,9 +61,10 @@ test('explicit internal Live server serves authenticated browser assets on loopb
       assert.ok((await script.text()).length > 100, 'real bundled browser script must be served');
       assert.equal(readFileSync(sentinel, 'utf8'), '<main>original fixture</main>\n');
       // The stop endpoint may close the socket before a response is flushed.
+      const exitSignal = once(child, 'exit');
       await req('/stop?token=' + encodeURIComponent(token)).catch(() => {});
       await Promise.race([
-        once(child, 'exit'),
+        exitSignal,
         new Promise((_, reject) => setTimeout(() => reject(new Error('Live server did not stop')), 4000)),
       ]);
       assert.equal(readFileSync(sentinel, 'utf8'), '<main>original fixture</main>\n');
