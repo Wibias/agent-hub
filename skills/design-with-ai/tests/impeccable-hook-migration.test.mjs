@@ -41,7 +41,7 @@ test('hook activation is explicit, migrates old entries and preserves unrelated 
       // Legacy config defaults to enabled, but merely asking for status
       // must not write config or activate/update hook manifests.
       const beforeStatus = readFileSync(hookFile, 'utf8');
-      assert.match(invoke(project, 'status'), /state:\\s+enabled/);
+      assert.ok(invoke(project, 'status').includes('state:        enabled'));
       assert.equal(readFileSync(hookFile, 'utf8'), beforeStatus,
         'status must be read-only');
       assert.equal(existsSync(configPath), false, 'status must not create configuration');
