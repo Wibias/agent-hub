@@ -536,6 +536,9 @@ if (Test-Path -Path $regPath) {
         }
     }
     $caseObjects = @($caseLines | ForEach-Object { $_ | ConvertFrom-Json })
+    # The explicit legacy command in N3 is intentionally re-baselined by
+    # AgentHub #404: it no longer routes outside DWA. Keep the prompt identical
+    # and hash-pin the replacement semantics; all other near-misses stay locked.
     $expectedNearMissPrompts = @{
         N1 = 'add a Redis rate-limit middleware to the API server'
         N2 = 'design the interface for the new quiz engine adapter'
@@ -544,21 +547,21 @@ if (Test-Path -Path $regPath) {
     }
     foreach ($id in $expectedNearMissPrompts.Keys) {
         $row = @($caseObjects | Where-Object { $_.id -ceq $id }) | Select-Object -First 1
-        $expectedSkill = if ($id -ceq 'N3') { 'impeccable' } else { $null }
+        $expectedSkill = if ($id -ceq 'N3') { 'design-with-ai' } else { $null }
         $skillMatches = if ($null -eq $expectedSkill) {
             $null -eq $row.expected_skill
         } else {
             [string]$row.expected_skill -ceq $expectedSkill
         }
         Chk "cases.jsonl: near-miss '$id' exact prompt and owner semantics" `
-            ($null -ne $row -and $row.prompt -ceq $expectedNearMissPrompts[$id] -and $row.category -ceq 'must-not-trigger' -and $skillMatches) `
+            ($null -ne $row -and $row.prompt -ceq $expectedNearMissPrompts[$id] -and $row.category -ceq $(if ($id -ceq 'N3') { 'must-trigger' } else { 'must-not-trigger' }) -and $skillMatches) `
             "Near-miss '$id' must retain its exact prompt, must-not-trigger category, and current owner boundary"
     }
 
     $expectedNearMissHashes = @{
         N1 = '43f8b085936bf5459a3c6c9bd7a2139fd6626da72bbba66aa37376fde720747c'
         N2 = 'b92eb1a1b1a99d8409d71fdfd56d9b1cad0fc10e9cfc8942dce260386501336d'
-        N3 = '91da51cc64299a8c4599e35281af12420d78d37afa39069bae8492c4d2a86f07'
+        N3 = '502ee36534cb86bbf06ba374802a3bf7c7f2467f520f2c336b1ad5188a8004bf'
         N4 = '6794d1349c7c99ff422ece74ae92c6f50e943dddf12c252cb3dd035f93ac3801'
     }
     foreach ($id in $expectedNearMissHashes.Keys) {
