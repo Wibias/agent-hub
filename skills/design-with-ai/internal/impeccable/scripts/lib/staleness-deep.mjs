@@ -29,8 +29,8 @@ const HOOK_MANIFESTS_BY_PROVIDER = Object.freeze({
 });
 
 const HOOK_SCRIPT_MARKERS = [
-  'skills/impeccable/scripts/hook.mjs',
-  'skills/impeccable/scripts/hook-before-edit.mjs',
+  'skills/design-with-ai/internal/impeccable/scripts/hook.mjs',
+  'skills/design-with-ai/internal/impeccable/scripts/hook-before-edit.mjs',
 ];
 
 // Retired live-mode state locations. impeccable-paths still reads these as
