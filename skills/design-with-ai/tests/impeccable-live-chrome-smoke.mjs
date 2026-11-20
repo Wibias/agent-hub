@@ -63,7 +63,7 @@ try {
   await page.addScriptTag({ url: scriptUrl });
   await page.waitForFunction(() =>
     window.__IMPECCABLE_LIVE_INIT__ === true &&
-    !!document.getElementById('impeccable-live-global-bar'), { timeout: 12000 });
+    !!document.getElementById('impeccable-live-global-bar'), null, { timeout: 12000 });
   assert.equal(await page.locator('#fixture').count(), 1, 'must preserve product content');
   assert.equal(errors.length, 0, 'browser script must not raise page exceptions: ' + errors.join('; '));
   const state = await page.evaluate(() => ({
