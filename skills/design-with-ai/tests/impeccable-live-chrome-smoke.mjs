@@ -58,8 +58,15 @@ try {
   const page = await context.newPage();
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
-  await page.goto('data:text/html,' + encodeURIComponent('<!DOCTYPE html><html><body><main><button id="fixture">Local fixture</button></main></body></html>'));
-  const scriptUrl = 'http://127.0.0.1:' + port + '/live.js?token=' + encodeURIComponent(token);
+  // A data: document has an opaque origin: modern Chrome may reject local
+  // network script loads from it. Navigate to the loopback helper first and
+  // replace that document with a minimal fixture in the *same origin*.
+  const helperOrigin = 'http://127.0.0.1:' + port;
+  await page.goto(helperOrigin + '/health');
+  await page.setContent('<!DOCTYPE html><html><body><main><button id="fixture">Local fixture</button></main></body></html>');
+  const scriptUrl = helperOrigin + '/live.js?token=' + encodeURIComponent(token);
+  const source = await page.request.get(scriptUrl);
+  assert.equal(source.status(), 200, 'tokenized Live asset must be available before browser injection');
   await page.addScriptTag({ url: scriptUrl });
   await page.waitForFunction(() =>
     window.__IMPECCABLE_LIVE_INIT__ === true &&
