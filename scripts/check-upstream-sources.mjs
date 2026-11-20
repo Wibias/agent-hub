@@ -84,7 +84,7 @@ for (const source of registry.sources) {
     fail(`${source.id}: git ls-remote exited ${result.status}: ${result.stderr.trim()}`);
   }
 
-  const head = result.stdout.trim().split(/\\s+/)[0];
+  const head = result.stdout.trim().split(/\s+/)[0];
   if (!/^[0-9a-f]{40}$/.test(head)) fail(`${source.id}: could not parse remote HEAD`);
 
   const advanced = head !== source.reviewedCommit;
