@@ -90,11 +90,11 @@ test('integrated Impeccable engine pin remains unqualified until executable veri
   const skill = read('skills/design-with-ai/SKILL.md');
   const scripts = 'skills/design-with-ai/internal/impeccable/scripts/';
   assert.match(upstream, /acb4cfe14470b1fdf51e855431af618d936b7db8/);
-  assert.match(upstream, /Skill version: `4\\.9\\.1`/);
-  assert.match(upstream, /Engine version: `0\\.1\\.24`/);
+  assert.match(upstream, /Skill version: `4[.]9[.]1`/);
+  assert.match(upstream, /Engine version: `0[.]1[.]24`/);
   assert.equal(read(scripts + 'VERSION').trim(), '0.1.24');
   assert.match(read(scripts + 'engine-checksums.txt'),
-    /0\\.1\\.24 impeccable-windows-x64\\.exe [0-9a-f]{64}/);
+    /0[.]1[.]24 impeccable-windows-x64[.]exe [0-9a-f]{64}/);
   assert.match(routes, /DWA/);
   assert.match(skill, /^name: design-with-ai$/m);
   assert.match(skill, /impeccable <verb>/);
