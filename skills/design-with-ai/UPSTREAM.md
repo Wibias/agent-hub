@@ -138,14 +138,31 @@ render verification, project authority and tool permissions take precedence.
 The upstream 496-line critique rubric was not copied as a competing audit
 owner, and no mandatory Impeccable motion-capture tool or reviewer was added.
 
-`skills/impeccable` is still a separate, explicit-only legacy specialist with
-its existing source and runtime pins. These adaptations **do not** update or
-qualify the Impeccable engine or implement its v4.10.0 CLI. The full migration
-into the sole `design-with-ai` owner is tracked by
-[AgentHub issue #404](https://github.com/Wibias/agent-hub/issues/404);
-until its parity gates pass, keep the legacy runtime boundary and report it
-accurately. The newer `engine-v0.1.28` release is deliberately not mixed with
-the older local skill snapshot.
+## Unified Impeccable runtime migration (2026-11-20)
+
+The local explicit Impeccable skill is being integrated under the canonical
+`skills/design-with-ai` owner in AgentHub issue #404. Its non-entrypoint
+files moved to `internal/impeccable/` and the separate `SKILL.md` entry
+was retired. Command dispatch is a conditional DWA subroute in
+`references/impeccable-routes.md`, not a second design workflow.
+
+The internal runtime still uses the **reviewed legacy** skill version 4.9.1,
+engine version 0.1.24 and its matching checksum manifest. The newer
+upstream `skill-v4.10.0` and `engine-v0.1.28` are not deployed
+together or claimed qualified by this migration. A separate release sync
+requires exact tagged provenance, a reviewed engine binary and
+cross-platform runtime verification.
+
+Certain internal playbook paths, command labels, context and hook helpers
+are deliberate AgentHub compatibility overlays and therefore no longer
+byte-identical to upstream. Unmodified engine launchers and manifests
+retain exact pinned Git blobs; verification must distinguish these sets.
+
+The normal DWA quality gate continues to own task acceptance. Source-only
+JS detection and its fail-closed scan receipt are independent from the
+optional Rust engine. No generic DWA task launches the engine, downloads
+binaries, installs hooks or starts a browser Live session. Full runtime,
+hook and Live parity must be demonstrated before this migration is merged.
 
 ## Preserved source snapshots
 
