@@ -71,8 +71,8 @@ test('design-with-ai is the single visible-UI and explicit Impeccable owner', as
   const owner = await description('design-with-ai');
   assert.match(owner, /visible product-UI design/i);
   assert.match(owner, /explicit Impeccable requests use the integrated DWA command route/i);
-  const catalog = await loadCatalog();
-  assert.equal(catalog.some((entry) => entry.name === 'impeccable'), false,
+  const catalog = JSON.parse(await readFile(path.join(repoRoot, 'knowledge', 'index.json'), 'utf8'));
+  assert.equal(catalog.entries.some((entry) => entry.id === 'agents/impeccable' && entry.status === 'active'), false,
     'standalone Impeccable must not be registered as a discovery surface');
 });
 
