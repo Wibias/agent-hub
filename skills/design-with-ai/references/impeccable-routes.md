@@ -19,6 +19,11 @@ use the normal DWA routes without loading this reference.
    agent. Use the resolved canonical skill root:
    `<dwa-root>/internal/impeccable/scripts/impeccable` on POSIX or
    `<dwa-root>/internal/impeccable/scripts/impeccable.cmd` on Windows.
+   Paths in imported playbooks such as
+   `.agents/skills/design-with-ai/internal/impeccable/scripts/impeccable`
+   are installation-specific examples, never mandatory literals. Resolve
+   the actual DWA skill root for the active harness and choose the POSIX or
+   Windows launcher as appropriate. Do not infer that a second skill exists.
    Keep cwd at the user's project. The launcher may download a release-pinned
    engine; do not execute it for an ordinary DWA task or without explicit
    command intent and the host's permitted tool controls.
