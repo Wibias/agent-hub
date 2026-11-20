@@ -7,7 +7,7 @@ description: >-
   shapes, compare calling patterns, mentions "design it twice", find deepening
   opportunities, decide where a seam goes, make code more testable or
   AI-navigable, or design/evolve a public interface contract. Not visual UI
-  (design-with-ai / impeccable) and not the architecture HTML scan
+  (design-with-ai) and not the architecture HTML scan
   (improve-codebase-architecture).
 ---
 
