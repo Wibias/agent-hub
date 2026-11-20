@@ -1,3 +1,14 @@
+> **AgentHub integration overlay (2026-11-20):** This file records the
+> original v4.9.1 / engine v0.1.24 release provenance for the runtime now
+> embedded under `skills/design-with-ai/internal/impeccable/`.
+> The old top-level `skills/impeccable/SKILL.md` was retired in the
+> integration branch, and `skills/design-with-ai/SKILL.md` is the sole
+> callable design owner. References and local scripts intentionally adapted
+> for the new paths no longer have byte-identical upstream blobs; the
+> unchanged manifest and launchers are still release pinned. This copy
+> does not claim an engine 0.1.28 update, working host hook migration or
+> complete Live/browser parity. Do not install the old standalone skill.
+>
 # Impeccable upstream
 
 AgentHub selectively vendors the explicit Impeccable specialist from
