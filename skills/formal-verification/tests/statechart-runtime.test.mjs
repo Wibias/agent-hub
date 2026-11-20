@@ -24,6 +24,8 @@ const expectedRuntimeFiles = [
   'frontends/verdict.ts',
   'frontends/view.ts',
   'ir.ts',
+  'janitor.ts',
+  'kill.ts',
   'package.json',
   'passes/annotate.ts',
   'passes/label.ts',
@@ -166,5 +168,17 @@ test(
       ['Layout/Parents', 'Array'],
       ['Layout/Regions', 'Object'],
     ]);
+  },
+);
+
+test(
+  'statechart DOT parser normalizes CRLF and trailing CR line boundaries',
+  { skip: canExecuteTypeScript ? false : 'requires a TypeScript-capable Node runtime' },
+  async () => {
+    const { splitLines } = await import(
+      new URL('../statechart/scripts/frontends/dot.ts', import.meta.url).href
+    );
+    assert.deepEqual(splitLines('one\r\ntwo\r'), ['one', 'two']);
+    assert.deepEqual(splitLines('one\ntwo'), ['one', 'two']);
   },
 );

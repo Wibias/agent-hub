@@ -9,6 +9,7 @@ on:
       - 'skills/formal-verification/statechart/**'
       - 'skills/formal-verification/tests/evals/cases.jsonl'
       - 'skills/formal-verification/tests/statechart-runtime.test.mjs'
+      - 'skills/formal-verification/tests/statechart-lifecycle.test.mjs'
       - 'tests/skill-catalog/statechart-adoption.test.mjs'
   push:
     branches:
@@ -20,6 +21,7 @@ on:
       - 'skills/formal-verification/statechart/**'
       - 'skills/formal-verification/tests/evals/cases.jsonl'
       - 'skills/formal-verification/tests/statechart-runtime.test.mjs'
+      - 'skills/formal-verification/tests/statechart-lifecycle.test.mjs'
       - 'tests/skill-catalog/statechart-adoption.test.mjs'
   workflow_dispatch:
 
@@ -28,7 +30,11 @@ permissions:
 
 jobs:
   verify:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
 
@@ -37,10 +43,11 @@ jobs:
           node-version: 22.18.0
 
       - name: Verify pinned upstream vendor bytes
+        if: matrix.os == 'ubuntu-latest'
         shell: bash
         run: |
           set -euo pipefail
-          pin='93b916d4a1e806507e22f4716b352fa91f2b227e'
+          pin='aaeb0ea3a0584995aa8f55ce44c6c5259414b896'
           upstream="$RUNNER_TEMP/cursor-plugins"
           git clone --filter=blob:none --no-checkout https://github.com/cursor/plugins.git "$upstream"
           git -C "$upstream" fetch --depth=1 origin "$pin"
@@ -51,6 +58,9 @@ jobs:
 
       - name: Test statechart compiler runtime
         run: node --test skills/formal-verification/tests/statechart-runtime.test.mjs
+
+      - name: Test statechart worker cleanup lifecycle
+        run: node --test skills/formal-verification/tests/statechart-lifecycle.test.mjs
 
       - name: Test statechart adoption contract
         run: node --test tests/skill-catalog/statechart-adoption.test.mjs
