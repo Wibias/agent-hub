@@ -126,9 +126,26 @@ the upstream's absolute uniform-stagger prohibition, and corrects the
 `mode="sync"` as the default, with `wait` as the explicit sequential mode.
 The existing project token, accessibility and measurement gates remain canonical.
 
-`impeccable` is intentionally not vendored or modified by `design-with-ai`. It
-remains an independently managed explicit/delegated specialist and may update on
-its own cadence.
+## Impeccable selective v4.10.0 review (2026-11-20)
+
+Reviewed the tagged `pbakaus/impeccable` `skill-v4.10.0` commit
+`b49177d32788f2dc585c42831d845dacf1ebed2c`. Adapted only two
+non-runtime ideas into the existing DWA owners: the optional compact
+navigation map for long approved design contracts
+(`references/durable-design-contract.md`) and paired normal/reduced-motion
+capture reasoning (`references/motion-build.md`). Existing DWA acceptance,
+render verification, project authority and tool permissions take precedence.
+The upstream 496-line critique rubric was not copied as a competing audit
+owner, and no mandatory Impeccable motion-capture tool or reviewer was added.
+
+`skills/impeccable` is still a separate, explicit-only legacy specialist with
+its existing source and runtime pins. These adaptations **do not** update or
+qualify the Impeccable engine or implement its v4.10.0 CLI. The full migration
+into the sole `design-with-ai` owner is tracked by
+[AgentHub issue #404](https://github.com/Wibias/agent-hub/issues/404);
+until its parity gates pass, keep the legacy runtime boundary and report it
+accurately. The newer `engine-v0.1.28` release is deliberately not mixed with
+the older local skill snapshot.
 
 ## Preserved source snapshots
 

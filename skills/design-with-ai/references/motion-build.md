@@ -100,6 +100,27 @@ leaks, offscreen loops, or long-session degradation belong to `motion-optimize`
 and require live profiling. Do not claim a runtime root cause from source style
 alone.
 
+### Paired motion evidence, when capture tooling is available
+
+For consequential or disputed web motion, capture the **same** URL, viewport,
+region and interaction in normal and reduced-motion settings. Record entrance,
+mid-transition, settled state, and exit where applicable. Verify that frames or
+recordings belong to the current candidate and show the intended region before
+drawing conclusions; blank, stale or clipped captures require recapture.
+
+Review continuity, orientation, interruption and whether meaningful feedback
+survives reduced motion. A single static screenshot cannot prove timing,
+smoothness or reversal behavior. The two captures provide visual-behavior
+evidence, not a performance profile. For native targets, use native-platform
+capture and reduced-motion controls instead of assuming a web capture tool
+applies.
+
+Use the existing browser/test tools or a trusted, explicitly selected provider.
+Do not start Impeccable's release engine, install a capture utility, require
+a fresh specialist agent, or block an otherwise verifiable small animation
+merely because a particular upstream capture command is unavailable.
+Report the missing capture dimension as `NOT_VERIFIED`.
+
 ## Output
 
 Keep the explanation small because the implementation is the deliverable:
