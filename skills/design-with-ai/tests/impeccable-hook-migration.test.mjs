@@ -42,8 +42,8 @@ test('hook activation is explicit, migrates old entries and preserves unrelated 
       assert.equal(existsSync(configPath), false, 'status must not create configuration');
       assert.match(invoke(project, 'on'), /enabled for this project/);
       const raw = readFileSync(hookFile, 'utf8');
-      assert.match(raw, /skills\\/design-with-ai\\/internal\\/impeccable\\/scripts\\/hook\\.mjs/);
-      assert.doesNotMatch(raw, /\\.agents\\/skills\\/impeccable\\/scripts\\/hook\\.mjs/);
+      assert.ok(raw.includes('skills/design-with-ai/internal/impeccable/scripts/hook.mjs'), 'new hook path must be installed');
+      assert.equal(raw.includes('.agents/skills/impeccable/scripts/hook.mjs'), false, 'legacy hook path must be retired');
       assert.match(raw, /echo unrelated-contract/);
       const config = JSON.parse(readFileSync(configPath, 'utf8'));
       assert.equal(config.hook.enabled, true);
