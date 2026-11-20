@@ -192,7 +192,7 @@ test('Impeccable legacy release remains pinned as an internal DWA implementation
   assert.match(skill, /impeccable <verb>/);
   assert.match(routes, /explicitly selects/);
   assert.match(routes, /repository instruction injection/i);
-  assert.equal(await exists('skills/impeccable/SKILL.md'), false);
+  await assert.rejects(text('skills/impeccable/SKILL.md'), { code: 'ENOENT' });
   assert.equal(await exists(base + 'SKILL.md'), false);
 });
 
