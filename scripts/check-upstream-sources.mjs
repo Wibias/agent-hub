@@ -5,6 +5,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { directoryScopeFor, hasScopedChanges } from './lib/upstream-scope-diff.mjs';
+import { classifyUpstreamStatus, needsUpstreamAction } from './lib/upstream-status.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(here, '..');
@@ -86,47 +87,36 @@ for (const source of registry.sources) {
   const head = result.stdout.trim().split(/\s+/)[0];
   if (!/^[0-9a-f]{40}$/.test(head)) fail(`${source.id}: could not parse remote HEAD`);
 
-  if (head !== source.reviewedCommit) {
-    const scopedDirectory = directoryScopeFor(source);
-    if (scopedDirectory) {
-      let changed;
-      try {
-        changed = hasScopedChanges({
-          remote,
-          reviewedCommit: source.reviewedCommit,
-          head,
-          scope: scopedDirectory,
-        });
-      } catch (error) {
-        fail(`${source.id}: scoped update check failed: ${error.message}`);
-      }
-      if (!changed) {
-        if (source.decision === 'update-pending') {
-          findings += 1;
-          console.log(adoptionStatus(source) + ` head=${head} scope-unchanged`);
-        } else {
-          console.log(
-            `CURRENT ${source.id} ${source.repository} reviewed=${source.reviewedCommit} head=${head} scope=${source.scope} (scope unchanged)`,
-          );
-        }
-        continue;
-      }
+  const advanced = head !== source.reviewedCommit;
+  const scopedDirectory = directoryScopeFor(source);
+  let scopedChanges = null;
+  if (advanced && scopedDirectory) {
+    try {
+      scopedChanges = hasScopedChanges({
+        remote,
+        reviewedCommit: source.reviewedCommit,
+        head,
+        scope: scopedDirectory,
+      });
+    } catch (error) {
+      fail(`${source.id}: scoped update check failed: ${error.message}`);
     }
-    findings += 1;
-    console.log(
-      `UPDATE ${source.id} ${source.repository} reviewed=${source.reviewedCommit} head=${head} scope=${source.scope}`,
-    );
-    continue;
   }
 
-  if (source.decision === 'update-pending') {
-    findings += 1;
-    console.log(adoptionStatus(source));
-  } else {
-    console.log(
-      `CURRENT ${source.id} ${source.repository} ${head} decision=${source.decision} scope=${source.scope}`,
-    );
-  }
+  const status = classifyUpstreamStatus({
+    advanced,
+    scopedChanges,
+    decision: source.decision,
+  });
+  const evidence = scopedChanges === null ? (advanced ? 'unscoped' : 'same-head') :
+    scopedChanges ? 'scope-changed' : 'scope-unchanged';
+  const details = `${source.id} ${source.repository} reviewed=${source.reviewedCommit} head=${head} scope=${source.scope} evidence=${evidence} adoption=${source.decision}`;
+  const local = source.localPin ? ` local=${source.localPin}` : '';
+
+  // SCOPE_CHANGED requires relevance review. REVIEW means the prose-only scope
+  // is not machine-comparable. Neither status claims adoption is necessary.
+  console.log(`${status} ${details}${local}`);
+  if (needsUpstreamAction(status)) findings += 1;
 }
 
 process.exit(findings === 0 ? 0 : 1);
