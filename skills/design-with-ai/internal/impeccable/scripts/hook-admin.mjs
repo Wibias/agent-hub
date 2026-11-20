@@ -405,8 +405,37 @@ function repairHookManifests(cwd) {
     const sharedDest = target.sharedDestRel ? path.join(cwd, target.sharedDestRel) : null;
 
     if (sharedDest && fileHasImpeccableHookMarker(sharedDest)) {
+      // A legacy hook in shared settings is not proof of an installed DWA
+      // hook. Migrating only the local settings file leaves the old shared
+      // command pointing to the removed standalone skill. Explicit "on"
+      // authorizes replacing our shared hook entries, not unrelated hooks.
+      const sharedRaw = JSON.parse(fs.readFileSync(sharedDest, 'utf8'));
+      const sharedHooks = JSON.stringify(sharedRaw.hooks);
+      const legacy = [
+        'skills/impeccable/scripts/hook-probe.mjs',
+        'skills/impeccable/scripts/hook.mjs',
+        'skills/impeccable/scripts/hook-before-edit.mjs',
+        'skills/impeccable/scripts/hook-after-edit.mjs',
+        'skills/impeccable/scripts/hook-stop.mjs',
+      ].some((marker) => sharedHooks.includes(marker));
+      if (legacy) {
+        const freshShared = target.manifest();
+        const migrated = mergeHookManifests(sharedRaw, freshShared);
+        // A shared user-written description is not a design hook entry.
+        if (Object.hasOwn(sharedRaw, 'description')) {
+          migrated.description = sharedRaw.description;
+        }
+        const serialized = JSON.stringify(migrated, null, 2) + '\n';
+        if (safeReadText(sharedDest) !== serialized) {
+          fs.writeFileSync(sharedDest, serialized);
+          result.written.push(target.provider);
+        } else {
+          result.already.push(target.provider);
+        }
+      } else {
+        result.already.push(target.provider);
+      }
       pruneImpeccableHookFromManifest(dest);
-      result.already.push(target.provider);
       continue;
     }
 
