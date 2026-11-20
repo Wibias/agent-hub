@@ -14,7 +14,7 @@
 {"id":"D14","prompt":"Security review GitHub PR #42 before it is merge-ready","expected_skill":"github-delivery"}
 {"id":"D15","prompt":"/review-security this GitHub PR #42","expected_skill":"review-security"}
 {"id":"D16","prompt":"Polish this dashboard and improve its visual hierarchy","expected_skill":"design-with-ai"}
-{"id":"D17","prompt":"Use impeccable to polish this dashboard","expected_skill":"impeccable"}
+{"id":"D17","prompt":"Use impeccable to polish this dashboard","expected_skill":"design-with-ai"}
 {"id":"D18","prompt":"Use official documentation and source-cited verified patterns for this implementation","expected_skill":"source-driven-development"}
 {"id":"D19","prompt":"Remember this non-obvious debugging lesson and write a learning from it","expected_skill":"extract-approach"}
 {"id":"D20","prompt":"Use a swarm of parallel agents to orchestrate this migration","expected_skill":"codex-dynamic-workflows"}
