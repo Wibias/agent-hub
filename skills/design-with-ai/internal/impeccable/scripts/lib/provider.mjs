@@ -2,4 +2,4 @@
 // this exact declaration, avoiding heuristic rewrites across executable code.
 export const IMPECCABLE_COMMAND_PREFIX = "$";
 export const IMPECCABLE_PROVIDER_ID = "agents";
-export const IMPECCABLE_COMMAND = `${IMPECCABLE_COMMAND_PREFIX}impeccable`;
+export const IMPECCABLE_COMMAND = `${IMPECCABLE_COMMAND_PREFIX}design-with-ai impeccable`;
