@@ -9,6 +9,7 @@ on:
       - 'skills/formal-verification/statechart/**'
       - 'skills/formal-verification/tests/evals/cases.jsonl'
       - 'skills/formal-verification/tests/statechart-runtime.test.mjs'
+      - 'skills/formal-verification/tests/statechart-lifecycle.test.mjs'
       - 'tests/skill-catalog/statechart-adoption.test.mjs'
   push:
     branches:
@@ -20,6 +21,7 @@ on:
       - 'skills/formal-verification/statechart/**'
       - 'skills/formal-verification/tests/evals/cases.jsonl'
       - 'skills/formal-verification/tests/statechart-runtime.test.mjs'
+      - 'skills/formal-verification/tests/statechart-lifecycle.test.mjs'
       - 'tests/skill-catalog/statechart-adoption.test.mjs'
   workflow_dispatch:
 
@@ -28,7 +30,11 @@ permissions:
 
 jobs:
   verify:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
 
@@ -37,6 +43,7 @@ jobs:
           node-version: 22.18.0
 
       - name: Verify pinned upstream vendor bytes
+        if: matrix.os == 'ubuntu-latest'
         shell: bash
         run: |
           set -euo pipefail
@@ -51,6 +58,9 @@ jobs:
 
       - name: Test statechart compiler runtime
         run: node --test skills/formal-verification/tests/statechart-runtime.test.mjs
+
+      - name: Test statechart worker cleanup lifecycle
+        run: node --test skills/formal-verification/tests/statechart-lifecycle.test.mjs
 
       - name: Test statechart adoption contract
         run: node --test tests/skill-catalog/statechart-adoption.test.mjs
