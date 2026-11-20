@@ -606,31 +606,6 @@
       "contentHash": "f2211d1d0a735bdf069fe78352c15986b84a139c6bd908995df50a042dc18f15"
     },
     {
-      "id": "agents/impeccable",
-      "path": "~/.agents/skills/impeccable/SKILL.md",
-      "type": "skill",
-      "harness": "agents",
-      "scope": "global",
-      "name": "impeccable",
-      "description": "Explicit-only Impeccable frontend design specialist. Use only when the user explicitly names impeccable, invokes /impeccable, or explicitly asks to use this named specialist. Handles the Impeccable command set and its frontend design workflow. Not for ordinary UI polish, visual hierarchy, redesign, audit, motion, or generic frontend design requests; use design-with-ai instead. Not for backend-only or non-UI tasks.",
-      "tags": [
-        "impeccable"
-      ],
-      "triggers": [
-        "Explicit-only Impeccable frontend design specialist. Use only when the user explicitly names impeccable",
-        "invokes /impeccable",
-        "visual hierarchy",
-        "redesign",
-        "audit",
-        "motion",
-        "or generic frontend design requests",
-        "use design-with-ai instead. Not for backend-only or non-UI tasks"
-      ],
-      "status": "active",
-      "canonicalId": null,
-      "contentHash": "6076ef4c62b3257d009a0a65af0fe70657ffe16c17f3d7cf09bae8ada7c78e6a"
-    },
-    {
       "id": "agents/improve-codebase-architecture",
       "path": "~/.agents/skills/improve-codebase-architecture/SKILL.md",
       "type": "skill",
