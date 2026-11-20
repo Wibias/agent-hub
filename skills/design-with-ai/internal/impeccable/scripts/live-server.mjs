@@ -751,7 +751,9 @@ function createRequestHandler({ detectScript, liveScriptParts }) {
         token: state.token,
         port: state.port,
         vocabulary: LIVE_COMMANDS,
-        commandPrefix: IMPECCABLE_COMMAND_PREFIX,
+        // The internally retained browser UI appends 'impeccable' to this prefix.
+        // Surface the callable DWA command, not the retired standalone skill.
+        commandPrefix: `${IMPECCABLE_COMMAND_PREFIX}design-with-ai `,
         appRoot: process.cwd(),
         parts,
       });
