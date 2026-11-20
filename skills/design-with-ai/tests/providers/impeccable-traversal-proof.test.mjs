@@ -8,10 +8,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { walkDir } from "../../../impeccable/scripts/detector/node/file-system.mjs";
+import { walkDir } from "../../internal/impeccable/scripts/detector/node/file-system.mjs";
 
 const detector = fileURLToPath(new URL(
-  "../../../impeccable/scripts/detect.mjs", import.meta.url));
+  "../../internal/impeccable/scripts/detect.mjs", import.meta.url));
 
 function fixture(fn) {
   const root = mkdtempSync(join(tmpdir(), "dwa-impeccable-walk-"));
