@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - 'skills/impeccable/**'
+      - 'skills/design-with-ai/internal/impeccable/**'
       - '.github/workflows/verify-impeccable-windows.yml'
   workflow_dispatch:
 
@@ -20,7 +21,7 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $scripts = Join-Path $env:GITHUB_WORKSPACE 'skills\impeccable\scripts'
+          $scripts = Join-Path $env:GITHUB_WORKSPACE 'skills\design-with-ai\internal\impeccable\scripts'
           $version = (Get-Content -Raw -LiteralPath (Join-Path $scripts 'VERSION')).Trim()
           if ($version -ne '0.1.24') { throw "Unexpected engine version: $version" }
           $manifest = Get-Content -LiteralPath (Join-Path $scripts 'engine-checksums.txt')
