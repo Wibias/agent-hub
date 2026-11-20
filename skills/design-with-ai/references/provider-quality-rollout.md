@@ -30,11 +30,20 @@ Tests establish adapter and orchestration behavior on synthetic fixtures. They *
 
 Recommended evaluation metrics: P0/P1 escapes; render/responsive escapes; reviewer-accepted vs rejected external findings; missing/blocked browser coverage; repeated ledger findings; iteration counts and time overhead; and the proportion of iterations backed by fresh completion proofs. Record baseline vs intervention with the same route set and blind evaluation to avoid rewarding a scanner merely for creating more warnings.
 
-## Decision on the separate Impeccable skill
+## Integrated Impeccable architecture
 
-**Retain `skills/impeccable` for now.** It still exposes an explicit specialist command vocabulary, PRODUCT.md/DESIGN.md flows, live-browser behavior and upstream engine/launcher contracts that the new **static source-only** Impeccable adapter cannot replace. Removing the skill now would break `/impeccable` and related explicit routes, and silently remove supported capabilities. The DWA adapter must not invoke the launcher or `live` mode automatically.
+The static JS detector is a local, source-only **internal DWA provider**.
+Its implementation is held in `skills/design-with-ai/internal/impeccable/`.
+The optional engine, CLI, hooks and Live mode are separate capabilities
+**inside the same DWA owner**, reached only from an explicit
+`design-with-ai impeccable <verb>` route defined in
+`references/impeccable-routes.md`.
 
-After at least one stable compatibility release, inventory downstream invocations and parity-test every explicitly supported command before replacing the vendored folder with a thin compatibility shim. Keep `/impeccable` routing and an explicit specialist entry point; do not merge generic DWA design ownership with Impeccable's specialist UX. The vendor's `UPSTREAM.md` still records an update-pending engine mismatch; this is a reason to plan an eventual migration, **not** evidence that the current adapter can safely supersede the runtime.
+The static provider must never use the Rust engine launcher or start Live or
+install hooks. The shared UI quality ledger and final product acceptance
+remain owned by DWA. The old independent discovery entry will be retired
+only after exact path, command, hook, Live and launcher tests pass; copying
+source files is not qualification.
 
 ## Rollback
 
