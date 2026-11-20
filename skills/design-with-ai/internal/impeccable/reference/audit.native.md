@@ -102,7 +102,7 @@ For each issue, document:
 - **Impact**: How it affects users
 - **Guideline**: The HIG / Material rule it violates (if applicable)
 - **Recommendation**: How to fix it
-- **Suggested command**: Which command to use (prefer: $impeccable adapt, $impeccable animate, $impeccable audit, $impeccable bolder, $impeccable clarify, $impeccable colorize, $impeccable critique, $impeccable delight, $impeccable distill, $impeccable document, $impeccable harden, $impeccable layout, $impeccable onboard, $impeccable optimize, $impeccable overdrive, $impeccable polish, $impeccable quieter, $impeccable shape, $impeccable typeset)
+- **Suggested command**: Which command to use (prefer: $design-with-ai impeccable adapt, $design-with-ai impeccable animate, $design-with-ai impeccable audit, $design-with-ai impeccable bolder, $design-with-ai impeccable clarify, $design-with-ai impeccable colorize, $design-with-ai impeccable critique, $design-with-ai impeccable delight, $design-with-ai impeccable distill, $design-with-ai impeccable document, $design-with-ai impeccable harden, $design-with-ai impeccable layout, $design-with-ai impeccable onboard, $design-with-ai impeccable optimize, $design-with-ai impeccable overdrive, $design-with-ai impeccable polish, $design-with-ai impeccable quieter, $design-with-ai impeccable shape, $design-with-ai impeccable typeset)
 
 ### Patterns & Systemic Issues
 
@@ -121,13 +121,13 @@ List recommended commands in priority order (P0 first, then P1, then P2):
 1. **[P?] `$command-name`**: Brief description (specific context from audit findings)
 2. **[P?] `$command-name`**: Brief description (specific context)
 
-**Rules**: Only recommend commands from: $impeccable adapt, $impeccable animate, $impeccable audit, $impeccable bolder, $impeccable clarify, $impeccable colorize, $impeccable critique, $impeccable delight, $impeccable distill, $impeccable document, $impeccable harden, $impeccable layout, $impeccable onboard, $impeccable optimize, $impeccable overdrive, $impeccable polish, $impeccable quieter, $impeccable shape, $impeccable typeset. Map findings to the most appropriate command. End with `$impeccable polish` as the final step if any fixes were recommended.
+**Rules**: Only recommend commands from: $design-with-ai impeccable adapt, $design-with-ai impeccable animate, $design-with-ai impeccable audit, $design-with-ai impeccable bolder, $design-with-ai impeccable clarify, $design-with-ai impeccable colorize, $design-with-ai impeccable critique, $design-with-ai impeccable delight, $design-with-ai impeccable distill, $design-with-ai impeccable document, $design-with-ai impeccable harden, $design-with-ai impeccable layout, $design-with-ai impeccable onboard, $design-with-ai impeccable optimize, $design-with-ai impeccable overdrive, $design-with-ai impeccable polish, $design-with-ai impeccable quieter, $design-with-ai impeccable shape, $design-with-ai impeccable typeset. Map findings to the most appropriate command. End with `$design-with-ai impeccable polish` as the final step if any fixes were recommended.
 
 After presenting the summary, tell the user:
 
 > You can ask me to run these one at a time, all at once, or in any order you prefer.
 >
-> Re-run `$impeccable audit` after fixes to see your score improve.
+> Re-run `$design-with-ai impeccable audit` after fixes to see your score improve.
 
 Keep P3s few: a long tail of minor issues buries the ones that matter.
 
@@ -140,4 +140,4 @@ Keep P3s few: a long tail of minor issues buries the ones that matter.
 
 ## Save the Report
 
-After the report is delivered, save a copy so the findings outlive this conversation: write it, from the score table through Recommended Actions, to a temp file, then run `.agents/skills/impeccable/scripts/impeccable audit-storage write "<resolved target, or . for the whole project>" <temp-file>` and delete the temp file. The helper prints the path it wrote, which you mention in one line; `REPORTS OFF:` means the project opted out, and you mention nothing. Saving never replaces delivering: the user reads the report in chat first.
+After the report is delivered, save a copy so the findings outlive this conversation: write it, from the score table through Recommended Actions, to a temp file, then run `.agents/skills/design-with-ai/internal/impeccable/scripts/impeccable audit-storage write "<resolved target, or . for the whole project>" <temp-file>` and delete the temp file. The helper prints the path it wrote, which you mention in one line; `REPORTS OFF:` means the project opted out, and you mention nothing. Saving never replaces delivering: the user reads the report in chat first.
