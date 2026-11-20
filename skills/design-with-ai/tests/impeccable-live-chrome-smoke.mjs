@@ -74,6 +74,8 @@ try {
   assert.equal(state.initialized, true);
   assert.equal(state.overlay, true);
   assert.equal(state.tokenExposed, false, 'script must clear token-bearing bootstrap global');
+  assert.equal(await page.evaluate(() => window.__IMPECCABLE_COMMAND_PREFIX__), '$design-with-ai ',
+    'Live UI must recommend the canonical DWA command rather than retired $impeccable');
   await context.close();
   console.log('PASS: internal Live overlay initialized in real isolated Chrome; product DOM preserved.');
 } finally {
