@@ -193,7 +193,7 @@ test('Impeccable legacy release remains pinned as an internal DWA implementation
   assert.match(routes, /explicitly selects/);
   assert.match(routes, /repository instruction injection/i);
   await assert.rejects(text('skills/impeccable/SKILL.md'), { code: 'ENOENT' });
-  assert.equal(await exists(base + 'SKILL.md'), false);
+  await assert.rejects(text(base + 'SKILL.md'), { code: 'ENOENT' });
 });
 
 test('integrated runtime retains AgentHub-only context helpers and provenance', async () => {
