@@ -43,6 +43,8 @@ const IMPECCABLE_HOOK_COMMAND_MARKERS = [
   // without deleting unrelated host hook entries.
   'skills/impeccable/scripts/hook.mjs',
   'skills/impeccable/scripts/hook-before-edit.mjs',
+  'skills/impeccable/scripts/hook-probe.mjs',
+  'skills/impeccable/scripts/hook-after-edit.mjs',
   'skills/impeccable/scripts/hook-stop.mjs',
   'skills/design-with-ai/internal/impeccable/scripts/hook-probe.mjs',
   'skills/design-with-ai/internal/impeccable/scripts/hook.mjs',
