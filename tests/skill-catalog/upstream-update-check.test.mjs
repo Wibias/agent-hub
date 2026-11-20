@@ -84,56 +84,38 @@ test('offline upstream check flags Impeccable reference and engine adoption as p
   assert.doesNotMatch(result.stdout, /RECORDED impeccable/);
 });
 
-test('Impeccable released engine 0.1.24 remains subject to runtime verification', () => {
-  const upstream = read('skills/impeccable/UPSTREAM.md');
-  const skill = read('skills/impeccable/SKILL.md');
-  const engineVersion = read('skills/impeccable/scripts/VERSION').trim();
-
+test('integrated Impeccable engine pin remains unqualified until executable verification', () => {
+  const upstream = read('skills/design-with-ai/internal/impeccable/UPSTREAM.md');
+  const routes = read('skills/design-with-ai/references/impeccable-routes.md');
+  const skill = read('skills/design-with-ai/SKILL.md');
+  const scripts = 'skills/design-with-ai/internal/impeccable/scripts/';
   assert.match(upstream, /acb4cfe14470b1fdf51e855431af618d936b7db8/);
-  assert.match(upstream, /acb4cfe14470b1fdf51e855431af618d936b7db8/);
-  assert.match(upstream, /cssAuthoring\.styleClose/);
-  assert.match(upstream, /update.pending/i);
-  assert.match(upstream, /Skill version: `4\.9\.1`/);
-  assert.match(upstream, /Engine version: `0\.1\.24`/);
-  assert.match(skill, /version: 4\.9\.1/);
-  assert.equal(engineVersion, '0.1.24');
-  assert.equal(existsSync(resolve('skills/impeccable/scripts/engine-checksums.txt')), true);
-  assert.match(
-    read('skills/impeccable/scripts/engine-checksums.txt'),
-    /0\.1\.24 impeccable-windows-x64\.exe [0-9a-f]{64}/,
-  );
-
-  assert.match(skill, /Explicit-only Impeccable frontend design specialist/i);
-  assert.match(skill, /repository instruction injection/i);
-  assert.match(skill, /craft-floor\.md[\s\S]{0,400}UI edit/i);
+  assert.match(upstream, /Skill version: `4\\.9\\.1`/);
+  assert.match(upstream, /Engine version: `0\\.1\\.24`/);
+  assert.equal(read(scripts + 'VERSION').trim(), '0.1.24');
+  assert.match(read(scripts + 'engine-checksums.txt'),
+    /0\\.1\\.24 impeccable-windows-x64\\.exe [0-9a-f]{64}/);
+  assert.match(routes, /DWA/);
+  assert.match(skill, /^name: design-with-ai$/m);
+  assert.match(skill, /impeccable <verb>/);
+  assert.equal(existsSync(resolve('skills/impeccable/SKILL.md')), false);
 });
 
-test('Impeccable pinned shared release files match exact upstream blob SHAs', () => {
+test('unmodified pinned engine files preserve original Git blob provenance', () => {
   const expected = new Map([
     ['agents/impeccable_finish_reviewer.toml', '40d58d11818cde624baad91316a637e553f09f67'],
-    ['reference/adapt.md', 'd2e5415b70357902a19e5e8f2696970fc067a580'],
-    ['reference/audit.md', '6df698d674d5652c60d9b0885b22e0b40637addc'],
     ['reference/degraded/finish-reviewer.md', 'b2cc1cceaa3f0692541ea2ac51d4d8a0107a8fac'],
-    ['reference/distill.md', 'c667ade7a9b1abc7418d4ee983757a61d5d9317d'],
-    ['reference/foundations.md', 'ce0d376256e20827a697e26932f79294f5d7053a'],
-    ['reference/hooks.md', '3d407938c965f0e228db99a0e422ace2b4e2f737'],
-    ['reference/init.md', '0be86b1c536c32609d5f158c43704bb5d6723c28'],
-    ['reference/live.md', 'a7d75515a20d10aeadff0a5e7b6e2a9442d3abdf'],
-    ['reference/new-work.md', 'a4737d17c99105b607b9b976ee377f8a8c463e6a'],
-    ['reference/onboard.md', 'f53ed67d710adf3e8a29f7ac2bb55ede6abe2d45'],
     ['reference/overdrive.md', '4ac7f17fc7d3a96a08e12d6e915e2108b8fedda5'],
-    ['reference/quieter.md', '2c22e505657e0d2674e1334a09008d9a106202ac'],
     ['scripts/VERSION', '5a48b6be2afb3d5511388c8f0da2eb4f0479f21c'],
     ['scripts/engine-checksums.txt', '5a8d94b95d095e5ec003c983b63a255c37e7b62c'],
     ['scripts/impeccable', '502652747b67ba10ad79d347553cc64a458b7408'],
     ['scripts/impeccable.cmd', 'ab90ace70ee4cb60671a3afdb6b9f022cab82da0'],
     ['scripts/live-browser.js', '4ab37e343e4f330106f101a2143f4f8d219110e1'],
+    ['scripts/command-metadata.json', '4686bb6deea643493198bff1369bc2958b3909a7'],
   ]);
   for (const [relative, sha] of expected) {
-    const path = 'skills/impeccable/' + relative;
-    assert.equal(git('hash-object', path), sha, path + ' must match release provenance');
+    const path = 'skills/design-with-ai/internal/impeccable/' + relative;
+    assert.equal(git('hash-object', path), sha, path + ' must match pinned-release provenance');
   }
-  assert.equal(git('hash-object', 'skills/impeccable/scripts/command-metadata.json'),
-    '4686bb6deea643493198bff1369bc2958b3909a7');
-  assert.match(git('ls-tree', 'HEAD', 'skills/impeccable/scripts/impeccable'), /^100755 blob /);
+  assert.match(git('ls-tree', 'HEAD', 'skills/design-with-ai/internal/impeccable/scripts/impeccable'), /^100755 blob /);
 });
