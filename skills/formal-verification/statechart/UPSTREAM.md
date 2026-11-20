@@ -4,13 +4,13 @@ Agent Hub vendors the statechart compiler runtime from `cursor/plugins` pstack.
 
 ## Current pin
 
-- Upstream runtime snapshot: `93b916d4a1e806507e22f4716b352fa91f2b227e`
-- Previous pinned runtime: `c742dd61706fbacc1b95f1a20b7b988cf096ce6c`
+- Upstream runtime snapshot: `aaeb0ea3a0584995aa8f55ce44c6c5259414b896`
+- Previous pinned runtime: `93b916d4a1e806507e22f4716b352fa91f2b227e` (before that: `c742dd61706fbacc1b95f1a20b7b988cf096ce6c`)
 - Compiler port: `34b1b7c96f09f81a21a6c78f65b7833f7dcb5b24` (`#977`)
 - Qualified-action trace fix: `740d2c0786246cafac41906198f656b135194d3b` (`#982`)
 - Source runtime: `pstack/skills/statechart/scripts/`
 - Source render reference: `pstack/skills/statechart/references/render.md`
-- Refreshed: `2026-11-18`
+- Refreshed: `2026-11-20`
 
 ## November 2026 scoped refresh
 
@@ -25,6 +25,30 @@ The upstream repository also changed unrelated pstack workflows. The broad
 this runtime refresh does not claim those unrelated changes were reviewed or
 adopted. Execution, renderer, and integration CI evidence is required before
 this refreshed runtime is considered qualified.
+
+## November 20 targeted process-lifecycle refresh
+
+Compared `93b916d4a1e806507e22f4716b352fa91f2b227e` with `aaeb0ea3a0584995aa8f55ce44c6c5259414b896` within
+`pstack/skills/statechart/scripts/`, excluding upstream `scripts/test/`.
+Updated the three existing files `run.ts`, `frontends/dot.ts`,
+`statechart.ts`, and added `kill.ts` and `janitor.ts`, copied
+byte-for-byte from `aaeb0ea3a0584995aa8f55ce44c6c5259414b896`. The existing render reference did not change.
+
+The new entrypoint runs a detached worker and janitor, sends an explicit
+completion message to the janitor, and cleans up the worker process group.
+The cleanup behavior differs on Windows and POSIX. The DOT frontend also
+normalizes line boundaries. These are runtime-behavior changes, not just
+documentation changes.
+
+**Qualification:** Byte parity and structural tests alone do not establish
+correct TLC execution, interruption handling or child-process cleanup on each
+OS. Verify successful, failing and interrupted checks with real child
+processes before declaring the runtime qualified for production use.
+
+The wider `pstack/` changes since the registry's
+`reviewedCommit` are **not** accepted or reviewed by this runtime
+refresh. The broad `upstream-sources.json` checkpoint is unchanged;
+only its separate `localPin` reflects the vendored runtime snapshot.
 
 ## Sync contract
 
