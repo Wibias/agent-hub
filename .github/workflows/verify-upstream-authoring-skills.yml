@@ -27,6 +27,8 @@ jobs:
         run: node scripts/skill-ratchet.mjs validate --skill-root "$PWD/skills/impeccable" --json
       - name: Validate Design with AI skill
         run: node scripts/skill-ratchet.mjs validate --skill-root "$PWD/skills/design-with-ai" --json
+      - name: Test selective DWA upstream adaptations
+        run: node --test skills/design-with-ai/tests/impeccable-v410-selective-review.test.mjs
       - name: Validate GitHub Delivery skill
         run: node scripts/skill-ratchet.mjs validate --skill-root "$PWD/skills/github-delivery" --json
       - name: Verify knowledge index
