@@ -54,7 +54,8 @@ test('upstream update check tracks the five canonical sources and decisions', ()
   assert.match(checker, /--offline/);
   assert.match(checker, /git[^\n]*ls-remote|ls-remote/);
   assert.match(checker, /CURRENT/);
-  assert.match(checker, /UPDATE/);
+  assert.match(checker, /classifyUpstreamStatus/);
+  assert.match(checker, /needsUpstreamAction/);
   assert.match(checker, /PENDING/);
   assert.match(checker, /hasScopedChanges/);
 });
