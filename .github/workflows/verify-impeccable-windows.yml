@@ -17,6 +17,9 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+      - name: Test internal DWA hook migration on Windows
+        run: node --test skills/design-with-ai/tests/impeccable-hook-migration.test.mjs
+
       - name: Verify release-pinned Windows launcher and checksum refusal
         shell: pwsh
         run: |
