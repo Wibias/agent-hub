@@ -337,7 +337,7 @@
       "harness": "agents",
       "scope": "global",
       "name": "design-with-ai",
-      "description": "Canonical default owner for visible product-UI design, audit, polish, restyling, redesign, new surfaces, design-to-code handoff specs, product-UI data visualization, native/mobile UI, motion review, and Penpot MCP product-design work including design-system audits, visual-token cleanup, screen design, components, variants, palette, component style, spacing, and typography. Use for ordinary \"make this look better\" work. Not for backend/server infrastructure, authentication or protocol deployment, general code review, non-UI chart/report generation, module/API interface design (route those to codebase-design), or copy-only edits. Explicit Impeccable requests stay with Impeccable.",
+      "description": "Canonical default owner for visible product-UI design, audit, polish, restyling, redesign, new surfaces, design-to-code handoff specs, product-UI data visualization, native/mobile UI, motion review, and Penpot MCP product-design work including design-system audits, visual-token cleanup, screen design, components, variants, palette, component style, spacing, and typography. Use for ordinary \"make this look better\" work. Not for backend/server infrastructure, authentication or protocol deployment, general code review, non-UI chart/report generation, module/API interface design (route those to codebase-design), or copy-only edits. Explicit Impeccable requests use the integrated DWA command route.",
       "tags": [
         "design",
         "with",
@@ -355,7 +355,7 @@
       ],
       "status": "active",
       "canonicalId": null,
-      "contentHash": "9877ce21afeb3f05bd5bdd00747953844f78152c551facfed05125e311aaa809"
+      "contentHash": "f0ce3788af7d190da47ffcf072d47d347658a261b9d90497dafa8b25b5c445e3"
     },
     {
       "id": "agents/diagnose",
