@@ -178,7 +178,7 @@ test(
     const { splitLines } = await import(
       new URL('../statechart/scripts/frontends/dot.ts', import.meta.url).href
     );
-    assert.deepEqual(splitLines('one\\r\\ntwo\\r'), ['one', 'two']);
-    assert.deepEqual(splitLines('one\\ntwo'), ['one', 'two']);
+    assert.deepEqual(splitLines('one\r\ntwo\r'), ['one', 'two']);
+    assert.deepEqual(splitLines('one\ntwo'), ['one', 'two']);
   },
 );
