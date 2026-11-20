@@ -12,16 +12,18 @@
     {
       "id": "emil",
       "repository": "emilkowalski/skills",
-      "reviewedCommit": "0f2e23b32bb1265e84cff8d3e75785fec953fb1b",
+      "reviewedCommit": "64eb3deb9a5fbfa041faf783e0bc3fd635872e9c",
       "scope": "design-with-ai motion sources",
-      "decision": "current"
+      "decision": "current",
+      "reviewedAt": "2026-11-20"
     },
     {
       "id": "matt",
       "repository": "mattpocock/skills",
-      "reviewedCommit": "4ae2317ddb22b046e26455e4f9c9b3aaaf62212d",
+      "reviewedCommit": "abeeaf95660ba9e8b7c753eb38f441ca707a8823",
       "scope": "adapted guidance only",
-      "decision": "not-applicable"
+      "decision": "not-applicable",
+      "reviewedAt": "2026-11-20"
     },
     {
       "id": "pstack",

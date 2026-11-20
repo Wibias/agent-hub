@@ -27,8 +27,8 @@ test('upstream update check tracks the five canonical sources and decisions', ()
 
   const expected = new Map([
     ['addy', ['addyosmani/agent-skills', '39b723ceebf81474d0557c1fecd01eddab585563', 'current']],
-    ['emil', ['emilkowalski/skills', '0f2e23b32bb1265e84cff8d3e75785fec953fb1b', 'current']],
-    ['matt', ['mattpocock/skills', '4ae2317ddb22b046e26455e4f9c9b3aaaf62212d', 'not-applicable']],
+    ['emil', ['emilkowalski/skills', '64eb3deb9a5fbfa041faf783e0bc3fd635872e9c', 'current']],
+    ['matt', ['mattpocock/skills', 'abeeaf95660ba9e8b7c753eb38f441ca707a8823', 'not-applicable']],
     ['pstack', ['cursor/plugins', 'bb68f2365eceafa0cb2d253112f675acf5f144cc', 'current']],
     ['impeccable', ['pbakaus/impeccable', 'acb4cfe14470b1fdf51e855431af618d936b7db8', 'update-pending']],
   ]);
@@ -40,6 +40,10 @@ test('upstream update check tracks the five canonical sources and decisions', ()
     assert.equal(source.decision, decision);
     assert.match(source.reviewedCommit, /^[0-9a-f]{40}$/);
     assert.ok(source.scope.length > 0);
+  }
+
+  for (const id of ['emil', 'matt']) {
+    assert.equal(registry.sources.find((source) => source.id === id).reviewedAt, '2026-11-20');
   }
 
   const pstack = registry.sources.find((source) => source.id === 'pstack');
