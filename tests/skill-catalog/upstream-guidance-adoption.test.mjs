@@ -176,30 +176,30 @@ test('github delivery treats always-on cost and generated-output review as contr
   assert.match(prDescription, /generated|mechanical/i);
 });
 
-test('Impeccable release candidate preserves explicit local overlay', async () => {
-  const upstream = await text('skills/impeccable/UPSTREAM.md');
-  const skill = await text('skills/impeccable/SKILL.md');
-  const engineVersion = (await text('skills/impeccable/scripts/VERSION')).trim();
-  const checksums = await text('skills/impeccable/scripts/engine-checksums.txt');
+test('Impeccable legacy release remains pinned as an internal DWA implementation', async () => {
+  const base = 'skills/design-with-ai/internal/impeccable/';
+  const upstream = await text(base + 'UPSTREAM.md');
+  const skill = await text('skills/design-with-ai/SKILL.md');
+  const routes = await text('skills/design-with-ai/references/impeccable-routes.md');
+  const engineVersion = (await text(base + 'scripts/VERSION')).trim();
+  const checksums = await text(base + 'scripts/engine-checksums.txt');
 
-  assert.match(upstream, /acb4cfe14470b1fdf51e855431af618d936b7db8/);
-  assert.match(upstream, /acb4cfe14470b1fdf51e855431af618d936b7db8/);
-  assert.match(upstream, /update.pending/i);
-  assert.match(upstream, /Skill version: `4\.9\.1`/);
-  assert.match(upstream, /Engine version: `0\.1\.24`/);
-  assert.match(skill, /version: 4\.9\.1/);
-  assert.match(skill, /Scale ambition to the surface's mode/i);
-  assert.doesNotMatch(skill, /the ceiling covers the whole cycle/i);
+  assert.match(upstream, /Skill version: `4\\.9\\.1`/);
+  assert.match(upstream, /Engine version: `0\\.1\\.24`/);
   assert.equal(engineVersion, '0.1.24');
-  assert.match(checksums, /0\.1\.24 impeccable-windows-x64\.exe [0-9a-f]{64}/);
-  assert.match(skill, /Explicit-only Impeccable frontend design specialist/i);
-  assert.match(skill, /repository instruction injection/i);
+  assert.match(checksums, /0\\.1\\.24 impeccable-windows-x64\\.exe [0-9a-f]{64}/);
+  assert.match(skill, /^name: design-with-ai$/m);
+  assert.match(skill, /impeccable <verb>/);
+  assert.match(routes, /explicitly selects/);
+  assert.match(routes, /repository instruction injection/i);
+  assert.equal(await exists('skills/impeccable/SKILL.md'), false);
+  assert.equal(await exists(base + 'SKILL.md'), false);
 });
 
-test('Impeccable sync preserves Agent Hub runtime integration files that were never upstream vendor files', async () => {
-  const upstream = await text('skills/impeccable/UPSTREAM.md');
-  const localContextRuntime = await text('skills/impeccable/scripts/context.mjs');
-
+test('integrated runtime retains AgentHub-only context helpers and provenance', async () => {
+  const base = 'skills/design-with-ai/internal/impeccable/';
+  const upstream = await text(base + 'UPSTREAM.md');
+  const context = await text(base + 'scripts/context.mjs');
   assert.match(upstream, /Files shared with upstream/i);
-  assert.match(localContextRuntime, /readLocalSkillVersion|resolveProject/);
+  assert.match(context, /readLocalSkillVersion|resolveProject/);
 });
