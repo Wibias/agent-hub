@@ -8,7 +8,7 @@ import { join, resolve } from "node:path";
 import { test } from "node:test";
 import {
   findDesignRoot, loadDesignSystemForTarget,
-} from "../../../impeccable/scripts/detector/design-system.mjs";
+} from "../../internal/impeccable/scripts/detector/design-system.mjs";
 
 function withFixtures(callback) {
   const home = mkdtempSync(join(tmpdir(), "dwa-impeccable-design-root-"));
