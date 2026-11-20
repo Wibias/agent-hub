@@ -4,7 +4,7 @@ import { once } from 'node:events';
 import { mkdtemp, mkdir, access, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import test from 'node:test';
 
 const scripts = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../statechart/scripts');
@@ -59,7 +59,7 @@ test('janitor terminates a detached worker group and removes only supplied stagi
     } finally {
       if (janitor?.exitCode === null && janitor?.signalCode === null) janitor.kill('SIGKILL');
       if (worker.exitCode === null && worker.signalCode === null) {
-        const { killGroup } = await import(path.join(scripts, 'kill.ts'));
+        const { killGroup } = await import(pathToFileURL(path.join(scripts, 'kill.ts')).href);
         await killGroup(worker.pid);
         await settles(worker, 5000).catch(() => {});
       }
