@@ -41,7 +41,7 @@ test('static source detector uses bundled DWA-local JS and never invokes the eng
   const provider = read('scripts/providers/impeccable.mjs');
   assert.match(provider, /internal\/impeccable\/scripts\/detect\.mjs/);
   assert.doesNotMatch(provider, /spawn.*impeccable\.cmd|spawn.*scripts\/impeccable/);
-  assert.match(read('references/impeccable-routes.md'), /no engine launch/i);
+  assert.match(read('references/impeccable-routes.md'), /normal UI work must not start the internal launcher/i);
 });
 
 test('hook management accepts legacy installations and writes current DWA paths', () => {
