@@ -1237,7 +1237,9 @@ function truthyEnv(value) {
 
 function valueHasHookMarker(value) {
   if (typeof value === 'string') {
-    return value.includes('skills/impeccable/scripts/hook.mjs')
+    return value.includes('skills/design-with-ai/internal/impeccable/scripts/hook.mjs')
+      || value.includes('skills/design-with-ai/internal/impeccable/scripts/hook-before-edit.mjs')
+      || value.includes('skills/impeccable/scripts/hook.mjs')
       || value.includes('skills/impeccable/scripts/hook-before-edit.mjs');
   }
   if (Array.isArray(value)) return value.some(valueHasHookMarker);
