@@ -11,10 +11,10 @@ import { Capability, ProviderStatus } from "../../scripts/providers/contract.mjs
 import { createProviderRegistry, runProviders } from "../../scripts/providers/registry.mjs";
 import { createImpeccableProvider } from "../../scripts/providers/impeccable.mjs";
 import { sourceScopeProof } from "../../scripts/providers/scope-proof.mjs";
-import { collectStaticCssText } from "../../../impeccable/scripts/detector/engines/static-html/css-cascade.mjs";
+import { collectStaticCssText } from "../../internal/impeccable/scripts/detector/engines/static-html/css-cascade.mjs";
 
 const cli = fileURLToPath(new URL("../../scripts/providers/scan.mjs", import.meta.url));
-const vendoredCli = fileURLToPath(new URL("../../../impeccable/scripts/detect.mjs", import.meta.url));
+const vendoredCli = fileURLToPath(new URL("../../internal/impeccable/scripts/detect.mjs", import.meta.url));
 const validProof = Object.freeze({
   schemaVersion: 1, candidateFiles: 1, eligibleFiles: 1,
   scannedFiles: 1, ignoredFiles: 0, degradedFiles: 0, durationMs: 1,
@@ -378,7 +378,7 @@ test("inline waivers suppress findings without suppressing file coverage", async
 test("HTML parser fallback is explicitly degraded, not complete browser-grade evidence", async () => {
   await fixture(async ({ root }) => {
     const { detectHtml } = await import(
-      "../../../impeccable/scripts/detector/engines/static-html/detect-html.mjs");
+      "../../internal/impeccable/scripts/detector/engines/static-html/detect-html.mjs");
     const page = join(root, "degraded.html");
     writeFileSync(page, "<!doctype html><html><body><main>Loaded</main></body></html>\n");
     const degraded = [];
@@ -475,7 +475,7 @@ test("scannable symlink paths never leak into blocked Impeccable evidence", asyn
 
 test("vendored walker extension policy matches the source symlink preflight", async () => {
   const { SCANNABLE_EXTENSIONS, SKIP_DIRS } = await import(
-    "../../../impeccable/scripts/detector/node/file-system.mjs");
+    "../../internal/impeccable/scripts/detector/node/file-system.mjs");
   for (const suffix of SCANNABLE_EXTENSIONS) {
     assert.match("file" + suffix,
       /\.(?:html?|css|scss|sass|less|jsx?|tsx?|vue|svelte|astro|blade\.php)$/i);
