@@ -77,7 +77,7 @@ A DESIGN.md written by `impeccable world` carries a `world: "<id>"` line in its 
 - **Scan mode** (default): the project has design tokens, components, or rendered output. Extract, then confirm descriptive language. Use when there's code to analyze.
 - **Seed mode**: the project is pre-implementation. Ensure PRODUCT.md exists, then reuse new-work's visual-world workshop and write its directional DESIGN.md seed. Re-run in scan mode once there's code.
 
-Decide by scanning first (Scan mode Step 1). If the scan finds no tokens, no component files, and no rendered site, offer seed mode; don't silently switch. `$impeccable document --seed` requests new-work's world workshop, but it does not authorize replacing coherent code: when an incumbent system exists, offer scan mode or route an explicit identity-replacement request through new-work.
+Decide by scanning first (Scan mode Step 1). If the scan finds no tokens, no component files, and no rendered site, offer seed mode; don't silently switch. `$design-with-ai impeccable document --seed` requests new-work's world workshop, but it does not authorize replacing coherent code: when an incumbent system exists, offer scan mode or route an explicit identity-replacement request through new-work.
 
 ## Scan mode (approach C: auto-extract, then confirm descriptive language)
 
@@ -368,7 +368,7 @@ Use the canonical section order from Scan mode. Populate the selected workshop d
 Lead the file with:
 
 ```markdown
-<!-- SEED: established with the user before implementation; re-run $impeccable document once there's code to capture the actual tokens and components. -->
+<!-- SEED: established with the user before implementation; re-run $design-with-ai impeccable document once there's code to capture the actual tokens and components. -->
 ```
 
 Per-section guidance in seed mode:
@@ -387,7 +387,7 @@ Seed mode writes a minimal frontmatter with `name` and `description` only; no co
 ### Step 3: Confirm
 
 1. Show the seed DESIGN.md. Call out that it is a seed (the marker is the literal commitment).
-2. Tell the user: "Re-run `$impeccable document` once you have some code. That pass will extract real tokens and generate the sidecar."
+2. Tell the user: "Re-run `$design-with-ai impeccable document` once you have some code. That pass will extract real tokens and generate the sidecar."
 
 Your own write is the freshest source; no reload needed.
 

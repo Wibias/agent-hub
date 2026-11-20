@@ -23,7 +23,7 @@ Resolve one stable target, run two independent assessments, synthesize a design 
    - "this page" -> the current URL or source file
 2. **Confirm the target slugs cleanly**:
    ```bash
-   .agents/skills/impeccable/scripts/impeccable critique-storage slug "<resolved-path-or-url>"
+   .agents/skills/design-with-ai/internal/impeccable/scripts/impeccable critique-storage slug "<resolved-path-or-url>"
    ```
    Every later command also accepts the resolved target directly and derives the same slug internally; never hand-write a slug. If this exits non-zero, skip persistence and trend for this run, but continue the critique.
 3. **Read `.impeccable/critique/ignore.md`** if it exists. Drop matching findings silently; it is the only prior-run input critique consumes.
@@ -71,7 +71,7 @@ Run the bundled detector and browser visualization evidence. On web, Assessment 
 
 CLI scan:
 ```bash
-.agents/skills/impeccable/scripts/impeccable detect --json [target]
+.agents/skills/design-with-ai/internal/impeccable/scripts/impeccable detect --json [target]
 ```
 
 - Pass markup files/directories as `[target]`; do not pass CSS-only files.
@@ -85,14 +85,14 @@ Browser visualization is required for a viewable target when browser automation 
 1. Create a fresh tab and navigate. Prefer the harness's native/browser-canvas screenshot path before hand-rolling a Playwright/Puppeteer script; only fall back to a custom script when no native browser tool is exposed.
 2. Preflight mutable injection by setting `document.title` and appending a `<script>` tag. Read-only evaluate APIs do not count.
 3. If mutation is unavailable, skip live server, browser presentation, and injection; report fallback signal.
-4. If mutation is available, start `.agents/skills/impeccable/scripts/impeccable live-server --background`, present the browser if supported, label `[Human]`, scroll top, inject `http://localhost:PORT/detect.js`, wait 2-3 seconds, read `impeccable` console messages, then run `.agents/skills/impeccable/scripts/impeccable live-server stop --keep-inject`. The overlay went in through the browser, so the project's HTML has no script tag to strip; a bare `stop` also runs `live-inject --remove` against the project's entry file, an edit a read-only critique should not make.
+4. If mutation is available, start `.agents/skills/design-with-ai/internal/impeccable/scripts/impeccable live-server --background`, present the browser if supported, label `[Human]`, scroll top, inject `http://localhost:PORT/detect.js`, wait 2-3 seconds, read `impeccable` console messages, then run `.agents/skills/design-with-ai/internal/impeccable/scripts/impeccable live-server stop --keep-inject`. The overlay went in through the browser, so the project's HTML has no script tag to strip; a bare `stop` also runs `live-inject --remove` against the project's entry file, an edit a read-only critique should not make.
 5. For multi-view targets, inject on 3-5 representative pages.
 
 **Desktop apps** (Electron, NW.js, CEF, WebView2): there is no URL to open, so Assessment B attaches to the running app instead.
 
 1. Launch the app with a local DevTools port: `--remote-debugging-port=9222` (Electron, NW.js, CEF), or `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9222` for WebView2. Keep the port on 127.0.0.1 and never expose it beyond this machine; prefer a test profile and test data.
 2. Seed the state under review (route, open panel, theme, data). The scan reads the window as it stands. Keep the window on screen: a minimized or hidden window scans without the pixel contrast reads.
-3. Run `.agents/skills/impeccable/scripts/impeccable detect --cdp 9222 --target <part of the page URL or title> --json`. It returns the same JSON as a URL scan and leaves the page as found. With several pages open it fails and lists them; rerun with a `--target` that names one.
+3. Run `.agents/skills/design-with-ai/internal/impeccable/scripts/impeccable detect --cdp 9222 --target <part of the page URL or title> --json`. It returns the same JSON as a URL scan and leaves the page as found. With several pages open it fails and lists them; rerun with a `--target` that names one.
 4. Take screenshots through the harness's CDP tooling (`Page.captureScreenshot` on the same target). Skip the live-server overlay: there is no `[Human]` tab.
 
 The app has one window, so the assessments take turns in it instead of opening tabs (A, then B; see the sub-agent gate), and each must leave it as found: put back any route, scroll, theme, or panel it changed. Tauri on macOS (WKWebView) and on Linux (WebKitGTK) expose no CDP: run Assessment A and the source scan only, and say so in Run Notes.
@@ -111,7 +111,7 @@ Synthesize both assessments into a single report. Do not simply concatenate. Wea
 
 The chat response is the primary user-facing deliverable. Present the full structured critique below in chat; do not replace it with a summary and a link. The persisted snapshot is an archive of that run.
 
-Codex final-answer note: `$impeccable critique` produces a report artifact, so the final chat response should intentionally exceed the usual concise close-out style. Do not title the final response "Critique Summary" unless the user explicitly asked for a summary.
+Codex final-answer note: `$design-with-ai impeccable critique` produces a report artifact, so the final chat response should intentionally exceed the usual concise close-out style. Do not title the final response "Critique Summary" unless the user explicitly asked for a summary.
 
 Structure your feedback as a design director would:
 
@@ -170,7 +170,7 @@ For each issue, tag with **P0-P3 severity** (see [Issue Severity below](#issue-s
 - **[P?] What**: Name the problem clearly
 - **Why it matters**: How this hurts users or undermines goals
 - **Fix**: What to do about it (be concrete)
-- **Suggested command**: Which command could address this (from: $impeccable adapt, $impeccable animate, $impeccable audit, $impeccable bolder, $impeccable clarify, $impeccable colorize, $impeccable critique, $impeccable delight, $impeccable distill, $impeccable document, $impeccable harden, $impeccable layout, $impeccable onboard, $impeccable optimize, $impeccable overdrive, $impeccable polish, $impeccable quieter, $impeccable shape, $impeccable typeset)
+- **Suggested command**: Which command could address this (from: $design-with-ai impeccable adapt, $design-with-ai impeccable animate, $design-with-ai impeccable audit, $design-with-ai impeccable bolder, $design-with-ai impeccable clarify, $design-with-ai impeccable colorize, $design-with-ai impeccable critique, $design-with-ai impeccable delight, $design-with-ai impeccable distill, $design-with-ai impeccable document, $design-with-ai impeccable harden, $design-with-ai impeccable layout, $design-with-ai impeccable onboard, $design-with-ai impeccable optimize, $design-with-ai impeccable overdrive, $design-with-ai impeccable polish, $design-with-ai impeccable quieter, $design-with-ai impeccable shape, $design-with-ai impeccable typeset)
 
 #### Persona Red Flags
 > *Consult the [Personas reference](#persona-based-design-testing) below.*
@@ -217,7 +217,7 @@ Persistence is not the end of the run. After it, the response continues with the
 
 ### Persist the Snapshot
 
-Once the report above is finalized, write it to `.impeccable/critique/` so the user can refer back, and so `$impeccable polish` can pick up the priority issues without a copy-paste.
+Once the report above is finalized, write it to `.impeccable/critique/` so the user can refer back, and so `$design-with-ai impeccable polish` can pick up the priority issues without a copy-paste.
 
 Skip this step if the Setup slug was null (vague or root-level target).
 
@@ -230,7 +230,7 @@ Skip this step if the Setup slug was null (vague or root-level target).
 2. **Pass the structured metadata** through `IMPECCABLE_CRITIQUE_META` (JSON), then run the write command:
    ```bash
    IMPECCABLE_CRITIQUE_META='{"target":"<user phrasing>","total_score":<n>,"max_score":<n>,"na_heuristics":"<comma-separated numbers, or empty>","p0_count":<n>,"p1_count":<n>}' \
-     .agents/skills/impeccable/scripts/impeccable critique-storage write "<resolved target>" <body-file>
+     .agents/skills/design-with-ai/internal/impeccable/scripts/impeccable critique-storage write "<resolved target>" <body-file>
    ```
    `max_score` is the applicable maximum from the heuristic table (40 when every heuristic applied), so a later run can tell a renormalized total from a full one. For a local file target, the helper also records an exact content fingerprint so polish can distinguish the assessed bytes from later edits without relying on Git state or timestamps. The helper prints the absolute path it wrote. Leave that file on disk. Polish closes it; this run does not. `REPORTS OFF:` instead means the project opted out of saved reports: skip the trend read and carry on.
 
@@ -238,7 +238,7 @@ Skip this step if the Setup slug was null (vague or root-level target).
 
 4. **Read the trend** for context:
    ```bash
-   .agents/skills/impeccable/scripts/impeccable critique-storage trend "<resolved target>" 5
+   .agents/skills/design-with-ai/internal/impeccable/scripts/impeccable critique-storage trend "<resolved target>" 5
    ```
    This returns a JSON array of the last 5 frontmatter entries (including the one you just wrote).
 
@@ -251,7 +251,7 @@ Skip this step if the Setup slug was null (vague or root-level target).
 
    If this is the first run for the slug, the trend is just one score; say so: "First run for this target, no trend yet."
 
-6. **Close the run.** Go to Ask the User below and emit the questions, or the `Questions skipped: <reason>` line when the count allows it. The run is not complete until you do. Persistence is bookkeeping and cleanup is not an ending; stopping here leaves the user with a report and no way forward, and leaves `$impeccable polish` with no priorities to inherit.
+6. **Close the run.** Go to Ask the User below and emit the questions, or the `Questions skipped: <reason>` line when the count allows it. The run is not complete until you do. Persistence is bookkeeping and cleanup is not an ending; stopping here leaves the user with a report and no way forward, and leaves `$design-with-ai impeccable polish` with no priorities to inherit.
 
 This is fire-and-forget. Do not show the user the helper's JSON output; only the human-readable trend line and the written path. Failures here should not block the rest of the flow; print the error and move on.
 
@@ -292,20 +292,20 @@ List recommended commands in priority order, based on the user's answers:
 ...
 
 **Rules for recommendations**:
-- Only recommend commands from: $impeccable adapt, $impeccable animate, $impeccable audit, $impeccable bolder, $impeccable clarify, $impeccable colorize, $impeccable critique, $impeccable delight, $impeccable distill, $impeccable document, $impeccable harden, $impeccable layout, $impeccable onboard, $impeccable optimize, $impeccable overdrive, $impeccable polish, $impeccable quieter, $impeccable shape, $impeccable typeset
+- Only recommend commands from: $design-with-ai impeccable adapt, $design-with-ai impeccable animate, $design-with-ai impeccable audit, $design-with-ai impeccable bolder, $design-with-ai impeccable clarify, $design-with-ai impeccable colorize, $design-with-ai impeccable critique, $design-with-ai impeccable delight, $design-with-ai impeccable distill, $design-with-ai impeccable document, $design-with-ai impeccable harden, $design-with-ai impeccable layout, $design-with-ai impeccable onboard, $design-with-ai impeccable optimize, $design-with-ai impeccable overdrive, $design-with-ai impeccable polish, $design-with-ai impeccable quieter, $design-with-ai impeccable shape, $design-with-ai impeccable typeset
 - Order by the user's stated priorities first, then by impact
 - Each item's description should carry enough context that the command knows what to focus on
 - Map each Priority Issue to the appropriate command
 - Skip commands that would address zero issues
 - If the user chose a limited scope, only include items within that scope
 - If the user marked areas as off-limits, exclude commands that would touch those areas
-- End with `$impeccable polish` as the final step if any fixes were recommended
+- End with `$design-with-ai impeccable polish` as the final step if any fixes were recommended
 
 After presenting the summary, tell the user:
 
 > You can ask me to run these one at a time, all at once, or in any order you prefer.
 >
-> Re-run `$impeccable critique` after fixes to see your score improve.
+> Re-run `$design-with-ai impeccable critique` after fixes to see your score improve.
 
 ---
 
