@@ -61,3 +61,51 @@ test('hook activation is explicit, migrates old entries and preserves unrelated 
       rmSync(project, { recursive: true, force: true });
     }
   });
+
+
+test('explicit hooks on upgrades shared Claude legacy commands without erasing other hooks',
+  { timeout: 30000 },
+  () => {
+    const project = mkdtempSync(path.join(tmpdir(), 'dwa-impeccable-claude-hooks-'));
+    try {
+      mkdirSync(path.join(project, '.claude', 'skills', 'design-with-ai', 'internal', 'impeccable'), { recursive: true });
+      const settings = path.join(project, '.claude', 'settings.json');
+      const local = path.join(project, '.claude', 'settings.local.json');
+      writeFileSync(settings, JSON.stringify({
+        description: 'project-owned settings',
+        custom: { marker: 'keep me' },
+        hooks: {
+          PostToolUse: [
+            { matcher: 'Edit|Write', hooks: [
+              { type: 'command', command: 'node "${CLAUDE_PROJECT_DIR}/.claude/skills/impeccable/scripts/hook.mjs"' },
+            ] },
+            { matcher: 'Read', hooks: [{ type: 'command', command: 'echo keep-other-shared-hook' }] },
+          ],
+        },
+      }, null, 2));
+      writeFileSync(local, JSON.stringify({
+        hooks: { Stop: [{ hooks: [
+          { type: 'command', command: 'node "${CLAUDE_PROJECT_DIR}/.claude/skills/impeccable/scripts/hook.mjs"' },
+          { type: 'command', command: 'echo keep-other-local-hook' },
+        ] }] },
+      }, null, 2));
+      const baseline = readFileSync(settings, 'utf8');
+      invoke(project, 'status');
+      assert.equal(readFileSync(settings, 'utf8'), baseline, 'status must not mutate shared hooks');
+      invoke(project, 'on');
+      const nextShared = readFileSync(settings, 'utf8');
+      const nextLocal = readFileSync(local, 'utf8');
+      assert.equal(nextShared.includes('.claude/skills/impeccable/scripts/hook.mjs'), false);
+      assert.ok(nextShared.includes('.claude/skills/design-with-ai/internal/impeccable/scripts/hook.mjs'));
+      assert.ok(nextShared.includes('keep-other-shared-hook'));
+      assert.ok(nextShared.includes('project-owned settings'));
+      assert.ok(nextShared.includes('keep me'));
+      assert.equal(nextLocal.includes('.claude/skills/impeccable/scripts/hook.mjs'), false);
+      assert.ok(nextLocal.includes('keep-other-local-hook'));
+      // Re-running explicit activation must not add duplicate managed commands.
+      invoke(project, 'on');
+      assert.equal(readFileSync(settings, 'utf8'), nextShared);
+    } finally {
+      rmSync(project, { recursive: true, force: true });
+    }
+  });
