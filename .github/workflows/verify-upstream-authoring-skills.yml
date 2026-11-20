@@ -31,6 +31,9 @@ jobs:
       - name: Test integrated Impeccable ownership and provider routing
         run: node --test skills/design-with-ai/tests/impeccable-unified-routes.test.mjs
 
+      - name: Test opt-in Impeccable hook migration
+        run: node --test skills/design-with-ai/tests/impeccable-hook-migration.test.mjs
+
       - name: Test selective DWA upstream adaptations
         run: node --test skills/design-with-ai/tests/impeccable-v410-selective-review.test.mjs
       - name: Validate GitHub Delivery skill
