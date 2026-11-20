@@ -157,7 +157,7 @@
       "harness": "agents",
       "scope": "global",
       "name": "codebase-design",
-      "description": "Shared vocabulary for designing deep modules, plus the design-it-twice pass that generates radically different module interfaces and compares them. Use when the user wants to design or improve a module interface, explore interface shapes, compare calling patterns, mentions \"design it twice\", find deepening opportunities, decide where a seam goes, make code more testable or AI-navigable, or design/evolve a public interface contract. Not visual UI (design-with-ai / impeccable) and not the architecture HTML scan (improve-codebase-architecture).",
+      "description": "Shared vocabulary for designing deep modules, plus the design-it-twice pass that generates radically different module interfaces and compares them. Use when the user wants to design or improve a module interface, explore interface shapes, compare calling patterns, mentions \"design it twice\", find deepening opportunities, decide where a seam goes, make code more testable or AI-navigable, or design/evolve a public interface contract. Not visual UI (design-with-ai) and not the architecture HTML scan (improve-codebase-architecture).",
       "tags": [
         "codebase",
         "design"
@@ -174,7 +174,7 @@
       ],
       "status": "active",
       "canonicalId": null,
-      "contentHash": "ff875caef52b5668bbebdd053d040f7546799a86818b2ba52f19ac38e8a45a1c"
+      "contentHash": "fc2531a09ad16c85e3a94efa8be6bb54fd453a345a404938bb052201845f41e6"
     },
     {
       "id": "agents/codex-dynamic-workflows",
@@ -256,7 +256,7 @@
       "harness": "agents",
       "scope": "global",
       "name": "conversion-pages",
-      "description": "Designs and writes high-conversion landing pages and pricing pages for SaaS products and services. Use when the user asks to build, rewrite, audit, or optimize a landing page or pricing page with conversion, persuasion, or CRO goals. Differentiator: covers CRO/AIDA frameworks, objection handling, SEO/AEO setup, and page-type-specific layout patterns for both landing and pricing pages -- distinct from impeccable (general frontend quality workflow), design-styles (visual style and taste), and writing-ticks (prose anti-slop). Product microcopy stays with `intent` plus `references/content-strategy.md` because `articulate` is not installed.",
+      "description": "Designs and writes high-conversion landing pages and pricing pages for SaaS products and services. Use when the user asks to build, rewrite, audit, or optimize a landing page or pricing page with conversion, persuasion, or CRO goals. Differentiator: covers CRO/AIDA frameworks, objection handling, SEO/AEO setup, and page-type-specific layout patterns for both landing and pricing pages -- distinct from design-with-ai (general UI design) and writing-ticks (prose anti-slop). Product microcopy stays with `intent` plus `references/content-strategy.md` because `articulate` is not installed.",
       "tags": [
         "conversion",
         "pages",
@@ -275,7 +275,7 @@
       ],
       "status": "active",
       "canonicalId": null,
-      "contentHash": "db453dfe9bccac464ac7104d8e2dd0395651d4781c46541445cee49648cc17c2"
+      "contentHash": "526eeb7a0da0558429e524f8138460b80132d25de1f301c91bbbf136be4fe9a9"
     },
     {
       "id": "agents/create-pr-from-local-work",
@@ -1151,7 +1151,7 @@
       "harness": "agents",
       "scope": "global",
       "name": "teach",
-      "description": "Explain a codebase, subsystem, change, or decision so the user understands both how it works now and why it ended up this way. Use when the user says \"teach me\", \"help me really understand this\", \"walk me through this\", or asks for a grounded explanation that combines current mechanics with historical rationale. Ground current behavior in live code, tests, config, and runtime evidence; ground rationale in Git history, PRs, issues, ADRs, specs, and other decision records. Read-only by default. Do not use for a persistent knowledge graph (understand), session transfer (handoff), changing the domain model (domain-modeling), or the explicit Impeccable UI `teach` alias.",
+      "description": "Explain a codebase, subsystem, change, or decision so the user understands both how it works now and why it ended up this way. Use when the user says \"teach me\", \"help me really understand this\", \"walk me through this\", or asks for a grounded explanation that combines current mechanics with historical rationale. Ground current behavior in live code, tests, config, and runtime evidence; ground rationale in Git history, PRs, issues, ADRs, specs, and other decision records. Read-only by default. Do not use for a persistent knowledge graph (understand), session transfer (handoff), changing the domain model (domain-modeling), or the explicit `design-with-ai impeccable teach` UI context alias.",
       "tags": [
         "teach"
       ],
@@ -1167,7 +1167,7 @@
       ],
       "status": "active",
       "canonicalId": null,
-      "contentHash": "8a436201ab3726e3d0cc3baadf112fe4c9c9946e61ccf5c5b32817e7823ecb0f"
+      "contentHash": "911fa6274e70b08f190df8e755e11963c741d79ae5e7e3f3852a50c87c51d1bb"
     },
     {
       "id": "agents/test-quality",
