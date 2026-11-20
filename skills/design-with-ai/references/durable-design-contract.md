@@ -10,6 +10,26 @@ Before writing anything, discover the project's existing design authority: `DESI
 - do not create a parallel `MASTER.md`, duplicate token ledger, or second rulebook because a generic template suggests one;
 - source code and shipped tokens remain implementation truth; durable docs record accepted design intent, relationships, and rationale that code alone does not make obvious.
 
+## Navigating large design contracts
+
+When the accepted design authority becomes too long to load usefully in one pass,
+treat the top-level document as a **navigation map**, not a second copy of all
+implementation details. First inspect the current document, linked tokens and
+components, and actual code. A concise map should point to exact, existing
+paths or sections for tokens, components, layouts, and surface exceptions.
+
+- Read only the relevant section/source for the active task, then verify its
+  claims against shipped code or explicit product decisions.
+- If source code contradicts the document, identify the affected rule, file
+  and concrete mismatch. Do not silently choose whichever text is newer.
+- Propose any compaction or rewrite before changing an approved DESIGN.md.
+  Keep the original available for review and preserve all accepted decisions.
+- Do not create an automatic index, regenerate a design system, or replace
+  missing source truth with speculative tokens merely to save context.
+
+This is conditional navigation, not a new design-doc format or a prerequisite
+for ordinary single-surface work.
+
 ## Global plus surface-specific deltas
 
 When the project has no better convention and the user wants persistent multi-surface guidance, use a master-plus-overrides model conceptually:
