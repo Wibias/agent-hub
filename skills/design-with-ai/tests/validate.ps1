@@ -548,14 +548,15 @@ if (Test-Path -Path $regPath) {
     foreach ($id in $expectedNearMissPrompts.Keys) {
         $row = @($caseObjects | Where-Object { $_.id -ceq $id }) | Select-Object -First 1
         $expectedSkill = if ($id -ceq 'N3') { 'design-with-ai' } else { $null }
+        $expectedCategory = if ($id -ceq 'N3') { 'must-trigger' } else { 'must-not-trigger' }
         $skillMatches = if ($null -eq $expectedSkill) {
             $null -eq $row.expected_skill
         } else {
             [string]$row.expected_skill -ceq $expectedSkill
         }
         Chk "cases.jsonl: near-miss '$id' exact prompt and owner semantics" `
-            ($null -ne $row -and $row.prompt -ceq $expectedNearMissPrompts[$id] -and $row.category -ceq $(if ($id -ceq 'N3') { 'must-trigger' } else { 'must-not-trigger' }) -and $skillMatches) `
-            "Near-miss '$id' must retain its exact prompt, must-not-trigger category, and current owner boundary"
+            ($null -ne $row -and $row.prompt -ceq $expectedNearMissPrompts[$id] -and $row.category -ceq $expectedCategory -and $skillMatches) `
+            "Near-miss '$id' must retain its exact prompt and the versioned owner/category boundary"
     }
 
     $expectedNearMissHashes = @{
