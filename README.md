@@ -73,7 +73,6 @@ backticks.
 | <!-- skill-doc:intent -->[**intent**](skills/intent/SKILL.md) | UX strategy and experience architecture: journeys, service design, information architecture, interaction patterns, content strategy, accessibility, ethics, and measurement. | “Map the onboarding journey and identify the highest-friction moments.” |
 | <!-- skill-doc:prototype -->[**prototype**](skills/prototype/SKILL.md) | Build throwaway logic or UI prototypes to compare a design/behavior direction before committing to production architecture. | “Prototype three structurally different settings flows.” |
 | <!-- skill-doc:fortify -->[**fortify**](skills/fortify/SKILL.md) | Harden visible UI outside the happy path: state/recovery design plus executable realistic-data stress testing. | `fortify worst-case src/routes/team.tsx` |
-| <!-- skill-doc:impeccable -->[**impeccable**](skills/impeccable/SKILL.md) | Explicit-only specialist frontend-design workflow when you specifically want Impeccable's design process. | “Use impeccable on this landing page.” |
 | <!-- skill-doc:conversion-pages -->[**conversion-pages**](skills/conversion-pages/SKILL.md) | Design and write SaaS landing/pricing pages around conversion goals, hierarchy, offers, and proof. | “Design a pricing page for these three plans.” |
 | <!-- skill-doc:seo-audit -->[**seo-audit**](skills/seo-audit/SKILL.md) | Audit technical SEO, on-page optimization, discoverability, and Core Web Vitals. | “Audit this site for technical SEO issues.” |
 
@@ -176,6 +175,7 @@ visible without multiplying top-level skills.
 | <!-- route-doc:design-with-ai:motion-review -->`motion-review <path-or-surface>` | Review a completed motion implementation and return an approve/block-style verdict. |
 | <!-- route-doc:design-with-ai:motion-optimize -->`motion-optimize <path-or-surface>` | Improve runtime/perceptual motion quality after behavior is already understood. |
 | <!-- route-doc:design-with-ai:motion-name -->`motion-name <interaction-description>` | Identify/name the motion or interaction pattern being described. |
+| `impeccable <verb> [target]` | Explicit legacy Impeccable commands under the unified DWA owner; optional internal engine, hooks and Live require separate authorization. |
 
 Conditional platform references cover web, mobile web/PWA, native mobile,
 React Native/Expo motion, desktop, direct manipulation, and visual-tool

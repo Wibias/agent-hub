@@ -9,7 +9,7 @@ description: >-
   rationale in Git history, PRs, issues, ADRs, specs, and other decision records.
   Read-only by default. Do not use for a persistent knowledge graph (understand),
   session transfer (handoff), changing the domain model (domain-modeling), or the
-  explicit Impeccable UI `teach` alias.
+  explicit `design-with-ai impeccable teach` UI context alias.
 ---
 
 # Teach
@@ -116,8 +116,8 @@ all remaining details.
   transfer, not teaching.
 - `domain-modeling` owns changing canonical terms and recording new architectural
   decisions. Teach may read those artifacts but does not edit them by default.
-- An explicit Impeccable UI `teach` command remains part of the Impeccable design
-  workflow. Do not hijack that command.
+- An explicit `design-with-ai impeccable teach` command belongs to DWA's
+  integrated UI context workflow. Do not route it through this code-teaching skill.
 
 ## Guardrails
 

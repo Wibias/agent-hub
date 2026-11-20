@@ -157,7 +157,7 @@
       "harness": "agents",
       "scope": "global",
       "name": "codebase-design",
-      "description": "Shared vocabulary for designing deep modules, plus the design-it-twice pass that generates radically different module interfaces and compares them. Use when the user wants to design or improve a module interface, explore interface shapes, compare calling patterns, mentions \"design it twice\", find deepening opportunities, decide where a seam goes, make code more testable or AI-navigable, or design/evolve a public interface contract. Not visual UI (design-with-ai / impeccable) and not the architecture HTML scan (improve-codebase-architecture).",
+      "description": "Shared vocabulary for designing deep modules, plus the design-it-twice pass that generates radically different module interfaces and compares them. Use when the user wants to design or improve a module interface, explore interface shapes, compare calling patterns, mentions \"design it twice\", find deepening opportunities, decide where a seam goes, make code more testable or AI-navigable, or design/evolve a public interface contract. Not visual UI (design-with-ai) and not the architecture HTML scan (improve-codebase-architecture).",
       "tags": [
         "codebase",
         "design"
@@ -174,7 +174,7 @@
       ],
       "status": "active",
       "canonicalId": null,
-      "contentHash": "ff875caef52b5668bbebdd053d040f7546799a86818b2ba52f19ac38e8a45a1c"
+      "contentHash": "fc2531a09ad16c85e3a94efa8be6bb54fd453a345a404938bb052201845f41e6"
     },
     {
       "id": "agents/codex-dynamic-workflows",
@@ -256,7 +256,7 @@
       "harness": "agents",
       "scope": "global",
       "name": "conversion-pages",
-      "description": "Designs and writes high-conversion landing pages and pricing pages for SaaS products and services. Use when the user asks to build, rewrite, audit, or optimize a landing page or pricing page with conversion, persuasion, or CRO goals. Differentiator: covers CRO/AIDA frameworks, objection handling, SEO/AEO setup, and page-type-specific layout patterns for both landing and pricing pages -- distinct from impeccable (general frontend quality workflow), design-styles (visual style and taste), and writing-ticks (prose anti-slop). Product microcopy stays with `intent` plus `references/content-strategy.md` because `articulate` is not installed.",
+      "description": "Designs and writes high-conversion landing pages and pricing pages for SaaS products and services. Use when the user asks to build, rewrite, audit, or optimize a landing page or pricing page with conversion, persuasion, or CRO goals. Differentiator: covers CRO/AIDA frameworks, objection handling, SEO/AEO setup, and page-type-specific layout patterns for both landing and pricing pages -- distinct from design-with-ai (general UI design) and writing-ticks (prose anti-slop). Product microcopy stays with `intent` plus `references/content-strategy.md` because `articulate` is not installed.",
       "tags": [
         "conversion",
         "pages",
@@ -275,7 +275,7 @@
       ],
       "status": "active",
       "canonicalId": null,
-      "contentHash": "db453dfe9bccac464ac7104d8e2dd0395651d4781c46541445cee49648cc17c2"
+      "contentHash": "526eeb7a0da0558429e524f8138460b80132d25de1f301c91bbbf136be4fe9a9"
     },
     {
       "id": "agents/create-pr-from-local-work",
@@ -337,7 +337,7 @@
       "harness": "agents",
       "scope": "global",
       "name": "design-with-ai",
-      "description": "Canonical default owner for visible product-UI design, audit, polish, restyling, redesign, new surfaces, design-to-code handoff specs, product-UI data visualization, native/mobile UI, motion review, and Penpot MCP product-design work including design-system audits, visual-token cleanup, screen design, components, variants, palette, component style, spacing, and typography. Use for ordinary \"make this look better\" work. Not for backend/server infrastructure, authentication or protocol deployment, general code review, non-UI chart/report generation, module/API interface design (route those to codebase-design), or copy-only edits. Explicit Impeccable requests stay with Impeccable.",
+      "description": "Canonical default owner for visible product-UI design, audit, polish, restyling, redesign, new surfaces, design-to-code handoff specs, product-UI data visualization, native/mobile UI, motion review, and Penpot MCP product-design work including design-system audits, visual-token cleanup, screen design, components, variants, palette, component style, spacing, and typography. Use for ordinary \"make this look better\" work. Not for backend/server infrastructure, authentication or protocol deployment, general code review, non-UI chart/report generation, module/API interface design (route those to codebase-design), or copy-only edits. Explicit Impeccable requests use the integrated DWA command route.",
       "tags": [
         "design",
         "with",
@@ -355,7 +355,7 @@
       ],
       "status": "active",
       "canonicalId": null,
-      "contentHash": "9877ce21afeb3f05bd5bdd00747953844f78152c551facfed05125e311aaa809"
+      "contentHash": "f0ce3788af7d190da47ffcf072d47d347658a261b9d90497dafa8b25b5c445e3"
     },
     {
       "id": "agents/diagnose",
@@ -604,31 +604,6 @@
       "status": "active",
       "canonicalId": null,
       "contentHash": "f2211d1d0a735bdf069fe78352c15986b84a139c6bd908995df50a042dc18f15"
-    },
-    {
-      "id": "agents/impeccable",
-      "path": "~/.agents/skills/impeccable/SKILL.md",
-      "type": "skill",
-      "harness": "agents",
-      "scope": "global",
-      "name": "impeccable",
-      "description": "Explicit-only Impeccable frontend design specialist. Use only when the user explicitly names impeccable, invokes /impeccable, or explicitly asks to use this named specialist. Handles the Impeccable command set and its frontend design workflow. Not for ordinary UI polish, visual hierarchy, redesign, audit, motion, or generic frontend design requests; use design-with-ai instead. Not for backend-only or non-UI tasks.",
-      "tags": [
-        "impeccable"
-      ],
-      "triggers": [
-        "Explicit-only Impeccable frontend design specialist. Use only when the user explicitly names impeccable",
-        "invokes /impeccable",
-        "visual hierarchy",
-        "redesign",
-        "audit",
-        "motion",
-        "or generic frontend design requests",
-        "use design-with-ai instead. Not for backend-only or non-UI tasks"
-      ],
-      "status": "active",
-      "canonicalId": null,
-      "contentHash": "6076ef4c62b3257d009a0a65af0fe70657ffe16c17f3d7cf09bae8ada7c78e6a"
     },
     {
       "id": "agents/improve-codebase-architecture",
@@ -1176,7 +1151,7 @@
       "harness": "agents",
       "scope": "global",
       "name": "teach",
-      "description": "Explain a codebase, subsystem, change, or decision so the user understands both how it works now and why it ended up this way. Use when the user says \"teach me\", \"help me really understand this\", \"walk me through this\", or asks for a grounded explanation that combines current mechanics with historical rationale. Ground current behavior in live code, tests, config, and runtime evidence; ground rationale in Git history, PRs, issues, ADRs, specs, and other decision records. Read-only by default. Do not use for a persistent knowledge graph (understand), session transfer (handoff), changing the domain model (domain-modeling), or the explicit Impeccable UI `teach` alias.",
+      "description": "Explain a codebase, subsystem, change, or decision so the user understands both how it works now and why it ended up this way. Use when the user says \"teach me\", \"help me really understand this\", \"walk me through this\", or asks for a grounded explanation that combines current mechanics with historical rationale. Ground current behavior in live code, tests, config, and runtime evidence; ground rationale in Git history, PRs, issues, ADRs, specs, and other decision records. Read-only by default. Do not use for a persistent knowledge graph (understand), session transfer (handoff), changing the domain model (domain-modeling), or the explicit `design-with-ai impeccable teach` UI context alias.",
       "tags": [
         "teach"
       ],
@@ -1192,7 +1167,7 @@
       ],
       "status": "active",
       "canonicalId": null,
-      "contentHash": "8a436201ab3726e3d0cc3baadf112fe4c9c9946e61ccf5c5b32817e7823ecb0f"
+      "contentHash": "911fa6274e70b08f190df8e755e11963c741d79ae5e7e3f3852a50c87c51d1bb"
     },
     {
       "id": "agents/test-quality",

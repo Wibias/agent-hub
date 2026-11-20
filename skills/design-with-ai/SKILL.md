@@ -9,7 +9,7 @@ description: >-
   better" work. Not for backend/server infrastructure, authentication or
   protocol deployment, general code review, non-UI chart/report generation,
   module/API interface design (route those to codebase-design), or copy-only
-  edits. Explicit Impeccable requests stay with Impeccable.
+  edits. Explicit Impeccable requests use the integrated DWA command route.
 ---
 
 # Design with AI
@@ -44,12 +44,21 @@ Then load only the selected workflow bundle.
 | `motion-optimize <route-or-target>` | standard | `references/motion-performance.md`, `references/browser-profiling.md` |
 | `motion-name <description>` | quick | `references/motion-vocabulary.md` |
 | `learn-design-taste <project-or-surface>` | quick | `references/taste-correction-retention.md` |
+| `impeccable <verb> [target]` (explicit only) | command-specific | `references/impeccable-routes.md` |
 
 Without a command, a vague look-better/polish request loads
 `references/design-methods.md` and routes to `improve-existing standard`.
 A direct request to implement/add an animation routes to `motion-build`, not to
 motion audit/review/opportunity discovery.
 Explicit requests to retain user design corrections route to `learn-design-taste`; never automatically persist rules from ordinary feedback, infer reasons as facts, or create a parallel memory store.
+
+Explicit `impeccable`, `/impeccable`, `$impeccable`, or the old named
+command vocabulary routes **here**, not to a separate skill. Read
+`references/impeccable-routes.md` to choose the owning DWA workflow and
+load only the necessary internal command reference. An incidental word
+"impeccable" in ordinary feedback does not invoke the engine or hooks.
+No engine launch, download, hook installation or Live session occurs
+without a specifically selected command and host permission.
 
 Penpot is a target/source adapter, not a separate command family. Resolve the
 underlying design task with the normal route, then load
@@ -148,8 +157,10 @@ automatically added by baseline polish.
 
 ## External boundaries
 
-`impeccable` remains an independently managed explicit/delegated specialist. Do
-not edit or vendor it. Explicit Impeccable requests stay with Impeccable.
+Impeccable's retained CLI, playbooks and helper scripts are **internal
+assets** of this skill at `internal/impeccable/`, not a second discoverable
+owner. DWA owns authorization, routing, completion and product acceptance.
+The internal engine is opt-in and cannot replace DWA's quality gates.
 `intent`, `conversion-pages`, `prototype`, `fortify`, `shadcn`, and
 `codebase-design` remain separate when their domain is primary.
 
@@ -189,6 +200,7 @@ host-specific guide for ordinary cross-host design work.
 
 - `references/hard-invariants.md`: always-on routing and authority invariants
 - `references/design-methods.md`: method selection and vague-request routing
+- `references/impeccable-routes.md`: explicit-only command compatibility within canonical DWA
 - `references/taste-correction-retention.md`: opt-in, evidence-grounded design correction retention; explicit approval before durable edits
 - `references/existing-ui-workflows.md`: audit/improve/restyle/redesign contracts
 - `references/audit-surface-evidence.md`: route relevance, state matrix, non-text contrast, widget/keyboard and claim calibration

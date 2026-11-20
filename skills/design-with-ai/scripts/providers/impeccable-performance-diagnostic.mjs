@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import { performance } from "node:perf_hooks";
 import { runProcess } from "./process-runner.mjs";
 
-const SCRIPT = fileURLToPath(new URL("../../../impeccable/scripts/detect.mjs", import.meta.url));
+const SCRIPT = fileURLToPath(new URL("../../internal/impeccable/scripts/detect.mjs", import.meta.url));
 const SELF = fileURLToPath(import.meta.url);
 // Node resolves ESM import.meta.url through symlinks; argv[1] may retain its
 // symlink spelling. Compare canonical paths for both command entrypoints.

@@ -67,14 +67,13 @@ test('code-simplification discovery is reserved for explicit named invocation', 
   assert.doesNotMatch(value, workflowLeak);
 });
 
-test('design-with-ai is the default visible-UI owner and impeccable is explicit-only', async () => {
+test('design-with-ai is the single visible-UI and explicit Impeccable owner', async () => {
   const owner = await description('design-with-ai');
-  const specialist = await description('impeccable');
-  assert.match(owner, /canonical|default/i);
-  assert.match(owner, /explicit.*impeccable|impeccable.*explicit/i);
-  assert.match(specialist, /explicit|only when/i);
-  assert.match(specialist, /impeccable|\/impeccable/i);
-  assert.match(specialist, /design-with-ai/i);
+  assert.match(owner, /visible product-UI design/i);
+  assert.match(owner, /explicit Impeccable requests use the integrated DWA command route/i);
+  const catalog = JSON.parse(await readFile(path.join(repoRoot, 'knowledge', 'index.json'), 'utf8'));
+  assert.equal(catalog.entries.some((entry) => entry.id === 'agents/impeccable' && entry.status === 'active'), false,
+    'standalone Impeccable must not be registered as a discovery surface');
 });
 
 test('source-driven-development requires explicit source-grounding intent', async () => {

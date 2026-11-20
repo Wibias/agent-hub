@@ -8,7 +8,7 @@ import { assertProviderReport, Capability, ProviderStatus, providerFailure } fro
 import { runProcess } from "./process-runner.mjs";
 
 const DEFAULT_SCRIPT = fileURLToPath(
-  new URL("../../../impeccable/scripts/detect.mjs", import.meta.url),
+  new URL("../../internal/impeccable/scripts/detect.mjs", import.meta.url),
 );
 const SCAN_MODULE = "detector/detect-antipatterns.mjs";
 const VALID_SEVERITIES = new Set(["error", "warning", "notice", "info", "advisory"]);

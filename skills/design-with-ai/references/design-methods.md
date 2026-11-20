@@ -10,7 +10,7 @@ them.
 | Request | Canonical owner |
 |---|---|
 | Look better, polish, restyle, redesign, build visible frontend UI | `design-with-ai` |
-| Explicit Impeccable command or bounded delegated craft phase | `impeccable` |
+| Explicit legacy Impeccable command | `design-with-ai` with internal `impeccable <verb>` route |
 | Journey, information architecture, service design, research, or ethical UX strategy | `intent` or its named leaf |
 | Conversion-specific landing or pricing page | `conversion-pages`, routed by `design-with-ai` when visible implementation is requested |
 | Module, SDK, domain, or API interface shape | `codebase-design` |
@@ -25,7 +25,7 @@ by the selected workflow.
 ### Named optional specialist classification
 
 When the user names an installed specialist as optional rather than invoking a
-specialist command (for example, `use impeccable if useful`):
+specialist command (for example, `use shadcn if useful`):
 
 1. Open this `design-with-ai` contract and the named specialist's `SKILL.md`
    once before deciding whether to delegate.
@@ -40,8 +40,8 @@ specialist command (for example, `use impeccable if useful`):
    ```
 
 3. General visible-UI work remains owned by `design-with-ai`; a named optional
-   Impeccable candidate is `bounded-specialist` unless the user actually invokes
-   an Impeccable command or the active workflow selects an exact delegated command.
+   the optional candidate is classified by its actual domain; a named
+   Impeccable adjective or command belongs to DWA, not a competing skill.
 4. Classification is not execution. Do not run the candidate's setup, command,
    or broader workflow unless it is selected after classification.
 5. Do not expand this check to unrelated installed skills. It applies only to a
@@ -49,8 +49,8 @@ specialist command (for example, `use impeccable if useful`):
    selected workflow.
 
 This classification satisfies the competing-skill boundary without turning a
-general polish request into an Impeccable task or silently ignoring the named
-candidate.
+general polish request into an unrelated specialist task or silently ignoring
+an optional installed candidate.
 
 ## Choose a method once
 
@@ -75,8 +75,8 @@ For look better / polish / improve UI / less AI without an explicit command:
    evidence references for the selected profile.
 4. Run the internal quality stack:
    `Direction -> Baseline -> Craft -> Gate`.
-5. Delegate an exact Impeccable command only when the stack reveals a genuine
-   need for deeper specialist craft. Do not make Impeccable a prerequisite.
+5. Load an internal Impeccable craft reference only when the selected work
+   needs it. Do not start its engine or make it a generic prerequisite.
 6. Motion is opt-in. Use a motion route only when requested or when a grounded
    opportunity is explicitly selected.
 
@@ -146,9 +146,9 @@ Build the representative high-consequence slice before broad implementation.
 
 ### 5. Refine
 
-Run the internal quality stack. A bounded Impeccable delegation may follow only
-when a precise specialist command adds value. Finish with rendered/browser
-verification owned by `design-with-ai`.
+Run the internal quality stack. An explicit Impeccable command can use its
+internal DWA adapter, but it is never a separate delegation. Finish with
+rendered/browser verification owned by `design-with-ai`.
 
 ## Method 3 - Inspiration board
 
@@ -171,7 +171,7 @@ verification owned by `design-with-ai`.
 | Motion audit/review/plans | motion routes | internal motion craft |
 | Runtime animation jank/leaks | `motion-optimize` | live profiling required |
 | Motion terminology | `motion-name` | lookup only |
-| Deep command-based craft | `impeccable` | explicit or bounded delegation |
+| Deep command-based craft | `design-with-ai impeccable <verb>` | explicit, internal, opt-in |
 | UX strategy, journeys, IA, ethics | `intent` and leaves | strategic artifact return |
 | Conversion landing/pricing | `conversion-pages` | bounded goal-specific specialist under `design-with-ai` for visible implementation |
 | Throwaway prototype | `prototype` | non-production concept branch |
@@ -206,6 +206,6 @@ it. Otherwise it returns control instead of guessing or reopening method choice.
    visual recipe applies to every product.
 5. Look-better runs the full internal quality stack, not one phase alone.
 6. Strategic UX leaves do not take over visual implementation.
-7. Impeccable does not rerun completed general workflow steps.
+7. Internal Impeccable playbooks do not rerun completed DWA workflow steps.
 8. Verify the rendered result before claiming modifying UI work complete when
    suitable tooling exists.

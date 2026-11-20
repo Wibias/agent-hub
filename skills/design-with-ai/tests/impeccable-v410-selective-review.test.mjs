@@ -27,7 +27,7 @@ test('selective v4.10 review does not claim legacy runtime or specialist parity'
   const upstream = read('../UPSTREAM.md');
   assert.match(upstream, /skill-v4\.10\.0/);
   assert.match(upstream, /issue #404/);
-  assert.match(upstream, /adaptations \*\*do not\*\* update or/);
-  assert.match(upstream, /qualify the Impeccable engine/);
+  assert.match(upstream, /not deployed[\s\S]*?claimed qualified/i);
+  assert.match(upstream, /Full runtime,[\s\S]*?must be demonstrated/);
   assert.match(upstream, /engine-v0\.1\.28/);
 });

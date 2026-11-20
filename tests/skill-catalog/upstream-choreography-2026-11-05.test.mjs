@@ -57,8 +57,8 @@ test('new choreography guidance is selectively attributed without replacing loca
 });
 
 test('Impeccable pinned engine release requires executable verification', () => {
-  const provenance = read('skills/impeccable/UPSTREAM.md');
-  const engine = read('skills/impeccable/scripts/VERSION').trim();
+  const provenance = read('skills/design-with-ai/internal/impeccable/UPSTREAM.md');
+  const engine = read('skills/design-with-ai/internal/impeccable/scripts/VERSION').trim();
   assert.match(provenance, /acb4cfe14470b1fdf51e855431af618d936b7db8/);
   assert.match(provenance, /binary|engine/i);
   assert.match(provenance, /runtime verification/i);
