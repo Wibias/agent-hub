@@ -66,6 +66,24 @@ For **AI-generated imagery**, state whether generation is allowed and the constr
 
 When a project has no established token architecture and a shared token system is genuinely required, primitive -> semantic -> component is a useful starting model, not a migration mandate. Do not rename or restructure a working token system solely to match that taxonomy.
 
+## Provenance for accepted design grammar (conditional)
+
+Rules derived from checkpointed deep design may record a stable rule ID,
+`sourceRef`, relevant coverage category, and one of:
+
+- `OBSERVED`: inspected in an accepted design or shipped implementation;
+- `APPROVED`: explicitly decided by project/owner authority;
+- `GENERALIZED`: abstraction with source evidence and rationale;
+- `DERIVED`: justified state/interaction consequence with source and rationale.
+
+`UNKNOWN` is an open question, not accepted shared design truth.
+`LAYOUT_HIERARCHY`, `CONTENT_HIERARCHY`, `SPATIAL_RHYTHM`,
+`SURFACE_TREATMENT`, `TYPOGRAPHIC_ROLES`, `COLOR_SEMANTICS`,
+`INTERACTION_FEEDBACK`, `RESPONSIVE_ADAPTATION`, and
+`MOTION_TRANSITION` are an optional coverage checklist, not a compulsory
+nine-section rulebook. One observed 24 px gap cannot establish a universal
+spacing system. Keep existing project design authority authoritative.
+
 ## Verification
 
 Before claiming the durable contract is current:

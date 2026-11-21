@@ -197,3 +197,26 @@ test("re-running sync after altering a receipt cannot rewrite prior assessments"
   assert.throws(() => syncLedger(f.ledgerPath, f.baseline, receipt),
     /Existing run assessment differs/);
 }));
+
+test("optional design artifact references are append-only and idempotent", () => fixture(f => {
+  const item = {
+    id: "UX-NEW-LINEAGE", route: "/jobs", kind: "VISUAL", priority: "MEDIUM",
+    symptom: "Visible task status ambiguous", acceptance: "State is clear",
+    evidenceRef: "renders/before.png",
+    sourceDesignArtifactRef: "slice:before-sha", designArtifactRef: "slice:after-sha",
+  };
+  assert.equal(importFindings(f.ledgerPath, { findings: [item] }).added, 1);
+  const found = readLedger(f.ledgerPath).events.find(e => e.id === item.id);
+  assert.equal(found.designArtifactRef, item.designArtifactRef);
+  assert.equal(found.sourceDesignArtifactRef, item.sourceDesignArtifactRef);
+  assert.equal(importFindings(f.ledgerPath, { findings: [item] }).added, 0);
+  assert.equal(importFindings(f.ledgerPath, { findings: [historic[0]] }).added, 0);
+  assert.throws(() => importFindings(f.ledgerPath, {
+    findings: [{ ...item, designArtifactRef: "slice:conflict" }],
+  }), /Conflicting historical finding ID/);
+}));
+test("blank optional design source is rejected", () => fixture(f => {
+  assert.throws(() => importFindings(f.ledgerPath, { findings: [
+    { ...historic[0], id: "UX-BAD-LINEAGE", designArtifactRef: "" },
+  ] }), /requires id/);
+}));
