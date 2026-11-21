@@ -46,6 +46,12 @@
     topology fingerprints, redesign-delta table, compact wireframes, explicit
     similarity-veto result, and a selected direction approved by the user.
     General authorization to redesign is not approval of a specific direction.
+    A recommendation, default option, silence, general "continue", or resume
+    cannot create the required human approval. Bind the explicit owner decision
+    to the exact presented checkpoint and direction version, as specified in
+    `references/design-decision-lineage.md`. A changed brief or proposed
+    direction invalidates the old approval; a missing display/reply correlation
+    is an implementation hold, not implied consent.
 16. Apply the similarity veto mechanically. A proposal is
     `RESTYLE, NOT REDESIGN` when either (a) old and proposed surfaces share the
     same one-sentence traversal and content-to-surface assignment, or (b) they

@@ -56,6 +56,12 @@ Do not invent a past review or treat an assistant's suggestion as verified.
    because the page looks cleaner or another screen improved. Prefer
    high-impact unresolved issues over another palette/radius pass.
 
+For a versioned representative slice in a decision-lineage deep workflow,
+record `sourceArtifactRef`, `resultArtifactRef`, and `causedByFindingIds` in
+its critique/refinement receipt. Reconcile each carried finding against its
+actual source and result; a changed identifier alone is not a verified repair.
+This extends, but never replaces, the existing finding-to-outcome ledger.
+
 For work spanning separate sessions or agents, keep the non-sensitive ledger in
 the authorized task/PR record or existing design handoff, if one is available;
 otherwise include it in the completion report so the next iteration can reuse
