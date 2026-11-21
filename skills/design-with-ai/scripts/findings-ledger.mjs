@@ -32,8 +32,10 @@ function reviewOf(item, runId) {
   if (!filled(reason) || !filled(evidenceRef)) {
     throw new Error(item.id + ": review needs a reason and evidence reference");
   }
+  if (!validLineage(item)) throw new Error(item.id + ": invalid design artifact reference in review");
   return { type: "REVIEWED", runId, id: item.id,
-    disposition: item.disposition, reason, evidenceRef };
+    disposition: item.disposition, reason, evidenceRef,
+    ...Object.fromEntries(lineageFields.filter(k => Object.hasOwn(item, k)).map(k => [k, item[k]])) };
 }
 
 function ensureSafeFile(path) {
@@ -62,7 +64,8 @@ export function readLedger(path) {
       known.add(event.id);
     } else if (event.type === "REVIEWED") {
       if (!known.has(event.id) || !filled(event.runId) ||
-          !statuses.has(event.disposition) || !filled(event.reason) || !filled(event.evidenceRef)) {
+          !statuses.has(event.disposition) || !filled(event.reason) || !filled(event.evidenceRef) ||
+          !validLineage(event)) {
         problems.push("invalid REVIEWED event: " + index);
       }
     } else {
@@ -202,7 +205,8 @@ export function verifyLedgerCoverage(ledger, baseline, receipt, { requireSynced 
       const evt = runEvents.find(x => x.id === item.id);
       const expected = reviewOf(item, snapshot.runId);
       if (!evt || evt.disposition !== expected.disposition ||
-          evt.reason !== expected.reason || evt.evidenceRef !== expected.evidenceRef) {
+          evt.reason !== expected.reason || evt.evidenceRef !== expected.evidenceRef ||
+          lineageFields.some(k => evt[k] !== expected[k])) {
         fail("Final finding missing matching persisted run assessment: " + item.id);
       }
     }

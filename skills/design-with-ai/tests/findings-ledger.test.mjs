@@ -226,3 +226,18 @@ test("unversioned latest cannot be imported as a design artifact reference", () 
     { ...historic[0], id: "UX-UNVERSIONED", designArtifactRef: "slice/latest" },
   ] }), /requires id/);
 }));
+
+test("reviewed design refs persist with the run and cannot be rewritten", () => fixture(f => {
+  const receipt = f.receipt();
+  receipt.findings[0].sourceDesignArtifactRef = "slice:before";
+  receipt.findings[0].designArtifactRef = "slice:after";
+  syncLedger(f.ledgerPath, f.baseline, receipt);
+  const evt = readLedger(f.ledgerPath).events.find(e =>
+    e.type === "REVIEWED" && e.id === receipt.findings[0].id);
+  assert.equal(evt.sourceDesignArtifactRef, "slice:before");
+  assert.equal(evt.designArtifactRef, "slice:after");
+  assert.equal(verifyLedgerCoverage(readLedger(f.ledgerPath), f.baseline, receipt).valid, true);
+  const altered = structuredClone(receipt);
+  altered.findings[0].designArtifactRef = "slice:changed-later";
+  assert.throws(() => syncLedger(f.ledgerPath, f.baseline, altered), /Existing run assessment differs/);
+}));
