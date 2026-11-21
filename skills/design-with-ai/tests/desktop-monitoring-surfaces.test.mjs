@@ -89,3 +89,13 @@ test("partial native KPI QA may be scoped, but a render PASS must be backed by c
   assert.match(verification, /COMPACT:IDLE/);
   assert.match(verification, /near-touching KPI line/);
 });
+
+test("stalled visual fixes require a source repair, and historic finding IDs remain immutable", () => {
+  const durable = read("../references/durable-findings-ledger.md");
+  assert.match(durable, /No repeated observation-only loop/);
+  assert.match(durable, /persistentRepairActions/);
+  assert.match(durable, /two meanings for PCG-16/);
+  assert.match(contract, /Code-first repair loop/);
+  assert.match(contract, /same compact client dimensions/);
+  assert.match(verification, /different defect cannot reuse/);
+});

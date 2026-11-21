@@ -143,6 +143,15 @@ and actual source SHA-256 are checked by
 `scripts/desktop-render-evidence.mjs`, `desktop-viewport-matrix.mjs` and
 `run-iteration-gate.mjs`. A PARTIAL desktop receipt may include a measured subset of real renders,
 but may not claim visually closed findings without supported reinspection.
+Repeated medium/high visual defects cannot cycle indefinitely through
+observation-only PARTIAL receipts. Durable history triggers
+`persistentRepairActions[]` when a defect has twice been assessed
+open and is observed PERSISTS or REGRESSED again. Report SOURCE_REPAIR
+with source-file and before/after evidence, or a truthful BLOCKED reason
+and nextStep. This checks consistency of declared evidence, not source diff
+authenticity. A different defect cannot reuse a historical finding ID:
+route, kind, symptom and acceptance are immutable.
+
 A `PARTIAL` desktop receipt claiming `gates.render: "PASS"` must
 now include a current v2 `COMPACT:IDLE` screenshot with KPI footer/
 divider geometry; a near-touching KPI line contradicts PASS. When

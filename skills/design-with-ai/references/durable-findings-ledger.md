@@ -35,6 +35,11 @@ On PowerShell use New-Item -ItemType Directory -Force .design-with-ai for the
 directory. The import source needs findings[], each with id, route, kind,
 priority, symptom, acceptance, evidenceRef. Re-importing identical IDs is
 safe; conflicting ID meanings are rejected, not silently rewritten.
+Future receipts must preserve each ID's original route, kind, symptom and
+acceptance. The compact KPI bottom-clearance defect and the empty-filter
+inspector message are different problems, never two meanings for PCG-16.
+Keep the original historic ID and allocate a new unused ID for the other
+observation. Do not rewrite a FOUND event or frozen baseline to hide this.
 
 ## Per-iteration procedure
 
@@ -63,6 +68,20 @@ safe; conflicting ID meanings are rejected, not silently rewritten.
    new finding to the current receipt and use the existing sync to persist
    it as FOUND plus REVIEWED rather than rebuilding history.
    Preserve genuine blockers as PARTIAL or NOT_VERIFIED.
+
+   **No repeated observation-only loop for confirmed defects.** When a
+   medium/high VISUAL or DETAIL finding has two consecutive historically
+   open assessments and is again observed as PERSISTS or REGRESSED,
+   the ledger requires a persistentRepairActions[] entry for that ID:
+   either SOURCE_REPAIR with an actual sourceFile, distinct beforeRef/
+   afterRef and a truthful renderResult, plus TASK_REPAIR in changeSummary
+   naming the original ID, or BLOCKED with a concrete blocker and nextStep.
+   Re-running a gate or giving a new ID to the same defect is not a fix.
+   Historical UNVERIFIED does not establish a recurrence and must not force
+   speculative code changes. A SOURCE_REPAIR record is an inspectable claim,
+   not cryptographic proof that the source changed or the runtime improved.
+   Build and render the same native window/state; keep the issue open if
+   the visual problem remains.
 5. Persist verdicts for the current run BEFORE making the gate proof:
 
        node SKILL/scripts/findings-ledger.mjs sync --ledger .design-with-ai/findings-ledger.json --baseline tmp/prior-findings-current.json --receipt tmp/iteration-receipt-current.json

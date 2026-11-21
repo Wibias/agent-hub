@@ -211,6 +211,7 @@ function trackedBaseline() {
 function trackedReceipt() {
   const receipt = validComplete();
   receipt.requiresPriorBaseline = true;
+  receipt.findings[0].kind = "NAVIGATION";
   receipt.findings[0].symptom = "Two generic Settings links share /settings in the same desktop view";
   receipt.findings[0].acceptance = "One generic Settings entry point remains at desktop width";
   receipt.findings[0].verification.method = "TEST";
@@ -256,7 +257,7 @@ test("prior acceptance cannot be weakened or silently renamed", () => {
   const receipt = trackedReceipt();
   receipt.findings[0].acceptance = "Settings button has an orange accent";
   const result = validateIterationReceipt(receipt, trackedBaseline());
-  assert.match(result.problems.join("\n"), /prior route\/acceptance changed/);
+  assert.match(result.problems.join("\n"), /FINDING_IDENTITY_CHANGED/);
 });
 
 test("a prior defect cannot be disguised as an unchanged KEEP without reassessment", () => {
@@ -370,4 +371,15 @@ test("CLI requires the pre-edit baseline and rejects missing carried findings", 
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test("baseline identity rejects hijacking a historical finding even with matching route/acceptance", () => {
+  const baseline = trackedBaseline();
+  const payload = trackedReceipt(baseline);
+  const original = baseline.findings[0];
+  const current = payload.findings.find(f => f.id === original.id);
+  current.kind = original.kind === "VISUAL" ? "DETAIL" : "VISUAL";
+  current.symptom = "Unrelated filter empty state";
+  const errors = validateIterationReceipt(payload, baseline).problems.join("; ");
+  assert.match(errors, /FINDING_IDENTITY_CHANGED/);
 });
