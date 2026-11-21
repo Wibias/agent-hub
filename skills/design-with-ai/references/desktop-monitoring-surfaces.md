@@ -53,6 +53,16 @@ describe the result as visually verified. For a detected short gap, set
 finding, **fix the WinForms KPI strip height/bottom padding** and
 repeat COMPACT:IDLE inspection on the updated executable.
 
+**Code-first repair loop for recurring measured KPI failures:** inspect
+the actual WinForms source defining the KPI strip's bottom divider, supporting
+text baseline and height; make a targeted height/padding source change that
+preserves legibility and the process-table budget; build/tests; rerender at
+the **same compact client dimensions**. If still cramped, keep the original
+finding open and iterate on the actual code rather than writing another
+observation-only PARTIAL receipt. If the source cannot be edited with
+available authorization, name the real blocker, not an invented code fix.
+This workflow is automatic; it must not require a longer user prompt.
+
 For a scoped PARTIAL render packet, include only actual captured viewports,
 actual tested runtime checks and findings actually inspected. Do not fake
 keyboard, DPI or destructive action checks merely to supply a compact
