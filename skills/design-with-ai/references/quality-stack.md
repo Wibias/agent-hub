@@ -76,6 +76,14 @@ Report the following as observed, failed, or unverified:
 - whether repeated same-weight containers represent genuinely comparable items;
 - whether status/readiness claims agree with known product semantics.
 
+For a full desktop monitor with charts, a process table, and an inspector,
+run `desktop-monitoring-surfaces.md` before Craft. Inspect matched actual
+window geometry, KPI supporting-line clipping, table column width vs header
+legibility, competing empty panels, distinct tab scopes, and action-state
+prerequisites. These are observed product issues, not a generic score for
+having a dark dashboard or many metrics. Record untested destructive behavior
+as `NOT_VERIFIED` and keep it outside any visual-only PASS.
+
 A visual pattern scan does not replace this check. If a substantive defect
 remains, revise the design or expose the product-model/authority gap before
 Craft. Do not use color or decoration to conceal a failed task-first verdict.
