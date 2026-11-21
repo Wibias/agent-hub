@@ -241,3 +241,31 @@ test("reviewed design refs persist with the run and cannot be rewritten", () => 
   altered.findings[0].designArtifactRef = "slice:changed-later";
   assert.throws(() => syncLedger(f.ledgerPath, f.baseline, altered), /Existing run assessment differs/);
 }));
+
+test("native PARTIAL cannot append a newly visual RESOLVED finding without final render", () => fixture(f => {
+  const receipt = f.receipt();
+  receipt.surfaceKind = "DENSE_DESKTOP_MONITOR";
+  receipt.findings.push({
+    id: "UX-VISUAL-NEW", route: "/jobs", kind: "VISUAL", priority: "MEDIUM",
+    symptom: "Small detail table is unreadable",
+    acceptance: "Table remains legible when inspector opens",
+    evidenceRef: "screens/compact-before.png",
+    decision: "Repair layout", disposition: "RESOLVED",
+    before: { ref: "screens/compact-before.png", route: "/jobs", viewport: "compact",
+      stateKey: "selected", dataKey: "rows" },
+    after: { ref: "screens/compact-after.png", route: "/jobs", viewport: "compact",
+      stateKey: "selected", dataKey: "rows" },
+    verification: { result: "PASS", evidenceRef: "tests/table-layout.test.js" },
+  });
+  const before = readLedger(f.ledgerPath).events.length;
+  assert.throws(() => syncLedger(f.ledgerPath, f.baseline, receipt),
+    /VISUAL_CLOSURE_UNVERIFIED UX-VISUAL-NEW/);
+  assert.equal(readLedger(f.ledgerPath).events.length, before,
+    "refusing unsupported closure must leave immutable history untouched");
+  const open = receipt.findings.at(-1);
+  open.disposition = "UNVERIFIED";
+  open.reason = "No rendered selected-state screenshot yet";
+  receipt.openCarryover.push(open.id);
+  assert.equal(syncLedger(f.ledgerPath, f.baseline, receipt).added, 1,
+    "documented open finding may still be persisted with PARTIAL");
+}));
