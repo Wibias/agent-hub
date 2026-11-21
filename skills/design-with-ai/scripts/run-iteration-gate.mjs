@@ -7,7 +7,7 @@ import { dirname, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { discoverProjectLedger } from "./findings-ledger.mjs";
-import { snapshotProjectSource } from "./project-source-snapshot.mjs";
+import { snapshotProjectSource, snapshotRootedSource } from "./project-source-snapshot.mjs";
 import { snapshotDesktopCaptureFiles } from "./desktop-render-evidence.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -21,10 +21,10 @@ function argsOf(argv) {
   if (argv.length === 1 && (argv[0] === "--help" || argv[0] === "-h")) return { help: true };
   const options = new Map();
   for (let i = 0; i < argv.length; i += 2) {
-    if (!["--receipt", "--baseline", "--ledger", "--render-evidence", "--proof", "--check-proof"].includes(argv[i]) ||
+    if (!["--receipt", "--baseline", "--ledger", "--render-evidence", "--source-root", "--proof", "--check-proof"].includes(argv[i]) ||
         !populated(argv[i + 1]) || argv[i + 1].startsWith("--") ||
         options.has(argv[i])) {
-      throw new Error("Usage: node run-iteration-gate.mjs --receipt <json> [--baseline <json>] [--ledger <project-ledger.json>] [--render-evidence <desktop-render.json>] --proof <out.json> OR --receipt <json> [--baseline <json>] [--ledger <project-ledger.json>] [--render-evidence <desktop-render.json>] --check-proof <proof.json>");
+      throw new Error("Usage: node run-iteration-gate.mjs --receipt <json> [--baseline <json>] [--ledger <project-ledger.json>] [--render-evidence <desktop-render.json>] [--source-root <project-dir>] --proof <out.json> OR --receipt <json> [--baseline <json>] [--ledger <project-ledger.json>] [--render-evidence <desktop-render.json>] [--source-root <project-dir>] --check-proof <proof.json>");
     }
     options.set(argv[i], resolve(argv[i + 1]));
   }
@@ -36,6 +36,7 @@ function argsOf(argv) {
     baseline: options.get("--baseline") ?? null,
     ledger: options.get("--ledger") ?? null,
     renderEvidence: options.get("--render-evidence") ?? null,
+    sourceRoot: options.get("--source-root") ?? null,
     proof: options.get("--proof") ?? null,
     checkProof: options.get("--check-proof") ?? null,
   };
@@ -45,9 +46,9 @@ function inputHash(path) {
   return path === null ? null : { path, sha256: hash(path) };
 }
 
-export function runGate({ receipt, baseline = null, ledger = null, renderEvidence = null, proof, workspaceCwd = process.cwd() }) {
+export function runGate({ receipt, baseline = null, ledger = null, renderEvidence = null, sourceRoot = null, proof, workspaceCwd = process.cwd() }) {
   if (!populated(proof)) throw new Error("--proof output path is required");
-  const discovered = discoverProjectLedger(workspaceCwd);
+  const discovered = discoverProjectLedger(sourceRoot ?? workspaceCwd);
   if (discovered && ledger === null) throw new Error("Project findings ledger exists; pass --ledger for durable coverage");
   if (discovered && ledger !== null && resolve(discovered) !== resolve(ledger)) {
     throw new Error("--ledger must select the canonical project findings ledger");
@@ -57,6 +58,11 @@ export function runGate({ receipt, baseline = null, ledger = null, renderEvidenc
   const protectedPaths = [receipt, baseline, ledger, renderEvidence, validator, ledgerValidator].filter(Boolean).map((item) => resolve(item));
   if (protectedPaths.includes(outputPath)) throw new Error("Proof output must not overwrite the receipt, baseline, or validator");
   if (existsSync(outputPath)) throw new Error("Proof file already exists; use a fresh path per execution");
+  const receiptData = JSON.parse(readFileSync(resolve(receipt), "utf8"));
+  if (receiptData?.surfaceKind === "DENSE_DESKTOP_MONITOR" &&
+      receiptData?.iterationVerdict === "COMPLETE" && sourceRoot === null) {
+    throw new Error("Desktop COMPLETE requires explicit --source-root; an unrelated working directory cannot certify native UI source");
+  }
   const receiptInput = inputHash(resolve(receipt));
   const baselineInput = inputHash(baseline === null ? null : resolve(baseline));
   const scriptInput = inputHash(validator);
@@ -66,7 +72,9 @@ export function runGate({ receipt, baseline = null, ledger = null, renderEvidenc
   const desktopValidatorInput = inputHash(renderEvidenceInput ? resolve(here, "desktop-render-evidence.mjs") : null);
   const snapshotScriptInput = inputHash(resolve(here, "project-source-snapshot.mjs"));
   const ignored = [receipt, baseline, ledger, renderEvidence, proof].filter(Boolean);
-  const projectSource = snapshotProjectSource(workspaceCwd, { ignorePaths: ignored });
+  const projectSource = sourceRoot === null
+    ? snapshotProjectSource(workspaceCwd, { ignorePaths: ignored })
+    : snapshotRootedSource(sourceRoot, { ignorePaths: ignored });
   let renderScreens = null;
   if (renderEvidenceInput) {
     const evidence = JSON.parse(readFileSync(renderEvidenceInput.path, "utf8"));
@@ -87,7 +95,9 @@ export function runGate({ receipt, baseline = null, ledger = null, renderEvidenc
   let result = null;
   try { result = JSON.parse(child.stdout); } catch { /* CLI failure may not return JSON */ }
   const exitCode = Number.isInteger(child.status) ? child.status : 2;
-  const sourceAfterValidation = snapshotProjectSource(workspaceCwd, { ignorePaths: ignored });
+  const sourceAfterValidation = sourceRoot === null
+    ? snapshotProjectSource(workspaceCwd, { ignorePaths: ignored })
+    : snapshotRootedSource(sourceRoot, { ignorePaths: ignored });
   if (projectSource?.sha256 !== sourceAfterValidation?.sha256) {
     throw new Error("Project sources changed during gate execution; rerun after edits stop");
   }
@@ -105,6 +115,7 @@ export function runGate({ receipt, baseline = null, ledger = null, renderEvidenc
     validator: scriptInput,
     ledgerValidator: ledgerScriptInput,
     projectSource,
+    sourceRoot: sourceRoot === null ? null : resolve(sourceRoot),
     sourceSnapshotValidator: snapshotScriptInput,
     processExitCode: exitCode,
     result: object(result) ? {
@@ -121,10 +132,10 @@ export function runGate({ receipt, baseline = null, ledger = null, renderEvidenc
   return { proofPath: outputPath, exitCode, proof: proofData };
 }
 
-export function checkProof({ receipt, baseline = null, ledger = null, renderEvidence = null, checkProof: proofPath, workspaceCwd = process.cwd() }) {
+export function checkProof({ receipt, baseline = null, ledger = null, renderEvidence = null, sourceRoot = null, checkProof: proofPath, workspaceCwd = process.cwd() }) {
   const issues = [];
   const fail = (x) => issues.push(x);
-  const discovered = discoverProjectLedger(workspaceCwd);
+  const discovered = discoverProjectLedger(sourceRoot ?? workspaceCwd);
   if (discovered && ledger === null) fail("Project findings ledger present but not selected for proof verification");
   if (discovered && ledger !== null && resolve(discovered) !== resolve(ledger)) {
     fail("Proof selected a noncanonical findings ledger for the current project");
@@ -135,6 +146,9 @@ export function checkProof({ receipt, baseline = null, ledger = null, renderEvid
   if (!object(evidence) || ![1, 2].includes(evidence.schemaVersion) ||
       evidence.generator !== "design-with-ai/run-iteration-gate.mjs") {
     fail("Unsupported proof format");
+  }
+  if ((sourceRoot === null ? null : resolve(sourceRoot)) !== (evidence?.sourceRoot ?? null)) {
+    fail("Source root differs from the recorded execution");
   }
   const expectedInputs = [
     ["receipt", resolve(receipt)],
@@ -173,9 +187,10 @@ export function checkProof({ receipt, baseline = null, ledger = null, renderEvid
   // The worktree snapshot is checked after the validator and again on every
   // --check-proof / Stop. It captures changes after a previous green PARTIAL.
   try {
-    const current = snapshotProjectSource(workspaceCwd, {
-      ignorePaths: [receipt, baseline, ledger, renderEvidence, proofPath].filter(Boolean),
-    });
+    const ignorePaths = [receipt, baseline, ledger, renderEvidence, proofPath].filter(Boolean);
+    const current = sourceRoot === null
+      ? snapshotProjectSource(workspaceCwd, { ignorePaths })
+      : snapshotRootedSource(sourceRoot, { ignorePaths });
     const saved = evidence?.projectSource;
     if (renderEvidence !== null) {
       try {
@@ -221,6 +236,10 @@ export function checkProof({ receipt, baseline = null, ledger = null, renderEvid
     catch { return null; }
   })();
   if (receiptData?.surfaceKind === "DENSE_DESKTOP_MONITOR" &&
+      evidence?.result?.verdict === "COMPLETE" && sourceRoot === null) {
+    fail("Desktop COMPLETE missing explicit source root");
+  }
+  if (receiptData?.surfaceKind === "DENSE_DESKTOP_MONITOR" &&
       evidence?.result?.verdict === "COMPLETE" &&
       (renderEvidence === null || evidence?.result?.desktopEvidenceChecked !== true)) {
     fail("Dense desktop monitor COMPLETE is missing final render validation");
@@ -238,6 +257,8 @@ export function checkProof({ receipt, baseline = null, ledger = null, renderEvid
     if (/^baseline changed after/.test(message)) return "BASELINE_CHANGED";
     if (/^ledger changed after/.test(message)) return "LEDGER_CHANGED";
     if (/^Project source changed after/.test(message)) return "WORKTREE_CHANGED";
+    if (/^Source root differs/.test(message)) return "PATH_MISMATCH";
+    if (/^Desktop COMPLETE missing explicit source root/.test(message)) return "WORKTREE_UNBOUND";
     if (/^Desktop screenshots changed/.test(message)) return "RENDER_ARTIFACT_CHANGED";
     if (/^Desktop render/.test(message)) return "RENDER_SOURCE_STALE";
     if (/^Project source snapshot missing/.test(message)) return "WORKTREE_UNBOUND";
@@ -252,6 +273,7 @@ export function checkProof({ receipt, baseline = null, ledger = null, renderEvid
   return {
     valid: issues.length === 0,
     completionEligible,
+    sourceBound: object(evidence?.projectSource) && typeof evidence.projectSource.sha256 === "string",
     issueCodes,
     processExitCode: evidence?.processExitCode ?? null,
     verdict: evidence?.result?.verdict ?? null,
@@ -264,7 +286,7 @@ function main() {
   try {
     const options = argsOf(process.argv.slice(2));
     if (options.help) {
-      process.stdout.write("Usage: node run-iteration-gate.mjs --receipt <json> [--baseline <json>] [--ledger <json>] --proof <out.json>\n   or: node run-iteration-gate.mjs --receipt <json> [--baseline <json>] [--ledger <json>] --check-proof <proof.json>\n");
+      process.stdout.write("Usage: node run-iteration-gate.mjs --receipt <json> [--baseline <json>] [--ledger <json>] [--source-root <native-project-dir>] --proof <out.json>\n   or: node run-iteration-gate.mjs --receipt <json> [--baseline <json>] [--ledger <json>] [--source-root <native-project-dir>] --check-proof <proof.json>\n");
       return;
     }
     if (options.checkProof !== null) {

@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import test from "node:test";
-import { snapshotProjectSource } from "../scripts/project-source-snapshot.mjs";
+import { snapshotProjectSource, snapshotRootedSource } from "../scripts/project-source-snapshot.mjs";
 import { runGate, checkProof } from "../scripts/run-iteration-gate.mjs";
 import { decideStop } from "../scripts/codex-stop-gate.mjs";
 import {
@@ -163,3 +163,35 @@ test("WinForms source and XAML modifications invalidate the project fingerprint 
   writeFileSync(join(output, "Generated.cs"), "class Generated { }\n");
   assert.equal(snapshotProjectSource(f.repo).sha256, withXaml.sha256);
 }));
+
+test("Gitless native root below a broken ancestor .git is fingerprinted without touching that metadata", () => {
+  const parent = mkdtempSync(join(tmpdir(), "dwa-broken-git-parent-"));
+  try {
+    const broken = join(parent, ".git");
+    mkdirSync(broken);
+    const project = join(parent, "nested", "PCGuardian");
+    mkdirSync(join(project, "UI"), { recursive: true });
+    const form = join(project, "UI", "MainForm.cs");
+    writeFileSync(form, "public class MainForm { }\n");
+    assert.throws(() => snapshotProjectSource(project), /workspace fingerprint is unavailable/);
+    const first = snapshotRootedSource(project);
+    assert.equal(first.sourceMode, "ROOTED_DIRECTORY");
+    assert.equal(first.fileCount, 1);
+    const bin = join(project, "bin");
+    mkdirSync(bin);
+    writeFileSync(join(bin, "Generated.cs"), "internal class Generated { }\n");
+    assert.equal(snapshotRootedSource(project).sha256, first.sha256);
+    writeFileSync(form, "public class MainForm { public int Version = 2; }\n");
+    assert.notEqual(snapshotRootedSource(project).sha256, first.sha256);
+    assert.equal(readdirSync(broken).length, 0, "ancestor .git remains unchanged");
+  } finally {
+    rmSync(parent, { recursive: true, force: true });
+  }
+});
+test("a Gitless empty or missing source directory is not certifiable", () => {
+  const root = mkdtempSync(join(tmpdir(), "dwa-gitless-empty-"));
+  try {
+    assert.throws(() => snapshotRootedSource(root), /no eligible project source files/);
+    assert.throws(() => snapshotRootedSource(join(root, "missing")), /ENOENT/);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});

@@ -65,7 +65,9 @@ configurations.
    `run-iteration-gate.mjs` `checkProof()` validator.
 4. Bind a Git project's tracked and untracked source files (including
    HTML/CSS/TS and small UI assets) to a content-derived SHA-256 snapshot at
-   gate execution. Stop compares the current source snapshot, receipt,
+   gate execution. For Gitless native work, use `--source-root` to bind an
+   explicit source directory without repairing an invalid ancestor `.git`.
+   Stop compares the current source snapshot, receipt,
    baseline, ledger, optional final native render screenshots and validators
    to the recorded proof. A code change
    **after** a green gate, such as a late font fix in `ui/index.html`,

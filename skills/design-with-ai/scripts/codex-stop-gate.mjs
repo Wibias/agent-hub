@@ -17,7 +17,7 @@ const GATE_RUN = /(?:^|[\s;"'\\/])run-iteration-gate\.mjs/i;
 const MODIFY = /\b(?:improve-existing|restyle-existing|redesign-existing|build-product-surface|verbesser(?:e|n|ung|t)?|überarbeit(?:e|en|ung)|optimier(?:e|en|ung)|redesign|rework|restyle|polish|implement|make .{0,35}better|fix .{0,35}(?:ui|design)|update .{0,35}(?:ui|design)|improve .{0,35}(?:ui|design))\b/i;
 const EXPLICIT = /design-with-ai|design with ai/i;
 const EXEC_TOOL = /exec|shell|command|terminal|powershell|bash|functions\.exec/i;
-const ARG = /(?:^|\s)--(receipt|baseline|ledger|render-evidence|proof|check-proof)\s+(?:"([^"]+)"|'([^']+)'|(\S+))/g;
+const ARG = /(?:^|\s)--(receipt|baseline|ledger|render-evidence|source-root|proof|check-proof)\s+(?:"([^"]+)"|'([^']+)'|(\S+))/g;
 const MAX_LOG_BYTES = 80 * 1024 * 1024;
 const MAX_PROOF_BYTES = 128 * 1024;
 const MAX_PATH_LENGTH = 2048;
@@ -122,16 +122,19 @@ export function decideStop(event, report, { home = homedir() } = {}) {
   if (!modifying) return allow("READ_ONLY_OR_OUT_OF_SCOPE");
   if (!report.explicit && !EXPLICIT.test(prompt) && !report.readsSkill) return allow("SKILL_NOT_OBSERVED");
   const cwd = resolve(event.cwd);
-  const needsLedger = isGitProject(cwd);
-  const canonicalLedger = discoverProjectLedger(cwd);
   let proofStatus = report.gateCommands.length ? "NO_VALID_PROOF" : "NO_GATE_COMMAND";
   for (const options of [...report.gateCommands].reverse()) {
-    if (needsLedger && (!canonicalLedger || !options.ledger ||
-        resolve(options.ledger) !== resolve(canonicalLedger))) {
+    const sourceRoot = options["source-root"] ?? null;
+    const canonicalLedger = discoverProjectLedger(sourceRoot ?? cwd);
+    const needsLedger = sourceRoot !== null || isGitProject(cwd);
+    if (needsLedger && (!options.ledger ||
+        (canonicalLedger && resolve(options.ledger) !== resolve(canonicalLedger)) ||
+        (sourceRoot === null && !canonicalLedger))) {
       proofStatus = "NO_VALID_PROOF";
       continue;
     }
-    const raw = [options.receipt, options.baseline, options.ledger, options.proof].filter(Boolean);
+    const raw = [options.receipt, options.baseline, options.ledger, options["render-evidence"],
+      sourceRoot, options.proof].filter(Boolean);
     if (!raw.every((path) => localAllowed(path, cwd, home))) {
       proofStatus = "PATH_REJECTED";
       continue;
@@ -145,7 +148,7 @@ export function decideStop(event, report, { home = homedir() } = {}) {
       checked = checkProof({
         receipt: options.receipt, baseline: options.baseline ?? null,
         ledger: options.ledger ?? null, renderEvidence: options["render-evidence"] ?? null,
-        checkProof: options.proof, workspaceCwd: event.cwd,
+        sourceRoot, checkProof: options.proof, workspaceCwd: event.cwd,
       });
     } catch {
       proofStatus = "PROOF_INVALID_OR_STALE";

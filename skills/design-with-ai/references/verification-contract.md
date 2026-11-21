@@ -128,7 +128,12 @@ macro similarity. Do not load or run this comparison for a single-route task.
 ## Dense desktop monitor quality evidence (conditional)
 
 The full-window desktop monitor now has a concrete conditional
-`DENSE_DESKTOP_MONITOR` render-evidence contract. When that surface is
+`DENSE_DESKTOP_MONITOR` render-evidence contract. For `COMPLETE`, explicitly
+pass `--source-root` as the actual target project directory. A Gitless C#
+project can be fingerprinted without altering an invalid ancestor `.git`.
+Proof verification reports `sourceBound` separately from validity, so a
+structurally valid `PARTIAL` with `projectSource: null` is visibly **not**
+a source-freshness certification. When that surface is
 being modified, the iteration receipt MUST name `surfaceKind:
 "DENSE_DESKTOP_MONITOR"`; `COMPLETE` requires the additional
 `--render-evidence` artifact. Its measured geometry, screenshot bytes

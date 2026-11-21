@@ -3,7 +3,7 @@
 // design iteration gate. Records only a digest and count, not file contents.
 // This is a freshness check, not a cryptographic proof of honest tool use.
 import { createHash } from "node:crypto";
-import { lstatSync, readFileSync, readlinkSync } from "node:fs";
+import { lstatSync, readFileSync, readlinkSync, readdirSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { basename, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -118,10 +118,70 @@ export function snapshotProjectSource(cwd = process.cwd(), { ignorePaths = [] } 
   return { schemaVersion: 1, sha256: digest.digest("hex"), fileCount: count };
 }
 
+
+/**
+ * Explicit, bounded source fingerprint for native projects without Git.
+ * This never silently replaces a failed Git check. The caller must supply
+ * the source root, so an unrelated broken ancestor .git can be left alone.
+ */
+export function snapshotRootedSource(sourceRoot, { ignorePaths = [] } = {}) {
+  if (typeof sourceRoot !== "string" || !isAbsolute(sourceRoot)) {
+    throw new Error("Rooted fingerprint requires an absolute project source root");
+  }
+  const root = resolve(sourceRoot);
+  const stRoot = lstatSync(root);
+  if (!stRoot.isDirectory() || stRoot.isSymbolicLink()) {
+    throw new Error("Project source root must be a real directory");
+  }
+  const ignored = new Set(ignorePaths.filter(Boolean).map(x => {
+    const path = resolve(x);
+    return process.platform === "win32" ? path.toLowerCase() : path;
+  }));
+  const digest = createHash("sha256");
+  digest.update("design-with-ai/rooted-source/v1\0" + root.toLowerCase() + "\0");
+  let count = 0, totalBytes = 0, visited = 0;
+  const queue = [{ dir: root, rel: "" }];
+  while (queue.length) {
+    const { dir, rel } = queue.pop();
+    if (++visited > MAX_FILES * 4) throw new Error("Too many directories for bounded source check");
+    const entries = readdirSync(dir, { withFileTypes: true }).sort((a, b) =>
+      a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
+    for (const entry of entries) {
+      const relPath = rel ? rel + "/" + entry.name : entry.name;
+      if (GENERATED.test(relPath) || (entry.isDirectory() && GENERATED.test(entry.name + "/"))) continue;
+      const full = resolve(dir, entry.name);
+      if (excluded(full, ignored)) continue;
+      const st = lstatSync(full);
+      if (st.isSymbolicLink()) {
+        // Do not traverse links/junctions into a different source tree.
+        if (!eligible(relPath)) continue;
+        digest.update(relPath + "\0SYMLINK\0" + readlinkSync(full) + "\0");
+        count++;
+      } else if (st.isDirectory()) {
+        queue.push({ dir: full, rel: relPath });
+      } else if (st.isFile() && eligible(relPath)) {
+        count++;
+        if (st.size > MAX_FILE_BYTES || totalBytes + st.size > MAX_TOTAL_BYTES) {
+          throw new Error("Source snapshot exceeds bounded size");
+        }
+        totalBytes += st.size;
+        digest.update(relPath + "\0");
+        digest.update(readFileSync(full));
+        digest.update("\0");
+      }
+      if (count > MAX_FILES) throw new Error("Too many source files for bounded check");
+    }
+  }
+  if (count === 0) throw new Error("Source root contains no eligible project source files");
+  return { schemaVersion: 1, sourceMode: "ROOTED_DIRECTORY", sha256: digest.digest("hex"), fileCount: count };
+}
+
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
-    const result = snapshotProjectSource(process.cwd());
-    if (result === null) throw new Error("No Git project detected; cannot bind native render to a source snapshot");
+    const args = process.argv.slice(2);
+    if (args.length !== 0 && (args.length !== 2 || args[0] !== "--source-root")) throw new Error("Usage: node project-source-snapshot.mjs [--source-root <absolute-source-dir>]");
+    const result = args.length ? snapshotRootedSource(resolve(args[1])) : snapshotProjectSource(process.cwd());
+    if (result === null) throw new Error("No Git project detected; pass --source-root for an explicit Gitless project");
     process.stdout.write(JSON.stringify(result, null, 2) + "\n");
   } catch (error) {
     process.stderr.write("Cannot fingerprint current product source: " + error.message + "\n");
