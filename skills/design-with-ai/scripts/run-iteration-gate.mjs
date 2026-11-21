@@ -174,7 +174,7 @@ export function checkProof({ receipt, baseline = null, ledger = null, renderEvid
   // --check-proof / Stop. It captures changes after a previous green PARTIAL.
   try {
     const current = snapshotProjectSource(workspaceCwd, {
-      ignorePaths: [receipt, baseline, ledger, proofPath].filter(Boolean),
+      ignorePaths: [receipt, baseline, ledger, renderEvidence, proofPath].filter(Boolean),
     });
     const saved = evidence?.projectSource;
     if (renderEvidence !== null) {
