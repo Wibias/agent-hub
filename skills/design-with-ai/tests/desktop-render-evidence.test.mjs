@@ -88,6 +88,8 @@ function matrixManifest(source = "a".repeat(64)) {
     const v = viewports.find(v => v.id === id), c = baseCapture(state);
     c.viewportId = id;
     c.viewport = { width: v.width, height: v.height, dpiPercent: v.dpiPercent };
+    c.kpiStrip = { rect: [0, 60, v.width, 97], bottomDividerY: 157 };
+    c.kpiText[0].supportingText = [24, 128, 131, 16];
     c.image = id === "COMPACT" ? state.toLowerCase() + ".png"
       : (id + "-" + state).toLowerCase() + ".png";
     const listHeight = Math.min(260, v.height - 565);
@@ -376,4 +378,34 @@ test("an expanded inspector cannot overlap the process list", () => {
   const selected = m.captures.find(c => c.viewportId === "COMPACT" && c.state === "SELECTED");
   selected.chartPanels.find(c => c.role === "DETAIL").rect = selected.processTable.rect;
   assert.match(allProblems(m), /chart panel overlaps process table/);
+});
+
+test("compact KPI supporting text touching divider fails even when maximized view remains clear", () => {
+  const m = matrixManifest();
+  const compact = m.captures.find(c => c.viewportId === "COMPACT" && c.state === "IDLE");
+  compact.kpiStrip = { rect: [0, 60, compact.viewport.width, 84], bottomDividerY: 144 };
+  compact.kpiText[0].supportingText = [24, 128, 131, 16];
+  assert.match(allProblems(m), /KPI_BOTTOM_CLEARANCE COMPACT:IDLE used-memory/);
+  const max = m.captures.find(c => c.viewportId === "MAXIMIZED" && c.state === "IDLE");
+  assert.equal(max.kpiStrip.bottomDividerY - (max.kpiText[0].supportingText[1] +
+    max.kpiText[0].supportingText[3]), 13);
+});
+test("KPI divider and supporting text cannot be silently omitted for a v2 render", () => {
+  const m = matrixManifest();
+  delete m.captures[0].kpiStrip;
+  delete m.captures[1].kpiText[0].supportingText;
+  assert.match(allProblems(m), /KPI_STRIP_MEASUREMENT_REQUIRED/);
+  assert.match(allProblems(m), /KPI_SUPPORTING_TEXT_MEASUREMENT_REQUIRED/);
+});
+test("a supporting line outside a metric cell is rejected regardless of divider clearance", () => {
+  const m = matrixManifest();
+  const compact = m.captures.find(c => c.viewportId === "COMPACT" && c.state === "IDLE");
+  compact.kpiText[0].supportingText = [24, 100, 250, 16];
+  assert.match(allProblems(m), /KPI_SUPPORTING_TEXT_OVERFLOW COMPACT:IDLE used-memory/);
+});
+test("DPI-specific physical bottom clearance is enforced for scaled native windows", () => {
+  const m = matrixManifest();
+  const scaled = m.captures.find(c => c.viewportId === "SCALED" && c.state === "IDLE");
+  scaled.kpiText[0].supportingText = [24, 133, 131, 16]; // 8 px to divider, needs 9 at 150%
+  assert.match(allProblems(m), /KPI_BOTTOM_CLEARANCE SCALED:IDLE used-memory/);
 });

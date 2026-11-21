@@ -14,7 +14,7 @@ Capture **specific** application version/window size, OS display scale (100%, 12
 
 For the **actual rendered client area**, inventory header/titlebar, KPI summary strip, trend graph, control/filter bars, process table, detail pane, actions, and status footer. Record effective available width and height. A nominal window dimension is not proof all rows or controls are visible.
 
-1. **KPI vertical fit**: label, large number, units and supporting explanation all need a stable baseline and enough vertical room. Inspect bottom clipping, overflow beyond metric-group boundaries, overlap with dividers, and wraps in longer strings. Do not reduce essential type size to conceal a height deficit.
+1. **KPI vertical fit**: label, large number, units and supporting explanation all need a stable baseline and enough vertical room. Inspect bottom clipping, overflow beyond metric-group boundaries, overlap with dividers, and wraps in longer strings. In compact windows, a section separator can visibly intersect the second supporting line even when the text is technically inside its metric cell. Do not reduce essential type size to conceal a height deficit.
 2. **Table column budget**: inspect header *and* representative cell content for each column at the same width. Find truncated, ambiguous headers, near-zero padding, misaligned numeric columns, and unused space beside constrained text. Allocate widths by content and task priority; permit appropriate resize, scrolling, ellipsis with accessible full-value disclosure, or fewer secondary columns. A huge empty column does not justify truncating the adjacent primary header.
 3. **Vertical workspace budget**: at normal window height, measure visible populated rows versus available space, minimum usable scroll area, chart height, empty-detail height and footer/actions. Do not reserve a dominant fixed-height inspector for `No process selected` when the process list is squeezed. Collapsing the *empty* inspector is acceptable if selecting a process re-opens useful inspection and keyboard focus remains stable.
 4. **Control identity and hierarchy**: two strips with the same RAM/CPU/GPU/NET/DISK labels may serve distinct scopes, such as system chart vs process ranking. Make those scopes discoverable through group labels, proximity or an intentional control style difference. Do not delete a distinct function just to reduce duplicate-looking controls; verify what each actually changes.
@@ -74,7 +74,15 @@ If Computer Use or an elevated process blocks a required state, keep
 `PARTIAL/NOT_VERIFIED`; do not extend the prompt or invent evidence.
 
  Attach observed window width/height/DPI for each screenshot, measured
-KPI text/cell rectangles and table-header text/cell rectangles, process
+KPI text/cell rectangles, the actual `kpiStrip.rect` and
+`kpiStrip.bottomDividerY` and each KPI item's `supportingText` bounds,
+plus table-header text/cell rectangles. Check the measured clearance between
+the last supporting glyph and the bottom separator in every viewport:
+version-2 desktop evidence uses a contextual minimum of 6 device-independent
+pixels (scaled by DPI). A line touching or crossing the separator is a HOLD,
+even if the KPI's general cell rectangle says the text fits. If the native
+render/UI-tree cannot supply these measurements, retain PARTIAL instead of
+writing invented rectangles. Also record the process
 table's visible/total row counts and rectangle, inspector rectangle and empty
 state, and applicable live chart sample count/collection interval/axis
 history. Rectangle values use `[x, y, width, height]` **in the captured
