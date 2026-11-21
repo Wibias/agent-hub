@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "artifactType": "REPRESENTATIVE_SLICE",
+  "artifactId": "example-slice-v1",
+  "sourceDirectionSetHash": "REPLACE_WITH_CHECKPOINT_SHA256",
+  "sourceDecisionHash": "REPLACE_WITH_DECISION_SHA256",
+  "sourceDirectionId": "B",
+  "flow": "Review one job",
+  "coveredContent": [
+    "queue",
+    "job"
+  ],
+  "omittedContent": [
+    "help"
+  ],
+  "representativenessRationale": "A high-consequence task spanning queue and details",
+  "views": [
+    {
+      "id": "queue",
+      "label": "Job queue"
+    },
+    {
+      "id": "detail",
+      "label": "Selected job"
+    }
+  ],
+  "transitions": [
+    {
+      "from": "queue",
+      "to": "detail",
+      "trigger": "Select job"
+    }
+  ],
+  "criticalStates": [
+    {
+      "viewId": "detail",
+      "state": "permission denied"
+    }
+  ],
+  "responsiveBehavior": [
+    "Stack details on narrow viewports"
+  ],
+  "visualDecisions": [
+    "Task action precedes secondary reporting"
+  ],
+  "tradeoffs": [
+    "Help is excluded from this representative slice"
+  ]
+}

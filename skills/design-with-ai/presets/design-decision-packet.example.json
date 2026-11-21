@@ -1,0 +1,57 @@
+{
+  "schemaVersion": 1,
+  "artifactType": "DIRECTION_SET",
+  "artifactId": "example-jobs-v1",
+  "workflowRoute": "redesign-existing",
+  "profile": "deep",
+  "brief": {
+    "id": "jobs-brief-v1",
+    "purpose": "Make the job review path clear",
+    "targetUsers": "Operators",
+    "contentModel": "Queue, job details and support",
+    "contentIds": [
+      "queue",
+      "job",
+      "help"
+    ],
+    "constraints": [
+      "Preserve permissions"
+    ],
+    "successCriteria": [
+      "Primary review action apparent"
+    ]
+  },
+  "directions": [
+    {
+      "id": "A",
+      "title": "Queue first",
+      "structuralModel": "Queue as the core",
+      "primaryContent": [
+        "queue",
+        "job"
+      ],
+      "groupingModel": "Queue groups",
+      "interactionOrganization": "List to details",
+      "visualWorld": "Editorial",
+      "tradeoffs": [
+        "Reporting is secondary"
+      ]
+    },
+    {
+      "id": "B",
+      "title": "Task workspace",
+      "structuralModel": "Job as a task workbench",
+      "primaryContent": [
+        "job",
+        "help"
+      ],
+      "groupingModel": "Task phases",
+      "interactionOrganization": "Step panels",
+      "visualWorld": "Industrial",
+      "tradeoffs": [
+        "More deliberate task steps"
+      ]
+    }
+  ],
+  "recommendation": "B"
+}
