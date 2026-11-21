@@ -25,7 +25,7 @@ function source() {
 test('permanent workflow runs all P14 tests and Reference Graph secret scans', () => {
   const value = readFileSync(WORKFLOW, 'utf8');
   assert.match(value, /node --test tests\/reference-graph\/\*\.test\.mjs/);
-  assert.match(value, /scan_secrets\.py reference-graph/);
+  assert.match(value, /scripts\/scan-secrets\.py reference-graph/);
 });
 
 test('P14 pins exact final P13 evidence, bytes, and request', () => {

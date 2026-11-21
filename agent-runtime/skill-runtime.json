@@ -27,11 +27,6 @@
       "reasoning": "high",
       "isolation": "prefer"
     },
-    "security-review": {
-      "reasoning": "high",
-      "isolation": "prefer",
-      "mutation": "read-only"
-    },
     "source-driven-development": {
       "reasoning": "medium"
     },

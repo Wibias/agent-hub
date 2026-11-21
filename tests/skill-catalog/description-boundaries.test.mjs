@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
@@ -16,18 +17,8 @@ async function description(skill) {
 const broadActivity = /\buse when (?:working with|writing|building|fixing|debugging|testing|finishing|committing)\b/i;
 const workflowLeak = /\b(?:must|always|never|do not)\s+(?:run|load|read|execute|call|invoke|launch)\b|(?:scripts\/|references\/)[^\s`]+/i;
 
-test('vite discovery is specific to Vite surfaces, not generic frontend work', async () => {
-  const value = await description('vite');
-  assert.match(value, /vite\.config|Vite-specific|Vite configuration/i);
-  assert.match(value, /Not for generic frontend/i);
-  assert.doesNotMatch(value, broadActivity);
-});
-
-test('vitest discovery requires Vitest-specific context and rejects generic test writing', async () => {
-  const value = await description('vitest');
-  assert.match(value, /Vitest-specific|vitest\.config/i);
-  assert.match(value, /Not for generic test writing/i);
-  assert.doesNotMatch(value, broadActivity);
+test('removed Vite and Vitest skills are not discoverable', () => {
+  for (const skill of ['vite', 'vitest']) assert.equal(existsSync(path.join(repoRoot, 'skills', skill, 'SKILL.md')), false);
 });
 
 test('ai-agent-security discovery requires explicit security intent', async () => {
@@ -37,11 +28,10 @@ test('ai-agent-security discovery requires explicit security intent', async () =
   assert.doesNotMatch(value, broadActivity);
 });
 
-test('create-pr-from-local-work discovery routes without embedding the workflow', async () => {
-  const value = await description('create-pr-from-local-work-redirect');
-  assert.match(value, /create a PR|open a PR|local work/i);
-  assert.match(value, /redirect|github-delivery/i);
-  assert.doesNotMatch(value, workflowLeak);
+test('GitHub delivery owns PR creation without a redirect skill', async () => {
+  const value = await description('github-delivery');
+  assert.match(value, /GitHub pull request|PR delivery|GitHub delivery/i);
+  assert.equal(existsSync(path.join(repoRoot, 'skills/create-pr-from-local-work-redirect/SKILL.md')), false);
 });
 
 test('simplify is the default cleanup owner without discovery-time load suppression', async () => {
@@ -84,20 +74,12 @@ test('source-driven-development requires explicit source-grounding intent', asyn
   assert.doesNotMatch(value, /correctness matters|building with frameworks\/libraries/i);
 });
 
-test('extract-approach discovery does not prescribe automatic end-of-task execution', async () => {
-  const value = await description('extract-approach');
-  assert.match(value, /extract approach|write a learning|remember this/i);
-  assert.match(value, /explicit|asks|requests|wants/i);
-  assert.doesNotMatch(value, /at end of|any session|prefer running|silently skipping/i);
-  assert.doesNotMatch(value, workflowLeak);
+test('retired extract-approach has no discoverable entrypoint', () => {
+  assert.equal(existsSync(path.join(repoRoot, 'skills/extract-approach/SKILL.md')), false);
 });
 
-test('vault-research discovery stays evidence-focused without embedding its workflow', async () => {
-  const value = await description('vault-research');
-  assert.match(value, /research|investigate|verify|compare current sources|current evidence/i);
-  assert.match(value, /Not for self-contained local work|local bug diagnosis|official-doc-only/i);
-  assert.doesNotMatch(value, broadActivity);
-  assert.doesNotMatch(value, workflowLeak);
+test('retired vault-research has no discoverable entrypoint', () => {
+  assert.equal(existsSync(path.join(repoRoot, 'skills/vault-research/SKILL.md')), false);
 });
 
 test('diagnose discovery is reserved for resistant bugs and false-success paths', async () => {

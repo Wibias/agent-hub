@@ -83,16 +83,38 @@ test('lock pins the consolidated integration tree and keeps documentation separa
   assert.equal(LOCK.documentation_files[0].sha256.length, 64);
 });
 
-test('committed reviewed files match every pinned hash', () => {
+test('historical reviewed-head artifacts match their immutable P35 pin', () => {
+  // A successor workflow maintenance edit must not rewrite an older approved lock.
+  // HEAD evolves; LOCK.reviewed_head_sha preserves the exact 2026-11-09 evidence.
+  const base = LOCK.reviewed_head_sha;
   for (const entry of LOCK.reviewed_files) {
-    const blob = git('cat-file', 'blob', 'HEAD:' + entry.path);
-    assert.equal(blob.status, 0, entry.path + ' must exist at HEAD');
-    assert.equal(sha256(blob.stdout), entry.sha256, entry.path + ' drifted from the pin');
+    const blob = git('cat-file', 'blob', base + ':' + entry.path);
+    assert.equal(blob.status, 0, entry.path + ' must exist at reviewed head');
+    assert.equal(sha256(blob.stdout), entry.sha256, entry.path + ' drifted from the historical pin');
   }
-  assert.equal(
-    sha256(git('cat-file', 'blob', 'HEAD:' + LOCK.historical_p35_lock.path).stdout),
-    LOCK.historical_p35_lock.sha256,
-  );
+  const historic = git('cat-file', 'blob', base + ':' + LOCK.historical_p35_lock.path);
+  assert.equal(historic.status, 0, 'historical P35 lock must exist at reviewed head');
+  assert.equal(sha256(historic.stdout), LOCK.historical_p35_lock.sha256);
+});
+
+test('successor workflow changes cannot be mistaken for P35-approved content', () => {
+  const workflow = LOCK.reviewed_files.find(x => x.path === '.github/workflows/verify-reference-graph.yml');
+  assert.ok(workflow);
+  const current = git('cat-file', 'blob', 'HEAD:' + workflow.path);
+  assert.equal(current.status, 0);
+  if (sha256(current.stdout) !== workflow.sha256) {
+    const actual = evaluateP35IntegrationPreflight({
+      lock: LOCK,
+      repository: repositoryFromLock({
+        headSha: git('rev-parse', 'HEAD').stdout.toString('utf8').trim(),
+        postPinChangedPaths: [workflow.path],
+      }),
+    });
+    assert.equal(actual.post_pin_scope_verified, false);
+    assert.equal(actual.pin_verified, false);
+    assert.equal(actual.activation_authorized, false);
+    assert.equal(actual.code_merge_authorized, false);
+  }
 });
 
 test('a verified pin still reports no merge or activation authority', () => {
@@ -240,7 +262,11 @@ test('CLI exits 2 with false authority flags and never prints a success code', (
   const result = spawnSync(process.execPath, [CLI], { encoding: 'utf8' });
   assert.equal(result.status, 2, result.stderr);
   const report = JSON.parse(result.stdout);
-  assert.equal(report.manifest_verified, true);
+  // The immutable 2026-11-09 review still verifies against its own head,
+  // but successor CI edits must not pass as the *current* pinned manifest.
+  assert.equal(report.manifest_verified, false);
+  assert.equal(report.pin_verified, false);
+  assert.equal(report.post_pin_scope_verified, false);
   assert.equal(report.code_merge_authorized, false);
   assert.equal(report.deployment_authorized, false);
   assert.equal(report.activation_authorized, false);

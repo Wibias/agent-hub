@@ -16,7 +16,7 @@ test('P18 governance is permanent, branch-verifiable, and runs all P18 contracts
   assert.match(source, /pull_request:/);
   assert.match(source, /agent\/reference-graph-p18/);
   assert.match(source, /node --test tests\/reference-graph\/p18-\*\.test\.mjs/);
-  assert.match(source, /scan_secrets\.py reference-graph/);
+  assert.match(source, /scripts\/scan-secrets\.py reference-graph/);
   assert.match(source, /verify-public-release\.mjs/);
 });
 

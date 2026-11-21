@@ -20,7 +20,7 @@ function sha256(path) {
 test('permanent Reference Graph governance automatically executes P15 contracts and broad secret scanning', () => {
   const workflow = readFileSync(WORKFLOW, 'utf8');
   assert.match(workflow, /node --test tests\/reference-graph\/\*\.test\.mjs/);
-  assert.match(workflow, /scan_secrets\.py reference-graph/);
+  assert.match(workflow, /scripts\/scan-secrets\.py reference-graph/);
   assert.match(workflow, /Execute Reference Graph migrations/);
   assert.match(workflow, /Smoke-test P10 runtime projection RLS, refresh grants, and P9 closure/);
 });

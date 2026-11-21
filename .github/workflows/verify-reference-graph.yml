@@ -31,6 +31,8 @@ jobs:
           --health-retries 10
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # P35 historical reviewed-head SHA checks require complete history
       - uses: actions/setup-node@v4
         with:
           node-version: 24
@@ -139,7 +141,7 @@ jobs:
           NODE
 
       - name: Scan Reference Graph tree for common secrets
-        run: python3 skills/security-review-redirect/scripts/scan_secrets.py reference-graph
+        run: python3 scripts/scan-secrets.py reference-graph
 
       - name: Verify catalog import plan
         run: node reference-graph/cli/import-design-references.mjs --plan

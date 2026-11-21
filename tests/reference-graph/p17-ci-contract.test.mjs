@@ -20,7 +20,7 @@ test('permanent P17 governance runs only disposable local-actuator contracts', (
   assert.match(source, /node --test tests\/reference-graph\/p17-\*\.test\.mjs/);
   assert.match(source, /AGENT_HUB_REFERENCE_GRAPH_STATE/);
   assert.match(source, /runner\.temp|RUNNER_TEMP/);
-  assert.match(source, /scan_secrets\.py reference-graph/);
+  assert.match(source, /scripts\/scan-secrets\.py reference-graph/);
   assert.match(source, /verify-public-release\.mjs/);
   assert.doesNotMatch(source, /\$\{\{\s*secrets\./i);
   assert.doesNotMatch(source, /vrznfnxzlxaavpqbzbzd/);

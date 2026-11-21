@@ -50,7 +50,7 @@
     },
     {
       "id": "agents/babysit",
-      "path": "~/.agents/skills/babysit-redirect/SKILL.md",
+      "path": "~/.agents/skills/github-delivery/overrides/babysit/SKILL.md",
       "type": "skill",
       "harness": "agents",
       "scope": "global",
@@ -69,7 +69,7 @@
     },
     {
       "id": "agents/babysit-pr",
-      "path": "~/.agents/skills/babysit-pr-redirect/SKILL.md",
+      "path": "~/.agents/skills/github-delivery/overrides/babysit-pr/SKILL.md",
       "type": "skill",
       "harness": "agents",
       "scope": "global",
@@ -87,46 +87,6 @@
       "status": "active",
       "canonicalId": null,
       "contentHash": "83ed5059de9387a94b584487bae81c2e380fc0823a6fc95fc549d90bc31f85d2"
-    },
-    {
-      "id": "agents/babysit-pr~2",
-      "path": "~/.agents/skills/github-delivery/overrides/babysit-pr/SKILL.md",
-      "type": "skill",
-      "harness": "agents",
-      "scope": "global",
-      "name": "babysit-pr",
-      "description": "Compatibility redirect for the explicit babysit-pr alias and requests to babysit a GitHub pull request. Routes to github-delivery; not a standalone PR or CI workflow.",
-      "tags": [
-        "babysit",
-        "pr",
-        "babysit-pr",
-        "github-delivery"
-      ],
-      "triggers": [
-        "not a standalone PR or CI workflow"
-      ],
-      "status": "duplicate",
-      "canonicalId": "agents/babysit-pr",
-      "contentHash": "83ed5059de9387a94b584487bae81c2e380fc0823a6fc95fc549d90bc31f85d2"
-    },
-    {
-      "id": "agents/babysit~2",
-      "path": "~/.agents/skills/github-delivery/overrides/babysit/SKILL.md",
-      "type": "skill",
-      "harness": "agents",
-      "scope": "global",
-      "name": "babysit",
-      "description": "Compatibility redirect for the explicit babysit alias and requests to watch or monitor a GitHub PR or CI loop. Routes to github-delivery; not a standalone PR or CI workflow.",
-      "tags": [
-        "babysit",
-        "github-delivery"
-      ],
-      "triggers": [
-        "not a standalone PR or CI workflow"
-      ],
-      "status": "duplicate",
-      "canonicalId": "agents/babysit",
-      "contentHash": "98c158429e892cf515ec6fb27435a747878ebc49d835a13fff162e55f7bac9b0"
     },
     {
       "id": "agents/code-simplification",
@@ -250,60 +210,6 @@
       "contentHash": "d77e80033c63e3c5f826a35880c2c81add035a59c35769dc7405fb69cd8fa711"
     },
     {
-      "id": "agents/conversion-pages",
-      "path": "~/.agents/skills/conversion-pages/SKILL.md",
-      "type": "skill",
-      "harness": "agents",
-      "scope": "global",
-      "name": "conversion-pages",
-      "description": "Designs and writes high-conversion landing pages and pricing pages for SaaS products and services. Use when the user asks to build, rewrite, audit, or optimize a landing page or pricing page with conversion, persuasion, or CRO goals. Differentiator: covers CRO/AIDA frameworks, objection handling, SEO/AEO setup, and page-type-specific layout patterns for both landing and pricing pages -- distinct from design-with-ai (general UI design) and writing-ticks (prose anti-slop). Product microcopy stays with `intent` plus `references/content-strategy.md` because `articulate` is not installed.",
-      "tags": [
-        "conversion",
-        "pages",
-        "landing",
-        "pricing"
-      ],
-      "triggers": [
-        "Designs and writes high-conversion landing pages and pricing pages for SaaS products and services.",
-        "the user asks to build",
-        "rewrite",
-        "audit",
-        "or optimize a landing page or pricing page with conversion",
-        "persuasion",
-        "or CRO goals. Differentiator: covers CRO/AIDA frameworks",
-        "objection handling"
-      ],
-      "status": "active",
-      "canonicalId": null,
-      "contentHash": "526eeb7a0da0558429e524f8138460b80132d25de1f301c91bbbf136be4fe9a9"
-    },
-    {
-      "id": "agents/create-pr-from-local-work",
-      "path": "~/.agents/skills/create-pr-from-local-work-redirect/SKILL.md",
-      "type": "skill",
-      "harness": "agents",
-      "scope": "global",
-      "name": "create-pr-from-local-work",
-      "description": "Compatibility redirect for publishing already-existing local work as a GitHub pull request when no issue number is supplied. Use when the user says create a PR, open a PR, push and create a PR, or publish local work as a pull request. Routes to github-delivery. Not for issue-linked PR creation or non-GitHub publication.",
-      "tags": [
-        "create",
-        "pr",
-        "from",
-        "local",
-        "work",
-        "create-pr-from-local-work",
-        "github-delivery"
-      ],
-      "triggers": [
-        "the user says create a PR",
-        "open a PR",
-        "push and create a PR"
-      ],
-      "status": "active",
-      "canonicalId": null,
-      "contentHash": "8e97f1849d7b7724106b5ff0d566883e9f71c15dfc3c3d0274d63bb3755dfeb9"
-    },
-    {
       "id": "agents/deprecation-and-migration",
       "path": "~/.agents/skills/deprecation-and-migration/SKILL.md",
       "type": "skill",
@@ -355,7 +261,7 @@
       ],
       "status": "active",
       "canonicalId": null,
-      "contentHash": "f0ce3788af7d190da47ffcf072d47d347658a261b9d90497dafa8b25b5c445e3"
+      "contentHash": "48bc0117ceb1f92ab438ca25c60977c97aa7144271958261e8f68ff36740d72e"
     },
     {
       "id": "agents/diagnose",
@@ -406,54 +312,6 @@
       "status": "active",
       "canonicalId": null,
       "contentHash": "94d5f276cd7f3bc65db1416c227b2101a7bd74aab9de58706be01a78d8004f45"
-    },
-    {
-      "id": "agents/domain-modeling",
-      "path": "~/.agents/skills/domain-modeling/SKILL.md",
-      "type": "skill",
-      "harness": "agents",
-      "scope": "global",
-      "name": "domain-modeling",
-      "description": "Build and sharpen a project's domain model. Use when the user wants to pin down domain terminology or a ubiquitous language, record an architectural decision, or when another skill needs to maintain the domain model.",
-      "tags": [
-        "domain",
-        "modeling"
-      ],
-      "triggers": [
-        "Build and sharpen a project's domain model.",
-        "the user wants to pin down domain terminology or a ubiquitous language",
-        "record an architectural decision",
-        "or when another skill needs to maintain the domain model"
-      ],
-      "status": "active",
-      "canonicalId": null,
-      "contentHash": "c98974d5c8464ddf955398b15f46d7afe10f352d3095227825d7b89107fff2dc"
-    },
-    {
-      "id": "agents/extract-approach",
-      "path": "~/.agents/skills/extract-approach/SKILL.md",
-      "type": "skill",
-      "harness": "agents",
-      "scope": "global",
-      "name": "extract-approach",
-      "description": "Capture a reusable decision rule into local ~/.agents/memory after a verified solve that produced a non-obvious insight. Use when the user explicitly asks to extract an approach, write a learning, remember a verified lesson, or when a completed solve clearly passes the reusable-insight trigger gate. Do not use for routine work, unverified attempts, stable reference facts, or session narration.",
-      "tags": [
-        "extract",
-        "approach"
-      ],
-      "triggers": [
-        "Capture a reusable decision rule into local ~/.agents/memory after a verified solve that produced a non-obvious insight.",
-        "the user explicitly asks to extract an approach",
-        "write a learning",
-        "remember a verified lesson",
-        "or when a completed solve clearly passes the reusable-insight trigger gate. Do not",
-        "routine work",
-        "unverified attempts",
-        "stable reference facts"
-      ],
-      "status": "active",
-      "canonicalId": null,
-      "contentHash": "7e0d7b70ce08675f6d21235fd3279b43579d07d915f8c60c9d7ca7c29827ed4b"
     },
     {
       "id": "agents/firecrawl",
@@ -631,30 +489,6 @@
       "contentHash": "7a021e1961cbcdf17703cf9fdfb7ff1de1f72fbd0c4b2f910ddc0ad256ea6645"
     },
     {
-      "id": "agents/improve-react",
-      "path": "~/.agents/skills/improve-react/SKILL.md",
-      "type": "skill",
-      "harness": "agents",
-      "scope": "global",
-      "name": "improve-react",
-      "description": "Survey a React codebase as a senior React engineer using React Doctor scan evidence, then write prioritized self-contained plans (read-only on source). Use when the user asks to improve React code, audit the React codebase, make the app faster or more robust, or wants a roadmap of React fixes. For regression checks or fix-now triage use the React Doctor CLI or a project-local React Doctor skill when installed. Not for visual taste (design-styles) or browser automation (playwright).",
-      "tags": [
-        "improve",
-        "react",
-        "improving"
-      ],
-      "triggers": [
-        "Survey a React codebase as a senior React engineer using React Doctor scan evidence",
-        "then write prioritized self-contained plans (read-only on source).",
-        "the user asks to improve React code",
-        "audit the React codebase",
-        "make the app faster or more robust"
-      ],
-      "status": "active",
-      "canonicalId": null,
-      "contentHash": "0349ac0a1a541d906347bccd1e7ce2910f208819c80dec8741558da6c14b4193"
-    },
-    {
       "id": "agents/intent",
       "path": "~/.agents/skills/intent/SKILL.md",
       "type": "skill",
@@ -776,31 +610,6 @@
       "status": "active",
       "canonicalId": null,
       "contentHash": "48b4110d0ceb6c7fcee9eeab653f441b2936917fde64c251b2f9bac2c87f0179"
-    },
-    {
-      "id": "agents/prototype",
-      "path": "~/.agents/skills/prototype/SKILL.md",
-      "type": "skill",
-      "harness": "agents",
-      "scope": "global",
-      "name": "prototype",
-      "description": "Build a throwaway prototype to flesh out a design before committing to it. Routes between two branches — a runnable terminal app for state/business-logic questions, or UI exploration through structurally distinct toggleable variants or an interactive design playground. Use when the user wants to prototype, sanity-check a data model or state machine, mock up a UI, explore design options, says \"prototype this\", \"let me play with it\", \"adjust the spacing live\", or \"try a few designs\", or when a technical fork can be settled cheaply and safely by observing behavior, output, timing, rendering, or performance instead of asking the user.",
-      "tags": [
-        "prototype"
-      ],
-      "triggers": [
-        "or UI exploration through structurally distinct toggleable variants or an interactive design playground.",
-        "the user wants to prototype",
-        "sanity-check a data model or state machine",
-        "mock up a UI",
-        "explore design options",
-        "says \"prototype this\"",
-        "\"let me play with it\"",
-        "\"adjust the spacing live\""
-      ],
-      "status": "active",
-      "canonicalId": null,
-      "contentHash": "c6248a32727d93ad4d64710009c63f3bc408666d0cdc46d4fcac9a7906d435fc"
     },
     {
       "id": "agents/quality-constraints",
@@ -927,53 +736,6 @@
       "contentHash": "bca3324f83056270af044b430ec676b9294af6b17f63db23f9cfc2a4b4feffbb"
     },
     {
-      "id": "agents/review-security~2",
-      "path": "~/.agents/skills/review-security-redirect/SKILL.md",
-      "type": "skill",
-      "harness": "agents",
-      "scope": "global",
-      "name": "review-security",
-      "description": "Compatibility redirect for /review-security or requests for a security review of a GitHub PR or branch. Routes to github-delivery; not a standalone security review workflow.",
-      "tags": [
-        "review",
-        "security",
-        "review-security",
-        "github-delivery"
-      ],
-      "triggers": [
-        "not a standalone security review workflow"
-      ],
-      "status": "active",
-      "canonicalId": null,
-      "contentHash": "2df61254f24c27d113feec3695b6792fa8654c661419b5a389c7d45bd58dedb3"
-    },
-    {
-      "id": "agents/security-review",
-      "path": "~/.agents/skills/security-review-redirect/SKILL.md",
-      "type": "skill",
-      "harness": "agents",
-      "scope": "global",
-      "name": "security-review",
-      "description": "Practical security checklist and category depth for app/API/SaaS/CI audits: authn/authz, secrets scanning, CORS/headers, uploads, webhooks, deps, Semgrep/CodeQL leads, and variant analysis. Use for a standalone security review of a codebase before launch when no GitHub pull request is involved, or as depth after github-delivery already owns a PR security review. Do NOT use as the entrypoint for “security review on PR #N”, merge-ready, full-review, or GitHub babysit; those belong to github-delivery. Not audit-tooling, fuzz harnesses, or smart-contract-security.",
-      "tags": [
-        "security",
-        "review"
-      ],
-      "triggers": [
-        "Practical security checklist and category depth for app/API/SaaS/CI audits: authn/authz",
-        "secrets scanning",
-        "CORS/headers",
-        "uploads",
-        "webhooks",
-        "deps",
-        "Semgrep/CodeQL leads",
-        "and variant analysis."
-      ],
-      "status": "active",
-      "canonicalId": null,
-      "contentHash": "76304a5fe6195ad9a75e82d406bf1302539a99d4ee722c1cf06afcdf392d045b"
-    },
-    {
       "id": "agents/seo-audit",
       "path": "~/.agents/skills/seo-audit/SKILL.md",
       "type": "skill",
@@ -998,31 +760,6 @@
       "status": "active",
       "canonicalId": null,
       "contentHash": "0e7c661298a6e39316e8296b37aa341239889f10416a33ac05c9f4affbd627fe"
-    },
-    {
-      "id": "agents/shadcn",
-      "path": "~/.agents/skills/shadcn/SKILL.md",
-      "type": "skill",
-      "harness": "agents",
-      "scope": "global",
-      "name": "shadcn",
-      "description": "Manages shadcn/ui components and projects: add, search, fix, compose, style, and update via CLI. Use when the project has components.json, user mentions shadcn, registry, presets, FieldGroup, or composing shadcn UI. Not for generic visible-UI taste, baseline polish, or micro craft (use design-with-ai). Source: shadcn-ui/ui skills/shadcn (MIT).",
-      "tags": [
-        "shadcn"
-      ],
-      "triggers": [
-        "Manages shadcn/ui components and projects: add",
-        "search",
-        "fix",
-        "compose",
-        "style",
-        "and update via CLI.",
-        "the project has components.json",
-        "user mentions shadcn"
-      ],
-      "status": "active",
-      "canonicalId": null,
-      "contentHash": "779ecb83b1282063640d48f1304a8c3d81f60ac371f4d2d07cf9bfdb4fb5d6ac"
     },
     {
       "id": "agents/simplify",
@@ -1220,32 +957,6 @@
       "contentHash": "0e54d807bb00566ed026d12f334863d2079b397ea87bfb9773c8f287160010c5"
     },
     {
-      "id": "agents/vault-research",
-      "path": "~/.agents/skills/vault-research/SKILL.md",
-      "type": "skill",
-      "harness": "agents",
-      "scope": "global",
-      "name": "vault-research",
-      "description": "Canonical external-research owner. Use when the user asks to research, investigate, verify, compare current sources, or check current evidence; when local evidence leaves a material external unknown; or when a hard, high-consequence decision needs broader current evidence. Not for self-contained local work, local bug diagnosis, or official-doc-only implementation grounding.",
-      "tags": [
-        "vault",
-        "research"
-      ],
-      "triggers": [
-        "Canonical external-research owner.",
-        "the user asks to research",
-        "investigate",
-        "verify",
-        "compare current sources",
-        "or check current evidence",
-        "when local evidence leaves a material external unknown",
-        "or when a hard"
-      ],
-      "status": "active",
-      "canonicalId": null,
-      "contentHash": "aa49a3c506bbff4c674418bf958052fed0289ac7d73dc285bd9e3c3f4759ccfa"
-    },
-    {
       "id": "agents/verification-harness",
       "path": "~/.agents/skills/verification-harness/SKILL.md",
       "type": "skill",
@@ -1296,81 +1007,6 @@
       "status": "active",
       "canonicalId": null,
       "contentHash": "df79db63d7128e75adb62d1021c38e06d52f8d81a7730a52267f7d3ce333fb91"
-    },
-    {
-      "id": "agents/vite",
-      "path": "~/.agents/skills/vite/SKILL.md",
-      "type": "skill",
-      "harness": "agents",
-      "scope": "global",
-      "name": "vite",
-      "description": "Owns Vite-specific configuration and build behavior, including vite.config.*, Vite plugins, dev/build/SSR issues, and Vite or Rolldown migration. Use when the request is specifically about Vite or a Vite configuration, plugin, or build surface. Not for generic frontend implementation or non-Vite bundler problems.",
-      "tags": [
-        "vite"
-      ],
-      "triggers": [
-        "Owns Vite-specific configuration and build behavior",
-        "including vite.config.*",
-        "Vite plugins",
-        "dev/build/SSR issues",
-        "and Vite or Rolldown migration.",
-        "the request is specifically about Vite or a Vite configuration",
-        "plugin",
-        "or build surface. Not for generic frontend implementation or non-Vite bundler problems"
-      ],
-      "status": "active",
-      "canonicalId": null,
-      "contentHash": "0ee741b48283a818e125cead4d6bd19df1fd192bb8b67501920ebc85c8df57b4"
-    },
-    {
-      "id": "agents/vitest",
-      "path": "~/.agents/skills/vitest/SKILL.md",
-      "type": "skill",
-      "harness": "agents",
-      "scope": "global",
-      "name": "vitest",
-      "description": "Owns Vitest-specific test configuration and behavior, including vitest.config.*, failing Vitest tests, mocks and mocking, filtering, fixtures, and coverage. Use when the request or project explicitly uses Vitest or concerns a Vitest-specific failure or configuration. Not for generic test writing or other test frameworks.",
-      "tags": [
-        "vitest"
-      ],
-      "triggers": [
-        "Owns Vitest-specific test configuration and behavior",
-        "including vitest.config.*",
-        "failing Vitest tests",
-        "mocks and mocking",
-        "filtering",
-        "fixtures",
-        "and coverage."
-      ],
-      "status": "active",
-      "canonicalId": null,
-      "contentHash": "fecde8773fea9f8a7178eb1508483127d23d1b562c2d801046eeaff0da910eaf"
-    },
-    {
-      "id": "agents/work-recall",
-      "path": "~/.agents/skills/work-recall/SKILL.md",
-      "type": "skill",
-      "harness": "agents",
-      "scope": "global",
-      "name": "work-recall",
-      "description": "Reconstruct the user's current working state for a named project, feature, bug, or recent workstream from available conversation context, repository state, Git history, PRs/issues/tickets, project records, and other live sources. Use for \"catch me up\", \"where did I leave off\", \"what was I working on\", \"resume this\", or when the user needs verified current state before continuing. Not for packing implementation context (context-engineering), persisting reusable lessons (extract-approach), or building a persistent codebase graph (understand).",
-      "tags": [
-        "work",
-        "recall"
-      ],
-      "triggers": [
-        "Reconstruct the user's current working state for a named project",
-        "feature",
-        "bug",
-        "or recent workstream from available conversation context",
-        "repository state",
-        "Git history",
-        "PRs/issues/tickets",
-        "project records"
-      ],
-      "status": "active",
-      "canonicalId": null,
-      "contentHash": "a828e3baff3245ca07854d2301867e4c5067c1b0576649c9d88abdf1ccca838d"
     },
     {
       "id": "agents/writing-ticks",
@@ -1666,24 +1302,7 @@
       "contentHash": "b889013dc06237ce1c584691b716821b4a40b0551002e1370f9aecf578abaa3d"
     }
   ],
-  "duplicateClusters": [
-    {
-      "contentHash": "98c158429e892cf515ec6fb27435a747878ebc49d835a13fff162e55f7bac9b0",
-      "canonicalId": "agents/babysit",
-      "memberIds": [
-        "agents/babysit",
-        "agents/babysit~2"
-      ]
-    },
-    {
-      "contentHash": "83ed5059de9387a94b584487bae81c2e380fc0823a6fc95fc549d90bc31f85d2",
-      "canonicalId": "agents/babysit-pr",
-      "memberIds": [
-        "agents/babysit-pr",
-        "agents/babysit-pr~2"
-      ]
-    }
-  ],
+  "duplicateClusters": [],
   "catalogs": [
     {
       "id": "design-references",

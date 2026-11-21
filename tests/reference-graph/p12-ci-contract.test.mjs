@@ -22,7 +22,7 @@ function runOperator(args) {
 test('existing permanent Reference Graph workflow executes the full P12 test contract', () => {
   const source = readFileSync(WORKFLOW, 'utf8');
   assert.match(source, /node --test tests\/reference-graph\/\*\.test\.mjs/);
-  assert.match(source, /scan_secrets\.py reference-graph/);
+  assert.match(source, /scripts\/scan-secrets\.py reference-graph/);
   assert.match(source, /009_reference_graph_runtime_projection\.sql/);
 });
 
