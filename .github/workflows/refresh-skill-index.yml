@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - agent/verify-skill-routing
-      - fix/retired-skills-ci-contracts-20261121
   workflow_dispatch:
 
 permissions:
