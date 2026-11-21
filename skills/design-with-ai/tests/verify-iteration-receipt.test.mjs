@@ -256,7 +256,7 @@ test("prior acceptance cannot be weakened or silently renamed", () => {
   const receipt = trackedReceipt();
   receipt.findings[0].acceptance = "Settings button has an orange accent";
   const result = validateIterationReceipt(receipt, trackedBaseline());
-  assert.match(result.problems.join("\n"), /prior route\/acceptance changed/);
+  assert.match(result.problems.join("\n"), /FINDING_IDENTITY_CHANGED/);
 });
 
 test("a prior defect cannot be disguised as an unchanged KEEP without reassessment", () => {

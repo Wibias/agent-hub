@@ -290,8 +290,8 @@ test("PCG-16 cannot be silently reassigned from KPI gap to an unrelated empty-fi
   assert.throws(() => syncLedger(f.ledgerPath, baseline, receipt), /FINDING_IDENTITY_CHANGED/);
   assert.deepEqual(readLedger(f.ledgerPath).events, snapshot,
     "identity rejection must not append to durable history");
-  receipt.findings.at(-1).kind = original.kind;
-  receipt.findings.at(-1).symptom = original.symptom;
+  receipt.findings.at(-1).kind = "DETAIL";
+  receipt.findings.at(-1).acceptance = "Show a relevant hint after filtering to zero processes";
   receipt.findings.at(-1).id = "PCG-17"; // distinct real observation gets a distinct ID
   receipt.openCarryover = ["UX-SETTINGS", "UX-PUBLISH", "PCG-17", "PCG-16"];
   receipt.findings.push({ ...original, decision: "Continue KPI measurement",
