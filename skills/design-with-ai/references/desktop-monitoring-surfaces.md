@@ -38,8 +38,25 @@ findings store. For a `COMPLETE` verdict, supply a **schemaVersion 2**
 render-evidence JSON file to `run-iteration-gate.mjs --render-evidence`.
 Legacy version-1 manifests remain readable as PARTIAL evidence but cannot
 certify COMPLETE for a dense monitoring window.
-Ordinary non-desktop work is unchanged; a truthful `PARTIAL` can omit a
-blocked native capture.
+Ordinary non-desktop work is unchanged. A truthful `PARTIAL` can omit a
+blocked native capture **only if the render gate is not reported PASS**.
+If the agent claims `gates.render: "PASS"` in ANY dense desktop receipt,
+even PARTIAL, it must provide current `--render-evidence` schemaVersion 2
+with at least an actual `COMPACT:IDLE` capture and the measured KPI
+supporting-text/divider geometry. The gate rejects a PASS when the measured
+bottom gap is below six DPI-scaled pixels. No full four-window matrix or
+DPI switch is required for a **scoped PARTIAL KPI smoke check**.
+If a capture cannot be obtained, set `gates.render: "NOT_VERIFIED"`,
+retain an open KPI finding and state what blocked the render; never
+describe the result as visually verified. For a detected short gap, set
+`gates.render: "REVISE"`, link the measured regression to an open
+finding, **fix the WinForms KPI strip height/bottom padding** and
+repeat COMPACT:IDLE inspection on the updated executable.
+
+For a scoped PARTIAL render packet, include only actual captured viewports,
+actual tested runtime checks and findings actually inspected. Do not fake
+keyboard, DPI or destructive action checks merely to supply a compact
+KPI measurement. Full checks remain mandatory for COMPLETE.
 
 **The agent creates this evidence automatically**, not the user. Keep the
 manifest beside its **final PNG screenshots** in an authorized
