@@ -6,6 +6,7 @@ import { createHash } from "node:crypto";
 import { lstatSync, readFileSync, readlinkSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { basename, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const MAX_FILES = 12000;
 const MAX_FILE_BYTES = 16 * 1024 * 1024;
@@ -115,4 +116,15 @@ export function snapshotProjectSource(cwd = process.cwd(), { ignorePaths = [] } 
     digest.update("\0");
   }
   return { schemaVersion: 1, sha256: digest.digest("hex"), fileCount: count };
+}
+
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  try {
+    const result = snapshotProjectSource(process.cwd());
+    if (result === null) throw new Error("No Git project detected; cannot bind native render to a source snapshot");
+    process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+  } catch (error) {
+    process.stderr.write("Cannot fingerprint current product source: " + error.message + "\n");
+    process.exitCode = 2;
+  }
 }

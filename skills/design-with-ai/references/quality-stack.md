@@ -77,7 +77,10 @@ Report the following as observed, failed, or unverified:
 - whether status/readiness claims agree with known product semantics.
 
 For a full desktop monitor with charts, a process table, and an inspector,
-run `desktop-monitoring-surfaces.md` before Craft. Inspect matched actual
+run `desktop-monitoring-surfaces.md` before Craft. An agent must not mark
+`COMPLETE` without a final-version native render manifest and matching
+source/screenshots; missing or stale focus/stalled/selected-state evidence
+is not a finished visual review. Inspect matched actual
 window geometry, KPI supporting-line clipping, table column width vs header
 legibility, competing empty panels, distinct tab scopes, and action-state
 prerequisites. These are observed product issues, not a generic score for

@@ -29,6 +29,71 @@ Keep meaningful numeric comparisons, dark surfaces when product/host context sup
 
 A full native process monitor legitimately needs telemetry and a table. `G74` is a contextual compact-utility anti-cosplay gate, not a mandate to remove real desktop monitoring controls.
 
+## Current-candidate render evidence is mandatory for COMPLETE
+
+For a full desktop/process monitor, put `surfaceKind:
+"DENSE_DESKTOP_MONITOR"` in the existing DWA iteration receipt. The
+normal durable findings ledger is still authoritative; do not build a second
+findings store. For a `COMPLETE` verdict, supply a separate version-1
+render-evidence JSON file to `run-iteration-gate.mjs --render-evidence`.
+Ordinary non-desktop work is unchanged; a truthful `PARTIAL` can omit a
+blocked native capture.
+
+**The agent creates this evidence automatically**, not the user. Keep the
+manifest beside its final PNG/JPEG/WebP screenshots in an authorized
+task-artifacts directory. Do not place it in the installed skill folder.
+Capture `IDLE`, `SELECTED`, `FOCUS` and `STALLED`; only `STALLED`
+may be explicitly excluded with a reason when that state truly does not
+exist. Attach observed window width/height/DPI for each screenshot, measured
+KPI text/cell rectangles and table-header text/cell rectangles, process
+table's visible/total row counts and rectangle, inspector rectangle and empty
+state, and applicable live chart sample count/collection interval/axis
+history. Rectangle values use `[x, y, width, height]` **in the captured
+window's coordinate system**, not inferred CSS units. Do not fabricate
+rectangles when Windows accessibility/UI-tree or actual render measurement
+is unavailable: record `NOT_VERIFIED` and retain `PARTIAL`.
+
+The manifest includes `candidateSourceSha256` from the same final
+project-source snapshot as the screenshot, `captures[].imageSha256`,
+`capturedAt`, `reviewedFindingIds` and runtime checks. The required
+`checks[]` are `NO_SELECTION_ACTION`, `SEGMENT_KEYBOARD`,
+`CHART_HISTORY`, and `DPI_READABILITY`, each with `result: PASS`,
+`method: TEST|RUNTIME` and an actual `evidenceRef`. These are claims
+requiring inspectable external test evidence, not automatic proof of a
+real interaction. A code-only audit cannot satisfy them.
+
+A mechanical hold is justified if any measured KPI/header text rectangle
+overflows its cell, absent graph samples are represented as zeroes, the
+claimed axis history exceeds observed samples, or a large selected/empty
+inspector leaves at most two visible rows among ten or more processes.
+Those thresholds are conditional failure evidence, not a universal
+aesthetic rule or an instruction to remove useful process details.
+
+Run the read-only source snapshot from the target project's working
+directory to obtain the hash:
+
+```powershell
+node "$HOME/.agents/skills/design-with-ai/scripts/project-source-snapshot.mjs"
+```
+
+Then run the existing iteration proof with its normal `--receipt`,
+`--baseline` and `--ledger` flags and the additional
+`--render-evidence <final-render.json>`. Repeat that same extra flag with
+`--check-proof`. The gate checks the real screenshot file bytes,
+manifest source identity and current C#/WinForms source. **After any final
+UI edit or screenshot update, take fresh captures and create a new proof.**
+An old screenshot cannot certify the latest source, and a screenshot that
+was not captured is not repaired by changing JSON alone.
+
+This checks inspectable artifact consistency, **not** that a screenshot
+really came from the application. The agent/human must inspect the actual
+live application and corroborate self-reported geometry, interactive
+tests, sampling states and provenance. If Computer Use is unavailable,
+the correct verdict is `PARTIAL` or `NOT_VERIFIED`. The source
+snapshot intentionally refuses invalid Git workspace metadata; never
+delete or rename an unexpected `.git` directory without owner
+authorization just to obtain a pass.
+
 ## Evidence receipt and acceptance
 
 For each major finding, record a stable ID, window/viewport dimensions and scaling, screenshot or actual UI-tree evidence source, observed symptom, affected control/column/region, consequence for the user, proposed change, matched **after** state, and `RESOLVED | IMPROVED_BUT_OPEN | PERSISTS | UNVERIFIED`. Measure or inspect rather than assert a fixed universal pixel threshold.

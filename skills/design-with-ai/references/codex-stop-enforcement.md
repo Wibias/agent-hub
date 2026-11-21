@@ -66,7 +66,8 @@ configurations.
 4. Bind a Git project's tracked and untracked source files (including
    HTML/CSS/TS and small UI assets) to a content-derived SHA-256 snapshot at
    gate execution. Stop compares the current source snapshot, receipt,
-   baseline, ledger and validators to the recorded proof. A code change
+   baseline, ledger, optional final native render screenshots and validators
+   to the recorded proof. A code change
    **after** a green gate, such as a late font fix in `ui/index.html`,
    invalidates the earlier evidence even if all other gates passed.
    Re-run the full iteration gate with a **new** proof output path after
