@@ -220,3 +220,9 @@ test("blank optional design source is rejected", () => fixture(f => {
     { ...historic[0], id: "UX-BAD-LINEAGE", designArtifactRef: "" },
   ] }), /requires id/);
 }));
+
+test("unversioned latest cannot be imported as a design artifact reference", () => fixture(f => {
+  assert.throws(() => importFindings(f.ledgerPath, { findings: [
+    { ...historic[0], id: "UX-UNVERSIONED", designArtifactRef: "slice/latest" },
+  ] }), /requires id/);
+}));

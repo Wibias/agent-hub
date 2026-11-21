@@ -21,7 +21,9 @@ const lineageFields = ["designArtifactRef", "sourceDesignArtifactRef"];
 const findingOf = (event) => Object.fromEntries([
   ...fields, ...lineageFields.filter(k => Object.hasOwn(event, k)),
 ].map(k => [k, event[k]]));
-const validLineage = (item) => lineageFields.every(k => !Object.hasOwn(item, k) || filled(item[k]));
+const validLineage = (item) => lineageFields.every(k =>
+  !Object.hasOwn(item, k) || (filled(item[k]) && !/(^|[:/#@])latest($|[:/#@.?])/i.test(item[k])),
+);
 function reviewOf(item, runId) {
   const reason = item.reassessment?.reason ?? item.reason ??
     item.justification ?? item.decision ?? "Reviewed current state";
