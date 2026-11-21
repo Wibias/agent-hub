@@ -80,3 +80,12 @@ test("closed visual findings must be reopened when selected-state geometry regre
   }
   assert.match(verification, /may not claim visually closed findings/);
 });
+
+test("partial native KPI QA may be scoped, but a render PASS must be backed by compact evidence", () => {
+  for (const phrase of ["gates.render", "COMPACT:IDLE", "NOT_VERIFIED",
+    "six DPI-scaled pixels", "actual tested runtime checks"]) {
+    assert.ok(contract.includes(phrase), "Missing compact KPI smoke contract " + phrase);
+  }
+  assert.match(verification, /COMPACT:IDLE/);
+  assert.match(verification, /near-touching KPI line/);
+});

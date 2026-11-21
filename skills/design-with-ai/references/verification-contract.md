@@ -143,6 +143,13 @@ and actual source SHA-256 are checked by
 `scripts/desktop-render-evidence.mjs`, `desktop-viewport-matrix.mjs` and
 `run-iteration-gate.mjs`. A PARTIAL desktop receipt may include a measured subset of real renders,
 but may not claim visually closed findings without supported reinspection.
+A `PARTIAL` desktop receipt claiming `gates.render: "PASS"` must
+now include a current v2 `COMPACT:IDLE` screenshot with KPI footer/
+divider geometry; a near-touching KPI line contradicts PASS. When
+native capture is unavailable, `gates.render: "NOT_VERIFIED"`
+retains an honest PARTIAL, not a visual pass. In a scoped PARTIAL
+manifest, do not invent untested runtime checks or claim a full
+viewport review.
 Known two-row inspector regressions require an open linked finding,
 not an all-closed summary. The version-2 desktop manifest requires COMPACT,
 MEDIUM, MAXIMIZED and a different-DPI SCALED profile, with the required

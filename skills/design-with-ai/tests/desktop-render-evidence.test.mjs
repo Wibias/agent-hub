@@ -238,6 +238,7 @@ test("a native desktop receipt cannot claim COMPLETE without final evidence", ()
   const partial = receipt();
   partial.iterationVerdict = "PARTIAL";
   partial.verdictReason = "Native screenshot capture unavailable";
+  partial.gates.render = "NOT_VERIFIED";
   partial.findings[0].disposition = "UNVERIFIED";
   partial.findings[0].reason = "No current native screenshot";
   partial.openCarryover = ["UX-TABLE"];
@@ -473,6 +474,7 @@ test("tracked visual defect yields a valid PARTIAL manifest, not a fabricated CO
   const m = matrixManifest(), r = receipt();
   r.iterationVerdict = "PARTIAL";
   r.verdictReason = "Unexpected white header area requires investigation";
+  r.gates.render = "REVISE";
   const c = m.captures.find(c => c.viewportId === "COMPACT" && c.state === "IDLE");
   c.renderInspection.unexpectedHeaderFill = true;
   c.renderInspection.findingRefs = { unexpectedHeaderFill: "PCG-17" };
@@ -555,4 +557,80 @@ test("a selected inspector path flagged as unreadable must be retained as an ope
   const c = m.captures.find(x => x.viewportId === "COMPACT" && x.state === "SELECTED");
   c.renderInspection.unreadableInspectorPath = true;
   assert.match(allProblems(m, r), /UNTRACKED_RENDER_FINDING COMPACT:SELECTED unreadableInspectorPath/);
+});
+
+test("PARTIAL cannot claim a render PASS without a current v2 native screenshot", () => {
+  const r = receipt();
+  r.iterationVerdict = "PARTIAL";
+  r.verdictReason = "Computer Use stopped after code edit";
+  r.findings[0].kind = "VISUAL";
+  r.findings[0].disposition = "UNVERIFIED";
+  r.findings[0].reason = "No current compact render measurement";
+  r.openCarryover = ["UX-TABLE"];
+  assert.match(validateIterationReceipt(r).problems.join("; "), /DESKTOP_RENDER_PASS_UNBOUND/);
+  r.gates.render = "NOT_VERIFIED";
+  assert.equal(validateIterationReceipt(r).valid, true,
+    validateIterationReceipt(r).problems.join("; "));
+});
+test("a minimal compact KPI capture is sufficient for honest PARTIAL render QA", () => {
+  const m = matrixManifest();
+  const r = receipt();
+  r.iterationVerdict = "PARTIAL";
+  r.verdictReason = "Native focus and DPI interactions not accessible";
+  r.findings[0].kind = "VISUAL";
+  r.findings[0].disposition = "UNVERIFIED";
+  r.findings[0].reason = "Missing remaining viewport acceptance states";
+  r.openCarryover = ["UX-TABLE"];
+  m.viewports = m.viewports.filter(v => v.id === "COMPACT");
+  m.captures = m.captures.filter(c => c.viewportId === "COMPACT" && c.state === "IDLE");
+  m.checks = [];
+  m.reviewedFindingIds = [];
+  m.findingViewportReviews = [];
+  assert.equal(validateDesktopRenderEvidence(m, r).valid, true,
+    allProblems(m, r));
+  const missing = structuredClone(m);
+  missing.captures = matrixManifest().captures.filter(c =>
+    c.viewportId === "COMPACT" && c.state === "SELECTED");
+  assert.match(allProblems(missing, r), /COMPACT_KPI_SMOKE_MISSING/);
+});
+test("compact KPI gap under six physical pixels contradicts PASS even in PARTIAL", () => {
+  const m = matrixManifest();
+  const r = receipt();
+  r.iterationVerdict = "PARTIAL";
+  r.verdictReason = "Compact KPI supporting line almost touches divider";
+  r.findings[0].kind = "VISUAL";
+  r.findings[0].disposition = "UNVERIFIED";
+  r.findings[0].reason = "KPI gap still needs source repair";
+  r.findings[0].evidenceRef = "renders/compact-kpi-actual.png";
+  r.openCarryover = ["UX-TABLE"];
+  m.viewports = m.viewports.filter(v => v.id === "COMPACT");
+  m.captures = m.captures.filter(c => c.viewportId === "COMPACT" && c.state === "IDLE");
+  m.checks = [];
+  m.reviewedFindingIds = [];
+  m.findingViewportReviews = [{
+    findingId: "UX-TABLE", viewportId: "COMPACT",
+    status: "PERSISTS", evidenceRef: "renders/compact-kpi-actual.png",
+  }];
+  const c = m.captures[0];
+  c.kpiText[0].supportingText = [24, 138, 131, 16]; // 157 - 154 == 3 px
+  c.measuredFindingRefs = { KPI_BOTTOM_CLEARANCE: "UX-TABLE" };
+  assert.match(allProblems(m, r), /RENDER_PASS_WITH_KPI_DEFECT COMPACT:IDLE/);
+  r.gates.render = "REVISE";
+  assert.equal(validateDesktopRenderEvidence(m, r).valid, true, allProblems(m, r));
+});
+test("full runner records invalid PARTIAL render PASS with no native screenshot", () => fixture(f => {
+  const r = receipt();
+  r.iterationVerdict = "PARTIAL";
+  r.verdictReason = "Live screen not measured";
+  r.findings[0].kind = "VISUAL";
+  r.findings[0].disposition = "UNVERIFIED";
+  r.findings[0].reason = "KPI bottom clearance missing";
+  r.openCarryover = ["UX-TABLE"];
+  writeFileSync(f.receiptPath, JSON.stringify(r));
+  const result = runGate({
+    receipt: f.receiptPath, sourceRoot: f.repo,
+    proof: f.proof, workspaceCwd: f.root,
+  });
+  assert.equal(result.exitCode, 1);
+  assert.match(result.proof.result.problems.join("; "), /DESKTOP_RENDER_PASS_UNBOUND/);
 });
