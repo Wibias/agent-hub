@@ -134,6 +134,52 @@ export function validateIterationReceipt(input, baseline = null, desktopEvidence
   for (const id of open) if (!carryover.includes(id)) fail("open finding omitted from carryover: " + id);
   for (const id of carryover) if (!open.has(id)) fail("carryover references closed/unknown finding: " + id);
 
+
+  // Historical repetition is determined by the ledger. A supplied action
+  // must name real code and render evidence, or an explicit unresolved
+  // blocker. This is a consistency check, not a source-diff verifier.
+  if (input.persistentRepairActions !== undefined) {
+    if (!Array.isArray(input.persistentRepairActions)) {
+      fail("persistentRepairActions must be an array");
+    } else {
+      const actionIds = new Set();
+      for (const action of input.persistentRepairActions) {
+        if (!record(action) || !populated(action.findingId)) {
+          fail("persistentRepairActions entry requires a findingId"); continue;
+        }
+        if (actionIds.has(action.findingId)) fail("duplicate persistent repair action " + action.findingId);
+        actionIds.add(action.findingId);
+        const finding = findings.find(x => x?.id === action.findingId);
+        if (!finding || closed.has(finding.disposition)) {
+          fail("persistent repair action must reference an open finding: " + action.findingId);
+          continue;
+        }
+        if (action.action === "SOURCE_REPAIR") {
+          const summary = input.changeSummary;
+          if (!record(summary) || summary.kind !== "TASK_REPAIR" ||
+              !summary.addressedFindingIds?.includes(action.findingId) ||
+              !populated(summary.evidenceRef) ||
+              !populated(action.sourceFile) ||
+              !/\.(?:cs|xaml|resx|tsx|jsx|ts|js|css|html)$/i.test(action.sourceFile) ||
+              !populated(action.beforeRef) || !populated(action.afterRef) ||
+              action.beforeRef === action.afterRef ||
+              !["PASS", "REVISE", "NOT_VERIFIED"].includes(action.renderResult)) {
+            fail("SOURCE_REPAIR_UNPROVEN " + action.findingId +
+              ": require addressed source edit, separate before/after refs and truthful render outcome");
+          }
+        } else if (action.action === "BLOCKED") {
+          if (!populated(action.blocker) || !populated(action.nextStep) ||
+              input.iterationVerdict === "COMPLETE") {
+            fail("REPAIR_BLOCKER_UNEXPLAINED " + action.findingId +
+              ": document actual constraint and next action; keep verdict incomplete");
+          }
+        } else {
+          fail("Unsupported persistent repair action for " + action.findingId);
+        }
+      }
+    }
+  }
+
   if (baseline !== null) {
     const baselineIssues = Array.isArray(baseline?.findings) ? baseline.findings : [];
     const baselineScope = Array.isArray(baseline?.scope) ? baseline.scope : [];
@@ -169,8 +215,11 @@ export function validateIterationReceipt(input, baseline = null, desktopEvidence
         continue;
       }
       const current = matching[0];
-      if (current.route !== issue.route || current.acceptance !== issue.acceptance) {
-        fail(issue.id + ": prior route/acceptance changed without an authorized baseline update");
+      // Stable IDs identify the original issue, not a free slot for later UI
+      // observations. Priority, resolution and evidence may evolve.
+      const identityFields = ["route", "kind", "symptom", "acceptance"];
+      if (identityFields.some(key => current[key] !== issue[key])) {
+        fail(issue.id + ": FINDING_IDENTITY_CHANGED: original route/kind/symptom/acceptance changed; allocate a new ID");
       }
       if (current.disposition === "RESOLVED" &&
           ["NAVIGATION", "WORKFLOW"].includes(issue.kind) &&

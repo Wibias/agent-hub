@@ -17,6 +17,8 @@ const statuses = new Set([
 ]);
 const hashEvents = (events) => createHash("sha256").update(JSON.stringify(events)).digest("hex");
 const fields = ["id", "route", "kind", "priority", "symptom", "acceptance", "evidenceRef"];
+const identityFields = ["route", "kind", "symptom", "acceptance"];
+const unresolvedObservation = new Set(["PERSISTS", "REGRESSED", "IMPROVED_BUT_OPEN"]);
 const lineageFields = ["designArtifactRef", "sourceDesignArtifactRef"];
 const findingOf = (event) => Object.fromEntries([
   ...fields, ...lineageFields.filter(k => Object.hasOwn(event, k)),
@@ -198,8 +200,12 @@ export function verifyLedgerCoverage(ledger, baseline, receipt, { requireSynced 
     }
   }
   for (const item of finalFindings) {
-    if (!allNow.some(x => x.id === item.id && x.route === item.route)) {
+    const original = allNow.find(x => x.id === item.id);
+    if (!original || original.route !== item.route) {
       fail("Final finding not persisted in durable ledger: " + item.id);
+    } else if (identityFields.some(k => item[k] !== original[k])) {
+      fail("FINDING_IDENTITY_CHANGED " + item.id +
+        ": immutable route/kind/symptom/acceptance differs from FOUND event");
     }
     if (requireSynced) {
       const evt = runEvents.find(x => x.id === item.id);
@@ -211,6 +217,32 @@ export function verifyLedgerCoverage(ledger, baseline, receipt, { requireSynced 
       }
     }
   }
+
+  // Two observed unresolved assessments in a row, followed by another
+  // confirmed failure, need a concrete source repair attempt or a blocker.
+  // UNVERIFIED means missing evidence and is deliberately excluded to
+  // prevent forcing code changes for unobserved UI defects.
+  const repeated = new Set();
+  for (const item of prior) {
+    if (!["VISUAL", "DETAIL"].includes(item.kind) ||
+        !["HIGH", "MEDIUM"].includes(item.priority)) continue;
+    const history = priorEvents.filter(e => e.type === "REVIEWED" && e.id === item.id);
+    if (history.length < 2 ||
+        !history.slice(-2).every(e => unresolvedObservation.has(e.disposition))) continue;
+    const current = finalFindings.find(f => f.id === item.id);
+    if (current && ["PERSISTS", "REGRESSED"].includes(current.disposition)) {
+      repeated.add(item.id);
+    }
+  }
+  for (const id of repeated) {
+    const action = Array.isArray(receipt?.persistentRepairActions)
+      ? receipt.persistentRepairActions.find(a => a?.findingId === id) : null;
+    if (!action) {
+      fail("REPEATED_DEFECT_WITHOUT_REPAIR " + id +
+        ": recurring observed visual defect needs a source repair attempt or explicit blocker");
+    }
+  }
+
   if (requireSynced && runEvents.length !== finalFindings.length) {
     fail("Ledger run assessment count differs from receipt finding count");
   }
