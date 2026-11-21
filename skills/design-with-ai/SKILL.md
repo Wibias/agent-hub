@@ -74,6 +74,8 @@ For `audit-surface`, `improve-existing`, `restyle-existing`,
 3. for standard/deep, load `references/source-evidence.md`, then
    `references/reference-library.md`;
 4. load only applicable conditional intelligence references from the section below;
+   for a checkpoint-dependent deep design decision, additionally load
+   `references/design-decision-lineage.md` after `references/core-design-workflow.md`;
 5. load the workflow-specific taste/quality references;
 6. for existing-UI modifying work, load `references/durable-findings-ledger.md`
    BEFORE editing, inspect or initialize the project-owned findings ledger,
@@ -94,6 +96,8 @@ route evidence or making an accessibility claim.
 `design-spec` is a bounded spec/prompt route after direction is known; it does
 not automatically reopen the full design workflow. Only explicit `design-spec handoff <target>`
 or an implementation-ready UI handoff request loads `references/developer-handoff.md`.
+If that handoff depends on a versioned approved deep design, also load
+`references/design-decision-lineage.md` without reopening direction generation.
 Do not confuse a developer design handoff with `skills/handoff`, which preserves
 session context for another agent rather than specifying UI implementation.
 
@@ -206,6 +210,7 @@ host-specific guide for ordinary cross-host design work.
 - `references/audit-surface-evidence.md`: route relevance, state matrix, non-text contrast, widget/keyboard and claim calibration
 - `references/new-product-surface.md`: new visible product surfaces
 - `references/core-design-workflow.md`: common non-motion design artifacts
+- `references/design-decision-lineage.md`: conditional, versioned owner choices and representative-slice continuity for decision-critical deep work
 - `references/source-evidence.md`: evidence discipline
 - `references/reference-library.md`: curated reference reuse
 - `references/penpot-integration.md`: Penpot MCP target/session, read/write, authority, capability, and secret-handling adapter
@@ -243,6 +248,7 @@ host-specific guide for ordinary cross-host design work.
 - references/audit-surface-evidence.md -- when to read: audit-surface standard/deep; provider finding relevance; non-text contrast or widget/keyboard claims
 - references/new-product-surface.md -- when to read: build-product-surface
 - references/core-design-workflow.md -- when to read: all non-motion surface workflows except design-spec
+- references/design-decision-lineage.md -- when to read: unresolved structural choice in deep redesign/new surface; explicit direction selection; cross-session representative slice; approved-deep-design handoff
 - references/source-evidence.md -- when to read: standard/deep non-motion surface workflows
 - references/reference-library.md -- when to read: after source-evidence for standard/deep non-motion surface workflows
 - references/penpot-integration.md -- when to read: resolved target/source is a Penpot file, design system, or MCP session for product-design work

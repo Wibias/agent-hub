@@ -166,12 +166,26 @@ cannot masquerade as a new concept. Each direction records:
 - signature artifact and refusals;
 - tradeoffs and locked-contract coverage.
 
+For a checkpoint-dependent deep decision, record a compact direction packet:
+`briefRef` (purpose, audience, content/data model, constraints, success
+criteria), versioned `directionSetRef`, stable candidate IDs, and a separate
+agent `recommendation`. All 2-3 directions must solve the **same** brief and
+content problem. Different palette, radius, typography, copy, or ordering alone
+is not a structurally distinct direction; distinguish primary content, grouping,
+information architecture, or interaction organization. Follow
+`design-decision-lineage.md` for immutable display and owner-selection rules.
+
 ### 7. Representative slice
 
 For deep redesign work, production implementation remains locked until the user
 approves one named direction from the pre-code redesign packet. Then render the
 highest-consequence slice and its narrow-state composition before building the
 whole surface. The slice must reveal the selected purpose, IA, and visual world.
+When decision lineage applies, identify the exact `sourceDirectionRef`,
+representative artifact, covered **and omitted** content, why the chosen flow
+is representative, 1-3 connected views/states, content placement, interactions,
+critical states, reachable transitions, responsive behavior, visual choices,
+and tradeoffs. Do not claim the representative slice covers omitted states.
 Reject the complete direction before full implementation if it still reads as
 the old concept or a generic category template; do not repair it through polish.
 
