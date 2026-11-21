@@ -71,7 +71,6 @@ backticks.
 |---|---|---|
 | <!-- skill-doc:design-with-ai -->[**design-with-ai**](skills/design-with-ai/SKILL.md) | Canonical visible-UI design owner: audit, improve, restyle, redesign, build product surfaces, and design motion without generic AI-SaaS styling. | `motion-build the settings drawer` or “redesign this dashboard without changing behavior” |
 | <!-- skill-doc:intent -->[**intent**](skills/intent/SKILL.md) | UX strategy and experience architecture: journeys, service design, information architecture, interaction patterns, content strategy, accessibility, ethics, and measurement. | “Map the onboarding journey and identify the highest-friction moments.” |
-| <!-- skill-doc:prototype -->[**prototype**](skills/prototype/SKILL.md) | Build throwaway logic or UI prototypes to compare a design/behavior direction before committing to production architecture. | “Prototype three structurally different settings flows.” |
 | <!-- skill-doc:fortify -->[**fortify**](skills/fortify/SKILL.md) | Harden visible UI outside the happy path: state/recovery design plus executable realistic-data stress testing. | `fortify worst-case src/routes/team.tsx` |
 | <!-- skill-doc:conversion-pages -->[**conversion-pages**](skills/conversion-pages/SKILL.md) | Design and write SaaS landing/pricing pages around conversion goals, hierarchy, offers, and proof. | “Design a pricing page for these three plans.” |
 | <!-- skill-doc:seo-audit -->[**seo-audit**](skills/seo-audit/SKILL.md) | Audit technical SEO, on-page optimization, discoverability, and Core Web Vitals. | “Audit this site for technical SEO issues.” |
@@ -114,7 +113,6 @@ backticks.
 
 | Skill | Use it for | Example |
 |---|---|---|
-| <!-- skill-doc:vault-research -->[**vault-research**](skills/vault-research/SKILL.md) | Canonical external-research workflow for investigation, comparison, source gathering, and evidence-backed recommendations. | “Research current approaches to durable agent memory.” |
 | <!-- skill-doc:read-github -->[**read-github**](skills/read-github/SKILL.md) | Read/search GitHub source and documentation without cloning or mutating the repository. | “Find where this repo implements auth refresh.” |
 | <!-- skill-doc:source-driven-development -->[**source-driven-development**](skills/source-driven-development/SKILL.md) | Ground implementation in current official/upstream source material when APIs, libraries, or standards can drift. | “Implement this against the current official Swift docs.” |
 | <!-- skill-doc:research-prompt -->[**research-prompt**](skills/research-prompt/SKILL.md) | Produce a compact deep-research brief for a human researcher or research model. | “Turn this question into a rigorous research prompt.” |
@@ -127,7 +125,6 @@ backticks.
 
 | Skill | Use it for | Example |
 |---|---|---|
-| <!-- skill-doc:security-review -->[**security-review**](skills/security-review-redirect/SKILL.md) | Practical application/API/SaaS/CI security review: authn/authz, secrets, input handling, dependencies, supply chain, and common vulnerability classes. | “Security-review this PR before merge.” |
 | <!-- skill-doc:ai-agent-security -->[**ai-agent-security**](skills/ai-agent-security/SKILL.md) | Threat-model, harden, or red-team LLM/agent/RAG/MCP systems against prompt injection, tool poisoning, model/data poisoning, and guardrail bypass. | “Threat-model this MCP-enabled support agent.” |
 
 ### Tooling & frameworks
@@ -138,9 +135,6 @@ backticks.
 | <!-- skill-doc:video-production -->[**video-production**](skills/video-production/SKILL.md) | Canonical authored-video owner for launch films, product promos, explainers, social/data videos, renderer selection, review, and final rendering with HyperFrames or Remotion. | “Turn this product site into a cinematic launch film and render the final video.” |
 | <!-- skill-doc:playwright -->[**playwright**](skills/playwright/SKILL.md) | Drive a real browser with Playwright for navigation, interaction, screenshots, multi-tab flows, and UI verification. | “Use Playwright to reproduce this checkout bug.” |
 | <!-- skill-doc:firecrawl -->[**firecrawl**](skills/firecrawl/SKILL.md) | Search, scrape, and interact with web content through Firecrawl tooling. | “Scrape these docs with Firecrawl.” |
-| <!-- skill-doc:shadcn -->[**shadcn**](skills/shadcn/SKILL.md) | Search, add, compose, fix, style, and update shadcn/ui components and registries. | “Add the correct shadcn command-menu primitive.” |
-| <!-- skill-doc:vite -->[**vite**](skills/vite/SKILL.md) | Own Vite-specific configuration, plugins, dev-server, and build behavior. | “Why does this Vite plugin only fail in production build?” |
-| <!-- skill-doc:vitest -->[**vitest**](skills/vitest/SKILL.md) | Own Vitest-specific configuration, test behavior, and failing Vitest suites. | “Fix this Vitest environment/config failure.” |
 
 ### Memory & agent workflow
 
@@ -150,7 +144,6 @@ backticks.
 | <!-- skill-doc:grilling -->[**grilling**](skills/grilling/SKILL.md) | Interview, stress-test, or explore a still-vague idea before acting; includes decision, intent, and ideation modes. | “Refine this rough product idea before we choose a direction.” |
 | <!-- skill-doc:handoff -->[**handoff**](skills/handoff/SKILL.md) | Compact the current conversation/work state into a structured handoff for a fresh agent/session. | “Create a handoff so I can continue this in a fresh session.” |
 | <!-- skill-doc:work-recall -->[**work-recall**](skills/work-recall/SKILL.md) | Reconstruct current working state for a project, feature, bug, or recent workstream from available history/context. | “Recall where we left off on Agent Hub memory.” |
-| <!-- skill-doc:extract-approach -->[**extract-approach**](skills/extract-approach/SKILL.md) | Capture a verified reusable decision rule into durable local memory after a solve proves it useful. | “Extract the rule we learned from this incident.” |
 | <!-- skill-doc:skill-ratchet -->[**skill-ratchet**](skills/skill-ratchet/SKILL.md) | Quality-gate adding, changing, evaluating, qualifying, and releasing Agent Skills with canonical/adversarial cases and digest-bound evidence. | `node scripts/skill-ratchet.mjs preflight --skill-root skills/foo` |
 
 ## Routes inside complex skills
@@ -194,16 +187,6 @@ skills to invoke.
 
 </details>
 
-<details>
-<summary><strong><code>prototype</code> — prototype branches</strong></summary>
-
-| Route | Use it for |
-|---|---|
-| <!-- route-doc:prototype:logic -->**Logic prototype** | Probe behavior, state transitions, or product logic without spending effort on visual fidelity. |
-| <!-- route-doc:prototype:ui -->**UI prototype** | Compare visible product directions with realistic content, working core interactions, and instant switching. |
-| <!-- route-doc:prototype:technical-fork -->**Technical fork** | Choose a minimal host-page/SPA setup for small probes or the richer full-stack prototype reference for routed app-shell prototypes. |
-
-</details>
 
 <details>
 <summary><strong><code>intent</code> — UX strategy modes and specialist routes</strong></summary>
