@@ -273,6 +273,7 @@ export function checkProof({ receipt, baseline = null, ledger = null, renderEvid
   return {
     valid: issues.length === 0,
     completionEligible,
+    sourceBound: object(evidence?.projectSource) && typeof evidence.projectSource.sha256 === "string",
     issueCodes,
     processExitCode: evidence?.processExitCode ?? null,
     verdict: evidence?.result?.verdict ?? null,
