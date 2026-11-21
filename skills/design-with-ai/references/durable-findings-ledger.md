@@ -51,6 +51,13 @@ safe; conflicting ID meanings are rejected, not silently rewritten.
    A unique run ID identifies this frozen baseline. Do not overwrite it.
 4. Implement and verify. The receipt must include all baseline IDs and all
    new issues; mark requiresPriorBaseline and requiresFindingsLedger true.
+   A previously closed VISUAL/DETAIL finding must be reopened as REGRESSED
+   or UNVERIFIED if a newly measured state shows its failure condition,
+   or if its final viewport evidence cannot be collected. For a dense
+   desktop render, the ledger sync accepts `--render-evidence` when
+   visual closures are claimed and rejects unsupported visual closure
+   even if the global verdict remains PARTIAL. Do not rewrite older
+   REVIEWED events; append the new run's assessment.
    New defects observed in the **final render or a verification-only turn**
    remain mandatory findings. Preserve the frozen baseline; append the
    new finding to the current receipt and use the existing sync to persist

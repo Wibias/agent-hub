@@ -90,6 +90,34 @@ window's coordinate system**, not inferred CSS units. Do not fabricate
 rectangles when Windows accessibility/UI-tree or actual render measurement
 is unavailable: record `NOT_VERIFIED` and retain `PARTIAL`.
 
+**Reopen historical findings automatically when the final measured layout
+regresses.** Before reporting a zero-open-findings state, review every
+previously closed in-scope VISUAL/DETAIL finding against the latest
+COMPACT, MEDIUM and MAXIMIZED renders in the affected state (especially
+SELECTED with inspector open). A prior `RESOLVED` does not survive a
+new counterexample. A dense desktop receipt may remain `PARTIAL`,
+but must mark an unproven visual closure `UNVERIFIED` and carry its
+ID forward. `findings-ledger.mjs sync` refuses a visual closure without
+matching native render evidence; supply `--render-evidence` to the
+existing sync command when verifying a closure. New regression status
+must be `REGRESSED` or `IMPROVED_BUT_OPEN`, not silently `RESOLVED`.
+
+The `schemaVersion 2` evidence can now include **only the states and
+viewports actually captured for a PARTIAL run**. Never invent missing
+screenshots or DPI data just to satisfy the complete matrix. A partial
+capture with fewer than three fully visible process rows among 10+
+processes must use `measuredFindingRefs.TABLE_CRAMPED` to link the
+measurement to a current open finding and its viewport review.
+The same applies to `KPI_BOTTOM_CLEARANCE`,
+`KPI_SUPPORTING_TEXT_OVERFLOW`,
+`EMPTY_INSPECTOR_DOMINATES_TABLE`, and
+`SELECTED_INSPECTOR_EMPTY`. Unlinked measured regressions invalidate
+the receipt, even if it says PARTIAL. Check the full executable path
+in selected-process inspector views: a genuinely clipped or unreadable
+path uses `renderInspection.unreadableInspectorPath` and is a new
+or reopened finding; natural wrapping with a working full-path copy
+is not necessarily a defect.
+
 **Verification-only iterations must record newly observed issues too.**
 After every real render, check the same layout states for anomalies such
 as an unexpected white table-header rectangle, duplicated graphs,

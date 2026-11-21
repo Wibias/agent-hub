@@ -72,3 +72,11 @@ test("Gitless native root is detected without user prompting and visual anomalie
   assert.match(verification, /newly observed/);
   assert.match(skill, /verification, append newly discovered defects/);
 });
+
+test("closed visual findings must be reopened when selected-state geometry regresses", () => {
+  for (const word of ["Reopen historical findings", "measuredFindingRefs.TABLE_CRAMPED",
+    "REGRESSED", "unreadableInspectorPath", "PARTIAL", "--render-evidence"]) {
+    assert.ok(contract.includes(word), "Missing regression audit guidance " + word);
+  }
+  assert.match(verification, /may not claim visually closed findings/);
+});
