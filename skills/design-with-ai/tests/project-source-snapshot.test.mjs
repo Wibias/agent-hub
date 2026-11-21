@@ -147,3 +147,19 @@ test("generated screenshot under artifacts does not invalidate UI source proof",
   writeFileSync(join(f.repo, "artifacts", "after.png"), "fake binary fixture");
   assert.equal(checkProof({ ...f.options, checkProof: f.proof }).valid, true);
 }));
+
+test("WinForms source and XAML modifications invalidate the project fingerprint while obj/publish are excluded", () => fixture(f => {
+  const before = snapshotProjectSource(f.repo);
+  const form = join(f.ui, "MainForm.cs");
+  writeFileSync(form, "public class MainForm { }\n");
+  const changed = snapshotProjectSource(f.repo);
+  assert.notEqual(before.sha256, changed.sha256);
+  const xaml = join(f.ui, "MainWindow.xaml");
+  writeFileSync(xaml, "<Window></Window>\n");
+  const withXaml = snapshotProjectSource(f.repo);
+  assert.notEqual(changed.sha256, withXaml.sha256);
+  const output = join(f.repo, "obj");
+  mkdirSync(output, { recursive: true });
+  writeFileSync(join(output, "Generated.cs"), "class Generated { }\n");
+  assert.equal(snapshotProjectSource(f.repo).sha256, withXaml.sha256);
+}));

@@ -196,3 +196,8 @@ test("legacy non-desktop iteration stays valid without desktop evidence", () => 
   delete a.surfaceKind;
   assert.equal(validateIterationReceipt(a).valid, true);
 });
+
+test("a renamed placeholder is not accepted as screenshot evidence", () => fixture(f => {
+  writeFileSync(join(f.root, "idle.png"), Buffer.alloc(100, 65));
+  assert.match(snapshotDesktopCaptureFiles(f.manifestPath).problems.join("; "), /does not match its image format/);
+}));

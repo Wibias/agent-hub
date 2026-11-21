@@ -234,6 +234,7 @@ export function checkProof({ receipt, baseline = null, ledger = null, renderEvid
     evidence.result?.verdict === "COMPLETE";
   const issueCodes = [...new Set(issues.map((message) => {
     if (/^receipt changed after/.test(message)) return "RECEIPT_CHANGED";
+    if (/^renderEvidence changed after/.test(message)) return "RENDER_EVIDENCE_CHANGED";
     if (/^baseline changed after/.test(message)) return "BASELINE_CHANGED";
     if (/^ledger changed after/.test(message)) return "LEDGER_CHANGED";
     if (/^Project source changed after/.test(message)) return "WORKTREE_CHANGED";

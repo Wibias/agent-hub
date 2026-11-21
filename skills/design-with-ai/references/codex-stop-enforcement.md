@@ -131,6 +131,7 @@ Key outcomes:
   gate rerun; the diagnostic journal records only the error code, not paths
   or source content.
 - `proof=PROOF_MISSING`, `PROOF_INVALID`, `WORKTREE_UNAVAILABLE`,
+  `RENDER_ARTIFACT_CHANGED`, `RENDER_SOURCE_STALE`, or `RENDER_EVIDENCE_CHANGED`,
   `VALIDATOR_NONZERO`, `INCOMPLETE_NOT_DISCLOSED`, or `PATH_REJECTED`:
   additional reasons a candidate cannot certify completion.
 
