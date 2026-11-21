@@ -409,3 +409,50 @@ test("DPI-specific physical bottom clearance is enforced for scaled native windo
   scaled.kpiText[0].supportingText = [24, 133, 131, 16]; // 8 px to divider, needs 9 at 150%
   assert.match(allProblems(m), /KPI_BOTTOM_CLEARANCE SCALED:IDLE used-memory/);
 });
+
+test("visible PCGuardian white header anomaly cannot be silently omitted from the findings receipt", () => {
+  const m = matrixManifest();
+  const c = m.captures.find(c => c.viewportId === "COMPACT" && c.state === "IDLE");
+  c.renderInspection.unexpectedHeaderFill = true;
+  const errors = allProblems(m);
+  assert.match(errors, /RENDER_ANOMALY COMPACT:IDLE unexpectedHeaderFill/);
+  assert.match(errors, /UNTRACKED_RENDER_FINDING COMPACT:IDLE unexpectedHeaderFill/);
+});
+test("reconciled rendering anomaly must retain a stable OPEN finding and same-viewport review", () => {
+  const m = matrixManifest();
+  const r = receipt();
+  const c = m.captures.find(c => c.viewportId === "COMPACT" && c.state === "IDLE");
+  c.renderInspection.unexpectedHeaderFill = true;
+  c.renderInspection.findingRefs = { unexpectedHeaderFill: "PCG-17" };
+  const item = {
+    id: "PCG-17", route: "PCGuardian/MainForm", kind: "VISUAL", priority: "MEDIUM",
+    symptom: "Unexpected white area next to Since header at compact size",
+    acceptance: "Header and scrollbar paint correctly at compact and maximized sizes",
+    evidenceRef: "renders/pcg17-compact.png", decision: "Investigate WinForms paint/scrollbar",
+    disposition: "PERSISTS", reason: "Render confirmed; root cause remains unverified",
+  };
+  r.findings.push(item);
+  r.openCarryover.push(item.id);
+  m.reviewedFindingIds.push(item.id);
+  let err = allProblems(m, r);
+  assert.match(err, /UNRECONCILED_RENDER_FINDING PCG-17:COMPACT unexpectedHeaderFill/);
+  m.findingViewportReviews.push({
+    findingId: item.id, viewportId: "COMPACT", status: "PERSISTS",
+    evidenceRef: "renders/pcg17-compact.png",
+  });
+  err = allProblems(m, r);
+  assert.match(err, /RENDER_ANOMALY/);
+  assert.doesNotMatch(err, /UNTRACKED_RENDER_FINDING|UNRECONCILED_RENDER_FINDING/);
+  r.findings.at(-1).disposition = "RESOLVED";
+  assert.match(allProblems(m, r), /UNTRACKED_RENDER_FINDING/);
+});
+test("anomaly cannot be linked to an invented or omitted prior finding", () => {
+  const m = matrixManifest();
+  const c = m.captures.find(c => c.viewportId === "MAXIMIZED" && c.state === "IDLE");
+  c.renderInspection.duplicateCharts = true;
+  c.renderInspection.findingRefs = { duplicateCharts: "PCG-FAKE" };
+  m.reviewedFindingIds.push("PCG-FAKE");
+  m.findingViewportReviews.push({ findingId: "PCG-FAKE", viewportId: "MAXIMIZED",
+    status: "PERSISTS", evidenceRef: "renders/fake.png" });
+  assert.match(allProblems(m), /UNTRACKED_RENDER_FINDING MAXIMIZED:IDLE duplicateCharts/);
+});

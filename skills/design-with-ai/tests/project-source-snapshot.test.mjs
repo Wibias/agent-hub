@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import test from "node:test";
-import { snapshotProjectSource, snapshotRootedSource } from "../scripts/project-source-snapshot.mjs";
+import { snapshotProjectSource, snapshotRootedSource, discoverNativeSourceRoot } from "../scripts/project-source-snapshot.mjs";
 import { runGate, checkProof } from "../scripts/run-iteration-gate.mjs";
 import { decideStop } from "../scripts/codex-stop-gate.mjs";
 import {
@@ -194,4 +194,75 @@ test("a Gitless empty or missing source directory is not certifiable", () => {
     assert.throws(() => snapshotRootedSource(root), /no eligible project source files/);
     assert.throws(() => snapshotRootedSource(join(root, "missing")), /ENOENT/);
   } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test("auto-detected WinForms source root binds a Gitless PCGuardian PARTIAL proof and catches late C# edits", () => {
+  const parent = mkdtempSync(join(tmpdir(), "dwa-pcg-auto-root-"));
+  try {
+    mkdirSync(join(parent, ".git")); // invalid ancestor, must stay untouched
+    const project = join(parent, "nested", "MemoryGuardian");
+    const art = join(project, ".design-with-ai");
+    const ui = join(project, "UI");
+    mkdirSync(art, { recursive: true });
+    mkdirSync(ui);
+    writeFileSync(join(project, "MemoryGuardian.csproj"), "<Project Sdk='Microsoft.NET.Sdk.WindowsDesktop' />");
+    const src = join(ui, "MainForm.cs");
+    writeFileSync(src, "public sealed class MainForm { public int Value = 1; }");
+    const ledger = join(art, "findings-ledger.json");
+    initializeLedger(ledger);
+    const prior = { id: "PCG-15", route: "PCGuardian/MainForm", kind: "WORKFLOW",
+      priority: "MEDIUM", symptom: "Stale action warning after selecting process",
+      acceptance: "Clear warning on selection", evidenceRef: "renders/pcg15-before.png" };
+    importFindings(ledger, { findings: [prior] });
+    const frozen = makeLedgerBaseline(readLedger(ledger),
+      { scope: ["PCGuardian/MainForm"], runId: "pcg-native-auto-run-1" });
+    const baseline = join(art, "prior.json");
+    writeFileSync(baseline, JSON.stringify(frozen));
+    const receipt = join(art, "receipt.json");
+    const data = {
+      schemaVersion: 1, requiresPriorBaseline: true, requiresFindingsLedger: true,
+      surfaceKind: "DENSE_DESKTOP_MONITOR", iterationVerdict: "PARTIAL",
+      verdictReason: "Live elevated Force Close confirmation not verified",
+      changeSummary: { kind: "NO_CHANGE", rationale: "Runtime inspection only", addressedFindingIds: [] },
+      scope: [{ route: "PCGuardian/MainForm", task: "Inspect process action state",
+        coverage: "INSPECTED", semantics: { applicable: false, reason: "Action remains unverified" } }],
+      findings: [{ ...prior, decision: "Retain pending verification",
+        disposition: "PERSISTS", reason: "Selection-state render unavailable" }],
+      openCarryover: ["PCG-15"],
+    };
+    writeFileSync(receipt, JSON.stringify(data));
+    syncLedger(ledger, frozen, data);
+    assert.equal(discoverNativeSourceRoot({ receipt, ledger }), project);
+    const proof = join(art, "proof.json");
+    const args = { receipt, baseline, ledger, proof, workspaceCwd: parent };
+    assert.equal(runGate(args).exitCode, 0);
+    const saved = JSON.parse(readFileSync(proof, "utf8"));
+    assert.equal(saved.sourceRootMode, "AUTO_NATIVE");
+    assert.equal(saved.sourceRoot, project);
+    assert.equal(saved.projectSource.sourceMode, "ROOTED_DIRECTORY");
+    const checked = checkProof({ ...args, checkProof: proof });
+    assert.equal(checked.valid, true, checked.issues.join("; "));
+    assert.equal(checked.sourceBound, true);
+    assert.equal(checked.completionEligible, false);
+    writeFileSync(src, "public sealed class MainForm { public int Value = 2; }");
+    const stale = checkProof({ ...args, checkProof: proof });
+    assert.equal(stale.valid, false);
+    assert.ok(stale.issueCodes.includes("WORKTREE_CHANGED"));
+    assert.equal(readdirSync(join(parent, ".git")).length, 0);
+  } finally { rmSync(parent, { recursive: true, force: true }); }
+});
+test("auto root never guesses unrelated folder names or mismatched project ledgers", () => {
+  const parent = mkdtempSync(join(tmpdir(), "dwa-pcg-no-guess-"));
+  try {
+    const p = join(parent, "MemoryGuardian"), art = join(p, ".design-with-ai");
+    mkdirSync(art, { recursive: true });
+    const receipt = join(art, "receipt.json"), ledger = join(art, "findings-ledger.json");
+    writeFileSync(receipt, "{}"); writeFileSync(ledger, "{}");
+    writeFileSync(join(p, "MainForm.cs"), "class MainForm {}");
+    assert.equal(discoverNativeSourceRoot({ receipt, ledger }), null, "missing real .csproj marker");
+    writeFileSync(join(p, "MemoryGuardian.csproj"), "<Project />");
+    assert.equal(discoverNativeSourceRoot({ receipt, ledger }), p);
+    assert.equal(discoverNativeSourceRoot({ receipt, ledger: join(parent, "other", "findings-ledger.json") }), null);
+    assert.equal(discoverNativeSourceRoot({ receipt: join(parent, "outside.json"), ledger }), null);
+  } finally { rmSync(parent, { recursive: true, force: true }); }
 });
