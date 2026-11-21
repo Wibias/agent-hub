@@ -211,6 +211,7 @@ function trackedBaseline() {
 function trackedReceipt() {
   const receipt = validComplete();
   receipt.requiresPriorBaseline = true;
+  receipt.findings[0].kind = "NAVIGATION";
   receipt.findings[0].symptom = "Two generic Settings links share /settings in the same desktop view";
   receipt.findings[0].acceptance = "One generic Settings entry point remains at desktop width";
   receipt.findings[0].verification.method = "TEST";
