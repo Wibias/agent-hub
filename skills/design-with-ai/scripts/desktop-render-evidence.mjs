@@ -2,7 +2,7 @@
 // Conditional, inspectable native desktop evidence. Does not authenticate UI
 // screenshots, self-reported measurements, human approval, or runtime behavior.
 import { createHash } from "node:crypto";
-import { lstatSync, readFileSync } from "node:fs";
+import { lstatSync, readFileSync, realpathSync } from "node:fs";
 import { dirname, extname, isAbsolute, relative, resolve, sep } from "node:path";
 
 const object = x => x !== null && typeof x === "object" && !Array.isArray(x);
@@ -93,6 +93,7 @@ export function validateDesktopRenderEvidence(manifest, receipt = null) {
         inspector.rect[3] >= 0.25 * c.viewport.height) {
       fail(label + ": TABLE_CRAMPED - selected inspector leaves at most two visible process rows");
     }
+    if (c.state === "SELECTED" && inspector?.empty === true) fail(label + ": selected-process inspector is still empty");
     if (c.state === "IDLE" && inspector?.empty === true && object(table) &&
         rect(table.rect) && rect(inspector.rect) && table.totalRows >= 10 &&
         table.visibleRows <= 2 && inspector.rect[3] >= 0.25 * c.viewport.height) {
@@ -141,7 +142,7 @@ export function validateDesktopRenderEvidence(manifest, receipt = null) {
     }
   }
   for (const id of checksRequired) {
-    if (!seenChecks.has(id) && !(id === "CHART_HISTORY" && excluded.has("STALLED"))) {
+    if (!seenChecks.has(id)) {
       fail("Missing runtime check " + id);
     }
   }
@@ -169,6 +170,7 @@ export function validateDesktopRenderEvidence(manifest, receipt = null) {
 // recursion, arbitrary input paths, or reading unrelated project secrets.
 export function snapshotDesktopCaptureFiles(manifestPath) {
   const dir = dirname(resolve(manifestPath));
+  const realDir = realpathSync(dir);
   const manifest = JSON.parse(readFileSync(resolve(manifestPath), "utf8"));
   const problems = [];
   const files = [];
@@ -188,10 +190,24 @@ export function snapshotDesktopCaptureFiles(manifestPath) {
     seen.add(full);
     try {
       const st = lstatSync(full);
+      const real = realpathSync(full);
+      const realRel = relative(realDir, real);
+      if (realRel === ".." || realRel.startsWith(".." + sep) || isAbsolute(realRel)) {
+        problems.push("Screenshot resolves outside evidence folder"); continue;
+      }
       if (!st.isFile() || st.isSymbolicLink() || st.size < 64 || st.size > 16 * 1024 * 1024) {
         problems.push("Unsafe or invalid screenshot file"); continue;
       }
-      const sha256 = createHash("sha256").update(readFileSync(full)).digest("hex");
+      const bytes = readFileSync(full);
+      const ext = extname(name).toLowerCase();
+      const formatOk = ext === ".png"
+        ? bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
+        : [".jpg", ".jpeg"].includes(ext)
+          ? bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255
+          : bytes.toString("ascii", 0, 4) === "RIFF" &&
+            bytes.toString("ascii", 8, 12) === "WEBP";
+      if (!formatOk) { problems.push("Screenshot file does not match its image format"); continue; }
+      const sha256 = createHash("sha256").update(bytes).digest("hex");
       if (sha256 !== capture.imageSha256) problems.push("Screenshot hash mismatch: " + capture.state);
       files.push({ state: capture.state, sha256, size: st.size });
     } catch {
