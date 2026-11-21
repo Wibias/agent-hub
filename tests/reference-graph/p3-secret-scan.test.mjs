@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, '../..');
-const scanner = path.join(root, 'skills/security-review-redirect/scripts/scan_secrets.py');
+const scanner = path.join(root, 'scripts/scan-secrets.py');
 
 function runScanner(contents) {
   const fixture = mkdtempSync(path.join(tmpdir(), 'reference-graph-secret-scan-'));

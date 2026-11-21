@@ -39,7 +39,7 @@ jobs:
         run: node --test tests/reference-graph/p16-*.test.mjs
 
       - name: Scan Reference Graph tree for common secrets
-        run: python3 skills/security-review-redirect/scripts/scan_secrets.py reference-graph
+        run: python3 scripts/scan-secrets.py reference-graph
 
       - name: Install PostgreSQL client when needed
         run: |
