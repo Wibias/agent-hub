@@ -77,12 +77,12 @@ If Computer Use or an elevated process blocks a required state, keep
 KPI text/cell rectangles, the actual `kpiStrip.rect` and
 `kpiStrip.bottomDividerY` and each KPI item's `supportingText` bounds,
 plus table-header text/cell rectangles. Check the measured clearance between
-the last supporting glyph and the bottom separator in **every** viewport:
+the last supporting glyph and the bottom separator in every viewport:
 version-2 desktop evidence uses a contextual minimum of 6 device-independent
 pixels (scaled by DPI). A line touching or crossing the separator is a HOLD,
 even if the KPI's general cell rectangle says the text fits. If the native
 render/UI-tree cannot supply these measurements, retain PARTIAL instead of
-writing invented rectangles. Continue to record process
+writing invented rectangles. Also record the process
 table's visible/total row counts and rectangle, inspector rectangle and empty
 state, and applicable live chart sample count/collection interval/axis
 history. Rectangle values use `[x, y, width, height]` **in the captured
