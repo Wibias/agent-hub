@@ -61,6 +61,11 @@ record `sourceArtifactRef`, `resultArtifactRef`, and `causedByFindingIds` in
 its critique/refinement receipt. Reconcile each carried finding against its
 actual source and result; a changed identifier alone is not a verified repair.
 This extends, but never replaces, the existing finding-to-outcome ledger.
+For structured deep-work critique, bind `sourceArtifactHash` and
+`resultArtifactHash` and connect actual change descriptions with
+`causedByFindingIds`. `RESOLVED` or `IMPROVED_BUT_OPEN` without a causal
+delta is invalid; even a changed hash and a claimed delta still require
+matched rendered and runtime evidence for acceptance.
 
 For work spanning separate sessions or agents, keep the non-sensitive ledger in
 the authorized task/PR record or existing design handoff, if one is available;

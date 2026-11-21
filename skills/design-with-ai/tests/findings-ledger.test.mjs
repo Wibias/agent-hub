@@ -197,3 +197,47 @@ test("re-running sync after altering a receipt cannot rewrite prior assessments"
   assert.throws(() => syncLedger(f.ledgerPath, f.baseline, receipt),
     /Existing run assessment differs/);
 }));
+
+test("optional design artifact references are append-only and idempotent", () => fixture(f => {
+  const item = {
+    id: "UX-NEW-LINEAGE", route: "/jobs", kind: "VISUAL", priority: "MEDIUM",
+    symptom: "Visible task status ambiguous", acceptance: "State is clear",
+    evidenceRef: "renders/before.png",
+    sourceDesignArtifactRef: "slice:before-sha", designArtifactRef: "slice:after-sha",
+  };
+  assert.equal(importFindings(f.ledgerPath, { findings: [item] }).added, 1);
+  const found = readLedger(f.ledgerPath).events.find(e => e.id === item.id);
+  assert.equal(found.designArtifactRef, item.designArtifactRef);
+  assert.equal(found.sourceDesignArtifactRef, item.sourceDesignArtifactRef);
+  assert.equal(importFindings(f.ledgerPath, { findings: [item] }).added, 0);
+  assert.equal(importFindings(f.ledgerPath, { findings: [historic[0]] }).added, 0);
+  assert.throws(() => importFindings(f.ledgerPath, {
+    findings: [{ ...item, designArtifactRef: "slice:conflict" }],
+  }), /Conflicting historical finding ID/);
+}));
+test("blank optional design source is rejected", () => fixture(f => {
+  assert.throws(() => importFindings(f.ledgerPath, { findings: [
+    { ...historic[0], id: "UX-BAD-LINEAGE", designArtifactRef: "" },
+  ] }), /requires id/);
+}));
+
+test("unversioned latest cannot be imported as a design artifact reference", () => fixture(f => {
+  assert.throws(() => importFindings(f.ledgerPath, { findings: [
+    { ...historic[0], id: "UX-UNVERSIONED", designArtifactRef: "slice/latest" },
+  ] }), /requires id/);
+}));
+
+test("reviewed design refs persist with the run and cannot be rewritten", () => fixture(f => {
+  const receipt = f.receipt();
+  receipt.findings[0].sourceDesignArtifactRef = "slice:before";
+  receipt.findings[0].designArtifactRef = "slice:after";
+  syncLedger(f.ledgerPath, f.baseline, receipt);
+  const evt = readLedger(f.ledgerPath).events.find(e =>
+    e.type === "REVIEWED" && e.id === receipt.findings[0].id);
+  assert.equal(evt.sourceDesignArtifactRef, "slice:before");
+  assert.equal(evt.designArtifactRef, "slice:after");
+  assert.equal(verifyLedgerCoverage(readLedger(f.ledgerPath), f.baseline, receipt).valid, true);
+  const altered = structuredClone(receipt);
+  altered.findings[0].designArtifactRef = "slice:changed-later";
+  assert.throws(() => syncLedger(f.ledgerPath, f.baseline, altered), /Existing run assessment differs/);
+}));

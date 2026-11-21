@@ -178,7 +178,85 @@ export function validateRepresentativeSlice(slice, packet, decision, packetCheck
   return errors;
 }
 
-export function validateAll({ packet, decision = null, slice = null }) {
+
+export function validateCritiqueRefinement(refinement, sourceSlice, revisedSlice, packet, decision, packetCheck) {
+  const errors = [];
+  if (!keys(refinement, ['schemaVersion', 'artifactType', 'sourceArtifactHash', 'resultArtifactHash', 'findings', 'deltas'], [], 'refinement', errors)) return errors;
+  if (refinement.schemaVersion !== 1 || refinement.artifactType !== 'CRITIQUE_REFINEMENT') errors.push('refinement: unsupported schemaVersion or artifactType');
+  validHash(refinement.sourceArtifactHash, 'refinement.sourceArtifactHash', errors);
+  validHash(refinement.resultArtifactHash, 'refinement.resultArtifactHash', errors);
+  if (!sourceSlice || refinement.sourceArtifactHash !== hashArtifact(sourceSlice)) errors.push('refinement: stale sourceArtifactHash');
+  if (!revisedSlice || refinement.resultArtifactHash !== hashArtifact(revisedSlice)) errors.push('refinement: stale or missing resultArtifactHash');
+  if (refinement.sourceArtifactHash === refinement.resultArtifactHash) errors.push('refinement: unchanged result artifact is not a design delta');
+  if (revisedSlice) errors.push(...validateRepresentativeSlice(revisedSlice, packet, decision, packetCheck));
+  if (!Array.isArray(refinement.findings)) errors.push('refinement.findings: expected array');
+  const known = new Set(), positive = new Set();
+  if (Array.isArray(refinement.findings)) for (const [i, f] of refinement.findings.entries()) {
+    const label = 'refinement.findings[' + i + ']';
+    if (!keys(f, ['id', 'disposition', 'reason', 'evidenceRef'], [], label, errors)) continue;
+    str(f.id, label + '.id', errors);
+    str(f.reason, label + '.reason', errors);
+    specificRef(f.evidenceRef, label + '.evidenceRef', errors);
+    if (known.has(f.id)) errors.push('refinement: duplicate finding ' + f.id);
+    known.add(f.id);
+    if (!['RESOLVED', 'IMPROVED_BUT_OPEN', 'PERSISTS', 'REGRESSED', 'KEEP_JUSTIFIED', 'DEFERRED', 'UNVERIFIED'].includes(f.disposition)) errors.push(label + ': unknown disposition');
+    if (['RESOLVED', 'IMPROVED_BUT_OPEN'].includes(f.disposition)) positive.add(f.id);
+  }
+  if (!Array.isArray(refinement.deltas)) errors.push('refinement.deltas: expected array');
+  const addressed = new Set();
+  if (Array.isArray(refinement.deltas)) for (const [i, d] of refinement.deltas.entries()) {
+    const label = 'refinement.deltas[' + i + ']';
+    if (!keys(d, ['causedByFindingIds', 'fromRef', 'toRef', 'changeSummary'], [], label, errors)) continue;
+    for (const id of list(d.causedByFindingIds, label + '.causedByFindingIds', errors, false)) {
+      if (!known.has(id)) errors.push(label + ': unknown finding ID ' + id);
+      else addressed.add(id);
+    }
+    specificRef(d.fromRef, label + '.fromRef', errors);
+    specificRef(d.toRef, label + '.toRef', errors);
+    str(d.changeSummary, label + '.changeSummary', errors);
+    if (d.fromRef === d.toRef) errors.push(label + ': identical source and result ref');
+  }
+  for (const id of positive) if (!addressed.has(id)) errors.push('refinement: positive disposition lacks causal design delta for ' + id);
+  return errors;
+}
+
+export function validateDesignContract(contract) {
+  const errors = [];
+  if (!keys(contract, ['schemaVersion', 'artifactType', 'rules'], [], 'contract', errors)) return errors;
+  if (contract.schemaVersion !== 1 || contract.artifactType !== 'DESIGN_GRAMMAR') errors.push('contract: unsupported schemaVersion or artifactType');
+  if (!Array.isArray(contract.rules)) errors.push('contract.rules: expected array');
+  const categories = new Set(['LAYOUT_HIERARCHY', 'CONTENT_HIERARCHY', 'SPATIAL_RHYTHM', 'SURFACE_TREATMENT', 'TYPOGRAPHIC_ROLES', 'COLOR_SEMANTICS', 'INTERACTION_FEEDBACK', 'RESPONSIVE_ADAPTATION', 'MOTION_TRANSITION']);
+  const ids = new Set();
+  if (Array.isArray(contract.rules)) for (const [i, rule] of contract.rules.entries()) {
+    const label = 'contract.rules[' + i + ']';
+    if (!keys(rule, ['id', 'category', 'rule', 'provenance', 'sourceRef'], ['rationale'], label, errors)) continue;
+    str(rule.id, label + '.id', errors);
+    str(rule.rule, label + '.rule', errors);
+    specificRef(rule.sourceRef, label + '.sourceRef', errors);
+    if (ids.has(rule.id)) errors.push('contract: duplicate rule ' + rule.id);
+    ids.add(rule.id);
+    if (!categories.has(rule.category)) errors.push(label + ': unknown category');
+    if (!['OBSERVED', 'APPROVED', 'GENERALIZED', 'DERIVED'].includes(rule.provenance)) errors.push(label + ': UNKNOWN design truth is not an accepted rule');
+    if (['GENERALIZED', 'DERIVED'].includes(rule.provenance)) str(rule.rationale, label + '.rationale', errors);
+  }
+  return errors;
+}
+
+export function validateImplementationBinding(binding, approvedArtifactHash) {
+  const errors = [];
+  if (!keys(binding, ['schemaVersion', 'artifactType', 'approvedArtifactHash', 'implementedAgainstArtifactHash', 'proofRef'], [], 'binding', errors)) return errors;
+  if (binding.schemaVersion !== 1 || binding.artifactType !== 'DESIGN_IMPLEMENTATION_BINDING') errors.push('binding: unsupported schemaVersion or artifactType');
+  validHash(binding.approvedArtifactHash, 'binding.approvedArtifactHash', errors);
+  validHash(binding.implementedAgainstArtifactHash, 'binding.implementedAgainstArtifactHash', errors);
+  specificRef(binding.proofRef, 'binding.proofRef', errors);
+  if (!approvedArtifactHash || binding.approvedArtifactHash !== approvedArtifactHash ||
+      binding.implementedAgainstArtifactHash !== approvedArtifactHash) {
+    errors.push('binding: implementedAgainstArtifactHash does not match the currently approved artifact');
+  }
+  return errors;
+}
+
+export function validateAll({ packet, decision = null, slice = null, revisedSlice = null, refinement = null, designContract = null, implementationBinding = null }) {
   const packetCheck = validateDecisionPacket(packet);
   const errors = [...packetCheck.errors];
   if (decision !== null) errors.push(...validateOwnerDecision(decision, packet, packetCheck));
@@ -186,6 +264,14 @@ export function validateAll({ packet, decision = null, slice = null }) {
     if (decision === null) errors.push('slice: decision artifact is required');
     else errors.push(...validateRepresentativeSlice(slice, packet, decision, packetCheck));
   }
+  if (revisedSlice !== null && refinement === null) errors.push('revisedSlice: missing refinement receipt');
+  if (refinement !== null) {
+    if (slice === null || decision === null) errors.push('refinement: source slice and decision are required');
+    else errors.push(...validateCritiqueRefinement(refinement, slice, revisedSlice, packet, decision, packetCheck));
+  }
+  if (designContract !== null) errors.push(...validateDesignContract(designContract));
+  const approvedHash = revisedSlice !== null && refinement !== null ? hashArtifact(revisedSlice) : slice !== null ? hashArtifact(slice) : null;
+  if (implementationBinding !== null) errors.push(...validateImplementationBinding(implementationBinding, approvedHash));
   return {
     ok: errors.length === 0,
     errors,
@@ -194,19 +280,21 @@ export function validateAll({ packet, decision = null, slice = null }) {
       briefHash: packetCheck.briefHash,
       decisionHash: decision && errors.length === 0 ? hashArtifact(decision) : null,
       sliceHash: slice && errors.length === 0 ? hashArtifact(slice) : null,
+      revisedSliceHash: revisedSlice && errors.length === 0 ? hashArtifact(revisedSlice) : null,
     },
-    limitations: ['Source refs and HUMAN_OWNER declarations must be corroborated from actual owner-channel evidence.', 'Structural distinctness, design quality, and rendered correctness are not mechanically verified.'],
+    reviewRequired: refinement !== null || implementationBinding !== null,
+    limitations: ['HUMAN_OWNER declarations must be corroborated from actual owner-channel evidence.', 'A changed design hash and claimed causal delta do not prove resolution; matched render/runtime proof remains mandatory.', 'Structural distinctness and design quality are not mechanically verified.'],
   };
 }
 
 function usage() {
-  return 'Usage: node validate-design-decision.mjs --packet direction-set.json [--decision decision.json] [--slice representative-slice.json] [--json]';
+  return 'Usage: node validate-design-decision.mjs --packet direction-set.json [--decision decision.json] [--slice representative-slice.json] [--revised-slice revised.json --refinement critique.json] [--contract grammar.json] [--implementation-binding binding.json] [--json]';
 }
 
 export function runCli(argv = process.argv.slice(2)) {
   if (argv.includes('--help')) { console.log(usage()); return 0; }
   const paths = {};
-  const allowed = new Set(['--packet', '--decision', '--slice']);
+  const allowed = new Set(['--packet', '--decision', '--slice', '--revised-slice', '--refinement', '--contract', '--implementation-binding']);
   let json = false;
   for (let i = 0; i < argv.length; i++) {
     const flag = argv[i];
@@ -223,6 +311,10 @@ export function runCli(argv = process.argv.slice(2)) {
       packet: read(paths['--packet']),
       decision: paths['--decision'] ? read(paths['--decision']) : null,
       slice: paths['--slice'] ? read(paths['--slice']) : null,
+      revisedSlice: paths['--revised-slice'] ? read(paths['--revised-slice']) : null,
+      refinement: paths['--refinement'] ? read(paths['--refinement']) : null,
+      designContract: paths['--contract'] ? read(paths['--contract']) : null,
+      implementationBinding: paths['--implementation-binding'] ? read(paths['--implementation-binding']) : null,
     });
     if (json) console.log(JSON.stringify(result, null, 2));
     else console.log((result.ok ? 'PASS' : 'FAIL') + ' design decision identity\n' + JSON.stringify(result, null, 2));

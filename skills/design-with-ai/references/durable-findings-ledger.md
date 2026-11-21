@@ -13,6 +13,12 @@ ID, route, kind, priority, symptom, acceptance and evidenceRef; REVIEWED adds
 a run ID, disposition, reason and evidence reference. A false-positive
 KEEP_JUSTIFIED is retained in future inspections, not deleted.
 
+New FOUND findings and later REVIEWED assessments in lineage-active deep
+work may optionally carry `sourceDesignArtifactRef` and `designArtifactRef`
+for exact design versions. These fields are append-only, nonempty when
+present, and cannot rewrite previously recorded history. Older schemaVersion 1 events are unchanged.
+A changed design artifact ref does not itself verify that a finding is fixed.
+
 An empty ledger DOES NOT reconstruct prior chats, PR reviews, screenshots,
 earlier findings or forgotten observations. On first adoption search available
 old independent baselines, UX reports and PR notes. Import only supported

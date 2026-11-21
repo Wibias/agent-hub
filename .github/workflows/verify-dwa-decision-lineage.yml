@@ -1,0 +1,38 @@
+name: DWA decision lineage verification
+
+on:
+  pull_request:
+    paths:
+      - 'skills/design-with-ai/**'
+      - '.github/workflows/verify-dwa-decision-lineage.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'skills/design-with-ai/**'
+      - '.github/workflows/verify-dwa-decision-lineage.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: decision-lineage (node-${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate decision and findings code
+        run: |
+          node --check skills/design-with-ai/scripts/validate-design-decision.mjs
+          node --check skills/design-with-ai/scripts/findings-ledger.mjs
+      - name: Test decision lineage and durable findings ledger
+        run: node --test skills/design-with-ai/tests/validate-design-decision.test.mjs skills/design-with-ai/tests/findings-ledger.test.mjs
+      - name: Validate DWA skill structure and retained regressions
+        run: node skills/skill-ratchet/scripts/skill-ratchet.mjs validate --skill-root skills/design-with-ai --json

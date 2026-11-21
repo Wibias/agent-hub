@@ -17,7 +17,13 @@ const statuses = new Set([
 ]);
 const hashEvents = (events) => createHash("sha256").update(JSON.stringify(events)).digest("hex");
 const fields = ["id", "route", "kind", "priority", "symptom", "acceptance", "evidenceRef"];
-const findingOf = (event) => Object.fromEntries(fields.map(k => [k, event[k]]));
+const lineageFields = ["designArtifactRef", "sourceDesignArtifactRef"];
+const findingOf = (event) => Object.fromEntries([
+  ...fields, ...lineageFields.filter(k => Object.hasOwn(event, k)),
+].map(k => [k, event[k]]));
+const validLineage = (item) => lineageFields.every(k =>
+  !Object.hasOwn(item, k) || (filled(item[k]) && !/(^|[:/#@])latest($|[:/#@.?])/i.test(item[k])),
+);
 function reviewOf(item, runId) {
   const reason = item.reassessment?.reason ?? item.reason ??
     item.justification ?? item.decision ?? "Reviewed current state";
@@ -26,8 +32,10 @@ function reviewOf(item, runId) {
   if (!filled(reason) || !filled(evidenceRef)) {
     throw new Error(item.id + ": review needs a reason and evidence reference");
   }
+  if (!validLineage(item)) throw new Error(item.id + ": invalid design artifact reference in review");
   return { type: "REVIEWED", runId, id: item.id,
-    disposition: item.disposition, reason, evidenceRef };
+    disposition: item.disposition, reason, evidenceRef,
+    ...Object.fromEntries(lineageFields.filter(k => Object.hasOwn(item, k)).map(k => [k, item[k]])) };
 }
 
 function ensureSafeFile(path) {
@@ -48,6 +56,7 @@ export function readLedger(path) {
     if (!object(event)) { problems.push("event " + index + " is not an object"); continue; }
     if (event.type === "FOUND") {
       if (!fields.every(k => filled(event[k]))) problems.push("FOUND event missing required fields: " + index);
+      if (!validLineage(event)) problems.push("FOUND event has invalid design artifact reference: " + index);
       if (!kinds.has(event.kind) || !priorities.has(event.priority)) {
         problems.push("FOUND event has invalid kind/priority: " + index);
       }
@@ -55,7 +64,8 @@ export function readLedger(path) {
       known.add(event.id);
     } else if (event.type === "REVIEWED") {
       if (!known.has(event.id) || !filled(event.runId) ||
-          !statuses.has(event.disposition) || !filled(event.reason) || !filled(event.evidenceRef)) {
+          !statuses.has(event.disposition) || !filled(event.reason) || !filled(event.evidenceRef) ||
+          !validLineage(event)) {
         problems.push("invalid REVIEWED event: " + index);
       }
     } else {
@@ -91,13 +101,14 @@ export function importFindings(path, source) {
   let added = 0;
   for (const finding of source.findings) {
     if (!object(finding) || !fields.every(k => filled(finding[k])) ||
-        !kinds.has(finding.kind) || !priorities.has(finding.priority)) {
+        !kinds.has(finding.kind) || !priorities.has(finding.priority) || !validLineage(finding)) {
       throw new Error("Import finding requires id, route, kind, priority, symptom, acceptance, evidenceRef");
     }
     const normalized = findingOf(finding);
     const prior = existing.get(finding.id);
     if (prior) {
-      if (JSON.stringify(findingOf(prior)) !== JSON.stringify(normalized)) {
+      if (fields.some(k => prior[k] !== normalized[k]) ||
+          lineageFields.some(k => Object.hasOwn(normalized, k) && prior[k] !== normalized[k])) {
         throw new Error("Conflicting historical finding ID " + finding.id + "; do not silently overwrite");
       }
       continue;
@@ -159,7 +170,8 @@ export function verifyLedgerCoverage(ledger, baseline, receipt, { requireSynced 
   if (baselineById.size !== frozen.length) fail("Duplicate baseline finding IDs");
   for (const item of prior) {
     const current = baselineById.get(item.id);
-    if (!current || fields.some(k => current[k] !== item[k])) {
+    if (!current || fields.some(k => current[k] !== item[k]) ||
+        lineageFields.some(k => Object.hasOwn(item, k) && current[k] !== item[k])) {
       fail("Durable prior finding missing or rewritten in baseline: " + item.id);
     }
   }
@@ -193,7 +205,8 @@ export function verifyLedgerCoverage(ledger, baseline, receipt, { requireSynced 
       const evt = runEvents.find(x => x.id === item.id);
       const expected = reviewOf(item, snapshot.runId);
       if (!evt || evt.disposition !== expected.disposition ||
-          evt.reason !== expected.reason || evt.evidenceRef !== expected.evidenceRef) {
+          evt.reason !== expected.reason || evt.evidenceRef !== expected.evidenceRef ||
+          lineageFields.some(k => evt[k] !== expected[k])) {
         fail("Final finding missing matching persisted run assessment: " + item.id);
       }
     }
@@ -229,7 +242,7 @@ export function syncLedger(path, baseline, receipt) {
   let added = 0;
   for (const f of receipt.findings) {
     if (!known.has(f.id)) {
-      if (!fields.every(k => filled(f[k])) || !kinds.has(f.kind) || !priorities.has(f.priority)) {
+      if (!fields.every(k => filled(f[k])) || !kinds.has(f.kind) || !priorities.has(f.priority) || !validLineage(f)) {
         throw new Error("New finding " + f.id + " lacks history metadata");
       }
       ledger.events.push({ type: "FOUND", ...findingOf(f) });

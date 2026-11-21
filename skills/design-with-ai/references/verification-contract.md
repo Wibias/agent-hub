@@ -125,6 +125,25 @@ same viewport band. `REVIEW_CROSS_SURFACE` is a contextual G02 lead, not a
 mechanical failure: shared shells and related workflow families can justify
 macro similarity. Do not load or run this comparison for a single-route task.
 
+## Conditional approved-design identity gate
+
+When a deep-design workflow uses `design-decision-lineage.md`, verify that
+implementation still targets the exact accepted representative slice (or
+approved refined-slice version). Run the read-only
+`scripts/validate-design-decision.mjs` with the actual `--packet`,
+`--decision`, and `--slice` files. Optional `--refined-slice`,
+`--refinement`, `--contract`, and `--implementation-binding` inputs
+check causal metadata, source hashes, rule provenance, and
+`implementedAgainstArtifactHash == approvedArtifactHash`.
+
+If the approved artifact changes, old identity/proof bindings become stale.
+The validator's checks are **not** cryptographic proof of genuine human
+input, an attested browser run, or actual UI quality. A linked refinement
+still requires matched rendered/runtime review before declaring a finding
+resolved. Preserve the existing render, accessibility, slop, receipt,
+durable findings, and iteration-proof gates. Ordinary quick polish does
+not acquire this additional gate.
+
 ## Before/after iteration evidence
 
 **Final-edit freshness:** A gate proof must be generated only after all UI
