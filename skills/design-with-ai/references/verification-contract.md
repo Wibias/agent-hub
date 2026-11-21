@@ -136,7 +136,7 @@ structurally valid `PARTIAL` with `projectSource: null` is visibly **not**
 a source-freshness certification. When that surface is
 being modified, the iteration receipt MUST name `surfaceKind:
 "DENSE_DESKTOP_MONITOR"`; `COMPLETE` requires the additional
-`--render-evidence` artifact. Its measured geometry, screenshot bytes
+`--render-evidence` artifact. Its measured geometry (including KPI supporting-text bottom clearance against the rendered separator), screenshot bytes
 and actual source SHA-256 are checked by
 `scripts/desktop-render-evidence.mjs`, `desktop-viewport-matrix.mjs` and
 `run-iteration-gate.mjs`. The version-2 desktop manifest requires COMPACT,

@@ -54,3 +54,11 @@ test("dense desktop COMPLETE requires an honest v2 window matrix and cross-viewp
   assert.match(quality, /multi-viewport/);
   assert.match(baseline, /compact, medium and maximized/);
 });
+
+test("compact KPI supporting text must clear the section divider, including scaled DPI", () => {
+  for (const word of ["kpiStrip.bottomDividerY", "supportingText", "6 device-independent",
+    "line touching or crossing", "every viewport"]) {
+    assert.ok(contract.includes(word), "Missing KPI clearance instruction " + word);
+  }
+  assert.match(verification, /KPI supporting-text bottom clearance/);
+});

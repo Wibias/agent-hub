@@ -73,6 +73,48 @@ export function validateDesktopViewportMatrix(manifest, receipt = null) {
       fail(label + ": VIEWPORT_SIZE_MISMATCH " + c.viewportId);
     }
     if (!filled(c.image)) fail(label + ": missing capture image");
+    // KPI supporting lines can be inside their metric cell yet cross the
+    // *actual* section divider when the compact header is vertically squeezed.
+    // Measure the divider and rendered supporting-text bounds separately.
+    // Six device-independent px is the dense-monitor minimum legibility gap,
+    // scaled to physical pixels. This is a conditional defect threshold, not
+    // a generic universal typography or spacing token.
+    if (!object(c.kpiStrip) || !rect(c.kpiStrip.rect) ||
+        !Number.isFinite(c.kpiStrip.bottomDividerY) ||
+        Math.abs(c.kpiStrip.bottomDividerY - bottom(c.kpiStrip.rect)) > 2) {
+      fail("KPI_STRIP_MEASUREMENT_REQUIRED " + key);
+    } else {
+      const bottomDividerY = c.kpiStrip.bottomDividerY;
+      if (outside(c.kpiStrip.rect, [0, 0, v.width, v.height])) {
+        fail("KPI_STRIP_OUTSIDE_WINDOW " + key);
+      }
+      const minBottomClearance = Math.ceil(6 * v.dpiPercent / 100);
+      if (!Array.isArray(c.kpiText) || c.kpiText.length === 0) {
+        fail("KPI_SUPPORTING_TEXT_REQUIRED " + key);
+      } else {
+        const ids = new Set();
+        for (const [j, item] of c.kpiText.entries()) {
+          if (!object(item) || !filled(item.id) || !rect(item.cell) ||
+              !rect(item.supportingText)) {
+            fail("KPI_SUPPORTING_TEXT_MEASUREMENT_REQUIRED " + key + " [" + j + "]");
+            continue;
+          }
+          if (ids.has(item.id)) fail("DUPLICATE_KPI_MEASUREMENT " + key + " " + item.id);
+          ids.add(item.id);
+          if (outside(item.supportingText, item.cell) ||
+              outside(item.supportingText, c.kpiStrip.rect)) {
+            fail("KPI_SUPPORTING_TEXT_OVERFLOW " + key + " " + item.id);
+          }
+          const clearance = bottomDividerY - bottom(item.supportingText);
+          if (clearance < minBottomClearance) {
+            fail("KPI_BOTTOM_CLEARANCE " + key + " " + item.id +
+              ": measured " + clearance.toFixed(1) + " px, need >= " +
+              minBottomClearance + " physical px");
+          }
+        }
+      }
+    }
+
     if (!Array.isArray(c.chartPanels)) fail(label + ": chartPanels geometry required");
     else {
       const roles = new Set(), panels = [];
