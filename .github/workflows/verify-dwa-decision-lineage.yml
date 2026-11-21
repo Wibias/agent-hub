@@ -33,6 +33,7 @@ jobs:
           node --check skills/design-with-ai/scripts/validate-design-decision.mjs
           node --check skills/design-with-ai/scripts/findings-ledger.mjs
           node --check skills/design-with-ai/scripts/desktop-render-evidence.mjs
+          node --check skills/design-with-ai/scripts/desktop-viewport-matrix.mjs
           node --check skills/design-with-ai/scripts/project-source-snapshot.mjs
           node --check skills/design-with-ai/scripts/codex-turn-context.mjs
       - name: Test decision lineage and durable findings ledger

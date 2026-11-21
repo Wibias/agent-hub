@@ -101,6 +101,10 @@ function matrixManifest(source = "a".repeat(64)) {
       id: "detail-chart", role: "DETAIL", rect:
         [Math.round(v.width * 0.52), inspectorY + 12, Math.round(v.width * 0.4), 84],
     });
+    if (state === "COLLECTING") c.chart = {
+      sampleCount: 1, collectionIntervalSec: 60,
+      historyLabelSec: 0, missingAsZero: false,
+    };
     c.renderInspection = {
       method: "SCREENSHOT_REVIEW", evidenceRef: "review:" + c.image,
       duplicateCharts: false, unexpectedHeaderFill: false,

@@ -34,17 +34,46 @@ A full native process monitor legitimately needs telemetry and a table. `G74` is
 For a full desktop/process monitor, put `surfaceKind:
 "DENSE_DESKTOP_MONITOR"` in the existing DWA iteration receipt. The
 normal durable findings ledger is still authoritative; do not build a second
-findings store. For a `COMPLETE` verdict, supply a separate version-1
+findings store. For a `COMPLETE` verdict, supply a **schemaVersion 2**
 render-evidence JSON file to `run-iteration-gate.mjs --render-evidence`.
+Legacy version-1 manifests remain readable as PARTIAL evidence but cannot
+certify COMPLETE for a dense monitoring window.
 Ordinary non-desktop work is unchanged; a truthful `PARTIAL` can omit a
 blocked native capture.
 
 **The agent creates this evidence automatically**, not the user. Keep the
-manifest beside its final PNG/JPEG/WebP screenshots in an authorized
-task-artifacts directory. Do not place it in the installed skill folder.
-Capture `IDLE`, `SELECTED`, `FOCUS` and `STALLED`; only `STALLED`
-may be explicitly excluded with a reason when that state truly does not
-exist. Attach observed window width/height/DPI for each screenshot, measured
+manifest beside its **final PNG screenshots** in an authorized
+task-artifacts directory. Version 2 checks their actual pixel dimensions
+against the declared captured window size. No resizing an old screenshot
+to invent a new profile. Do not place it in the installed skill folder.
+Capture a **native window matrix**, not one flattering screenshot:
+`COMPACT`, `MEDIUM`, `MAXIMIZED` at three meaningfully distinct actual
+window widths, plus `SCALED` at a **different Windows DPI percentage**.
+The matrix uses `viewports[]` with stable IDs, physical pixel width/height,
+`dpiPercent` and `mode: WINDOWED|MAXIMIZED`. Do not hardcode 1161,
+1440 or 1919 px as universal breakpoints: choose supported sizes and
+state the tested bounds. For each ordinary size, capture the **same**
+`IDLE`, `SELECTED`, `FOCUS` and `COLLECTING` states. At scaled DPI,
+capture at least `IDLE` and `FOCUS`. Capture `STALLED` in one normal
+viewport when supported; exclude only that state with an explicit, truthful
+reason when not applicable. No silently inferred states or fake DPI changes.
+
+Each `captures[]` entry carries its `viewportId` and measured
+`chartPanels[]`: one `SYSTEM` plot, and a separate `DETAIL` plot when
+selected. The `renderInspection` record must explicitly inspect duplicated
+charts/repeated `NOW` markers, anomalous white/high-contrast table headers,
+clipped supporting copy and unusable blank space, with a real render/screenshot
+review reference. A structural duplicate or overlap is a mechanical HOLD.
+An anomaly found in the real pixels is a HOLD even if all JSON geometry fits.
+
+**The validator does not interpret screenshot pixels.** Hashes, PNG dimensions,
+measured rectangles and self-reported reviews cannot prove an agent actually
+looked at the UI. Do not mark falsely clean inspections. Use a real app render,
+native UI-tree measurements, and optionally independent visual review.
+If Computer Use or an elevated process blocks a required state, keep
+`PARTIAL/NOT_VERIFIED`; do not extend the prompt or invent evidence.
+
+ Attach observed window width/height/DPI for each screenshot, measured
 KPI text/cell rectangles and table-header text/cell rectangles, process
 table's visible/total row counts and rectangle, inspector rectangle and empty
 state, and applicable live chart sample count/collection interval/axis
@@ -52,6 +81,14 @@ history. Rectangle values use `[x, y, width, height]` **in the captured
 window's coordinate system**, not inferred CSS units. Do not fabricate
 rectangles when Windows accessibility/UI-tree or actual render measurement
 is unavailable: record `NOT_VERIFIED` and retain `PARTIAL`.
+
+For any finding declared `RESOLVED`, record `findingViewportReviews[]`
+for `COMPACT`, `MEDIUM`, and `MAXIMIZED` with matching final evidence.
+A finding resolved at 1919 px is not resolved at 1161 px by implication.
+`NOT_APPLICABLE` needs a real viewport-specific reason; an
+`IMPROVED_BUT_OPEN`, `PERSISTS`, or `NOT_VERIFIED` row is not a resolution.
+This is a proof overlay on the existing durable findings ledger, **not**
+a second ledger.
 
 The manifest includes `candidateSourceSha256` from the same final
 project-source snapshot as the screenshot, `captures[].imageSha256`,
@@ -64,8 +101,11 @@ real interaction. A code-only audit cannot satisfy them.
 
 A mechanical hold is justified if any measured KPI/header text rectangle
 overflows its cell, absent graph samples are represented as zeroes, the
-claimed axis history exceeds observed samples, or a large selected/empty
-inspector leaves at most two visible rows among ten or more processes.
+claimed axis history exceeds observed samples, a large selected/empty
+inspector leaves at most two visible rows among ten or more processes,
+or a required compact/medium/maximized/focus/collecting capture is missing.
+In v2, fewer than three fully visible rows when ten or more processes exist
+is a hold in any required normal window state.
 Those thresholds are conditional failure evidence, not a universal
 aesthetic rule or an instruction to remove useful process details.
 

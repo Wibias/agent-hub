@@ -106,7 +106,7 @@ export function validateDesktopRenderEvidence(manifest, receipt = null) {
         table.visibleRows <= 2 && inspector.rect[3] >= 0.25 * c.viewport.height) {
       fail(label + ": EMPTY_INSPECTOR_DOMINATES_TABLE");
     }
-    if (c.state === "IDLE" && !object(c.chart)) fail(label + ": chart sampling evidence required");
+    if (["IDLE", "COLLECTING"].includes(c.state) && !object(c.chart)) fail(label + ": chart sampling evidence required");
     if (object(c.chart)) {
       const g = c.chart;
       if (!Number.isInteger(g.sampleCount) || g.sampleCount < 0 ||

@@ -44,3 +44,13 @@ test('desktop monitoring eval cases are explicit and quick general polish stays 
   const unrelated = cases.find(x=>x.id==='E107');
   assert.ok(unrelated.unnecessary_resources.includes('references/desktop-monitoring-surfaces.md'));
 });
+
+test("dense desktop COMPLETE requires an honest v2 window matrix and cross-viewport findings", () => {
+  for (const concept of ["schemaVersion 2", "COMPACT", "MEDIUM", "MAXIMIZED",
+    "SCALED", "COLLECTING", "findingViewportReviews", "duplicate", "PARTIAL"]) {
+    assert.ok(contract.includes(concept), "Missing viewport regression guidance " + concept);
+  }
+  assert.match(verification, /single-window manifest cannot certify COMPLETE/);
+  assert.match(quality, /multi-viewport/);
+  assert.match(baseline, /compact, medium and maximized/);
+});
