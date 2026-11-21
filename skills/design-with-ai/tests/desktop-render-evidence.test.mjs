@@ -633,4 +633,4 @@ test("full runner records invalid PARTIAL render PASS with no native screenshot"
   });
   assert.equal(result.exitCode, 1);
   assert.match(result.proof.result.problems.join("; "), /DESKTOP_RENDER_PASS_UNBOUND/);
-});
+}));
