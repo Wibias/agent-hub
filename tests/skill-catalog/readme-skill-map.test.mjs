@@ -94,11 +94,6 @@ const requiredRouteMarkers = [
   "fortify:state-resilience",
   "fortify:worst-case",
 
-  // prototype branches
-  "prototype:logic",
-  "prototype:ui",
-  "prototype:technical-fork",
-
   // intent modes and strategic specialist routes
   "intent:context",
   "intent:practice",
@@ -192,4 +187,10 @@ test("README documents the public routes of complex skills", () => {
     const marker = `<!-- route-doc:${route} -->`;
     assert.equal(count(readme, marker), 1, `missing or duplicate route marker: ${marker}`);
   }
+});
+
+test("retired prototype routes cannot reappear in the public README", () => {
+  const readme = readFileSync(readmePath, "utf8");
+  assert.doesNotMatch(readme, /<!-- route-doc:prototype:/);
+  assert.doesNotMatch(readme, /<!-- skill-doc:prototype -->/);
 });
