@@ -371,3 +371,14 @@ test("CLI requires the pre-edit baseline and rejects missing carried findings", 
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("baseline identity rejects hijacking a historical finding even with matching route/acceptance", () => {
+  const baseline = trackedBaseline();
+  const payload = trackedReceipt(baseline);
+  const original = baseline.findings[0];
+  const current = payload.findings.find(f => f.id === original.id);
+  current.kind = original.kind === "VISUAL" ? "DETAIL" : "VISUAL";
+  current.symptom = "Unrelated filter empty state";
+  const errors = validateIterationReceipt(payload, baseline).problems.join("; ");
+  assert.match(errors, /FINDING_IDENTITY_CHANGED/);
+});

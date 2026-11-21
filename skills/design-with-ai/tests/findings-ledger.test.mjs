@@ -269,3 +269,95 @@ test("native PARTIAL cannot append a newly visual RESOLVED finding without final
   assert.equal(syncLedger(f.ledgerPath, f.baseline, receipt).added, 1,
     "documented open finding may still be persisted with PARTIAL");
 }));
+
+test("PCG-16 cannot be silently reassigned from KPI gap to an unrelated empty-filter state", () => fixture(f => {
+  const original = {
+    id: "PCG-16", route: "/jobs", kind: "VISUAL", priority: "MEDIUM",
+    symptom: "Compact KPI supporting text collides with the bottom divider",
+    acceptance: "At least six DPI-aware pixels below supporting KPI lines",
+    evidenceRef: "renders/compact-kpi-before.png",
+  };
+  importFindings(f.ledgerPath, { findings: [original] });
+  const baseline = makeLedgerBaseline(readLedger(f.ledgerPath),
+    { scope: ["/jobs"], runId: "pcg-id-collision" });
+  const receipt = f.receipt();
+  receipt.findings.push({ ...original, kind: "DETAIL",
+    symptom: "Empty filter shows a misleading inspector hint",
+    decision: "Fix the empty-filter hint", disposition: "PERSISTS",
+    reason: "Not verified in all windows" });
+  receipt.openCarryover.push("PCG-16");
+  const snapshot = readLedger(f.ledgerPath).events;
+  assert.throws(() => syncLedger(f.ledgerPath, baseline, receipt), /FINDING_IDENTITY_CHANGED/);
+  assert.deepEqual(readLedger(f.ledgerPath).events, snapshot,
+    "identity rejection must not append to durable history");
+  receipt.findings.at(-1).kind = original.kind;
+  receipt.findings.at(-1).symptom = original.symptom;
+  receipt.findings.at(-1).id = "PCG-17"; // distinct real observation gets a distinct ID
+  receipt.openCarryover = ["UX-SETTINGS", "UX-PUBLISH", "PCG-17", "PCG-16"];
+  receipt.findings.push({ ...original, decision: "Continue KPI measurement",
+    disposition: "PERSISTS", reason: "Compact footer still too close to the divider" });
+  assert.equal(syncLedger(f.ledgerPath, baseline, receipt).added, 1);
+}));
+test("repeated observed desktop KPI defects require source repair or a named blocker", () => fixture(f => {
+  const issue = {
+    id: "PCG-KPI", route: "/jobs", kind: "VISUAL", priority: "MEDIUM",
+    symptom: "KPI supporting lines are only two pixels above the divider",
+    acceptance: "The compact window leaves at least six pixels of bottom clearance",
+    evidenceRef: "renders/compact-kpi-initial.png",
+  };
+  importFindings(f.ledgerPath, { findings: [issue] });
+  const makeReceipt = () => {
+    const r = f.receipt();
+    r.findings.push({ ...issue, decision: "Keep investigating the KPI strip",
+      disposition: "PERSISTS", reason: "Gap is still measured at two pixels" });
+    r.openCarryover.push(issue.id);
+    return r;
+  };
+  const first = makeLedgerBaseline(readLedger(f.ledgerPath),
+    { scope: ["/jobs"], runId: "kpi-iteration-one" });
+  syncLedger(f.ledgerPath, first, makeReceipt());
+  const second = makeLedgerBaseline(readLedger(f.ledgerPath),
+    { scope: ["/jobs"], runId: "kpi-iteration-two" });
+  syncLedger(f.ledgerPath, second, makeReceipt());
+  const third = makeLedgerBaseline(readLedger(f.ledgerPath),
+    { scope: ["/jobs"], runId: "kpi-iteration-three" });
+  const current = makeReceipt();
+  const before = readLedger(f.ledgerPath).events;
+  assert.throws(() => syncLedger(f.ledgerPath, third, current),
+    /REPEATED_DEFECT_WITHOUT_REPAIR PCG-KPI/);
+  assert.deepEqual(readLedger(f.ledgerPath).events, before);
+  current.persistentRepairActions = [{ findingId: issue.id, action: "SOURCE_REPAIR",
+    sourceFile: "UI/MainForm.cs", beforeRef: "diffs/mainform-before",
+    afterRef: "diffs/mainform-after", renderResult: "REVISE" }];
+  assert.throws(() => syncLedger(f.ledgerPath, third, current),
+    /SOURCE_REPAIR_UNPROVEN/);
+  current.changeSummary = { kind: "TASK_REPAIR",
+    rationale: "Increased actual KPI panel height and safe bottom padding",
+    addressedFindingIds: [issue.id], evidenceRef: "diffs/mainform-kpi-branch.patch" };
+  assert.equal(syncLedger(f.ledgerPath, third, current).assessed, current.findings.length);
+  assert.equal(readLedger(f.ledgerPath).events.filter(e => e.type === "FOUND" && e.id === issue.id).length, 1);
+}));
+test("a real blocker permits truthful PARTIAL without inventing a source change", () => fixture(f => {
+  const issue = { id: "PCG-ACCESS", route: "/jobs", kind: "VISUAL", priority: "HIGH",
+    symptom: "The selected inspector clips its process list",
+    acceptance: "Keep at least three process rows visible with inspector open",
+    evidenceRef: "screens/selected-before.png" };
+  importFindings(f.ledgerPath, { findings: [issue] });
+  const r = () => {
+    const receipt = f.receipt();
+    receipt.findings.push({ ...issue, decision: "Recheck selected window",
+      disposition: "REGRESSED", reason: "Only two rows measured" });
+    receipt.openCarryover.push(issue.id);
+    return receipt;
+  };
+  for (const [index, runId] of ["access-1", "access-2"].entries()) {
+    const base = makeLedgerBaseline(readLedger(f.ledgerPath), { scope: ["/jobs"], runId });
+    assert.equal(syncLedger(f.ledgerPath, base, r()).assessed, 3);
+  }
+  const base = makeLedgerBaseline(readLedger(f.ledgerPath), { scope: ["/jobs"], runId: "access-3" });
+  const current = r();
+  current.persistentRepairActions = [{ findingId: issue.id, action: "BLOCKED",
+    blocker: "The target project's source is read-only in this session",
+    nextStep: "Use an authorized editable source worktree before attempting the repair" }];
+  assert.equal(syncLedger(f.ledgerPath, base, current).assessed, 3);
+}));
