@@ -47,7 +47,7 @@ test("installer preserves existing Stop, prompt, tool hooks and other config", (
     assert.match(updated.hooks[event][1].hooks[0].command, /codex-(?:stop-gate|turn-context)\.mjs/);
     assert.equal(updated.hooks[event][1].hooks[0].timeout, 15);
   }
-  assert.equal(updated.hooks.PostToolUse[1].matcher, "Bash");
+  assert.equal(updated.hooks.PostToolUse[1].matcher, "Bash|exec_command|functions\\.exec");
   assert.deepEqual(updated.hooks.SubagentStop, original.hooks.SubagentStop);
 }));
 

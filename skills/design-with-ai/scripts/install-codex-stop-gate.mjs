@@ -73,7 +73,7 @@ export function planInstall({
   config.hooks.UserPromptSubmit = updateEvent(config.hooks.UserPromptSubmit ?? [],
     markers.UserPromptSubmit, entry(contextCommand, "Recording design turn scope"));
   config.hooks.PostToolUse = updateEvent(config.hooks.PostToolUse ?? [],
-    markers.PostToolUse, entry(contextCommand, "Recording design gate calls", "Bash"));
+    markers.PostToolUse, entry(contextCommand, "Recording design gate calls", "Bash|exec_command|functions\\.exec"));
   return {
     hooksPath: destination, skillDir: root,
     changed: JSON.stringify(config) !== original,

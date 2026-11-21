@@ -22,7 +22,7 @@ node (Join-Path $skill "scripts/install-codex-stop-gate.mjs") --apply
 ```
 
 The installer adds three cooperating command handlers to `~/.codex/hooks.json`:
-`UserPromptSubmit`, `PostToolUse` (Bash matcher), and `Stop`. It preserves
+`UserPromptSubmit`, `PostToolUse` (regex matcher for `Bash`, `exec_command`, and `functions.exec`), and `Stop`. It preserves
 existing handlers and makes a timestamped backup before changes. It is dry-run by default and idempotent. It does not
 edit `config.toml`, disable other hooks or bypass Codex trust decisions.
 If you already manage the same Stop event in another active configuration
@@ -38,7 +38,13 @@ will not execute newly added unmanaged hooks until you explicitly approve them. 
 The installed hooks use Codex's documented `turn_id` fields. On
 `UserPromptSubmit`, only the modifying/explicit-skill flags are stored. On
 `PostToolUse`, recognized skill-file reads and gate-command proof paths are
-recorded. On `Stop`, the hook verifies the current turn's gate proof.
+recorded for commands exposed directly by `Bash`, `exec_command`, or
+`functions.exec`. An opaque `functions.exec` JavaScript wrapper does not
+prove which nested process ran, so the hook will not parse or trust arbitrary
+wrapper code. In that case `NO_GATE_COMMAND` is an observability limitation,
+not evidence that the gate never ran. The hook still requires a real,
+current proof and must not infer success from a command string.
+On `Stop`, the hook verifies the current turn's gate proof.
 
 This **does not depend on `transcript_path`**: Codex documents that field as
 nullable and warns that transcript JSONL is not a stable hook interface.

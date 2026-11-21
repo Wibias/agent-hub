@@ -30,9 +30,15 @@ export function classifyPrompt(prompt) {
   };
 }
 function commandText(payload) {
-  const v = payload?.tool_input;
-  if (typeof v === "string") return v;
+  let v = payload?.tool_input;
+  if (typeof v === "string") {
+    try { v = JSON.parse(v); }
+    catch { return v; }
+  }
   if (!obj(v)) return "";
+  // Do not interpret arbitrary functions.exec JavaScript `code` as an executed
+  // shell command: the wrapper can contain comments or quoted examples.
+  // Only inspect command/cmd/script fields exposed by the host event.
   const command = v.command ?? v.cmd ?? v.script ?? "";
   if (Array.isArray(command)) {
     const first = String(command[0] ?? "");
@@ -105,8 +111,17 @@ export function recordTurnHook(event, {
       return { recorded: true, cause: "PROMPT_CONTEXT" };
     }
     const command = commandText(event);
-    if (PATH_RE.test(command)) entry = { kind: "skill" };
-    const proof = event.tool_name === "Bash" ? gateOptions(command) : null;
+    const toolName = String(event.tool_name ?? "");
+    const allowedTool = /^(?:Bash|exec_command|functions\.exec)$/i.test(toolName);
+    // Failed subprocesses must not register a successful gate candidate.
+    const response = event.tool_response;
+    const failed = obj(response) && (
+      response.is_error === true || response.ok === false || response.success === false ||
+      (Number.isInteger(response.exit_code) && response.exit_code !== 0) ||
+      (Number.isInteger(response.exitCode) && response.exitCode !== 0)
+    );
+    if (allowedTool && !failed && PATH_RE.test(command)) entry = { kind: "skill" };
+    const proof = allowedTool && !failed ? gateOptions(command) : null;
     if (proof) {
       // The runner resolves relative input paths against the process cwd.
       // Store that same absolute interpretation for the Stop-side proof check.
