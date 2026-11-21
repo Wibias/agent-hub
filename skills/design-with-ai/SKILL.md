@@ -126,6 +126,7 @@ concrete target evidence or explicit user intent:
 - charts, forecasts, funnels, KPI encodings, analytical visualizations -> `references/data-visualization.md`; use `references/design-guidance.md` only when a chart/interaction choice remains open;
 - browser/PWA UI on phones/tablets where viewport chrome, touch capability, safe areas, soft keyboard, overscroll, or mobile-browser behavior is material -> `references/mobile-web.md`;
 - browser-extension popups, toolbar popovers, embedded settings panels, or compact internal operator utilities -> `references/utility-surfaces.md`;
+- actual desktop-window system monitors, task/process tables, live resource graphs and action inspectors -> `references/desktop-monitoring-surfaces.md`, for native Windows or desktop webviews; inspect rendered geometry and real action prerequisites; do not infer this from the word "dashboard" alone;
 - actual native/mobile target (SwiftUI, Compose, React Native, Flutter, etc.) or platform-specific safe-area, text-scaling, native gesture, or system-control behavior -> `references/native-mobile.md`; query `references/design-guidance.md` only for a specific unresolved outcome;
 - React Native/Expo motion implementation/review -> `references/react-native-motion.md`; exact package/API claims remain current-source questions rather than frozen skill truth;
 - direct drag/swipe/throw/reorder/sheet manipulation -> `references/direct-manipulation.md`;
@@ -220,6 +221,7 @@ host-specific guide for ordinary cross-host design work.
 - `references/data-visualization.md`: chart and analytical visualization decisions inside product UI
 - `references/mobile-web.md`: browser/PWA-on-phone platform behavior
 - `references/utility-surfaces.md`: compact browser-extension popups and embedded utility controls
+- `references/desktop-monitoring-surfaces.md`: conditional dense desktop telemetry, table, inspector, control and action-state acceptance
 - `references/native-mobile.md`: platform-aware native/mobile UI contract
 - `references/react-native-motion.md`: conditional React Native/Expo motion engineering
 - `references/direct-manipulation.md`: drag/swipe/gesture continuity and velocity mechanics
@@ -256,6 +258,7 @@ host-specific guide for ordinary cross-host design work.
 - references/ux-copy-research-evidence.md -- when to read: actual UI copy defect or supplied user research that affects a resolved product interface
 - references/perceptual-hierarchy.md -- when to read: concrete hierarchy, grouping, figure/ground, or visual-salience question remains unresolved
 - references/data-visualization.md -- when to read: target contains charts or analytical visualizations
+- references/desktop-monitoring-surfaces.md -- when to read: resolved full desktop monitoring UI has a dense metric strip, chart, process table, inspector or consequential process actions
 - references/mobile-web.md -- when to read: browser/PWA target has material phone/tablet platform behavior
 - references/native-mobile.md -- when to read: actual native/mobile target or platform-specific native behavior
 - references/react-native-motion.md -- when to read: React Native/Expo motion build/review/optimization reasoning

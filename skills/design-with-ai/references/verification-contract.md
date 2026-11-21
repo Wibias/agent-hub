@@ -125,6 +125,18 @@ same viewport band. `REVIEW_CROSS_SURFACE` is a contextual G02 lead, not a
 mechanical failure: shared shells and related workflow families can justify
 macro similarity. Do not load or run this comparison for a single-route task.
 
+## Dense desktop monitor quality evidence (conditional)
+
+When `desktop-monitoring-surfaces.md` applies, completion evidence must
+include a matched actual window-size/DPI render, header/KPI fit, table
+readability and width allocation, list-versus-empty-inspector height use,
+scoped metric controls, and chart data freshness. Record actual interaction
+tests for no process selected and any destructive target action; a static
+screenshot alone leaves those behaviors `NOT_VERIFIED`. Keep genuine telemetry
+and functional controls even when a generic anti-slop heuristic dislikes
+repeated numeric groups. If essential controls are clipped or the list is
+unnecessarily squeezed by an inert pane, mark `REVISE` rather than `COMPLETE`.
+
 ## Conditional approved-design identity gate
 
 When a deep-design workflow uses `design-decision-lineage.md`, verify that

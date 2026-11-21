@@ -108,6 +108,14 @@ viewport and state before adding decorative polish:
    scanning. Replace unearned equal-weight boxes with task-appropriate rows,
    sections, tables, or open layout; do not ban cards or force asymmetry.
 
+For a dense full-window system/process monitor, additionally load
+`desktop-monitoring-surfaces.md`. Compare the actual titlebar/KPI/chart/table/
+inspector/action/footer **height and width budget**, not isolated component
+polish. Protect legible table headings and available process rows before
+expanding the empty inspector; distinguish chart-scope tabs from table-scope
+tabs and inspect the no-selection/destructive-action state. Screenshots can
+suggest interaction risk but cannot verify that a control can execute.
+
 A failure in task clarity, truth, or legibility must be revised before Craft.
 If correcting it changes locked purpose or IA, route through the workflow's
 authority/redesign rules rather than silently changing the product model.
