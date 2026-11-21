@@ -62,3 +62,13 @@ test("compact KPI supporting text must clear the section divider, including scal
   }
   assert.match(verification, /KPI supporting-text bottom clearance/);
 });
+
+test("Gitless native root is detected without user prompting and visual anomalies remain durable findings", () => {
+  assert.match(contract, /automatically discovers/);
+  assert.match(contract, /sourceRootMode: AUTO_NATIVE/);
+  assert.match(contract, /renderInspection\.findingRefs/);
+  assert.match(contract, /findings-ledger\.mjs sync/);
+  assert.match(verification, /automatically selects/);
+  assert.match(verification, /newly observed/);
+  assert.match(skill, /verification, append newly discovered defects/);
+});

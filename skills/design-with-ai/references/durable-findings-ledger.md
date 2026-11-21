@@ -51,6 +51,10 @@ safe; conflicting ID meanings are rejected, not silently rewritten.
    A unique run ID identifies this frozen baseline. Do not overwrite it.
 4. Implement and verify. The receipt must include all baseline IDs and all
    new issues; mark requiresPriorBaseline and requiresFindingsLedger true.
+   New defects observed in the **final render or a verification-only turn**
+   remain mandatory findings. Preserve the frozen baseline; append the
+   new finding to the current receipt and use the existing sync to persist
+   it as FOUND plus REVIEWED rather than rebuilding history.
    Preserve genuine blockers as PARTIAL or NOT_VERIFIED.
 5. Persist verdicts for the current run BEFORE making the gate proof:
 
