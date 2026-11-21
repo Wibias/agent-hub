@@ -78,8 +78,8 @@ Report the following as observed, failed, or unverified:
 
 For a full desktop monitor with charts, a process table, and an inspector,
 run `desktop-monitoring-surfaces.md` before Craft. An agent must not mark
-`COMPLETE` without a final-version native render manifest and matching
-source/screenshots; missing or stale focus/stalled/selected-state evidence
+`COMPLETE` without a final-version native **multi-viewport** (compact, medium,
+maximized, scaled-DPI) render manifest and matching source/screenshots; missing or stale focus/stalled/selected-state evidence
 is not a finished visual review. Inspect matched actual
 window geometry, KPI supporting-line clipping, table column width vs header
 legibility, competing empty panels, distinct tab scopes, and action-state

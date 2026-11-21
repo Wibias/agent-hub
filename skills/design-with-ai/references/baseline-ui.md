@@ -112,7 +112,8 @@ For a dense full-window system/process monitor, additionally load
 `desktop-monitoring-surfaces.md`. Compare the actual titlebar/KPI/chart/table/
 inspector/action/footer **height and width budget**, not isolated component
 polish. Protect legible table headings and available process rows before
-expanding the empty inspector; distinguish chart-scope tabs from table-scope
+expanding the empty inspector; review compact, medium and maximized window
+sizes with the same interaction/data state, not only the best-looking size; distinguish chart-scope tabs from table-scope
 tabs and inspect the no-selection/destructive-action state. Screenshots can
 suggest interaction risk but cannot verify that a control can execute.
 

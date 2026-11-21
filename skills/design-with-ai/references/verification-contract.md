@@ -138,8 +138,11 @@ being modified, the iteration receipt MUST name `surfaceKind:
 "DENSE_DESKTOP_MONITOR"`; `COMPLETE` requires the additional
 `--render-evidence` artifact. Its measured geometry, screenshot bytes
 and actual source SHA-256 are checked by
-`scripts/desktop-render-evidence.mjs` and
-`run-iteration-gate.mjs`. Source `.cs`, `.csproj`, `.resx` and
+`scripts/desktop-render-evidence.mjs`, `desktop-viewport-matrix.mjs` and
+`run-iteration-gate.mjs`. The version-2 desktop manifest requires COMPACT,
+MEDIUM, MAXIMIZED and a different-DPI SCALED profile, with the required
+idle, selected, focus and collecting states at ordinary widths. A legacy
+single-window manifest cannot certify COMPLETE. Source `.cs`, `.csproj`, `.resx` and
 `.xaml` edits invalidate earlier proofs. This cannot attest the image
 origin, so real rendered inspection is still required.
 

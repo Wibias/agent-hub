@@ -5,6 +5,7 @@ import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
+import { deflateSync } from "node:zlib";
 import {
   validateDesktopRenderEvidence, snapshotDesktopCaptureFiles,
 } from "../scripts/desktop-render-evidence.mjs";
@@ -43,6 +44,78 @@ function manifest(source = "a".repeat(64)) {
     reviewedFindingIds: ["UX-TABLE"],
   };
 }
+
+// v2 fixtures are synthetic, valid PNG byte streams with the declared
+// physical dimensions. They are NEVER evidence of a real PCGuardian render.
+function makePng(width, height) {
+  const sig = Buffer.from([137,80,78,71,13,10,26,10]);
+  const crcTable = Array.from({ length: 256 }, (_, i) => {
+    let c = i;
+    for (let k = 0; k < 8; k++) c = (c & 1) ? (0xedb88320 ^ (c >>> 1)) : (c >>> 1);
+    return c >>> 0;
+  });
+  const chunk = (type, data) => {
+    const t = Buffer.from(type, "ascii");
+    const n = Buffer.alloc(4); n.writeUInt32BE(data.length);
+    let crc = 0xffffffff;
+    for (const b of Buffer.concat([t, data])) crc = crcTable[(crc ^ b) & 255] ^ (crc >>> 8);
+    const checksum = Buffer.alloc(4); checksum.writeUInt32BE((crc ^ 0xffffffff) >>> 0);
+    return Buffer.concat([n, t, data, checksum]);
+  };
+  const header = Buffer.alloc(13);
+  header.writeUInt32BE(width, 0); header.writeUInt32BE(height, 4);
+  header[8] = 8; header[9] = 6; // RGBA 8-bit
+  const scanlines = Buffer.alloc((width * 4 + 1) * height);
+  return Buffer.concat([
+    sig, chunk("IHDR", header), chunk("IDAT", deflateSync(scanlines, { level: 9 })),
+    chunk("IEND", Buffer.alloc(0)),
+  ]);
+}
+function matrixManifest(source = "a".repeat(64)) {
+  const viewports = [
+    { id: "COMPACT", mode: "WINDOWED", width: 1166, height: 791, dpiPercent: 100 },
+    { id: "MEDIUM", mode: "WINDOWED", width: 1440, height: 900, dpiPercent: 100 },
+    { id: "MAXIMIZED", mode: "MAXIMIZED", width: 1919, height: 1033, dpiPercent: 100 },
+    { id: "SCALED", mode: "WINDOWED", width: 1440, height: 900, dpiPercent: 150 },
+  ];
+  const variants = [
+    ...["IDLE", "SELECTED", "FOCUS", "COLLECTING", "STALLED"].map(s => ["COMPACT", s]),
+    ...["IDLE", "SELECTED", "FOCUS", "COLLECTING"].map(s => ["MEDIUM", s]),
+    ...["IDLE", "SELECTED", "FOCUS", "COLLECTING"].map(s => ["MAXIMIZED", s]),
+    ...["IDLE", "FOCUS"].map(s => ["SCALED", s]),
+  ];
+  const captures = variants.map(([id, state]) => {
+    const v = viewports.find(v => v.id === id), c = baseCapture(state);
+    c.viewportId = id;
+    c.viewport = { width: v.width, height: v.height, dpiPercent: v.dpiPercent };
+    c.image = id === "COMPACT" ? state.toLowerCase() + ".png"
+      : (id + "-" + state).toLowerCase() + ".png";
+    const listHeight = Math.min(260, v.height - 565);
+    const inspectorY = 350 + listHeight + 6;
+    const inspectorHeight = Math.min(175, v.height - inspectorY - 45);
+    c.processTable = { rect: [0, 350, v.width, listHeight],
+      visibleRows: Math.floor((listHeight - 24) / 24), totalRows: 50 };
+    c.inspector = { rect: [0, inspectorY, v.width, inspectorHeight], empty: state === "IDLE" };
+    c.chartPanels = [{ id: "system-chart", role: "SYSTEM", rect: [18, 184, v.width - 36, 96] }];
+    if (state === "SELECTED") c.chartPanels.push({
+      id: "detail-chart", role: "DETAIL", rect:
+        [Math.round(v.width * 0.52), inspectorY + 12, Math.round(v.width * 0.4), 84],
+    });
+    if (state === "COLLECTING") c.chart = {
+      sampleCount: 1, collectionIntervalSec: 60,
+      historyLabelSec: 0, missingAsZero: false,
+    };
+    c.renderInspection = {
+      method: "SCREENSHOT_REVIEW", evidenceRef: "review:" + c.image,
+      duplicateCharts: false, unexpectedHeaderFill: false,
+      clippedSupportingText: false, unproductiveBlankSpace: false,
+    };
+    return c;
+  });
+  return { ...manifest(source), schemaVersion: 2, viewports, captures,
+    findingViewportReviews: [] };
+}
+
 function receipt() {
   return {
     schemaVersion: 1, surfaceKind: "DENSE_DESKTOP_MONITOR",
@@ -69,8 +142,15 @@ function fixture(fn) {
   const candidate = snapshotProjectSource(repo);
   assert.ok(candidate?.sha256);
   assert.ok(candidate.fileCount >= 1, "C# source must participate in the fingerprint");
-  const m = manifest(snapshotRootedSource(repo).sha256);
-  for (const c of m.captures) writeFileSync(join(root, c.image), png);
+  const m = matrixManifest(snapshotRootedSource(repo).sha256);
+  const pngCache = new Map();
+  for (const c of m.captures) {
+    const id = c.viewport.width + "x" + c.viewport.height;
+    if (!pngCache.has(id)) pngCache.set(id, makePng(c.viewport.width, c.viewport.height));
+    const bytes = pngCache.get(id);
+    c.imageSha256 = sha(bytes);
+    writeFileSync(join(root, c.image), bytes);
+  }
   const manifestPath = join(root, "desktop-render.json");
   const receiptPath = join(root, "receipt.json");
   const proof = join(root, "proof.json");
@@ -86,8 +166,14 @@ function allProblems(data, receiptData = receipt()) {
   return validateDesktopRenderEvidence(data, receiptData).problems.join("; ");
 }
 
-test("complete matched PCGuardian evidence is structurally accepted, without asserting screenshot authenticity", () => {
-  assert.deepEqual(validateDesktopRenderEvidence(manifest(), receipt()).problems, []);
+test("legacy single-window capture cannot certify COMPLETE, but remains valid PARTIAL evidence", () => {
+  assert.match(allProblems(manifest()), /MULTI_VIEWPORT_REQUIRED/);
+  assert.equal(validateDesktopRenderEvidence(manifest(), {
+    ...receipt(), iterationVerdict: "PARTIAL",
+  }).valid, true);
+});
+test("complete matrix evidence is structurally accepted without asserting screenshot authenticity", () => {
+  assert.deepEqual(validateDesktopRenderEvidence(matrixManifest(), receipt()).problems, []);
 });
 test("measured truncated KPI or table header text prevents a complete verdict", () => {
   const a = manifest();
@@ -132,7 +218,7 @@ test("documented inapplicable stalled state is allowed, but action check remains
   const a = manifest();
   a.captures = a.captures.filter(x => x.state !== "STALLED");
   a.stateExclusions = [{ state: "STALLED", reason: "Target has no stalled state" }];
-  assert.equal(validateDesktopRenderEvidence(a, receipt()).valid, true);
+  assert.equal(validateDesktopRenderEvidence(a, { ...receipt(), iterationVerdict: "PARTIAL" }).valid, true);
   a.checks = a.checks.filter(x => x.id !== "NO_SELECTION_ACTION");
   assert.match(allProblems(a), /Missing runtime check NO_SELECTION_ACTION/);
 });
@@ -150,7 +236,7 @@ test("a native desktop receipt cannot claim COMPLETE without final evidence", ()
 });
 test("real screenshot bytes are bound, path traversal is refused and later edits are detected", () => fixture(f => {
   assert.equal(snapshotDesktopCaptureFiles(f.manifestPath).valid, true);
-  writeFileSync(join(f.root, "idle.png"), Buffer.from(png).fill(0x41, 35, 36));
+  writeFileSync(join(f.root, "idle.png"), Buffer.from(readFileSync(join(f.root, "idle.png"))).fill(0x41, 35, 36));
   assert.match(snapshotDesktopCaptureFiles(f.manifestPath).problems.join("; "), /hash mismatch/);
   f.m.captures[0].image = "../private.png";
   f.save();
@@ -174,7 +260,7 @@ test("last-minute screenshot change invalidates the old proof even without code 
   const options = { receipt: f.receiptPath, renderEvidence: f.manifestPath,
     sourceRoot: f.repo, proof: f.proof, workspaceCwd: f.root };
   assert.equal(runGate(options).exitCode, 0);
-  writeFileSync(join(f.root, "selected.png"), Buffer.from(png).fill(0x42, 35, 36));
+  writeFileSync(join(f.root, "selected.png"), Buffer.from(readFileSync(join(f.root, "selected.png"))).fill(0x42, 35, 36));
   const stale = checkProof({ ...options, checkProof: f.proof });
   assert.equal(stale.valid, false);
   assert.ok(stale.issueCodes.includes("RENDER_ARTIFACT_CHANGED"));
@@ -215,3 +301,79 @@ test("a different source-root path invalidates proof replay", () => fixture(f =>
   assert.equal(replay.valid, false);
   assert.ok(replay.issueCodes.includes("PATH_MISMATCH"));
 }));
+
+test("maximized screenshot cannot hide two SYSTEM chart panels", () => {
+  const m = matrixManifest();
+  const big = m.captures.find(c => c.viewportId === "MAXIMIZED" && c.state === "IDLE");
+  big.chartPanels.push({ id: "system-chart-duplicate", role: "SYSTEM",
+    rect: [big.viewport.width / 2, 184, big.viewport.width / 2 - 20, 96] });
+  assert.match(allProblems(m), /DUPLICATE_CHART_ROLE MAXIMIZED:IDLE SYSTEM/);
+});
+test("white or unexpected header fill in maximized mode blocks visual acceptance", () => {
+  const m = matrixManifest();
+  m.captures.find(c => c.viewportId === "MAXIMIZED" && c.state === "IDLE")
+    .renderInspection.unexpectedHeaderFill = true;
+  assert.match(allProblems(m), /RENDER_ANOMALY MAXIMIZED:IDLE unexpectedHeaderFill/);
+});
+test("compact selected table with two visible rows blocks acceptance even if medium and maximized fit", () => {
+  const m = matrixManifest();
+  m.captures.find(c => c.viewportId === "COMPACT" && c.state === "SELECTED")
+    .processTable.visibleRows = 2;
+  assert.match(allProblems(m), /TABLE_CRAMPED COMPACT:SELECTED/);
+});
+test("each size must include idle, selection, focus and collection state", () => {
+  const m = matrixManifest();
+  m.captures = m.captures.filter(c => !(c.viewportId === "MEDIUM" && c.state === "FOCUS"));
+  assert.match(allProblems(m), /MISSING_VIEWPORT_STATE MEDIUM:FOCUS/);
+  const n = matrixManifest();
+  n.captures = n.captures.filter(c => !(c.viewportId === "MAXIMIZED" && c.state === "COLLECTING"));
+  assert.match(allProblems(n), /MISSING_VIEWPORT_STATE MAXIMIZED:COLLECTING/);
+});
+test("DPI comparison is a distinct real scaling profile, not the same 100 percent screenshot", () => {
+  const m = matrixManifest();
+  m.viewports.find(v => v.id === "SCALED").dpiPercent = 100;
+  for (const c of m.captures.filter(c => c.viewportId === "SCALED")) c.viewport.dpiPercent = 100;
+  assert.match(allProblems(m), /SCALED viewport must use a different Windows DPI/);
+});
+test("viewport metadata cannot relabel compact screenshot as maximized", () => {
+  const m = matrixManifest();
+  m.captures.find(c => c.viewportId === "MAXIMIZED" && c.state === "SELECTED")
+    .viewport.width = 1166;
+  assert.match(allProblems(m), /VIEWPORT_SIZE_MISMATCH MAXIMIZED/);
+});
+test("a resolved finding requires matching rendered evidence at every normal window size", () => {
+  const r = receipt();
+  r.findings[0].disposition = "RESOLVED";
+  const m = matrixManifest();
+  m.findingViewportReviews = [{ findingId: "UX-TABLE", viewportId: "COMPACT",
+    status: "RESOLVED", evidenceRef: "render:compact-after" }];
+  assert.match(allProblems(m, r), /FINDING_NOT_RESOLVED_AT_VIEWPORT UX-TABLE:MEDIUM/);
+  assert.match(allProblems(m, r), /FINDING_NOT_RESOLVED_AT_VIEWPORT UX-TABLE:MAXIMIZED/);
+  m.findingViewportReviews.push(
+    { findingId: "UX-TABLE", viewportId: "MEDIUM", status: "RESOLVED", evidenceRef: "render:medium-after" },
+    { findingId: "UX-TABLE", viewportId: "MAXIMIZED", status: "RESOLVED", evidenceRef: "render:max-after" },
+  );
+  assert.equal(validateDesktopRenderEvidence(m, r).valid, true);
+});
+test("missing measured chart geometry or visual review prevents Complete", () => {
+  const m = matrixManifest();
+  delete m.captures[0].chartPanels;
+  delete m.captures[1].renderInspection;
+  assert.match(allProblems(m), /chartPanels geometry required/);
+  assert.match(allProblems(m), /real renderInspection evidence required/);
+});
+test("a mismatched screenshot pixel size is rejected even with valid sha256", () => fixture(f => {
+  const capture = f.m.captures.find(x => x.viewportId === "MAXIMIZED" && x.state === "IDLE");
+  const pngBytes = makePng(1166, 791);
+  writeFileSync(join(f.root, capture.image), pngBytes);
+  capture.imageSha256 = sha(pngBytes);
+  f.save();
+  assert.match(snapshotDesktopCaptureFiles(f.manifestPath).problems.join("; "),
+    /VIEWPORT_IMAGE_DIMENSION_MISMATCH/);
+}));
+test("an expanded inspector cannot overlap the process list", () => {
+  const m = matrixManifest();
+  const selected = m.captures.find(c => c.viewportId === "COMPACT" && c.state === "SELECTED");
+  selected.chartPanels.find(c => c.role === "DETAIL").rect = selected.processTable.rect;
+  assert.match(allProblems(m), /chart panel overlaps process table/);
+});
