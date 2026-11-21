@@ -26,7 +26,6 @@ Generated from `agent-runtime/host-capabilities.json` and `agent-runtime/skill-r
 | design-with-ai | high | inherit | inherit |
 | diagnose | high | prefer | inherit |
 | improve-codebase-architecture | high | prefer | inherit |
-| security-review | high | prefer | read-only |
 | source-driven-development | medium | inherit | inherit |
 | writing-ticks | low | inherit | inherit |
 
