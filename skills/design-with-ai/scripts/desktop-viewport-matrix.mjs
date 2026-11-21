@@ -153,7 +153,25 @@ export function validateDesktopViewportMatrix(manifest, receipt = null) {
         if (typeof inspection[flag] !== "boolean") {
           fail(label + ": missing inspected issue flag " + flag);
         } else if (inspection[flag] === true) {
-          fail("RENDER_ANOMALY " + key + " " + flag);
+          if (receipt?.iterationVerdict === "COMPLETE") {
+            fail("RENDER_ANOMALY " + key + " " + flag);
+          }
+          // Observed defects must become durable findings, even during a
+          // verification-only run. The agent creates the receipt entry; the
+          // established ledger sync appends FOUND and REVIEWED atomically.
+          const id = inspection.findingRefs?.[flag];
+          const finding = Array.isArray(receipt?.findings)
+            ? receipt.findings.find(x => x?.id === id) : null;
+          if (!filled(id) || !finding || !filled(finding.route) ||
+              !filled(finding.symptom) || !filled(finding.acceptance) ||
+              !filled(finding.evidenceRef) ||
+              !["PERSISTS", "IMPROVED_BUT_OPEN", "REGRESSED", "UNVERIFIED", "DEFERRED"].includes(finding.disposition)) {
+            fail("UNTRACKED_RENDER_FINDING " + key + " " + flag +
+              ": add a stable OPEN finding to receipt and canonical ledger");
+          } else if (!Array.isArray(manifest.reviewedFindingIds) ||
+                     !manifest.reviewedFindingIds.includes(id)) {
+            fail("UNREVIEWED_RENDER_FINDING " + key + " " + flag + " " + id);
+          }
         }
       }
     }
@@ -203,6 +221,21 @@ export function validateDesktopViewportMatrix(manifest, receipt = null) {
     seenReviews.add(id);
     if (r.status === "NOT_APPLICABLE" && !filled(r.reason)) {
       fail("findingViewportReviews[" + i + "]: NOT_APPLICABLE requires a reason");
+    }
+  }
+  // A real anomaly cannot be marked "RESOLVED" at its observed viewport.
+  // Cross-size findings remain in the same existing ledger and receipt.
+  for (const c of captures) {
+    const observed = c?.renderInspection;
+    if (!object(observed)) continue;
+    for (const flag of ISSUE_FLAGS) {
+      if (observed[flag] !== true) continue;
+      const id = observed.findingRefs?.[flag];
+      if (!filled(id)) continue; // already reported as untracked above
+      const review = reviews.find(r => r?.findingId === id && r?.viewportId === c.viewportId);
+      if (!review || !["PERSISTS", "IMPROVED_BUT_OPEN", "NOT_VERIFIED"].includes(review.status)) {
+        fail("UNRECONCILED_RENDER_FINDING " + id + ":" + c.viewportId + " " + flag);
+      }
     }
   }
   for (const f of resolved) for (const viewportId of ["COMPACT", "MEDIUM", "MAXIMIZED"]) {

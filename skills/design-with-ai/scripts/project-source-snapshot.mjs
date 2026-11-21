@@ -5,7 +5,7 @@
 import { createHash } from "node:crypto";
 import { lstatSync, readFileSync, readlinkSync, readdirSync } from "node:fs";
 import { spawnSync } from "node:child_process";
-import { basename, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const MAX_FILES = 12000;
@@ -174,6 +174,41 @@ export function snapshotRootedSource(sourceRoot, { ignorePaths = [] } = {}) {
   }
   if (count === 0) throw new Error("Source root contains no eligible project source files");
   return { schemaVersion: 1, sourceMode: "ROOTED_DIRECTORY", sha256: digest.digest("hex"), fileCount: count };
+}
+
+/**
+ * Automatic but strictly anchored source-root detection for Gitless native
+ * monitors. We accept only a project-local .design-with-ai artifact directory
+ * and a real C# project marker at the inferred root. Never walk upward into
+ * unrelated workspaces or silently forgive broken Git metadata.
+ */
+export function discoverNativeSourceRoot({ receipt = null, ledger = null } = {}) {
+  const paths = [receipt, ledger].filter(x => typeof x === "string" && x.trim());
+  if (!paths.length) return null;
+  let root = null;
+  for (const name of paths) {
+    const full = resolve(name);
+    const parent = dirname(full);
+    if (basename(parent).toLowerCase() !== ".design-with-ai") return null;
+    const next = dirname(parent);
+    if (root !== null && (process.platform === "win32" ?
+        next.toLowerCase() !== root.toLowerCase() : next !== root)) {
+      throw new Error("Receipt and ledger belong to different product roots");
+    }
+    root = next;
+  }
+  if (ledger !== null && resolve(ledger) !== resolve(root, ".design-with-ai", "findings-ledger.json")) {
+    throw new Error("Cannot infer product root from a noncanonical findings ledger");
+  }
+  let entries;
+  try {
+    const st = lstatSync(root);
+    if (!st.isDirectory() || st.isSymbolicLink()) return null;
+    entries = readdirSync(root, { withFileTypes: true });
+  } catch { return null; }
+  // Require a concrete product marker, not just a folder named MemoryGuardian.
+  if (!entries.some(x => x.isFile() && /\.csproj$/i.test(x.name))) return null;
+  return root;
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

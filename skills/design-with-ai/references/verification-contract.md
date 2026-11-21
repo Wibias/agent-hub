@@ -128,9 +128,11 @@ macro similarity. Do not load or run this comparison for a single-route task.
 ## Dense desktop monitor quality evidence (conditional)
 
 The full-window desktop monitor now has a concrete conditional
-`DENSE_DESKTOP_MONITOR` render-evidence contract. For `COMPLETE`, explicitly
-pass `--source-root` as the actual target project directory. A Gitless C#
-project can be fingerprinted without altering an invalid ancestor `.git`.
+`DENSE_DESKTOP_MONITOR` render-evidence contract. For `COMPLETE`, bind the actual source root. With a canonical
+project-local receipt and ledger in `.design-with-ai` plus a root-level
+`.csproj`, the gate automatically selects the native source even without
+`--source-root`. Explicit `--source-root` remains available for
+nonstandard layouts; a broken ancestor `.git` is never altered.
 Proof verification reports `sourceBound` separately from validity, so a
 structurally valid `PARTIAL` with `projectSource: null` is visibly **not**
 a source-freshness certification. When that surface is
@@ -142,7 +144,10 @@ and actual source SHA-256 are checked by
 `run-iteration-gate.mjs`. The version-2 desktop manifest requires COMPACT,
 MEDIUM, MAXIMIZED and a different-DPI SCALED profile, with the required
 idle, selected, focus and collecting states at ordinary widths. A legacy
-single-window manifest cannot certify COMPLETE. Source `.cs`, `.csproj`, `.resx` and
+single-window manifest cannot certify COMPLETE. Positive, newly observed
+visual anomalies require `renderInspection.findingRefs` to stable open
+findings in the same durable ledger and final receipt, even if the turn
+only verifies earlier work. Source `.cs`, `.csproj`, `.resx` and
 `.xaml` edits invalidate earlier proofs. This cannot attest the image
 origin, so real rendered inspection is still required.
 

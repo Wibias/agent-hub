@@ -90,6 +90,22 @@ window's coordinate system**, not inferred CSS units. Do not fabricate
 rectangles when Windows accessibility/UI-tree or actual render measurement
 is unavailable: record `NOT_VERIFIED` and retain `PARTIAL`.
 
+**Verification-only iterations must record newly observed issues too.**
+After every real render, check the same layout states for anomalies such
+as an unexpected white table-header rectangle, duplicated graphs,
+clipped text or a misleading empty state. A positive
+`renderInspection.unexpectedHeaderFill` or another anomaly flag
+must have a `renderInspection.findingRefs.<flag>` pointing to a
+stable open finding in the **current receipt** with route, priority,
+symptom, acceptance and real screenshot reference. Record the
+corresponding open `findingViewportReviews[]` status.
+The existing `findings-ledger.mjs sync` writes the new immutable
+FOUND and REVIEWED events into the **same** ledger. Do not reset the
+frozen pre-edit baseline just because a defect was discovered later.
+A positive anomaly without a matching open finding blocks the gate.
+If a white rectangle could be a scrollbar rather than a broken
+header, keep the underlying cause uncertain in the finding.
+
 For any finding declared `RESOLVED`, record `findingViewportReviews[]`
 for `COMPACT`, `MEDIUM`, and `MAXIMIZED` with matching final evidence.
 A finding resolved at 1919 px is not resolved at 1161 px by implication.
@@ -119,20 +135,29 @@ aesthetic rule or an instruction to remove useful process details.
 
 Native projects without Git can still produce a bounded source fingerprint.
 Use the actual native project folder, not a separate scratch working directory.
-The explicit rooted mode does not need to repair or delete an unrelated
-ancestor `.git` folder. It hashes eligible source files and omits known
-build output; the root must contain real source, not just generated files.
+The gate **automatically discovers** a Gitless C# source root when the
+receipt and canonical findings-ledger are under the same product-local
+`.design-with-ai` directory and the product root contains a real
+`.csproj`. It never searches upward by guessing the product name or
+modifies a broken ancestor `.git`. This is bounded source hashing, not
+runtime/screenshot authentication. The proof records
+`sourceRootMode: AUTO_NATIVE` and its source hash; `--check-proof`
+independently rechecks the same source. Missing identity stays PARTIAL
+unless the required evidence can be established. `--source-root`
+remains an explicit fallback for nonstandard layouts.
 
-Run the read-only source snapshot with `--source-root` to obtain the hash:
+For an optional independent source-only inspection, the explicit flag remains available:
 
 ```powershell
 node "$HOME/.agents/skills/design-with-ai/scripts/project-source-snapshot.mjs" --source-root "<PCGuardian-project-dir>"
 ```
 
-Then run the existing iteration proof with its normal `--receipt`,
-`--baseline` and `--ledger` flags plus `--source-root <PCGuardian-project-dir>`
-and `--render-evidence <final-render.json>`. Repeat both extra flags with
-`--check-proof`. The gate checks the real screenshot file bytes,
+Run the normal iteration proof with `--receipt`, `--baseline`,
+`--ledger` and `--render-evidence <final-render.json>`; automatic root
+detection uses those project-local artifacts and a real C# project marker.
+Repeat the same flags with `--check-proof`. Do not ask the user for a
+longer prompt or manual `--source-root` when the source is discoverable.
+For a noncanonical layout, add an explicit `--source-root` instead. The gate checks the real screenshot file bytes,
 manifest source identity and current C#/WinForms source. **After any final
 UI edit or screenshot update, take fresh captures and create a new proof.**
 An old screenshot cannot certify the latest source, and a screenshot that

@@ -10,6 +10,7 @@ import { fileURLToPath } from "node:url";
 import { checkProof } from "./run-iteration-gate.mjs";
 import { appendStopDiagnostic } from "./stop-diagnostic-journal.mjs";
 import { isGitProject, discoverProjectLedger } from "./findings-ledger.mjs";
+import { discoverNativeSourceRoot } from "./project-source-snapshot.mjs";
 import { readTurnContext } from "./codex-turn-context.mjs";
 
 const SKILL_PATH = /(?:^|[\\/])design-with-ai[\\/]SKILL\.md/i;
@@ -124,7 +125,8 @@ export function decideStop(event, report, { home = homedir() } = {}) {
   const cwd = resolve(event.cwd);
   let proofStatus = report.gateCommands.length ? "NO_VALID_PROOF" : "NO_GATE_COMMAND";
   for (const options of [...report.gateCommands].reverse()) {
-    const sourceRoot = options["source-root"] ?? null;
+    const sourceRoot = options["source-root"] ??
+      discoverNativeSourceRoot({ receipt: options.receipt, ledger: options.ledger });
     const canonicalLedger = discoverProjectLedger(sourceRoot ?? cwd);
     const needsLedger = sourceRoot !== null || isGitProject(cwd);
     if (needsLedger && (!options.ledger ||
@@ -204,6 +206,8 @@ export function decideStop(event, report, { home = homedir() } = {}) {
       "Before finishing, write the iteration receipt and independent pre-edit baseline (if applicable), " +
       "initialize or locate the canonical .design-with-ai/findings-ledger.json in this project, import available earlier findings, then freeze a pre-edit snapshot. " +
       "Reconcile all old in-scope findings against the current receipt. " +
+      "For a native desktop project, infer the source root from the canonical project-local ledger and C# project marker; keep the ancestor .git untouched. " +
+      "Any newly observed visual anomaly requires a stable open finding in the receipt and durable ledger, including in verification-only passes. " +
       "Run scripts/run-iteration-gate.mjs with --receipt, --baseline, --ledger, and a new --proof path. " +
       "Check the proof with --check-proof, inspect issueCodes, and report the actual exit code. " +
       "If UI source, receipt, baseline or ledger changed after that proof, rerun the gate with a NEW proof path after the final edit. " +

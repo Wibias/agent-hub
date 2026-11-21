@@ -79,7 +79,9 @@ For `audit-surface`, `improve-existing`, `restyle-existing`,
 5. load the workflow-specific taste/quality references;
 6. for existing-UI modifying work, load `references/durable-findings-ledger.md`
    BEFORE editing, inspect or initialize the project-owned findings ledger,
-   import any available old findings and freeze its snapshot;
+   import any available old findings and freeze its snapshot; during
+   verification, append newly discovered defects to the existing ledger
+   rather than replacing the frozen baseline;
 7. for modifying work, load `references/verification-contract.md` before
    completion.
 

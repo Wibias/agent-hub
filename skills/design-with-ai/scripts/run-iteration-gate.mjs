@@ -7,7 +7,7 @@ import { dirname, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { discoverProjectLedger } from "./findings-ledger.mjs";
-import { snapshotProjectSource, snapshotRootedSource } from "./project-source-snapshot.mjs";
+import { snapshotProjectSource, snapshotRootedSource, discoverNativeSourceRoot } from "./project-source-snapshot.mjs";
 import { snapshotDesktopCaptureFiles } from "./desktop-render-evidence.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -48,7 +48,11 @@ function inputHash(path) {
 
 export function runGate({ receipt, baseline = null, ledger = null, renderEvidence = null, sourceRoot = null, proof, workspaceCwd = process.cwd() }) {
   if (!populated(proof)) throw new Error("--proof output path is required");
-  const discovered = discoverProjectLedger(sourceRoot ?? workspaceCwd);
+  const receiptData = JSON.parse(readFileSync(resolve(receipt), "utf8"));
+  const autoRoot = sourceRoot === null && receiptData?.surfaceKind === "DENSE_DESKTOP_MONITOR"
+    ? discoverNativeSourceRoot({ receipt, ledger }) : null;
+  const effectiveRoot = sourceRoot !== null ? resolve(sourceRoot) : autoRoot;
+  const discovered = discoverProjectLedger(effectiveRoot ?? workspaceCwd);
   if (discovered && ledger === null) throw new Error("Project findings ledger exists; pass --ledger for durable coverage");
   if (discovered && ledger !== null && resolve(discovered) !== resolve(ledger)) {
     throw new Error("--ledger must select the canonical project findings ledger");
@@ -58,10 +62,9 @@ export function runGate({ receipt, baseline = null, ledger = null, renderEvidenc
   const protectedPaths = [receipt, baseline, ledger, renderEvidence, validator, ledgerValidator].filter(Boolean).map((item) => resolve(item));
   if (protectedPaths.includes(outputPath)) throw new Error("Proof output must not overwrite the receipt, baseline, or validator");
   if (existsSync(outputPath)) throw new Error("Proof file already exists; use a fresh path per execution");
-  const receiptData = JSON.parse(readFileSync(resolve(receipt), "utf8"));
   if (receiptData?.surfaceKind === "DENSE_DESKTOP_MONITOR" &&
-      receiptData?.iterationVerdict === "COMPLETE" && sourceRoot === null) {
-    throw new Error("Desktop COMPLETE requires explicit --source-root; an unrelated working directory cannot certify native UI source");
+      receiptData?.iterationVerdict === "COMPLETE" && effectiveRoot === null) {
+    throw new Error("Desktop COMPLETE requires a trustworthy project source root (automatic .csproj detection or --source-root)");
   }
   const receiptInput = inputHash(resolve(receipt));
   const baselineInput = inputHash(baseline === null ? null : resolve(baseline));
@@ -72,9 +75,9 @@ export function runGate({ receipt, baseline = null, ledger = null, renderEvidenc
   const desktopValidatorInput = inputHash(renderEvidenceInput ? resolve(here, "desktop-render-evidence.mjs") : null);
   const snapshotScriptInput = inputHash(resolve(here, "project-source-snapshot.mjs"));
   const ignored = [receipt, baseline, ledger, renderEvidence, proof].filter(Boolean);
-  const projectSource = sourceRoot === null
+  const projectSource = effectiveRoot === null
     ? snapshotProjectSource(workspaceCwd, { ignorePaths: ignored })
-    : snapshotRootedSource(sourceRoot, { ignorePaths: ignored });
+    : snapshotRootedSource(effectiveRoot, { ignorePaths: ignored });
   let renderScreens = null;
   if (renderEvidenceInput) {
     const evidence = JSON.parse(readFileSync(renderEvidenceInput.path, "utf8"));
@@ -95,9 +98,9 @@ export function runGate({ receipt, baseline = null, ledger = null, renderEvidenc
   let result = null;
   try { result = JSON.parse(child.stdout); } catch { /* CLI failure may not return JSON */ }
   const exitCode = Number.isInteger(child.status) ? child.status : 2;
-  const sourceAfterValidation = sourceRoot === null
+  const sourceAfterValidation = effectiveRoot === null
     ? snapshotProjectSource(workspaceCwd, { ignorePaths: ignored })
-    : snapshotRootedSource(sourceRoot, { ignorePaths: ignored });
+    : snapshotRootedSource(effectiveRoot, { ignorePaths: ignored });
   if (projectSource?.sha256 !== sourceAfterValidation?.sha256) {
     throw new Error("Project sources changed during gate execution; rerun after edits stop");
   }
@@ -115,7 +118,8 @@ export function runGate({ receipt, baseline = null, ledger = null, renderEvidenc
     validator: scriptInput,
     ledgerValidator: ledgerScriptInput,
     projectSource,
-    sourceRoot: sourceRoot === null ? null : resolve(sourceRoot),
+    sourceRoot: effectiveRoot,
+    sourceRootMode: autoRoot !== null ? "AUTO_NATIVE" : effectiveRoot !== null ? "EXPLICIT" : "GIT_OR_UNBOUND",
     sourceSnapshotValidator: snapshotScriptInput,
     processExitCode: exitCode,
     result: object(result) ? {
@@ -135,7 +139,14 @@ export function runGate({ receipt, baseline = null, ledger = null, renderEvidenc
 export function checkProof({ receipt, baseline = null, ledger = null, renderEvidence = null, sourceRoot = null, checkProof: proofPath, workspaceCwd = process.cwd() }) {
   const issues = [];
   const fail = (x) => issues.push(x);
-  const discovered = discoverProjectLedger(sourceRoot ?? workspaceCwd);
+  const receiptData = (() => {
+    try { return JSON.parse(readFileSync(resolve(receipt), "utf8")); }
+    catch { return null; }
+  })();
+  const autoRoot = sourceRoot === null && receiptData?.surfaceKind === "DENSE_DESKTOP_MONITOR"
+    ? discoverNativeSourceRoot({ receipt, ledger }) : null;
+  const effectiveRoot = sourceRoot !== null ? resolve(sourceRoot) : autoRoot;
+  const discovered = discoverProjectLedger(effectiveRoot ?? workspaceCwd);
   if (discovered && ledger === null) fail("Project findings ledger present but not selected for proof verification");
   if (discovered && ledger !== null && resolve(discovered) !== resolve(ledger)) {
     fail("Proof selected a noncanonical findings ledger for the current project");
@@ -147,7 +158,7 @@ export function checkProof({ receipt, baseline = null, ledger = null, renderEvid
       evidence.generator !== "design-with-ai/run-iteration-gate.mjs") {
     fail("Unsupported proof format");
   }
-  if ((sourceRoot === null ? null : resolve(sourceRoot)) !== (evidence?.sourceRoot ?? null)) {
+  if (effectiveRoot !== (evidence?.sourceRoot ?? null)) {
     fail("Source root differs from the recorded execution");
   }
   const expectedInputs = [
@@ -188,9 +199,9 @@ export function checkProof({ receipt, baseline = null, ledger = null, renderEvid
   // --check-proof / Stop. It captures changes after a previous green PARTIAL.
   try {
     const ignorePaths = [receipt, baseline, ledger, renderEvidence, proofPath].filter(Boolean);
-    const current = sourceRoot === null
+    const current = effectiveRoot === null
       ? snapshotProjectSource(workspaceCwd, { ignorePaths })
-      : snapshotRootedSource(sourceRoot, { ignorePaths });
+      : snapshotRootedSource(effectiveRoot, { ignorePaths });
     const saved = evidence?.projectSource;
     if (renderEvidence !== null) {
       try {
@@ -231,13 +242,9 @@ export function checkProof({ receipt, baseline = null, ledger = null, renderEvid
   if (baseline !== null && evidence?.result?.baselineChecked !== true) {
     fail("Baseline verification was not confirmed");
   }
-  const receiptData = (() => {
-    try { return JSON.parse(readFileSync(resolve(receipt), "utf8")); }
-    catch { return null; }
-  })();
   if (receiptData?.surfaceKind === "DENSE_DESKTOP_MONITOR" &&
-      evidence?.result?.verdict === "COMPLETE" && sourceRoot === null) {
-    fail("Desktop COMPLETE missing explicit source root");
+      evidence?.result?.verdict === "COMPLETE" && effectiveRoot === null) {
+    fail("Desktop COMPLETE missing trusted source root");
   }
   if (receiptData?.surfaceKind === "DENSE_DESKTOP_MONITOR" &&
       evidence?.result?.verdict === "COMPLETE" &&
@@ -258,7 +265,7 @@ export function checkProof({ receipt, baseline = null, ledger = null, renderEvid
     if (/^ledger changed after/.test(message)) return "LEDGER_CHANGED";
     if (/^Project source changed after/.test(message)) return "WORKTREE_CHANGED";
     if (/^Source root differs/.test(message)) return "PATH_MISMATCH";
-    if (/^Desktop COMPLETE missing explicit source root/.test(message)) return "WORKTREE_UNBOUND";
+    if (/^Desktop COMPLETE missing trusted source root/.test(message)) return "WORKTREE_UNBOUND";
     if (/^Desktop screenshots changed/.test(message)) return "RENDER_ARTIFACT_CHANGED";
     if (/^Desktop render/.test(message)) return "RENDER_SOURCE_STALE";
     if (/^Project source snapshot missing/.test(message)) return "WORKTREE_UNBOUND";
