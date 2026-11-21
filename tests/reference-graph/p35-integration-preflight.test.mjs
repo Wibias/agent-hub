@@ -262,7 +262,11 @@ test('CLI exits 2 with false authority flags and never prints a success code', (
   const result = spawnSync(process.execPath, [CLI], { encoding: 'utf8' });
   assert.equal(result.status, 2, result.stderr);
   const report = JSON.parse(result.stdout);
-  assert.equal(report.manifest_verified, true);
+  // The immutable 2026-11-09 review still verifies against its own head,
+  // but successor CI edits must not pass as the *current* pinned manifest.
+  assert.equal(report.manifest_verified, false);
+  assert.equal(report.pin_verified, false);
+  assert.equal(report.post_pin_scope_verified, false);
   assert.equal(report.code_merge_authorized, false);
   assert.equal(report.deployment_authorized, false);
   assert.equal(report.activation_authorized, false);
