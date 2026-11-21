@@ -17,7 +17,7 @@ const GATE_RUN = /(?:^|[\s;"'\\/])run-iteration-gate\.mjs/i;
 const MODIFY = /\b(?:improve-existing|restyle-existing|redesign-existing|build-product-surface|verbesser(?:e|n|ung|t)?|überarbeit(?:e|en|ung)|optimier(?:e|en|ung)|redesign|rework|restyle|polish|implement|make .{0,35}better|fix .{0,35}(?:ui|design)|update .{0,35}(?:ui|design)|improve .{0,35}(?:ui|design))\b/i;
 const EXPLICIT = /design-with-ai|design with ai/i;
 const EXEC_TOOL = /exec|shell|command|terminal|powershell|bash|functions\.exec/i;
-const ARG = /(?:^|\s)--(receipt|baseline|ledger|proof|check-proof)\s+(?:"([^"]+)"|'([^']+)'|(\S+))/g;
+const ARG = /(?:^|\s)--(receipt|baseline|ledger|render-evidence|proof|check-proof)\s+(?:"([^"]+)"|'([^']+)'|(\S+))/g;
 const MAX_LOG_BYTES = 80 * 1024 * 1024;
 const MAX_PROOF_BYTES = 128 * 1024;
 const MAX_PATH_LENGTH = 2048;
@@ -144,7 +144,8 @@ export function decideStop(event, report, { home = homedir() } = {}) {
     try {
       checked = checkProof({
         receipt: options.receipt, baseline: options.baseline ?? null,
-        ledger: options.ledger ?? null, checkProof: options.proof, workspaceCwd: event.cwd,
+        ledger: options.ledger ?? null, renderEvidence: options["render-evidence"] ?? null,
+        checkProof: options.proof, workspaceCwd: event.cwd,
       });
     } catch {
       proofStatus = "PROOF_INVALID_OR_STALE";

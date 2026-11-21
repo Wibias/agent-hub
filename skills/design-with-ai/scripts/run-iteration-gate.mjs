@@ -8,6 +8,7 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { discoverProjectLedger } from "./findings-ledger.mjs";
 import { snapshotProjectSource } from "./project-source-snapshot.mjs";
+import { snapshotDesktopCaptureFiles } from "./desktop-render-evidence.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const validator = resolve(here, "verify-iteration-receipt.mjs");
@@ -20,10 +21,10 @@ function argsOf(argv) {
   if (argv.length === 1 && (argv[0] === "--help" || argv[0] === "-h")) return { help: true };
   const options = new Map();
   for (let i = 0; i < argv.length; i += 2) {
-    if (!["--receipt", "--baseline", "--ledger", "--proof", "--check-proof"].includes(argv[i]) ||
+    if (!["--receipt", "--baseline", "--ledger", "--render-evidence", "--proof", "--check-proof"].includes(argv[i]) ||
         !populated(argv[i + 1]) || argv[i + 1].startsWith("--") ||
         options.has(argv[i])) {
-      throw new Error("Usage: node run-iteration-gate.mjs --receipt <json> [--baseline <json>] [--ledger <project-ledger.json>] --proof <out.json> OR --receipt <json> [--baseline <json>] [--ledger <project-ledger.json>] --check-proof <proof.json>");
+      throw new Error("Usage: node run-iteration-gate.mjs --receipt <json> [--baseline <json>] [--ledger <project-ledger.json>] [--render-evidence <desktop-render.json>] --proof <out.json> OR --receipt <json> [--baseline <json>] [--ledger <project-ledger.json>] [--render-evidence <desktop-render.json>] --check-proof <proof.json>");
     }
     options.set(argv[i], resolve(argv[i + 1]));
   }
@@ -34,6 +35,7 @@ function argsOf(argv) {
     receipt: options.get("--receipt"),
     baseline: options.get("--baseline") ?? null,
     ledger: options.get("--ledger") ?? null,
+    renderEvidence: options.get("--render-evidence") ?? null,
     proof: options.get("--proof") ?? null,
     checkProof: options.get("--check-proof") ?? null,
   };
@@ -43,7 +45,7 @@ function inputHash(path) {
   return path === null ? null : { path, sha256: hash(path) };
 }
 
-export function runGate({ receipt, baseline = null, ledger = null, proof, workspaceCwd = process.cwd() }) {
+export function runGate({ receipt, baseline = null, ledger = null, renderEvidence = null, proof, workspaceCwd = process.cwd() }) {
   if (!populated(proof)) throw new Error("--proof output path is required");
   const discovered = discoverProjectLedger(workspaceCwd);
   if (discovered && ledger === null) throw new Error("Project findings ledger exists; pass --ledger for durable coverage");
@@ -52,7 +54,7 @@ export function runGate({ receipt, baseline = null, ledger = null, proof, worksp
   }
   if (ledger !== null && baseline === null) throw new Error("Durable findings ledger requires --baseline");
   const outputPath = resolve(proof);
-  const protectedPaths = [receipt, baseline, ledger, validator, ledgerValidator].filter(Boolean).map((item) => resolve(item));
+  const protectedPaths = [receipt, baseline, ledger, renderEvidence, validator, ledgerValidator].filter(Boolean).map((item) => resolve(item));
   if (protectedPaths.includes(outputPath)) throw new Error("Proof output must not overwrite the receipt, baseline, or validator");
   if (existsSync(outputPath)) throw new Error("Proof file already exists; use a fresh path per execution");
   const receiptInput = inputHash(resolve(receipt));
@@ -60,12 +62,25 @@ export function runGate({ receipt, baseline = null, ledger = null, proof, worksp
   const scriptInput = inputHash(validator);
   const ledgerInput = inputHash(ledger === null ? null : resolve(ledger));
   const ledgerScriptInput = inputHash(ledgerInput ? ledgerValidator : null);
+  const renderEvidenceInput = inputHash(renderEvidence === null ? null : resolve(renderEvidence));
+  const desktopValidatorInput = inputHash(renderEvidenceInput ? resolve(here, "desktop-render-evidence.mjs") : null);
   const snapshotScriptInput = inputHash(resolve(here, "project-source-snapshot.mjs"));
-  const ignored = [receipt, baseline, ledger, proof].filter(Boolean);
+  const ignored = [receipt, baseline, ledger, renderEvidence, proof].filter(Boolean);
   const projectSource = snapshotProjectSource(workspaceCwd, { ignorePaths: ignored });
+  let renderScreens = null;
+  if (renderEvidenceInput) {
+    const evidence = JSON.parse(readFileSync(renderEvidenceInput.path, "utf8"));
+    if (!projectSource || evidence.candidateSourceSha256 !== projectSource.sha256) {
+      throw new Error("Desktop final render is not bound to the current Git source fingerprint");
+    }
+    const captures = snapshotDesktopCaptureFiles(renderEvidenceInput.path);
+    if (!captures.valid) throw new Error("Desktop screenshot artifacts invalid: " + captures.problems.join("; "));
+    renderScreens = captures.files;
+  }
   const command = [process.execPath, validator, "--receipt", receiptInput.path,
     ...(baselineInput ? ["--baseline", baselineInput.path] : []),
-    ...(ledgerInput ? ["--ledger", ledgerInput.path] : [])];
+    ...(ledgerInput ? ["--ledger", ledgerInput.path] : []),
+    ...(renderEvidenceInput ? ["--render-evidence", renderEvidenceInput.path] : [])];
   const child = spawnSync(command[0], command.slice(1), {
     encoding: "utf8", shell: false, maxBuffer: 4 * 1024 * 1024,
   });
@@ -84,6 +99,9 @@ export function runGate({ receipt, baseline = null, ledger = null, proof, worksp
     receipt: receiptInput,
     baseline: baselineInput,
     ledger: ledgerInput,
+    renderEvidence: renderEvidenceInput,
+    renderScreens,
+    desktopValidator: desktopValidatorInput,
     validator: scriptInput,
     ledgerValidator: ledgerScriptInput,
     projectSource,
@@ -94,6 +112,7 @@ export function runGate({ receipt, baseline = null, ledger = null, proof, worksp
       verdict: result.verdict ?? null,
       baselineChecked: result.baselineChecked === true,
       ledgerChecked: result.ledgerChecked === true,
+      desktopEvidenceChecked: result.desktopEvidenceChecked === true,
       problems: Array.isArray(result.problems) ? result.problems : [],
     } : null,
   };
@@ -102,7 +121,7 @@ export function runGate({ receipt, baseline = null, ledger = null, proof, worksp
   return { proofPath: outputPath, exitCode, proof: proofData };
 }
 
-export function checkProof({ receipt, baseline = null, ledger = null, checkProof: proofPath, workspaceCwd = process.cwd() }) {
+export function checkProof({ receipt, baseline = null, ledger = null, renderEvidence = null, checkProof: proofPath, workspaceCwd = process.cwd() }) {
   const issues = [];
   const fail = (x) => issues.push(x);
   const discovered = discoverProjectLedger(workspaceCwd);
@@ -121,6 +140,8 @@ export function checkProof({ receipt, baseline = null, ledger = null, checkProof
     ["receipt", resolve(receipt)],
     ["baseline", baseline === null ? null : resolve(baseline)],
     ["ledger", ledger === null ? null : resolve(ledger)],
+    ["renderEvidence", renderEvidence === null ? null : resolve(renderEvidence)],
+    ["desktopValidator", renderEvidence === null ? null : resolve(here, "desktop-render-evidence.mjs")],
     ["validator", validator],
     ["ledgerValidator", ledger === null ? null : ledgerValidator],
     ["sourceSnapshotValidator", resolve(here, "project-source-snapshot.mjs")],
@@ -140,6 +161,15 @@ export function checkProof({ receipt, baseline = null, ledger = null, checkProof
     catch { fail(key + " input is not readable"); continue; }
     if (stored.sha256 !== actualHash) fail(key + " changed after the recorded execution");
   }
+  if (renderEvidence !== null) {
+    try {
+      const currentScreens = snapshotDesktopCaptureFiles(renderEvidence);
+      if (!currentScreens.valid ||
+          JSON.stringify(currentScreens.files) !== JSON.stringify(evidence?.renderScreens)) {
+        fail("Desktop screenshots changed or are missing after the recorded execution");
+      }
+    } catch { fail("Desktop screenshots changed or are missing after the recorded execution"); }
+  }
   // The worktree snapshot is checked after the validator and again on every
   // --check-proof / Stop. It captures changes after a previous green PARTIAL.
   try {
@@ -147,6 +177,14 @@ export function checkProof({ receipt, baseline = null, ledger = null, checkProof
       ignorePaths: [receipt, baseline, ledger, proofPath].filter(Boolean),
     });
     const saved = evidence?.projectSource;
+    if (renderEvidence !== null) {
+      try {
+        const render = JSON.parse(readFileSync(resolve(renderEvidence), "utf8"));
+        if (!current || render.candidateSourceSha256 !== current.sha256) {
+          fail("Desktop render is stale against the current project source");
+        }
+      } catch { fail("Desktop render manifest cannot be verified"); }
+    }
     if (current === null && saved !== null && saved !== undefined) {
       fail("Project source fingerprint unavailable");
     } else if (current !== null && (!object(saved) ||
@@ -162,7 +200,8 @@ export function checkProof({ receipt, baseline = null, ledger = null, checkProof
   const cmd = evidence?.command;
   const expected = [process.execPath, validator, "--receipt", resolve(receipt),
     ...(baseline ? ["--baseline", resolve(baseline)] : []),
-    ...(ledger ? ["--ledger", resolve(ledger)] : [])];
+    ...(ledger ? ["--ledger", resolve(ledger)] : []),
+    ...(renderEvidence ? ["--render-evidence", resolve(renderEvidence)] : [])];
   if (!Array.isArray(cmd) || cmd.length !== expected.length ||
       cmd.some((v, i) => v !== expected[i])) fail("Validator command differs from recorded inputs");
   if (!Number.isInteger(evidence?.processExitCode) ||
@@ -177,6 +216,15 @@ export function checkProof({ receipt, baseline = null, ledger = null, checkProof
   if (baseline !== null && evidence?.result?.baselineChecked !== true) {
     fail("Baseline verification was not confirmed");
   }
+  const receiptData = (() => {
+    try { return JSON.parse(readFileSync(resolve(receipt), "utf8")); }
+    catch { return null; }
+  })();
+  if (receiptData?.surfaceKind === "DENSE_DESKTOP_MONITOR" &&
+      evidence?.result?.verdict === "COMPLETE" &&
+      (renderEvidence === null || evidence?.result?.desktopEvidenceChecked !== true)) {
+    fail("Dense desktop monitor COMPLETE is missing final render validation");
+  }
   if (ledger !== null && (evidence?.schemaVersion !== 2 || evidence?.result?.ledgerChecked !== true)) {
     fail("Durable ledger verification was not confirmed");
   }
@@ -189,6 +237,8 @@ export function checkProof({ receipt, baseline = null, ledger = null, checkProof
     if (/^baseline changed after/.test(message)) return "BASELINE_CHANGED";
     if (/^ledger changed after/.test(message)) return "LEDGER_CHANGED";
     if (/^Project source changed after/.test(message)) return "WORKTREE_CHANGED";
+    if (/^Desktop screenshots changed/.test(message)) return "RENDER_ARTIFACT_CHANGED";
+    if (/^Desktop render/.test(message)) return "RENDER_SOURCE_STALE";
     if (/^Project source snapshot missing/.test(message)) return "WORKTREE_UNBOUND";
     if (/^Project source fingerprint unavailable/.test(message)) return "WORKTREE_UNAVAILABLE";
     if (/^(validator|ledgerValidator|sourceSnapshotValidator) changed after/.test(message)) {
