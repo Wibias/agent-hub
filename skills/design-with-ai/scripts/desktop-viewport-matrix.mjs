@@ -28,6 +28,7 @@ export function validateDesktopViewportMatrix(manifest, receipt = null) {
   const problems = [];
   const fail = x => problems.push(x);
   const complete = receipt?.iterationVerdict === "COMPLETE";
+  const claimedRenderPass = receipt?.gates?.render === "PASS";
   // A partial run may contain only the viewports that were actually
   // inspected. Missing captures must remain unverified, not fabricated.
   const openStatus = new Set(["PERSISTS", "REGRESSED", "IMPROVED_BUT_OPEN", "UNVERIFIED"]);
@@ -126,10 +127,16 @@ export function validateDesktopViewportMatrix(manifest, receipt = null) {
           ids.add(item.id);
           if (outside(item.supportingText, item.cell) ||
               outside(item.supportingText, c.kpiStrip.rect)) {
+            if (claimedRenderPass) {
+              fail("RENDER_PASS_WITH_KPI_DEFECT " + key + " " + item.id);
+            }
             measuredDefect(c, key, "KPI_SUPPORTING_TEXT_OVERFLOW", item.id);
           }
           const clearance = bottomDividerY - bottom(item.supportingText);
           if (clearance < minBottomClearance) {
+            if (claimedRenderPass) {
+              fail("RENDER_PASS_WITH_KPI_DEFECT " + key + " " + item.id);
+            }
             measuredDefect(c, key, "KPI_BOTTOM_CLEARANCE", item.id +
               ": measured " + clearance.toFixed(1) + " px, need >= " +
               minBottomClearance + " physical px");
@@ -218,6 +225,12 @@ export function validateDesktopViewportMatrix(manifest, receipt = null) {
   }
   if (complete) for (const state of ["IDLE", "FOCUS"]) if (!seen.has("SCALED:" + state)) {
     fail("MISSING_VIEWPORT_STATE SCALED:" + state);
+  }
+  // A rendered compact monitor that claims a visual PASS must include
+  // the current COMPACT/IDLE KPI strip, even when a full DPI matrix is
+  // impossible. All other missing states remain honestly PARTIAL.
+  if (claimedRenderPass && !seen.has("COMPACT:IDLE")) {
+    fail("COMPACT_KPI_SMOKE_MISSING: native render PASS requires COMPACT:IDLE with measured supporting text and divider");
   }
   // A deliberately excluded stalled state is still reviewed by the base
   // validator; if a stalled state exists, one real viewport must show it.

@@ -256,6 +256,12 @@ export function validateIterationReceipt(input, baseline = null, desktopEvidence
     return !["WORKFLOW", "NAVIGATION"].includes(kind);
   });
   if (input.surfaceKind === "DENSE_DESKTOP_MONITOR") {
+    // A PARTIAL overall result does not authorize a detached visual PASS.
+    // If any rendered QA is claimed as PASS, bind it to current source and
+    // the minimally inspected compact KPI state, even without full E2E.
+    if (input.gates?.render === "PASS" && desktopEvidence?.schemaVersion !== 2) {
+      fail("DESKTOP_RENDER_PASS_UNBOUND: reported render PASS requires a current v2 compact KPI screenshot and measurements even in PARTIAL");
+    }
     if (desktopEvidence === null) {
       if (input.iterationVerdict === "COMPLETE") {
         fail("Dense desktop monitor COMPLETE requires final render evidence");

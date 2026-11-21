@@ -153,17 +153,20 @@ export function validateDesktopRenderEvidence(manifest, receipt = null) {
       fail("Check " + check.id + " requires PASS with TEST/RUNTIME evidence");
     }
   }
-  for (const id of checksRequired) {
-    if (!seenChecks.has(id)) {
-      fail("Missing runtime check " + id);
-    }
+  // A PARTIAL single-viewport visual check must not fake inaccessible
+  // destructive-action, keyboard or DPI interactions just to get a valid
+  // evidence packet. Every *reported* check still needs real TEST/RUNTIME
+  // proof. A COMPLETE release continues to require the full contract.
+  if (receipt?.iterationVerdict === "COMPLETE") for (const id of checksRequired) {
+    if (!seenChecks.has(id)) fail("Missing runtime check " + id);
   }
   if (!Array.isArray(manifest.reviewedFindingIds) ||
       new Set(manifest.reviewedFindingIds).size !== manifest.reviewedFindingIds.length ||
       manifest.reviewedFindingIds.some(id => !filled(id))) {
     fail("reviewedFindingIds must be unique finding IDs");
   }
-  if (Array.isArray(receipt?.findings) && Array.isArray(manifest.reviewedFindingIds)) {
+  if (receipt?.iterationVerdict === "COMPLETE" &&
+      Array.isArray(receipt?.findings) && Array.isArray(manifest.reviewedFindingIds)) {
     for (const finding of receipt.findings) {
       if (filled(finding?.id) && !manifest.reviewedFindingIds.includes(finding.id)) {
         fail("Visual review omitted carried finding " + finding.id);
