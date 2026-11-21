@@ -511,6 +511,7 @@ test("previously closed table finding must reopen when selected compact state sh
   r.iterationVerdict = "PARTIAL";
   r.verdictReason = "Compact selected inspector still crowds process table";
   r.findings[0].kind = "VISUAL";
+  r.findings[0].evidenceRef = "baseline/pcg-table.png";
   r.findings[0].disposition = "REGRESSED";
   r.findings[0].reason = "Two rows in selected compact state";
   r.openCarryover.push("UX-TABLE");

@@ -32,7 +32,7 @@ export function validateDesktopViewportMatrix(manifest, receipt = null) {
   // inspected. Missing captures must remain unverified, not fabricated.
   const openStatus = new Set(["PERSISTS", "REGRESSED", "IMPROVED_BUT_OPEN", "UNVERIFIED"]);
   function measuredDefect(c, key, code, message = "") {
-    if (complete) { fail(code + " " + key + (message ? ": " + message : "")); return; }
+    if (complete) { fail(code + " " + key + (message ? " " + message : "")); return; }
     const id = c.measuredFindingRefs?.[code];
     const finding = Array.isArray(receipt?.findings)
       ? receipt.findings.find(x => x?.id === id) : null;
