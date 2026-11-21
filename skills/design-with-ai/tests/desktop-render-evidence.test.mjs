@@ -456,3 +456,31 @@ test("anomaly cannot be linked to an invented or omitted prior finding", () => {
     status: "PERSISTS", evidenceRef: "renders/fake.png" });
   assert.match(allProblems(m), /UNTRACKED_RENDER_FINDING MAXIMIZED:IDLE duplicateCharts/);
 });
+
+test("tracked visual defect yields a valid PARTIAL manifest, not a fabricated COMPLETE", () => {
+  const m = matrixManifest(), r = receipt();
+  r.iterationVerdict = "PARTIAL";
+  r.verdictReason = "Unexpected white header area requires investigation";
+  const c = m.captures.find(c => c.viewportId === "COMPACT" && c.state === "IDLE");
+  c.renderInspection.unexpectedHeaderFill = true;
+  c.renderInspection.findingRefs = { unexpectedHeaderFill: "PCG-17" };
+  const item = {
+    id: "PCG-17", route: "PCGuardian/MainForm", kind: "VISUAL", priority: "MEDIUM",
+    symptom: "A white rectangle appears beside the Since header",
+    acceptance: "Correctly paint header/scrollbar at compact and maximized widths",
+    evidenceRef: "renders/pcg17.png", decision: "Investigate",
+    disposition: "PERSISTS", reason: "Root cause unverified",
+  };
+  r.findings.push(item); r.openCarryover.push(item.id);
+  m.reviewedFindingIds.push(item.id);
+  m.findingViewportReviews.push({ findingId: item.id, viewportId: "COMPACT",
+    status: "PERSISTS", evidenceRef: item.evidenceRef });
+  assert.equal(validateDesktopRenderEvidence(m, r).valid, true,
+    allProblems(m, r));
+  const missing = structuredClone(m);
+  delete missing.captures.find(c => c.viewportId === "COMPACT" && c.state === "IDLE")
+    .renderInspection.findingRefs;
+  assert.match(allProblems(missing, r), /UNTRACKED_RENDER_FINDING/);
+  r.iterationVerdict = "COMPLETE";
+  assert.match(allProblems(m, r), /RENDER_ANOMALY/);
+});
