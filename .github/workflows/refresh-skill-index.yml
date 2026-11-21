@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - agent/verify-skill-routing
+      - feat/dwa-dense-desktop-quality-gate-20261121
   workflow_dispatch:
 
 permissions:
