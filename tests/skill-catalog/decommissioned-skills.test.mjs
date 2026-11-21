@@ -8,7 +8,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, '../..');
 const read = (relative) => readFileSync(path.join(root, relative), 'utf8');
 
-const DECOMMISSIONED_SKILLS = Object.freeze(['pnpm', 'write-swift']);
+const DECOMMISSIONED_SKILLS = Object.freeze(['pnpm', 'write-swift', 'security-review-redirect', 'prototype', 'vite', 'vitest', 'vault-research', 'extract-approach', 'create-pr-from-local-work-redirect', 'shadcn']);
 
 test('decommissioned skills stay absent from active catalog surfaces', () => {
   const readme = read('README.md');

@@ -20,7 +20,7 @@ test('P19 governance runs permanent contract, secret, release, and disposable Po
   assert.match(source, /push\s*:[\s\S]*branches\s*:[\s\S]*-\s+main/);
   assert.match(source, /actions\/setup-node@v4[\s\S]*node-version:\s*24/);
   assert.match(source, /node --test tests\/reference-graph\/p19-\*\.test\.mjs/);
-  assert.match(source, /scan_secrets\.py reference-graph/);
+  assert.match(source, /scripts\/scan-secrets\.py reference-graph/);
   assert.match(source, /node scripts\/verify-public-release\.mjs/);
   assert.match(source, /image:\s*pgvector\/pgvector:pg16/);
   assert.match(source, /create role anon/i);

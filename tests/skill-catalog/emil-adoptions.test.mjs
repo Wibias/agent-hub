@@ -35,12 +35,14 @@ test('design-with-ai owns motion building plus mobile-web and native motion bran
   await assertStructurallyValid('design-with-ai');
 });
 
-test('prototype UI variants declare a divergence axis and explicit win-cost tradeoffs', async () => {
-  const ui = read('skills/prototype/UI.md');
-  assert.match(ui, /named divergence axis/i);
-  assert.match(ui, /realistic content/i);
-  assert.match(ui, /working interactions/i);
-  assert.match(ui, /when it wins/i);
-  assert.match(ui, /cost|tradeoff/i);
-  await assertStructurallyValid('prototype');
+test('DWA owns direction divergence and representative slice tradeoffs after prototype retirement', async () => {
+  assert.equal(existsSync(path.join(root, 'skills/prototype/SKILL.md')), false);
+  const core = read('skills/design-with-ai/references/core-design-workflow.md');
+  const lineage = read('skills/design-with-ai/references/design-decision-lineage.md');
+  assert.match(core, /2-3/);
+  assert.match(core, /interaction and traversal model/);
+  assert.match(lineage, /representativenessRationale/);
+  assert.match(lineage, /tradeoffs/);
+  assert.match(lineage, /coveredContent/);
+  await assertStructurallyValid('design-with-ai');
 });

@@ -65,16 +65,9 @@ test('performance retains negative experiment evidence and rejects neutral compl
   assert.match(skill, /does not retry|do not repeat|already tested/i);
 });
 
-test('episodic memory keeps code claims historical and supersedable', async () => {
-  const skill = await text('skills/extract-approach/SKILL.md');
-  const storage = await text('skills/extract-approach/references/storage-contract.md');
-
-  assert.match(skill, /historical provenance/i);
-  assert.match(skill, /repo@.*commit|repository\/commit/i);
-  assert.match(skill, /superseded/i);
-  assert.match(skill, /work-recall.*current-state|current-state.*work-recall/i);
-  assert.match(storage, /historical evidence/i);
-  assert.match(storage, /live state/i);
+test('retired extract-approach is not resurrected for episodic memory behavior', async () => {
+  await assert.rejects(text('skills/extract-approach/SKILL.md'), { code: 'ENOENT' });
+  await assert.rejects(text('skills/extract-approach/references/storage-contract.md'), { code: 'ENOENT' });
 });
 
 test('skill authoring describes portable procedures instead of model workarounds', async () => {
