@@ -141,7 +141,10 @@ being modified, the iteration receipt MUST name `surfaceKind:
 `--render-evidence` artifact. Its measured geometry (including KPI supporting-text bottom clearance against the rendered separator), screenshot bytes
 and actual source SHA-256 are checked by
 `scripts/desktop-render-evidence.mjs`, `desktop-viewport-matrix.mjs` and
-`run-iteration-gate.mjs`. The version-2 desktop manifest requires COMPACT,
+`run-iteration-gate.mjs`. A PARTIAL desktop receipt may include a measured subset of real renders,
+but may not claim visually closed findings without supported reinspection.
+Known two-row inspector regressions require an open linked finding,
+not an all-closed summary. The version-2 desktop manifest requires COMPACT,
 MEDIUM, MAXIMIZED and a different-DPI SCALED profile, with the required
 idle, selected, focus and collecting states at ordinary widths. A legacy
 single-window manifest cannot certify COMPLETE. Positive, newly observed

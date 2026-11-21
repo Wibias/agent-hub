@@ -218,9 +218,9 @@ export function verifyLedgerCoverage(ledger, baseline, receipt, { requireSynced 
     assessedCount: runEvents.length, runId: snapshot.runId };
 }
 
-export function syncLedger(path, baseline, receipt) {
+export function syncLedger(path, baseline, receipt, desktopEvidence = null) {
   const ledger = readLedger(path);
-  const comparison = validateIterationReceipt(receipt, baseline);
+  const comparison = validateIterationReceipt(receipt, baseline, desktopEvidence);
   if (!comparison.valid) throw new Error("Receipt is invalid: " + comparison.problems.join("; "));
   const before = verifyLedgerCoverage(ledger, baseline, receipt, { requireSynced: false });
   if (!before.valid) {
@@ -306,7 +306,11 @@ function cli() {
   }
   const baseline = JSON.parse(readFileSync(resolve(opts.get("--baseline")), "utf8"));
   const receipt = JSON.parse(readFileSync(resolve(opts.get("--receipt")), "utf8"));
-  if (command === "sync") return syncLedger(ledgerPath, baseline, receipt);
+  if (command === "sync") {
+    const render = opts.has("--render-evidence")
+      ? JSON.parse(readFileSync(resolve(opts.get("--render-evidence")), "utf8")) : null;
+    return syncLedger(ledgerPath, baseline, receipt, render);
+  }
   if (command === "check") return verifyLedgerCoverage(ledger, baseline, receipt);
   throw new Error("Unknown ledger command");
 }

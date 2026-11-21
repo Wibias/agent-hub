@@ -111,11 +111,15 @@ function matrixManifest(source = "a".repeat(64)) {
       method: "SCREENSHOT_REVIEW", evidenceRef: "review:" + c.image,
       duplicateCharts: false, unexpectedHeaderFill: false,
       clippedSupportingText: false, unproductiveBlankSpace: false,
+      unreadableInspectorPath: false,
     };
     return c;
   });
   return { ...manifest(source), schemaVersion: 2, viewports, captures,
-    findingViewportReviews: [] };
+    findingViewportReviews: ["COMPACT", "MEDIUM", "MAXIMIZED"].map(viewportId => ({
+      findingId: "UX-TABLE", viewportId, status: "RESOLVED",
+      evidenceRef: "renders/" + viewportId.toLowerCase() + "-table.png",
+    })) };
 }
 
 function receipt() {
@@ -234,7 +238,15 @@ test("a native desktop receipt cannot claim COMPLETE without final evidence", ()
   const partial = receipt();
   partial.iterationVerdict = "PARTIAL";
   partial.verdictReason = "Native screenshot capture unavailable";
+  partial.findings[0].disposition = "UNVERIFIED";
+  partial.findings[0].reason = "No current native screenshot";
+  partial.openCarryover = ["UX-TABLE"];
   assert.equal(validateIterationReceipt(partial).valid, true);
+  const premature = receipt();
+  premature.iterationVerdict = "PARTIAL";
+  premature.verdictReason = "Missing render";
+  assert.match(validateIterationReceipt(premature).problems.join("; "),
+    /VISUAL_CLOSURE_UNVERIFIED UX-TABLE/);
 });
 test("real screenshot bytes are bound, path traversal is refused and later edits are detected", () => fixture(f => {
   assert.equal(snapshotDesktopCaptureFiles(f.manifestPath).valid, true);
@@ -483,4 +495,64 @@ test("tracked visual defect yields a valid PARTIAL manifest, not a fabricated CO
   assert.match(allProblems(missing, r), /UNTRACKED_RENDER_FINDING/);
   r.iterationVerdict = "COMPLETE";
   assert.match(allProblems(m, r), /RENDER_ANOMALY/);
+});
+
+test("a visual finding closed under PARTIAL still needs actual current desktop captures", () => {
+  const r = receipt();
+  r.iterationVerdict = "PARTIAL";
+  r.verdictReason = "New selected-state evidence has not been collected";
+  r.findings[0].kind = "VISUAL";
+  assert.match(validateIterationReceipt(r).problems.join("; "), /VISUAL_CLOSURE_UNVERIFIED/);
+  assert.equal(validateDesktopRenderEvidence(matrixManifest(), r).valid, true);
+});
+test("previously closed table finding must reopen when selected compact state shows two rows", () => {
+  const m = matrixManifest();
+  const r = receipt();
+  r.iterationVerdict = "PARTIAL";
+  r.verdictReason = "Compact selected inspector still crowds process table";
+  r.findings[0].kind = "VISUAL";
+  r.findings[0].evidenceRef = "baseline/pcg-table.png";
+  r.findings[0].disposition = "REGRESSED";
+  r.findings[0].reason = "Two rows in selected compact state";
+  r.openCarryover.push("UX-TABLE");
+  const c = m.captures.find(x => x.viewportId === "COMPACT" && x.state === "SELECTED");
+  c.processTable.visibleRows = 2;
+  let errors = allProblems(m, r);
+  assert.match(errors, /UNTRACKED_MEASURED_REGRESSION COMPACT:SELECTED TABLE_CRAMPED/);
+  c.measuredFindingRefs = { TABLE_CRAMPED: "UX-TABLE" };
+  m.findingViewportReviews = m.findingViewportReviews.map(x =>
+    x.viewportId === "COMPACT" ? { ...x, status: "PERSISTS" } : x);
+  assert.equal(validateDesktopRenderEvidence(m, r).valid, true, allProblems(m, r));
+  r.findings[0].disposition = "RESOLVED";
+  r.openCarryover = [];
+  assert.match(allProblems(m, r), /UNTRACKED_MEASURED_REGRESSION/);
+});
+test("honest PARTIAL can record only captured viewports, but cannot mark prior visual finding closed", () => {
+  const m = matrixManifest();
+  const r = receipt();
+  r.iterationVerdict = "PARTIAL";
+  r.verdictReason = "Native controller cannot reach maximized FOCUS";
+  r.findings[0].kind = "VISUAL";
+  r.findings[0].disposition = "UNVERIFIED";
+  r.findings[0].reason = "No maximized verification";
+  r.openCarryover = ["UX-TABLE"];
+  m.viewports = m.viewports.filter(x => x.id === "COMPACT");
+  m.captures = m.captures.filter(x => x.viewportId === "COMPACT" && x.state === "IDLE");
+  assert.equal(validateDesktopRenderEvidence(m, r).valid, true, allProblems(m, r));
+  r.findings[0].disposition = "RESOLVED";
+  r.openCarryover = [];
+  assert.match(allProblems(m, r), /FINDING_NOT_RESOLVED_AT_VIEWPORT|UNTRACKED/);
+});
+test("a selected inspector path flagged as unreadable must be retained as an open finding", () => {
+  const m = matrixManifest();
+  const r = receipt();
+  r.iterationVerdict = "PARTIAL";
+  r.verdictReason = "Path wrapping needs a native review";
+  r.findings[0].kind = "VISUAL";
+  r.findings[0].disposition = "UNVERIFIED";
+  r.findings[0].reason = "Review pending";
+  r.openCarryover = ["UX-TABLE"];
+  const c = m.captures.find(x => x.viewportId === "COMPACT" && x.state === "SELECTED");
+  c.renderInspection.unreadableInspectorPath = true;
+  assert.match(allProblems(m, r), /UNTRACKED_RENDER_FINDING COMPACT:SELECTED unreadableInspectorPath/);
 });

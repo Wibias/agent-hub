@@ -94,7 +94,7 @@ export function validateDesktopRenderEvidence(manifest, receipt = null) {
     if (!object(inspector) || !rect(inspector.rect) || typeof inspector.empty !== "boolean") {
       fail(label + ": inspector requires bounds and explicit empty state");
     } else if (outside(inspector.rect, windowRect)) fail(label + ": inspector outside window");
-    if (c.state === "SELECTED" && object(table) && object(inspector) &&
+    if (!matrix && c.state === "SELECTED" && object(table) && object(inspector) &&
         Number.isInteger(table.visibleRows) && Number.isInteger(table.totalRows) &&
         rect(inspector.rect) && table.totalRows >= 10 && table.visibleRows <= 2 &&
         inspector.rect[3] >= 0.25 * c.viewport.height) {

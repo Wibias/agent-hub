@@ -6,7 +6,7 @@ const BASE_STATES = ["IDLE", "SELECTED", "FOCUS", "COLLECTING"];
 const ROLES = new Set(["SYSTEM", "DETAIL"]);
 const ISSUE_FLAGS = [
   "duplicateCharts", "unexpectedHeaderFill", "clippedSupportingText",
-  "unproductiveBlankSpace",
+  "unproductiveBlankSpace", "unreadableInspectorPath",
 ];
 const object = x => x !== null && typeof x === "object" && !Array.isArray(x);
 const filled = x => typeof x === "string" && x.trim().length > 0;
@@ -27,8 +27,31 @@ const overlaps = (a, b) => Math.min(right(a), right(b)) - Math.max(a[0], b[0]) >
 export function validateDesktopViewportMatrix(manifest, receipt = null) {
   const problems = [];
   const fail = x => problems.push(x);
+  const complete = receipt?.iterationVerdict === "COMPLETE";
+  // A partial run may contain only the viewports that were actually
+  // inspected. Missing captures must remain unverified, not fabricated.
+  const openStatus = new Set(["PERSISTS", "REGRESSED", "IMPROVED_BUT_OPEN", "UNVERIFIED"]);
+  function measuredDefect(c, key, code, message = "") {
+    if (complete) { fail(code + " " + key + (message ? " " + message : "")); return; }
+    const id = c.measuredFindingRefs?.[code];
+    const finding = Array.isArray(receipt?.findings)
+      ? receipt.findings.find(x => x?.id === id) : null;
+    const review = Array.isArray(manifest?.findingViewportReviews)
+      ? manifest.findingViewportReviews.find(x => x?.findingId === id &&
+        x?.viewportId === c.viewportId) : null;
+    if (!filled(id) || !finding || !openStatus.has(finding.disposition) ||
+        !filled(finding.symptom) || !filled(finding.acceptance) ||
+        !filled(finding.evidenceRef) ||
+        !Array.isArray(receipt?.openCarryover) ||
+        !receipt.openCarryover.includes(id) || !review ||
+        !["PERSISTS", "IMPROVED_BUT_OPEN", "NOT_VERIFIED"].includes(review.status) ||
+        !filled(review.evidenceRef)) {
+      fail("UNTRACKED_MEASURED_REGRESSION " + key + " " + code +
+        ": reopen an existing finding or add a new open finding and viewport review");
+    }
+  }
   const viewports = new Map();
-  if (!Array.isArray(manifest?.viewports) || manifest.viewports.length !== 4) {
+  if (!Array.isArray(manifest?.viewports) || (complete && manifest.viewports.length !== 4)) {
     fail("MULTI_VIEWPORT_REQUIRED: define COMPACT, MEDIUM, MAXIMIZED and SCALED viewports");
   }
   for (const [i, v] of (Array.isArray(manifest?.viewports) ? manifest.viewports : []).entries()) {
@@ -45,7 +68,7 @@ export function validateDesktopViewportMatrix(manifest, receipt = null) {
       fail("viewports[" + i + "]: incorrect WINDOWED/MAXIMIZED mode");
     }
   }
-  for (const id of REQUIRED_VIEWPORTS) if (!viewports.has(id)) fail("Missing viewport " + id);
+  if (complete) for (const id of REQUIRED_VIEWPORTS) if (!viewports.has(id)) fail("Missing viewport " + id);
   const compact = viewports.get("COMPACT");
   const medium = viewports.get("MEDIUM");
   const maximized = viewports.get("MAXIMIZED");
@@ -103,11 +126,11 @@ export function validateDesktopViewportMatrix(manifest, receipt = null) {
           ids.add(item.id);
           if (outside(item.supportingText, item.cell) ||
               outside(item.supportingText, c.kpiStrip.rect)) {
-            fail("KPI_SUPPORTING_TEXT_OVERFLOW " + key + " " + item.id);
+            measuredDefect(c, key, "KPI_SUPPORTING_TEXT_OVERFLOW", item.id);
           }
           const clearance = bottomDividerY - bottom(item.supportingText);
           if (clearance < minBottomClearance) {
-            fail("KPI_BOTTOM_CLEARANCE " + key + " " + item.id +
+            measuredDefect(c, key, "KPI_BOTTOM_CLEARANCE", item.id +
               ": measured " + clearance.toFixed(1) + " px, need >= " +
               minBottomClearance + " physical px");
           }
@@ -153,7 +176,7 @@ export function validateDesktopViewportMatrix(manifest, receipt = null) {
         if (typeof inspection[flag] !== "boolean") {
           fail(label + ": missing inspected issue flag " + flag);
         } else if (inspection[flag] === true) {
-          if (receipt?.iterationVerdict === "COMPLETE") {
+          if (complete) {
             fail("RENDER_ANOMALY " + key + " " + flag);
           }
           // Observed defects must become durable findings, even during a
@@ -178,34 +201,35 @@ export function validateDesktopViewportMatrix(manifest, receipt = null) {
     if (["IDLE", "SELECTED", "FOCUS", "COLLECTING"].includes(c.state) &&
         Number.isInteger(c.processTable?.totalRows) && c.processTable.totalRows >= 10 &&
         Number.isInteger(c.processTable?.visibleRows) && c.processTable.visibleRows < 3) {
-      fail("TABLE_CRAMPED " + key + ": fewer than 3 fully visible process rows");
+      measuredDefect(c, key, "TABLE_CRAMPED", "fewer than 3 fully visible process rows");
     }
     if (c.state === "IDLE" && c.inspector?.empty === true && rect(c.inspector.rect) &&
         c.inspector.rect[3] > v.height * 0.25) {
-      fail("EMPTY_INSPECTOR_DOMINATES_TABLE " + key);
+      measuredDefect(c, key, "EMPTY_INSPECTOR_DOMINATES_TABLE");
     }
     if (c.state === "SELECTED" && c.inspector?.empty === true) {
-      fail("SELECTED_INSPECTOR_EMPTY " + key);
+      measuredDefect(c, key, "SELECTED_INSPECTOR_EMPTY");
     }
   }
-  for (const id of ["COMPACT", "MEDIUM", "MAXIMIZED"]) {
+  if (complete) for (const id of ["COMPACT", "MEDIUM", "MAXIMIZED"]) {
     for (const state of BASE_STATES) if (!seen.has(id + ":" + state)) {
       fail("MISSING_VIEWPORT_STATE " + id + ":" + state);
     }
   }
-  for (const state of ["IDLE", "FOCUS"]) if (!seen.has("SCALED:" + state)) {
+  if (complete) for (const state of ["IDLE", "FOCUS"]) if (!seen.has("SCALED:" + state)) {
     fail("MISSING_VIEWPORT_STATE SCALED:" + state);
   }
   // A deliberately excluded stalled state is still reviewed by the base
   // validator; if a stalled state exists, one real viewport must show it.
   const stalledExcluded = Array.isArray(manifest.stateExclusions) &&
     manifest.stateExclusions.some(x => x?.state === "STALLED");
-  if (!stalledExcluded && !captures.some(c => c?.state === "STALLED" &&
+  if (complete && !stalledExcluded && !captures.some(c => c?.state === "STALLED" &&
       ["COMPACT", "MEDIUM", "MAXIMIZED"].includes(c?.viewportId))) {
     fail("STALLED state needs a real viewport capture or justified exclusion");
   }
   const resolved = Array.isArray(receipt?.findings)
-    ? receipt.findings.filter(x => x?.disposition === "RESOLVED" && filled(x.id)) : [];
+    ? receipt.findings.filter(x => ["RESOLVED", "KEEP_JUSTIFIED"].includes(x?.disposition) &&
+        filled(x.id) && !["NAVIGATION", "WORKFLOW"].includes(x.kind)) : [];
   const reviews = Array.isArray(manifest?.findingViewportReviews) ? manifest.findingViewportReviews : [];
   if (!Array.isArray(manifest?.findingViewportReviews)) fail("findingViewportReviews required");
   const seenReviews = new Set();
@@ -240,7 +264,11 @@ export function validateDesktopViewportMatrix(manifest, receipt = null) {
   }
   for (const f of resolved) for (const viewportId of ["COMPACT", "MEDIUM", "MAXIMIZED"]) {
     const review = reviews.find(r => r?.findingId === f.id && r?.viewportId === viewportId);
-    if (!review || !["RESOLVED", "NOT_APPLICABLE"].includes(review.status)) {
+    const captured = captures.some(c => c?.viewportId === viewportId &&
+      (c?.state === "SELECTED" || c?.state === "IDLE") &&
+      filled(c?.image) && filled(c?.renderInspection?.evidenceRef));
+    if (!review || !["RESOLVED", "NOT_APPLICABLE"].includes(review.status) ||
+        (review.status === "RESOLVED" && !captured)) {
       fail("FINDING_NOT_RESOLVED_AT_VIEWPORT " + f.id + ":" + viewportId);
     }
   }

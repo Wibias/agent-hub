@@ -245,13 +245,35 @@ export function validateIterationReceipt(input, baseline = null, desktopEvidence
   }
 
   let desktopEvidenceChecked = false;
+  // Closure is a distinct claim from the overall verdict. A PARTIAL receipt
+  // may honestly carry open visual issues, but it must not silently close
+  // existing visual/detail findings based only on source edits or old screenshots.
+  const visuallyClosed = findings.filter(f => {
+    if (!record(f) || !closed.has(f.disposition)) return false;
+    const historic = Array.isArray(baseline?.findings)
+      ? baseline.findings.find(x => x?.id === f.id) : null;
+    const kind = historic?.kind ?? f.kind;
+    return !["WORKFLOW", "NAVIGATION"].includes(kind);
+  });
   if (input.surfaceKind === "DENSE_DESKTOP_MONITOR") {
     if (desktopEvidence === null) {
-      if (input.iterationVerdict === "COMPLETE") fail("Dense desktop monitor COMPLETE requires final render evidence");
+      if (input.iterationVerdict === "COMPLETE") {
+        fail("Dense desktop monitor COMPLETE requires final render evidence");
+      }
+      for (const f of visuallyClosed) {
+        fail("VISUAL_CLOSURE_UNVERIFIED " + f.id +
+          ": a visually closed finding needs current, multi-viewport rendered evidence even in PARTIAL");
+      }
     } else {
       const desktop = validateDesktopRenderEvidence(desktopEvidence, input);
       desktopEvidenceChecked = desktop.valid;
       if (!desktop.valid) problems.push(...desktop.problems.map(x => "desktop render: " + x));
+      if (desktopEvidence.schemaVersion !== 2) {
+        for (const f of visuallyClosed) {
+          fail("VISUAL_CLOSURE_UNVERIFIED " + f.id +
+            ": single-viewport evidence cannot prove visual closure");
+        }
+      }
     }
   }
   return {
