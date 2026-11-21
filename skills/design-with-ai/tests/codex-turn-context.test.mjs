@@ -205,3 +205,12 @@ test("failed host command events never register a successful gate candidate", ()
   assert.equal(failed.cause, "NOT_RELEVANT");
   assert.deepEqual(readTurnContext(f.event, { root: f.stateRoot }).gateCommands, []);
 }));
+
+test("native root flag is recorded as a version-bound gate input without storing commands", () => fixture(async (f) => {
+  recordTurnHook(f.prompt("Verbessere PCGuardian mit design-with-ai"), { root: f.stateRoot });
+  const command = 'node run-iteration-gate.mjs --receipt receipt.json --ledger ledger.json --proof proof.json --source-root project';
+  const recorded = recordTurnHook(f.tool(command), { root: f.stateRoot });
+  assert.equal(recorded.cause, "GATE_CANDIDATE");
+  const context = readTurnContext(f.event, { root: f.stateRoot });
+  assert.equal(context.gateCommands[0]["source-root"], join(f.root, "project"));
+}));

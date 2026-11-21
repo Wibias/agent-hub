@@ -8,7 +8,7 @@ import { spawnSync } from "node:child_process";
 import {
   validateDesktopRenderEvidence, snapshotDesktopCaptureFiles,
 } from "../scripts/desktop-render-evidence.mjs";
-import { snapshotProjectSource } from "../scripts/project-source-snapshot.mjs";
+import { snapshotProjectSource, snapshotRootedSource } from "../scripts/project-source-snapshot.mjs";
 import { runGate, checkProof } from "../scripts/run-iteration-gate.mjs";
 import { validateIterationReceipt } from "../scripts/verify-iteration-receipt.mjs";
 
@@ -69,7 +69,7 @@ function fixture(fn) {
   const candidate = snapshotProjectSource(repo);
   assert.ok(candidate?.sha256);
   assert.ok(candidate.fileCount >= 1, "C# source must participate in the fingerprint");
-  const m = manifest(candidate.sha256);
+  const m = manifest(snapshotRootedSource(repo).sha256);
   for (const c of m.captures) writeFileSync(join(root, c.image), png);
   const manifestPath = join(root, "desktop-render.json");
   const receiptPath = join(root, "receipt.json");
@@ -158,7 +158,7 @@ test("real screenshot bytes are bound, path traversal is refused and later edits
 }));
 test("full iteration proof binds final screenshots and actual C# source, then detects changes", () => fixture(f => {
   const options = { receipt: f.receiptPath, renderEvidence: f.manifestPath,
-    proof: f.proof, workspaceCwd: f.repo };
+    sourceRoot: f.repo, proof: f.proof, workspaceCwd: f.root };
   const ran = runGate(options);
   assert.equal(ran.exitCode, 0, JSON.stringify(ran.proof.result?.problems));
   const checked = checkProof({ ...options, checkProof: f.proof });
@@ -172,7 +172,7 @@ test("full iteration proof binds final screenshots and actual C# source, then de
 }));
 test("last-minute screenshot change invalidates the old proof even without code changes", () => fixture(f => {
   const options = { receipt: f.receiptPath, renderEvidence: f.manifestPath,
-    proof: f.proof, workspaceCwd: f.repo };
+    sourceRoot: f.repo, proof: f.proof, workspaceCwd: f.root };
   assert.equal(runGate(options).exitCode, 0);
   writeFileSync(join(f.root, "selected.png"), Buffer.from(png).fill(0x42, 35, 36));
   const stale = checkProof({ ...options, checkProof: f.proof });
@@ -185,11 +185,11 @@ test("geometry failure never becomes COMPLETE just because the formal receipt cl
   selected.inspector.rect = [0, 426, 1166, 230];
   f.save();
   const ran = runGate({ receipt: f.receiptPath, renderEvidence: f.manifestPath,
-    proof: f.proof, workspaceCwd: f.repo });
+    sourceRoot: f.repo, proof: f.proof, workspaceCwd: f.root });
   assert.equal(ran.exitCode, 1);
   assert.equal(ran.proof.result.valid, false);
   assert.equal(checkProof({ receipt: f.receiptPath, renderEvidence: f.manifestPath,
-    checkProof: f.proof, workspaceCwd: f.repo }).completionEligible, false);
+    sourceRoot: f.repo, checkProof: f.proof, workspaceCwd: f.root }).completionEligible, false);
 }));
 test("legacy non-desktop iteration stays valid without desktop evidence", () => {
   const a = receipt();
@@ -200,4 +200,18 @@ test("legacy non-desktop iteration stays valid without desktop evidence", () => 
 test("a renamed placeholder is not accepted as screenshot evidence", () => fixture(f => {
   writeFileSync(join(f.root, "idle.png"), Buffer.alloc(100, 65));
   assert.match(snapshotDesktopCaptureFiles(f.manifestPath).problems.join("; "), /does not match its image format/);
+}));
+
+test("native COMPLETE cannot run from an unrelated directory without an explicit source root", () => fixture(f => {
+  assert.throws(() => runGate({ receipt: f.receiptPath, renderEvidence: f.manifestPath,
+    proof: f.proof, workspaceCwd: f.root }), /requires explicit --source-root/);
+}));
+test("a different source-root path invalidates proof replay", () => fixture(f => {
+  const args = { receipt: f.receiptPath, renderEvidence: f.manifestPath, sourceRoot: f.repo,
+    proof: f.proof, workspaceCwd: f.root };
+  assert.equal(runGate(args).exitCode, 0);
+  assert.equal(checkProof({ ...args, checkProof: f.proof }).sourceBound, true);
+  const replay = checkProof({ ...args, sourceRoot: f.root, checkProof: f.proof });
+  assert.equal(replay.valid, false);
+  assert.ok(replay.issueCodes.includes("PATH_MISMATCH"));
 }));
