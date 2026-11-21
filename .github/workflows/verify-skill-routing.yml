@@ -75,11 +75,11 @@ jobs:
       - name: Validate Skill Ratchet structure
         run: node skills/skill-ratchet/scripts/skill-ratchet.mjs validate --skill-root skills/skill-ratchet
 
-      - name: Test extract approach memory initialization
-        run: node --test skills/extract-approach/tests/*.test.mjs
+      - name: Verify intentionally retired skills remain absent
+        run: node --test tests/skill-catalog/decommissioned-skills.test.mjs
 
-      - name: Validate extract approach skill structure
-        run: node skills/skill-ratchet/scripts/skill-ratchet.mjs validate --skill-root skills/extract-approach
+      - name: Validate active retrospective skill structure
+        run: node skills/skill-ratchet/scripts/skill-ratchet.mjs validate --skill-root skills/retrospective
 
       - name: Test read github target normalization
         run: node --test skills/read-github/tests/*.test.mjs
