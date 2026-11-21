@@ -133,3 +133,57 @@ test('ordering of arrays is significant to the displayed checkpoint', () => {
   f.packet.directions.reverse();
   assert.notEqual(before, hashArtifact(f.packet));
 });
+
+test('causal refinement validates and remains subject to manual review', () => {
+  const f = fixture(), revisedSlice = clone(f.slice);
+  revisedSlice.visualDecisions.push('Visible pending state');
+  const refinement = {
+    schemaVersion: 1, artifactType: 'CRITIQUE_REFINEMENT',
+    sourceArtifactHash: hashArtifact(f.slice), resultArtifactHash: hashArtifact(revisedSlice),
+    findings: [{ id: 'UX-1', disposition: 'RESOLVED', reason: 'Pending status visible',
+      evidenceRef: 'render:jobs-after' }],
+    deltas: [{ causedByFindingIds: ['UX-1'], fromRef: 'view:detail-v1',
+      toRef: 'view:detail-v2', changeSummary: 'Make state visible' }],
+  };
+  const r = validateAll({ ...f, revisedSlice, refinement });
+  assert.equal(r.ok, true, errs(r));
+  assert.equal(r.reviewRequired, true);
+  refinement.deltas = [];
+  assert.match(errs(validateAll({ ...f, revisedSlice, refinement })), /lacks causal design delta/);
+});
+test('refinement refuses dangling finding IDs and identical result artifacts', () => {
+  const f = fixture(), revisedSlice = clone(f.slice);
+  revisedSlice.visualDecisions.push('Delta');
+  const refinement = {
+    schemaVersion: 1, artifactType: 'CRITIQUE_REFINEMENT',
+    sourceArtifactHash: hashArtifact(f.slice), resultArtifactHash: hashArtifact(revisedSlice),
+    findings: [{ id: 'UX-1', disposition: 'RESOLVED', reason: 'Changed', evidenceRef: 'render:after' }],
+    deltas: [{ causedByFindingIds: ['UX-999'], fromRef: 'a', toRef: 'b', changeSummary: 'Change' }],
+  };
+  assert.match(errs(validateAll({ ...f, revisedSlice, refinement })), /unknown finding ID/);
+  refinement.resultArtifactHash = refinement.sourceArtifactHash;
+  assert.match(errs(validateAll({ ...f, revisedSlice: clone(f.slice), refinement })), /unchanged result artifact/);
+});
+test('generalized grammar requires evidence-linked rationale', () => {
+  const f = fixture();
+  const designContract = { schemaVersion: 1, artifactType: 'DESIGN_GRAMMAR', rules: [
+    { id: 'spacing', category: 'SPATIAL_RHYTHM', rule: 'Use 24 px globally',
+      provenance: 'GENERALIZED', sourceRef: 'slice:approved' },
+  ] };
+  assert.match(errs(validateAll({ ...f, designContract })), /rationale/);
+  designContract.rules[0].rationale = 'Observed across approved surfaces';
+  assert.equal(validateAll({ ...f, designContract }).ok, true);
+  designContract.rules[0].provenance = 'UNKNOWN';
+  assert.match(errs(validateAll({ ...f, designContract })), /UNKNOWN design truth/);
+});
+test('implementation identity binding must match the currently approved slice', () => {
+  const f = fixture(), h = hashArtifact(f.slice);
+  const implementationBinding = {
+    schemaVersion: 1, artifactType: 'DESIGN_IMPLEMENTATION_BINDING',
+    approvedArtifactHash: h, implementedAgainstArtifactHash: '0'.repeat(64),
+    proofRef: 'artifacts:run-gate',
+  };
+  assert.match(errs(validateAll({ ...f, implementationBinding })), /does not match the currently approved artifact/);
+  implementationBinding.implementedAgainstArtifactHash = h;
+  assert.equal(validateAll({ ...f, implementationBinding }).ok, true);
+});
