@@ -165,3 +165,43 @@ test("implicit skill read opts in for a modifying UI request", () => fixture(asy
   assert.equal(context.readsSkill, true);
   assert.equal((await handleStop(f.stop, { turnRoot: f.stateRoot })).decision, "block");
 }));
+
+test("exec_command native events recognize actual PowerShell gate invocations", () => fixture(async (f) => {
+  recordTurnHook(f.prompt("Verbessere PCGuardian mit design-with-ai."), { root: f.stateRoot });
+  const command = 'node run-iteration-gate.mjs --receipt "receipt.json" --proof "proof.json"';
+  const result = recordTurnHook({
+    ...f.event, hook_event_name: "PostToolUse", tool_name: "exec_command",
+    tool_input: { cmd: ["powershell", "-NoProfile", "-Command", command] },
+    tool_response: { exit_code: 0 },
+  }, { root: f.stateRoot });
+  assert.equal(result.cause, "GATE_CANDIDATE");
+  const report = readTurnContext(f.event, { root: f.stateRoot });
+  assert.equal(report.gateCommands.length, 1);
+  assert.equal(report.gateCommands[0].proof, join(f.root, "proof.json"));
+}));
+test("functions.exec accepts exposed commands but not opaque wrapper JavaScript", () => fixture(async (f) => {
+  recordTurnHook(f.prompt("Verbessere PCGuardian mit design-with-ai."), { root: f.stateRoot });
+  const raw = 'node run-iteration-gate.mjs --receipt receipt.json --proof proof.json';
+  const direct = recordTurnHook({
+    ...f.event, hook_event_name: "PostToolUse", tool_name: "functions.exec",
+    tool_input: { command: raw }, tool_response: { ok: true },
+  }, { root: f.stateRoot });
+  assert.equal(direct.cause, "GATE_CANDIDATE");
+  const opaque = recordTurnHook({
+    ...f.event, hook_event_name: "PostToolUse", tool_name: "functions.exec",
+    tool_input: { code: 'text("node run-iteration-gate.mjs --receipt receipt.json --proof proof.json")' },
+    tool_response: { ok: true },
+  }, { root: f.stateRoot });
+  assert.equal(opaque.cause, "NOT_RELEVANT");
+  assert.equal(readTurnContext(f.event, { root: f.stateRoot }).gateCommands.length, 1);
+}));
+test("failed host command events never register a successful gate candidate", () => fixture(async (f) => {
+  recordTurnHook(f.prompt("Verbessere PCGuardian mit design-with-ai."), { root: f.stateRoot });
+  const failed = recordTurnHook({
+    ...f.event, hook_event_name: "PostToolUse", tool_name: "exec_command",
+    tool_input: { cmd: ["bash", "-lc", "node run-iteration-gate.mjs --receipt receipt.json --proof proof.json"] },
+    tool_response: { exit_code: 1 },
+  }, { root: f.stateRoot });
+  assert.equal(failed.cause, "NOT_RELEVANT");
+  assert.deepEqual(readTurnContext(f.event, { root: f.stateRoot }).gateCommands, []);
+}));

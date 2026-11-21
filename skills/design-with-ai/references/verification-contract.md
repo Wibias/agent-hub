@@ -127,6 +127,18 @@ macro similarity. Do not load or run this comparison for a single-route task.
 
 ## Dense desktop monitor quality evidence (conditional)
 
+The full-window desktop monitor now has a concrete conditional
+`DENSE_DESKTOP_MONITOR` render-evidence contract. When that surface is
+being modified, the iteration receipt MUST name `surfaceKind:
+"DENSE_DESKTOP_MONITOR"`; `COMPLETE` requires the additional
+`--render-evidence` artifact. Its measured geometry, screenshot bytes
+and actual source SHA-256 are checked by
+`scripts/desktop-render-evidence.mjs` and
+`run-iteration-gate.mjs`. Source `.cs`, `.csproj`, `.resx` and
+`.xaml` edits invalidate earlier proofs. This cannot attest the image
+origin, so real rendered inspection is still required.
+
+
 When `desktop-monitoring-surfaces.md` applies, completion evidence must
 include a matched actual window-size/DPI render, header/KPI fit, table
 readability and width allocation, list-versus-empty-inspector height use,

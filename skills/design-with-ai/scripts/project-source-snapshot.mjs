@@ -6,14 +6,15 @@ import { createHash } from "node:crypto";
 import { lstatSync, readFileSync, readlinkSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { basename, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const MAX_FILES = 12000;
 const MAX_FILE_BYTES = 16 * 1024 * 1024;
 const MAX_TOTAL_BYTES = 256 * 1024 * 1024;
 const MAX_GIT_OUTPUT = 8 * 1024 * 1024;
-const SOURCE = /\.(?:ts|tsx|js|jsx|mjs|cjs|html|css|scss|sass|less|json|jsonl|md|mdx|yaml|yml|toml|xml|svg|py|sh|ps1|psm1|sql|svelte|vue|astro|php|go|rs|java|kt|swift|rb|txt|ini|graphql|gql|png|jpe?g|webp|gif|ico)$/i;
+const SOURCE = /\.(?:ts|tsx|js|jsx|mjs|cjs|html|css|scss|sass|less|json|jsonl|md|mdx|yaml|yml|toml|xml|svg|py|sh|ps1|psm1|sql|svelte|vue|astro|php|go|rs|java|kt|swift|rb|cs|csproj|sln|slnx|resx|xaml|axaml|razor|fs|fsproj|vb|props|targets|txt|ini|graphql|gql|png|jpe?g|webp|gif|ico)$/i;
 const SPECIAL = /^(?:Dockerfile|Makefile|Containerfile|\.gitignore|\.prettierignore|\.editorconfig|\.npmrc)$/i;
-const GENERATED = /^(?:node_modules|\.git|\.next|\.nuxt|\.cache|coverage|dist|build|test-results|playwright-report|tmp|temp|artifacts|screenshots|\.codex|\.design-with-ai)(?:\/|$)/i;
+const GENERATED = /^(?:node_modules|\.git|\.vs|\.next|\.nuxt|\.cache|coverage|dist|build|bin|obj|publish|test-results|playwright-report|tmp|temp|artifacts|screenshots|\.codex|\.design-with-ai)(?:\/|$)/i;
 
 function git(cwd, ...args) {
   const result = spawnSync("git", ["-C", cwd, ...args], {
@@ -115,4 +116,15 @@ export function snapshotProjectSource(cwd = process.cwd(), { ignorePaths = [] } 
     digest.update("\0");
   }
   return { schemaVersion: 1, sha256: digest.digest("hex"), fileCount: count };
+}
+
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  try {
+    const result = snapshotProjectSource(process.cwd());
+    if (result === null) throw new Error("No Git project detected; cannot bind native render to a source snapshot");
+    process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+  } catch (error) {
+    process.stderr.write("Cannot fingerprint current product source: " + error.message + "\n");
+    process.exitCode = 2;
+  }
 }

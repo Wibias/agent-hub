@@ -32,7 +32,10 @@ jobs:
         run: |
           node --check skills/design-with-ai/scripts/validate-design-decision.mjs
           node --check skills/design-with-ai/scripts/findings-ledger.mjs
+          node --check skills/design-with-ai/scripts/desktop-render-evidence.mjs
+          node --check skills/design-with-ai/scripts/project-source-snapshot.mjs
+          node --check skills/design-with-ai/scripts/codex-turn-context.mjs
       - name: Test decision lineage and durable findings ledger
-        run: node --test skills/design-with-ai/tests/validate-design-decision.test.mjs skills/design-with-ai/tests/findings-ledger.test.mjs skills/design-with-ai/tests/desktop-monitoring-surfaces.test.mjs
+        run: node --test skills/design-with-ai/tests/validate-design-decision.test.mjs skills/design-with-ai/tests/findings-ledger.test.mjs skills/design-with-ai/tests/desktop-monitoring-surfaces.test.mjs skills/design-with-ai/tests/desktop-render-evidence.test.mjs skills/design-with-ai/tests/project-source-snapshot.test.mjs skills/design-with-ai/tests/codex-turn-context.test.mjs skills/design-with-ai/tests/install-codex-stop-gate.test.mjs skills/design-with-ai/tests/run-iteration-gate.test.mjs skills/design-with-ai/tests/verify-iteration-receipt.test.mjs
       - name: Validate DWA skill structure and retained regressions
         run: node skills/skill-ratchet/scripts/skill-ratchet.mjs validate --skill-root skills/design-with-ai --json

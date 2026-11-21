@@ -4,6 +4,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { validateDesktopRenderEvidence } from "./desktop-render-evidence.mjs";
 
 const dispositions = new Set([
   "RESOLVED", "IMPROVED_BUT_OPEN", "PERSISTS", "REGRESSED",
@@ -26,7 +27,7 @@ function matchedCandidate(before, after) {
 
 // A separate pre-edit baseline is supplied by the task/previous review.
  // It is intentionally not sourced from the post-edit receipt being judged.
-export function validateIterationReceipt(input, baseline = null) {
+export function validateIterationReceipt(input, baseline = null, desktopEvidence = null) {
   const problems = [];
   const fail = (message) => problems.push(message);
   if (!record(input) || input.schemaVersion !== 1) {
@@ -243,7 +244,18 @@ export function validateIterationReceipt(input, baseline = null) {
     fail("PARTIAL/NOT_VERIFIED requires verdictReason");
   }
 
+  let desktopEvidenceChecked = false;
+  if (input.surfaceKind === "DENSE_DESKTOP_MONITOR") {
+    if (desktopEvidence === null) {
+      if (input.iterationVerdict === "COMPLETE") fail("Dense desktop monitor COMPLETE requires final render evidence");
+    } else {
+      const desktop = validateDesktopRenderEvidence(desktopEvidence, input);
+      desktopEvidenceChecked = desktop.valid;
+      if (!desktop.valid) problems.push(...desktop.problems.map(x => "desktop render: " + x));
+    }
+  }
   return {
+    desktopEvidenceChecked,
     valid: problems.length === 0,
     verdict: input.iterationVerdict ?? null,
     inScope: scope.length,
@@ -259,7 +271,7 @@ async function main(argv) {
   const args = argv.slice(2);
   const options = new Map();
   for (let i = 0; i < args.length; i += 2) {
-    if (!["--receipt", "--baseline", "--ledger"].includes(args[i]) ||
+    if (!["--receipt", "--baseline", "--ledger", "--render-evidence"].includes(args[i]) ||
         typeof args[i + 1] !== "string" || args[i + 1].startsWith("--") ||
         options.has(args[i])) {
       process.stderr.write("Usage: node verify-iteration-receipt.mjs --receipt <json> [--baseline <json>] [--ledger <json>]\n");
@@ -282,7 +294,9 @@ async function main(argv) {
       process.exitCode = 2;
       return;
     }
-    const result = validateIterationReceipt(data, baseline);
+    const desktopEvidence = options.has("--render-evidence")
+      ? JSON.parse(readFileSync(options.get("--render-evidence"), "utf8")) : null;
+    const result = validateIterationReceipt(data, baseline, desktopEvidence);
     if (options.has("--ledger")) {
       const { readLedger, verifyLedgerCoverage } = await import("./findings-ledger.mjs");
       const ledger = readLedger(options.get("--ledger"));
