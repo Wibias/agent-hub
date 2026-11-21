@@ -286,7 +286,7 @@ function main() {
   try {
     const options = argsOf(process.argv.slice(2));
     if (options.help) {
-      process.stdout.write("Usage: node run-iteration-gate.mjs --receipt <json> [--baseline <json>] [--ledger <json>] --proof <out.json>\n   or: node run-iteration-gate.mjs --receipt <json> [--baseline <json>] [--ledger <json>] --check-proof <proof.json>\n");
+      process.stdout.write("Usage: node run-iteration-gate.mjs --receipt <json> [--baseline <json>] [--ledger <json>] [--source-root <native-project-dir>] --proof <out.json>\n   or: node run-iteration-gate.mjs --receipt <json> [--baseline <json>] [--ledger <json>] [--source-root <native-project-dir>] --check-proof <proof.json>\n");
       return;
     }
     if (options.checkProof !== null) {

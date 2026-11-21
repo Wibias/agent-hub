@@ -69,16 +69,21 @@ inspector leaves at most two visible rows among ten or more processes.
 Those thresholds are conditional failure evidence, not a universal
 aesthetic rule or an instruction to remove useful process details.
 
-Run the read-only source snapshot from the target project's working
-directory to obtain the hash:
+Native projects without Git can still produce a bounded source fingerprint.
+Use the actual native project folder, not a separate scratch working directory.
+The explicit rooted mode does not need to repair or delete an unrelated
+ancestor `.git` folder. It hashes eligible source files and omits known
+build output; the root must contain real source, not just generated files.
+
+Run the read-only source snapshot with `--source-root` to obtain the hash:
 
 ```powershell
-node "$HOME/.agents/skills/design-with-ai/scripts/project-source-snapshot.mjs"
+node "$HOME/.agents/skills/design-with-ai/scripts/project-source-snapshot.mjs" --source-root "<PCGuardian-project-dir>"
 ```
 
 Then run the existing iteration proof with its normal `--receipt`,
-`--baseline` and `--ledger` flags and the additional
-`--render-evidence <final-render.json>`. Repeat that same extra flag with
+`--baseline` and `--ledger` flags plus `--source-root <PCGuardian-project-dir>`
+and `--render-evidence <final-render.json>`. Repeat both extra flags with
 `--check-proof`. The gate checks the real screenshot file bytes,
 manifest source identity and current C#/WinForms source. **After any final
 UI edit or screenshot update, take fresh captures and create a new proof.**

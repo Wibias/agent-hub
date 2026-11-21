@@ -148,7 +148,7 @@ export function snapshotRootedSource(sourceRoot, { ignorePaths = [] } = {}) {
       a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
     for (const entry of entries) {
       const relPath = rel ? rel + "/" + entry.name : entry.name;
-      if (GENERATED.test(relPath)) continue;
+      if (GENERATED.test(relPath) || (entry.isDirectory() && GENERATED.test(entry.name + "/"))) continue;
       const full = resolve(dir, entry.name);
       if (excluded(full, ignored)) continue;
       const st = lstatSync(full);
