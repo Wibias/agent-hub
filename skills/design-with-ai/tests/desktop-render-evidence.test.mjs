@@ -292,7 +292,7 @@ test("a renamed placeholder is not accepted as screenshot evidence", () => fixtu
 
 test("native COMPLETE cannot run from an unrelated directory without an explicit source root", () => fixture(f => {
   assert.throws(() => runGate({ receipt: f.receiptPath, renderEvidence: f.manifestPath,
-    proof: f.proof, workspaceCwd: f.root }), /requires explicit --source-root/);
+    proof: f.proof, workspaceCwd: f.root }), /requires a trustworthy project source root/);
 }));
 test("a different source-root path invalidates proof replay", () => fixture(f => {
   const args = { receipt: f.receiptPath, renderEvidence: f.manifestPath, sourceRoot: f.repo,
