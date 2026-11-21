@@ -4,11 +4,13 @@
 import { createHash } from "node:crypto";
 import { lstatSync, readFileSync, realpathSync } from "node:fs";
 import { dirname, extname, isAbsolute, relative, resolve, sep } from "node:path";
+import { validateDesktopViewportMatrix } from "./desktop-viewport-matrix.mjs";
 
 const object = x => x !== null && typeof x === "object" && !Array.isArray(x);
 const filled = x => typeof x === "string" && x.trim().length > 0;
 const hex = x => typeof x === "string" && /^[0-9a-f]{64}$/.test(x);
 const statesRequired = ["IDLE", "SELECTED", "FOCUS", "STALLED"];
+const v2States = new Set([...statesRequired, "COLLECTING"]);
 const checksRequired = ["NO_SELECTION_ACTION", "SEGMENT_KEYBOARD", "CHART_HISTORY", "DPI_READABILITY"];
 const knownStates = new Set(statesRequired);
 const knownChecks = new Set(checksRequired);
@@ -28,9 +30,13 @@ function expectedWindowRect(viewport) { return [0, 0, viewport.width, viewport.h
 export function validateDesktopRenderEvidence(manifest, receipt = null) {
   const problems = [];
   const fail = message => problems.push(message);
-  if (!object(manifest) || manifest.schemaVersion !== 1 ||
+  if (!object(manifest) || ![1, 2].includes(manifest.schemaVersion) ||
       manifest.surfaceKind !== "DENSE_DESKTOP_MONITOR") {
-    return { valid: false, problems: ["Expected a version 1 DENSE_DESKTOP_MONITOR render manifest"] };
+    return { valid: false, problems: ["Expected a version 1 or 2 DENSE_DESKTOP_MONITOR render manifest"] };
+  }
+  const matrix = manifest.schemaVersion === 2;
+  if (receipt?.iterationVerdict === "COMPLETE" && !matrix) {
+    fail("MULTI_VIEWPORT_REQUIRED: legacy single-viewport evidence cannot certify COMPLETE");
   }
   if (!hex(manifest.candidateSourceSha256)) fail("Missing versioned candidateSourceSha256");
   if (!Array.isArray(manifest.captures) || manifest.captures.length === 0) {
@@ -40,7 +46,8 @@ export function validateDesktopRenderEvidence(manifest, receipt = null) {
   for (const [i, c] of (Array.isArray(manifest.captures) ? manifest.captures : []).entries()) {
     const label = "captures[" + i + "]";
     if (!object(c)) { fail(label + ": invalid capture"); continue; }
-    if (!knownStates.has(c.state) || seenStates.has(c.state)) {
+    if (!(matrix ? v2States : knownStates).has(c.state) ||
+        (!matrix && seenStates.has(c.state))) {
       fail(label + ": unknown or duplicate state");
     }
     seenStates.add(c.state);
@@ -126,8 +133,13 @@ export function validateDesktopRenderEvidence(manifest, receipt = null) {
       } else excluded.add(exclusion.state);
     }
   }
-  for (const state of statesRequired) if (!seenStates.has(state) && !excluded.has(state)) {
-    fail("Missing final render state " + state);
+  if (!matrix) for (const state of statesRequired) {
+    if (!seenStates.has(state) && !excluded.has(state)) {
+      fail("Missing final render state " + state);
+    }
+  } else {
+    const matrixResult = validateDesktopViewportMatrix(manifest, receipt);
+    problems.push(...matrixResult.problems);
   }
   if (!Array.isArray(manifest.checks)) fail("checks: interaction and freshness results required");
   const seenChecks = new Set();
@@ -178,7 +190,8 @@ export function snapshotDesktopCaptureFiles(manifestPath) {
   for (const capture of Array.isArray(manifest.captures) ? manifest.captures : []) {
     const name = capture?.image;
     if (!filled(name) || isAbsolute(name) || name.replaceAll("\\", "/").split("/").includes("..") ||
-        !/^\.(?:png|jpe?g|webp)$/i.test(extname(name))) {
+        !/^\.(?:png|jpe?g|webp)$/i.test(extname(name)) ||
+        (manifest.schemaVersion === 2 && extname(name).toLowerCase() !== ".png")) {
       problems.push("Invalid screenshot relative path");
       continue;
     }
@@ -207,9 +220,19 @@ export function snapshotDesktopCaptureFiles(manifestPath) {
           : bytes.toString("ascii", 0, 4) === "RIFF" &&
             bytes.toString("ascii", 8, 12) === "WEBP";
       if (!formatOk) { problems.push("Screenshot file does not match its image format"); continue; }
+      if (manifest.schemaVersion === 2) {
+        const viewport = capture.viewport;
+        if (bytes.length < 24 || bytes.toString("ascii", 12, 16) !== "IHDR" ||
+            !object(viewport) || bytes.readUInt32BE(16) !== viewport.width ||
+            bytes.readUInt32BE(20) !== viewport.height) {
+          problems.push("VIEWPORT_IMAGE_DIMENSION_MISMATCH: " +
+            capture.viewportId + ":" + capture.state);
+          continue;
+        }
+      }
       const sha256 = createHash("sha256").update(bytes).digest("hex");
       if (sha256 !== capture.imageSha256) problems.push("Screenshot hash mismatch: " + capture.state);
-      files.push({ state: capture.state, sha256, size: st.size });
+      files.push({ state: capture.state, viewportId: capture.viewportId ?? null, sha256, size: st.size });
     } catch {
       problems.push("Screenshot unavailable: " + capture.state);
     }
