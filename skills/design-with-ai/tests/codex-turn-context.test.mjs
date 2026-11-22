@@ -7,7 +7,8 @@ import { classifyPrompt, recordTurnHook, readTurnContext } from "../scripts/code
 import { handleStop } from "../scripts/codex-stop-gate.mjs";
 import { runGate, checkProof } from "../scripts/run-iteration-gate.mjs";
 import { initializeLedger, importFindings, makeLedgerBaseline, readLedger, syncLedger } from "../scripts/findings-ledger.mjs";
-import { listRecentNativeGateProofs, recordNativeGateProof } from "../scripts/native-gate-proof-index.mjs";
+import { listRecentNativeGateProofs, inspectRecentNativeGateProofs, recordNativeGateProof } from "../scripts/native-gate-proof-index.mjs";
+import { createDiagnostic } from "../scripts/stop-diagnostic-journal.mjs";
 
 async function fixture(action) {
   const root = mkdtempSync(join(tmpdir(), "design-native-turn-test-"));
@@ -363,6 +364,82 @@ test("a real native gate registers a verified hint even when Codex cwd is severa
   }, { turnRoot: f.stateRoot, gateIndexRoot: indexRoot });
   assert.equal(result.status, "ACTIONABLE_PARTIAL_CONTINUATION", JSON.stringify(result));
   assert.equal(result.proofStatus, "VERIFIED_INCOMPLETE");
+}));
+
+
+test("native index diagnoses a current registered proof outside the actual Codex cwd", () => fixture(async f => {
+  const workspace = join(f.root, "session-workspace");
+  const otherProject = join(f.root, "unrelated-workspace", "PCGuardian");
+  mkdirSync(workspace, { recursive: true });
+  mkdirSync(otherProject, { recursive: true });
+  const indexRoot = join(f.root, "private-index");
+  const n = nativeGateFixture(otherProject);
+  const event = { ...f.event, cwd: workspace };
+  recordTurnHook({ ...event, hook_event_name: "UserPromptSubmit",
+    prompt: "Verbessere PCGuardian mit design-with-ai." }, { root: f.stateRoot });
+  assert.equal(runGate({ receipt: n.receipt, baseline: n.baseline,
+    ledger: n.ledger, proof: n.proof, workspaceCwd: f.root,
+    nativeGateIndexRoot: indexRoot }).exitCode, 0);
+  const turn = readTurnContext(event, { root: f.stateRoot });
+  assert.equal(inspectRecentNativeGateProofs({
+    cwd: workspace, startedAt: turn.promptAt, indexRoot,
+  }).status, "INDEX_CWD_DISJOINT");
+  const result = await handleStop({
+    ...event, hook_event_name: "Stop", stop_hook_active: false,
+    last_assistant_message: "PARTIAL: Auswahlzustand offen.",
+  }, { turnRoot: f.stateRoot, gateIndexRoot: indexRoot });
+  assert.equal(result.proofStatus, "NO_GATE_COMMAND");
+  assert.equal(result.gateIndexStatus, "INDEX_CWD_DISJOINT");
+  const diagnostic = createDiagnostic({
+    event, report: turn, result, transcriptState: "NATIVE_TURN_EVENTS",
+  });
+  assert.equal(diagnostic.nativeIndex, "INDEX_CWD_DISJOINT");
+  assert.ok(!JSON.stringify(diagnostic).includes(otherProject));
+}));
+
+test("native index distinguishes a registered but rejected proof from no registration", () => fixture(async f => {
+  const project = join(f.root, "nested", "PCGuardian");
+  mkdirSync(project, { recursive: true });
+  const indexRoot = join(f.root, "private-index");
+  const n = nativeGateFixture(project);
+  recordTurnHook(f.prompt("Verbessere PCGuardian mit design-with-ai."), { root: f.stateRoot });
+  assert.equal(runGate({ receipt: n.receipt, baseline: n.baseline,
+    ledger: n.ledger, proof: n.proof, workspaceCwd: f.root,
+    nativeGateIndexRoot: indexRoot }).exitCode, 0);
+  const proof = JSON.parse(readFileSync(n.proof, "utf8"));
+  proof.ledger = null;
+  writeFileSync(n.proof, JSON.stringify(proof));
+  const result = await handleStop({
+    ...f.stop, last_assistant_message: "PARTIAL: Nachprüfung offen.",
+  }, { turnRoot: f.stateRoot, gateIndexRoot: indexRoot });
+  assert.equal(result.proofStatus, "NO_GATE_COMMAND");
+  assert.equal(result.gateIndexStatus, "INDEX_PROOF_METADATA_INVALID");
+}));
+
+test("native index exposes timing rejection without storing paths in the Stop journal", () => fixture(async f => {
+  const indexRoot = join(f.root, "private-index");
+  const project = join(f.root, "deep", "PCGuardian");
+  mkdirSync(project, { recursive: true });
+  const n = nativeGateFixture(project);
+  assert.equal(recordNativeGateProof({ proofPath: n.proof,
+    sourceRoot: project, executedAt: "2000-01-01T00:00:00.000Z",
+  }, { indexRoot }).recorded, true);
+  recordTurnHook(f.prompt("Verbessere PCGuardian mit design-with-ai."), { root: f.stateRoot });
+  const turn = readTurnContext(f.event, { root: f.stateRoot });
+  const inspected = inspectRecentNativeGateProofs({
+    cwd: f.root, startedAt: turn.promptAt, indexRoot,
+  });
+  assert.deepEqual(inspected.proofPaths, []);
+  assert.equal(inspected.status, "INDEX_OUTSIDE_TURN_TIME");
+  const result = await handleStop({
+    ...f.stop, last_assistant_message: "PARTIAL: visuelle Prüfung offen.",
+  }, { turnRoot: f.stateRoot, gateIndexRoot: indexRoot });
+  assert.equal(result.gateIndexStatus, "INDEX_OUTSIDE_TURN_TIME");
+  const journal = createDiagnostic({
+    event: f.stop, report: turn, result, transcriptState: "NATIVE_TURN_EVENTS",
+  });
+  assert.equal(journal.nativeIndex, "INDEX_OUTSIDE_TURN_TIME");
+  assert.ok(!JSON.stringify(journal).includes(project));
 }));
 
 test("the proof index refuses to select ambiguous deep native projects", () => fixture(async f => {

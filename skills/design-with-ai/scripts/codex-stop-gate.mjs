@@ -13,7 +13,7 @@ import { appendStopDiagnostic } from "./stop-diagnostic-journal.mjs";
 import { isGitProject, discoverProjectLedger } from "./findings-ledger.mjs";
 import { discoverNativeSourceRoot } from "./project-source-snapshot.mjs";
 import { readTurnContext } from "./codex-turn-context.mjs";
-import { defaultNativeGateIndexRoot, listRecentNativeGateProofs } from "./native-gate-proof-index.mjs";
+import { defaultNativeGateIndexRoot, inspectRecentNativeGateProofs } from "./native-gate-proof-index.mjs";
 
 const SKILL_PATH = /(?:^|[\\/])design-with-ai[\\/]SKILL\.md/i;
 const GATE_RUN = /(?:^|[\s;"'\\/])run-iteration-gate\.mjs/i;
@@ -73,47 +73,68 @@ function isValidArtifact(path) {
  * Never infer successful execution from JavaScript source or stdout prose.
  * Recover only a current, locally generated, source-bound gate artifact.
  */
-function nativeArtifactOptions(proofPath, cwd, home, promptAt) {
+function nativeArtifactOptions(proofPath, cwd, home, promptAt, trace = null) {
+  const reject = (code) => { if (trace) trace.rejection = code; return null; };
   if (typeof proofPath !== "string" || !localAllowed(proofPath, cwd, home) ||
-      !/\.json$/i.test(proofPath) || !isValidArtifact(proofPath)) return null;
+      !/\.json$/i.test(proofPath) || !isValidArtifact(proofPath)) {
+    return reject("INDEX_PROOF_PATH_UNSAFE");
+  }
   let proof;
   try {
-    if (lstatSync(proofPath).isSymbolicLink()) return null;
+    if (lstatSync(proofPath).isSymbolicLink()) return reject("INDEX_PROOF_PATH_UNSAFE");
     proof = JSON.parse(readFileSync(proofPath, "utf8"));
-  } catch { return null; }
+  } catch { return reject("INDEX_PROOF_UNREADABLE"); }
   if (!obj(proof) || proof.generator !== "design-with-ai/run-iteration-gate.mjs" ||
       !obj(proof.receipt) || !obj(proof.baseline) || !obj(proof.ledger) ||
       typeof proof.sourceRoot !== "string" ||
       ![proof.receipt.path, proof.baseline.path, proof.ledger.path].every(x =>
         typeof x === "string" && x.length > 0 && isAbsolute(x)) ||
       (proof.renderEvidence && (typeof proof.renderEvidence.path !== "string" ||
-        !isAbsolute(proof.renderEvidence.path)))) return null;
+        !isAbsolute(proof.renderEvidence.path)))) {
+    return reject("INDEX_PROOF_METADATA_INVALID");
+  }
   const sourceRoot = resolve(proof.sourceRoot);
   if (!localAllowed(sourceRoot, cwd, home) ||
-      !(within(cwd, sourceRoot) || within(sourceRoot, cwd))) return null;
+      !(within(cwd, sourceRoot) || within(sourceRoot, cwd))) {
+    return reject("INDEX_PROOF_ROOT_DISJOINT");
+  }
   const artifacts = join(sourceRoot, ".design-with-ai");
   if (!within(proofPath, artifacts) || !within(proof.receipt.path, artifacts) ||
       !within(proof.baseline.path, artifacts) ||
-      resolve(proof.ledger.path) !== join(artifacts, "findings-ledger.json")) return null;
+      !(within(resolve(proof.ledger.path), join(artifacts, "findings-ledger.json")) &&
+        within(join(artifacts, "findings-ledger.json"), resolve(proof.ledger.path)))) {
+    return reject("INDEX_PROOF_ARTIFACT_PATH_INVALID");
+  }
   if (proof.renderEvidence && (!obj(proof.renderEvidence) ||
-      !within(proof.renderEvidence.path, artifacts))) return null;
+      !within(proof.renderEvidence.path, artifacts))) {
+    return reject("INDEX_PROOF_ARTIFACT_PATH_INVALID");
+  }
   try {
     if (lstatSync(artifacts).isSymbolicLink() ||
-        !lstatSync(artifacts).isDirectory()) return null;
+        !lstatSync(artifacts).isDirectory()) return reject("INDEX_PROOF_FILES_UNSAFE");
     const realDir = realpathSync(artifacts);
     for (const path of [proofPath, proof.receipt.path, proof.baseline.path,
       proof.ledger.path, proof.renderEvidence?.path].filter(Boolean)) {
       if (lstatSync(path).isSymbolicLink() || !lstatSync(path).isFile() ||
-          !within(realpathSync(path), realDir)) return null;
+          !within(realpathSync(path), realDir)) {
+        return reject("INDEX_PROOF_FILES_UNSAFE");
+      }
     }
-    if (discoverNativeSourceRoot({
+    const discoveredRoot = discoverNativeSourceRoot({
       receipt: proof.receipt.path, ledger: proof.ledger.path,
-    }) !== sourceRoot) return null;
-  } catch { return null; }
+    });
+    if (!discoveredRoot ||
+        !(within(discoveredRoot, sourceRoot) && within(sourceRoot, discoveredRoot))) {
+      return reject("INDEX_PROOF_NATIVE_ROOT_INVALID");
+    }
+  } catch { return reject("INDEX_PROOF_FILES_UNSAFE"); }
   const started = Date.parse(promptAt);
   const executed = Date.parse(proof.executedAt);
   if (!Number.isFinite(started) || !Number.isFinite(executed) ||
-      executed < started - 1000 || executed > Date.now() + 60000) return null;
+      executed < started - 1000 || executed > Date.now() + 60000) {
+    return reject("INDEX_PROOF_OUTSIDE_TURN_TIME");
+  }
+  if (trace) trace.rejection = "INDEX_PROOF_ACCEPTED";
   return {
     receipt: proof.receipt.path,
     baseline: proof.baseline.path,
@@ -140,8 +161,11 @@ function nativeProofFilesAt(root) {
       .sort((a, b) => b.time - a.time).slice(0, 32).map(x => x.path);
   } catch { return []; }
 }
-function nativeArtifactCandidates(cwd, home, promptAt, hints = [], gateIndexRoot = defaultNativeGateIndexRoot()) {
-  if (!Number.isFinite(Date.parse(promptAt))) return [];
+function nativeArtifactCandidates(cwd, home, promptAt, hints = [], gateIndexRoot = defaultNativeGateIndexRoot(), diagnostic = null) {
+  if (!Number.isFinite(Date.parse(promptAt))) {
+    if (diagnostic) diagnostic.indexStatus = "INDEX_TURN_TIME_INVALID";
+    return [];
+  }
   // Explicit typed proof hints support nested functions.exec even when the
   // working directory sits above the product project. Never parse JS itself.
   const hinted = hints.filter(x => typeof x === "string").slice(-8);
@@ -183,11 +207,19 @@ function nativeArtifactCandidates(cwd, home, promptAt, hints = [], gateIndexRoot
   // A real gate writes a private proof hint without waiting for PostToolUse.
   // Unlike folder scanning this works at arbitrary project depth. Never
   // trust the index itself, and refuse ambiguous current project candidates.
-  const indexed = listRecentNativeGateProofs({
+  const inspection = inspectRecentNativeGateProofs({
     cwd, startedAt: promptAt, indexRoot: gateIndexRoot,
-  }).map(x => nativeArtifactOptions(x, cwd, home, promptAt)).filter(Boolean);
+  });
+  const indexTrace = {};
+  const indexed = inspection.proofPaths.map(x =>
+    nativeArtifactOptions(x, cwd, home, promptAt, indexTrace)).filter(Boolean);
   const roots = new Set(indexed.map(x => x["source-root"]));
   const registered = roots.size === 1 ? indexed.map(x => x.proof) : [];
+  if (diagnostic) {
+    diagnostic.indexStatus = roots.size > 1 ? "INDEX_AMBIGUOUS_PROJECTS" :
+      indexed.length ? "INDEX_PROOF_ACCEPTED" :
+      indexTrace.rejection ?? inspection.status;
+  }
   const unique = [...new Set([...registered, ...fallback, ...anchored, ...hinted]
     .map(x => resolve(x)))];
   // Stop evaluates candidates in reverse order: prefer explicit tool
@@ -254,8 +286,9 @@ export function decideStop(event, report, { home = homedir(), gateIndexRoot = de
   if (!modifying) return allow("READ_ONLY_OR_OUT_OF_SCOPE");
   if (!report.explicit && !EXPLICIT.test(prompt) && !report.readsSkill) return allow("SKILL_NOT_OBSERVED");
   const cwd = resolve(event.cwd);
+  const nativeDiagnostic = {};
   const artifactOptions = nativeArtifactCandidates(cwd, home, report.promptAt,
-    Array.isArray(report.proofHints) ? report.proofHints : [], gateIndexRoot);
+    Array.isArray(report.proofHints) ? report.proofHints : [], gateIndexRoot, nativeDiagnostic);
   // Prefer the most recent artifact-backed candidate from this actual turn.
   // Direct command events remain supported for Git and legacy workflows.
   const commands = [...report.gateCommands, ...artifactOptions];
@@ -361,14 +394,18 @@ export function decideStop(event, report, { home = homedir(), gateIndexRoot = de
       continue: true,
       status: "RETRY_LIMIT_NOT_VERIFIED",
       proofStatus,
-      systemMessage: "design-with-ai: the one automatic correction did not produce a current verified gate proof (" + proofStatus + "). The result remains NOT_VERIFIED; do not treat a completion claim as tested.",
+      gateIndexStatus: nativeDiagnostic.indexStatus,
+      systemMessage: "design-with-ai: the one automatic correction did not produce a current verified gate proof (" + proofStatus +
+        "; native index: " + nativeDiagnostic.indexStatus + "). The result remains NOT_VERIFIED; do not treat a completion claim as tested.",
     };
   }
   return {
     decision: "block",
     status: "MISSING_VERIFIED_GATE_PROOF",
     proofStatus,
-    reason: "The current modifying design-with-ai turn has no verified iteration-gate proof (" + proofStatus + "). " +
+    gateIndexStatus: nativeDiagnostic.indexStatus,
+    reason: "The current modifying design-with-ai turn has no verified iteration-gate proof (" + proofStatus +
+      "; native index: " + nativeDiagnostic.indexStatus + "). " +
       "Before finishing, write the iteration receipt and independent pre-edit baseline (if applicable), " +
       "initialize or locate the canonical .design-with-ai/findings-ledger.json in this project, import available earlier findings, then freeze a pre-edit snapshot. " +
       "Reconcile all old in-scope findings against the current receipt. " +

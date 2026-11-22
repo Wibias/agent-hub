@@ -170,16 +170,43 @@ On Windows PowerShell, inspect the latest entries after a normal design task:
 ```powershell
 $log = Join-Path $HOME ".codex/design-with-ai/stop-events.jsonl"
 Get-Content $log -Tail 15 | ForEach-Object { $_ | ConvertFrom-Json } |
-    Format-Table at, decision, cause, proof, retry, transcript -AutoSize
+    Format-Table at, decision, cause, proof, nativeIndex, retry, transcript -AutoSize
 ```
 
 Each record contains only timestamp, decision, an allowlisted cause, retry
 flag, transcript scan state, presence of a user-turn boundary and skill file
-reference, number of candidate gate commands, and a coarse proof outcome.
+reference, number of candidate gate commands, a coarse proof outcome, and an
+allowlisted `nativeIndex` rejection category.
 **No prompts, tool commands, tool outputs, paths, session IDs, tokens, or
 full receipt contents** are written. The event timestamp helps correlate
 with the local Codex session, but does not authenticate that an event was
 triggered by Codex rather than a manual simulation.
+
+When `proof=NO_GATE_COMMAND` but the native gate has already written its
+private index, use `nativeIndex` to distinguish the actual rejection point,
+without creating another proof or guessing from the missing tool event:
+
+- `INDEX_CWD_DISJOINT`: the Codex Stop event's cwd and indexed native
+  source root are separate trees. This is a deliberate workspace security
+  constraint; do not accept unrelated projects merely because both are
+  inside the same user profile.
+- `INDEX_OUTSIDE_TURN_TIME`: the indexed gate ran before the current
+  recorded user-turn boundary or outside the allowed freshness window.
+- `INDEX_PROOF_METADATA_INVALID`, `INDEX_PROOF_NATIVE_ROOT_INVALID`,
+  `INDEX_PROOF_ARTIFACT_PATH_INVALID`, `INDEX_PROOF_FILES_UNSAFE`:
+  the candidate was read but rejected by a specific proof/root/filesystem
+  guard before `checkProof()`.
+- `INDEX_UNAVAILABLE`, `INDEX_EMPTY`, `INDEX_RECORD_INVALID`: the
+  index directory or its entry could not be used.
+- `INDEX_PROOF_ACCEPTED`: a native artifact candidate passed preliminary
+  path, root and turn guards. A later `checkProof()` failure still cannot
+  be called a verified gate.
+- `INDEX_AMBIGUOUS_PROJECTS`: more than one distinct current native
+  project matches. Do not choose a random project.
+
+This field never includes paths, prompt content, session IDs, process IDs,
+hashes or tool output. It is evidence about *why the Stop hook rejected*
+a proof hint, not evidence that the UI passed visual verification.
 
 Key outcomes:
 
