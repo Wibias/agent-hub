@@ -121,38 +121,65 @@ function nativeArtifactOptions(proofPath, cwd, home, promptAt) {
     "source-root": sourceRoot, proof: resolve(proofPath),
   };
 }
+function nativeProofFilesAt(root) {
+  const artifacts = join(root, ".design-with-ai");
+  try {
+    if (lstatSync(root).isSymbolicLink() || !lstatSync(root).isDirectory() ||
+        lstatSync(artifacts).isSymbolicLink() || !lstatSync(artifacts).isDirectory() ||
+        !existsSync(join(artifacts, "findings-ledger.json")) ||
+        !readdirSync(root, { withFileTypes: true }).some(x =>
+          x.isFile() && /\.csproj$/i.test(x.name))) return [];
+    // The proof filename is only a candidate hint. checkProof() later
+    // authenticates its bound source, ledger, receipt and validator.
+    const entries = readdirSync(artifacts, { withFileTypes: true });
+    if (entries.length > 256) return []; // fail closed on noisy artifact dirs
+    return entries.filter(x => x.isFile() && /proof.*\.json$/i.test(x.name))
+      .map(x => ({ path: join(artifacts, x.name),
+        time: statSync(join(artifacts, x.name)).mtimeMs }))
+      .sort((a, b) => b.time - a.time).slice(0, 32).map(x => x.path);
+  } catch { return []; }
+}
 function nativeArtifactCandidates(cwd, home, promptAt, hints = []) {
   if (!Number.isFinite(Date.parse(promptAt))) return [];
-  // Explicit tool-result proof hints support nested functions.exec even when
-  // the model's current working directory is above the product project.
-  const candidates = hints.filter(x => typeof x === "string").slice(-8);
-  // The fallback scan is deliberately limited to the current/ancestor native
-  // project. Do not recurse through a user's workspace or unrelated projects.
+  // Explicit typed proof hints support nested functions.exec even when the
+  // working directory sits above the product project. Never parse JS itself.
+  const hinted = hints.filter(x => typeof x === "string").slice(-8);
+  const anchored = [];
   let dir = resolve(cwd);
   for (let i = 0; i < 8; i++) {
-    const artifacts = join(dir, ".design-with-ai");
-    try {
-      if (existsSync(join(artifacts, "findings-ledger.json")) &&
-          !lstatSync(artifacts).isSymbolicLink() &&
-          readdirSync(dir, { withFileTypes: true }).some(x =>
-            x.isFile() && /\.csproj$/i.test(x.name))) {
-        const entries = readdirSync(artifacts, { withFileTypes: true })
-          .filter(x => x.isFile() && /^.*proof.*\.json$/i.test(x.name))
-          .slice(0, 256).map(x => {
-            const path = join(artifacts, x.name);
-            return { path, time: statSync(path).mtimeMs };
-          }).sort((a, b) => b.time - a.time).slice(0, 32);
-        candidates.push(...entries.map(x => x.path));
-        break;
-      }
-    } catch { /* unknown roots are not evidence */ }
+    const found = nativeProofFilesAt(dir);
+    if (found.length) {
+      anchored.push(...found);
+      break;
+    }
     const parent = dirname(dir);
     if (parent === dir) break;
     dir = parent;
   }
-  const unique = [...new Set(candidates.map(x => resolve(x)))];
-  return unique.map(x => nativeArtifactOptions(x, cwd, home, promptAt))
-    .filter(Boolean);
+
+  // Codex can start at the parent "work" folder while the native project
+  // lives in its immediate child. Inspect *one* bounded directory level,
+  // never recurse into the user's workspace or follow directory links.
+  // A single unambiguous current project may supply proof candidates.
+  const childCandidates = [];
+  if (!anchored.length && !within(cwd, join(home, ".codex"))) {
+    try {
+      const entries = readdirSync(resolve(cwd), { withFileTypes: true });
+      if (entries.length <= 128) {
+        const children = entries.filter(x => x.isDirectory());
+        if (children.length <= 32) {
+          for (const child of children) childCandidates.push(
+            ...nativeProofFilesAt(join(resolve(cwd), child.name)));
+        }
+      }
+    } catch { /* never traverse unknown or inaccessible roots */ }
+  }
+  const verifiedChildHints = childCandidates.map(x =>
+    nativeArtifactOptions(x, cwd, home, promptAt)).filter(Boolean);
+  const distinctChildRoots = new Set(verifiedChildHints.map(x => x["source-root"]));
+  const fallback = distinctChildRoots.size === 1 ? verifiedChildHints.map(x => x.proof) : [];
+  const unique = [...new Set([...hinted, ...anchored, ...fallback].map(x => resolve(x)))];
+  return unique.map(x => nativeArtifactOptions(x, cwd, home, promptAt)).filter(Boolean);
 }
 
 function latestUser(payload) {
