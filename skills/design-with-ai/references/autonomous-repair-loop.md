@@ -43,7 +43,9 @@ controller alone as a fully autonomous runtime.
        node <skill-root>/scripts/repair-loop-controller.mjs --receipt <current-receipt.json> --baseline <frozen-baseline.json> --attempts <iteration-attempts.json> [--render-evidence <actual-manifest.json>] [--proof <current-proof.json> --ledger <project-ledger.json> --source-root <project-root>]
 
    The optional JSON attempts file is an array (or an object with an
-   "attempts" array) of completed actual actions, for example:
+   "attempts" array) of completed actual actions; if omitted, the controller
+   accepts the current receipt's "repairLoop.attempts" array. Keep it
+   consistent with the separate task artifacts used by the gate. For example:
 
        { "findingId":"UX-04", "action":"REPAIR_SOURCE",
          "sourceBefore":"real-sha-before", "sourceAfter":"real-sha-after",
