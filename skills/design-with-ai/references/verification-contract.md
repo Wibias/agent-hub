@@ -172,6 +172,20 @@ blocker and an evidence reference. BLOCKED must also name the next step.
 An explicitly requested RESTYLE is not silently converted into an
 unrelated repair task.
 
+**Every old open visual finding must be reconsidered before new UI work.**
+For `DENSE_DESKTOP_MONITOR` with frozen `IMPROVE` baseline and
+`changeSummary.kind !== "NO_CHANGE"`, supply `visualCarryoverReviews[]`
+with one current review per unresolved historical VISUAL/DETAIL finding.
+`OBSERVED` entries require source, evidence, viewport and issue code,
+and feed the screenshot-to-repair check. `NOT_VERIFIED` needs an evidence
+reference and next verification step; do not invent pixel measurements.
+A task repair addressing one previous HIGH/MEDIUM issue does not excuse
+all other unresolved HIGH/MEDIUM issues: each unaddressed finding needs
+a specific `priorityDeferrals[]` entry with an actual justified basis.
+Valid PARTIAL alone is not equivalent to visual completion. These guards
+check submitted evidence accounting, not image authenticity, and they
+cannot infer screenshots omitted entirely from the agent's inputs.
+
 **Current screenshot defects must drive action, not another PARTIAL loop.**
 When the latest user-provided or agent-captured screenshot visibly confirms
 a defect (including crowded KPI footer text or vertically misaligned search
