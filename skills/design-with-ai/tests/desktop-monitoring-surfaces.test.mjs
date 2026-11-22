@@ -99,3 +99,13 @@ test("stalled visual fixes require a source repair, and historic finding IDs rem
   assert.match(contract, /same compact client dimensions/);
   assert.match(verification, /different defect cannot reuse/);
 });
+
+test("repeated IMPROVED_BUT_OPEN needs actual evidence and old issues outrank cosmetic novelty", () => {
+  const durable = read("../references/durable-findings-ledger.md");
+  assert.match(durable, /IMPROVED_BUT_OPEN with evidence/);
+  assert.match(durable, /reassessment: \{ observed: true/);
+  assert.match(durable, /priorityDeferrals\[\]/);
+  assert.match(contract, /historical finding says IMPROVED_BUT_OPEN/);
+  assert.match(verification, /genuinely observed/);
+  assert.match(verification, /older unresolved HIGH\/MEDIUM/);
+});

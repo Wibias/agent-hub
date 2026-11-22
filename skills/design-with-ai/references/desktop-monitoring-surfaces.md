@@ -61,6 +61,15 @@ the **same compact client dimensions**. If still cramped, keep the original
 finding open and iterate on the actual code rather than writing another
 observation-only PARTIAL receipt. If the source cannot be edited with
 available authorization, name the real blocker, not an invented code fix.
+This also applies when the historical finding says IMPROVED_BUT_OPEN: if the
+current compact render still fails, identify the observation with current
+`reassessment.observed`, a RENDER or MEASUREMENT method and an
+evidenceRef. Do not bypass repair by endlessly relabeling the same error.
+If only missing multi-viewport evidence remains, use UNVERIFIED instead.
+Before changing a cosmetic element like the Windows title bar, prioritize
+older open HIGH/MEDIUM problems or include an evidence-grounded
+`priorityDeferrals[]` exception for an actual user scope, dependency
+or blocker.
 This workflow is automatic; it must not require a longer user prompt.
 
 For a scoped PARTIAL render packet, include only actual captured viewports,
