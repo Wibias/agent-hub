@@ -520,6 +520,11 @@ test("user screenshot confirms old KPI defect: UNVERIFIED and no-change cannot a
   r.findings[0].disposition = "PERSISTS";
   assert.match(validateIterationReceipt(r, baseline).problems.join("; "),
     /OBSERVED_VISUAL_DEFECT_WITHOUT_REPAIR UX-01/);
+  r.persistentRepairActions = { invalid: true };
+  assert.match(validateIterationReceipt(r, baseline).problems.join("; "),
+    /persistentRepairActions must be an array/,
+    "malformed action evidence must not crash the validator");
+  delete r.persistentRepairActions;
 
   // A real access blocker is truthful; speculative source edits are not.
   r.persistentRepairActions = [{
