@@ -183,7 +183,9 @@ export function validateIterationReceipt(input, baseline = null, desktopEvidence
     if (observationKeys.has(key)) fail("duplicate current visual observation " + key);
     observationKeys.add(key);
     const finding = findings.find(x => x?.id === obs.findingId);
-    const kind = baseline?.findings?.find(x => x?.id === obs.findingId)?.kind ?? finding?.kind;
+    const historic = Array.isArray(baseline?.findings)
+      ? baseline.findings.find(x => x?.id === obs.findingId) : null;
+    const kind = historic?.kind ?? finding?.kind;
     if (!finding || !["VISUAL", "DETAIL"].includes(kind)) {
       fail("CURRENT_VISUAL_OBSERVATION_UNTRACKED " + obs.findingId +
         ": preserve the old finding ID or create a durable visual/detail finding");
@@ -195,15 +197,16 @@ export function validateIterationReceipt(input, baseline = null, desktopEvidence
     }
     if (finding.disposition === "RESOLVED") {
       if (input.changeSummary?.kind !== "TASK_REPAIR" ||
-          !input.changeSummary?.addressedFindingIds?.includes(obs.findingId)) {
+          !Array.isArray(input.changeSummary?.addressedFindingIds) ||
+          !input.changeSummary.addressedFindingIds.includes(obs.findingId)) {
         fail("OBSERVED_VISUAL_DEFECT_UNREPAIRED " + obs.findingId +
           ": closing a currently observed defect requires an addressed repair and verified after state");
       }
     } else if (baseline?.intent === "IMPROVE") {
-      const priority = baseline?.findings?.find(x => x?.id === obs.findingId)?.priority ??
-        finding.priority;
+      const priority = historic?.priority ?? finding.priority;
       if (["HIGH", "MEDIUM"].includes(priority) || obs.reportedBy === "USER") {
-        const action = input.persistentRepairActions?.find(a => a?.findingId === obs.findingId);
+        const action = Array.isArray(input.persistentRepairActions)
+          ? input.persistentRepairActions.find(a => a?.findingId === obs.findingId) : null;
         if (!action || !["SOURCE_REPAIR", "BLOCKED"].includes(action.action)) {
           fail("OBSERVED_VISUAL_DEFECT_WITHOUT_REPAIR " + obs.findingId +
             ": attempt a targeted source repair and rerender, or document an actual blocker");
