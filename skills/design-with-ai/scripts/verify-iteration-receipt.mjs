@@ -172,6 +172,7 @@ export function validateIterationReceipt(input, baseline = null, desktopEvidence
   const observationKeys = new Set();
   for (const obs of visualObservations) {
     if (!record(obs) || !populated(obs.findingId) || obs.observed !== true ||
+        !["USER", "AGENT"].includes(obs.reportedBy) ||
         !["SCREENSHOT_REVIEW", "LIVE_RENDER", "MEASUREMENT", "RUNTIME"].includes(obs.method) ||
         !populated(obs.evidenceRef) || !populated(obs.viewportId) ||
         !populated(obs.issueCode)) {
