@@ -3,7 +3,7 @@
 // design iteration gate. Records only a digest and count, not file contents.
 // This is a freshness check, not a cryptographic proof of honest tool use.
 import { createHash } from "node:crypto";
-import { lstatSync, readFileSync, readlinkSync, readdirSync } from "node:fs";
+import { lstatSync, readFileSync, readlinkSync, readdirSync, statSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -174,6 +174,63 @@ export function snapshotRootedSource(sourceRoot, { ignorePaths = [] } = {}) {
   }
   if (count === 0) throw new Error("Source root contains no eligible project source files");
   return { schemaVersion: 1, sourceMode: "ROOTED_DIRECTORY", sha256: digest.digest("hex"), fileCount: count };
+}
+
+
+/**
+ * Last native UI source edit for deciding if a *receipt* postdates its
+ * candidate. Content hashing alone cannot catch a receipt from yesterday
+ * being reused after edits and blessed with a brand-new proof today.
+ * This checks filesystem order, not screenshots, honest authorship or
+ * cryptographic timestamps. The validator must retain the full source hash.
+ */
+export function latestNativeSourceEdit(sourceRoot) {
+  if (typeof sourceRoot !== "string" || !isAbsolute(sourceRoot)) {
+    throw new Error("Native source freshness requires an absolute source root");
+  }
+  const root = resolve(sourceRoot);
+  const state = lstatSync(root);
+  if (!state.isDirectory() || state.isSymbolicLink()) {
+    throw new Error("Native source root must be a real directory");
+  }
+  const native = /\.(?:cs|csproj|resx|xaml|axaml|razor|vb|vbproj|fs|fsproj|props|targets)$/i;
+  const queue = [{ dir: root, rel: "" }];
+  let newest = null, files = 0, visited = 0;
+  while (queue.length) {
+    const { dir, rel } = queue.pop();
+    if (++visited > MAX_FILES * 4) throw new Error("Native source freshness directory budget exceeded");
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const relPath = rel ? rel + "/" + entry.name : entry.name;
+      if (GENERATED.test(relPath) || (entry.isDirectory() && GENERATED.test(entry.name + "/"))) continue;
+      const full = join(dir, entry.name);
+      const st = lstatSync(full);
+      if (st.isSymbolicLink()) continue; // no junction traversal
+      if (st.isDirectory()) {
+        queue.push({ dir: full, rel: relPath });
+      } else if (st.isFile() && native.test(entry.name)) {
+        if (++files > MAX_FILES) throw new Error("Native source freshness file budget exceeded");
+        if (newest === null || st.mtimeMs > newest.mtimeMs) {
+          newest = { relativePath: relPath, mtimeMs: st.mtimeMs };
+        }
+      }
+    }
+  }
+  return newest === null ? null : { ...newest, fileCount: files };
+}
+
+export function nativeReceiptFreshness(receiptPath, sourceRoot) {
+  if (sourceRoot === null) return { valid: true, latest: null };
+  const latest = latestNativeSourceEdit(sourceRoot);
+  if (latest === null) return { valid: true, latest: null };
+  const receiptTime = statSync(resolve(receiptPath)).mtimeMs;
+  // Allow coarse filesystem timestamps; real edits minutes after a
+  // receipt must not pass this comparison.
+  const toleranceMs = 1500;
+  return {
+    valid: latest.mtimeMs <= receiptTime + toleranceMs,
+    latest,
+    receiptMtimeMs: receiptTime,
+  };
 }
 
 /**
