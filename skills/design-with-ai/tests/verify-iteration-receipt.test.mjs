@@ -614,3 +614,131 @@ test("uninspected user reports must not be promoted to observed render evidence"
   assert.equal(validateIterationReceipt(r, baseline).valid, true,
     validateIterationReceipt(r, baseline).problems.join("; "));
 });
+
+test("a task repair addressing one old priority does not waive another unresolved older defect", () => {
+  const baseline = trackedBaseline();
+  baseline.findings.push({
+    id: "UX-02", route: "/settings", kind: "VISUAL", priority: "MEDIUM",
+    symptom: "Risk of unnecessary redesign",
+    acceptance: "Form remains readable and logically grouped",
+    evidenceRef: "reviews/settings-old-visual.png",
+  });
+  const r = trackedReceipt();
+  r.iterationVerdict = "PARTIAL";
+  r.verdictReason = "The KPI visual issue remains open while navigation was repaired";
+  r.findings[1].kind = "VISUAL";
+  r.findings[1].priority = "MEDIUM";
+  r.findings[1].disposition = "UNVERIFIED";
+  r.findings[1].reason = "Current visual inspection was skipped";
+  r.openCarryover = ["UX-02"];
+  // UX-01 is a real high-priority repair. It cannot mask unresolved UX-02.
+  const errors = validateIterationReceipt(r, baseline).problems.join("; ");
+  assert.match(errors, /UNRESOLVED_FINDING_DEPRIORITIZED UX-02/);
+  r.priorityDeferrals = [{
+    findingId: "UX-02", basis: "BLOCKED",
+    reason: "The native window could not be shown in the authorized environment",
+    evidenceRef: "logs/native-window-unavailable.txt",
+    nextStep: "Reopen the live window and review the affected layout",
+  }];
+  assert.equal(validateIterationReceipt(r, baseline).valid, true,
+    validateIterationReceipt(r, baseline).problems.join("; "));
+});
+
+test("desktop IMPROVE cannot add unrelated UI work without reviewing every old visual carryover", () => {
+  const baseline = trackedBaseline();
+  baseline.findings[0].kind = "VISUAL";
+  baseline.findings[0].priority = "LOW";
+  const r = trackedReceipt();
+  r.surfaceKind = "DENSE_DESKTOP_MONITOR";
+  r.iterationVerdict = "PARTIAL";
+  r.verdictReason = "Only part of the native window could be reviewed";
+  r.gates.render = "NOT_VERIFIED";
+  r.findings[0].kind = "VISUAL";
+  r.findings[0].priority = "LOW";
+  r.findings[0].disposition = "UNVERIFIED";
+  r.findings[0].reason = "Missing current view of KPI";
+  r.openCarryover = ["UX-01"];
+  // A newly implemented search feature is presented as a task repair.
+  r.changeSummary = {
+    kind: "TASK_REPAIR", addressedFindingIds: ["UX-02"],
+    rationale: "Added keyboard Escape behavior for the process search",
+    evidenceRef: "tests/search-escape.test.cs",
+  };
+  assert.match(validateIterationReceipt(r, baseline).problems.join("; "),
+    /VISUAL_CARRYOVER_REVIEW_REQUIRED/);
+  r.visualCarryoverReviews = [];
+  assert.match(validateIterationReceipt(r, baseline).problems.join("; "),
+    /VISUAL_CARRYOVER_UNREVIEWED UX-01/);
+  r.visualCarryoverReviews = [{
+    findingId: "UX-01", status: "NOT_VERIFIED",
+    reason: "Native capture was blocked by desktop access control",
+    evidenceRef: "logs/native-capture-denied.txt",
+    nextStep: "Capture the same compact window with authorized external UI automation",
+  }];
+  assert.equal(validateIterationReceipt(r, baseline).valid, true,
+    validateIterationReceipt(r, baseline).problems.join("; "));
+  // Visual inspection is now available, and the user-confirmed defect is
+  // still present. It must trigger targeted repair, not more search polish.
+  r.visualCarryoverReviews = [{
+    findingId: "UX-01", status: "OBSERVED", reportedBy: "USER",
+    reason: "The compact KPI supporting text still touches the divider",
+    method: "SCREENSHOT_REVIEW", evidenceRef: "user/compact-kpi-current.png",
+    viewportId: "COMPACT", issueCode: "KPI_BOTTOM_CROWDING",
+  }];
+  r.findings[0].disposition = "PERSISTS";
+  r.findings[0].reason = "Inspected screenshot still shows crowded supporting text";
+  assert.match(validateIterationReceipt(r, baseline).problems.join("; "),
+    /OBSERVED_VISUAL_DEFECT_WITHOUT_REPAIR UX-01/);
+  r.persistentRepairActions = [{
+    findingId: "UX-01", action: "BLOCKED",
+    blocker: "WinForms source was read-only after the observed screenshot",
+    nextStep: "Get source write access and repair KPI padding before unrelated edits",
+  }];
+  assert.equal(validateIterationReceipt(r, baseline).valid, true,
+    validateIterationReceipt(r, baseline).problems.join("; "));
+  // The same truthful no-change verification run remains valid without
+  // forcing a guess at the unavailable native text geometry.
+  r.changeSummary = { kind: "NO_CHANGE", addressedFindingIds: [],
+    rationale: "Verified old KPI screenshot but could not edit protected source" };
+  delete r.visualCarryoverReviews;
+  r.currentVisualObservations = [{
+    findingId: "UX-01", observed: true, reportedBy: "USER",
+    method: "SCREENSHOT_REVIEW", evidenceRef: "user/compact-kpi-current.png",
+    viewportId: "COMPACT", issueCode: "KPI_BOTTOM_CROWDING",
+  }];
+  assert.equal(validateIterationReceipt(r, baseline).valid, true,
+    validateIterationReceipt(r, baseline).problems.join("; "));
+});
+
+test("invalid visual carryover reviews cannot silently replace actual screenshot evidence", () => {
+  const baseline = trackedBaseline();
+  baseline.findings[0].kind = "VISUAL";
+  baseline.findings[0].priority = "LOW";
+  const r = trackedReceipt();
+  r.surfaceKind = "DENSE_DESKTOP_MONITOR";
+  r.iterationVerdict = "PARTIAL";
+  r.verdictReason = "Compact screenshot review is incomplete";
+  r.gates.render = "NOT_VERIFIED";
+  r.findings[0].kind = "VISUAL";
+  r.findings[0].disposition = "UNVERIFIED";
+  r.findings[0].reason = "Not independently inspected";
+  r.openCarryover = ["UX-01"];
+  r.changeSummary = { kind: "COSMETIC_ONLY", addressedFindingIds: [],
+    rationale: "Changed list styling" };
+  r.visualCarryoverReviews = [
+    { findingId: "UX-01", status: "NOT_VERIFIED", reason: "No screenshot", evidenceRef: "log:no-image" },
+  ];
+  assert.match(validateIterationReceipt(r, baseline).problems.join("; "),
+    /unavailable evidence requires a next verification step/);
+  r.visualCarryoverReviews.push({ ...r.visualCarryoverReviews[0] });
+  assert.match(validateIterationReceipt(r, baseline).problems.join("; "),
+    /reviews must identify distinct older open/);
+  r.visualCarryoverReviews = [{
+    findingId: "UX-01", status: "OBSERVED",
+    reason: "The search placeholder appears above the visual center",
+    evidenceRef: "renders/search.png", viewportId: "COMPACT",
+    issueCode: "INPUT_TEXT_VERTICAL_ALIGNMENT", method: "SCREENSHOT_REVIEW",
+  }];
+  assert.match(validateIterationReceipt(r, baseline).problems.join("; "),
+    /observed screenshot requires reporter, method, viewport and issue code/);
+});
