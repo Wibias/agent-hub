@@ -98,3 +98,81 @@ test("installer fails safely when supporting native context script is missing", 
   assert.throws(() => installCodexStopGate({ ...f, apply: true }), /Codex hook script is missing/);
   assert.equal(existsSync(f.hooksPath), false);
 }));
+
+test("standalone Impeccable Stop hook is retained unless removal is explicitly requested", () => fixture(f => {
+  mkdirSync(join(f.root, "codex"), { recursive: true });
+  const old = String.raw`if (Test-Path 'X:\Fixture\.agents\skills\impeccable\scripts\hook.mjs') { node 'X:\Fixture\.agents\skills\impeccable\scripts\hook.mjs'; exit $LASTEXITCODE }`;
+  writeFileSync(f.hooksPath, JSON.stringify({ hooks: { Stop: [
+    { hooks: [{ type: "command", command: old, commandWindows: old }] },
+  ] } }));
+  installCodexStopGate({ ...f, apply: true });
+  const current = JSON.parse(readFileSync(f.hooksPath, "utf8"));
+  assert.equal(current.hooks.Stop.length, 2);
+  assert.match(current.hooks.Stop[0].hooks[0].command, /impeccable/);
+}));
+
+test("opt-in cleanup removes only standalone Impeccable hooks across events, makes backup and keeps all unrelated hooks", () => fixture(f => {
+  mkdirSync(join(f.root, "codex"), { recursive: true });
+  const legacy = String.raw`if (Test-Path 'X:\Fixture\.agents\skills\impeccable\scripts\hook.mjs') { node 'X:\Fixture\.agents\skills\impeccable\scripts\hook.mjs'; exit $LASTEXITCODE }`;
+  const original = {
+    description: "Preserve independent integrations",
+    hooks: {
+      Stop: [
+        { matcher: "", hooks: [
+          { command: "node github-delivery/scripts/codex-watchdog-hook.mjs", type: "command" },
+          { command: "node memory-engine/adapters/codex-passive-memory-hook-cli.mjs", type: "command" },
+        ] },
+        { matcher: "", hooks: [{ type: "command", command: "node legacy",
+          commandWindows: legacy }] },
+        { hooks: [
+          { command: "node other-hook.mjs", type: "command" },
+          { command: 'node "X:\\Fixture\\.agents\\skills\\impeccable\\scripts\\hook.mjs"', type: "command" },
+        ] },
+      ],
+      UserPromptSubmit: [{ hooks: [{ command: "node user-hook.mjs", type: "command" }] }],
+      PostToolUse: [{ matcher: "Bash", hooks: [{
+        command: "node impeccable/scripts/something-hook.mjs", type: "command",
+      }, { command: "node audit-hook.mjs", type: "command" }] }],
+      SubagentStop: [{ hooks: [{ command: "node subagent-hook.mjs", type: "command" }] }],
+    },
+  };
+  writeFileSync(f.hooksPath, JSON.stringify(original));
+  const dry = installCodexStopGate({ ...f, removeImpeccableHooks: true });
+  assert.equal(dry.plannedImpeccableHookRemoval, 3);
+  assert.equal(dry.removedImpeccableHooks, 0);
+  assert.deepEqual(JSON.parse(readFileSync(f.hooksPath, "utf8")), original);
+  const result = installCodexStopGate({ ...f, removeImpeccableHooks: true, apply: true });
+  assert.equal(result.removedImpeccableHooks, 3);
+  assert.ok(result.backupPath && existsSync(result.backupPath));
+  assert.deepEqual(JSON.parse(readFileSync(result.backupPath, "utf8")), original);
+  const updated = JSON.parse(readFileSync(f.hooksPath, "utf8"));
+  assert.equal(updated.description, original.description);
+  assert.equal(updated.hooks.Stop.length, 3);
+  assert.equal(updated.hooks.Stop[0].hooks.length, 2);
+  assert.equal(updated.hooks.Stop[1].hooks[0].command, "node other-hook.mjs");
+  assert.match(updated.hooks.Stop[2].hooks[0].command, /design-with-ai/);
+  assert.equal(updated.hooks.PostToolUse[0].hooks.length, 1);
+  assert.equal(updated.hooks.PostToolUse[0].hooks[0].command, "node audit-hook.mjs");
+  assert.deepEqual(updated.hooks.SubagentStop, original.hooks.SubagentStop);
+  assert.equal(updated.hooks.UserPromptSubmit[0].hooks[0].command, "node user-hook.mjs");
+  const again = installCodexStopGate({ ...f, removeImpeccableHooks: true, apply: true });
+  assert.equal(again.removedImpeccableHooks, 0);
+  assert.equal(again.applied, false);
+  assert.equal(again.backupPath, null);
+}));
+
+test("opt-in Impeccable removal preserves unrelated Impeccable skill references and unrelated JavaScript", () => fixture(f => {
+  mkdirSync(join(f.root, "codex"), { recursive: true });
+  const original = { hooks: { Stop: [
+    { hooks: [{ type: "command", command: "node design-with-ai/scripts/codex-stop-gate.mjs" }] },
+    { hooks: [{ type: "command", command: "node impeccable/scripts/render-tokens.mjs" }] },
+    { hooks: [{ type: "command", command: "node other-project/scripts/hook.mjs" }] },
+  ] } };
+  writeFileSync(f.hooksPath, JSON.stringify(original));
+  installCodexStopGate({ ...f, removeImpeccableHooks: true, apply: true });
+  const updated = JSON.parse(readFileSync(f.hooksPath, "utf8"));
+  assert.ok(updated.hooks.Stop.some(group =>
+    group.hooks.some(x => x.command.includes("impeccable/scripts/render-tokens.mjs"))));
+  assert.ok(updated.hooks.Stop.some(group =>
+    group.hooks.some(x => x.command.includes("other-project/scripts/hook.mjs"))));
+}));

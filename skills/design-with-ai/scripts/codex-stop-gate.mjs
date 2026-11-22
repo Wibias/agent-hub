@@ -13,6 +13,7 @@ import { appendStopDiagnostic } from "./stop-diagnostic-journal.mjs";
 import { isGitProject, discoverProjectLedger } from "./findings-ledger.mjs";
 import { discoverNativeSourceRoot } from "./project-source-snapshot.mjs";
 import { readTurnContext } from "./codex-turn-context.mjs";
+import { defaultNativeGateIndexRoot, listRecentNativeGateProofs } from "./native-gate-proof-index.mjs";
 
 const SKILL_PATH = /(?:^|[\\/])design-with-ai[\\/]SKILL\.md/i;
 const GATE_RUN = /(?:^|[\s;"'\\/])run-iteration-gate\.mjs/i;
@@ -139,7 +140,7 @@ function nativeProofFilesAt(root) {
       .sort((a, b) => b.time - a.time).slice(0, 32).map(x => x.path);
   } catch { return []; }
 }
-function nativeArtifactCandidates(cwd, home, promptAt, hints = []) {
+function nativeArtifactCandidates(cwd, home, promptAt, hints = [], gateIndexRoot = defaultNativeGateIndexRoot()) {
   if (!Number.isFinite(Date.parse(promptAt))) return [];
   // Explicit typed proof hints support nested functions.exec even when the
   // working directory sits above the product project. Never parse JS itself.
@@ -179,7 +180,18 @@ function nativeArtifactCandidates(cwd, home, promptAt, hints = []) {
     nativeArtifactOptions(x, cwd, home, promptAt)).filter(Boolean);
   const distinctChildRoots = new Set(verifiedChildHints.map(x => x["source-root"]));
   const fallback = distinctChildRoots.size === 1 ? verifiedChildHints.map(x => x.proof) : [];
-  const unique = [...new Set([...hinted, ...anchored, ...fallback].map(x => resolve(x)))];
+  // A real gate writes a private proof hint without waiting for PostToolUse.
+  // Unlike folder scanning this works at arbitrary project depth. Never
+  // trust the index itself, and refuse ambiguous current project candidates.
+  const indexed = listRecentNativeGateProofs({
+    cwd, startedAt: promptAt, indexRoot: gateIndexRoot,
+  }).map(x => nativeArtifactOptions(x, cwd, home, promptAt)).filter(Boolean);
+  const roots = new Set(indexed.map(x => x["source-root"]));
+  const registered = roots.size === 1 ? indexed.map(x => x.proof) : [];
+  const unique = [...new Set([...registered, ...fallback, ...anchored, ...hinted]
+    .map(x => resolve(x)))];
+  // Stop evaluates candidates in reverse order: prefer explicit tool
+  // outputs over scanned hints and newer artifacts over older ones.
   return unique.map(x => nativeArtifactOptions(x, cwd, home, promptAt)).filter(Boolean);
 }
 
@@ -232,7 +244,7 @@ export async function inspectTurnTranscript(file) {
   return report;
 }
 
-export function decideStop(event, report, { home = homedir() } = {}) {
+export function decideStop(event, report, { home = homedir(), gateIndexRoot = defaultNativeGateIndexRoot() } = {}) {
   const allow = (reason, proofStatus = "NOT_CHECKED") => ({ continue: true, status: reason, proofStatus });
   if (!obj(event) || event.hook_event_name !== "Stop" ||
       typeof event.cwd !== "string" || typeof event.turn_id !== "string") return allow("INVALID_EVENT");
@@ -243,7 +255,7 @@ export function decideStop(event, report, { home = homedir() } = {}) {
   if (!report.explicit && !EXPLICIT.test(prompt) && !report.readsSkill) return allow("SKILL_NOT_OBSERVED");
   const cwd = resolve(event.cwd);
   const artifactOptions = nativeArtifactCandidates(cwd, home, report.promptAt,
-    Array.isArray(report.proofHints) ? report.proofHints : []);
+    Array.isArray(report.proofHints) ? report.proofHints : [], gateIndexRoot);
   // Prefer the most recent artifact-backed candidate from this actual turn.
   // Direct command events remain supported for Git and legacy workflows.
   const commands = [...report.gateCommands, ...artifactOptions];
@@ -371,7 +383,7 @@ export function decideStop(event, report, { home = homedir() } = {}) {
   };
 }
 
-export async function handleStop(event, { onDiagnostic, turnRoot } = {}) {
+export async function handleStop(event, { onDiagnostic, turnRoot, gateIndexRoot } = {}) {
   let report = null;
   let result = { continue: true, status: "NOT_STOP" };
   let transcriptState = "NOT_CHECKED";
@@ -382,7 +394,7 @@ export async function handleStop(event, { onDiagnostic, turnRoot } = {}) {
     report = readTurnContext(event, turnRoot === undefined ? {} : { root: turnRoot });
     if (report) {
       transcriptState = "NATIVE_TURN_EVENTS";
-      result = decideStop(event, report);
+      result = decideStop(event, report, gateIndexRoot ? { gateIndexRoot } : {});
       return result;
     }
     const path = event.transcript_path;
@@ -396,7 +408,7 @@ export async function handleStop(event, { onDiagnostic, turnRoot } = {}) {
       report = await inspectTurnTranscript(path);
       transcriptState = report.userBoundary || report.confidence === "NO_USER_BOUNDARY"
         ? "SCANNED" : "UNAVAILABLE";
-      result = decideStop(event, report);
+      result = decideStop(event, report, gateIndexRoot ? { gateIndexRoot } : {});
       return result;
     } catch {
       transcriptState = "SCAN_ERROR";
