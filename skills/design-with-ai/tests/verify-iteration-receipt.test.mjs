@@ -443,4 +443,53 @@ test("a low-priority task repair cannot silently skip an older medium-priority i
   receipt.priorityDeferrals[0].nextStep = "Get authorized write access and fix the KPI view";
   assert.equal(validateIterationReceipt(receipt, baseline).valid, true,
     validateIterationReceipt(receipt, baseline).problems.join("; "));
+
+  // Relabeling the same open older finding must not allow a new
+  // low-priority repair to bypass the exception requirement.
+  delete receipt.priorityDeferrals;
+  for (const status of ["UNVERIFIED", "DEFERRED"]) {
+    receipt.findings[0].disposition = status;
+    receipt.findings[0].reason = "Current KPI verification is unavailable";
+    assert.match(validateIterationReceipt(receipt, baseline).problems.join("; "),
+      /UNRESOLVED_FINDING_DEPRIORITIZED UX-01/);
+  }
+});
+
+test("an unverified older medium defect blocks cosmetic detours, not a no-change verification", () => {
+  const baseline = trackedBaseline();
+  baseline.findings[0].priority = "MEDIUM";
+  baseline.findings[0].kind = "VISUAL";
+  const receipt = trackedReceipt();
+  receipt.iterationVerdict = "PARTIAL";
+  receipt.verdictReason = "The compact KPI state could not be measured";
+  receipt.findings[0].kind = "VISUAL";
+  receipt.findings[0].disposition = "UNVERIFIED";
+  receipt.findings[0].reason = "No current native compact KPI measurement";
+  receipt.openCarryover = ["UX-01"];
+  receipt.changeSummary = {
+    kind: "COSMETIC_ONLY", addressedFindingIds: [],
+    rationale: "Repainted the title bar instead of verifying the KPI",
+  };
+  assert.match(validateIterationReceipt(receipt, baseline).problems.join("; "),
+    /UNRESOLVED_FINDING_DEPRIORITIZED UX-01/);
+
+  receipt.changeSummary = {
+    kind: "NO_CHANGE", addressedFindingIds: [],
+    rationale: "No source edit; compact capture unavailable",
+  };
+  assert.equal(validateIterationReceipt(receipt, baseline).valid, true,
+    validateIterationReceipt(receipt, baseline).problems.join("; "));
+
+  receipt.changeSummary = {
+    kind: "COSMETIC_ONLY", addressedFindingIds: [],
+    rationale: "Explicitly scoped title-bar work while native capture is unavailable",
+  };
+  receipt.priorityDeferrals = [{
+    findingId: "UX-01", basis: "BLOCKED",
+    reason: "Native compact render cannot start in this session",
+    evidenceRef: "logs/compact-native-launch-failure.txt",
+    nextStep: "Obtain a native compact render and inspect the KPI bottom clearance",
+  }];
+  assert.equal(validateIterationReceipt(receipt, baseline).valid, true,
+    validateIterationReceipt(receipt, baseline).problems.join("; "));
 });
