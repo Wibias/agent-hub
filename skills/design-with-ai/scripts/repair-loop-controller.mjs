@@ -123,14 +123,18 @@ export function decideRepairLoop(receipt, baseline, {
 
   if (pending.length) {
     const issue = pending[0];
-    if (!issue.seen || !observedStates.has(issue.disposition)) {
+    if (!issue.seen) {
       return next("VERIFY_CURRENT", issue,
         "Inspect existing screenshots or capture the actual current UI state before editing; unavailable evidence must be recorded, not guessed",
         { inspectExistingEvidenceFirst: true });
     }
+    // A current screenshot can confirm a defect even if the agent incorrectly
+    // wrote UNVERIFIED/DEFERRED in the receipt. Repair it, and reconcile that
+    // contradictory status before the next gate; do not keep recapturing it.
     return next("REPAIR_SOURCE", issue,
       "Confirmed open defect has priority over new features: inspect source, make the smallest authorized repair, build/test and rerender the identical state",
-      { requireMatchedBeforeAfter: true });
+      { requireMatchedBeforeAfter: true,
+        ...(observedStates.has(issue.disposition) ? {} : { reconcileDisposition: true }) });
   }
   if (receipt.iterationVerdict === "COMPLETE" && checkedProof?.completionEligible !== true) {
     return next("RUN_GATES", null, "Claimed COMPLETE still requires a real, fresh final gate proof");
