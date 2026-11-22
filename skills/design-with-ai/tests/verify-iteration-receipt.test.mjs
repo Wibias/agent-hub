@@ -383,3 +383,64 @@ test("baseline identity rejects hijacking a historical finding even with matchin
   const errors = validateIterationReceipt(payload, baseline).problems.join("; ");
   assert.match(errors, /FINDING_IDENTITY_CHANGED/);
 });
+
+test("a medium-priority old visual finding blocks cosmetic detours in an IMPROVE run", () => {
+  const baseline = trackedBaseline();
+  baseline.findings[0].priority = "MEDIUM";
+  baseline.findings[0].kind = "VISUAL";
+  const receipt = trackedReceipt();
+  receipt.iterationVerdict = "PARTIAL";
+  receipt.verdictReason = "Old visual defect remains while cosmetic title bar is changed";
+  receipt.findings[0].kind = "VISUAL";
+  receipt.findings[0].disposition = "IMPROVED_BUT_OPEN";
+  receipt.findings[0].reason = "Current compact selected state not yet repaired";
+  receipt.openCarryover = ["UX-01"];
+  receipt.changeSummary = {
+    kind: "COSMETIC_ONLY", addressedFindingIds: [], rationale: "New dark title bar",
+  };
+  const unprioritized = validateIterationReceipt(receipt, baseline);
+  assert.match(unprioritized.problems.join("; "), /UNRESOLVED_FINDING_DEPRIORITIZED UX-01/);
+  receipt.priorityDeferrals = [{ findingId: "UX-01", basis: "EXPLICIT_USER_SCOPE",
+    reason: "User explicitly requested only title-bar styling",
+    evidenceRef: "brief/user-titlebar-only.txt" }];
+  assert.equal(validateIterationReceipt(receipt, baseline).valid, true,
+    validateIterationReceipt(receipt, baseline).problems.join("; "));
+});
+test("a low-priority task repair cannot silently skip an older medium-priority issue", () => {
+  const baseline = trackedBaseline();
+  baseline.findings[0].priority = "MEDIUM";
+  baseline.findings[0].kind = "VISUAL";
+  baseline.findings.push({
+    id: "UX-02", route: "/settings", kind: "VISUAL", priority: "LOW",
+    symptom: "Risk of unnecessary redesign",
+    acceptance: "Form remains readable and logically grouped",
+    evidenceRef: "review/settings-before.png",
+  });
+  const receipt = trackedReceipt();
+  receipt.iterationVerdict = "PARTIAL";
+  receipt.verdictReason = "Higher priority issue remains unaddressed";
+  receipt.findings[0].kind = "VISUAL";
+  receipt.findings[0].disposition = "PERSISTS";
+  receipt.findings[0].reason = "Old defect still visible";
+  receipt.openCarryover = ["UX-01"];
+  receipt.findings[1].kind = "VISUAL";
+  receipt.findings[1].disposition = "RESOLVED";
+  receipt.findings[1].decision = "Repair settings copy";
+  receipt.findings[1].before = captured("review/settings-before.png", "/settings");
+  receipt.findings[1].verification = { result: "PASS", evidenceRef: "tests/settings-layout.test.ts" };
+  receipt.changeSummary = {
+    kind: "TASK_REPAIR", addressedFindingIds: ["UX-02"],
+    rationale: "Fixed lower-priority settings polish",
+    evidenceRef: "diff/settings-surface.patch",
+  };
+  assert.match(validateIterationReceipt(receipt, baseline).problems.join("; "),
+    /UNRESOLVED_FINDING_DEPRIORITIZED UX-01/);
+  receipt.priorityDeferrals = [{ findingId: "UX-01", basis: "BLOCKED",
+    reason: "No write access to the KPI view source in this session",
+    evidenceRef: "logs/source-access-denied.txt" }];
+  assert.match(validateIterationReceipt(receipt, baseline).problems.join("; "),
+    /UNRESOLVED_FINDING_DEPRIORITIZED/);
+  receipt.priorityDeferrals[0].nextStep = "Get authorized write access and fix the KPI view";
+  assert.equal(validateIterationReceipt(receipt, baseline).valid, true,
+    validateIterationReceipt(receipt, baseline).problems.join("; "));
+});

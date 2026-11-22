@@ -49,12 +49,20 @@ observation. Do not rewrite a FOUND event or frozen baseline to hide this.
    Settings controls need not be duplicates if their functions differ.
 2. Import newly discovered PRE-EDIT issues from a reviewed findings manifest.
    Never weaken original acceptance text to fit a cosmetic change.
-3. Snapshot every in-scope historical finding and its event-prefix hash:
+3. Before doing new cosmetic polish in an IMPROVE workflow, prioritize
+   existing unresolved medium/high findings. If actual user scope, a
+   dependency or an access blocker prevents this, include a
+   `priorityDeferrals[]` entry for each displaced finding:
+   `{ findingId, basis: "EXPLICIT_USER_SCOPE" | "DEPENDENCY" | "BLOCKED",
+   reason, evidenceRef, nextStep? }`. BLOCKED requires nextStep.
+   Do not invent a user request or conceal an open defect. Explicit
+   RESTYLE and SCOPED_COSMETIC work remain separate user intents.
+4. Snapshot every in-scope historical finding and its event-prefix hash:
 
        node SKILL/scripts/findings-ledger.mjs snapshot --ledger .design-with-ai/findings-ledger.json --baseline tmp/prior-findings-current.json --scope /jobs,/jobs/:id,/settings --intent IMPROVE
 
    A unique run ID identifies this frozen baseline. Do not overwrite it.
-4. Implement and verify. The receipt must include all baseline IDs and all
+5. Implement and verify. The receipt must include all baseline IDs and all
    new issues; mark requiresPriorBaseline and requiresFindingsLedger true.
    A previously closed VISUAL/DETAIL finding must be reopened as REGRESSED
    or UNVERIFIED if a newly measured state shows its failure condition,
@@ -72,17 +80,24 @@ observation. Do not rewrite a FOUND event or frozen baseline to hide this.
    **No repeated observation-only loop for confirmed defects.** When a
    medium/high VISUAL or DETAIL finding has two consecutive historically
    open assessments and is again observed as PERSISTS or REGRESSED,
+   or as IMPROVED_BUT_OPEN with evidence of the still-visible defect,
    the ledger requires a persistentRepairActions[] entry for that ID:
    either SOURCE_REPAIR with an actual sourceFile, distinct beforeRef/
    afterRef and a truthful renderResult, plus TASK_REPAIR in changeSummary
    naming the original ID, or BLOCKED with a concrete blocker and nextStep.
    Re-running a gate or giving a new ID to the same defect is not a fix.
+   For a repeatedly open IMPROVED_BUT_OPEN finding, add a current
+   `reassessment: { observed: true, method: "RENDER", evidenceRef: "...",
+   reason: "..." }` only after actually inspecting the UI. MEASUREMENT
+   and RUNTIME are also accepted methods. If only additional viewports
+   or inaccessible Computer Use are missing, classify the current result
+   UNVERIFIED instead of asserting that the defect is still visible.
    Historical UNVERIFIED does not establish a recurrence and must not force
    speculative code changes. A SOURCE_REPAIR record is an inspectable claim,
    not cryptographic proof that the source changed or the runtime improved.
    Build and render the same native window/state; keep the issue open if
    the visual problem remains.
-5. Persist verdicts for the current run BEFORE making the gate proof:
+6. Persist verdicts for the current run BEFORE making the gate proof:
 
        node SKILL/scripts/findings-ledger.mjs sync --ledger .design-with-ai/findings-ledger.json --baseline tmp/prior-findings-current.json --receipt tmp/iteration-receipt-current.json
        node SKILL/scripts/run-iteration-gate.mjs --receipt tmp/iteration-receipt-current.json --baseline tmp/prior-findings-current.json --ledger .design-with-ai/findings-ledger.json --proof tmp/iteration-proof-current.json
@@ -95,7 +110,7 @@ observation. Do not rewrite a FOUND event or frozen baseline to hide this.
    and both validator scripts. Changes after proof invalidate it.
    A valid PARTIAL can legitimately yield check-proof exit 1 because
    completionEligible is false; inspect the reported valid flag separately.
-6. Commit the project ledger with the UI changes. Keep temporary artifacts
+7. Commit the project ledger with the UI changes. Keep temporary artifacts
    and secrets out of version control.
 
 ## Rebuttal and regression

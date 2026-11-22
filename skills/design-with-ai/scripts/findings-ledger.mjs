@@ -230,8 +230,21 @@ export function verifyLedgerCoverage(ledger, baseline, receipt, { requireSynced 
     if (history.length < 2 ||
         !history.slice(-2).every(e => unresolvedObservation.has(e.disposition))) continue;
     const current = finalFindings.find(f => f.id === item.id);
-    if (current && ["PERSISTS", "REGRESSED"].includes(current.disposition)) {
+    if (!current) continue;
+    if (["PERSISTS", "REGRESSED"].includes(current.disposition)) {
       repeated.add(item.id);
+    } else if (current.disposition === "IMPROVED_BUT_OPEN") {
+      // This status is ambiguous: it can mean still visibly defective, or
+      // merely awaiting extra viewports. Never infer observation from prose.
+      const check = current.reassessment;
+      if (check?.observed === true &&
+          ["RENDER", "MEASUREMENT", "RUNTIME"].includes(check.method) &&
+          filled(check.evidenceRef)) {
+        repeated.add(item.id);
+      } else {
+        fail("REPEATED_IMPROVEMENT_UNVERIFIED " + item.id +
+          ": provide actual observed render/measurement evidence, or classify as UNVERIFIED instead");
+      }
     }
   }
   for (const id of repeated) {
@@ -239,7 +252,7 @@ export function verifyLedgerCoverage(ledger, baseline, receipt, { requireSynced 
       ? receipt.persistentRepairActions.find(a => a?.findingId === id) : null;
     if (!action) {
       fail("REPEATED_DEFECT_WITHOUT_REPAIR " + id +
-        ": recurring observed visual defect needs a source repair attempt or explicit blocker");
+        ": recurring observed visual defect (including evidenced IMPROVED_BUT_OPEN) needs a source repair attempt or explicit blocker");
     }
   }
 

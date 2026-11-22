@@ -146,11 +146,20 @@ but may not claim visually closed findings without supported reinspection.
 Repeated medium/high visual defects cannot cycle indefinitely through
 observation-only PARTIAL receipts. Durable history triggers
 `persistentRepairActions[]` when a defect has twice been assessed
-open and is observed PERSISTS or REGRESSED again. Report SOURCE_REPAIR
+open and is observed PERSISTS, REGRESSED or genuinely observed
+IMPROVED_BUT_OPEN again. For an ongoing IMPROVED_BUT_OPEN assessment,
+current `reassessment.observed` and method RENDER, MEASUREMENT or RUNTIME
+plus an evidenceRef are required. Otherwise classify as UNVERIFIED. Report SOURCE_REPAIR
 with source-file and before/after evidence, or a truthful BLOCKED reason
 and nextStep. This checks consistency of declared evidence, not source diff
 authenticity. A different defect cannot reuse a historical finding ID:
-route, kind, symptom and acceptance are immutable.
+route, kind, symptom and acceptance are immutable. During IMPROVE,
+older unresolved HIGH/MEDIUM issues take precedence over new cosmetic
+work or solely low-priority changes. A justified exception needs
+`priorityDeferrals[]` with actual explicit user scope, dependency or
+blocker and an evidence reference. BLOCKED must also name the next step.
+An explicitly requested RESTYLE is not silently converted into an
+unrelated repair task.
 
 A `PARTIAL` desktop receipt claiming `gates.render: "PASS"` must
 now include a current v2 `COMPACT:IDLE` screenshot with KPI footer/
