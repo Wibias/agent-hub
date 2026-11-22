@@ -1,6 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 
 const read = path => readFileSync(new URL(path, import.meta.url), 'utf8');
 const skill = read('../SKILL.md');
@@ -98,6 +100,46 @@ test("stalled visual fixes require a source repair, and historic finding IDs rem
   assert.match(contract, /Code-first repair loop/);
   assert.match(contract, /same compact client dimensions/);
   assert.match(verification, /different defect cannot reuse/);
+});
+
+test("native verification uses external inspection without altering the app just to generate evidence", () => {
+  for (const phrase of [
+    "External-first native inspection", "read-only", "PowerShell/.NET",
+    "GetDpiForWindow", "same integrity level", "restoring",
+    "Do **not** modify Program.cs", "not to the PCGuardian executable",
+    "PARTIAL", "NOT_VERIFIED",
+  ]) {
+    assert.ok(contract.toLowerCase().includes(phrase.toLowerCase()),
+      "Missing external-first native inspection contract: " + phrase);
+  }
+  assert.match(verification, /captured \*\*externally\*\*/);
+  assert.match(verification, /without modifying the application's startup code/);
+  assert.match(contract, /A screenshot alone cannot substitute/);
+  assert.match(contract, /Product source changes\s+are justified separately/);
+});
+
+test("bundled external capture helper stays read-only and distinguishes raw observation from v2 proof", () => {
+  const helper = read("../scripts/capture-native-window.ps1");
+  for (const marker of [
+    "GetClientRect", "ClientToScreen", "GetDpiForWindow", "CopyFromScreen",
+    "UIAutomationClient", "Get-FileHash", "RAW_NOT_CERTIFIED",
+    "SetThreadDpiAwarenessContext", "occlusionVerified = $false",
+  ]) {
+    assert.ok(helper.includes(marker), "Missing external capture behavior: " + marker);
+  }
+  assert.doesNotMatch(helper, /(?:Program|MainForm)\.cs|dotnet build|Add-Content.*\.cs/);
+  assert.match(contract, /scripts\/capture-native-window\.ps1/);
+
+  if (process.platform === "win32") {
+    const path = fileURLToPath(new URL("../scripts/capture-native-window.ps1", import.meta.url));
+    const command = '$errors=$null;$tokens=$null;' +
+      '[System.Management.Automation.Language.Parser]::ParseFile(' +
+      "'" + path.replaceAll("'", "''") + "',[ref]$tokens,[ref]$errors)|Out-Null;" +
+      'if($errors.Count){$errors|ForEach-Object{Write-Error $_.Message};exit 1}';
+    const proc = spawnSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-EncodedCommand",
+      Buffer.from(command, "utf16le").toString("base64")], { encoding: "utf8" });
+    assert.equal(proc.status, 0, proc.stdout + proc.stderr);
+  }
 });
 
 test("repeated IMPROVED_BUT_OPEN needs actual evidence and old issues outrank cosmetic novelty", () => {

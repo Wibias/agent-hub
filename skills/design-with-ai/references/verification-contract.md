@@ -127,6 +127,17 @@ macro similarity. Do not load or run this comparison for a single-route task.
 
 ## Dense desktop monitor quality evidence (conditional)
 
+Native Windows render evidence should be captured **externally** by the
+DWA agent using authorized Computer Use/PowerShell, UI Automation and Win32,
+without modifying the application's startup code or adding a product-side
+export switch. If an elevated native app blocks cross-integrity access,
+try an authorized same-integrity external tester first; do not bypass UAC.
+Unavailable custom-painted text geometry stays `NOT_VERIFIED`, not a made-up
+exact rectangle. A missing measurement is **not** permission to modify
+PCGuardian just to implement a test exporter. Product source repairs remain
+appropriate only for independently confirmed defects within the user's
+authorized improvement scope.
+
 The full-window desktop monitor now has a concrete conditional
 `DENSE_DESKTOP_MONITOR` render-evidence contract. For `COMPLETE`, bind the actual source root. With a canonical
 project-local receipt and ledger in `.design-with-ai` plus a root-level

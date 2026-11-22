@@ -82,7 +82,51 @@ KPI measurement. Full checks remain mandatory for COMPLETE.
 
 **The agent creates this evidence automatically**, not the user. Keep the
 manifest beside its **final PNG screenshots** in an authorized
-task-artifacts directory. Version 2 checks their actual pixel dimensions
+task-artifacts directory.
+
+**External-first native inspection (no product instrumentation by default):**
+For a task that asks to *verify*, *measure*, or *finish QA* of an existing
+Windows desktop UI, the target application is **read-only**. The agent must
+collect evidence from **outside** the application using its authorized
+computer-use environment. The bundled read-only helper
+`scripts/capture-native-window.ps1 -TargetPid <pid> -OutputDirectory <artifacts>`
+collects a real client PNG, SHA-256, window DPI and exposed UIA rectangles;
+its JSON is explicitly **RAW_NOT_CERTIFIED**, not schema v2. The agent runs
+it at each actually supported window size and state, reviews its pixels,
+and constructs the v2 evidence only from independently grounded fields.
+Other authorized tools may provide equivalent measurements via PowerShell/.NET
+UI Automation plus Win32 window/client rectangles, GetDpiForWindow and real
+screen capture), or an equivalent existing inspection tool. It must run the
+harness itself, rather than asking the user to install an app-specific
+exporter. Locate the running process and HWND, capture the actual client
+area and its physical pixel dimensions, enumerate whatever UIA control
+bounds are exposed, and derive visual observations from the actual pixels.
+Capture supported window sizes/states, restoring the user's original
+window state afterwards. Sample/interval metadata must come from actual
+observable runtime data or already existing read-only model/log evidence.
+
+Do **not** modify Program.cs, MainForm.cs, the project file, deployment
+artifacts, or launch flags to add `--render-evidence` merely to satisfy
+DWA verification. The flag `--render-evidence` belongs to the **external
+DWA gate**, not to the PCGuardian executable. Product source changes
+are justified separately for an *observed product defect* during an
+authorized improvement task, not for missing test instrumentation.
+Never claim an external harness measured text-glyph rectangles, chart
+history or a changed DPI unless it truly did.
+
+**UIPI and custom drawing:** An elevated target may deny UI Automation
+to a non-elevated tester. When authorized, run the external harness at
+the **same integrity level** as the target with normal user consent;
+do not disable UAC, change the app's elevation, bypass Windows security
+or inject code. If UIA omits custom-drawn text, try independent screenshot
+inspection and available read-only APIs, but distinguish measured geometry
+from image-based estimates. A screenshot alone cannot substitute for
+required exact `supportingText` bounds in schema v2. When safe access
+or reliable measurements are unavailable, record the precise blocker
+and missing fields, keep `PARTIAL`/`NOT_VERIFIED`, and retain the original
+finding IDs. Do not create more product UI changes as a workaround.
+
+Version 2 checks their actual pixel dimensions
 against the declared captured window size. No resizing an old screenshot
 to invent a new profile. Do not place it in the installed skill folder.
 Capture a **native window matrix**, not one flattering screenshot:
