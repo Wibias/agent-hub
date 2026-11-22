@@ -88,7 +88,13 @@ task-artifacts directory.
 For a task that asks to *verify*, *measure*, or *finish QA* of an existing
 Windows desktop UI, the target application is **read-only**. The agent must
 collect evidence from **outside** the application using its authorized
-computer-use environment and an external Windows harness (PowerShell/.NET
+computer-use environment. The bundled read-only helper
+`scripts/capture-native-window.ps1 -TargetPid <pid> -OutputDirectory <artifacts>`
+collects a real client PNG, SHA-256, window DPI and exposed UIA rectangles;
+its JSON is explicitly **RAW_NOT_CERTIFIED**, not schema v2. The agent runs
+it at each actually supported window size and state, reviews its pixels,
+and constructs the v2 evidence only from independently grounded fields.
+Other authorized tools may provide equivalent measurements via PowerShell/.NET
 UI Automation plus Win32 window/client rectangles, GetDpiForWindow and real
 screen capture), or an equivalent existing inspection tool. It must run the
 harness itself, rather than asking the user to install an app-specific
