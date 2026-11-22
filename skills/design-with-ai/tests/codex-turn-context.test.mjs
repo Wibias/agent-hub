@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, readdirSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { classifyPrompt, recordTurnHook, readTurnContext } from "../scripts/codex-turn-context.mjs";
 import { handleStop } from "../scripts/codex-stop-gate.mjs";
 import { runGate, checkProof } from "../scripts/run-iteration-gate.mjs";
+import { initializeLedger, importFindings, makeLedgerBaseline, readLedger, syncLedger } from "../scripts/findings-ledger.mjs";
 
 async function fixture(action) {
   const root = mkdtempSync(join(tmpdir(), "design-native-turn-test-"));
@@ -213,4 +214,112 @@ test("native root flag is recorded as a version-bound gate input without storing
   assert.equal(recorded.cause, "GATE_CANDIDATE");
   const context = readTurnContext(f.event, { root: f.stateRoot });
   assert.equal(context.gateCommands[0]["source-root"], join(f.root, "project"));
+}));
+
+function nativeGateFixture(projectRoot) {
+  const artifacts = join(projectRoot, ".design-with-ai");
+  mkdirSync(artifacts, { recursive: true });
+  writeFileSync(join(projectRoot, "PCGuardian.csproj"),
+    "<Project Sdk='Microsoft.NET.Sdk.WindowsDesktop' />");
+  writeFileSync(join(projectRoot, "MainForm.cs"), "public class MainForm { public int Rows = 4; }");
+  const ledger = join(artifacts, "findings-ledger.json");
+  initializeLedger(ledger);
+  const issue = { id: "PCG-11", route: "PCGuardian/MainForm", kind: "VISUAL",
+    priority: "MEDIUM", symptom: "Process table occupies insufficient height",
+    acceptance: "Four rows fit without inspector clipping", evidenceRef: "renders/old.png" };
+  importFindings(ledger, { findings: [issue] });
+  const frozen = makeLedgerBaseline(readLedger(ledger),
+    { scope: ["PCGuardian/MainForm"], runId: "native-functions-proof-run" });
+  const baseline = join(artifacts, "prior.json");
+  writeFileSync(baseline, JSON.stringify(frozen));
+  const receipt = join(artifacts, "receipt.json");
+  const data = {
+    schemaVersion: 1, requiresPriorBaseline: true, requiresFindingsLedger: true,
+    surfaceKind: "DENSE_DESKTOP_MONITOR", iterationVerdict: "PARTIAL",
+    verdictReason: "Current final render remains unverified",
+    gates: { render: "NOT_VERIFIED", functional: "PASS" },
+    changeSummary: { kind: "NO_CHANGE", rationale: "Read-only verification pass",
+      addressedFindingIds: [] },
+    scope: [{ route: "PCGuardian/MainForm", task: "Inspect final native layout",
+      coverage: "INSPECTED", semantics: { applicable: false, reason: "No destructive actions tested" } }],
+    findings: [{ ...issue, decision: "Verify current state", disposition: "PERSISTS",
+      reason: "Latest inspector state needs a new render" }],
+    openCarryover: [issue.id],
+  };
+  writeFileSync(receipt, JSON.stringify(data));
+  syncLedger(ledger, frozen, data);
+  const proof = join(artifacts, "iteration-proof-40.json");
+  return { projectRoot, artifacts, ledger, baseline, receipt, proof };
+}
+
+test("opaque functions.exec results register a typed current native gate proof, not the wrapper code", () => fixture(async f => {
+  const projectRoot = join(f.root, "nested", "PCGuardian");
+  mkdirSync(projectRoot, { recursive: true });
+  const n = nativeGateFixture(projectRoot);
+  recordTurnHook(f.prompt("Verbessere PCGuardian mit design-with-ai."), { root: f.stateRoot });
+  assert.equal(runGate({ receipt: n.receipt, baseline: n.baseline,
+    ledger: n.ledger, proof: n.proof, workspaceCwd: f.root }).exitCode, 0);
+  const event = {
+    ...f.event, hook_event_name: "PostToolUse", tool_name: "functions.exec",
+    tool_input: { code: 'text({ proofPath: "this is only an example" })' },
+    tool_response: { content: [{ type: "text", text: JSON.stringify({
+      proofPath: n.proof, processExitCode: 0,
+    }) }] },
+  };
+  const recorded = recordTurnHook(event, { root: f.stateRoot });
+  assert.equal(recorded.cause, "PROOF_HINT_CANDIDATE");
+  const ctx = readTurnContext(f.event, { root: f.stateRoot });
+  assert.equal(ctx.gateCommands.length, 0);
+  assert.deepEqual(ctx.proofHints, [n.proof]);
+  const status = await handleStop({
+    ...f.stop, last_assistant_message: "PARTIAL: finale native Renderprüfung offen.",
+  }, { turnRoot: f.stateRoot });
+  assert.equal(status.status, "ACTIONABLE_PARTIAL_CONTINUATION", JSON.stringify(status));
+  assert.notEqual(status.proofStatus, "NO_GATE_COMMAND");
+}));
+
+test("Stop independently discovers a current canonical native proof even without any tool event", () => fixture(async f => {
+  const n = nativeGateFixture(f.root);
+  recordTurnHook(f.prompt("Verbessere PCGuardian mit design-with-ai."), { root: f.stateRoot });
+  assert.equal(runGate({ receipt: n.receipt, baseline: n.baseline,
+    ledger: n.ledger, proof: n.proof, workspaceCwd: f.root }).exitCode, 0);
+  assert.deepEqual(readTurnContext(f.event, { root: f.stateRoot }).gateCommands, []);
+  const status = await handleStop({
+    ...f.stop, last_assistant_message: "PARTIAL: Render-Manifest fehlt.",
+  }, { turnRoot: f.stateRoot });
+  assert.equal(status.status, "ACTIONABLE_PARTIAL_CONTINUATION", JSON.stringify(status));
+}));
+
+test("a proof from before the current user turn is not accepted through opaque output or filesystem scanning", () => fixture(async f => {
+  const n = nativeGateFixture(f.root);
+  assert.equal(runGate({ receipt: n.receipt, baseline: n.baseline,
+    ledger: n.ledger, proof: n.proof, workspaceCwd: f.root }).exitCode, 0);
+  const old = JSON.parse(readFileSync(n.proof, "utf8"));
+  old.executedAt = "2000-01-01T00:00:00.000Z";
+  writeFileSync(n.proof, JSON.stringify(old));
+  recordTurnHook(f.prompt("Verbessere PCGuardian mit design-with-ai."), { root: f.stateRoot });
+  recordTurnHook({
+    ...f.event, hook_event_name: "PostToolUse", tool_name: "functions.exec",
+    tool_input: { code: "text({})" },
+    tool_response: { content: [{ type: "text", text: JSON.stringify({ proofPath: n.proof }) }] },
+  }, { root: f.stateRoot });
+  const status = await handleStop({
+    ...f.stop, last_assistant_message: "PARTIAL: angeblich abgeschlossen.",
+  }, { turnRoot: f.stateRoot });
+  assert.equal(status.proofStatus, "NO_GATE_COMMAND");
+  assert.equal(status.decision, "block");
+}));
+
+test("unstructured functions.exec text is never treated as a gate command", () => fixture(async f => {
+  recordTurnHook(f.prompt("Verbessere PCGuardian mit design-with-ai."), { root: f.stateRoot });
+  const result = recordTurnHook({
+    ...f.event, hook_event_name: "PostToolUse", tool_name: "functions.exec",
+    tool_input: { code: 'text("node run-iteration-gate.mjs --receipt receipt.json --proof proof.json")' },
+    tool_response: { content: [{ type: "text",
+      text: 'node run-iteration-gate.mjs --receipt receipt.json --proof proof.json' }] },
+  }, { root: f.stateRoot });
+  assert.equal(result.cause, "NOT_RELEVANT");
+  const ctx = readTurnContext(f.event, { root: f.stateRoot });
+  assert.equal(ctx.gateCommands.length, 0);
+  assert.deepEqual(ctx.proofHints, []);
 }));

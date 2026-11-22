@@ -2,10 +2,10 @@
 // Read-only Codex Stop guard: one continuation for a modifying design-with-ai
 // turn missing independently checked iteration-gate evidence.
 // The hook cannot authenticate a host transcript or force other hooks to comply.
-import { createReadStream, existsSync, readFileSync, statSync } from "node:fs";
+import { createReadStream, existsSync, readFileSync, statSync, lstatSync, readdirSync, realpathSync } from "node:fs";
 import { createInterface } from "node:readline";
 import { homedir, tmpdir } from "node:os";
-import { isAbsolute, resolve, sep } from "node:path";
+import { isAbsolute, resolve, sep, dirname, basename, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { checkProof } from "./run-iteration-gate.mjs";
 import { decideRepairLoop } from "./repair-loop-controller.mjs";
@@ -65,6 +65,96 @@ function isValidArtifact(path) {
     return st.isFile() && st.size > 0 && st.size <= MAX_PROOF_BYTES;
   } catch { return false; }
 }
+
+/**
+ * Native proof fallback for host tools that execute Node through nested
+ * functions.exec JavaScript rather than a direct Bash/exec_command call.
+ * Never infer successful execution from JavaScript source or stdout prose.
+ * Recover only a current, locally generated, source-bound gate artifact.
+ */
+function nativeArtifactOptions(proofPath, cwd, home, promptAt) {
+  if (typeof proofPath !== "string" || !localAllowed(proofPath, cwd, home) ||
+      !/\.json$/i.test(proofPath) || !isValidArtifact(proofPath)) return null;
+  let proof;
+  try {
+    if (lstatSync(proofPath).isSymbolicLink()) return null;
+    proof = JSON.parse(readFileSync(proofPath, "utf8"));
+  } catch { return null; }
+  if (!obj(proof) || proof.generator !== "design-with-ai/run-iteration-gate.mjs" ||
+      !obj(proof.receipt) || !obj(proof.baseline) || !obj(proof.ledger) ||
+      typeof proof.sourceRoot !== "string" ||
+      ![proof.receipt.path, proof.baseline.path, proof.ledger.path].every(x =>
+        typeof x === "string" && x.length > 0 && isAbsolute(x)) ||
+      (proof.renderEvidence && (typeof proof.renderEvidence.path !== "string" ||
+        !isAbsolute(proof.renderEvidence.path)))) return null;
+  const sourceRoot = resolve(proof.sourceRoot);
+  if (!localAllowed(sourceRoot, cwd, home) ||
+      !(within(cwd, sourceRoot) || within(sourceRoot, cwd))) return null;
+  const artifacts = join(sourceRoot, ".design-with-ai");
+  if (!within(proofPath, artifacts) || !within(proof.receipt.path, artifacts) ||
+      !within(proof.baseline.path, artifacts) ||
+      resolve(proof.ledger.path) !== join(artifacts, "findings-ledger.json")) return null;
+  if (proof.renderEvidence && (!obj(proof.renderEvidence) ||
+      !within(proof.renderEvidence.path, artifacts))) return null;
+  try {
+    if (lstatSync(artifacts).isSymbolicLink() ||
+        !lstatSync(artifacts).isDirectory()) return null;
+    const realDir = realpathSync(artifacts);
+    for (const path of [proofPath, proof.receipt.path, proof.baseline.path,
+      proof.ledger.path, proof.renderEvidence?.path].filter(Boolean)) {
+      if (lstatSync(path).isSymbolicLink() || !lstatSync(path).isFile() ||
+          !within(realpathSync(path), realDir)) return null;
+    }
+    if (discoverNativeSourceRoot({
+      receipt: proof.receipt.path, ledger: proof.ledger.path,
+    }) !== sourceRoot) return null;
+  } catch { return null; }
+  const started = Date.parse(promptAt);
+  const executed = Date.parse(proof.executedAt);
+  if (!Number.isFinite(started) || !Number.isFinite(executed) ||
+      executed < started - 1000 || executed > Date.now() + 60000) return null;
+  return {
+    receipt: proof.receipt.path,
+    baseline: proof.baseline.path,
+    ledger: proof.ledger.path,
+    ...(proof.renderEvidence ? { "render-evidence": proof.renderEvidence.path } : {}),
+    "source-root": sourceRoot, proof: resolve(proofPath),
+  };
+}
+function nativeArtifactCandidates(cwd, home, promptAt, hints = []) {
+  if (!Number.isFinite(Date.parse(promptAt))) return [];
+  // Explicit tool-result proof hints support nested functions.exec even when
+  // the model's current working directory is above the product project.
+  const candidates = hints.filter(x => typeof x === "string").slice(-8);
+  // The fallback scan is deliberately limited to the current/ancestor native
+  // project. Do not recurse through a user's workspace or unrelated projects.
+  let dir = resolve(cwd);
+  for (let i = 0; i < 8; i++) {
+    const artifacts = join(dir, ".design-with-ai");
+    try {
+      if (existsSync(join(artifacts, "findings-ledger.json")) &&
+          !lstatSync(artifacts).isSymbolicLink() &&
+          readdirSync(dir, { withFileTypes: true }).some(x =>
+            x.isFile() && /\.csproj$/i.test(x.name))) {
+        const entries = readdirSync(artifacts, { withFileTypes: true })
+          .filter(x => x.isFile() && /^.*proof.*\.json$/i.test(x.name))
+          .slice(0, 256).map(x => {
+            const path = join(artifacts, x.name);
+            return { path, time: statSync(path).mtimeMs };
+          }).sort((a, b) => b.time - a.time).slice(0, 32);
+        candidates.push(...entries.map(x => x.path));
+        break;
+      }
+    } catch { /* unknown roots are not evidence */ }
+    const parent = dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  const unique = [...new Set(candidates.map(x => resolve(x)))];
+  return unique.map(x => nativeArtifactOptions(x, cwd, home, promptAt))
+    .filter(Boolean);
+}
+
 function latestUser(payload) {
   if (payload?.type === "user_message" && typeof payload.message === "string") return payload.message;
   if (payload?.type === "message" && payload.role === "user") {
@@ -124,8 +214,13 @@ export function decideStop(event, report, { home = homedir() } = {}) {
   if (!modifying) return allow("READ_ONLY_OR_OUT_OF_SCOPE");
   if (!report.explicit && !EXPLICIT.test(prompt) && !report.readsSkill) return allow("SKILL_NOT_OBSERVED");
   const cwd = resolve(event.cwd);
-  let proofStatus = report.gateCommands.length ? "NO_VALID_PROOF" : "NO_GATE_COMMAND";
-  for (const options of [...report.gateCommands].reverse()) {
+  const artifactOptions = nativeArtifactCandidates(cwd, home, report.promptAt,
+    Array.isArray(report.proofHints) ? report.proofHints : []);
+  // Prefer the most recent artifact-backed candidate from this actual turn.
+  // Direct command events remain supported for Git and legacy workflows.
+  const commands = [...report.gateCommands, ...artifactOptions];
+  let proofStatus = commands.length ? "NO_VALID_PROOF" : "NO_GATE_COMMAND";
+  for (const options of [...commands].reverse()) {
     const sourceRoot = options["source-root"] ??
       discoverNativeSourceRoot({ receipt: options.receipt, ledger: options.ledger });
     const canonicalLedger = discoverProjectLedger(sourceRoot ?? cwd);

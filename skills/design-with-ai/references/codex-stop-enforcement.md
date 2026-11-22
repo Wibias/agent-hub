@@ -40,10 +40,21 @@ The installed hooks use Codex's documented `turn_id` fields. On
 `PostToolUse`, recognized skill-file reads and gate-command proof paths are
 recorded for commands exposed directly by `Bash`, `exec_command`, or
 `functions.exec`. An opaque `functions.exec` JavaScript wrapper does not
-prove which nested process ran, so the hook will not parse or trust arbitrary
-wrapper code. In that case `NO_GATE_COMMAND` is an observability limitation,
-not evidence that the gate never ran. The hook still requires a real,
-current proof and must not infer success from a command string.
+prove which nested process ran: **never** parse its arbitrary `code` as a
+shell command. When `functions.exec` returns a **structured** `proofPath`,
+the PostToolUse hook records only that path, not the wrapper or its output.
+At Stop, the verifier reconstructs gate inputs from the actual native proof
+and independently checks its canonical project ledger, `.csproj` source
+root, hashes, prompt/creation time, current source and validator. A bounded
+fallback also looks for current proof files directly under the current or
+ancestor native project's canonical `.design-with-ai` directory when the
+host provides no PostToolUse gate event at all.
+
+This is **not** permission to accept a guessed path, arbitrary stdout,
+an older turn's proof or an unrelated workspace. Non-native workflows still
+prefer explicit command events. If neither typed proof nor a current
+canonical native artifact is available, `NO_GATE_COMMAND` remains a truthful
+observability limitation, not evidence that the gate never ran.
 On `Stop`, the hook verifies the current turn's gate proof.
 
 This **does not depend on `transcript_path`**: Codex documents that field as
