@@ -138,8 +138,26 @@ export function validateIterationReceipt(input, baseline = null, desktopEvidence
   // screenshot are independent of missing *other* viewports. This array
   // means the defect was visually confirmed, not merely reported or guessed.
   // The validator checks accounting, not the image pixels or their origin.
-  const visualObservations = Array.isArray(input.currentVisualObservations)
+  const providedVisualObservations = Array.isArray(input.currentVisualObservations)
     ? input.currentVisualObservations : [];
+  // A v2 screenshot review with a flagged defect is a current observation
+  // even if the agent omits an explicit currentVisualObservations entry.
+  const renderVisualObservations = [];
+  if (desktopEvidence?.schemaVersion === 2 && Array.isArray(desktopEvidence.captures)) {
+    for (const capture of desktopEvidence.captures) {
+      const inspection = capture?.renderInspection;
+      if (!record(inspection) || !record(inspection.findingRefs)) continue;
+      for (const [issueCode, findingId] of Object.entries(inspection.findingRefs)) {
+        if (inspection[issueCode] !== true) continue;
+        renderVisualObservations.push({
+          findingId, observed: true, issueCode, viewportId: capture.viewportId,
+          method: inspection.method, evidenceRef: inspection.evidenceRef,
+          reportedBy: "AGENT",
+        });
+      }
+    }
+  }
+  const visualObservations = [...providedVisualObservations, ...renderVisualObservations];
   if (input.currentVisualObservations !== undefined &&
       !Array.isArray(input.currentVisualObservations)) {
     fail("currentVisualObservations must be an array");
@@ -153,7 +171,7 @@ export function validateIterationReceipt(input, baseline = null, desktopEvidence
       fail("CURRENT_VISUAL_OBSERVATION_INVALID: require findingId, observed true, evidenceRef, viewportId, issueCode and an inspected method");
       continue;
     }
-    const key = [obs.findingId, obs.viewportId, obs.issueCode].join(":");
+    const key = [obs.findingId, obs.viewportId, obs.issueCode, obs.evidenceRef].join(":");
     if (observationKeys.has(key)) fail("duplicate current visual observation " + key);
     observationKeys.add(key);
     const finding = findings.find(x => x?.id === obs.findingId);
