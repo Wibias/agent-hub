@@ -525,6 +525,8 @@ test("previously closed table finding must reopen when selected compact state sh
   c.measuredFindingRefs = { TABLE_CRAMPED: "UX-TABLE" };
   m.findingViewportReviews = m.findingViewportReviews.map(x =>
     x.viewportId === "COMPACT" ? { ...x, status: "PERSISTS" } : x);
+  assert.match(allProblems(m, r), /RENDER_PASS_WITH_MEASURED_DEFECT COMPACT:SELECTED TABLE_CRAMPED/);
+  r.gates.render = "REVISE";
   assert.equal(validateDesktopRenderEvidence(m, r).valid, true, allProblems(m, r));
   r.findings[0].disposition = "RESOLVED";
   r.openCarryover = [];
@@ -600,7 +602,7 @@ test("compact KPI gap under six physical pixels contradicts PASS even in PARTIAL
   r.iterationVerdict = "PARTIAL";
   r.verdictReason = "Compact KPI supporting line almost touches divider";
   r.findings[0].kind = "VISUAL";
-  r.findings[0].disposition = "UNVERIFIED";
+  r.findings[0].disposition = "PERSISTS";
   r.findings[0].reason = "KPI gap still needs source repair";
   r.findings[0].evidenceRef = "renders/compact-kpi-actual.png";
   r.openCarryover = ["UX-TABLE"];
@@ -645,6 +647,7 @@ test("a screenshot-observed crowded KPI and misaligned search text stay open eve
   r.findings[0].kind = "VISUAL";
   r.findings[0].disposition = "UNVERIFIED";
   r.findings[0].reason = "Other viewports are not measured";
+  r.findings[0].evidenceRef = "renders/compact-kpi-current.png";
   r.openCarryover = ["UX-TABLE"];
   m.viewports = m.viewports.filter(v => v.id === "COMPACT");
   m.captures = m.captures.filter(c => c.viewportId === "COMPACT" && c.state === "IDLE");
@@ -681,6 +684,7 @@ test("actual text glyph bounds reveal off-center search text without inventing m
   r.findings[0].kind = "VISUAL";
   r.findings[0].disposition = "UNVERIFIED";
   r.findings[0].reason = "Missing other viewports";
+  r.findings[0].evidenceRef = "renders/search-field-current.png";
   r.openCarryover = ["UX-TABLE"];
   m.viewports = m.viewports.filter(v => v.id === "COMPACT");
   m.captures = m.captures.filter(c => c.viewportId === "COMPACT" && c.state === "IDLE");
