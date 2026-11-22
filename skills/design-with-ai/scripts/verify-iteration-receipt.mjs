@@ -264,14 +264,14 @@ export function validateIterationReceipt(input, baseline = null, desktopEvidence
       const highOpen = baselineIssues.some((issue) => record(issue) && issue.priority === "HIGH" &&
         findings.some((f) => f?.id === issue.id && !closed.has(f.disposition)));
 
-      // Do not let a "continue improving" brief drift into a new cosmetic
-      // theme while older medium/high defects remain known and open.
-      // Explicit narrow user scope or a genuine dependency/blocker may be
-      // recorded, but this must be a concrete per-finding exception.
+      // In a broad IMPROVE run, older medium/high findings retain priority
+      // even when their latest status is UNVERIFIED or DEFERRED. Those statuses
+      // require investigation or a documented deferral, NOT speculative edits.
+      // Only evidenced closure removes an old finding from this priority set.
       const prioritized = baselineIssues.filter(issue => record(issue) &&
         ["HIGH", "MEDIUM"].includes(issue.priority) &&
         findings.some(f => f?.id === issue.id &&
-          ["PERSISTS", "REGRESSED", "IMPROVED_BUT_OPEN"].includes(f.disposition)));
+          !closed.has(f.disposition)));
       const addressedPriority = prioritized.some(issue => addressed.includes(issue.id));
       const cosmeticDetour = intent === "IMPROVE" && prioritized.length > 0 &&
         (summary.kind === "COSMETIC_ONLY" ||
