@@ -9,6 +9,7 @@ import { fileURLToPath } from "node:url";
 import { discoverProjectLedger } from "./findings-ledger.mjs";
 import { snapshotProjectSource, snapshotRootedSource, discoverNativeSourceRoot, nativeReceiptFreshness } from "./project-source-snapshot.mjs";
 import { snapshotDesktopCaptureFiles } from "./desktop-render-evidence.mjs";
+import { recordNativeGateProof } from "./native-gate-proof-index.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const validator = resolve(here, "verify-iteration-receipt.mjs");
@@ -149,6 +150,14 @@ export function runGate({ receipt, baseline = null, ledger = null, renderEvidenc
   };
   mkdirSync(dirname(outputPath), { recursive: true });
   writeFileSync(outputPath, JSON.stringify(proofData, null, 2) + "\n", { flag: "wx" });
+  // A private, bounded discovery hint is emitted by the actual gate process.
+  // This works even when Code Mode does not forward its nested invocation to
+  // Codex PostToolUse. It is NOT trusted as proof; Stop calls checkProof().
+  if (receiptData?.surfaceKind === "DENSE_DESKTOP_MONITOR" &&
+      effectiveRoot !== null) {
+    recordNativeGateProof({ proofPath: outputPath, sourceRoot: effectiveRoot,
+      executedAt: proofData.executedAt });
+  }
   return { proofPath: outputPath, exitCode, proof: proofData };
 }
 
