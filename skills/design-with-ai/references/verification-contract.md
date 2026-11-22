@@ -172,6 +172,26 @@ blocker and an evidence reference. BLOCKED must also name the next step.
 An explicitly requested RESTYLE is not silently converted into an
 unrelated repair task.
 
+**Current screenshot defects must drive action, not another PARTIAL loop.**
+When the latest user-provided or agent-captured screenshot visibly confirms
+a defect (including crowded KPI footer text or vertically misaligned search
+placeholder), inspect it and bind the original finding ID to
+`currentVisualObservations[]` with `observed: true`, `reportedBy`,
+`SCREENSHOT_REVIEW` or another real inspection method,
+`evidenceRef`, `viewportId` and `issueCode`. Uninspected reports
+must not be promoted to observed evidence. An observed defect cannot
+be downgraded to UNVERIFIED/DEFERRED for lack of *other* viewports.
+For an authorized IMPROVE task, the receipt validator requires targeted
+SOURCE_REPAIR or an actual BLOCKED action for observed HIGH/MEDIUM or
+explicitly user-observed defects. The render validator derives equivalent
+observations from true `renderInspection` flags, even if the agent omits
+`currentVisualObservations[]`. This is evidence-accounting, not machine
+authentication of screenshot pixels. A new defect repaired in the same
+iteration can appear in `changeSummary.addressedFindingIds` so long
+as its ID is present in the final receipt and persisted ledger.
+Custom-drawn text with no reliable glyph bounds can still be reviewed
+visually and repaired; do not pretend the six-DIP gap was measured.
+
 A `PARTIAL` desktop receipt claiming `gates.render: "PASS"` must
 now include a current v2 `COMPACT:IDLE` screenshot with KPI footer/
 divider geometry; a near-touching KPI line contradicts PASS. When

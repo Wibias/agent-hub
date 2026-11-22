@@ -111,7 +111,8 @@ function matrixManifest(source = "a".repeat(64)) {
       method: "SCREENSHOT_REVIEW", evidenceRef: "review:" + c.image,
       duplicateCharts: false, unexpectedHeaderFill: false,
       clippedSupportingText: false, unproductiveBlankSpace: false,
-      unreadableInspectorPath: false,
+      unreadableInspectorPath: false, kpiBottomCrowding: false,
+      misalignedInputText: false,
     };
     return c;
   });
@@ -524,6 +525,8 @@ test("previously closed table finding must reopen when selected compact state sh
   c.measuredFindingRefs = { TABLE_CRAMPED: "UX-TABLE" };
   m.findingViewportReviews = m.findingViewportReviews.map(x =>
     x.viewportId === "COMPACT" ? { ...x, status: "PERSISTS" } : x);
+  assert.match(allProblems(m, r), /RENDER_PASS_WITH_MEASURED_DEFECT COMPACT:SELECTED TABLE_CRAMPED/);
+  r.gates.render = "REVISE";
   assert.equal(validateDesktopRenderEvidence(m, r).valid, true, allProblems(m, r));
   r.findings[0].disposition = "RESOLVED";
   r.openCarryover = [];
@@ -599,7 +602,7 @@ test("compact KPI gap under six physical pixels contradicts PASS even in PARTIAL
   r.iterationVerdict = "PARTIAL";
   r.verdictReason = "Compact KPI supporting line almost touches divider";
   r.findings[0].kind = "VISUAL";
-  r.findings[0].disposition = "UNVERIFIED";
+  r.findings[0].disposition = "PERSISTS";
   r.findings[0].reason = "KPI gap still needs source repair";
   r.findings[0].evidenceRef = "renders/compact-kpi-actual.png";
   r.openCarryover = ["UX-TABLE"];
@@ -634,3 +637,131 @@ test("full runner records invalid PARTIAL render PASS with no native screenshot"
   assert.equal(result.exitCode, 1);
   assert.match(result.proof.result.problems.join("; "), /DESKTOP_RENDER_PASS_UNBOUND/);
 }));
+
+test("a screenshot-observed crowded KPI and misaligned search text stay open even without other viewports", () => {
+  const m = matrixManifest();
+  const r = receipt();
+  r.iterationVerdict = "PARTIAL";
+  r.verdictReason = "Only compact screenshot is available";
+  r.gates.render = "REVISE";
+  r.findings[0].kind = "VISUAL";
+  r.findings[0].disposition = "UNVERIFIED";
+  r.findings[0].reason = "Other viewports are not measured";
+  r.findings[0].evidenceRef = "renders/compact-kpi-current.png";
+  r.openCarryover = ["UX-TABLE"];
+  m.viewports = m.viewports.filter(v => v.id === "COMPACT");
+  m.captures = m.captures.filter(c => c.viewportId === "COMPACT" && c.state === "IDLE");
+  m.checks = [];
+  const c = m.captures[0];
+  c.renderInspection.kpiBottomCrowding = true;
+  c.renderInspection.misalignedInputText = true;
+  c.renderInspection.findingRefs = {
+    kpiBottomCrowding: "UX-TABLE",
+    misalignedInputText: "UX-TABLE",
+  };
+  m.findingViewportReviews = [{
+    findingId: "UX-TABLE", viewportId: "COMPACT", status: "NOT_VERIFIED",
+    evidenceRef: c.image,
+  }];
+  assert.match(allProblems(m, r),
+    /UNTRACKED_RENDER_FINDING COMPACT:IDLE kpiBottomCrowding/);
+  assert.match(allProblems(m, r),
+    /UNTRACKED_RENDER_FINDING COMPACT:IDLE misalignedInputText/);
+  r.findings[0].disposition = "PERSISTS";
+  m.findingViewportReviews[0].status = "PERSISTS";
+  assert.equal(validateDesktopRenderEvidence(m, r).valid, true, allProblems(m, r));
+  r.gates.render = "PASS";
+  assert.match(allProblems(m, r),
+    /RENDER_PASS_WITH_VISUAL_DEFECT COMPACT:IDLE misalignedInputText/);
+});
+
+test("actual text glyph bounds reveal off-center search text without inventing measurements", () => {
+  const m = matrixManifest();
+  const r = receipt();
+  r.iterationVerdict = "PARTIAL";
+  r.verdictReason = "Only compact evidence is available";
+  r.gates.render = "REVISE";
+  r.findings[0].kind = "VISUAL";
+  r.findings[0].disposition = "UNVERIFIED";
+  r.findings[0].reason = "Missing other viewports";
+  r.findings[0].evidenceRef = "renders/search-field-current.png";
+  r.openCarryover = ["UX-TABLE"];
+  m.viewports = m.viewports.filter(v => v.id === "COMPACT");
+  m.captures = m.captures.filter(c => c.viewportId === "COMPACT" && c.state === "IDLE");
+  m.checks = [];
+  const c = m.captures[0];
+  c.textInputs = [{
+    id: "filter-by-name", field: [300, 292, 155, 24],
+    text: [304, 293, 110, 13],
+  }];
+  c.measuredFindingRefs = { INPUT_TEXT_VERTICAL_ALIGNMENT: "UX-TABLE" };
+  m.findingViewportReviews = [{
+    findingId: "UX-TABLE", viewportId: "COMPACT", status: "NOT_VERIFIED",
+    evidenceRef: c.image,
+  }];
+  assert.match(allProblems(m, r),
+    /UNTRACKED_MEASURED_REGRESSION COMPACT:IDLE INPUT_TEXT_VERTICAL_ALIGNMENT/);
+  r.findings[0].disposition = "IMPROVED_BUT_OPEN";
+  m.findingViewportReviews[0].status = "IMPROVED_BUT_OPEN";
+  assert.equal(validateDesktopRenderEvidence(m, r).valid, true, allProblems(m, r));
+  c.textInputs[0].text = [304, 298, 110, 13];
+  assert.doesNotMatch(allProblems(m, r), /UNTRACKED_MEASURED_REGRESSION/);
+});
+
+test("manifest-observed compact KPI anomaly enforces repair even when not copied into receipt observations", () => {
+  const m = matrixManifest();
+  const r = receipt();
+  const baseline = {
+    schemaVersion: 1, intent: "IMPROVE", scope: ["PCGuardian/MainForm"],
+    findings: [{
+      id: "UX-TABLE", route: "PCGuardian/MainForm", kind: "VISUAL",
+      priority: "MEDIUM", symptom: r.findings[0].symptom,
+      acceptance: r.findings[0].acceptance,
+      evidenceRef: "baseline/table-before.png",
+    }],
+  };
+  r.requiresPriorBaseline = true;
+  r.iterationVerdict = "PARTIAL";
+  r.verdictReason = "Current compact screenshot confirms crowded KPI area";
+  r.gates.render = "REVISE";
+  r.findings[0].kind = "VISUAL";
+  r.findings[0].priority = "MEDIUM";
+  r.findings[0].evidenceRef = "baseline/table-before.png";
+  r.findings[0].disposition = "PERSISTS";
+  r.findings[0].reason = "Current compact KPI still looks crowded";
+  r.openCarryover = ["UX-TABLE"];
+  r.changeSummary = { kind: "NO_CHANGE", addressedFindingIds: [],
+    rationale: "No edit despite observed compact defect" };
+  m.viewports = m.viewports.filter(v => v.id === "COMPACT");
+  m.captures = m.captures.filter(c => c.viewportId === "COMPACT" && c.state === "IDLE");
+  m.checks = [];
+  m.findingViewportReviews = [{
+    findingId: "UX-TABLE", viewportId: "COMPACT", status: "PERSISTS",
+    evidenceRef: "renders/compact-idle.png",
+  }];
+  const c = m.captures[0];
+  c.renderInspection.kpiBottomCrowding = true;
+  c.renderInspection.findingRefs = { kpiBottomCrowding: "UX-TABLE" };
+
+  assert.equal(validateDesktopRenderEvidence(m, r).valid, true,
+    allProblems(m, r));
+  assert.match(validateIterationReceipt(r, baseline, m).problems.join("; "),
+    /OBSERVED_VISUAL_DEFECT_WITHOUT_REPAIR UX-TABLE/);
+  r.persistentRepairActions = [{
+    findingId: "UX-TABLE", action: "BLOCKED",
+    blocker: "Source tree unavailable in this read-only session",
+    nextStep: "Reopen authorized WinForms source and verify the same compact state",
+  }];
+  assert.equal(validateIterationReceipt(r, baseline, m).valid, true,
+    validateIterationReceipt(r, baseline, m).problems.join("; "));
+
+  // Repeating the same observation explicitly must not create a false
+  // duplicate when it was already derived from the v2 manifest.
+  r.currentVisualObservations = [{
+    findingId: "UX-TABLE", observed: true, issueCode: "kpiBottomCrowding",
+    reportedBy: "AGENT", viewportId: "COMPACT",
+    method: "SCREENSHOT_REVIEW", evidenceRef: c.renderInspection.evidenceRef,
+  }];
+  assert.equal(validateIterationReceipt(r, baseline, m).valid, true,
+    validateIterationReceipt(r, baseline, m).problems.join("; "));
+});

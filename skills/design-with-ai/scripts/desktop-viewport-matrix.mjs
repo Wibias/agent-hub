@@ -7,6 +7,7 @@ const ROLES = new Set(["SYSTEM", "DETAIL"]);
 const ISSUE_FLAGS = [
   "duplicateCharts", "unexpectedHeaderFill", "clippedSupportingText",
   "unproductiveBlankSpace", "unreadableInspectorPath",
+  "kpiBottomCrowding", "misalignedInputText",
 ];
 const object = x => x !== null && typeof x === "object" && !Array.isArray(x);
 const filled = x => typeof x === "string" && x.trim().length > 0;
@@ -31,9 +32,12 @@ export function validateDesktopViewportMatrix(manifest, receipt = null) {
   const claimedRenderPass = receipt?.gates?.render === "PASS";
   // A partial run may contain only the viewports that were actually
   // inspected. Missing captures must remain unverified, not fabricated.
-  const openStatus = new Set(["PERSISTS", "REGRESSED", "IMPROVED_BUT_OPEN", "UNVERIFIED"]);
+  // A defect actually visible in the current capture is observed, not UNVERIFIED.
+  // Missing *other* viewports only restricts overall completion.
+  const openStatus = new Set(["PERSISTS", "REGRESSED", "IMPROVED_BUT_OPEN"]);
   function measuredDefect(c, key, code, message = "") {
     if (complete) { fail(code + " " + key + (message ? " " + message : "")); return; }
+    if (claimedRenderPass) fail("RENDER_PASS_WITH_MEASURED_DEFECT " + key + " " + code);
     const id = c.measuredFindingRefs?.[code];
     const finding = Array.isArray(receipt?.findings)
       ? receipt.findings.find(x => x?.id === id) : null;
@@ -45,7 +49,7 @@ export function validateDesktopViewportMatrix(manifest, receipt = null) {
         !filled(finding.evidenceRef) ||
         !Array.isArray(receipt?.openCarryover) ||
         !receipt.openCarryover.includes(id) || !review ||
-        !["PERSISTS", "IMPROVED_BUT_OPEN", "NOT_VERIFIED"].includes(review.status) ||
+        !["PERSISTS", "IMPROVED_BUT_OPEN"].includes(review.status) ||
         !filled(review.evidenceRef)) {
       fail("UNTRACKED_MEASURED_REGRESSION " + key + " " + code +
         ": reopen an existing finding or add a new open finding and viewport review");
@@ -145,6 +149,27 @@ export function validateDesktopViewportMatrix(manifest, receipt = null) {
       }
     }
 
+    // Optional exact glyph bounds: UI Automation often provides only the
+    // input *control* rectangle. Never synthesize missing text rectangles.
+    // When actual rendered glyph bounds are available, check vertical balance.
+    if (c.textInputs !== undefined) {
+      if (!Array.isArray(c.textInputs)) fail(label + ": textInputs must be an array");
+      else for (const [j, item] of c.textInputs.entries()) {
+        if (!object(item) || !filled(item.id) || !rect(item.field) ||
+            !rect(item.text) || outside(item.text, item.field)) {
+          fail(label + ".textInputs[" + j + "]: actual input and glyph rectangles required");
+          continue;
+        }
+        const topGap = item.text[1] - item.field[1];
+        const bottomGap = bottom(item.field) - bottom(item.text);
+        // Four DIP allows for baseline/antialias variation; this is a
+        // contextual lead, not proof that the font's optical center is wrong.
+        if (Math.abs(topGap - bottomGap) > Math.ceil(4 * v.dpiPercent / 100)) {
+          measuredDefect(c, key, "INPUT_TEXT_VERTICAL_ALIGNMENT", item.id);
+        }
+      }
+    }
+
     if (!Array.isArray(c.chartPanels)) fail(label + ": chartPanels geometry required");
     else {
       const roles = new Set(), panels = [];
@@ -186,6 +211,9 @@ export function validateDesktopViewportMatrix(manifest, receipt = null) {
           if (complete) {
             fail("RENDER_ANOMALY " + key + " " + flag);
           }
+          if (claimedRenderPass) {
+            fail("RENDER_PASS_WITH_VISUAL_DEFECT " + key + " " + flag);
+          }
           // Observed defects must become durable findings, even during a
           // verification-only run. The agent creates the receipt entry; the
           // established ledger sync appends FOUND and REVIEWED atomically.
@@ -195,7 +223,7 @@ export function validateDesktopViewportMatrix(manifest, receipt = null) {
           if (!filled(id) || !finding || !filled(finding.route) ||
               !filled(finding.symptom) || !filled(finding.acceptance) ||
               !filled(finding.evidenceRef) ||
-              !["PERSISTS", "IMPROVED_BUT_OPEN", "REGRESSED", "UNVERIFIED", "DEFERRED"].includes(finding.disposition)) {
+              !openStatus.has(finding.disposition)) {
             fail("UNTRACKED_RENDER_FINDING " + key + " " + flag +
               ": add a stable OPEN finding to receipt and canonical ledger");
           } else if (!Array.isArray(manifest.reviewedFindingIds) ||
@@ -270,7 +298,7 @@ export function validateDesktopViewportMatrix(manifest, receipt = null) {
       const id = observed.findingRefs?.[flag];
       if (!filled(id)) continue; // already reported as untracked above
       const review = reviews.find(r => r?.findingId === id && r?.viewportId === c.viewportId);
-      if (!review || !["PERSISTS", "IMPROVED_BUT_OPEN", "NOT_VERIFIED"].includes(review.status)) {
+      if (!review || !["PERSISTS", "IMPROVED_BUT_OPEN"].includes(review.status)) {
         fail("UNRECONCILED_RENDER_FINDING " + id + ":" + c.viewportId + " " + flag);
       }
     }

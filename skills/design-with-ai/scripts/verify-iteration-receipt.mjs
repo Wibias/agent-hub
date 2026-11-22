@@ -134,6 +134,86 @@ export function validateIterationReceipt(input, baseline = null, desktopEvidence
   for (const id of open) if (!carryover.includes(id)) fail("open finding omitted from carryover: " + id);
   for (const id of carryover) if (!open.has(id)) fail("carryover references closed/unknown finding: " + id);
 
+  // Inspectable observations of an actual user-supplied or agent-captured
+  // screenshot are independent of missing *other* viewports. This array
+  // means the defect was visually confirmed, not merely reported or guessed.
+  // The validator checks accounting, not the image pixels or their origin.
+  const providedVisualObservations = Array.isArray(input.currentVisualObservations)
+    ? input.currentVisualObservations : [];
+  // A v2 screenshot review with a flagged defect is a current observation
+  // even if the agent omits an explicit currentVisualObservations entry.
+  const renderVisualObservations = [];
+  if (desktopEvidence?.schemaVersion === 2 && Array.isArray(desktopEvidence.captures)) {
+    for (const capture of desktopEvidence.captures) {
+      const inspection = capture?.renderInspection;
+      if (!record(inspection) || !record(inspection.findingRefs)) continue;
+      for (const [issueCode, findingId] of Object.entries(inspection.findingRefs)) {
+        if (inspection[issueCode] !== true) continue;
+        renderVisualObservations.push({
+          findingId, observed: true, issueCode, viewportId: capture.viewportId,
+          method: inspection.method, evidenceRef: inspection.evidenceRef,
+          reportedBy: "AGENT",
+        });
+      }
+    }
+  }
+  const visualObservations = [
+    ...providedVisualObservations,
+    ...renderVisualObservations.filter(render => !providedVisualObservations.some(provided =>
+      provided?.findingId === render.findingId &&
+      provided?.viewportId === render.viewportId &&
+      provided?.issueCode === render.issueCode &&
+      provided?.evidenceRef === render.evidenceRef)),
+  ];
+  if (input.currentVisualObservations !== undefined &&
+      !Array.isArray(input.currentVisualObservations)) {
+    fail("currentVisualObservations must be an array");
+  }
+  const observationKeys = new Set();
+  for (const obs of visualObservations) {
+    if (!record(obs) || !populated(obs.findingId) || obs.observed !== true ||
+        !["USER", "AGENT"].includes(obs.reportedBy) ||
+        !["SCREENSHOT_REVIEW", "LIVE_RENDER", "MEASUREMENT", "RUNTIME"].includes(obs.method) ||
+        !populated(obs.evidenceRef) || !populated(obs.viewportId) ||
+        !populated(obs.issueCode)) {
+      fail("CURRENT_VISUAL_OBSERVATION_INVALID: require findingId, observed true, evidenceRef, viewportId, issueCode and an inspected method");
+      continue;
+    }
+    const key = [obs.findingId, obs.viewportId, obs.issueCode, obs.evidenceRef].join(":");
+    if (observationKeys.has(key)) fail("duplicate current visual observation " + key);
+    observationKeys.add(key);
+    const finding = findings.find(x => x?.id === obs.findingId);
+    const historic = Array.isArray(baseline?.findings)
+      ? baseline.findings.find(x => x?.id === obs.findingId) : null;
+    const kind = historic?.kind ?? finding?.kind;
+    if (!finding || !["VISUAL", "DETAIL"].includes(kind)) {
+      fail("CURRENT_VISUAL_OBSERVATION_UNTRACKED " + obs.findingId +
+        ": preserve the old finding ID or create a durable visual/detail finding");
+      continue;
+    }
+    if (["UNVERIFIED", "DEFERRED", "KEEP_JUSTIFIED"].includes(finding.disposition)) {
+      fail("OBSERVED_VISUAL_DEFECT_UNVERIFIED " + obs.findingId +
+        ": a confirmed screenshot defect cannot be relabeled unverified just because other viewports are missing");
+    }
+    if (finding.disposition === "RESOLVED") {
+      if (input.changeSummary?.kind !== "TASK_REPAIR" ||
+          !Array.isArray(input.changeSummary?.addressedFindingIds) ||
+          !input.changeSummary.addressedFindingIds.includes(obs.findingId)) {
+        fail("OBSERVED_VISUAL_DEFECT_UNREPAIRED " + obs.findingId +
+          ": closing a currently observed defect requires an addressed repair and verified after state");
+      }
+    } else if (baseline?.intent === "IMPROVE") {
+      const priority = historic?.priority ?? finding.priority;
+      if (["HIGH", "MEDIUM"].includes(priority) || obs.reportedBy === "USER") {
+        const action = Array.isArray(input.persistentRepairActions)
+          ? input.persistentRepairActions.find(a => a?.findingId === obs.findingId) : null;
+        if (!action || !["SOURCE_REPAIR", "BLOCKED"].includes(action.action)) {
+          fail("OBSERVED_VISUAL_DEFECT_WITHOUT_REPAIR " + obs.findingId +
+            ": attempt a targeted source repair and rerender, or document an actual blocker");
+        }
+      }
+    }
+  }
 
   // Historical repetition is determined by the ledger. A supplied action
   // must name real code and render evidence, or an explicit unresolved
@@ -248,9 +328,12 @@ export function validateIterationReceipt(input, baseline = null, desktopEvidence
       fail("baseline comparison requires changeSummary with kind and rationale");
     } else {
       const addressed = Array.isArray(summary.addressedFindingIds) ? summary.addressedFindingIds : [];
+      const finalIds = new Set(findings.map(f => f?.id).filter(populated));
+      // New findings discovered in this iteration can also be repaired now;
+      // they must still be recorded in the durable ledger by its sync step.
       if (new Set(addressed).size !== addressed.length ||
-          addressed.some((id) => !populated(id) || !priorById.has(id))) {
-        fail("changeSummary addressedFindingIds must be unique known baseline IDs");
+          addressed.some((id) => !populated(id) || !finalIds.has(id))) {
+        fail("changeSummary addressedFindingIds must be unique known final finding IDs");
       }
       if (summary.kind === "TASK_REPAIR" && addressed.length === 0) {
         fail("TASK_REPAIR must name at least one addressed prior finding");

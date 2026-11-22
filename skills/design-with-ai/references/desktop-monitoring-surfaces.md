@@ -23,6 +23,62 @@ For the **actual rendered client area**, inventory header/titlebar, KPI summary 
 7. **Typography and contrast**: assess the smallest essential labels, supplemental numerical data, subdued text and state colours at normal scale. Dense does not excuse unreadable 10 px text or near-invisible secondary values. Use tabular numerals where values change; reserve bright/neon accents for meaningful state or selection.
 8. **Host and edge cases**: inspect minimum supported window size, normal/maximized modes, 100/125/150% DPI where feasible, German and English text lengths, a long process name, high CPU/GPU values, no process selected, empty table, permission-denied/terminated target, and live updates while scrolling. Do not invent supported behaviors; mark unavailable environments `NOT_VERIFIED`.
 
+## Mandatory visual-defect detection and repair loop
+
+Before introducing another feature or accepting a polished-looking screenshot,
+inspect **the actual latest native client pixels** at the supported compact
+size. An attached user screenshot is a valid lead: inspect it directly rather
+than dismissing the report because full UI Automation or DPI capture is
+unavailable. Review both the entire window and legible crops for:
+
+- The last rendered KPI supporting glyphs versus the visible lower divider:
+  detect cramped or touching text even if the KPI cell itself is not clipped.
+  The six-DIP `KPI_BOTTOM_CLEARANCE` measurement is mechanical only when
+  real glyph and divider rectangles are known. Without such bounds, record
+  **qualitative visual crowding** in
+  `renderInspection.kpiBottomCrowding` or
+  `currentVisualObservations[].issueCode: "KPI_BOTTOM_CROWDING"`;
+  never invent the exact pixel gap.
+- Placeholder and entered-text **vertical centering inside each visible
+  search/filter input**, not just alignment of the input rectangle with its
+  neighboring dropdown. Inspect text top/bottom breathing room and focus
+  state. Record `renderInspection.misalignedInputText` or
+  `currentVisualObservations[].issueCode: "INPUT_TEXT_VERTICAL_ALIGNMENT"`.
+  If exact rendered glyph rectangles exist, `captures[].textInputs[]` may
+  provide `{ id, field: [x,y,w,h], text: [x,y,w,h] }` for the
+  conditional geometric check; UIA control bounds alone are insufficient.
+
+When the agent **actually observes** either problem, reuse the historical
+finding ID for the same original symptom, or create one stable new ID for
+the distinct defect, preserving original acceptance text. Record in the
+receipt's `currentVisualObservations[]`:
+`{ findingId, observed: true, reportedBy: "USER"|"AGENT",
+method: "SCREENSHOT_REVIEW"|"LIVE_RENDER"|"MEASUREMENT"|"RUNTIME",
+evidenceRef, viewportId: "COMPACT", issueCode }`.
+`SCREENSHOT_REVIEW` means that the agent reviewed pixels, not that exact
+glyph geometry was measured. Uninspected reports remain `UNVERIFIED`.
+Once a current visual defect is confirmed, do **not** mark that defect
+`UNVERIFIED` or `DEFERRED` just because other viewports are missing.
+Use `PERSISTS` or `REGRESSED` until fixed; `IMPROVED_BUT_OPEN` needs
+actual evidence of an improvement and the remaining issue.
+
+On an authorized general `IMPROVE` run, repair an observed HIGH/MEDIUM
+defect or an explicitly user-observed defect **now**, even on the first
+observed run. Inspect the relevant WinForms paint/layout code, make the
+smallest targeted source repair, build/test, and rerender the exact same
+compact dimensions/state. Repeat if still visible. Record the actual
+`persistentRepairActions[]` SOURCE_REPAIR with distinct before/after
+evidence and a truthful renderResult, or a real BLOCKED reason/nextStep.
+If a new defect is discovered and repaired during this iteration, include
+its new stable ID in `changeSummary.addressedFindingIds` and persist
+it in the canonical ledger. This does not authorize installing app-side
+test exporters: inspection remains external-first.
+
+If a real observation shows a defect, a valid `PARTIAL` report is **not**
+permission to choose unrelated cosmetic/features over that repair. Final
+`COMPLETE` still requires the full multi-viewport/DPI and interaction
+evidence; a one-viewport repair may truthfully remain `PARTIAL`.
+
 ## Visual restraint, not anti-dashboard prejudice
 
 Keep meaningful numeric comparisons, dark surfaces when product/host context supports them, gridlines where they help trends, a selected metric accent, and real warning/status colours. Challenge only unearned uniform header casing, gratuitous neon outlines, redundant segmented chrome, equal-weight metric styling for unequal consequences, and repeated containment that masks the task. Use visual hierarchy and spacing before adding more decorative surfaces.

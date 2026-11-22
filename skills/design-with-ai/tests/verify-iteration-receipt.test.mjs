@@ -345,7 +345,7 @@ test("TASK_REPAIR cannot cite unknown findings or omit implementation evidence",
   receipt.changeSummary.addressedFindingIds = ["UNKNOWN"];
   receipt.changeSummary.evidenceRef = "";
   const result = validateIterationReceipt(receipt, trackedBaseline());
-  assert.match(result.problems.join("\n"), /must be unique known baseline IDs/);
+  assert.match(result.problems.join("\n"), /must be unique known final finding IDs/);
   assert.match(result.problems.join("\n"), /needs actual implementation or runtime evidence/);
 });
 
@@ -492,4 +492,125 @@ test("an unverified older medium defect blocks cosmetic detours, not a no-change
   }];
   assert.equal(validateIterationReceipt(receipt, baseline).valid, true,
     validateIterationReceipt(receipt, baseline).problems.join("; "));
+});
+
+test("user screenshot confirms old KPI defect: UNVERIFIED and no-change cannot avoid repair", () => {
+  const baseline = trackedBaseline();
+  baseline.findings[0].priority = "MEDIUM";
+  baseline.findings[0].kind = "VISUAL";
+  const r = trackedReceipt();
+  r.iterationVerdict = "PARTIAL";
+  r.verdictReason = "Only a current compact screenshot was inspected";
+  r.findings[0].kind = "VISUAL";
+  r.findings[0].disposition = "UNVERIFIED";
+  r.findings[0].reason = "Multi-viewport matrix is missing";
+  r.openCarryover = ["UX-01"];
+  r.changeSummary = {
+    kind: "NO_CHANGE", addressedFindingIds: [],
+    rationale: "No source edit because other viewports were unavailable",
+  };
+  r.currentVisualObservations = [{
+    findingId: "UX-01", observed: true, method: "SCREENSHOT_REVIEW",
+    reportedBy: "USER", issueCode: "KPI_BOTTOM_CLEARANCE",
+    viewportId: "COMPACT", evidenceRef: "user/pcguardian-compact-current.png",
+  }];
+
+  assert.match(validateIterationReceipt(r, baseline).problems.join("; "),
+    /OBSERVED_VISUAL_DEFECT_UNVERIFIED UX-01/);
+  r.findings[0].disposition = "PERSISTS";
+  assert.match(validateIterationReceipt(r, baseline).problems.join("; "),
+    /OBSERVED_VISUAL_DEFECT_WITHOUT_REPAIR UX-01/);
+  r.persistentRepairActions = { invalid: true };
+  assert.match(validateIterationReceipt(r, baseline).problems.join("; "),
+    /persistentRepairActions must be an array/,
+    "malformed action evidence must not crash the validator");
+  delete r.persistentRepairActions;
+
+  // A real access blocker is truthful; speculative source edits are not.
+  r.persistentRepairActions = [{
+    findingId: "UX-01", action: "BLOCKED",
+    blocker: "Native project source is read-only in this session",
+    nextStep: "Obtain authorized source access and rerender the compact state",
+  }];
+  assert.equal(validateIterationReceipt(r, baseline).valid, true,
+    validateIterationReceipt(r, baseline).problems.join("; "));
+
+  r.persistentRepairActions = [{
+    findingId: "UX-01", action: "SOURCE_REPAIR",
+    sourceFile: "UI/MainForm.cs",
+    beforeRef: "renders/compact-before.png",
+    afterRef: "renders/compact-after.png",
+    renderResult: "REVISE",
+  }];
+  r.changeSummary = {
+    kind: "TASK_REPAIR", addressedFindingIds: ["UX-01"],
+    rationale: "Reallocated KPI strip height and bottom padding",
+    evidenceRef: "diff/main-form-kpi.patch",
+  };
+  assert.equal(validateIterationReceipt(r, baseline).valid, true,
+    validateIterationReceipt(r, baseline).problems.join("; "));
+});
+
+test("a newly observed input alignment defect may be repaired in the same iteration", () => {
+  const baseline = trackedBaseline();
+  const r = trackedReceipt();
+  r.iterationVerdict = "PARTIAL";
+  r.verdictReason = "A different KPI finding still needs full viewport verification";
+  const issue = {
+    id: "PCG-INPUT", route: "/jobs", kind: "DETAIL", priority: "LOW",
+    symptom: "Search placeholder text is vertically off-center",
+    acceptance: "Placeholder and entered text are vertically balanced in the input",
+    evidenceRef: "user/search-field-compact.png",
+    decision: "Repair search input text alignment",
+    disposition: "PERSISTS", reason: "User screenshot confirms visible misalignment",
+  };
+  r.findings.push(issue);
+  r.openCarryover = ["PCG-INPUT"];
+  r.currentVisualObservations = [{
+    findingId: "PCG-INPUT", observed: true, method: "SCREENSHOT_REVIEW",
+    reportedBy: "USER", issueCode: "INPUT_TEXT_VERTICAL_ALIGNMENT",
+    viewportId: "COMPACT", evidenceRef: "user/search-field-compact.png",
+  }];
+  r.changeSummary = {
+    kind: "TASK_REPAIR", addressedFindingIds: ["PCG-INPUT"],
+    rationale: "Changed WinForms input text rendering margins",
+    evidenceRef: "diff/search-input-align.patch",
+  };
+  assert.match(validateIterationReceipt(r, baseline).problems.join("; "),
+    /OBSERVED_VISUAL_DEFECT_WITHOUT_REPAIR PCG-INPUT/);
+  r.persistentRepairActions = [{
+    findingId: "PCG-INPUT", action: "SOURCE_REPAIR",
+    sourceFile: "UI/DarkControls.cs",
+    beforeRef: "renders/search-before.png",
+    afterRef: "renders/search-after.png",
+    renderResult: "REVISE",
+  }];
+  assert.equal(validateIterationReceipt(r, baseline).valid, true,
+    validateIterationReceipt(r, baseline).problems.join("; "));
+});
+
+test("uninspected user reports must not be promoted to observed render evidence", () => {
+  const baseline = trackedBaseline();
+  const r = trackedReceipt();
+  r.iterationVerdict = "PARTIAL";
+  r.verdictReason = "No current render is accessible";
+  r.findings[0].disposition = "UNVERIFIED";
+  r.findings[0].reason = "Screenshot unavailable";
+  r.openCarryover = ["UX-01"];
+  r.changeSummary = { kind: "NO_CHANGE", addressedFindingIds: [], rationale: "No render evidence" };
+  r.currentVisualObservations = [{
+    findingId: "UX-01", observed: false, method: "SCREENSHOT_REVIEW",
+    reportedBy: "USER", issueCode: "KPI_BOTTOM_CLEARANCE",
+    viewportId: "COMPACT", evidenceRef: "missing.png",
+  }];
+  assert.match(validateIterationReceipt(r, baseline).problems.join("; "),
+    /CURRENT_VISUAL_OBSERVATION_INVALID/);
+  r.currentVisualObservations[0].observed = true;
+  r.currentVisualObservations[0].reportedBy = "UNKNOWN";
+  assert.match(validateIterationReceipt(r, baseline).problems.join("; "),
+    /CURRENT_VISUAL_OBSERVATION_INVALID/,
+    "unrecognized provenance cannot silently bypass observed USER defect repair");
+  delete r.currentVisualObservations;
+  assert.equal(validateIterationReceipt(r, baseline).valid, true,
+    validateIterationReceipt(r, baseline).problems.join("; "));
 });
