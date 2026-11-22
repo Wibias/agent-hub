@@ -162,7 +162,8 @@ function nativeArtifactCandidates(cwd, home, promptAt, hints = []) {
   // never recurse into the user's workspace or follow directory links.
   // A single unambiguous current project may supply proof candidates.
   const childCandidates = [];
-  if (!anchored.length && !within(cwd, join(home, ".codex"))) {
+  if (!anchored.some(x => nativeArtifactOptions(x, cwd, home, promptAt)) &&
+      !within(cwd, join(home, ".codex"))) {
     try {
       const entries = readdirSync(resolve(cwd), { withFileTypes: true });
       if (entries.length <= 128) {
