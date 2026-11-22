@@ -7,6 +7,7 @@ import { classifyPrompt, recordTurnHook, readTurnContext } from "../scripts/code
 import { handleStop } from "../scripts/codex-stop-gate.mjs";
 import { runGate, checkProof } from "../scripts/run-iteration-gate.mjs";
 import { initializeLedger, importFindings, makeLedgerBaseline, readLedger, syncLedger } from "../scripts/findings-ledger.mjs";
+import { listRecentNativeGateProofs, recordNativeGateProof } from "../scripts/native-gate-proof-index.mjs";
 
 async function fixture(action) {
   const root = mkdtempSync(join(tmpdir(), "design-native-turn-test-"));
@@ -338,6 +339,86 @@ test("Stop does not accept a direct-child native proof from a previous turn", ()
     ...f.stop, last_assistant_message: "PARTIAL: weitere Renderprüfung fehlt.",
   }, { turnRoot: f.stateRoot });
   assert.equal(decision.proofStatus, "NO_GATE_COMMAND");
+}));
+
+
+test("a real native gate registers a verified hint even when Codex cwd is several levels above the project", () => fixture(async f => {
+  const project = join(f.root, "deep", "2026-07-23", "ca", "work", "MemoryGuardian");
+  mkdirSync(project, { recursive: true });
+  const n = nativeGateFixture(project);
+  const indexRoot = join(f.root, "private-index");
+  recordTurnHook(f.prompt("Verbessere PCGuardian mit design-with-ai."), { root: f.stateRoot });
+  assert.equal(runGate({ receipt: n.receipt, baseline: n.baseline,
+    ledger: n.ledger, proof: n.proof, workspaceCwd: f.root,
+    nativeGateIndexRoot: indexRoot }).exitCode, 0);
+  const turn = readTurnContext(f.event, { root: f.stateRoot });
+  const hints = listRecentNativeGateProofs({
+    cwd: f.root, startedAt: turn.promptAt, indexRoot,
+  });
+  assert.deepEqual(hints, [n.proof]);
+  assert.deepEqual(turn.gateCommands, []);
+  assert.deepEqual(turn.proofHints, []);
+  const result = await handleStop({ ...f.stop,
+    last_assistant_message: "PARTIAL: Auswahlzustand nicht visuell überprüft.",
+  }, { turnRoot: f.stateRoot, gateIndexRoot: indexRoot });
+  assert.equal(result.status, "ACTIONABLE_PARTIAL_CONTINUATION", JSON.stringify(result));
+  assert.equal(result.proofStatus, "VERIFIED_INCOMPLETE");
+}));
+
+test("the proof index refuses to select ambiguous deep native projects", () => fixture(async f => {
+  const indexRoot = join(f.root, "private-index");
+  recordTurnHook(f.prompt("Verbessere PCGuardian mit design-with-ai."), { root: f.stateRoot });
+  for (const name of ["first", "second"]) {
+    const project = join(f.root, "deep", name, "project");
+    mkdirSync(project, { recursive: true });
+    const n = nativeGateFixture(project);
+    assert.equal(runGate({ receipt: n.receipt, baseline: n.baseline,
+      ledger: n.ledger, proof: n.proof, workspaceCwd: f.root,
+      nativeGateIndexRoot: indexRoot }).exitCode, 0);
+  }
+  const result = await handleStop({ ...f.stop,
+    last_assistant_message: "PARTIAL: finale Native-QA unvollständig.",
+  }, { turnRoot: f.stateRoot, gateIndexRoot: indexRoot });
+  assert.equal(result.proofStatus, "NO_GATE_COMMAND", JSON.stringify(result));
+  assert.equal(result.decision, "block");
+}));
+
+test("stale or out-of-scope native proof index hints do not count as a gate command", () => fixture(async f => {
+  const indexRoot = join(f.root, "private-index");
+  const project = join(f.root, "many", "levels", "below");
+  mkdirSync(project, { recursive: true });
+  const n = nativeGateFixture(project);
+  const earlier = "2000-01-01T00:00:00.000Z";
+  assert.equal(recordNativeGateProof({ proofPath: n.proof, sourceRoot: project,
+    executedAt: earlier }, { indexRoot }).recorded, true);
+  recordTurnHook(f.prompt("Verbessere PCGuardian mit design-with-ai."), { root: f.stateRoot });
+  const context = readTurnContext(f.event, { root: f.stateRoot });
+  assert.deepEqual(listRecentNativeGateProofs({
+    cwd: f.root, startedAt: context.promptAt, indexRoot,
+  }), []);
+  const result = await handleStop({ ...f.stop,
+    last_assistant_message: "PARTIAL: Quelle unverifiziert.",
+  }, { turnRoot: f.stateRoot, gateIndexRoot: indexRoot });
+  assert.equal(result.proofStatus, "NO_GATE_COMMAND");
+  const outside = join(f.root, "outsider");
+  mkdirSync(outside);
+  assert.deepEqual(listRecentNativeGateProofs({
+    cwd: outside, startedAt: context.promptAt, indexRoot,
+  }), []);
+}));
+
+test("malformed index entries cannot manufacture gate execution", () => fixture(async f => {
+  const indexRoot = join(f.root, "private-index");
+  mkdirSync(indexRoot);
+  writeFileSync(join(indexRoot, "0".repeat(64) + ".json"),
+    JSON.stringify({ schemaVersion: 1, proofPath: "/tmp/unrelated.json",
+      sourceRoot: "/tmp/unrelated", executedAt: new Date().toISOString() }));
+  const other = join(f.root, "other");
+  mkdirSync(other);
+  assert.deepEqual(listRecentNativeGateProofs({
+    cwd: other, startedAt: new Date(Date.now() - 30000).toISOString(),
+    indexRoot,
+  }), []);
 }));
 
 test("a proof from before the current user turn is not accepted through opaque output or filesystem scanning", () => fixture(async f => {
