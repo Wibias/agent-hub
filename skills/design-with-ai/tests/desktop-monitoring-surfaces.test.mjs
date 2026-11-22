@@ -142,6 +142,20 @@ test("bundled external capture helper stays read-only and distinguishes raw obse
   }
 });
 
+test("current user screenshots drive KPI and input alignment repair, not false UNVERIFIED", () => {
+  for (const marker of [
+    "Mandatory visual-defect detection and repair loop",
+    "kpiBottomCrowding", "misalignedInputText",
+    "INPUT_TEXT_VERTICAL_ALIGNMENT", "currentVisualObservations[]",
+    "persistentRepairActions[]", "same", "not", "PARTIAL",
+  ]) {
+    assert.ok(contract.includes(marker), "Missing screenshot-to-repair guidance: " + marker);
+  }
+  assert.match(verification, /Current screenshot defects must drive action/);
+  assert.match(verification, /currentVisualObservations\[\]/);
+  assert.match(verification, /new defect repaired in the same/);
+});
+
 test("repeated IMPROVED_BUT_OPEN needs actual evidence and old issues outrank cosmetic novelty", () => {
   const durable = read("../references/durable-findings-ledger.md");
   assert.match(durable, /IMPROVED_BUT_OPEN with evidence/);
