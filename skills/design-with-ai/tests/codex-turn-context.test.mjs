@@ -322,4 +322,4 @@ test("unstructured functions.exec text is never treated as a gate command", () =
   const ctx = readTurnContext(f.event, { root: f.stateRoot });
   assert.equal(ctx.gateCommands.length, 0);
   assert.deepEqual(ctx.proofHints, []);
-});
+}));
