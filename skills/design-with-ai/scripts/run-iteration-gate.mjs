@@ -47,7 +47,7 @@ function inputHash(path) {
   return path === null ? null : { path, sha256: hash(path) };
 }
 
-export function runGate({ receipt, baseline = null, ledger = null, renderEvidence = null, sourceRoot = null, proof, workspaceCwd = process.cwd() }) {
+export function runGate({ receipt, baseline = null, ledger = null, renderEvidence = null, sourceRoot = null, proof, workspaceCwd = process.cwd(), nativeGateIndexRoot = undefined }) {
   if (!populated(proof)) throw new Error("--proof output path is required");
   const receiptData = JSON.parse(readFileSync(resolve(receipt), "utf8"));
   const autoRoot = sourceRoot === null && receiptData?.surfaceKind === "DENSE_DESKTOP_MONITOR"
@@ -156,7 +156,7 @@ export function runGate({ receipt, baseline = null, ledger = null, renderEvidenc
   if (receiptData?.surfaceKind === "DENSE_DESKTOP_MONITOR" &&
       effectiveRoot !== null) {
     recordNativeGateProof({ proofPath: outputPath, sourceRoot: effectiveRoot,
-      executedAt: proofData.executedAt });
+      executedAt: proofData.executedAt }, nativeGateIndexRoot === undefined ? {} : { indexRoot: nativeGateIndexRoot });
   }
   return { proofPath: outputPath, exitCode, proof: proofData };
 }
