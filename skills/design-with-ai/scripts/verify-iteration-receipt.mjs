@@ -263,7 +263,42 @@ export function validateIterationReceipt(input, baseline = null, desktopEvidence
       }
       const highOpen = baselineIssues.some((issue) => record(issue) && issue.priority === "HIGH" &&
         findings.some((f) => f?.id === issue.id && !closed.has(f.disposition)));
-      if (intent === "IMPROVE" && summary.kind === "COSMETIC_ONLY" && highOpen) {
+
+      // Do not let a "continue improving" brief drift into a new cosmetic
+      // theme while older medium/high defects remain known and open.
+      // Explicit narrow user scope or a genuine dependency/blocker may be
+      // recorded, but this must be a concrete per-finding exception.
+      const prioritized = baselineIssues.filter(issue => record(issue) &&
+        ["HIGH", "MEDIUM"].includes(issue.priority) &&
+        findings.some(f => f?.id === issue.id &&
+          ["PERSISTS", "REGRESSED", "IMPROVED_BUT_OPEN"].includes(f.disposition)));
+      const addressedPriority = prioritized.some(issue => addressed.includes(issue.id));
+      const cosmeticDetour = intent === "IMPROVE" && prioritized.length > 0 &&
+        (summary.kind === "COSMETIC_ONLY" ||
+          (summary.kind === "TASK_REPAIR" && !addressedPriority));
+      if (cosmeticDetour) {
+        const deferrals = Array.isArray(input.priorityDeferrals) ? input.priorityDeferrals : [];
+        const seenDeferrals = new Set();
+        for (const exception of deferrals) {
+          if (!record(exception) || !populated(exception.findingId) ||
+              seenDeferrals.has(exception.findingId)) {
+            fail("priorityDeferrals requires distinct findingIds"); continue;
+          }
+          seenDeferrals.add(exception.findingId);
+        }
+        for (const issue of prioritized) {
+          const exception = deferrals.find(x => x?.findingId === issue.id);
+          if (!exception || !["EXPLICIT_USER_SCOPE", "BLOCKED", "DEPENDENCY"].includes(exception.basis) ||
+              !populated(exception.reason) || !populated(exception.evidenceRef) ||
+              (exception.basis === "BLOCKED" && !populated(exception.nextStep))) {
+            fail("UNRESOLVED_FINDING_DEPRIORITIZED " + issue.id +
+              ": address the older medium/high finding first, or document an explicit requested scope/dependency/real blocker with evidence");
+          }
+        }
+      }
+
+      if (intent === "IMPROVE" && summary.kind === "COSMETIC_ONLY" && highOpen &&
+          !Array.isArray(input.priorityDeferrals)) {
         fail("IMPROVE cannot substitute cosmetic-only changes for unresolved HIGH prior findings");
       }
       if (input.iterationVerdict === "COMPLETE" && summary.kind === "COSMETIC_ONLY" &&
