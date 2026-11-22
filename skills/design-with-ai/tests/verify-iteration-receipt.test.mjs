@@ -600,6 +600,11 @@ test("uninspected user reports must not be promoted to observed render evidence"
   }];
   assert.match(validateIterationReceipt(r, baseline).problems.join("; "),
     /CURRENT_VISUAL_OBSERVATION_INVALID/);
+  r.currentVisualObservations[0].observed = true;
+  r.currentVisualObservations[0].reportedBy = "UNKNOWN";
+  assert.match(validateIterationReceipt(r, baseline).problems.join("; "),
+    /CURRENT_VISUAL_OBSERVATION_INVALID/,
+    "unrecognized provenance cannot silently bypass observed USER defect repair");
   delete r.currentVisualObservations;
   assert.equal(validateIterationReceipt(r, baseline).valid, true,
     validateIterationReceipt(r, baseline).problems.join("; "));
