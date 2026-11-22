@@ -94,7 +94,10 @@ observation. Do not rewrite a FOUND event or frozen baseline to hide this.
    For a repeatedly open IMPROVED_BUT_OPEN finding, add a current
    `reassessment: { observed: true, method: "RENDER", evidenceRef: "...",
    reason: "..." }` only after actually inspecting the UI. MEASUREMENT
-   and RUNTIME are also accepted methods. If only additional viewports
+   and RUNTIME and SCREENSHOT_REVIEW are also accepted methods when
+   real current pixels were actually inspected. A screenshot review is
+   qualitative evidence, not an invented pixel-distance measurement.
+   If only additional viewports
    or inaccessible Computer Use are missing, classify the current result
    UNVERIFIED instead of asserting that the defect is still visible.
    Historical UNVERIFIED does not establish a recurrence and must not force
