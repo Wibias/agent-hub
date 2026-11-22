@@ -155,6 +155,50 @@ test("UNVERIFIED with a valid current inability goes to the next actionable defe
   assert.equal(r.findingId, "UX-SEARCH");
 });
 
+test("a locally observed exporter concurrency failure becomes a targeted source repair, not a generic blocker", () => {
+  const x = receipt();
+  x.findings.push({
+    id: "UX-EXPORT-RACE", kind: "WORKFLOW", priority: "HIGH",
+    disposition: "PERSISTS",
+    acceptance: "Repeat capture without modifying a live collection during iteration",
+  });
+  x.currentRuntimeFailures = [{
+    findingId: "UX-EXPORT-RACE", observed: true,
+    evidenceRef: "logs/collection-concurrency-stacktrace.txt",
+    errorCode: "COLLECTION_MODIFIED_DURING_ENUMERATION",
+  }];
+  x.findings[0].disposition = "RESOLVED";
+  x.findings[1].disposition = "RESOLVED";
+  const result = decideRepairLoop(x, baseline());
+  assert.equal(result.action, "REPAIR_SOURCE");
+  assert.equal(result.findingId, "UX-EXPORT-RACE");
+});
+
+test("an incomplete final render or manifest remains actionable RUN_GATES even with no open findings", () => {
+  const x = receipt();
+  x.findings = x.findings.map(f => ({ ...f, disposition: "RESOLVED" }));
+  x.currentVisualObservations = [];
+  const result = decideRepairLoop(x, baseline());
+  assert.equal(result.outcome, "CONTINUE");
+  assert.equal(result.action, "RUN_GATES");
+  assert.equal(result.findingId, null);
+});
+
+test("a source repair still requires a real rerender if the finding was prematurely closed", () => {
+  const x = receipt();
+  x.findings = x.findings.map(f => ({ ...f, disposition: "RESOLVED" }));
+  x.currentVisualObservations = [];
+  const result = decideRepairLoop(x, baseline(), {
+    attempts: [{
+      findingId: "UX-OLD", action: "REPAIR_SOURCE", result: "PASS",
+      sourceBefore: "old-sha", sourceAfter: "new-sha",
+      renderBefore: "renders/old.png", renderAfter: "",
+    }],
+  });
+  assert.equal(result.action, "RERENDER");
+  assert.equal(result.findingId, "UX-OLD");
+});
+
 test("valid COMPLETE is only recognized with independently verified final proof", () => {
   const x = receipt();
   x.iterationVerdict = "COMPLETE";
