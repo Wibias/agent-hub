@@ -134,6 +134,57 @@ export function validateIterationReceipt(input, baseline = null, desktopEvidence
   for (const id of open) if (!carryover.includes(id)) fail("open finding omitted from carryover: " + id);
   for (const id of carryover) if (!open.has(id)) fail("carryover references closed/unknown finding: " + id);
 
+  // Inspectable observations of an actual user-supplied or agent-captured
+  // screenshot are independent of missing *other* viewports. This array
+  // means the defect was visually confirmed, not merely reported or guessed.
+  // The validator checks accounting, not the image pixels or their origin.
+  const visualObservations = Array.isArray(input.currentVisualObservations)
+    ? input.currentVisualObservations : [];
+  if (input.currentVisualObservations !== undefined &&
+      !Array.isArray(input.currentVisualObservations)) {
+    fail("currentVisualObservations must be an array");
+  }
+  const observationKeys = new Set();
+  for (const obs of visualObservations) {
+    if (!record(obs) || !populated(obs.findingId) || obs.observed !== true ||
+        !["SCREENSHOT_REVIEW", "LIVE_RENDER", "MEASUREMENT", "RUNTIME"].includes(obs.method) ||
+        !populated(obs.evidenceRef) || !populated(obs.viewportId) ||
+        !populated(obs.issueCode)) {
+      fail("CURRENT_VISUAL_OBSERVATION_INVALID: require findingId, observed true, evidenceRef, viewportId, issueCode and an inspected method");
+      continue;
+    }
+    const key = [obs.findingId, obs.viewportId, obs.issueCode].join(":");
+    if (observationKeys.has(key)) fail("duplicate current visual observation " + key);
+    observationKeys.add(key);
+    const finding = findings.find(x => x?.id === obs.findingId);
+    const kind = baseline?.findings?.find(x => x?.id === obs.findingId)?.kind ?? finding?.kind;
+    if (!finding || !["VISUAL", "DETAIL"].includes(kind)) {
+      fail("CURRENT_VISUAL_OBSERVATION_UNTRACKED " + obs.findingId +
+        ": preserve the old finding ID or create a durable visual/detail finding");
+      continue;
+    }
+    if (["UNVERIFIED", "DEFERRED", "KEEP_JUSTIFIED"].includes(finding.disposition)) {
+      fail("OBSERVED_VISUAL_DEFECT_UNVERIFIED " + obs.findingId +
+        ": a confirmed screenshot defect cannot be relabeled unverified just because other viewports are missing");
+    }
+    if (finding.disposition === "RESOLVED") {
+      if (input.changeSummary?.kind !== "TASK_REPAIR" ||
+          !input.changeSummary?.addressedFindingIds?.includes(obs.findingId)) {
+        fail("OBSERVED_VISUAL_DEFECT_UNREPAIRED " + obs.findingId +
+          ": closing a currently observed defect requires an addressed repair and verified after state");
+      }
+    } else if (baseline?.intent === "IMPROVE") {
+      const priority = baseline?.findings?.find(x => x?.id === obs.findingId)?.priority ??
+        finding.priority;
+      if (["HIGH", "MEDIUM"].includes(priority) || obs.reportedBy === "USER") {
+        const action = input.persistentRepairActions?.find(a => a?.findingId === obs.findingId);
+        if (!action || !["SOURCE_REPAIR", "BLOCKED"].includes(action.action)) {
+          fail("OBSERVED_VISUAL_DEFECT_WITHOUT_REPAIR " + obs.findingId +
+            ": attempt a targeted source repair and rerender, or document an actual blocker");
+        }
+      }
+    }
+  }
 
   // Historical repetition is determined by the ledger. A supplied action
   // must name real code and render evidence, or an explicit unresolved
@@ -248,9 +299,12 @@ export function validateIterationReceipt(input, baseline = null, desktopEvidence
       fail("baseline comparison requires changeSummary with kind and rationale");
     } else {
       const addressed = Array.isArray(summary.addressedFindingIds) ? summary.addressedFindingIds : [];
+      const finalIds = new Set(findings.map(f => f?.id).filter(populated));
+      // New findings discovered in this iteration can also be repaired now;
+      // they must still be recorded in the durable ledger by its sync step.
       if (new Set(addressed).size !== addressed.length ||
-          addressed.some((id) => !populated(id) || !priorById.has(id))) {
-        fail("changeSummary addressedFindingIds must be unique known baseline IDs");
+          addressed.some((id) => !populated(id) || !finalIds.has(id))) {
+        fail("changeSummary addressedFindingIds must be unique known final finding IDs");
       }
       if (summary.kind === "TASK_REPAIR" && addressed.length === 0) {
         fail("TASK_REPAIR must name at least one addressed prior finding");
