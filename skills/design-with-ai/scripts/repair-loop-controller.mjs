@@ -12,23 +12,24 @@ const observedStates = new Set(["PERSISTS", "REGRESSED", "IMPROVED_BUT_OPEN"]);
 const priority = { HIGH: 0, MEDIUM: 1, LOW: 2 };
 const filled = x => typeof x === "string" && x.trim().length > 0;
 const object = x => x !== null && typeof x === "object" && !Array.isArray(x);
+const items = x => Array.isArray(x) ? x : [];
 const validAction = new Set(["REPAIR_SOURCE", "VERIFY_CURRENT", "RERENDER", "RUN_GATES"]);
 
 function isObserved(id, receipt, manifest) {
-  return (receipt.currentVisualObservations ?? []).some(x => x?.findingId === id && x?.observed === true) ||
-    (receipt.visualCarryoverReviews ?? []).some(x => x?.findingId === id && x?.status === "OBSERVED") ||
-    (receipt.findings ?? []).some(x => x?.id === id && x.reassessment?.observed === true) ||
-    (manifest?.captures ?? []).some(c =>
+  return items(receipt.currentVisualObservations).some(x => x?.findingId === id && x?.observed === true) ||
+    items(receipt.visualCarryoverReviews).some(x => x?.findingId === id && x?.status === "OBSERVED") ||
+    items(receipt.findings).some(x => x?.id === id && x.reassessment?.observed === true) ||
+    items(manifest?.captures).some(c =>
       Object.entries(c?.renderInspection?.findingRefs ?? {}).some(([flag, ref]) =>
         ref === id && c.renderInspection[flag] === true));
 }
 function blockedAction(id, receipt) {
-  return (receipt.persistentRepairActions ?? []).find(x =>
+  return items(receipt.persistentRepairActions).find(x =>
     x?.findingId === id && x.action === "BLOCKED" &&
     filled(x.blocker) && filled(x.nextStep) && filled(x.evidenceRef));
 }
 function recentUnverifiedBlock(id, receipt) {
-  return (receipt.visualCarryoverReviews ?? []).find(x =>
+  return items(receipt.visualCarryoverReviews).find(x =>
     x?.findingId === id && x?.status === "NOT_VERIFIED" &&
     filled(x.reason) && filled(x.evidenceRef) && filled(x.nextStep));
 }
@@ -77,8 +78,8 @@ export function decideRepairLoop(receipt, baseline, {
       attempts: attempts.length };
   }
   const old = new Map(baseline.findings.map((x, i) => [x.id, { ...x, order: i }]));
-  const issues = receipt.findings.filter(f => open.has(f?.disposition) &&
-    !["NAVIGATION", "WORKFLOW"].includes(old.get(f.id)?.kind ?? f?.kind));
+  const issues = receipt.findings.filter(f => object(f) && filled(f.id) &&
+    open.has(f.disposition));
   const ranked = issues.map((f, i) => {
     const prev = old.get(f.id);
     return { ...f, severity: priority[prev?.priority ?? f.priority] ?? 2,
@@ -93,7 +94,7 @@ export function decideRepairLoop(receipt, baseline, {
     pending.push(issue);
   }
   if (!pending.length && ranked.length > 0) {
-    return { outcome: "STOP_BLOCKED", reason: "Every open visual finding has a documented current blocker or inaccessible evidence",
+    return { outcome: "STOP_BLOCKED", reason: "Every open finding has a documented current blocker or inaccessible evidence",
       remaining: ranked.map(f => f.id) };
   }
 
