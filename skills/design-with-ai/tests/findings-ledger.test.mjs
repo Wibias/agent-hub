@@ -390,6 +390,10 @@ test("a third visibly IMPROVED_BUT_OPEN KPI assessment requires repair, not a ne
     reason: "Current small window still has a measured two-pixel gap" };
   assert.throws(() => syncLedger(f.ledgerPath, baseline, receipt),
     /REPEATED_DEFECT_WITHOUT_REPAIR PCG-KPI-GAP/);
+  receipt.findings.at(-1).reassessment.method = "SCREENSHOT_REVIEW";
+  assert.throws(() => syncLedger(f.ledgerPath, baseline, receipt),
+    /REPEATED_DEFECT_WITHOUT_REPAIR PCG-KPI-GAP/,
+    "actually inspected screenshot evidence still triggers repair");
   assert.deepEqual(readLedger(f.ledgerPath).events, originalEvents,
     "failed follow-through cannot write a false durable assessment");
   receipt.persistentRepairActions = [{ findingId: issue.id, action: "SOURCE_REPAIR",
