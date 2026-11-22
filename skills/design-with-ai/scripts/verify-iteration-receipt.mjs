@@ -165,9 +165,17 @@ export function validateIterationReceipt(input, baseline = null, desktopEvidence
       }
     }
   }
-  const visualObservations = [ ...new Map([
-    ...providedVisualObservations, ...carryoverVisualObservations, ...renderVisualObservations,
-  ].map(x => [[x?.findingId, x?.viewportId, x?.issueCode, x?.evidenceRef].join(":"), x])).values() ];
+  // Preserve USER provenance when the same inspected screenshot is also
+  // reported by an automatic render review. Do not let a weaker duplicate
+  // overwrite a confirmed user observation.
+  const uniqueVisualObservations = new Map();
+  for (const obs of [...renderVisualObservations, ...carryoverVisualObservations, ...providedVisualObservations]) {
+    const key = [obs?.findingId, obs?.viewportId, obs?.issueCode, obs?.evidenceRef].join(":");
+    const existing = uniqueVisualObservations.get(key);
+    if (!existing || (obs?.observed === true && obs?.reportedBy === "USER") ||
+        existing?.reportedBy !== "USER") uniqueVisualObservations.set(key, obs);
+  }
+  const visualObservations = [...uniqueVisualObservations.values()];
   if (input.currentVisualObservations !== undefined &&
       !Array.isArray(input.currentVisualObservations)) {
     fail("currentVisualObservations must be an array");
