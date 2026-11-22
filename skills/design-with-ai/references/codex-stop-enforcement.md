@@ -48,7 +48,19 @@ and independently checks its canonical project ledger, `.csproj` source
 root, hashes, prompt/creation time, current source and validator. A bounded
 fallback also looks for current proof files directly under the current or
 ancestor native project's canonical `.design-with-ai` directory when the
-host provides no PostToolUse gate event at all.
+host provides no PostToolUse gate event at all. If Codex starts in the
+**immediate parent** of a native project, the fallback inspects at most one
+bounded level of direct child directories. It accepts this route only when
+exactly one child native project has a current, structurally valid proof
+for the active turn. Never recursively crawl unrelated projects, follow
+directory junctions, accept a prior turn's proof or silently choose
+between multiple current child project proofs.
+
+Codex can omit `PostToolUse` events for nested Code Mode / `functions.exec`
+execution, even when the hook is installed and trusted. This external
+host coverage gap is not repaired by adding tool-name regex variants.
+The independent artifact check is the fallback, not a guarantee that
+the host always gives sufficient current-turn context.
 
 This is **not** permission to accept a guessed path, arbitrary stdout,
 an older turn's proof or an unrelated workspace. Non-native workflows still
