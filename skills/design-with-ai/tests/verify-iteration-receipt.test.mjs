@@ -345,7 +345,7 @@ test("TASK_REPAIR cannot cite unknown findings or omit implementation evidence",
   receipt.changeSummary.addressedFindingIds = ["UNKNOWN"];
   receipt.changeSummary.evidenceRef = "";
   const result = validateIterationReceipt(receipt, trackedBaseline());
-  assert.match(result.problems.join("\n"), /must be unique known baseline IDs/);
+  assert.match(result.problems.join("\n"), /must be unique known final finding IDs/);
   assert.match(result.problems.join("\n"), /needs actual implementation or runtime evidence/);
 });
 
