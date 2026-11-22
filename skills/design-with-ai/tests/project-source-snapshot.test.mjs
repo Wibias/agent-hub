@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync, utimesSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -257,6 +257,29 @@ test("auto-detected WinForms source root binds a Gitless PCGuardian PARTIAL proo
     const stale = checkProof({ ...args, checkProof: proof });
     assert.equal(stale.valid, false);
     assert.ok(stale.issueCodes.includes("WORKTREE_CHANGED"));
+
+    // Real regression: a fresh gate proof generated after the source edit
+    // must not bless the unchanged, older receipt as valid PARTIAL.
+    const past = new Date(Date.now() - 20000);
+    utimesSync(receipt, past, past);
+    const staleReceiptProof = join(art, "proof-over-old-receipt.json");
+    const staleReceiptGate = runGate({ ...args, proof: staleReceiptProof });
+    assert.equal(staleReceiptGate.exitCode, 1);
+    assert.equal(staleReceiptGate.proof.result.valid, false);
+    assert.equal(staleReceiptGate.proof.validatorProcessExitCode, 0);
+    assert.match(staleReceiptGate.proof.result.problems.join("; "), /NATIVE_RECEIPT_STALE/);
+    const staleReceiptCheck = checkProof({ ...args, checkProof: staleReceiptProof });
+    assert.equal(staleReceiptCheck.valid, false);
+    assert.ok(staleReceiptCheck.issueCodes.includes("NATIVE_RECEIPT_STALE"));
+
+    // After the final edit, a genuinely new, reconciled receipt may be
+    // validated without touching the broken ancestor Git metadata.
+    const olderSource = new Date(Date.now() - 10000);
+    utimesSync(src, olderSource, olderSource);
+    writeFileSync(receipt, JSON.stringify(data));
+    const repairedProof = join(art, "proof-after-fresh-receipt.json");
+    assert.equal(runGate({ ...args, proof: repairedProof }).exitCode, 0);
+    assert.equal(checkProof({ ...args, checkProof: repairedProof }).valid, true);
     assert.equal(readdirSync(join(parent, ".git")).length, 0);
   } finally { rmSync(parent, { recursive: true, force: true }); }
 });
