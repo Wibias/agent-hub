@@ -201,14 +201,14 @@ export function decideStop(event, report, { home = homedir() } = {}) {
             attempts, manifest, checkedProof: checked,
           });
           if (action.outcome === "CONTINUE" &&
-              ["VERIFY_CURRENT", "REPAIR_SOURCE", "RERENDER"].includes(action.action)) {
+              ["VERIFY_CURRENT", "REPAIR_SOURCE", "RERENDER", "RUN_GATES"].includes(action.action)) {
             return {
               decision: "block",
               status: "ACTIONABLE_PARTIAL_CONTINUATION",
               proofStatus: "VERIFIED_INCOMPLETE",
               reason: "design-with-ai: a valid PARTIAL proof does not finish this IMPROVE request. " +
                 "Execute the autonomous repair loop now: " + action.action +
-                " for existing finding " + action.findingId + ". " +
+                (action.findingId ? " for existing finding " + action.findingId + ". " : ". ") +
                 action.reason + ". Reinspect the actual UI, repair authorized source if observed, " +
                 "test and rerender the same state, then generate fresh proof. " +
                 "Stop only on verified COMPLETE, real blocker, documented stall, or bounded iteration limit. " +
