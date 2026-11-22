@@ -56,6 +56,15 @@ test("unknown current appearance leads to verification, never speculative editin
   assert.equal(r.findingId, "UX-OLD");
 });
 
+test("an observed defect mislabeled UNVERIFIED requires repair, not another capture loop", () => {
+  const x = receipt();
+  x.findings[0].disposition = "UNVERIFIED";
+  const next = decideRepairLoop(x, baseline());
+  assert.equal(next.action, "REPAIR_SOURCE");
+  assert.equal(next.findingId, "UX-OLD");
+  assert.equal(next.reconcileDisposition, true);
+});
+
 test("current manifest observation can independently drive repair", () => {
   const x = receipt();
   delete x.currentVisualObservations;
