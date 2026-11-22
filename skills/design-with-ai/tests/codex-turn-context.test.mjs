@@ -290,6 +290,56 @@ test("Stop independently discovers a current canonical native proof even without
   assert.equal(status.status, "ACTIONABLE_PARTIAL_CONTINUATION", JSON.stringify(status));
 }));
 
+test("Stop finds the canonical current proof when Codex cwd is one level above the native project", () => fixture(async f => {
+  const project = join(f.root, "MemoryGuardian");
+  mkdirSync(project, { recursive: true });
+  const n = nativeGateFixture(project);
+  recordTurnHook(f.prompt("Verbessere PCGuardian mit design-with-ai."), { root: f.stateRoot });
+  assert.equal(runGate({ receipt: n.receipt, baseline: n.baseline,
+    ledger: n.ledger, proof: n.proof, workspaceCwd: f.root }).exitCode, 0);
+  // No PostToolUse event, as can happen for nested functions.exec execution.
+  const decision = await handleStop({
+    ...f.stop, last_assistant_message: "PARTIAL: weitere Renderprüfung fehlt.",
+  }, { turnRoot: f.stateRoot });
+  assert.equal(decision.status, "ACTIONABLE_PARTIAL_CONTINUATION", JSON.stringify(decision));
+  assert.equal(decision.proofStatus, "VERIFIED_INCOMPLETE");
+}));
+
+test("Stop refuses ambiguous direct-child project proof discovery", () => fixture(async f => {
+  const first = join(f.root, "MemoryGuardian");
+  const second = join(f.root, "OtherProduct");
+  mkdirSync(first, { recursive: true });
+  mkdirSync(second, { recursive: true });
+  const a = nativeGateFixture(first);
+  const b = nativeGateFixture(second);
+  recordTurnHook(f.prompt("Verbessere PCGuardian mit design-with-ai."), { root: f.stateRoot });
+  for (const x of [a, b]) {
+    assert.equal(runGate({ receipt: x.receipt, baseline: x.baseline,
+      ledger: x.ledger, proof: x.proof, workspaceCwd: f.root }).exitCode, 0);
+  }
+  const decision = await handleStop({
+    ...f.stop, last_assistant_message: "PARTIAL: weitere Renderprüfung fehlt.",
+  }, { turnRoot: f.stateRoot });
+  assert.equal(decision.proofStatus, "NO_GATE_COMMAND", JSON.stringify(decision));
+  assert.equal(decision.decision, "block");
+}));
+
+test("Stop does not accept a direct-child native proof from a previous turn", () => fixture(async f => {
+  const project = join(f.root, "MemoryGuardian");
+  mkdirSync(project, { recursive: true });
+  const n = nativeGateFixture(project);
+  assert.equal(runGate({ receipt: n.receipt, baseline: n.baseline,
+    ledger: n.ledger, proof: n.proof, workspaceCwd: f.root }).exitCode, 0);
+  recordTurnHook(f.prompt("Verbessere PCGuardian mit design-with-ai."), { root: f.stateRoot });
+  const old = JSON.parse(readFileSync(n.proof, "utf8"));
+  old.executedAt = "2000-01-01T00:00:00.000Z";
+  writeFileSync(n.proof, JSON.stringify(old));
+  const decision = await handleStop({
+    ...f.stop, last_assistant_message: "PARTIAL: weitere Renderprüfung fehlt.",
+  }, { turnRoot: f.stateRoot });
+  assert.equal(decision.proofStatus, "NO_GATE_COMMAND");
+}));
+
 test("a proof from before the current user turn is not accepted through opaque output or filesystem scanning", () => fixture(async f => {
   const n = nativeGateFixture(f.root);
   assert.equal(runGate({ receipt: n.receipt, baseline: n.baseline,
