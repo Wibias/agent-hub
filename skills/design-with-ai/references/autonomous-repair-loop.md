@@ -68,7 +68,15 @@ controller alone as a fully autonomous runtime.
    - **RERENDER**: the edited source lacks a distinct post-edit render.
      Capture/review the final application candidate before further edits.
    - **RUN_GATES**: finish missing acceptance and generate/check fresh proof;
-     if it reveals faults, record the findings and rerun the controller.
+     this is **actionable even if all recorded findings are resolved** and the
+     final rendering, interaction matrix or manifest is still incomplete.
+     If a local capture/export/test process crashes, inspect its actual
+     exception/stack trace, create or reuse a stable in-scope runtime finding,
+     and record its current evidence in "currentRuntimeFailures" with
+     "findingId", "observed: true", "evidenceRef" and an error code.
+     A repairable exception in the project's own code is not an external
+     access blocker. Repair the local source, rerun the same test and collect
+     independent fresh captures before any publish step.
 
    Generic control decisions are not desktop-only KPI heuristics. The
    selected finding's original acceptance is the next repair's target.
