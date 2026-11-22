@@ -707,3 +707,61 @@ test("actual text glyph bounds reveal off-center search text without inventing m
   c.textInputs[0].text = [304, 298, 110, 13];
   assert.doesNotMatch(allProblems(m, r), /UNTRACKED_MEASURED_REGRESSION/);
 });
+
+test("manifest-observed compact KPI anomaly enforces repair even when not copied into receipt observations", () => {
+  const m = matrixManifest();
+  const r = receipt();
+  const baseline = {
+    schemaVersion: 1, intent: "IMPROVE", scope: ["PCGuardian/MainForm"],
+    findings: [{
+      id: "UX-TABLE", route: "PCGuardian/MainForm", kind: "VISUAL",
+      priority: "MEDIUM", symptom: r.findings[0].symptom,
+      acceptance: r.findings[0].acceptance,
+      evidenceRef: "baseline/table-before.png",
+    }],
+  };
+  r.requiresPriorBaseline = true;
+  r.iterationVerdict = "PARTIAL";
+  r.verdictReason = "Current compact screenshot confirms crowded KPI area";
+  r.gates.render = "REVISE";
+  r.findings[0].kind = "VISUAL";
+  r.findings[0].priority = "MEDIUM";
+  r.findings[0].evidenceRef = "baseline/table-before.png";
+  r.findings[0].disposition = "PERSISTS";
+  r.findings[0].reason = "Current compact KPI still looks crowded";
+  r.openCarryover = ["UX-TABLE"];
+  r.changeSummary = { kind: "NO_CHANGE", addressedFindingIds: [],
+    rationale: "No edit despite observed compact defect" };
+  m.viewports = m.viewports.filter(v => v.id === "COMPACT");
+  m.captures = m.captures.filter(c => c.viewportId === "COMPACT" && c.state === "IDLE");
+  m.checks = [];
+  m.findingViewportReviews = [{
+    findingId: "UX-TABLE", viewportId: "COMPACT", status: "PERSISTS",
+    evidenceRef: "renders/compact-idle.png",
+  }];
+  const c = m.captures[0];
+  c.renderInspection.kpiBottomCrowding = true;
+  c.renderInspection.findingRefs = { kpiBottomCrowding: "UX-TABLE" };
+
+  assert.equal(validateDesktopRenderEvidence(m, r).valid, true,
+    allProblems(m, r));
+  assert.match(validateIterationReceipt(r, baseline, m).problems.join("; "),
+    /OBSERVED_VISUAL_DEFECT_WITHOUT_REPAIR UX-TABLE/);
+  r.persistentRepairActions = [{
+    findingId: "UX-TABLE", action: "BLOCKED",
+    blocker: "Source tree unavailable in this read-only session",
+    nextStep: "Reopen authorized WinForms source and verify the same compact state",
+  }];
+  assert.equal(validateIterationReceipt(r, baseline, m).valid, true,
+    validateIterationReceipt(r, baseline, m).problems.join("; "));
+
+  // Repeating the same observation explicitly must not create a false
+  // duplicate when it was already derived from the v2 manifest.
+  r.currentVisualObservations = [{
+    findingId: "UX-TABLE", observed: true, issueCode: "kpiBottomCrowding",
+    reportedBy: "AGENT", viewportId: "COMPACT",
+    method: "SCREENSHOT_REVIEW", evidenceRef: c.renderInspection.evidenceRef,
+  }];
+  assert.equal(validateIterationReceipt(r, baseline, m).valid, true,
+    validateIterationReceipt(r, baseline, m).problems.join("; "));
+});
