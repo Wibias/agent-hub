@@ -52,6 +52,16 @@ observation. Do not rewrite a FOUND event or frozen baseline to hide this.
 3. Before doing new cosmetic polish **or unrelated lower-priority repair**
    in an IMPROVE workflow, prioritize existing unresolved medium/high
    findings, including those now marked `UNVERIFIED` or `DEFERRED`.
+   For dense native desktop monitoring UI changes, include one
+   `visualCarryoverReviews[]` entry for **every** unresolved older
+   VISUAL/DETAIL finding with OBSERVED, NOT_VERIFIED or NOT_APPLICABLE,
+   a reason and evidence reference. OBSERVED includes inspected method,
+   reporter, viewport and issue code, and activates the same repair
+   obligation as a `currentVisualObservations[]` entry. NOT_VERIFIED
+   requires a concrete next verification step. A no-change verification
+   turn need not invent reviews. When working on one older priority
+   finding, explicitly defer each *other* unresolved HIGH/MEDIUM issue
+   with independent evidence or address it as well. No one-of-many bypass.
    Missing current evidence calls for verification, not speculative source
    repair; it does not make older findings disappear from task priority.
    A truthful no-change verification run may remain PARTIAL.
