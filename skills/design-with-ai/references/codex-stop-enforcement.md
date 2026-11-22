@@ -75,8 +75,14 @@ configurations.
    Re-run the full iteration gate with a **new** proof output path after
    the final code/evidence change.
 5. Permit `COMPLETE` only for a current, input-bound, valid COMPLETE proof.
-   Permit `PARTIAL` / `NOT_VERIFIED` only with a valid matching proof
-   and the corresponding **explicit verdict** in the final message.
+   For an IMPROVE receipt with an otherwise valid `PARTIAL` / `NOT_VERIFIED`
+   proof, use `repair-loop-controller.mjs` on the current receipt and frozen
+   baseline: if it selects `REPAIR_SOURCE`, `VERIFY_CURRENT`, or `RERENDER`,
+   request one *targeted* continuation rather than treating PARTIAL as done.
+   An evidence-backed blocked or stalled task may end with explicit PARTIAL.
+   This cannot guarantee a full autonomous loop: `stop_hook_active` still
+   caps the hook to one request; the agent must perform the bounded loop
+   proactively within its own original task.
 6. Otherwise request one Codex automatic continuation asking it to run
    the real validator and produce/verify proof. If `stop_hook_active` is
    already true, allow termination to avoid a loop. This is a bounded
@@ -117,6 +123,10 @@ Key outcomes:
 
 - `BLOCK` / `MISSING_VERIFIED_GATE_PROOF`: current modifying design turn
   lacks a verified gate proof; Codex should request one continuation.
+- `BLOCK` / `ACTIONABLE_PARTIAL_CONTINUATION`: current IMPROVE turn has a
+  valid incomplete proof but an existing finding still needs a real repair,
+  current verification or matched rerender. The one Codex continuation must
+  attempt this action rather than asking the user to restart the task.
 - `ALLOW` / `VERIFIED_COMPLETE` or `VERIFIED_INCOMPLETE`: gate proof was
   valid and matched the declared verdict.
 - `ALLOW` / `RETRY_LIMIT_NOT_VERIFIED`: the one permitted correction was
@@ -186,6 +196,8 @@ from a green test in the Hub repository.
 - **Limited correction:** Codex marks an automatic Stop continuation with
   `stop_hook_active`. It is honored as a one-retry limit. The agent can
   still end with unresolved findings and a truthful incomplete verdict.
+  Continuous repair is the skill-level within-turn loop, not repeated Stop
+  blocks. A host without the trusted hook cannot enforce this final guard.
 - **Proof scope:** The proof validates receipt structure, current input
   hashes, a bounded Git-workspace source-content fingerprint, and observed
   validator subprocess result. It includes tracked/untracked source code and
