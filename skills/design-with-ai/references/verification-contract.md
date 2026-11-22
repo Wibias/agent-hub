@@ -257,7 +257,15 @@ not acquire this additional gate.
 ## Autonomous repair-before-handoff for improve-existing
 
 For authorized modifying `improve-existing` work, load
-`autonomous-repair-loop.md`. `run-iteration-gate.mjs` verifies the current
+`autonomous-repair-loop.md`. A native candidate's final receipt must be
+written **after** its last C#/WinForms/XAML source edit; a later proof
+over an earlier receipt is rejected as NATIVE_RECEIPT_STALE. Reconcile
+the current code, current screenshot and actual test outcomes before each
+fresh proof. An invalid or incomplete `--render-evidence` check and a local
+export/test race are actionable verification defects, not evidence of
+COMPLETION. The controller's RUN_GATES action is not a terminal verdict;
+execute the missing test or diagnose its failure before stopping.
+`run-iteration-gate.mjs` verifies the current
 candidate and may legitimately return a valid PARTIAL. That does **not**
 end the task when source repairs or runtime verification remain possible.
 Execute `scripts/repair-loop-controller.mjs` on the frozen baseline and
