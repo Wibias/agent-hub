@@ -389,6 +389,38 @@ export function decideStop(event, report, { home = homedir(), gateIndexRoot = de
     }
     proofStatus = "INCOMPLETE_NOT_DISCLOSED";
   }
+  // A current native gate index for an unrelated cwd is not a proof for
+  // this Codex workspace. Another gate run cannot repair the *session*
+  // working-directory mismatch. Never accept the other project's artifact,
+  // but do not ask the agent to manufacture duplicate receipts or proofs.
+  // Keep the one-continuation host bound: this message is actionable
+  // guidance, not a new way to bypass proof verification.
+  if (commands.length === 0 && nativeDiagnostic.indexStatus === "INDEX_CWD_DISJOINT") {
+    const explanation = "design-with-ai: WORKSPACE_SCOPE_MISMATCH. A native gate artifact " +
+      "exists outside this Codex session's workspace, so this Stop hook cannot " +
+      "verify or certify it. Do not rerun the same gate, regenerate the receipt, " +
+      "modify project Git metadata, or make unrelated UI edits to solve this. " +
+      "Report the existing gate's own result honestly (PARTIAL remains PARTIAL " +
+      "when applicable), state that the Stop hook has not independently " +
+      "verified it, and open a Codex session with the target native project's " +
+      "directory as its workspace before the next design iteration.";
+    if (event.stop_hook_active === true) {
+      return {
+        continue: true,
+        status: "WORKSPACE_SCOPE_MISMATCH",
+        proofStatus,
+        gateIndexStatus: nativeDiagnostic.indexStatus,
+        systemMessage: explanation,
+      };
+    }
+    return {
+      decision: "block",
+      status: "WORKSPACE_SCOPE_MISMATCH",
+      proofStatus,
+      gateIndexStatus: nativeDiagnostic.indexStatus,
+      reason: explanation + " This host Stop hook allows only one guidance continuation.",
+    };
+  }
   if (event.stop_hook_active === true) {
     return {
       continue: true,
