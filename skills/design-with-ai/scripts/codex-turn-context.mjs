@@ -49,6 +49,36 @@ function commandText(payload) {
   }
   return typeof command === "string" ? command : "";
 }
+// functions.exec often invokes nested tools through JavaScript. Its code
+// is NOT a shell command. Record only a typed proofPath from a completed
+// tool result; the Stop hook must independently validate the artifact,
+// source root, receipt, turn time and canonical ledger before accepting it.
+function proofPathFromResponse(value, depth = 0) {
+  if (depth > 5 || value == null) return null;
+  if (typeof value === "string") {
+    if (value.length > MAX_INPUT) return null;
+    try { return proofPathFromResponse(JSON.parse(value), depth + 1); }
+    catch { return null; }
+  }
+  if (Array.isArray(value)) {
+    for (const x of value.slice(0, 20)) {
+      const proof = proofPathFromResponse(x, depth + 1);
+      if (proof) return proof;
+    }
+    return null;
+  }
+  if (!obj(value)) return null;
+  // Arbitrary path strings in stdout are not enough. Require the exact
+  // structured property emitted by the real iteration-gate runner.
+  if (token(value.proofPath) && value.proofPath.length <= 2048 &&
+      isAbsolute(value.proofPath)) return value.proofPath;
+  for (const key of ["result", "output", "content", "data", "text"]) {
+    const proof = proofPathFromResponse(value[key], depth + 1);
+    if (proof) return proof;
+  }
+  return null;
+}
+
 function gateOptions(command) {
   // Don't classify grep, echo, or arbitrary strings containing the filename
   // as an executed validator. Proof and original input hashes are checked at Stop.
@@ -128,11 +158,16 @@ export function recordTurnHook(event, {
       const options = Object.fromEntries(Object.entries(proof).map(([key, value]) =>
         [key, isAbsolute(value) ? value : resolve(event.cwd, value)]));
       entry = { kind: "gate", options };
+    } else if (toolName === "functions.exec" && !failed) {
+      // Never parse the opaque JS wrapper as an executed shell command.
+      const path = proofPathFromResponse(response);
+      if (path) entry = { kind: "proof-hint", proofPath: path };
     }
     if (!entry || !existsSync(target)) return { recorded: false, cause: "NOT_RELEVANT" };
     if (statSync(target).size > MAX_FILE) return { recorded: false, cause: "SIZE_LIMIT" };
     appendFileSync(target, JSON.stringify(entry) + "\n", { encoding: "utf8", mode: 0o600 });
-    return { recorded: true, cause: entry.kind === "gate" ? "GATE_CANDIDATE" : "SKILL_CANDIDATE" };
+    return { recorded: true, cause: entry.kind === "gate" ? "GATE_CANDIDATE" :
+      entry.kind === "proof-hint" ? "PROOF_HINT_CANDIDATE" : "SKILL_CANDIDATE" };
   } catch {
     return { recorded: false, cause: "IO_ERROR" };
   }
@@ -154,11 +189,13 @@ export function readTurnContext(event, {
         typeof parsed[0].explicit !== "boolean") return null;
     const gateCommands = parsed.filter(x => x.kind === "gate" && obj(x.options))
       .slice(-8).map(x => x.options);
+    const proofHints = parsed.filter(x => x.kind === "proof-hint" && token(x.proofPath))
+      .slice(-8).map(x => x.proofPath);
     return {
       userBoundary: true, userPrompt: "", promptAt: parsed[0].at, modifying: parsed[0].modifying,
       explicit: parsed[0].explicit,
       readsSkill: parsed.some(x => x.kind === "skill"),
-      gateCommands, confidence: "NATIVE_TURN_EVENTS",
+      gateCommands, proofHints, confidence: "NATIVE_TURN_EVENTS",
     };
   } catch { return null; }
 }
