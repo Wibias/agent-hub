@@ -21,6 +21,25 @@ node (Join-Path $skill "scripts/install-codex-stop-gate.mjs")
 node (Join-Path $skill "scripts/install-codex-stop-gate.mjs") --apply
 ```
 
+If the older standalone Impeccable Stop hook is still registered, and
+**you explicitly want to remove that older lifecycle integration** because
+`design-with-ai` now owns the design workflow, update the local skill first
+and run this opt-in, backup-safe migration:
+
+```powershell
+$skill = Join-Path $HOME ".agents/skills/design-with-ai"
+node (Join-Path $skill "scripts/install-codex-stop-gate.mjs") --remove-impeccable-hooks
+node (Join-Path $skill "scripts/install-codex-stop-gate.mjs") --apply --remove-impeccable-hooks
+```
+
+The migration removes only hooks executing legacy
+`impeccable/scripts/*hook*.mjs|js|cjs`, across Codex events. It retains
+GitHub-delivery, memory, other hooks, DWA's own hooks, and all embedded
+Impeccable design knowledge. It creates a timestamped backup of
+`~/.codex/hooks.json` before changing anything and is idempotent. It
+does **not** delete the Impeccable skill directory or edit other active
+Codex configuration layers.
+
 The installer adds three cooperating command handlers to `~/.codex/hooks.json`:
 `UserPromptSubmit`, `PostToolUse` (regex matcher for `Bash`, `exec_command`, and `functions.exec`), and `Stop`. It preserves
 existing handlers and makes a timestamped backup before changes. It is dry-run by default and idempotent. It does not
@@ -61,6 +80,24 @@ execution, even when the hook is installed and trusted. This external
 host coverage gap is not repaired by adding tool-name regex variants.
 The independent artifact check is the fallback, not a guarantee that
 the host always gives sufficient current-turn context.
+
+The native gate now writes its **own local proof-location hint** when it
+produces the real proof (not on `--check-proof`). This does not require a
+`PostToolUse` event, does not parse `functions.exec` JavaScript, and works
+when Codex starts multiple directory levels above the native project.
+Stop looks only in a bounded, flat per-user index at
+`~/.codex/design-with-ai/gate-index/`; each project has one record with
+absolute proof/source paths and gate timestamp. These are local metadata,
+not credentials or prompt text. Hints older than 48 hours are ignored and
+old records are pruned on the next write; the index has a hard item cap.
+Stop must still establish the active user turn, an unambiguous native source
+root under the current working tree, the canonical findings ledger and a
+real current immutable proof, then independently run `checkProof()`.
+An index entry **alone** can never certify a UI or a successful gate.
+When two distinct current native projects qualify, no arbitrary choice is
+made. If filesystem access or turn identity is absent, Stop fails
+conservatively with a truthful incomplete result rather than inventing
+execution evidence.
 
 This is **not** permission to accept a guessed path, arbitrary stdout,
 an older turn's proof or an unrelated workspace. Non-native workflows still
