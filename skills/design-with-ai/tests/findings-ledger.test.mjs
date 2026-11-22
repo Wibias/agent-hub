@@ -361,3 +361,73 @@ test("a real blocker permits truthful PARTIAL without inventing a source change"
     nextStep: "Use an authorized editable source worktree before attempting the repair" }];
   assert.equal(syncLedger(f.ledgerPath, base, current).assessed, 3);
 }));
+
+test("a third visibly IMPROVED_BUT_OPEN KPI assessment requires repair, not a new cosmetic pass", () => fixture(f => {
+  const issue = { id: "PCG-KPI-GAP", route: "/jobs", kind: "VISUAL",
+    priority: "MEDIUM", symptom: "KPI supporting lines nearly touch section divider",
+    acceptance: "Compact view has six DPI-scaled pixels below every supporting line",
+    evidenceRef: "renders/compact-kpi-initial.png" };
+  importFindings(f.ledgerPath, { findings: [issue] });
+  const make = () => {
+    const r = f.receipt();
+    r.findings.push({ ...issue, decision: "Repair the KPI control layout",
+      disposition: "IMPROVED_BUT_OPEN", reason: "Only two pixels of bottom clearance" });
+    r.openCarryover.push(issue.id);
+    return r;
+  };
+  for (const runId of ["gap-observed-one", "gap-observed-two"]) {
+    const baseline = makeLedgerBaseline(readLedger(f.ledgerPath), { scope: ["/jobs"], runId });
+    syncLedger(f.ledgerPath, baseline, make());
+  }
+  const baseline = makeLedgerBaseline(readLedger(f.ledgerPath),
+    { scope: ["/jobs"], runId: "gap-observed-three" });
+  const receipt = make();
+  const originalEvents = readLedger(f.ledgerPath).events;
+  assert.throws(() => syncLedger(f.ledgerPath, baseline, receipt),
+    /REPEATED_IMPROVEMENT_UNVERIFIED PCG-KPI-GAP/);
+  receipt.findings.at(-1).reassessment = {
+    observed: true, method: "RENDER", evidenceRef: "renders/compact-kpi-current.png",
+    reason: "Current small window still has a measured two-pixel gap" };
+  assert.throws(() => syncLedger(f.ledgerPath, baseline, receipt),
+    /REPEATED_DEFECT_WITHOUT_REPAIR PCG-KPI-GAP/);
+  assert.deepEqual(readLedger(f.ledgerPath).events, originalEvents,
+    "failed follow-through cannot write a false durable assessment");
+  receipt.persistentRepairActions = [{ findingId: issue.id, action: "SOURCE_REPAIR",
+    sourceFile: "UI/MainForm.cs", beforeRef: "diff/old-kpi", afterRef: "diff/new-kpi",
+    renderResult: "REVISE" }];
+  receipt.changeSummary = { kind: "TASK_REPAIR",
+    rationale: "Added actual bottom space to the KPI strip",
+    addressedFindingIds: [issue.id], evidenceRef: "diff/kpi-layout.patch" };
+  assert.equal(syncLedger(f.ledgerPath, baseline, receipt).assessed, receipt.findings.length);
+  assert.equal(readLedger(f.ledgerPath).events.filter(e => e.type === "FOUND" && e.id === issue.id).length, 1);
+}));
+test("repeated IMPROVED_BUT_OPEN without current observation must be UNVERIFIED, not presumed defective", () => fixture(f => {
+  const issue = { id: "PCG-KPI-NOT-OBSERVED", route: "/jobs", kind: "VISUAL",
+    priority: "MEDIUM", symptom: "KPI footer may overlap lower divider",
+    acceptance: "Measure six scaled pixels in compact client area",
+    evidenceRef: "render/kpi-original.png" };
+  importFindings(f.ledgerPath, { findings: [issue] });
+  const initial = () => {
+    const r = f.receipt();
+    r.findings.push({ ...issue, decision: "Await fresh render", disposition: "IMPROVED_BUT_OPEN",
+      reason: "Needs multi-viewport evidence" });
+    r.openCarryover.push(issue.id);
+    return r;
+  };
+  for (const runId of ["unseen-one", "unseen-two"]) {
+    const baseline = makeLedgerBaseline(readLedger(f.ledgerPath), { scope: ["/jobs"], runId });
+    syncLedger(f.ledgerPath, baseline, initial());
+  }
+  const baseline = makeLedgerBaseline(readLedger(f.ledgerPath),
+    { scope: ["/jobs"], runId: "unseen-three" });
+  const receipt = initial();
+  receipt.findings.at(-1).reassessment = {
+    observed: true, method: "SCREENSHOT", evidenceRef: "render/kpi-old.png" };
+  assert.throws(() => syncLedger(f.ledgerPath, baseline, receipt),
+    /REPEATED_IMPROVEMENT_UNVERIFIED/);
+  receipt.findings.at(-1).disposition = "UNVERIFIED";
+  receipt.findings.at(-1).reason = "No accessible recent compact render";
+  delete receipt.findings.at(-1).reassessment;
+  assert.equal(syncLedger(f.ledgerPath, baseline, receipt).assessed, receipt.findings.length,
+    "truthful missing-evidence outcome does not force speculative WinForms edits");
+}));
