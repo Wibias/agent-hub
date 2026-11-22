@@ -49,9 +49,14 @@ observation. Do not rewrite a FOUND event or frozen baseline to hide this.
    Settings controls need not be duplicates if their functions differ.
 2. Import newly discovered PRE-EDIT issues from a reviewed findings manifest.
    Never weaken original acceptance text to fit a cosmetic change.
-3. Before doing new cosmetic polish in an IMPROVE workflow, prioritize
-   existing unresolved medium/high findings. If actual user scope, a
-   dependency or an access blocker prevents this, include a
+3. Before doing new cosmetic polish **or unrelated lower-priority repair**
+   in an IMPROVE workflow, prioritize existing unresolved medium/high
+   findings, including those now marked `UNVERIFIED` or `DEFERRED`.
+   Missing current evidence calls for verification, not speculative source
+   repair; it does not make older findings disappear from task priority.
+   A truthful no-change verification run may remain PARTIAL.
+   If actual user scope, a dependency or an access blocker prevents this,
+   include a
    `priorityDeferrals[]` entry for each displaced finding:
    `{ findingId, basis: "EXPLICIT_USER_SCOPE" | "DEPENDENCY" | "BLOCKED",
    reason, evidenceRef, nextStep? }`. BLOCKED requires nextStep.
