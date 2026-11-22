@@ -21,7 +21,7 @@ const markers = {
 // Exact historical standalone Impeccable lifecycle scripts. A path in
 // commandWindows OR command is enough; never touch design-with-ai's vendored
 // Impeccable references, unrelated hooks, or the skill directory itself.
-const oldImpeccableHook = /[\\/]impeccable[\\/]scripts[\\/][\w.-]*hook\.(?:mjs|js|cjs)(?=["'\s;)\]}]|$)/i;
+const oldImpeccableHook = /(?:^|[\s"'\\/])impeccable[\\/]scripts[\\/][\w.-]*hook\.(?:mjs|js|cjs)(?=["'\s;)\]}]|$)/i;
 function removeImpeccableHookEntries(config) {
   let removed = 0;
   for (const [event, groups] of Object.entries(config.hooks)) {
