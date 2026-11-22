@@ -118,7 +118,9 @@ from image-based estimates. A screenshot alone cannot substitute for
 required exact `supportingText` bounds in schema v2. When safe access
 or reliable measurements are unavailable, record the precise blocker
 and missing fields, keep `PARTIAL`/`NOT_VERIFIED`, and retain the original
-finding IDs. Do not create more product UI changes as a workaround. Version 2 checks their actual pixel dimensions
+finding IDs. Do not create more product UI changes as a workaround.
+
+Version 2 checks their actual pixel dimensions
 against the declared captured window size. No resizing an old screenshot
 to invent a new profile. Do not place it in the installed skill folder.
 Capture a **native window matrix**, not one flattering screenshot:
