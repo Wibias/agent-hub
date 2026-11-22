@@ -50,6 +50,15 @@ function fixture(fn) {
       disposition: "PERSISTS", reason: "Real publishing remains unverified",
     }],
     openCarryover: [finding.id],
+    // The external provider token is genuinely unavailable. A structured,
+    // evidence-grounded blocker must permit truthful PARTIAL despite the
+    // actionable-loop guard; prose alone is not reliable evidence.
+    persistentRepairActions: [{
+      findingId: finding.id, action: "BLOCKED",
+      blocker: "No authorized live TikTok provider token in this environment",
+      evidenceRef: "tests/simulated-publish.txt",
+      nextStep: "Obtain an authorized provider connection before live verification",
+    }],
   };
   writeFileSync(receipt, JSON.stringify(data));
   syncLedger(ledger, frozen, data);
