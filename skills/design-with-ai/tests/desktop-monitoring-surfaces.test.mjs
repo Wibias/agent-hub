@@ -100,6 +100,22 @@ test("stalled visual fixes require a source repair, and historic finding IDs rem
   assert.match(verification, /different defect cannot reuse/);
 });
 
+test("native verification uses external inspection without altering the app just to generate evidence", () => {
+  for (const phrase of [
+    "External-first native inspection", "read-only", "PowerShell/.NET",
+    "GetDpiForWindow", "same integrity level", "restore",
+    "Do **not** modify Program.cs", "not to the PCGuardian executable",
+    "PARTIAL", "NOT_VERIFIED",
+  ]) {
+    assert.ok(contract.toLowerCase().includes(phrase.toLowerCase()),
+      "Missing external-first native inspection contract: " + phrase);
+  }
+  assert.match(verification, /captured \*\*externally\*\*/);
+  assert.match(verification, /without modifying the application's startup code/);
+  assert.match(contract, /A screenshot alone cannot substitute/);
+  assert.match(contract, /Product source changes\s+are justified separately/);
+});
+
 test("repeated IMPROVED_BUT_OPEN needs actual evidence and old issues outrank cosmetic novelty", () => {
   const durable = read("../references/durable-findings-ledger.md");
   assert.match(durable, /IMPROVED_BUT_OPEN with evidence/);
