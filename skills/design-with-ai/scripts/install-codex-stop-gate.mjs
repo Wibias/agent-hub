@@ -18,6 +18,33 @@ const markers = {
   PostToolUse: /(?:^|[\\/])codex-turn-context\.mjs(?:"|\s|$)/i,
 };
 
+// Exact historical standalone Impeccable lifecycle scripts. A path in
+// commandWindows OR command is enough; never touch design-with-ai's vendored
+// Impeccable references, unrelated hooks, or the skill directory itself.
+const oldImpeccableHook = /[\\/]impeccable[\\/]scripts[\\/][\w.-]*hook\.(?:mjs|js|cjs)(?=["'\s;)\]}]|$)/i;
+function removeImpeccableHookEntries(config) {
+  let removed = 0;
+  for (const [event, groups] of Object.entries(config.hooks)) {
+    if (!Array.isArray(groups)) throw new Error("Hook event registry must be an array");
+    const kept = [];
+    for (const group of groups) {
+      if (!isObject(group) || !Array.isArray(group.hooks)) {
+        kept.push(group);
+        continue;
+      }
+      const hooks = group.hooks.filter(h => {
+        const matches = oldImpeccableHook.test(String(h?.command ?? "")) ||
+          oldImpeccableHook.test(String(h?.commandWindows ?? ""));
+        if (matches) removed++;
+        return !matches;
+      });
+      if (hooks.length) kept.push({ ...group, hooks });
+    }
+    config.hooks[event] = kept;
+  }
+  return removed;
+}
+
 function readConfig(path) {
   if (!existsSync(path)) return { hooks: {} };
   const stat = lstatSync(path);
@@ -50,6 +77,7 @@ function updateEvent(existing, marker, entry) {
 export function planInstall({
   hooksPath = join(homedir(), ".codex", "hooks.json"),
   skillDir = defaultSkill,
+  removeImpeccableHooks = false,
 } = {}) {
   const destination = resolve(hooksPath);
   const root = resolve(skillDir);
@@ -61,6 +89,7 @@ export function planInstall({
   }
   const config = readConfig(destination);
   const original = JSON.stringify(config);
+  const removedImpeccableHooks = removeImpeccableHooks ? removeImpeccableHookEntries(config) : 0;
   const stopCommand = "node \"" + stopFile + "\"";
   const contextCommand = "node \"" + contextFile + "\"";
   const entry = (command, statusMessage, matcher) => ({
@@ -77,7 +106,7 @@ export function planInstall({
   return {
     hooksPath: destination, skillDir: root,
     changed: JSON.stringify(config) !== original,
-    config, command: stopCommand, contextCommand,
+    config, command: stopCommand, contextCommand, removedImpeccableHooks,
   };
 }
 
@@ -97,6 +126,8 @@ export function installCodexStopGate(options = {}) {
   return {
     schemaVersion: 2, hooksPath: plan.hooksPath, skillDir: plan.skillDir,
     wouldChange: plan.changed, applied: apply && plan.changed, backupPath,
+    removedImpeccableHooks: apply ? plan.removedImpeccableHooks : 0,
+    plannedImpeccableHookRemoval: plan.removedImpeccableHooks,
     hooks: ["UserPromptSubmit", "PostToolUse", "Stop"],
     nextAction: "Restart Codex if needed; run /hooks and review/trust all three design-with-ai commands.",
     warning: "Hooks are opt-in, may be disabled, and cannot certify actual UI correctness.",
@@ -110,12 +141,13 @@ function main() {
     for (let i = 0; i < args.length; i++) {
       const arg = args[i];
       if (arg === "--apply") parsed.apply = true;
+      else if (arg === "--remove-impeccable-hooks") parsed.removeImpeccableHooks = true;
       else if (arg === "--hooks" || arg === "--skill-dir") {
         const v = args[++i];
         if (!v || v.startsWith("--")) throw new Error(arg + " requires a path");
         parsed[arg === "--hooks" ? "hooksPath" : "skillDir"] = v;
       } else if (arg === "--help") {
-        process.stdout.write("Usage: node install-codex-stop-gate.mjs [--apply] [--hooks <file>] [--skill-dir <skill-root>]\nDry-run by default.\n"); return;
+        process.stdout.write("Usage: node install-codex-stop-gate.mjs [--apply] [--remove-impeccable-hooks] [--hooks <file>] [--skill-dir <skill-root>]\nDry-run by default.\n"); return;
       } else throw new Error("Unexpected argument: " + arg);
     }
     process.stdout.write(JSON.stringify(installCodexStopGate(parsed), null, 2) + "\n");
