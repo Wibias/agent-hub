@@ -27,6 +27,17 @@ const PROOFS = new Set([
 const TRANSCRIPTS = new Set([
   "NOT_CHECKED", "UNAVAILABLE", "SCANNED", "SCAN_ERROR", "NATIVE_TURN_EVENTS",
 ]);
+const GATE_INDEX_STATUSES = new Set([
+  "INDEX_CWD_INVALID", "INDEX_TURN_TIME_INVALID", "INDEX_UNAVAILABLE",
+  "INDEX_TOO_MANY_ENTRIES", "INDEX_CURRENT_CANDIDATE",
+  "INDEX_OUTSIDE_TURN_TIME", "INDEX_CWD_DISJOINT",
+  "INDEX_RECORD_INVALID", "INDEX_EMPTY", "INDEX_AMBIGUOUS_PROJECTS",
+  "INDEX_PROOF_ACCEPTED", "INDEX_PROOF_PATH_UNSAFE",
+  "INDEX_PROOF_UNREADABLE", "INDEX_PROOF_METADATA_INVALID",
+  "INDEX_PROOF_ROOT_DISJOINT", "INDEX_PROOF_ARTIFACT_PATH_INVALID",
+  "INDEX_PROOF_FILES_UNSAFE", "INDEX_PROOF_NATIVE_ROOT_INVALID",
+  "INDEX_PROOF_OUTSIDE_TURN_TIME",
+]);
 const boundedCount = (value) => Number.isSafeInteger(value) && value >= 0
   ? Math.min(value, 100000) : 0;
 const safeEnum = (value, values, fallback) => values.has(value) ? value : fallback;
@@ -47,6 +58,7 @@ export function createDiagnostic({ event, report, result, transcriptState }, clo
     skillFileReference: report?.readsSkill === true,
     gateCommandCandidates: boundedCount(report?.gateCommands?.length),
     proof: safeEnum(result?.proofStatus, PROOFS, "NOT_CHECKED"),
+    nativeIndex: safeEnum(result?.gateIndexStatus, GATE_INDEX_STATUSES, "NOT_CHECKED"),
   };
 }
 
