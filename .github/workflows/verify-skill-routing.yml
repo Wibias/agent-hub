@@ -186,6 +186,9 @@ jobs:
       - name: Test Codex rollout execution trace inspector
         run: node --test skills/design-with-ai/tests/inspect-codex-rollout.test.mjs
 
+      - name: Test DWA autonomous within-turn repair decisions
+        run: node --test skills/design-with-ai/tests/repair-loop-controller.test.mjs
+
       - name: Test Codex design Stop completion hook
         run: node --test skills/design-with-ai/tests/codex-stop-gate.test.mjs
 

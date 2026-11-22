@@ -183,13 +183,20 @@ Before the quality stack:
      including a new motif that merely displaced an old default.
 3. Preserve a coherent existing icon dependency unless an approved system,
    coverage, accessibility, or licensing reason requires migration.
-4. Load `quality-stack.md` and run
-   `Direction -> Baseline -> Craft -> Gate`.
+4. Load `quality-stack.md` and `autonomous-repair-loop.md`. Run
+   `Direction -> Baseline -> Craft -> Gate` **inside** its bounded
+   `inspect -> repair -> rerender -> test -> decide-next` execution loop.
+   A valid PARTIAL receipt is a factual checkpoint, not an automatic handoff
+   to the user. Continue the highest-priority actionable fix in the same
+   request when authorized tools remain available.
 5. Use `spacing-critique.md` when relationship/density problems remain.
-6. On the final render, reconcile every in-scope finding against its acceptance
-   condition. State `RESOLVED`, `IMPROVED_BUT_OPEN`, `PERSISTS`, `REGRESSED`,
-   `KEEP_JUSTIFIED`, `DEFERRED`, or `UNVERIFIED` with matched evidence. Leave
-   open findings visible for the next iteration.
+6. On **each** post-edit render, reconcile every in-scope finding against its
+   acceptance condition. State `RESOLVED`, `IMPROVED_BUT_OPEN`, `PERSISTS`,
+   `REGRESSED`, `KEEP_JUSTIFIED`, `DEFERRED`, or `UNVERIFIED` with matched
+   evidence. Call the repair-loop controller and execute its next action
+   before deciding to finish. Preserve the frozen baseline across attempts.
+   Stop only on an actual COMPLETE proof, a documented blocker, stalled
+   unchanged source/render evidence, or the bounded iteration limit.
 
 Profile depth:
 

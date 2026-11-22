@@ -82,7 +82,11 @@ For `audit-surface`, `improve-existing`, `restyle-existing`,
    import any available old findings and freeze its snapshot; during
    verification, append newly discovered defects to the existing ledger
    rather than replacing the frozen baseline;
-7. for modifying work, load `references/verification-contract.md` before
+7. for **improve-existing**, load `references/autonomous-repair-loop.md`
+   before the first code edit. Use its bounded next-action loop inside this
+   task; a structurally valid PARTIAL gate is not a reason to stop while
+   authorized observable repairs remain;
+8. for modifying work, load `references/verification-contract.md` before
    completion.
 
 For an inspected operational surface, including dashboards, queues, setup flows,
@@ -197,7 +201,9 @@ passed.
 
 For a Codex host that has explicitly installed and trusted the optional
 `Stop` hook, the runtime can request one automatic continuation when a
-modifying design-with-ai turn tries to end without current gate proof.
+modifying design-with-ai turn tries to end without current gate proof,
+or prematurely ends an actionable improve-existing PARTIAL without
+attempting the next repair step.
 This does not replace the normal verification contract. A skill alone
 cannot install or force its own hook. Installation/trust and limits are
 documented in `references/codex-stop-enforcement.md`; do not load that
@@ -243,6 +249,7 @@ host-specific guide for ordinary cross-host design work.
 - `references/motion-vocabulary.md`: effect-name reverse lookup
 - `references/verification-contract.md`: completion evidence
 - `references/durable-findings-ledger.md`: persistent project UX findings history across iterations
+- `references/autonomous-repair-loop.md`: bounded self-directed improve-existing repair, rerender and gate orchestration
 - `references/codex-stop-enforcement.md`: optional Codex runtime Stop enforcement and installer
 
 <!-- eval:references -->
@@ -280,6 +287,7 @@ host-specific guide for ordinary cross-host design work.
 - references/motion-workflows.md -- when to read: motion-opportunities; motion-audit; motion-review
 - references/motion-performance.md -- when to read: motion-optimize
 - references/motion-vocabulary.md -- when to read: motion-name
+- references/autonomous-repair-loop.md -- when to read: improve-existing modifying work after baseline/ledger freeze and before source edits
 - references/verification-contract.md -- when to read: modifying workflows before completion
 - references/durable-findings-ledger.md -- when to read: existing UI modifying work before editing and final ledger reconciliation
 - references/codex-stop-enforcement.md -- when to read: configuring/troubleshooting Codex Stop hooks only

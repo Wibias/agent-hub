@@ -8,6 +8,7 @@ import { homedir, tmpdir } from "node:os";
 import { isAbsolute, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { checkProof } from "./run-iteration-gate.mjs";
+import { decideRepairLoop } from "./repair-loop-controller.mjs";
 import { appendStopDiagnostic } from "./stop-diagnostic-journal.mjs";
 import { isGitProject, discoverProjectLedger } from "./findings-ledger.mjs";
 import { discoverNativeSourceRoot } from "./project-source-snapshot.mjs";
@@ -186,6 +187,36 @@ export function decideStop(event, report, { home = homedir() } = {}) {
     if (checked.completionEligible) return allow("VERIFIED_COMPLETE", "VERIFIED_COMPLETE");
     if (["PARTIAL", "NOT_VERIFIED"].includes(checked.verdict) &&
         new RegExp("\\b" + checked.verdict + "\\b", "i").test(event.last_assistant_message ?? "")) {
+      // A valid PARTIAL proof does not end an authorized IMPROVE task with
+      // actionable findings. This hook requests only ONE continuation.
+      if (event.stop_hook_active !== true && options.baseline) {
+        try {
+          const receipt = JSON.parse(readFileSync(options.receipt, "utf8"));
+          const baseline = JSON.parse(readFileSync(options.baseline, "utf8"));
+          const manifest = options["render-evidence"]
+            ? JSON.parse(readFileSync(options["render-evidence"], "utf8")) : null;
+          const attempts = Array.isArray(receipt.repairLoop?.attempts)
+            ? receipt.repairLoop.attempts : [];
+          const action = decideRepairLoop(receipt, baseline, {
+            attempts, manifest, checkedProof: checked,
+          });
+          if (action.outcome === "CONTINUE" &&
+              ["VERIFY_CURRENT", "REPAIR_SOURCE", "RERENDER"].includes(action.action)) {
+            return {
+              decision: "block",
+              status: "ACTIONABLE_PARTIAL_CONTINUATION",
+              proofStatus: "VERIFIED_INCOMPLETE",
+              reason: "design-with-ai: a valid PARTIAL proof does not finish this IMPROVE request. " +
+                "Execute the autonomous repair loop now: " + action.action +
+                " for existing finding " + action.findingId + ". " +
+                action.reason + ". Reinspect the actual UI, repair authorized source if observed, " +
+                "test and rerender the same state, then generate fresh proof. " +
+                "Stop only on verified COMPLETE, real blocker, documented stall, or bounded iteration limit. " +
+                "No unrelated features. This host Stop hook allows only one continuation.",
+            };
+          }
+        } catch { /* Never infer an action from unavailable task evidence. */ }
+      }
       return allow("VERIFIED_INCOMPLETE", "VERIFIED_INCOMPLETE");
     }
     proofStatus = "INCOMPLETE_NOT_DISCLOSED";

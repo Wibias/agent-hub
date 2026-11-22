@@ -156,6 +156,83 @@ test("current, valid PARTIAL receipt passes only with an explicit PARTIAL final 
   assert.equal((await handleStop(f.event)).decision, "block");
 }));
 
+test("Stop requests one real next action even when a PARTIAL gate proof is valid", () => fixture(async f => {
+  f.putReceipt("PARTIAL");
+  const base = JSON.parse(readFileSync(f.baseline, "utf8"));
+  base.findings.push({
+    id: "UX-VISUAL", route: "/settings", kind: "VISUAL", priority: "MEDIUM",
+    symptom: "Text crowds a divider", acceptance: "Readable separation in compact view",
+    evidenceRef: "render/earlier.png",
+  });
+  const payload = JSON.parse(readFileSync(f.receipt, "utf8"));
+  payload.findings.push({
+    id: "UX-VISUAL", route: "/settings", kind: "VISUAL", priority: "MEDIUM",
+    symptom: "Text crowds a divider", acceptance: "Readable separation in compact view",
+    decision: "Investigate current compact rendering", disposition: "UNVERIFIED",
+    reason: "Latest compact screenshot not inspected yet",
+  });
+  payload.openCarryover.push("UX-VISUAL");
+  writeFileSync(f.baseline, JSON.stringify(base));
+  writeFileSync(f.receipt, JSON.stringify(payload));
+  const result = runGate({
+    receipt: f.receipt, baseline: f.baseline, proof: f.proof, workspaceCwd: f.dir,
+  });
+  assert.equal(result.exitCode, 0);
+  const command = 'node run-iteration-gate.mjs --receipt "' + f.receipt +
+    '" --baseline "' + f.baseline + '" --proof "' + f.proof + '"';
+  f.write([f.prompt("Verbessere mit design-with-ai die aktuelle UI."), f.call("exec_command", command)]);
+  const verdict = await handleStop({
+    ...f.event, last_assistant_message: "PARTIAL: nicht alles geprüft.",
+  });
+  assert.equal(verdict.decision, "block", JSON.stringify(verdict));
+  assert.equal(verdict.status, "ACTIONABLE_PARTIAL_CONTINUATION");
+  assert.match(verdict.reason, /VERIFY_CURRENT/);
+  assert.match(verdict.reason, /UX-VISUAL/);
+  const retried = await handleStop({
+    ...f.event, stop_hook_active: true,
+    last_assistant_message: "PARTIAL: nicht alles geprüft.",
+  });
+  assert.equal(retried.continue, true);
+  assert.equal(retried.status, "VERIFIED_INCOMPLETE");
+}));
+
+test("a real evidence-backed blocker may end a PARTIAL Stop without another automatic retry", () => fixture(async f => {
+  f.putReceipt("PARTIAL");
+  const base = JSON.parse(readFileSync(f.baseline, "utf8"));
+  base.findings.push({
+    id: "UX-VISUAL", route: "/settings", kind: "VISUAL", priority: "MEDIUM",
+    symptom: "Text crowds a divider", acceptance: "Readable separation in compact view",
+    evidenceRef: "render/earlier.png",
+  });
+  const payload = JSON.parse(readFileSync(f.receipt, "utf8"));
+  payload.findings.push({
+    id: "UX-VISUAL", route: "/settings", kind: "VISUAL", priority: "MEDIUM",
+    symptom: "Text crowds a divider", acceptance: "Readable separation in compact view",
+    decision: "Await authorized capture", disposition: "UNVERIFIED",
+    reason: "The graphical desktop cannot be accessed",
+  });
+  payload.openCarryover.push("UX-VISUAL");
+  payload.visualCarryoverReviews = [{
+    findingId: "UX-VISUAL", status: "NOT_VERIFIED",
+    reason: "Authorized UI automation process cannot reach the desktop",
+    evidenceRef: "logs/capture-denied.txt",
+    nextStep: "Run capture in a user-approved interactive session",
+  }];
+  writeFileSync(f.baseline, JSON.stringify(base));
+  writeFileSync(f.receipt, JSON.stringify(payload));
+  assert.equal(runGate({
+    receipt: f.receipt, baseline: f.baseline, proof: f.proof, workspaceCwd: f.dir,
+  }).exitCode, 0);
+  const command = 'node run-iteration-gate.mjs --receipt "' + f.receipt +
+    '" --baseline "' + f.baseline + '" --proof "' + f.proof + '"';
+  f.write([f.prompt("Verbessere mit design-with-ai die aktuelle UI."), f.call("exec_command", command)]);
+  const verdict = await handleStop({
+    ...f.event, last_assistant_message: "PARTIAL: nicht alles geprüft.",
+  });
+  assert.equal(verdict.continue, true, JSON.stringify(verdict));
+  assert.equal(verdict.status, "VERIFIED_INCOMPLETE");
+}));
+
 test("stale proof after changes to receipt cannot be reused", () => fixture(async (f) => {
   f.putReceipt();
   runGate({ receipt: f.receipt, baseline: f.baseline, proof: f.proof, workspaceCwd: f.dir });

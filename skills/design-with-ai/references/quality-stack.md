@@ -150,6 +150,15 @@ gate and code tests pass.
 The validator supplements real render and runtime evaluation; it does
 not independently prove the cited evidence.
 
+For authorized `improve-existing` modifications, the Gate is an **iteration
+checkpoint**, not automatically the end of work. After each reconciliation,
+run `scripts/repair-loop-controller.mjs` with the frozen baseline, latest
+receipt, actual attempts and current proof. Execute its CONTINUE action
+(repair, collect current evidence, rerender, or finish the missing gates)
+within the same request. Only a verified COMPLETE or a truthful blocked,
+stalled, or bounded-limit result permits the agent to stop. Do not ask the
+user to launch another iteration merely because the receipt says PARTIAL.
+
 ## 4. Gate
 
 ### Provider evidence supplement (profile-aware)
