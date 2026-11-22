@@ -254,6 +254,23 @@ resolved. Preserve the existing render, accessibility, slop, receipt,
 durable findings, and iteration-proof gates. Ordinary quick polish does
 not acquire this additional gate.
 
+## Autonomous repair-before-handoff for improve-existing
+
+For authorized modifying `improve-existing` work, load
+`autonomous-repair-loop.md`. `run-iteration-gate.mjs` verifies the current
+candidate and may legitimately return a valid PARTIAL. That does **not**
+end the task when source repairs or runtime verification remain possible.
+Execute `scripts/repair-loop-controller.mjs` on the frozen baseline and
+latest receipt (plus current manifest, attempt history and proof when
+available). Act on CONTINUE by inspecting the precise issue, repairing the
+source if observed, building/testing, rerendering the same state, and issuing
+a fresh proof after edits. Repeat within the agreed bounded budget.
+Only an actual verified COMPLETE, evidence-grounded blocker, demonstrated
+stalled attempt, or iteration limit is a terminal handoff. This is agent
+execution guidance, not a claim that a mechanical gate can edit application
+code or verify pixels by itself. The optional Stop hook adds at most one
+premature-termination correction, not unbounded host automation.
+
 ## Before/after iteration evidence
 
 **Final-edit freshness:** A gate proof must be generated only after all UI
