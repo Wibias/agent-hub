@@ -388,12 +388,27 @@ test("native index diagnoses a current registered proof outside the actual Codex
     ...event, hook_event_name: "Stop", stop_hook_active: false,
     last_assistant_message: "PARTIAL: Auswahlzustand offen.",
   }, { turnRoot: f.stateRoot, gateIndexRoot: indexRoot });
+  assert.equal(result.decision, "block");
+  assert.equal(result.status, "WORKSPACE_SCOPE_MISMATCH");
   assert.equal(result.proofStatus, "NO_GATE_COMMAND");
   assert.equal(result.gateIndexStatus, "INDEX_CWD_DISJOINT");
+  assert.match(result.reason, /Do not rerun the same gate/);
+  assert.match(result.reason, /open a Codex session with the target native project's/);
+  assert.doesNotMatch(result.reason, /Before finishing, write the iteration receipt/);
+  const retried = await handleStop({
+    ...event, hook_event_name: "Stop", stop_hook_active: true,
+    last_assistant_message: "PARTIAL: Auswahlzustand offen.",
+  }, { turnRoot: f.stateRoot, gateIndexRoot: indexRoot });
+  assert.equal(retried.continue, true);
+  assert.equal(retried.status, "WORKSPACE_SCOPE_MISMATCH");
+  assert.equal(retried.proofStatus, "NO_GATE_COMMAND");
+  assert.equal(retried.gateIndexStatus, "INDEX_CWD_DISJOINT");
+  assert.match(retried.systemMessage, /Do not rerun the same gate/);
   const diagnostic = createDiagnostic({
     event, report: turn, result, transcriptState: "NATIVE_TURN_EVENTS",
   });
   assert.equal(diagnostic.nativeIndex, "INDEX_CWD_DISJOINT");
+  assert.equal(diagnostic.cause, "WORKSPACE_SCOPE_MISMATCH");
   assert.ok(!JSON.stringify(diagnostic).includes(otherProject));
 }));
 
