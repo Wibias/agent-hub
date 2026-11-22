@@ -65,11 +65,14 @@ This also applies when the historical finding says IMPROVED_BUT_OPEN: if the
 current compact render still fails, identify the observation with current
 `reassessment.observed`, a RENDER or MEASUREMENT method and an
 evidenceRef. Do not bypass repair by endlessly relabeling the same error.
-If only missing multi-viewport evidence remains, use UNVERIFIED instead.
-Before changing a cosmetic element like the Windows title bar, prioritize
-older open HIGH/MEDIUM problems or include an evidence-grounded
-`priorityDeferrals[]` exception for an actual user scope, dependency
-or blocker.
+If no current captured view confirms the failure and required multi-viewport
+evidence is missing, use UNVERIFIED instead. Do not relabel an actually
+observed compact defect UNVERIFIED just because other viewports are missing.
+Older HIGH/MEDIUM findings remain priority items even when UNVERIFIED or
+DEFERRED: inspect the missing evidence before unrelated new features or
+cosmetic work, or include an evidence-grounded `priorityDeferrals[]`
+exception for actual user scope, dependency or blocker. Do not infer a
+source repair from an unobserved issue.
 This workflow is automatic; it must not require a longer user prompt.
 
 For a scoped PARTIAL render packet, include only actual captured viewports,
