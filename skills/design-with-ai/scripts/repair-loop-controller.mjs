@@ -162,10 +162,12 @@ function cli(argv) {
       });
     } catch { proof = { valid: false, completionEligible: false }; }
   }
+  const currentReceipt = load("--receipt");
   const history = load("--attempts");
-  const result = decideRepairLoop(load("--receipt"), load("--baseline"), {
-    attempts: Array.isArray(history) ? history : history?.attempts ?? [],
-    manifest: load("--render-evidence"), checkedProof: proof,
+  const attempts = history === null ? currentReceipt?.repairLoop?.attempts ?? []
+    : Array.isArray(history) ? history : history?.attempts;
+  const result = decideRepairLoop(currentReceipt, load("--baseline"), {
+    attempts, manifest: load("--render-evidence"), checkedProof: proof,
   });
   process.stdout.write(JSON.stringify(result, null, 2) + "\n");
   if (result.outcome === "INVALID") process.exitCode = 2;
