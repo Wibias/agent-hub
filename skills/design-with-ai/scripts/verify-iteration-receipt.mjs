@@ -157,7 +157,14 @@ export function validateIterationReceipt(input, baseline = null, desktopEvidence
       }
     }
   }
-  const visualObservations = [...providedVisualObservations, ...renderVisualObservations];
+  const visualObservations = [
+    ...providedVisualObservations,
+    ...renderVisualObservations.filter(render => !providedVisualObservations.some(provided =>
+      provided?.findingId === render.findingId &&
+      provided?.viewportId === render.viewportId &&
+      provided?.issueCode === render.issueCode &&
+      provided?.evidenceRef === render.evidenceRef)),
+  ];
   if (input.currentVisualObservations !== undefined &&
       !Array.isArray(input.currentVisualObservations)) {
     fail("currentVisualObservations must be an array");
