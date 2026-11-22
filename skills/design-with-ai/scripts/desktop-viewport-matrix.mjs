@@ -7,7 +7,7 @@ const ROLES = new Set(["SYSTEM", "DETAIL"]);
 const ISSUE_FLAGS = [
   "duplicateCharts", "unexpectedHeaderFill", "clippedSupportingText",
   "unproductiveBlankSpace", "unreadableInspectorPath",
-  "misalignedInputText",
+  "kpiBottomCrowding", "misalignedInputText",
 ];
 const object = x => x !== null && typeof x === "object" && !Array.isArray(x);
 const filled = x => typeof x === "string" && x.trim().length > 0;
