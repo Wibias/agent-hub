@@ -103,7 +103,7 @@ test("stalled visual fixes require a source repair, and historic finding IDs rem
 test("native verification uses external inspection without altering the app just to generate evidence", () => {
   for (const phrase of [
     "External-first native inspection", "read-only", "PowerShell/.NET",
-    "GetDpiForWindow", "same integrity level", "restore",
+    "GetDpiForWindow", "same integrity level", "restoring",
     "Do **not** modify Program.cs", "not to the PCGuardian executable",
     "PARTIAL", "NOT_VERIFIED",
   ]) {
