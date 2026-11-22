@@ -145,14 +145,20 @@ test("Git project Stop cannot accept legacy proof before durable history is init
   assert.equal((await handleStop({ ...f.event, stop_hook_active: true })).continue, true);
 }));
 
-test("current, valid PARTIAL receipt passes only with an explicit PARTIAL final verdict", () => fixture(async (f) => {
+test("current valid PARTIAL with missing gates requires a continuation even without known open findings", () => fixture(async (f) => {
   f.putReceipt("PARTIAL");
   assert.equal(runGate({ receipt: f.receipt, baseline: f.baseline, proof: f.proof, workspaceCwd: f.dir }).exitCode, 0);
   const command = 'node run-iteration-gate.mjs --receipt "' + f.receipt +
     '" --baseline "' + f.baseline + '" --proof "' + f.proof + '"';
   f.write([f.prompt("Verbessere mit design-with-ai die Einstellungen."), f.call("exec_command", command)]);
   const verdict = await handleStop({ ...f.event, last_assistant_message: "PARTIAL: noch offen." });
-  assert.equal(verdict.continue, true, JSON.stringify(verdict));
+  assert.equal(verdict.decision, "block", JSON.stringify(verdict));
+  assert.equal(verdict.status, "ACTIONABLE_PARTIAL_CONTINUATION");
+  assert.match(verdict.reason, /RUN_GATES/);
+  assert.doesNotMatch(verdict.reason, /finding null/);
+  const oneRetry = await handleStop({ ...f.event, stop_hook_active: true, last_assistant_message: "PARTIAL: noch offen." });
+  assert.equal(oneRetry.continue, true);
+  assert.equal(oneRetry.status, "VERIFIED_INCOMPLETE");
   assert.equal((await handleStop(f.event)).decision, "block");
 }));
 
