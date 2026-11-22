@@ -43,12 +43,13 @@ test("journal includes only allowlisted categorical facts, never raw data", () =
   const record = JSON.parse(data);
   assert.deepEqual(Object.keys(record), [
     "schemaVersion", "at", "event", "decision", "cause", "retry", "transcript",
-    "turnBoundary", "skillFileReference", "gateCommandCandidates", "proof",
+    "turnBoundary", "skillFileReference", "gateCommandCandidates", "proof", "nativeIndex",
   ]);
   assert.equal(record.decision, "BLOCK");
   assert.equal(record.cause, "MISSING_VERIFIED_GATE_PROOF");
   assert.equal(record.gateCommandCandidates, 1);
   assert.equal(record.proof, "PROOF_MISSING");
+  assert.equal(record.nativeIndex, "NOT_CHECKED");
   for (const secret of ["private-name", "secret-token", "secret-content",
     "private-session-id", "/private/", "authorization credential", "Verbessere"]) {
     assert.equal(data.includes(secret), false, "journal leaked: " + secret);
@@ -80,9 +81,11 @@ test("untrusted result status and unexpected fields cannot enter journal", () =>
   const v = createDiagnostic({ ...input(), result: {
     status: "token=REDACT_ME", proofStatus: "C:/Secrets/log.json",
     decision: "block", prompt: "private", reason: "sensitive",
+    gateIndexStatus: "sensitive-path / C:/Secrets/log.json",
   } }, new Date("2026-11-04T19:00:00Z"));
   assert.equal(v.cause, "INVALID_EVENT");
   assert.equal(v.proof, "NOT_CHECKED");
+  assert.equal(v.nativeIndex, "NOT_CHECKED");
   assert.doesNotMatch(JSON.stringify(v), /REDACT_ME|Secrets|private|sensitive/);
 });
 
