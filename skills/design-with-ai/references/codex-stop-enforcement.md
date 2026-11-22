@@ -77,8 +77,10 @@ configurations.
 5. Permit `COMPLETE` only for a current, input-bound, valid COMPLETE proof.
    For an IMPROVE receipt with an otherwise valid `PARTIAL` / `NOT_VERIFIED`
    proof, use `repair-loop-controller.mjs` on the current receipt and frozen
-   baseline: if it selects `REPAIR_SOURCE`, `VERIFY_CURRENT`, or `RERENDER`,
-   request one *targeted* continuation rather than treating PARTIAL as done.
+   baseline: if it selects `REPAIR_SOURCE`, `VERIFY_CURRENT`, `RERENDER`,
+   or `RUN_GATES`, request one *targeted* continuation rather than treating
+   PARTIAL as done. A missing final render/manifest is actionable even if
+   all known UI findings have been marked resolved.
    An evidence-backed blocked or stalled task may end with explicit PARTIAL.
    This cannot guarantee a full autonomous loop: `stop_hook_active` still
    caps the hook to one request; the agent must perform the bounded loop

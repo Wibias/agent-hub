@@ -33,9 +33,14 @@ controller alone as a fully autonomous runtime.
 4. Build/test, run the affected route or native app, and render exactly the
    same viewport and state. Compare before/after and check for clipping,
    interaction regressions, inaccessible focus and introduced defects.
-5. Reconcile ledger/receipt and run ordinary applicable mechanical/visual/
-   functional gates. When the source or any proof input changes, issue a
-   **new** gate-proof path. Check it independently as usual.
+5. After **every source edit**, regenerate the final receipt from the
+   current candidate and reconcile the ledger before issuing a new proof.
+   A new proof alone cannot rehabilitate an old receipt: native source file
+   changes newer than the receipt produce NATIVE_RECEIPT_STALE. Re-run
+   affected states and keep the before/after evidence. When the source or
+   any proof input changes, issue a **new** gate-proof path and check it
+   independently as usual. Never reuse an old assessment from a different
+   candidate simply because the JSON still validates.
 6. Ask the controller for the **next action**, then **execute it in this
    task**. Repeat 2-6 until a truthful stopping condition below is reached,
    without requesting user confirmation after each internal pass:
@@ -63,7 +68,15 @@ controller alone as a fully autonomous runtime.
    - **RERENDER**: the edited source lacks a distinct post-edit render.
      Capture/review the final application candidate before further edits.
    - **RUN_GATES**: finish missing acceptance and generate/check fresh proof;
-     if it reveals faults, record the findings and rerun the controller.
+     this is **actionable even if all recorded findings are resolved** and the
+     final rendering, interaction matrix or manifest is still incomplete.
+     If a local capture/export/test process crashes, inspect its actual
+     exception/stack trace, create or reuse a stable in-scope runtime finding,
+     and record its current evidence in "currentRuntimeFailures" with
+     "findingId", "observed: true", "evidenceRef" and an error code.
+     A repairable exception in the project's own code is not an external
+     access blocker. Repair the local source, rerun the same test and collect
+     independent fresh captures before any publish step.
 
    Generic control decisions are not desktop-only KPI heuristics. The
    selected finding's original acceptance is the next repair's target.

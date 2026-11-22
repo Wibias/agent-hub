@@ -16,7 +16,8 @@ const items = x => Array.isArray(x) ? x : [];
 const validAction = new Set(["REPAIR_SOURCE", "VERIFY_CURRENT", "RERENDER", "RUN_GATES"]);
 
 function isObserved(id, receipt, manifest) {
-  return items(receipt.currentVisualObservations).some(x => x?.findingId === id && x?.observed === true) ||
+  return items(receipt.currentRuntimeFailures).some(x => x?.findingId === id && x?.observed === true && filled(x?.evidenceRef)) ||
+    items(receipt.currentVisualObservations).some(x => x?.findingId === id && x?.observed === true) ||
     items(receipt.visualCarryoverReviews).some(x => x?.findingId === id && x?.status === "OBSERVED") ||
     items(receipt.findings).some(x => x?.id === id && x.reassessment?.observed === true) ||
     items(manifest?.captures).some(c =>
@@ -98,6 +99,20 @@ export function decideRepairLoop(receipt, baseline, {
       remaining: ranked.map(f => f.id) };
   }
 
+  // The changed UI is not accepted just because its finding was prematurely
+  // marked RESOLVED. Every last source repair still needs an after render.
+  const latestAttempt = attempts.at(-1);
+  if (latestAttempt?.action === "REPAIR_SOURCE" &&
+      latestAttempt.result !== "BLOCKED" &&
+      (!filled(latestAttempt.renderAfter) ||
+       latestAttempt.renderAfter === latestAttempt.renderBefore)) {
+    const target = receipt.findings.find(x => x?.id === latestAttempt.findingId) ??
+      baseline.findings.find(x => x?.id === latestAttempt.findingId);
+    if (target) return next("RERENDER", target,
+      "Last source change has no independently distinguishable post-edit render, even if its finding was marked resolved",
+      { verifyAtSameViewport: true });
+  }
+
   // Do not silently move to another feature while an attempted fix lacks a
   // matched rerender, or the current render has introduced a fresh regression.
   for (const issue of pending) {
@@ -140,7 +155,7 @@ export function decideRepairLoop(receipt, baseline, {
     return next("RUN_GATES", null, "Claimed COMPLETE still requires a real, fresh final gate proof");
   }
   return next("RUN_GATES", null,
-    "No repairable visual defects remain in the submitted evidence; finish functional, visual, source and release acceptance without inventing missing coverage");
+    "No repairable findings remain in the submitted evidence, but acceptance is incomplete: run the missing render, functional, source and release checks; diagnose and record any local test/export failure before stopping");
 }
 
 function cli(argv) {

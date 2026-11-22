@@ -7,7 +7,7 @@ import { dirname, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { discoverProjectLedger } from "./findings-ledger.mjs";
-import { snapshotProjectSource, snapshotRootedSource, discoverNativeSourceRoot } from "./project-source-snapshot.mjs";
+import { snapshotProjectSource, snapshotRootedSource, discoverNativeSourceRoot, nativeReceiptFreshness } from "./project-source-snapshot.mjs";
 import { snapshotDesktopCaptureFiles } from "./desktop-render-evidence.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -97,7 +97,22 @@ export function runGate({ receipt, baseline = null, ledger = null, renderEvidenc
   });
   let result = null;
   try { result = JSON.parse(child.stdout); } catch { /* CLI failure may not return JSON */ }
-  const exitCode = Number.isInteger(child.status) ? child.status : 2;
+  const validatorExitCode = Number.isInteger(child.status) ? child.status : 2;
+  // A new proof cannot legitimize an old receipt written before the latest
+  // native source change. This is a gate-level constraint, not a change to
+  // the raw child validator's exit code.
+  const nativeFreshness = receiptData?.surfaceKind === "DENSE_DESKTOP_MONITOR" && effectiveRoot !== null
+    ? nativeReceiptFreshness(receipt, effectiveRoot) : { valid: true };
+  const staleReceipt = !nativeFreshness.valid;
+  if (staleReceipt) {
+    result = object(result) ? result : {};
+    result.valid = false;
+    result.problems = [
+      ...(Array.isArray(result.problems) ? result.problems : []),
+      "NATIVE_RECEIPT_STALE: current native source is newer than the final iteration receipt; reconcile findings after the last edit",
+    ];
+  }
+  const exitCode = staleReceipt ? 1 : validatorExitCode;
   const sourceAfterValidation = effectiveRoot === null
     ? snapshotProjectSource(workspaceCwd, { ignorePaths: ignored })
     : snapshotRootedSource(effectiveRoot, { ignorePaths: ignored });
@@ -122,6 +137,7 @@ export function runGate({ receipt, baseline = null, ledger = null, renderEvidenc
     sourceRootMode: autoRoot !== null ? "AUTO_NATIVE" : effectiveRoot !== null ? "EXPLICIT" : "GIT_OR_UNBOUND",
     sourceSnapshotValidator: snapshotScriptInput,
     processExitCode: exitCode,
+    validatorProcessExitCode: validatorExitCode,
     result: object(result) ? {
       valid: result.valid === true,
       verdict: result.verdict ?? null,
@@ -147,6 +163,15 @@ export function checkProof({ receipt, baseline = null, ledger = null, renderEvid
     ? discoverNativeSourceRoot({ receipt, ledger }) : null;
   const effectiveRoot = sourceRoot !== null ? resolve(sourceRoot) : autoRoot;
   const discovered = discoverProjectLedger(effectiveRoot ?? workspaceCwd);
+  if (receiptData?.surfaceKind === "DENSE_DESKTOP_MONITOR" && effectiveRoot !== null) {
+    try {
+      if (!nativeReceiptFreshness(receipt, effectiveRoot).valid) {
+        fail("Native source is newer than the final iteration receipt");
+      }
+    } catch {
+      fail("Native source-to-receipt chronology cannot be checked");
+    }
+  }
   if (discovered && ledger === null) fail("Project findings ledger present but not selected for proof verification");
   if (discovered && ledger !== null && resolve(discovered) !== resolve(ledger)) {
     fail("Proof selected a noncanonical findings ledger for the current project");
@@ -259,6 +284,8 @@ export function checkProof({ receipt, baseline = null, ledger = null, renderEvid
     evidence.result?.valid === true &&
     evidence.result?.verdict === "COMPLETE";
   const issueCodes = [...new Set(issues.map((message) => {
+    if (/^Native source is newer/.test(message)) return "NATIVE_RECEIPT_STALE";
+    if (/^Native source-to-receipt/.test(message)) return "SOURCE_CHRONOLOGY_UNAVAILABLE";
     if (/^receipt changed after/.test(message)) return "RECEIPT_CHANGED";
     if (/^renderEvidence changed after/.test(message)) return "RENDER_EVIDENCE_CHANGED";
     if (/^baseline changed after/.test(message)) return "BASELINE_CHANGED";
