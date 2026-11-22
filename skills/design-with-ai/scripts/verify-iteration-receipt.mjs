@@ -140,6 +140,14 @@ export function validateIterationReceipt(input, baseline = null, desktopEvidence
   // The validator checks accounting, not the image pixels or their origin.
   const providedVisualObservations = Array.isArray(input.currentVisualObservations)
     ? input.currentVisualObservations : [];
+  // A carryover review cannot be omitted from the evidence trail merely
+  // because the agent does not repeat it in currentVisualObservations.
+  const carryoverVisualObservations = Array.isArray(input.visualCarryoverReviews)
+    ? input.visualCarryoverReviews.filter(x => x?.status === "OBSERVED").map(x => ({
+      findingId: x.findingId, observed: true, method: x.method,
+      evidenceRef: x.evidenceRef, viewportId: x.viewportId,
+      issueCode: x.issueCode, reportedBy: x.reportedBy,
+    })) : [];
   // A v2 screenshot review with a flagged defect is a current observation
   // even if the agent omits an explicit currentVisualObservations entry.
   const renderVisualObservations = [];
@@ -157,14 +165,17 @@ export function validateIterationReceipt(input, baseline = null, desktopEvidence
       }
     }
   }
-  const visualObservations = [
-    ...providedVisualObservations,
-    ...renderVisualObservations.filter(render => !providedVisualObservations.some(provided =>
-      provided?.findingId === render.findingId &&
-      provided?.viewportId === render.viewportId &&
-      provided?.issueCode === render.issueCode &&
-      provided?.evidenceRef === render.evidenceRef)),
-  ];
+  // Preserve USER provenance when the same inspected screenshot is also
+  // reported by an automatic render review. Do not let a weaker duplicate
+  // overwrite a confirmed user observation.
+  const uniqueVisualObservations = new Map();
+  for (const obs of [...renderVisualObservations, ...carryoverVisualObservations, ...providedVisualObservations]) {
+    const key = [obs?.findingId, obs?.viewportId, obs?.issueCode, obs?.evidenceRef].join(":");
+    const existing = uniqueVisualObservations.get(key);
+    if (!existing || (obs?.observed === true && obs?.reportedBy === "USER") ||
+        existing?.reportedBy !== "USER") uniqueVisualObservations.set(key, obs);
+  }
+  const visualObservations = [...uniqueVisualObservations.values()];
   if (input.currentVisualObservations !== undefined &&
       !Array.isArray(input.currentVisualObservations)) {
     fail("currentVisualObservations must be an array");
@@ -355,11 +366,12 @@ export function validateIterationReceipt(input, baseline = null, desktopEvidence
         ["HIGH", "MEDIUM"].includes(issue.priority) &&
         findings.some(f => f?.id === issue.id &&
           !closed.has(f.disposition)));
-      const addressedPriority = prioritized.some(issue => addressed.includes(issue.id));
-      const cosmeticDetour = intent === "IMPROVE" && prioritized.length > 0 &&
-        (summary.kind === "COSMETIC_ONLY" ||
-          (summary.kind === "TASK_REPAIR" && !addressedPriority));
-      if (cosmeticDetour) {
+      // Addressing *one* old defect never waives the other outstanding
+      // high/medium findings. All displaced findings need their own
+      // evidence-backed deferral, even when a new feature is called TASK_REPAIR.
+      const displaced = intent === "IMPROVE" && summary.kind !== "NO_CHANGE"
+        ? prioritized.filter(issue => !addressed.includes(issue.id)) : [];
+      if (displaced.length > 0) {
         const deferrals = Array.isArray(input.priorityDeferrals) ? input.priorityDeferrals : [];
         const seenDeferrals = new Set();
         for (const exception of deferrals) {
@@ -369,7 +381,7 @@ export function validateIterationReceipt(input, baseline = null, desktopEvidence
           }
           seenDeferrals.add(exception.findingId);
         }
-        for (const issue of prioritized) {
+        for (const issue of displaced) {
           const exception = deferrals.find(x => x?.findingId === issue.id);
           if (!exception || !["EXPLICIT_USER_SCOPE", "BLOCKED", "DEPENDENCY"].includes(exception.basis) ||
               !populated(exception.reason) || !populated(exception.evidenceRef) ||
@@ -377,6 +389,53 @@ export function validateIterationReceipt(input, baseline = null, desktopEvidence
             fail("UNRESOLVED_FINDING_DEPRIORITIZED " + issue.id +
               ": address the older medium/high finding first, or document an explicit requested scope/dependency/real blocker with evidence");
           }
+        }
+      }
+
+      // For native desktop improvement, every older open visual finding on
+      // the affected route must be explicitly re-inspected BEFORE unrelated UI
+      // edits. Otherwise the agent can omit the screenshot review entirely,
+      // put the finding in UNVERIFIED, and still obtain valid PARTIAL.
+      const visualCarryover = baselineIssues.filter(issue => record(issue) &&
+        ["VISUAL", "DETAIL"].includes(issue.kind) &&
+        findings.some(f => f?.id === issue.id && !closed.has(f.disposition)));
+      if (input.surfaceKind === "DENSE_DESKTOP_MONITOR" &&
+          intent === "IMPROVE" && summary.kind !== "NO_CHANGE" && visualCarryover.length) {
+        const reviews = Array.isArray(input.visualCarryoverReviews)
+          ? input.visualCarryoverReviews : [];
+        if (!Array.isArray(input.visualCarryoverReviews)) {
+          fail("VISUAL_CARRYOVER_REVIEW_REQUIRED: every older open visual finding needs a current review before new desktop UI edits");
+        }
+        const requiredIds = new Set(visualCarryover.map(x => x.id));
+        const seen = new Set();
+        for (const review of reviews) {
+          if (!record(review) || !populated(review.findingId) ||
+              !requiredIds.has(review.findingId) || seen.has(review.findingId)) {
+            fail("VISUAL_CARRYOVER_REVIEW_INVALID: reviews must identify distinct older open in-scope visual findings");
+            continue;
+          }
+          seen.add(review.findingId);
+          if (!["OBSERVED", "NOT_VERIFIED", "NOT_APPLICABLE"].includes(review.status) ||
+              !populated(review.reason) || !populated(review.evidenceRef)) {
+            fail("VISUAL_CARRYOVER_REVIEW_INVALID " + review.findingId +
+              ": require status, reason and evidenceRef");
+            continue;
+          }
+          if (review.status === "OBSERVED" &&
+              (!["USER", "AGENT"].includes(review.reportedBy) ||
+               !["SCREENSHOT_REVIEW", "LIVE_RENDER", "MEASUREMENT", "RUNTIME"].includes(review.method) ||
+               !populated(review.viewportId) || !populated(review.issueCode))) {
+            fail("VISUAL_CARRYOVER_REVIEW_INVALID " + review.findingId +
+              ": observed screenshot requires reporter, method, viewport and issue code");
+          }
+          if (review.status === "NOT_VERIFIED" && !populated(review.nextStep)) {
+            fail("VISUAL_CARRYOVER_REVIEW_INVALID " + review.findingId +
+              ": unavailable evidence requires a next verification step");
+          }
+        }
+        for (const issue of visualCarryover) if (!seen.has(issue.id)) {
+          fail("VISUAL_CARRYOVER_UNREVIEWED " + issue.id +
+            ": inspect the existing visual finding, then repair or document a real blocker");
         }
       }
 

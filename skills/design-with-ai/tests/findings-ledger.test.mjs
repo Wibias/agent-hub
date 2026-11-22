@@ -334,6 +334,10 @@ test("repeated observed desktop KPI defects require source repair or a named blo
   current.changeSummary = { kind: "TASK_REPAIR",
     rationale: "Increased actual KPI panel height and safe bottom padding",
     addressedFindingIds: [issue.id], evidenceRef: "diffs/mainform-kpi-branch.patch" };
+  current.priorityDeferrals = ["UX-SETTINGS", "UX-PUBLISH"].map(findingId => ({
+    findingId, basis: "DEPENDENCY", reason: "Scoped KPI-only source repair in this test",
+    evidenceRef: "tests/kpi-repair-scope.txt",
+  }));
   assert.equal(syncLedger(f.ledgerPath, third, current).assessed, current.findings.length);
   assert.equal(readLedger(f.ledgerPath).events.filter(e => e.type === "FOUND" && e.id === issue.id).length, 1);
 }));
@@ -402,6 +406,10 @@ test("a third visibly IMPROVED_BUT_OPEN KPI assessment requires repair, not a ne
   receipt.changeSummary = { kind: "TASK_REPAIR",
     rationale: "Added actual bottom space to the KPI strip",
     addressedFindingIds: [issue.id], evidenceRef: "diff/kpi-layout.patch" };
+  receipt.priorityDeferrals = ["UX-SETTINGS", "UX-PUBLISH"].map(findingId => ({
+    findingId, basis: "DEPENDENCY", reason: "Scoped KPI-only source repair in this test",
+    evidenceRef: "tests/kpi-repair-scope.txt",
+  }));
   assert.equal(syncLedger(f.ledgerPath, baseline, receipt).assessed, receipt.findings.length);
   assert.equal(readLedger(f.ledgerPath).events.filter(e => e.type === "FOUND" && e.id === issue.id).length, 1);
 }));

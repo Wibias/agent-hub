@@ -27,7 +27,32 @@ For the **actual rendered client area**, inventory header/titlebar, KPI summary 
 
 Before introducing another feature or accepting a polished-looking screenshot,
 inspect **the actual latest native client pixels** at the supported compact
-size. An attached user screenshot is a valid lead: inspect it directly rather
+size.
+
+**Mandatory pre-edit carryover review for general native IMPROVE work:**
+Before any new UI change, list **every old open VISUAL/DETAIL finding** in
+`visualCarryoverReviews[]`, not just one convenient finding. Each entry is
+`{ findingId, status: "OBSERVED"|"NOT_VERIFIED"|"NOT_APPLICABLE",
+reason, evidenceRef }`. An OBSERVED entry additionally needs
+`reportedBy: "USER"|"AGENT", method: "SCREENSHOT_REVIEW"|...,
+viewportId, issueCode`; a NOT_VERIFIED entry needs a concrete
+`nextStep`. Look at available current user screenshots and the real
+desktop render before choosing a status. Never use NOT_VERIFIED merely
+because the full DPI matrix is missing if the defect is visible now.
+Do not create false observations from old screenshots. This ledger-based
+review is required for every older open visual finding before a new
+feature, cosmetic edit, or unrelated TASK_REPAIR in a broad desktop
+IMPROVE turn. A **read-only NO_CHANGE** verification may remain PARTIAL
+without this additional write-oriented review.
+
+A separate priority rule applies to each older open HIGH/MEDIUM finding:
+address it in `changeSummary.addressedFindingIds` or document an
+evidence-backed `priorityDeferrals[]` exception **for that finding**.
+Fixing one prior issue does not waive the rest. If the carryover review
+confirms a user-observed defect, its observation feeds the same
+`persistentRepairActions[]` repair-or-BLOCKED check automatically.
+No validator can certify that an omitted screenshot was actually reviewed;
+the agent still must perform the pixel inspection, not merely fill JSON. An attached user screenshot is a valid lead: inspect it directly rather
 than dismissing the report because full UI Automation or DPI capture is
 unavailable. Review both the entire window and legible crops for:
 

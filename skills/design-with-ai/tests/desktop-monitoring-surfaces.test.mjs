@@ -156,6 +156,16 @@ test("current user screenshots drive KPI and input alignment repair, not false U
   assert.match(verification, /new defect repaired in the same/);
 });
 
+test("native UI edits require per-finding carryover review instead of selective screenshot intake", () => {
+  const durable = read("../references/durable-findings-ledger.md");
+  assert.match(contract, /Mandatory pre-edit carryover review/);
+  assert.match(contract, /visualCarryoverReviews\[\]/);
+  assert.match(contract, /Fixing one prior issue does not waive the rest/);
+  assert.match(durable, /every.*unresolved older/);
+  assert.match(verification, /Every old open visual finding must be reconsidered/);
+  assert.match(verification, /task repair addressing one/);
+});
+
 test("repeated IMPROVED_BUT_OPEN needs actual evidence and old issues outrank cosmetic novelty", () => {
   const durable = read("../references/durable-findings-ledger.md");
   assert.match(durable, /IMPROVED_BUT_OPEN with evidence/);
