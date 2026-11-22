@@ -101,7 +101,7 @@ test("installer fails safely when supporting native context script is missing", 
 
 test("standalone Impeccable Stop hook is retained unless removal is explicitly requested", () => fixture(f => {
   mkdirSync(join(f.root, "codex"), { recursive: true });
-  const old = String.raw`if (Test-Path 'C:\Users\ws\.agents\skills\impeccable\scripts\hook.mjs') { node 'C:\Users\ws\.agents\skills\impeccable\scripts\hook.mjs'; exit $LASTEXITCODE }`;
+  const old = String.raw`if (Test-Path 'X:\Fixture\.agents\skills\impeccable\scripts\hook.mjs') { node 'X:\Fixture\.agents\skills\impeccable\scripts\hook.mjs'; exit $LASTEXITCODE }`;
   writeFileSync(f.hooksPath, JSON.stringify({ hooks: { Stop: [
     { hooks: [{ type: "command", command: old, commandWindows: old }] },
   ] } }));
@@ -113,7 +113,7 @@ test("standalone Impeccable Stop hook is retained unless removal is explicitly r
 
 test("opt-in cleanup removes only standalone Impeccable hooks across events, makes backup and keeps all unrelated hooks", () => fixture(f => {
   mkdirSync(join(f.root, "codex"), { recursive: true });
-  const legacy = String.raw`if (Test-Path 'C:\Users\ws\.agents\skills\impeccable\scripts\hook.mjs') { node 'C:\Users\ws\.agents\skills\impeccable\scripts\hook.mjs'; exit $LASTEXITCODE }`;
+  const legacy = String.raw`if (Test-Path 'X:\Fixture\.agents\skills\impeccable\scripts\hook.mjs') { node 'X:\Fixture\.agents\skills\impeccable\scripts\hook.mjs'; exit $LASTEXITCODE }`;
   const original = {
     description: "Preserve independent integrations",
     hooks: {
@@ -126,7 +126,7 @@ test("opt-in cleanup removes only standalone Impeccable hooks across events, mak
           commandWindows: legacy }] },
         { hooks: [
           { command: "node other-hook.mjs", type: "command" },
-          { command: 'node "C:\\Users\\ws\\.agents\\skills\\impeccable\\scripts\\hook.mjs"', type: "command" },
+          { command: 'node "X:\\Fixture\\.agents\\skills\\impeccable\\scripts\\hook.mjs"', type: "command" },
         ] },
       ],
       UserPromptSubmit: [{ hooks: [{ command: "node user-hook.mjs", type: "command" }] }],
