@@ -118,6 +118,30 @@ test("native verification uses external inspection without altering the app just
   assert.match(contract, /Product source changes\s+are justified separately/);
 });
 
+test("bundled external capture helper stays read-only and distinguishes raw observation from v2 proof", () => {
+  const helper = read("../scripts/capture-native-window.ps1");
+  for (const marker of [
+    "GetClientRect", "ClientToScreen", "GetDpiForWindow", "CopyFromScreen",
+    "UIAutomationClient", "Get-FileHash", "RAW_NOT_CERTIFIED",
+    "SetThreadDpiAwarenessContext", "occlusionVerified = $false",
+  ]) {
+    assert.ok(helper.includes(marker), "Missing external capture behavior: " + marker);
+  }
+  assert.doesNotMatch(helper, /(?:Program|MainForm)\.cs|dotnet build|Add-Content.*\.cs/);
+  assert.match(contract, /scripts\/capture-native-window\.ps1/);
+
+  if (process.platform === "win32") {
+    const path = fileURLToPath(new URL("../scripts/capture-native-window.ps1", import.meta.url));
+    const command = '$errors=$null;$tokens=$null;' +
+      '[System.Management.Automation.Language.Parser]::ParseFile(' +
+      "'" + path.replaceAll("'", "''") + "',[ref]$tokens,[ref]$errors)|Out-Null;" +
+      'if($errors.Count){$errors|ForEach-Object{Write-Error $_.Message};exit 1}';
+    const proc = spawnSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-EncodedCommand",
+      Buffer.from(command, "utf16le").toString("base64")], { encoding: "utf8" });
+    assert.equal(proc.status, 0, proc.stdout + proc.stderr);
+  }
+});
+
 test("repeated IMPROVED_BUT_OPEN needs actual evidence and old issues outrank cosmetic novelty", () => {
   const durable = read("../references/durable-findings-ledger.md");
   assert.match(durable, /IMPROVED_BUT_OPEN with evidence/);
