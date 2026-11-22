@@ -111,7 +111,8 @@ function matrixManifest(source = "a".repeat(64)) {
       method: "SCREENSHOT_REVIEW", evidenceRef: "review:" + c.image,
       duplicateCharts: false, unexpectedHeaderFill: false,
       clippedSupportingText: false, unproductiveBlankSpace: false,
-      unreadableInspectorPath: false,
+      unreadableInspectorPath: false, kpiBottomCrowding: false,
+      misalignedInputText: false,
     };
     return c;
   });
@@ -634,3 +635,71 @@ test("full runner records invalid PARTIAL render PASS with no native screenshot"
   assert.equal(result.exitCode, 1);
   assert.match(result.proof.result.problems.join("; "), /DESKTOP_RENDER_PASS_UNBOUND/);
 }));
+
+test("a screenshot-observed crowded KPI and misaligned search text stay open even without other viewports", () => {
+  const m = matrixManifest();
+  const r = receipt();
+  r.iterationVerdict = "PARTIAL";
+  r.verdictReason = "Only compact screenshot is available";
+  r.gates.render = "REVISE";
+  r.findings[0].kind = "VISUAL";
+  r.findings[0].disposition = "UNVERIFIED";
+  r.findings[0].reason = "Other viewports are not measured";
+  r.openCarryover = ["UX-TABLE"];
+  m.viewports = m.viewports.filter(v => v.id === "COMPACT");
+  m.captures = m.captures.filter(c => c.viewportId === "COMPACT" && c.state === "IDLE");
+  m.checks = [];
+  const c = m.captures[0];
+  c.renderInspection.kpiBottomCrowding = true;
+  c.renderInspection.misalignedInputText = true;
+  c.renderInspection.findingRefs = {
+    kpiBottomCrowding: "UX-TABLE",
+    misalignedInputText: "UX-TABLE",
+  };
+  m.findingViewportReviews = [{
+    findingId: "UX-TABLE", viewportId: "COMPACT", status: "NOT_VERIFIED",
+    evidenceRef: c.image,
+  }];
+  assert.match(allProblems(m, r),
+    /UNTRACKED_RENDER_FINDING COMPACT:IDLE kpiBottomCrowding/);
+  assert.match(allProblems(m, r),
+    /UNTRACKED_RENDER_FINDING COMPACT:IDLE misalignedInputText/);
+  r.findings[0].disposition = "PERSISTS";
+  m.findingViewportReviews[0].status = "PERSISTS";
+  assert.equal(validateDesktopRenderEvidence(m, r).valid, true, allProblems(m, r));
+  r.gates.render = "PASS";
+  assert.match(allProblems(m, r),
+    /RENDER_PASS_WITH_VISUAL_DEFECT COMPACT:IDLE misalignedInputText/);
+});
+
+test("actual text glyph bounds reveal off-center search text without inventing measurements", () => {
+  const m = matrixManifest();
+  const r = receipt();
+  r.iterationVerdict = "PARTIAL";
+  r.verdictReason = "Only compact evidence is available";
+  r.gates.render = "REVISE";
+  r.findings[0].kind = "VISUAL";
+  r.findings[0].disposition = "UNVERIFIED";
+  r.findings[0].reason = "Missing other viewports";
+  r.openCarryover = ["UX-TABLE"];
+  m.viewports = m.viewports.filter(v => v.id === "COMPACT");
+  m.captures = m.captures.filter(c => c.viewportId === "COMPACT" && c.state === "IDLE");
+  m.checks = [];
+  const c = m.captures[0];
+  c.textInputs = [{
+    id: "filter-by-name", field: [300, 292, 155, 24],
+    text: [304, 293, 110, 13],
+  }];
+  c.measuredFindingRefs = { INPUT_TEXT_VERTICAL_ALIGNMENT: "UX-TABLE" };
+  m.findingViewportReviews = [{
+    findingId: "UX-TABLE", viewportId: "COMPACT", status: "NOT_VERIFIED",
+    evidenceRef: c.image,
+  }];
+  assert.match(allProblems(m, r),
+    /UNTRACKED_MEASURED_REGRESSION COMPACT:IDLE INPUT_TEXT_VERTICAL_ALIGNMENT/);
+  r.findings[0].disposition = "IMPROVED_BUT_OPEN";
+  m.findingViewportReviews[0].status = "IMPROVED_BUT_OPEN";
+  assert.equal(validateDesktopRenderEvidence(m, r).valid, true, allProblems(m, r));
+  c.textInputs[0].text = [304, 298, 110, 13];
+  assert.doesNotMatch(allProblems(m, r), /UNTRACKED_MEASURED_REGRESSION/);
+});
