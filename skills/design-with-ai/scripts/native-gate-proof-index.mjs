@@ -90,34 +90,61 @@ export function recordNativeGateProof({
  * Read a bounded, flat per-user index. The output is UNTRUSTED hints.
  * Stop validates each proof against its current source and full gate inputs.
  */
-export function listRecentNativeGateProofs({
+/**
+ * A privacy-preserving diagnosis of index discovery. No filesystem paths,
+ * prompt text, source hashes or project identifiers are returned in status.
+ * This can explain why a registered proof did not become a Stop candidate.
+ */
+export function inspectRecentNativeGateProofs({
   cwd, startedAt, indexRoot = defaultNativeGateIndexRoot(), now = Date.now(),
 } = {}) {
-  if (typeof cwd !== "string" || !isAbsolute(cwd) || !at(startedAt) ||
-      !safeDirectory(indexRoot)) return [];
+  const output = (proofPaths, status) => ({ proofPaths, status });
+  if (typeof cwd !== "string" || !isAbsolute(cwd)) return output([], "INDEX_CWD_INVALID");
+  if (!at(startedAt)) return output([], "INDEX_TURN_TIME_INVALID");
+  if (!safeDirectory(indexRoot)) return output([], "INDEX_UNAVAILABLE");
   let files;
   try { files = readdirSync(indexRoot); }
-  catch { return []; }
-  if (files.length > MAX_INDEX_ENTRIES) return [];
+  catch { return output([], "INDEX_UNAVAILABLE"); }
+  if (files.length > MAX_INDEX_ENTRIES) return output([], "INDEX_TOO_MANY_ENTRIES");
   const records = [];
+  let seenValidRecord = false;
+  let seenMatchingRoot = false;
+  let seenOldProof = false;
+  let seenUnsafeRecord = false;
   for (const name of files) {
     if (!INDEX_NAME.test(name)) continue;
     const path = join(indexRoot, name);
     try {
       const st = lstatSync(path);
       if (!st.isFile() || st.isSymbolicLink() ||
-          st.size <= 0 || st.size > MAX_ENTRY_BYTES) continue;
+          st.size <= 0 || st.size > MAX_ENTRY_BYTES) {
+        seenUnsafeRecord = true;
+        continue;
+      }
       const record = JSON.parse(readFileSync(path, "utf8"));
-      if (!validRecord(record) ||
-          !(within(record.sourceRoot, cwd) || within(cwd, record.sourceRoot))) continue;
+      if (!validRecord(record)) { seenUnsafeRecord = true; continue; }
+      seenValidRecord = true;
+      if (!(within(record.sourceRoot, cwd) || within(cwd, record.sourceRoot))) continue;
+      seenMatchingRoot = true;
       const executed = Date.parse(record.executedAt);
       if (executed < Date.parse(startedAt) - 1000 ||
-          executed > now + 60000 || now - executed > MAX_AGE_MS) continue;
-      // Never infer success from this record: the separate proof might have
-      // changed, been deleted, or been generated with a nonzero gate.
+          executed > now + 60000 || now - executed > MAX_AGE_MS) {
+        seenOldProof = true;
+        continue;
+      }
+      // Still only an untrusted location hint, never proof of a valid gate.
       records.push(record);
-    } catch { /* invalid hints are ignored */ }
+    } catch { seenUnsafeRecord = true; }
   }
-  return records.sort((a, b) => Date.parse(b.executedAt) -
-    Date.parse(a.executedAt)).map(record => record.proofPath);
+  if (records.length) return output(records
+    .sort((a, b) => Date.parse(b.executedAt) - Date.parse(a.executedAt))
+    .map(record => record.proofPath), "INDEX_CURRENT_CANDIDATE");
+  if (seenOldProof) return output([], "INDEX_OUTSIDE_TURN_TIME");
+  if (seenValidRecord && !seenMatchingRoot) return output([], "INDEX_CWD_DISJOINT");
+  if (seenUnsafeRecord) return output([], "INDEX_RECORD_INVALID");
+  return output([], "INDEX_EMPTY");
+}
+
+export function listRecentNativeGateProofs(options = {}) {
+  return inspectRecentNativeGateProofs(options).proofPaths;
 }
