@@ -70,8 +70,8 @@ function proofPathFromResponse(value, depth = 0) {
   if (!obj(value)) return null;
   // Arbitrary path strings in stdout are not enough. Require the exact
   // structured property emitted by the real iteration-gate runner.
-  if (token(value.proofPath) && value.proofPath.length <= 2048 &&
-      isAbsolute(value.proofPath)) return value.proofPath;
+  if (typeof value.proofPath === "string" && value.proofPath.length > 0 &&
+      value.proofPath.length <= 2048 && isAbsolute(value.proofPath)) return value.proofPath;
   for (const key of ["result", "output", "content", "data", "text"]) {
     const proof = proofPathFromResponse(value[key], depth + 1);
     if (proof) return proof;
