@@ -657,7 +657,11 @@ test("desktop IMPROVE cannot add unrelated UI work without reviewing every old v
   r.findings[0].priority = "LOW";
   r.findings[0].disposition = "UNVERIFIED";
   r.findings[0].reason = "Missing current view of KPI";
-  r.openCarryover = ["UX-01"];
+  // The newly added feature is not evidence that the unrelated visual
+  // acceptance is complete.
+  r.findings[1].disposition = "PERSISTS";
+  r.findings[1].reason = "New interaction is implemented but other evidence remains open";
+  r.openCarryover = ["UX-01", "UX-02"];
   // A newly implemented search feature is presented as a task repair.
   r.changeSummary = {
     kind: "TASK_REPAIR", addressedFindingIds: ["UX-02"],
