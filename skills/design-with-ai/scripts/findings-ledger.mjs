@@ -238,7 +238,7 @@ export function verifyLedgerCoverage(ledger, baseline, receipt, { requireSynced 
       // merely awaiting extra viewports. Never infer observation from prose.
       const check = current.reassessment;
       if (check?.observed === true &&
-          ["RENDER", "MEASUREMENT", "RUNTIME"].includes(check.method) &&
+          ["RENDER", "MEASUREMENT", "RUNTIME", "SCREENSHOT_REVIEW"].includes(check.method) &&
           filled(check.evidenceRef)) {
         repeated.add(item.id);
       } else {
