@@ -82,7 +82,11 @@ function nativeArtifactOptions(proofPath, cwd, home, promptAt) {
   } catch { return null; }
   if (!obj(proof) || proof.generator !== "design-with-ai/run-iteration-gate.mjs" ||
       !obj(proof.receipt) || !obj(proof.baseline) || !obj(proof.ledger) ||
-      typeof proof.sourceRoot !== "string") return null;
+      typeof proof.sourceRoot !== "string" ||
+      ![proof.receipt.path, proof.baseline.path, proof.ledger.path].every(x =>
+        typeof x === "string" && x.length > 0 && isAbsolute(x)) ||
+      (proof.renderEvidence && (typeof proof.renderEvidence.path !== "string" ||
+        !isAbsolute(proof.renderEvidence.path)))) return null;
   const sourceRoot = resolve(proof.sourceRoot);
   if (!localAllowed(sourceRoot, cwd, home) ||
       !(within(cwd, sourceRoot) || within(sourceRoot, cwd))) return null;
