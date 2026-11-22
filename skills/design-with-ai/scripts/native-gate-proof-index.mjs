@@ -54,8 +54,21 @@ export function recordNativeGateProof({
     if (existsSync(dir) && !safeDirectory(dir)) return { recorded: false, reason: "UNSAFE_INDEX" };
     mkdirSync(dir, { recursive: true, mode: 0o700 });
     if (!safeDirectory(dir)) return { recorded: false, reason: "UNSAFE_INDEX" };
+    // Keep the index small and avoid retaining obsolete project paths.
+    // Only clean old, regular index entries in this dedicated directory.
+    for (const name of readdirSync(dir).filter(x => INDEX_NAME.test(x)).slice(0, MAX_INDEX_ENTRIES + 1)) {
+      const path = join(dir, name);
+      try {
+        const st = lstatSync(path);
+        if (st.isFile() && !st.isSymbolicLink() &&
+            Date.now() - st.mtimeMs > MAX_AGE_MS) rmSync(path, { force: true });
+      } catch { /* do not affect gate outcomes */ }
+    }
     const hash = createHash("sha256").update(resolve(sourceRoot).toLowerCase()).digest("hex");
     const target = join(dir, hash + ".json");
+    if (!existsSync(target) && readdirSync(dir).length >= MAX_INDEX_ENTRIES) {
+      return { recorded: false, reason: "INDEX_CAPACITY" };
+    }
     if (existsSync(target) && (lstatSync(target).isSymbolicLink() ||
         !lstatSync(target).isFile())) return { recorded: false, reason: "UNSAFE_ENTRY" };
     const payload = JSON.stringify(record) + "\n";
