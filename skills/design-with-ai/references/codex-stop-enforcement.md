@@ -189,7 +189,14 @@ without creating another proof or guessing from the missing tool event:
 - `INDEX_CWD_DISJOINT`: the Codex Stop event's cwd and indexed native
   source root are separate trees. This is a deliberate workspace security
   constraint; do not accept unrelated projects merely because both are
-  inside the same user profile.
+  inside the same user profile. With no other viable gate candidates, Stop
+  now emits `WORKSPACE_SCOPE_MISMATCH` rather than instructing another
+  identical gate run. It requests at most one explanatory continuation and
+  then allows a clearly unverified finish. The operator must open the next
+  Codex design session in the actual project directory; changing the
+  terminal's directory in another window does not change an existing
+  Codex session's `cwd`. The independently reported `PARTIAL` gate result
+  does not become `COMPLETE`, and the Stop hook does not claim verification.
 - `INDEX_OUTSIDE_TURN_TIME`: the indexed gate ran before the current
   recorded user-turn boundary or outside the allowed freshness window.
 - `INDEX_PROOF_METADATA_INVALID`, `INDEX_PROOF_NATIVE_ROOT_INVALID`,
