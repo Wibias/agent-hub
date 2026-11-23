@@ -12,7 +12,7 @@ import { createProviderRegistry, runProviders } from "../../scripts/providers/re
 import { createImpeccableProvider } from "../../scripts/providers/impeccable.mjs";
 import { sourceScopeProof } from "../../scripts/providers/scope-proof.mjs";
 import { collectStaticCssText } from "../../internal/impeccable/scripts/detector/engines/static-html/css-cascade.mjs";
-import { checkBorders } from "../../internal/impeccable/scripts/detector/rules/checks.mjs";
+import { checkBorders, checkElementPseudoStripeDOM, collectRoundedCssHosts, scanCssTextForPseudoStripe, scanCssTextForInsetStripe } from "../../internal/impeccable/scripts/detector/rules/checks.mjs";
 import { detectText } from "../../internal/impeccable/scripts/detector/engines/regex/detect-text.mjs";
 
 const cli = fileURLToPath(new URL("../../scripts/providers/scan.mjs", import.meta.url));
@@ -542,5 +542,69 @@ test("Impeccable v4.10 side-tab parity: square borders are not rounded-host find
   for (const [name, path, content, expected] of cases) {
     const findings = detectText(content, path).filter((finding) => finding.antipattern === "side-tab");
     assert.equal(findings.length > 0, expected, name + ": " + JSON.stringify(findings));
+  }
+});
+
+
+test("Impeccable source-only pseudo stripe requires rounded host, not rounded pseudo", () => {
+  const pseudo = '::before { content: ""; position: absolute; width: 4px; height: 100%; top: 0; left: 0; background: #e11d48; }';
+  const cases = [
+    ['rounded host', '.card { border-radius: 8px; }\n.card' + pseudo, true],
+    ['square host', '.card { border-radius: 0; }\n.card' + pseudo, false],
+    ['unresolved host', '.card { color: red; }\n.card' + pseudo, false],
+    ['commented-out radius', '/* .card { border-radius: 8px; } */\n.card' + pseudo, false],
+    ['only pseudo rounded', '.card { color: red; }\n.card::before { border-radius: 8px; }\n.card' + pseudo, false],
+    ['single rounded corner', '.card { border-top-left-radius: 6px; }\n.card' + pseudo, true],
+    ['later exact selector reset', '.card { border-radius: 8px; }\n.card { border-radius: 0; }\n.card' + pseudo, false],
+  ];
+  for (const [name, css, expected] of cases) {
+    assert.equal(scanCssTextForPseudoStripe(css).length > 0, expected, name);
+    assert.equal(detectText(css, 'card.css').filter((x) => x.antipattern === 'side-tab').length > 0,
+      expected, name + ' in source-only regex scan');
+  }
+  assert.deepEqual([...collectRoundedCssHosts('.square {border-radius:0}.round {border-radius:6px}')], ['.round']);
+});
+
+test("Impeccable inset stripe respects host radius in both source engines", () => {
+  const cases = [
+    ['square', '.card { border-radius: 0; box-shadow: inset 4px 0 0 #e11d48; }', false],
+    ['rounded', '.card { border-radius: 8px; box-shadow: inset 4px 0 0 #e11d48; }', true],
+    ['unknown', '.card { box-shadow: inset 4px 0 0 #e11d48; }', false],
+    ['commented-out radius', '/* .card { border-radius: 8px; } */ .card { box-shadow: inset 4px 0 0 #e11d48; }', false],
+  ];
+  for (const [name, css, expected] of cases) {
+    assert.equal(scanCssTextForInsetStripe(css).length > 0, expected, name + ' shared scanner');
+    assert.equal(detectText(css, 'card.css').filter((x) => x.antipattern === 'side-tab').length > 0,
+      expected, name + ' regex fallback');
+  }
+});
+
+test("browser pseudo-element stripe only reports visibly rounded host", () => {
+  const previousGetComputedStyle = globalThis.getComputedStyle;
+  let radius = '0px';
+  const host = {
+    nodeType: 1, tagName: 'DIV', parentElement: null, className: 'card',
+    closest: () => null,
+    getAttribute: (key) => key === 'class' ? 'card' : null,
+    getBoundingClientRect: () => ({ width: 200, height: 60 }),
+  };
+  const pseudoStyle = {
+    content: '""', position: 'absolute', opacity: '1', display: 'block',
+    width: '4px', height: '60px', left: '0px', right: 'auto',
+    top: '0px', bottom: '0px', backgroundColor: 'rgb(225, 29, 72)',
+  };
+  globalThis.getComputedStyle = (_, pseudo) => pseudo ? pseudoStyle : ({
+    visibility: 'visible', display: 'block', opacity: '1',
+    borderRadius: radius, borderTopLeftRadius: radius,
+    borderTopRightRadius: radius, borderBottomLeftRadius: radius,
+    borderBottomRightRadius: radius,
+  });
+  try {
+    assert.deepEqual(checkElementPseudoStripeDOM(host), [], 'square host');
+    radius = '8px';
+    assert.ok(checkElementPseudoStripeDOM(host).some((x) => x.id === 'side-tab'), 'rounded host');
+  } finally {
+    if (previousGetComputedStyle === undefined) delete globalThis.getComputedStyle;
+    else globalThis.getComputedStyle = previousGetComputedStyle;
   }
 });

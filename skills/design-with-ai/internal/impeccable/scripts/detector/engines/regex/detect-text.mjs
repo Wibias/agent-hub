@@ -2,7 +2,7 @@ import { GENERIC_FONTS, OVERUSED_FONTS, EM_DASH_FLOOR, EM_DASH_CHARS_PER_DASH } 
 import { isNeutralColor } from '../../shared/color.mjs';
 import { extractGoogleFontFamilies } from '../../shared/fonts.mjs';
 import { checkSourceDesignSystem } from '../../design-system.mjs';
-import { scanCssTextForGlow, scanCssTextForGridBackground, scanCssTextForMarquee, scanCssTextForPseudoStripe, scanCssTextForRadialHalo } from '../../rules/checks.mjs';
+import { scanCssTextForGlow, scanCssTextForGridBackground, scanCssTextForMarquee, scanCssTextForPseudoStripe, collectRoundedCssHosts, scanCssTextForRadialHalo } from '../../rules/checks.mjs';
 import { isFullPage } from '../../shared/page.mjs';
 import { applyInlineIgnores } from '../../shared/inline-ignores.mjs';
 import { finding } from '../../findings.mjs';
@@ -793,6 +793,7 @@ function blankCssComments(css) {
 
 function scanInsetStripeCss(rawContent, filePath, lineOffset = 0) {
   const content = blankCssComments(rawContent);
+  const roundedHosts = collectRoundedCssHosts(content);
   const findings = [];
   const ruleRe = /([^{};]+)\{([^{}]*)\}/g;
   let match;
@@ -814,6 +815,7 @@ function scanInsetStripeCss(rawContent, filePath, lineOffset = 0) {
     // the line, or every rule after the first reports the preceding line.
     const selectorStart = match.index + (match[1].length - match[1].trimStart().length);
     const selector = match[1].trim().replace(/\s+/g, ' ');
+    if (!selector.split(',').every((part) => roundedHosts.has(part.trim()))) continue;
     if (!selector) continue;
     if (/:(?:hover|focus|focus-visible|focus-within|active|checked|target)\b/i.test(selector)) continue;
     if (/\[aria-selected\s*[*^$|~]?=\s*["']?true/i.test(selector)) continue;
