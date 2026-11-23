@@ -174,14 +174,104 @@ test("a locally observed exporter concurrency failure becomes a targeted source 
   assert.equal(result.findingId, "UX-EXPORT-RACE");
 });
 
-test("an incomplete final render or manifest remains actionable RUN_GATES even with no open findings", () => {
+test("an incomplete desktop manifest selects actual missing evidence rather than repeating RUN_GATES", () => {
   const x = receipt();
   x.findings = x.findings.map(f => ({ ...f, disposition: "RESOLVED" }));
   x.currentVisualObservations = [];
   const result = decideRepairLoop(x, baseline());
   assert.equal(result.outcome, "CONTINUE");
-  assert.equal(result.action, "RUN_GATES");
+  assert.equal(result.action, "VERIFY_COVERAGE");
   assert.equal(result.findingId, null);
+  assert.equal(result.target, "MANIFEST:V2");
+});
+
+test("partial native matrix targets COMPACT and real DPI after MEDIUM and MAXIMIZED captures", () => {
+  const x = receipt();
+  x.findings = x.findings.map(f => ({ ...f, disposition: "RESOLVED" }));
+  x.currentVisualObservations = [];
+  const manifest = {
+    schemaVersion: 2, viewports: [
+      { id: "MEDIUM", width: 1170, height: 753, dpiPercent: 100 },
+      { id: "MAXIMIZED", width: 1790, height: 1000, dpiPercent: 100 },
+    ],
+    captures: ["IDLE", "SELECTED", "FOCUS"].map(state => ({
+      viewportId: "MEDIUM", state, image: state + ".png",
+      imageSha256: "a".repeat(64), renderInspection: { evidenceRef: "render/" + state },
+    })).concat([{ viewportId: "MAXIMIZED", state: "IDLE", image: "max-idle.png",
+      imageSha256: "b".repeat(64), renderInspection: { evidenceRef: "render/max-idle" } }]),
+    checks: [{ id: "CHART_HISTORY", result: "PASS", method: "TEST",
+      evidenceRef: "tests/chart-history.txt" }],
+  };
+  const result = decideRepairLoop(x, baseline(), {
+    manifest, checkedProof: { valid: true, completionEligible: false, verdict: "PARTIAL" },
+  });
+  assert.equal(result.outcome, "CONTINUE");
+  assert.equal(result.action, "VERIFY_COVERAGE");
+  assert.equal(result.target, "VIEWPORT:COMPACT");
+  assert.ok(result.missingCoverage.includes("VIEWPORT:SCALED"));
+  assert.ok(result.missingCoverage.includes("COMPACT:IDLE"));
+  assert.ok(result.missingCoverage.includes("SCALED:FOCUS"));
+  assert.ok(result.missingCoverage.includes("CHECK:NO_SELECTION_ACTION"));
+  assert.ok(!result.missingCoverage.includes("MEDIUM:SELECTED"));
+  assert.ok(!result.missingCoverage.includes("MAXIMIZED:IDLE"));
+});
+
+test("a real documented coverage blocker advances to the next missing state", () => {
+  const x = receipt();
+  x.findings = x.findings.map(f => ({ ...f, disposition: "RESOLVED" }));
+  x.currentVisualObservations = [];
+  const result = decideRepairLoop(x, baseline(), { attempts: [{
+    action: "VERIFY_COVERAGE", target: "MANIFEST:V2", result: "BLOCKED",
+    blocker: "Windows capture tool is denied by UIPI", evidenceRef: "logs/capture-denied.txt",
+    nextStep: "Use a separately authorized same-integrity tester",
+  }] });
+  assert.equal(result.outcome, "STOP_BLOCKED");
+  assert.deepEqual(result.blockedCoverage, ["MANIFEST:V2"]);
+});
+
+test("a bare blocked claim cannot skip missing desktop evidence", () => {
+  const x = receipt();
+  x.findings = x.findings.map(f => ({ ...f, disposition: "RESOLVED" }));
+  x.currentVisualObservations = [];
+  const result = decideRepairLoop(x, baseline(), { attempts: [{
+    action: "VERIFY_COVERAGE", target: "MANIFEST:V2", result: "BLOCKED",
+    blocker: "No access", nextStep: "retry",
+  }] });
+  assert.equal(result.action, "VERIFY_COVERAGE");
+  assert.equal(result.target, "MANIFEST:V2");
+});
+
+test("a fully enumerated matrix with a valid PARTIAL proof requires acceptance review, not another proof", () => {
+  const x = receipt();
+  x.findings = x.findings.map(f => ({ ...f, disposition: "RESOLVED" }));
+  x.currentVisualObservations = [];
+  const manifest = { schemaVersion: 2,
+    viewports: ["COMPACT", "MEDIUM", "MAXIMIZED", "SCALED"].map(id => ({
+      id, width: 1170, height: 753, dpiPercent: id === "SCALED" ? 125 : 100,
+    })),
+    captures: ["COMPACT", "MEDIUM", "MAXIMIZED"].flatMap(viewportId =>
+      ["IDLE", "SELECTED", "FOCUS", "COLLECTING"].map(state => ({
+        viewportId, state, image: viewportId + state + ".png",
+        imageSha256: "a".repeat(64), renderInspection: { evidenceRef: "render/" + viewportId + state },
+      }))).concat(["IDLE", "FOCUS"].map(state => ({
+        viewportId: "SCALED", state, image: "scaled-" + state + ".png",
+        imageSha256: "a".repeat(64), renderInspection: { evidenceRef: "render/" + state },
+      })), [{ viewportId: "MEDIUM", state: "STALLED", image: "stalled.png",
+        imageSha256: "a".repeat(64), renderInspection: { evidenceRef: "render/stalled" } }]),
+    checks: ["NO_SELECTION_ACTION", "SEGMENT_KEYBOARD", "CHART_HISTORY", "DPI_READABILITY"].map(id => ({
+      id, result: "PASS", method: "TEST", evidenceRef: "tests/" + id,
+    })),
+  };
+  const partial = { valid: true, completionEligible: false, verdict: "PARTIAL" };
+  const result = decideRepairLoop(x, baseline(), { manifest, checkedProof: partial });
+  assert.equal(result.action, "VERIFY_ACCEPTANCE");
+  assert.equal(result.target, "ACCEPTANCE:FINAL");
+  const stalled = decideRepairLoop(x, baseline(), {
+    manifest, checkedProof: partial, attempts: [{
+      action: "VERIFY_ACCEPTANCE", target: "ACCEPTANCE:FINAL", result: "PASS",
+    }],
+  });
+  assert.equal(stalled.outcome, "STOP_STALLED");
 });
 
 test("a source repair still requires a real rerender if the finding was prematurely closed", () => {

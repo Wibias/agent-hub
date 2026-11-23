@@ -6,6 +6,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { checkProof } from "./run-iteration-gate.mjs";
+import { isDesktopCoverageTarget, planDesktopCoverage } from "./desktop-coverage-plan.mjs";
 
 const open = new Set(["PERSISTS", "REGRESSED", "IMPROVED_BUT_OPEN", "UNVERIFIED", "DEFERRED"]);
 const observedStates = new Set(["PERSISTS", "REGRESSED", "IMPROVED_BUT_OPEN"]);
@@ -13,7 +14,8 @@ const priority = { HIGH: 0, MEDIUM: 1, LOW: 2 };
 const filled = x => typeof x === "string" && x.trim().length > 0;
 const object = x => x !== null && typeof x === "object" && !Array.isArray(x);
 const items = x => Array.isArray(x) ? x : [];
-const validAction = new Set(["REPAIR_SOURCE", "VERIFY_CURRENT", "RERENDER", "RUN_GATES"]);
+const validAction = new Set(["REPAIR_SOURCE", "VERIFY_CURRENT", "RERENDER", "RUN_GATES",
+  "VERIFY_COVERAGE", "VERIFY_ACCEPTANCE"]);
 
 function isObserved(id, receipt, manifest) {
   return items(receipt.currentRuntimeFailures).some(x => x?.findingId === id && x?.observed === true && filled(x?.evidenceRef)) ||
@@ -64,8 +66,11 @@ export function decideRepairLoop(receipt, baseline, {
       !object(baseline) || !Array.isArray(baseline.findings) ||
       !Array.isArray(attempts) || !Number.isInteger(maxCycles) ||
       maxCycles < 1 || maxCycles > 32 ||
-      attempts.some(a => !object(a) || !filled(a.findingId) ||
-        !validAction.has(a.action) || !["PASS", "REVISE", "BLOCKED"].includes(a.result))) {
+      attempts.some(a => !object(a) || !validAction.has(a.action) ||
+        !["PASS", "REVISE", "BLOCKED"].includes(a.result) ||
+        (a.action === "VERIFY_COVERAGE" ? !isDesktopCoverageTarget(a.target) :
+          a.action === "VERIFY_ACCEPTANCE" ? a.target !== "ACCEPTANCE:FINAL" :
+            !filled(a.findingId)))) {
     return { outcome: "INVALID", reason: "Need actual receipt, frozen baseline, and structured bounded attempts" };
   }
   if (baseline.intent !== "IMPROVE") {
@@ -153,6 +158,48 @@ export function decideRepairLoop(receipt, baseline, {
   }
   if (receipt.iterationVerdict === "COMPLETE" && checkedProof?.completionEligible !== true) {
     return next("RUN_GATES", null, "Claimed COMPLETE still requires a real, fresh final gate proof");
+  }
+  if (receipt.surfaceKind === "DENSE_DESKTOP_MONITOR") {
+    const coverage = planDesktopCoverage(manifest, attempts);
+    if (coverage.nextTarget) {
+      return next("VERIFY_COVERAGE", null,
+        "Obtain independently inspectable actual desktop evidence for " +
+        coverage.nextTarget + " before running another proof. Use existing authorized " +
+        "read-only test/capture tools; never fake DPI, UI actions or screenshots. " +
+        "If access is denied, record the real blocker with evidence and next step, " +
+        "then continue to the next uncovered target.",
+        { target: coverage.nextTarget, missingCoverage: coverage.missing,
+          blockedCoverage: coverage.blocked });
+    }
+    if (coverage.blocked.length) {
+      return { outcome: "STOP_BLOCKED",
+        reason: "All remaining desktop evidence targets have individually documented blockers; " +
+          "finish PARTIAL without generating another identical gate proof",
+        remaining: coverage.missing, blockedCoverage: coverage.blocked };
+    }
+    if (checkedProof?.valid === true && checkedProof.completionEligible === false &&
+        receipt.iterationVerdict !== "COMPLETE") {
+      const prior = attempts.filter(a => a.action === "VERIFY_ACCEPTANCE" &&
+        a.target === "ACCEPTANCE:FINAL").at(-1);
+      if (prior?.result === "BLOCKED" && filled(prior.blocker) &&
+          filled(prior.nextStep) && filled(prior.evidenceRef)) {
+        return { outcome: "STOP_BLOCKED",
+          reason: "Final acceptance remains blocked by an evidence-backed limitation; " +
+            "do not repeat a valid PARTIAL proof with unchanged inputs",
+          remaining: ["ACCEPTANCE:FINAL"] };
+      }
+      if (prior?.result === "PASS") {
+        return { outcome: "STOP_STALLED",
+          reason: "A final acceptance review was recorded, but the current checked proof " +
+            "is still PARTIAL. Inspect whether its inputs changed; do not issue another " +
+            "identical proof without new evidence." };
+      }
+      return next("VERIFY_ACCEPTANCE", null,
+        "Desktop capture checklist is present but the independently checked proof " +
+        "is still PARTIAL. Identify the exact remaining source/render/functional acceptance " +
+        "gap and collect the missing real evidence; do not rerun an unchanged gate.",
+        { target: "ACCEPTANCE:FINAL" });
+    }
   }
   return next("RUN_GATES", null,
     "No repairable findings remain in the submitted evidence, but acceptance is incomplete: run the missing render, functional, source and release checks; diagnose and record any local test/export failure before stopping");
