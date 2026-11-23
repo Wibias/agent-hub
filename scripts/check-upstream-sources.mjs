@@ -5,7 +5,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { directoryScopeFor, hasScopedChanges } from './lib/upstream-scope-diff.mjs';
-import { classifyUpstreamStatus, needsUpstreamAction } from './lib/upstream-status.mjs';
+import { classifyUpstreamStatus, needsUpstreamAction, validateUpstreamIntegration } from './lib/upstream-status.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(here, '..');
@@ -45,6 +45,11 @@ function validate(registry) {
     }
     if (source.decision === 'update-pending' && !source.localPin) {
       fail(`${source.id}: update-pending requires localPin`);
+    }
+    try {
+      validateUpstreamIntegration(source);
+    } catch (error) {
+      fail(`${source.id}: ${error.message}`);
     }
   }
   return registry;
@@ -110,7 +115,8 @@ for (const source of registry.sources) {
   });
   const evidence = scopedChanges === null ? (advanced ? 'unscoped' : 'same-head') :
     scopedChanges ? 'scope-changed' : 'scope-unchanged';
-  const details = `${source.id} ${source.repository} reviewed=${source.reviewedCommit} head=${head} scope=${source.scope} evidence=${evidence} adoption=${source.decision}`;
+  const owner = source.integrationOwner ? ` owner=${source.integrationOwner}` : '';
+  const details = `${source.id} ${source.repository} reviewed=${source.reviewedCommit} head=${head} scope=${source.scope} evidence=${evidence} adoption=${source.decision}${owner}`;
   const local = source.localPin ? ` local=${source.localPin}` : '';
 
   // SCOPE_CHANGED requires relevance review. REVIEW means the prose-only scope
