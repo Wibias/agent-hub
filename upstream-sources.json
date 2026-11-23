@@ -39,7 +39,8 @@
       "reviewedCommit": "acb4cfe14470b1fdf51e855431af618d936b7db8",
       "scope": ".agents/skills/impeccable/",
       "decision": "update-pending",
-      "localPin": "acb4cfe14470b1fdf51e855431af618d936b7db8"
+      "localPin": "acb4cfe14470b1fdf51e855431af618d936b7db8",
+      "integrationOwner": "design-with-ai"
     }
   ]
 }
