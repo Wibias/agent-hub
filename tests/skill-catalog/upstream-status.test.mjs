@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { classifyUpstreamStatus, needsUpstreamAction } from '../../scripts/lib/upstream-status.mjs';
+import { classifyUpstreamStatus, needsUpstreamAction, validateUpstreamIntegration } from '../../scripts/lib/upstream-status.mjs';
 
 const classify = (advanced, scopedChanges, decision = 'current') =>
   classifyUpstreamStatus({ advanced, scopedChanges, decision });
@@ -38,4 +38,22 @@ test('invalid or contradictory status inputs fail closed', () => {
   assert.throws(() => classifyUpstreamStatus({ advanced: false, scopedChanges: true, decision: 'current' }), TypeError);
   assert.throws(() => classifyUpstreamStatus({ advanced: 'true', scopedChanges: null, decision: 'current' }), TypeError);
   assert.throws(() => classifyUpstreamStatus({ advanced: true, scopedChanges: null, decision: 'unknown' }), TypeError);
+});
+
+test('Impeccable is always a DWA upstream and cannot be dismissed as irrelevant', () => {
+  const good = {
+    id: 'impeccable', repository: 'pbakaus/impeccable',
+    integrationOwner: 'design-with-ai', decision: 'update-pending',
+  };
+  assert.doesNotThrow(() => validateUpstreamIntegration(good));
+  assert.doesNotThrow(() => validateUpstreamIntegration({ ...good, decision: 'current' }));
+  for (const invalid of [
+    { ...good, integrationOwner: undefined },
+    { ...good, integrationOwner: 'impeccable' },
+    { ...good, decision: 'not-applicable' },
+    { ...good, repository: 'untrusted/impeccable' },
+  ]) {
+    assert.throws(() => validateUpstreamIntegration(invalid), /owned by design-with-ai/);
+  }
+  assert.doesNotThrow(() => validateUpstreamIntegration({ id: 'emil' }));
 });
