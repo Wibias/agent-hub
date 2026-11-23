@@ -1,0 +1,80 @@
+name: Impeccable next-engine Windows x64 candidate smoke
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/verify-impeccable-next-engine-candidate.yml'
+      - 'skills/design-with-ai/internal/impeccable/scripts/impeccable.cmd'
+      - 'skills/design-with-ai/internal/impeccable/scripts/engine-checksums.txt'
+      - 'skills/design-with-ai/internal/impeccable/scripts/VERSION'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  candidate-windows-x64:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify exact upstream 0.1.28 binary and the DWA launcher without changing the installed pin
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          # Official GitHub Release asset metadata for engine-v0.1.28 (2026-11-19).
+          # Keep this immutable expected digest independent from the downloaded
+          # asset and from the test-only candidate manifest.
+          $expected = '2fd0b53e8d9554f3f028a258fd958d39bd712b3eb4f1725363966ca2380f8c3e'
+          $release = 'https://github.com/pbakaus/impeccable/releases/download/engine-v0.1.28/impeccable-windows-x64.exe'
+          $scripts = Join-Path $env:GITHUB_WORKSPACE 'skills\design-with-ai\internal\impeccable\scripts'
+
+          # Never modify AgentHub's pinned runtime files or its user cache.
+          if ((Get-Content -Raw (Join-Path $scripts 'VERSION')).Trim() -ne '0.1.24') {
+            throw 'The expected baseline local pin changed. Re-review the candidate test.'
+          }
+          $candidateScripts = Join-Path $env:RUNNER_TEMP 'impeccable-0128-scripts'
+          Copy-Item -LiteralPath $scripts -Destination $candidateScripts -Recurse
+          Set-Content -LiteralPath (Join-Path $candidateScripts 'VERSION') -Value '0.1.28' -Encoding ascii
+          Set-Content -LiteralPath (Join-Path $candidateScripts 'engine-checksums.txt') -Value ("0.1.28 impeccable-windows-x64.exe " + $expected) -Encoding ascii
+          $launcher = Join-Path $candidateScripts 'impeccable.cmd'
+
+          $env:IMPECCABLE_HOME = Join-Path $env:RUNNER_TEMP 'impeccable-0128-home'
+          $env:IMPECCABLE_DOWNLOAD_BASE = 'http://127.0.0.1:9'
+          Remove-Item Env:IMPECCABLE_BIN -ErrorAction SilentlyContinue
+          Remove-Item Env:IMPECCABLE_LAUNCHER_PROBE -ErrorAction SilentlyContinue
+
+          $cache = Join-Path $env:IMPECCABLE_HOME 'bin\0.1.28'
+          New-Item -ItemType Directory -Path $cache -Force | Out-Null
+          $binary = Join-Path $cache 'impeccable.exe'
+          & curl.exe --fail --location --silent --show-error --retry 2 --connect-timeout 10 --max-time 120 --output $binary $release
+          if ($LASTEXITCODE -ne 0) { throw "Official release download failed: $LASTEXITCODE" }
+          $actual = (Get-FileHash -LiteralPath $binary -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actual -ne $expected) { throw "Upstream release SHA256 mismatch: $actual" }
+          Write-Output 'PASS: Official 0.1.28 Windows x64 artifact SHA256 verified'
+
+          $out = (& $launcher engine-probe 2>&1 | Out-String).Trim()
+          if ($LASTEXITCODE -ne 0 -or $out -notmatch 'impeccable-engine 0\.1\.28') {
+            throw "Candidate launcher engine-probe failed (exit $LASTEXITCODE)"
+          }
+          Write-Output 'PASS: DWA Windows launcher starts 0.1.28 from the checksum-verified candidate cache'
+
+          # Manifest tampering must not reuse an earlier verified cache stamp.
+          $badLine = '0.1.28 impeccable-windows-x64.exe ' + ('0' * 64)
+          Set-Content -LiteralPath (Join-Path $candidateScripts 'engine-checksums.txt') -Value $badLine -Encoding ascii
+          $badOut = (& $launcher engine-probe 2>&1 | Out-String).Trim()
+          if ($LASTEXITCODE -eq 0 -or $badOut -notmatch 'cannot verify the cached engine') {
+            throw "Tampered candidate manifest was not rejected (exit $LASTEXITCODE)"
+          }
+          Write-Output 'PASS: Tampered candidate manifest fails closed'
+
+          if ((Get-Content -Raw (Join-Path $scripts 'VERSION')).Trim() -ne '0.1.24') {
+            throw 'The checked-in DWA runtime pin changed during this smoke'
+          }
+          Write-Output 'PASS: DWA production engine pin remains 0.1.24'
+          # The intentionally rejected native engine probe leaves LASTEXITCODE
+          # nonzero; the assertions above already validated that failure.
+          # An explicit successful exit is essential under pwsh -File.
+          exit 0
