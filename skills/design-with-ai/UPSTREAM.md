@@ -4,6 +4,49 @@ This skill is a Wibias orchestration/consolidation layer. Upstream sources suppl
 craft guidance; local routing, workflow composition, evals, and completion policy
 are maintained here.
 
+
+## Impeccable upstream integration policy (2026-11-23)
+
+**Canonical owner:** `skills/design-with-ai/`. `pbakaus/impeccable` is a
+reviewed upstream source and, where explicitly selected, an internal provider
+under `skills/design-with-ai/internal/impeccable/`. It is **not** a second
+discoverable AgentHub skill. Do not restore `skills/impeccable/SKILL.md`,
+`internal/impeccable/SKILL.md`, a competing design router, or a parallel
+acceptance/quality gate. Legacy command names remain DWA subroutes only.
+
+On each new Impeccable release or relevant upstream change:
+
+1. Compare the exact reviewed commit/tag and changed scope with the current DWA
+   implementation, including internal runtime assets. A new upstream commit is
+   a review trigger, **not** proof that every change should be copied.
+2. Classify each meaningful capability, fix, or behavior change as
+   `INTEGRATE`, `ALREADY_COVERED`, `NOT_RELEVANT`, or `BLOCKED_PENDING`.
+   Record the upstream ref, impacted DWA owner, evidence, and rationale in the
+   upstream review or an explicitly linked issue/PR. Do not silently drop a
+   relevant improvement just because Impeccable is no longer standalone.
+3. For `INTEGRATE`, improve the **existing DWA** workflow, reference,
+   detector, optional internal provider, or test. Keep a single owner and
+   preserve project design authority, ordinary DWA gate/receipt semantics,
+   explicit-only engine activation, and host permission/security boundaries.
+   Protect the behavioral delta with relevant regression/compatibility tests.
+4. For `ALREADY_COVERED` or `NOT_RELEVANT`, give a concrete comparison or
+   reason. For `BLOCKED_PENDING`, retain an actionable tracked follow-up
+   and an honestly pending status; do not report the implementation as current.
+5. Keep **reviewed upstream ref**, **local implementation pin**, and
+   **runtime qualification** distinct. Only advance the installed engine
+   release after coherent tagged-source/checksum verification plus appropriate
+   Windows x64 launcher, fail-closed, hook, Live/browser, and negative-path
+   evidence. Updating prose or reference files never qualifies a binary.
+6. Run Skill Ratchet checks required by the affected skill and update the
+   relevant upstream registry/provenance only after recording the disposition.
+   Do not overwrite historical pins with a newer unreviewed `main` snapshot.
+
+The canonical registry entry in `upstream-sources.json` must retain
+`integrationOwner: "design-with-ai"`. The upstream checker rejects a missing
+or competing owner and a blanket `not-applicable` decision for Impeccable.
+That is an ownership guard, **not** an automatic relevance judge or installer.
+
+
 | Source | Snapshot / access | Role | Licence / provenance |
 |---|---|---|---|
 | LexnLin design-with-AI thread | accessed 2026-07-12; URL recorded historically | Methods 1-3 and component-by-component framing | public thread, historical local note |
