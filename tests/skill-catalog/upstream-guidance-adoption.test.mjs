@@ -186,8 +186,9 @@ test('Impeccable legacy release remains pinned as an internal DWA implementation
 
   assert.match(upstream, /Skill version: `4[.]9[.]1`/);
   assert.match(upstream, /Engine version: `0[.]1[.]24`/);
-  assert.equal(engineVersion, '0.1.24');
-  assert.match(checksums, /0[.]1[.]24 impeccable-windows-x64[.]exe [0-9a-f]{64}/);
+  assert.equal(engineVersion, '0.1.28');
+  assert.match(upstream, /Active engine version: `0[.]1[.]28`/);
+  assert.match(checksums, /0[.]1[.]28 impeccable-windows-x64[.]exe [0-9a-f]{64}/);
   assert.match(skill, /^name: design-with-ai$/m);
   assert.match(skill, /impeccable <verb>/);
   assert.match(routes, /explicitly selects/);
