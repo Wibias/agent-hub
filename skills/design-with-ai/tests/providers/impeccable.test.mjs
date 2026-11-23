@@ -552,6 +552,7 @@ test("Impeccable source-only pseudo stripe requires rounded host, not rounded ps
     ['rounded host', '.card { border-radius: 8px; }\n.card' + pseudo, true],
     ['square host', '.card { border-radius: 0; }\n.card' + pseudo, false],
     ['unresolved host', '.card { color: red; }\n.card' + pseudo, false],
+    ['commented-out radius', '/* .card { border-radius: 8px; } */\n.card' + pseudo, false],
     ['only pseudo rounded', '.card { color: red; }\n.card::before { border-radius: 8px; }\n.card' + pseudo, false],
     ['single rounded corner', '.card { border-top-left-radius: 6px; }\n.card' + pseudo, true],
     ['later exact selector reset', '.card { border-radius: 8px; }\n.card { border-radius: 0; }\n.card' + pseudo, false],
@@ -569,6 +570,7 @@ test("Impeccable inset stripe respects host radius in both source engines", () =
     ['square', '.card { border-radius: 0; box-shadow: inset 4px 0 0 #e11d48; }', false],
     ['rounded', '.card { border-radius: 8px; box-shadow: inset 4px 0 0 #e11d48; }', true],
     ['unknown', '.card { box-shadow: inset 4px 0 0 #e11d48; }', false],
+    ['commented-out radius', '/* .card { border-radius: 8px; } */ .card { box-shadow: inset 4px 0 0 #e11d48; }', false],
   ];
   for (const [name, css, expected] of cases) {
     assert.equal(scanCssTextForInsetStripe(css).length > 0, expected, name + ' shared scanner');
