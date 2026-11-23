@@ -31,9 +31,10 @@ jobs:
           $release = 'https://github.com/pbakaus/impeccable/releases/download/engine-v0.1.28/impeccable-windows-x64.exe'
           $scripts = Join-Path $env:GITHUB_WORKSPACE 'skills\design-with-ai\internal\impeccable\scripts'
 
-          # Never modify AgentHub's pinned runtime files or its user cache.
-          if ((Get-Content -Raw (Join-Path $scripts 'VERSION')).Trim() -ne '0.1.24') {
-            throw 'The expected baseline local pin changed. Re-review the candidate test.'
+          # Keep the checked-in pin unchanged; candidate files use temp only.
+          $baselinePin = (Get-Content -Raw (Join-Path $scripts 'VERSION')).Trim()
+          if ($baselinePin -notmatch '^0[.]1[.](?:24|28)$') {
+            throw "Unreviewed installed engine baseline: $baselinePin"
           }
           $candidateScripts = Join-Path $env:RUNNER_TEMP 'impeccable-0128-scripts'
           Copy-Item -LiteralPath $scripts -Destination $candidateScripts -Recurse
@@ -70,10 +71,10 @@ jobs:
           }
           Write-Output 'PASS: Tampered candidate manifest fails closed'
 
-          if ((Get-Content -Raw (Join-Path $scripts 'VERSION')).Trim() -ne '0.1.24') {
+          if ((Get-Content -Raw (Join-Path $scripts 'VERSION')).Trim() -ne $baselinePin) {
             throw 'The checked-in DWA runtime pin changed during this smoke'
           }
-          Write-Output 'PASS: DWA production engine pin remains 0.1.24'
+          Write-Output "PASS: DWA production engine pin remains $baselinePin"
           # The intentionally rejected native engine probe leaves LASTEXITCODE
           # nonzero; the assertions above already validated that failure.
           # An explicit successful exit is essential under pwsh -File.

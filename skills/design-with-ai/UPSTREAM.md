@@ -189,12 +189,15 @@ files moved to `internal/impeccable/` and the separate `SKILL.md` entry
 was retired. Command dispatch is a conditional DWA subroute in
 `references/impeccable-routes.md`, not a second design workflow.
 
-The internal runtime still uses the **reviewed legacy** skill version 4.9.1,
-engine version 0.1.24 and its matching checksum manifest. The newer
-upstream `skill-v4.10.0` and `engine-v0.1.28` are not deployed
-together or claimed qualified by this migration. A separate release sync
-requires exact tagged provenance, a reviewed engine binary and
-cross-platform runtime verification.
+This migration originally pinned legacy skill 4.9.1 and engine 0.1.24
+with matching hashes. The 2026-11-23 **engine-only** release candidate
+updates `internal/impeccable/scripts/VERSION` and its verified release-asset
+SHA-256 manifest to engine 0.1.28 from the exact upstream
+`engine-v0.1.28` release tag. The canonical DWA skill owns routing and
+remains a selective adaptation of upstream skill 4.10.0 ideas, not a
+wholesale replacement or a claim of complete browser/Live parity.
+The upgrade's qualification boundaries are recorded in
+`internal/impeccable/UPSTREAM.md` and issue #436.
 
 Certain internal playbook paths, command labels, context and hook helpers
 are deliberate AgentHub compatibility overlays and therefore no longer
