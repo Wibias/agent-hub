@@ -23,11 +23,11 @@ test('motion build optionally captures matched normal and reduced-motion evidenc
   assert.match(motion, /NOT_VERIFIED/);
 });
 
-test('selective v4.10 review does not claim legacy runtime or specialist parity', () => {
+test('selective v4.10 review keeps DWA ownership distinct from the 0.1.28 engine candidate', () => {
   const upstream = read('../UPSTREAM.md');
   assert.match(upstream, /skill-v4\.10\.0/);
   assert.match(upstream, /issue #404/);
-  assert.match(upstream, /not deployed[\s\S]*?claimed qualified/i);
+  assert.match(upstream, /engine-only[\s\S]*?0[.]1[.]28[\s\S]*?complete browser\/Live parity/i);
   assert.match(upstream, /Full runtime,[\s\S]*?must be demonstrated/);
   assert.match(upstream, /engine-v0\.1\.28/);
 });
