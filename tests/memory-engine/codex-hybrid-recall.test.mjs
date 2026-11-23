@@ -197,7 +197,10 @@ test('real Codex hybrid hook recovers a lexical-miss memory through the warm IPC
   const root = mkdtempSync(join(tmpdir(), 'agent-hub-codex-hybrid-e2e-'));
   const repoDir = join(root, 'repo');
   const dbPath = join(root, 'memory.sqlite3');
-  const socketPath = join(root, 'embedding.sock');
+  // Windows IPC requires a named pipe, not a filesystem socket path.
+  const socketPath = process.platform === 'win32'
+    ? `\\\\.\\pipe\\agent-hub-codex-hybrid-e2e-${process.pid}-${Date.now()}`
+    : join(root, 'embedding.sock');
   const projectId = 'github.com/example/hybrid-e2e';
 
   mkdirSync(repoDir, { recursive: true });
@@ -237,7 +240,7 @@ test('real Codex hybrid hook recovers a lexical-miss memory through the warm IPC
         return texts.map(() => semanticVector());
       },
     },
-    platform: 'linux',
+    platform: process.platform,
   });
 
   t.after(async () => {
