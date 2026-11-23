@@ -58,8 +58,9 @@ function checkBorders(tag, widths, colors, radius, opts = {}) {
 
     if (isSide) {
       if (spanBadge) continue;
+      // Upstream engine 0.1.27 limits the side-tab tell to rounded hosts.
+      // A chromatic accent on a square box is not by itself this pattern.
       if (radius > 0) findings.push({ id: 'side-tab', snippet: `border-${sn}: ${w}px + border-radius: ${radius}px` });
-      else if (w >= 3) findings.push({ id: 'side-tab', snippet: `border-${sn}: ${w}px` });
     } else {
       if (radius > 0 && w >= 2) findings.push({ id: 'border-accent-on-rounded', snippet: `border-${sn}: ${w}px + border-radius: ${radius}px` });
       // Horizontal variant of the side-tab stripe: a thick chromatic accent

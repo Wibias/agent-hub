@@ -14,7 +14,12 @@ import { profileFindings, profileStep } from '../../profile/profiler.mjs';
 
 const hasRounded = (line) =>
   /\brounded(?:-\w+)?\b/.test(line.replace(/\brounded-none\b/g, ''));
-const hasBorderRadius = (line) => /border-radius/i.test(line);
+// The regex fallback only knows what the source proves. A missing, zero or
+// unresolved radius must not turn an otherwise valid square-box accent into a
+// rounded-host side-tab finding. The DOM scanner handles computed values.
+const hasBorderRadius = (line) => [...line.matchAll(/\b(?:border-radius|borderRadius)\s*:\s*(["'`]?)([^;},'"]+)\1/gi)]
+  .some(([, , value]) => /(?:^|[\s/])(?:\d*\.)?[1-9]\d*(?:\.\d+)?(?:px|rem|em|%|vh|vw)?(?=$|[\s/])/i
+    .test(value.replace(/\s*!\s*important\s*$/i, '').trim()));
 const isSafeElement = (line) => /<(?:blockquote|nav[\s>]|pre[\s>]|code[\s>]|a\s|input[\s>]|span[\s>])/i.test(line);
 
 
@@ -501,22 +506,22 @@ function isNeutralBorderColor(str) {
 const REGEX_MATCHERS = [
   // --- Side-tab ---
   { id: 'side-tab', regex: /\bborder-[lrse]-(\d+)\b/g,
-    test: (m, line) => { const n = +m[1]; return hasRounded(line) ? n >= 2 : n >= 4; },
+    test: (m, line) => hasRounded(line) && +m[1] >= 2,
     fmt: (m) => m[0] },
   { id: 'side-tab', regex: /border-(?:left|right)\s*:\s*(\d+)px\s+solid[^;]*/gi,
-    test: (m, line) => { if (isSafeElement(line)) return false; if (isNeutralBorderColor(m[0])) return false; const n = +m[1]; return hasBorderRadius(line) ? n >= 2 : n >= 3; },
+    test: (m, line) => !isSafeElement(line) && !isNeutralBorderColor(m[0]) && hasBorderRadius(line) && +m[1] >= 2,
     fmt: (m) => m[0].replace(/\s*;?\s*$/, '') },
   { id: 'side-tab', regex: /border-(?:left|right)-width\s*:\s*(\d+)px/gi,
-    test: (m, line) => !isSafeElement(line) && +m[1] >= 3,
+    test: (m, line) => !isSafeElement(line) && hasBorderRadius(line) && +m[1] >= 3,
     fmt: (m) => m[0] },
   { id: 'side-tab', regex: /border-inline-(?:start|end)\s*:\s*(\d+)px\s+solid/gi,
-    test: (m, line) => !isSafeElement(line) && +m[1] >= 3,
+    test: (m, line) => !isSafeElement(line) && hasBorderRadius(line) && +m[1] >= 3,
     fmt: (m) => m[0] },
   { id: 'side-tab', regex: /border-inline-(?:start|end)-width\s*:\s*(\d+)px/gi,
-    test: (m, line) => !isSafeElement(line) && +m[1] >= 3,
+    test: (m, line) => !isSafeElement(line) && hasBorderRadius(line) && +m[1] >= 3,
     fmt: (m) => m[0] },
   { id: 'side-tab', regex: /border(?:Left|Right)\s*[:=]\s*["'`](\d+)px\s+solid/g,
-    test: (m) => +m[1] >= 3,
+    test: (m, line) => hasBorderRadius(line) && +m[1] >= 3,
     fmt: (m) => m[0] },
   // --- Border accent on rounded ---
   { id: 'border-accent-on-rounded', regex: /\bborder-[tb]-(\d+)\b/g,
@@ -1088,6 +1093,26 @@ function stripCssInJsComments(content, ext) {
   return output + content.slice(cursor);
 }
 
+// Border-radius evidence for one CSS rule must not leak in from the next rule.
+// The fallback inspects a bounded seven-line window; an unresolved declaration
+// block is left unknown rather than borrowing a nearby element's radius.
+function matcherContext(lines, i, matchOffset, blockContext, ruleId) {
+  const line = lines[i];
+  if (!blockContext) return line;
+  if (ruleId !== 'side-tab') {
+    return lines.slice(Math.max(0, i - 3), Math.min(lines.length, i + 4)).join(' ');
+  }
+  const priorLines = lines.slice(Math.max(0, i - 3), i);
+  const laterLines = lines.slice(i + 1, Math.min(lines.length, i + 4));
+  const before = [...priorLines, line.slice(0, matchOffset)].join('\n');
+  const lastOpen = before.lastIndexOf('{');
+  const lastClose = before.lastIndexOf('}');
+  if (lastOpen < 0 || lastOpen < lastClose) return line;
+  const after = [line.slice(matchOffset), ...laterLines].join('\n');
+  const close = after.indexOf('}');
+  return before.slice(lastOpen + 1) + (close < 0 ? after : after.slice(0, close));
+}
+
 function runRegexMatchers(lines, filePath, lineOffset = 0, blockContext = null, options = {}) {
   const { profile, phase = 'regex-matchers' } = options || {};
   const findings = [];
@@ -1099,9 +1124,7 @@ function runRegexMatchers(lines, filePath, lineOffset = 0, blockContext = null, 
         let m;
         while ((m = matcher.regex.exec(line)) !== null) {
           // For extracted blocks, use nearby lines as context for multi-line CSS patterns
-          const context = blockContext
-            ? lines.slice(Math.max(0, i - 3), Math.min(lines.length, i + 4)).join(' ')
-            : line;
+          const context = matcherContext(lines, i, m.index, blockContext, matcher.id);
           if (matcher.test(m, context)) {
             findings.push(finding(matcher.id, filePath, matcher.fmt(m, context), i + 1 + lineOffset));
           }
@@ -1125,9 +1148,7 @@ function runRegexMatchers(lines, filePath, lineOffset = 0, blockContext = null, 
         let m;
         while ((m = matcher.regex.exec(line)) !== null) {
           // For extracted blocks, use nearby lines as context for multi-line CSS patterns
-          const context = blockContext
-            ? lines.slice(Math.max(0, i - 3), Math.min(lines.length, i + 4)).join(' ')
-            : line;
+          const context = matcherContext(lines, i, m.index, blockContext, matcher.id);
           if (matcher.test(m, context)) {
             matches.push(finding(matcher.id, filePath, matcher.fmt(m, context), i + 1 + lineOffset));
           }

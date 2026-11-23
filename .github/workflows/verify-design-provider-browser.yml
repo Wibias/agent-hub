@@ -35,6 +35,13 @@ jobs:
           test -n "$CHROME"
           echo "CHROME_PATH=$CHROME" >> "$GITHUB_ENV"
 
+      # Fail fast on source-only Impeccable regressions before the much slower
+      # upstream Taste/browser transport setup. No additional job is needed.
+      # Explicitly exercise the latest #205 scanner-failure evidence contract
+      # against this PR's actual synthetic merge with the moving base.
+      - name: Impeccable scanner and rejected-symlink path privacy regressions
+        run: node --test skills/design-with-ai/tests/providers/impeccable.test.mjs
+
       - name: Fetch exact reviewed Taste Skill source
         run: |
           set -euo pipefail
@@ -73,11 +80,6 @@ jobs:
       # inherited from the latest #205 provider-base branch.
       - name: DOM-state error, redirect and close-time fail-closed regressions
         run: node --test skills/design-with-ai/tests/providers/rendered-state-probe.test.mjs
-
-      # Explicitly exercise the latest #205 scanner-failure evidence contract
-      # against this PR's actual synthetic merge with the moving base.
-      - name: Impeccable scanner and rejected-symlink path privacy regressions
-        run: node --test skills/design-with-ai/tests/providers/impeccable.test.mjs
 
       # Verify untrusted provider exceptions and native subprocess payloads on
       # the exact combined PR merge, not only on the base PR in isolation.
