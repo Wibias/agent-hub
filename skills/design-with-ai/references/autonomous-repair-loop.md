@@ -80,9 +80,38 @@ author a detailed verification plan.
      view/state. Address the selected finding before new unrelated work.
    - **RERENDER**: the edited source lacks a distinct post-edit render.
      Capture/review the final application candidate before further edits.
-   - **RUN_GATES**: finish missing acceptance and generate/check fresh proof;
-     this is **actionable even if all recorded findings are resolved** and the
-     final rendering, interaction matrix or manifest is still incomplete.
+   - **VERIFY_COVERAGE**: for a dense native monitor with incomplete
+     desktop evidence, use `target` and `missingCoverage` to acquire the
+     next actual missing viewport/state or functional check before another
+     gate run. The controller prioritizes missing COMPACT and different-DPI
+     SCALED evidence, then missing selected/focus/collecting/stalled and
+     supported functional checks. A manifest entry is only a candidate;
+     compare it to real app screenshots, DPI, process state and runtime
+     behavior. NEVER generate placeholder images, fake a DPI change, or
+     perform an unauthorized destructive process action.
+     Record an actual completed verification attempt as
+     `{ "action":"VERIFY_COVERAGE", "target":"COMPACT:IDLE",
+     "result":"PASS", "evidenceRef":"real-evidence-ref" }`.
+     If the state is genuinely inaccessible, record the exact observed
+     blocker as `result:"BLOCKED"` with `blocker`, `evidenceRef`
+     and `nextStep`. Only an evidence-backed blocked attempt lets the
+     controller move to the next target and eventually `STOP_BLOCKED`.
+     A bare narrative claim of UIPI failure is not a substitute for the
+     attempted state. Newly gained evidence updates the existing manifest
+     and receipt before any new proof.
+   - **VERIFY_ACCEPTANCE**: the declared desktop coverage matrix is
+     present but a valid checked proof remains PARTIAL. Diagnose the
+     remaining product/receipt/interaction gap instead of generating a
+     second identical proof. A completed attempt uses
+     `{ "action":"VERIFY_ACCEPTANCE", "target":"ACCEPTANCE:FINAL",
+     "result":"PASS"|"BLOCKED", ... }`; a blocked attempt requires
+     the same concrete blocker/evidence/next-step fields. A PASS review
+     followed by an unchanged PARTIAL check is a `STOP_STALLED` signal,
+     not permission for infinite proof regeneration.
+   - **RUN_GATES**: validate **changed** source and actual new evidence,
+     or produce the first independent proof. Do not invoke it just because
+     an existing current valid PARTIAL proof has an expected nonzero
+     `--check-proof` completion status.
      If a local capture/export/test process crashes, inspect its actual
      exception/stack trace, create or reuse a stable in-scope runtime finding,
      and record its current evidence in "currentRuntimeFailures" with
