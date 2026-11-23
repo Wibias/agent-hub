@@ -63,3 +63,40 @@ jobs:
           }
           Write-Output 'PASS: Incorrect manifest digest fails closed'
           exit 0
+
+  linux-launcher:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Verify source-locked official asset digests
+        run: node --test skills/design-with-ai/tests/impeccable-engine-release-pin.test.mjs
+      - name: Launch verified Linux x64 engine and reject a tampered manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          scripts="$GITHUB_WORKSPACE/skills/design-with-ai/internal/impeccable/scripts"
+          test "$(cat "$scripts/VERSION")" = '0.1.28'
+          export IMPECCABLE_HOME="$RUNNER_TEMP/impeccable-linux-positive"
+          unset IMPECCABLE_BIN || true
+          out="$(sh "$scripts/impeccable" engine-probe)"
+          test "$out" = 'impeccable-engine 0.1.28'
+          echo 'PASS: Linux x64 engine 0.1.28 launched with a release-verified cache'
+          copied="$RUNNER_TEMP/impeccable-linux-negative"
+          cp -R "$scripts" "$copied"
+          sed -i -E "s/^0\.1\.28 impeccable-linux-x64 [0-9a-f]{64}$/0.1.28 impeccable-linux-x64 $(printf '0%.0s' {1..64})/" "$copied/engine-checksums.txt"
+          export IMPECCABLE_DOWNLOAD_BASE='http://127.0.0.1:9'
+          set +e
+          bad="$(sh "$copied/impeccable" engine-probe 2>&1)"
+          status=$?
+          set -e
+          if [ "$status" -eq 0 ]; then
+            echo 'FAIL: tampered Linux release manifest was not rejected'
+            exit 1
+          fi
+          echo 'PASS: Linux x64 manifest tamper fails closed'
