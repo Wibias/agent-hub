@@ -76,7 +76,9 @@ export function proposeAtomicCandidateShadows(source, { sourceAuthority = 'user_
   if (source.includes(String.fromCharCode(96).repeat(3))) return reject('code_block');
 
   const chunks = segment(source);
-  if (chunks.length > 24) return reject('too_many_segments');
+  // Long task prompts commonly contain many task sentences. Keep a bounded
+  // scan, but do not discard the whole message after 24 sentences.
+  if (chunks.length > 200) return reject('too_many_segments');
   const sourceHash = hash(source);
   const suggestions = [];
   for (const chunk of chunks) {

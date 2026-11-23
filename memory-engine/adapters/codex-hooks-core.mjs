@@ -1,7 +1,12 @@
 import { createHash } from 'node:crypto';
 
 import { evaluateReliance } from '../index.mjs';
-import { classifyMemoryCandidatePrompt } from '../memory-capture-policy.mjs';
+import {
+  MAX_AUTO_CAPTURE_PROMPT_CHARS,
+  classifyMemoryCandidatePrompt,
+  memoryCandidateFingerprint,
+} from '../memory-capture-policy.mjs';
+import { proposeAtomicCandidateShadows } from '../memory-atomic-candidate-shadow.mjs';
 import {
   isAtomicRuleConfirmationAttempt,
   parseAtomicRuleConfirmationPrompt,
@@ -1646,6 +1651,17 @@ export function createCodexMemoryHookAdapter({
             ? classifyMemoryCandidatePrompt(event.prompt)
             : null
         );
+        const atomicProposal = (
+          candidateCapture
+          && explicitMemory === null
+          && typeof event.prompt === 'string'
+          && event.prompt.length > MAX_AUTO_CAPTURE_PROMPT_CHARS
+            ? proposeAtomicCandidateShadows(event.prompt, {
+                sourceAuthority: 'user_direct',
+              })
+            : null
+        );
+        const atomicSuggestions = (atomicProposal?.suggestions ?? []).slice(0, 5);
         const duplicateCandidate = (
           candidateProposal !== null
           && typeof memory.findCandidateByFingerprint === 'function'
@@ -1664,6 +1680,7 @@ export function createCodexMemoryHookAdapter({
           capturePrompts
           || explicitMemory !== null
           || shouldCaptureCandidate
+          || atomicSuggestions.length > 0
         );
 
         if (shouldCapture) {
@@ -1700,6 +1717,11 @@ export function createCodexMemoryHookAdapter({
                 metadata.candidate_type = candidateProposal.type;
                 metadata.candidate_policy = candidateProposal.policyVersion;
                 metadata.candidate_rule = candidateProposal.decisionReason;
+              }
+              if (atomicSuggestions.length > 0) {
+                metadata.atomic_capture = true;
+                metadata.atomic_policy = atomicProposal.policyVersion;
+                metadata.atomic_suggestion_count = atomicSuggestions.length;
               }
 
               const captured = await protocol.handle({
@@ -1748,6 +1770,77 @@ export function createCodexMemoryHookAdapter({
                 fingerprint: candidateProposal.fingerprint,
                 createdAt: capturedEvidence.captured_at ?? capturedAt,
               });
+            }
+
+            if (
+              atomicSuggestions.length > 0
+              && capturedEvidence
+              && typeof memory.recordCandidate === 'function'
+              && typeof memory.findCandidateByFingerprint === 'function'
+            ) {
+              for (const [index, suggestion] of atomicSuggestions.entries()) {
+                const type = 'constraint';
+                const fingerprint = memoryCandidateFingerprint({
+                  type,
+                  value: suggestion.fragment,
+                });
+                const duplicate = memory.findCandidateByFingerprint({
+                  projectId,
+                  branch: context.branch,
+                  fingerprint,
+                });
+                if (duplicate !== null) continue;
+
+                const spanEvidenceId = `evidence:${requestPrefix}:atomic:${index}:${suggestion.fragmentHash.slice(0, 16)}`;
+                const capturedSpan = await protocol.handle({
+                  protocol: 'memory.protocol.v1',
+                  operation: 'capture_evidence',
+                  request_id: `${requestPrefix}:atomic:${index}:capture`,
+                  payload: {
+                    id: spanEvidenceId,
+                    project_id: projectId,
+                    harness,
+                    session_id: event.session_id,
+                    source_kind: 'session',
+                    source_ref: `session:${event.session_id}`,
+                    captured_at: capturedAt,
+                    branch: context.branch,
+                    commit_sha: context.revisionSha,
+                    path: null,
+                    blob_oid: null,
+                    content: suggestion.fragment,
+                    metadata: {
+                      event_type: 'user_prompt',
+                      hook_event_name: 'UserPromptSubmit',
+                      turn_id: event.turn_id,
+                      atomic_fragment: true,
+                      parent_evidence_id: capturedEvidence.id,
+                      span_start: suggestion.start,
+                      span_end: suggestion.end,
+                      source_hash: suggestion.sourceHash,
+                      fragment_hash: suggestion.fragmentHash,
+                      atomic_policy: atomicProposal.policyVersion,
+                      atomic_disposition: suggestion.disposition,
+                      atomic_reason: suggestion.reasonCode,
+                    },
+                  },
+                });
+                const spanEvidence = capturedSpan?.ok
+                  ? capturedSpan.result?.evidence ?? null
+                  : null;
+                if (!spanEvidence) continue;
+
+                memory.recordCandidate({
+                  id: `candidate:${requestPrefix}:atomic:${index}:${suggestion.fragmentHash.slice(0, 12)}`,
+                  evidenceId: spanEvidence.id,
+                  type,
+                  proposedValue: suggestion.fragment,
+                  decisionReason: `rule:atomic:${suggestion.reasonCode}`,
+                  policyVersion: atomicProposal.policyVersion,
+                  fingerprint,
+                  createdAt: capturedAt,
+                });
+              }
             }
 
             if (
