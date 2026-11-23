@@ -528,8 +528,7 @@ export async function runCodexMemoryHook({
         : defaultCodexEmbeddingCacheDir();
 
       if (
-        platform !== 'win32'
-        && typeof embeddingCacheAvailable === 'function'
+        typeof embeddingCacheAvailable === 'function'
         && typeof ensureEmbeddingWorker === 'function'
         && embeddingCacheAvailable(cacheDir)
       ) {
