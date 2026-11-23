@@ -7,6 +7,9 @@ on:
       - 'skills/github-delivery/**'
       - 'knowledge/**'
       - 'upstream-sources.json'
+      - 'scripts/check-upstream-sources.mjs'
+      - 'scripts/lib/upstream-status.mjs'
+      - 'tests/skill-catalog/upstream-*.test.mjs'
       - '.github/workflows/verify-upstream-authoring-skills.yml'
   workflow_dispatch:
 
@@ -26,6 +29,8 @@ jobs:
         run: |
           test ! -e skills/impeccable/SKILL.md
           test ! -e skills/design-with-ai/internal/impeccable/SKILL.md
+      - name: Validate upstream source ownership and pending-review behavior
+        run: node --test tests/skill-catalog/upstream-status.test.mjs tests/skill-catalog/upstream-update-check.test.mjs
       - name: Validate Design with AI skill
         run: node scripts/skill-ratchet.mjs validate --skill-root "$PWD/skills/design-with-ai" --json
       - name: Test integrated Impeccable ownership and provider routing
