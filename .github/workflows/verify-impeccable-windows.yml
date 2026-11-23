@@ -46,6 +46,14 @@ jobs:
             throw "Pinned Windows engine launch failed (exit $LASTEXITCODE)"
           }
           Write-Output 'PASS: Engine 0.1.28 launched through the Windows checksum-verifying path'
+          # Read-only command parser checks; do not start Live servers or hooks.
+          foreach ($args in @(@('--help'), @('live', '--help'), @('doctor', '--help'))) {
+            $helpOut = (& (Join-Path $scripts 'impeccable.cmd') @args 2>&1 | Out-String).Trim()
+            if ($LASTEXITCODE -ne 0 -or $helpOut -notmatch '(?i)(impeccable|usage|live|doctor)') {
+              throw "Pinned Windows 0.1.28 CLI help failed for $($args -join ' ') (exit $LASTEXITCODE)"
+            }
+          }
+          Write-Output 'PASS: Windows 0.1.28 main, Live and doctor CLI help'
 
           $badScripts = Join-Path $env:RUNNER_TEMP 'impeccable-tampered-scripts'
           Copy-Item -LiteralPath $scripts -Destination $badScripts -Recurse
@@ -87,6 +95,12 @@ jobs:
           out="$(sh "$scripts/impeccable" engine-probe)"
           test "$out" = 'impeccable-engine 0.1.28'
           echo 'PASS: Linux x64 engine 0.1.28 launched with a release-verified cache'
+          # Verify the read-only command parser for the existing DWA explicit verbs.
+          sh "$scripts/impeccable" --help > "$RUNNER_TEMP/impeccable-help.txt"
+          sh "$scripts/impeccable" live --help > "$RUNNER_TEMP/impeccable-live-help.txt"
+          sh "$scripts/impeccable" doctor --help > "$RUNNER_TEMP/impeccable-doctor-help.txt"
+          grep -Eqi 'impeccable|usage' "$RUNNER_TEMP/impeccable-help.txt"
+          echo 'PASS: Linux 0.1.28 main, Live and doctor CLI help'
           copied="$RUNNER_TEMP/impeccable-linux-negative"
           cp -R "$scripts" "$copied"
           sed -i -E "s/^0\.1\.28 impeccable-linux-x64 [0-9a-f]{64}$/0.1.28 impeccable-linux-x64 $(printf '0%.0s' {1..64})/" "$copied/engine-checksums.txt"
