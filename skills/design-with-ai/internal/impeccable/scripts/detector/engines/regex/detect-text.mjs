@@ -14,7 +14,12 @@ import { profileFindings, profileStep } from '../../profile/profiler.mjs';
 
 const hasRounded = (line) =>
   /\brounded(?:-\w+)?\b/.test(line.replace(/\brounded-none\b/g, ''));
-const hasBorderRadius = (line) => /border-radius/i.test(line);
+// The regex fallback only knows what the source proves. A missing, zero or
+// unresolved radius must not turn an otherwise valid square-box accent into a
+// rounded-host side-tab finding. The DOM scanner handles computed values.
+const hasBorderRadius = (line) => [...line.matchAll(/\b(?:border-radius|borderRadius)\s*:\s*(["'`]?)([^;},'"]+)\1/gi)]
+  .some(([, , value]) => /(?:^|[\s/])(?:\d*\.)?[1-9]\d*(?:\.\d+)?(?:px|rem|em|%|vh|vw)?(?=$|[\s/])/i
+    .test(value.replace(/\s*!\s*important\s*$/i, '').trim()));
 const isSafeElement = (line) => /<(?:blockquote|nav[\s>]|pre[\s>]|code[\s>]|a\s|input[\s>]|span[\s>])/i.test(line);
 
 
@@ -501,22 +506,22 @@ function isNeutralBorderColor(str) {
 const REGEX_MATCHERS = [
   // --- Side-tab ---
   { id: 'side-tab', regex: /\bborder-[lrse]-(\d+)\b/g,
-    test: (m, line) => { const n = +m[1]; return hasRounded(line) ? n >= 2 : n >= 4; },
+    test: (m, line) => hasRounded(line) && +m[1] >= 2,
     fmt: (m) => m[0] },
   { id: 'side-tab', regex: /border-(?:left|right)\s*:\s*(\d+)px\s+solid[^;]*/gi,
-    test: (m, line) => { if (isSafeElement(line)) return false; if (isNeutralBorderColor(m[0])) return false; const n = +m[1]; return hasBorderRadius(line) ? n >= 2 : n >= 3; },
+    test: (m, line) => !isSafeElement(line) && !isNeutralBorderColor(m[0]) && hasBorderRadius(line) && +m[1] >= 2,
     fmt: (m) => m[0].replace(/\s*;?\s*$/, '') },
   { id: 'side-tab', regex: /border-(?:left|right)-width\s*:\s*(\d+)px/gi,
-    test: (m, line) => !isSafeElement(line) && +m[1] >= 3,
+    test: (m, line) => !isSafeElement(line) && hasBorderRadius(line) && +m[1] >= 3,
     fmt: (m) => m[0] },
   { id: 'side-tab', regex: /border-inline-(?:start|end)\s*:\s*(\d+)px\s+solid/gi,
-    test: (m, line) => !isSafeElement(line) && +m[1] >= 3,
+    test: (m, line) => !isSafeElement(line) && hasBorderRadius(line) && +m[1] >= 3,
     fmt: (m) => m[0] },
   { id: 'side-tab', regex: /border-inline-(?:start|end)-width\s*:\s*(\d+)px/gi,
-    test: (m, line) => !isSafeElement(line) && +m[1] >= 3,
+    test: (m, line) => !isSafeElement(line) && hasBorderRadius(line) && +m[1] >= 3,
     fmt: (m) => m[0] },
   { id: 'side-tab', regex: /border(?:Left|Right)\s*[:=]\s*["'`](\d+)px\s+solid/g,
-    test: (m) => +m[1] >= 3,
+    test: (m, line) => hasBorderRadius(line) && +m[1] >= 3,
     fmt: (m) => m[0] },
   // --- Border accent on rounded ---
   { id: 'border-accent-on-rounded', regex: /\bborder-[tb]-(\d+)\b/g,
