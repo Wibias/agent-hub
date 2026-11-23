@@ -369,16 +369,25 @@ export function decideStop(event, report, { home = homedir(), gateIndexRoot = de
             attempts, manifest, checkedProof: checked,
           });
           if (action.outcome === "CONTINUE" &&
-              ["VERIFY_CURRENT", "REPAIR_SOURCE", "RERENDER", "RUN_GATES"].includes(action.action)) {
+              ["VERIFY_CURRENT", "REPAIR_SOURCE", "RERENDER", "RUN_GATES",
+                "VERIFY_COVERAGE", "VERIFY_ACCEPTANCE"].includes(action.action)) {
+            const evidenceFirst = ["VERIFY_COVERAGE", "VERIFY_ACCEPTANCE"].includes(action.action);
             return {
               decision: "block",
               status: "ACTIONABLE_PARTIAL_CONTINUATION",
               proofStatus: "VERIFIED_INCOMPLETE",
               reason: "design-with-ai: a valid PARTIAL proof does not finish this IMPROVE request. " +
                 "Execute the autonomous repair loop now: " + action.action +
-                (action.findingId ? " for existing finding " + action.findingId + ". " : ". ") +
-                action.reason + ". Reinspect the actual UI, repair authorized source if observed, " +
-                "test and rerender the same state, then generate fresh proof. " +
+                (action.findingId ? " for existing finding " + action.findingId + ". " :
+                  action.target ? " for evidence target " + action.target + ". " : ". ") +
+                action.reason +
+                (evidenceFirst
+                  ? " Inspect current evidence first. Re-run the gate only after " +
+                    "source, receipt, manifest, or other proof inputs actually change. " +
+                    "Keep blocked or untestable states PARTIAL; never authorize dangerous " +
+                    "process actions, elevation or DPI changes implicitly. "
+                  : " Reinspect the actual UI, repair authorized source if observed, " +
+                    "test and rerender the same state, then generate fresh proof when needed. ") +
                 "Stop only on verified COMPLETE, real blocker, documented stall, or bounded iteration limit. " +
                 "No unrelated features. This host Stop hook allows only one continuation.",
             };
