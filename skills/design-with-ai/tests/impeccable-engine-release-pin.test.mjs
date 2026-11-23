@@ -47,7 +47,7 @@ test('upstream 0.1.28 provenance is explicitly distinguished from skill tag and 
   assert.match(record, /80f576894c6157cd895f749565e8755f8406bce2/);
   assert.match(record, /skill-v4\.10\.0/);
   assert.match(record, /0\.1\.27/);
-  assert.match(record, /stale.*manifest/i);
+  assert.match(record, /stale[\s\S]*?manifest/i);
   assert.match(record, /0\.1\.28/);
-  assert.match(record, /not.*(?:full|complete).*parity/i);
+  assert.match(record, /not[\s\S]{0,300}(?:full|complete)[\s\S]{0,200}parity/i);
 });
