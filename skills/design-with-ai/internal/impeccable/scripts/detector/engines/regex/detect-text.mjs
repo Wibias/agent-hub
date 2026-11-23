@@ -1093,6 +1093,26 @@ function stripCssInJsComments(content, ext) {
   return output + content.slice(cursor);
 }
 
+// Border-radius evidence for one CSS rule must not leak in from the next rule.
+// The fallback inspects a bounded seven-line window; an unresolved declaration
+// block is left unknown rather than borrowing a nearby element's radius.
+function matcherContext(lines, i, matchOffset, blockContext, ruleId) {
+  const line = lines[i];
+  if (!blockContext) return line;
+  if (ruleId !== 'side-tab') {
+    return lines.slice(Math.max(0, i - 3), Math.min(lines.length, i + 4)).join(' ');
+  }
+  const priorLines = lines.slice(Math.max(0, i - 3), i);
+  const laterLines = lines.slice(i + 1, Math.min(lines.length, i + 4));
+  const before = [...priorLines, line.slice(0, matchOffset)].join('\n');
+  const lastOpen = before.lastIndexOf('{');
+  const lastClose = before.lastIndexOf('}');
+  if (lastOpen < 0 || lastOpen < lastClose) return line;
+  const after = [line.slice(matchOffset), ...laterLines].join('\n');
+  const close = after.indexOf('}');
+  return before.slice(lastOpen + 1) + (close < 0 ? after : after.slice(0, close));
+}
+
 function runRegexMatchers(lines, filePath, lineOffset = 0, blockContext = null, options = {}) {
   const { profile, phase = 'regex-matchers' } = options || {};
   const findings = [];
@@ -1104,9 +1124,7 @@ function runRegexMatchers(lines, filePath, lineOffset = 0, blockContext = null, 
         let m;
         while ((m = matcher.regex.exec(line)) !== null) {
           // For extracted blocks, use nearby lines as context for multi-line CSS patterns
-          const context = blockContext
-            ? lines.slice(Math.max(0, i - 3), Math.min(lines.length, i + 4)).join(' ')
-            : line;
+          const context = matcherContext(lines, i, m.index, blockContext, matcher.id);
           if (matcher.test(m, context)) {
             findings.push(finding(matcher.id, filePath, matcher.fmt(m, context), i + 1 + lineOffset));
           }
@@ -1130,9 +1148,7 @@ function runRegexMatchers(lines, filePath, lineOffset = 0, blockContext = null, 
         let m;
         while ((m = matcher.regex.exec(line)) !== null) {
           // For extracted blocks, use nearby lines as context for multi-line CSS patterns
-          const context = blockContext
-            ? lines.slice(Math.max(0, i - 3), Math.min(lines.length, i + 4)).join(' ')
-            : line;
+          const context = matcherContext(lines, i, m.index, blockContext, matcher.id);
           if (matcher.test(m, context)) {
             matches.push(finding(matcher.id, filePath, matcher.fmt(m, context), i + 1 + lineOffset));
           }
