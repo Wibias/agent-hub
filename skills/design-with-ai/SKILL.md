@@ -24,6 +24,26 @@ motion target must have a resolvable target before workflow references are
 loaded. If the target is missing, stop and request it. Do not infer an arbitrary
 surface or design file.
 
+**Short-prompt continuity:** An instruction such as "use design-with-ai to
+improve this project further" is sufficient when the target can be resolved
+from the active project, current task, or its canonical findings ledger.
+Recover the last confirmed target, outstanding findings, proof/receipt status
+and actual blocked verification states yourself. Do not ask the user to
+rewrite the state matrix, repeat known IDs, supply validator commands, or
+paste a long operational prompt. This does not authorize guessing a target
+when more than one distinct project matches.
+
+**Local Codex scope preflight:** Before a modifying local-code operation,
+resolve both the *host session workspace* (not merely the shell subprocess's
+directory) and the intended product source root. When neither is inside the
+other, **do not edit the other project** or start its gate/evidence cycle.
+Explain the workspace mismatch briefly and require a new authorized Codex
+session opened at that product root. An agent-side `cd` or a gate index
+pointing to another directory cannot change the host Stop hook's workspace
+or establish cross-project authority. This applies to local source edits,
+not read-only remote design files or workflows explicitly backed by a
+separately authorized editing integration.
+
 After target resolution, load `references/hard-invariants.md` before acting.
 Then load only the selected workflow bundle.
 

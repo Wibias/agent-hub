@@ -207,6 +207,34 @@ or reliable measurements are unavailable, record the precise blocker
 and missing fields, keep `PARTIAL`/`NOT_VERIFIED`, and retain the original
 finding IDs. Do not create more product UI changes as a workaround.
 
+**Selected inspector / scrollbar regression protocol:** If a real render
+showed a selected process in the inspector while its corresponding row was
+outside the visible table, or an inspector path forced multiline growth,
+a code change to `EnsureVisible()`, custom scrollbar synchronization or
+one-line ellipsis is **not** a verified visual fix. Preserve the original
+finding ID and latest failing screenshot. Before treating it as resolved,
+obtain a *new* selected-state capture of the **final executable** at the
+same viewport and selection, and visually verify all of: the selected row
+is actually visible/highlighted; the inspector refers to that same record;
+the custom scroll thumb reflects the list viewport; the path occupies the
+intended one line; and no essential detail was displaced or clipped.
+A tooltip's source-level presence does not prove real hover or accessible
+full-value disclosure. Compare the actual pre-fix and post-fix capture,
+not merely output from an older build.
+
+When UIPI prevents changing selection through the external test client,
+first inspect whether an **already existing, explicitly authorized**
+application/test runner can place the actual final build in the requested
+selected state, and whether that state can be independently inspected
+without bypassing Windows protections. A deterministic screenshot may
+support **layout-only** claims when its provenance, version and selected
+identity are grounded; it does **not** certify external clicking, keyboard
+focus, hover or elevation-dependent actions. If no supported safe capture
+path exists, stop recapturing the same idle screen, record the affected
+state's UIPI blocker in the durable ledger with a concrete next step, keep
+the visual/interaction acceptance `NOT_VERIFIED`, and do not start a
+new unrelated typography/spacing iteration to make the report look busy.
+
 Version 2 checks their actual pixel dimensions
 against the declared captured window size. No resizing an old screenshot
 to invent a new profile. Do not place it in the installed skill folder.
