@@ -861,6 +861,37 @@ function parseCssDeclBlock(block) {
   return decls;
 }
 
+// Conservative source-only evidence: a side stripe is reportable only
+// when its host selector has an explicit positive border radius in this CSS.
+function collectRoundedCssHosts(content) {
+  const customProps = collectCssCustomProps(content);
+  const declared = new Map();
+  const re = new RegExp(CSS_RULE_BLOCK_SOURCE, 'g');
+  let m;
+  while ((m = re.exec(String(content))) !== null) {
+    const decls = parseCssDeclBlock(m[2]);
+    const values = [
+      'border-radius', 'border-top-left-radius', 'border-top-right-radius',
+      'border-bottom-left-radius', 'border-bottom-right-radius',
+    ].filter((name) => decls.has(name)).map((name) => resolveVarRefs(decls.get(name), customProps));
+    if (!values.length) continue;
+    const positive = values.some((value) => String(value).split(/[\s/]+/).some((part) => {
+      const n = part.match(/^(\d+(?:\.\d+)?|\.\d+)(?:px|rem|em|%)$/i);
+      return n && Number(n[1]) > 0;
+    }));
+    for (const selector of m[1].split(',').map((part) => part.trim())) {
+      if (selector && !/::?(?:before|after)\b/i.test(selector)) declared.set(selector, positive);
+    }
+  }
+  return new Set([...declared].filter(([, positive]) => positive).map(([selector]) => selector));
+}
+
+function cssStripeHasRoundedHost(selector, roundedHosts, pseudo = false) {
+  return selector.split(',').map((part) => pseudo
+    ? part.replace(/::?(?:before|after)\b.*$/i, '').trim()
+    : part.trim()).every((part) => part && roundedHosts.has(part));
+}
+
 function cssLengthToPx(value) {
   const m = String(value || '').trim().match(/^(-?[\d.]+)(px|rem|em)$/i);
   if (!m) return null;
@@ -886,6 +917,7 @@ function scanCssTextForPseudoStripe(rawContent) {
   const content = String(rawContent || '').replace(/\/\*[\s\S]*?\*\//g,
     (block) => block.replace(/[^\n]/g, ' '));
   const customProps = collectCssCustomProps(content);
+  const roundedHosts = collectRoundedCssHosts(content);
   const findings = [];
   const seen = new Set();
   const ruleRe = new RegExp(CSS_RULE_BLOCK_SOURCE, 'g');
@@ -893,6 +925,7 @@ function scanCssTextForPseudoStripe(rawContent) {
   while ((m = ruleRe.exec(content)) !== null) {
     const selector = m[1].trim();
     if (!/::?(?:before|after)\b/i.test(selector)) continue;
+    if (!cssStripeHasRoundedHost(selector, roundedHosts, true)) continue;
     // Keep the border rule's prose exemptions (blockquote bars etc.).
     if (/\b(?:blockquote|pre|code|nav|hr)\b/i.test(selector)) continue;
     const decls = parseCssDeclBlock(m[2]);
@@ -1015,12 +1048,14 @@ function scanCssTextForPseudoStripe(rawContent) {
 // is decoration and flags.
 function scanCssTextForInsetStripe(content) {
   const customProps = collectCssCustomProps(content);
+  const roundedHosts = collectRoundedCssHosts(content);
   const findings = [];
   const seen = new Set();
   const ruleRe = new RegExp(CSS_RULE_BLOCK_SOURCE, 'g');
   let m;
   while ((m = ruleRe.exec(content)) !== null) {
     const selector = m[1].trim();
+    if (!cssStripeHasRoundedHost(selector, roundedHosts)) continue;
     // Selection-state contexts: current-item markers and interaction
     // states. Tab-strip membership alone ([role=tab], .tabs, bare
     // [aria-selected]) is NOT exempt — a stripe on every tab in the
@@ -2067,6 +2102,14 @@ function checkElementPseudoStripeDOM(el) {
   const rect = el.getBoundingClientRect();
   if (rect.width < 40 || rect.height < 20) return [];
   if (isTabContextElement(el)) return [];
+  // Only the host's computed corners qualify, not the stripe's own corners.
+  const hostStyle = getComputedStyle(el);
+  const radii = [
+    hostStyle.borderRadius, hostStyle.borderTopLeftRadius,
+    hostStyle.borderTopRightRadius, hostStyle.borderBottomLeftRadius,
+    hostStyle.borderBottomRightRadius,
+  ];
+  if (!radii.some((value) => (parseRadiusToPx(value, rect.width) ?? 0) > 0)) return [];
 
   const findings = [];
   for (const which of ['::before', '::after']) {
@@ -5437,6 +5480,7 @@ export {
   scanCssTextForGlow,
   scanCssTextForGridBackground,
   scanCssTextForRadialHalo,
+  collectRoundedCssHosts,
   scanCssTextForPseudoStripe,
   scanCssTextForInsetStripe,
   scanCssTextForMarquee,
