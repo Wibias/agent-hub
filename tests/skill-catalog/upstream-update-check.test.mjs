@@ -58,7 +58,7 @@ test('upstream update check tracks the five canonical sources and decisions', ()
   const policy = read('skills/design-with-ai/UPSTREAM.md');
   assert.match(policy, /## Impeccable upstream integration policy/);
   for (const decision of ['INTEGRATE', 'ALREADY_COVERED', 'NOT_RELEVANT', 'BLOCKED_PENDING']) {
-    assert.match(policy, new RegExp(`\\\\b${decision}\\\\b`));
+    assert.ok(policy.includes(decision), decision);
   }
   assert.match(policy, /single owner/);
   assert.equal(existsSync(resolve('skills/impeccable/SKILL.md')), false);
