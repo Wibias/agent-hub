@@ -864,11 +864,14 @@ function parseCssDeclBlock(block) {
 // Conservative source-only evidence: a side stripe is reportable only
 // when its host selector has an explicit positive border radius in this CSS.
 function collectRoundedCssHosts(content) {
-  const customProps = collectCssCustomProps(content);
+  // Comments are not live host rules; retain byte/line layout when blanking.
+  const source = String(content).replace(/\/\*[\s\S]*?\*\//g,
+    (block) => block.replace(/[^\n]/g, ' '));
+  const customProps = collectCssCustomProps(source);
   const declared = new Map();
   const re = new RegExp(CSS_RULE_BLOCK_SOURCE, 'g');
   let m;
-  while ((m = re.exec(String(content))) !== null) {
+  while ((m = re.exec(source)) !== null) {
     const decls = parseCssDeclBlock(m[2]);
     const values = [
       'border-radius', 'border-top-left-radius', 'border-top-right-radius',
