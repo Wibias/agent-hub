@@ -19,9 +19,22 @@ controller alone as a fully autonomous runtime.
 
 ## Single-request loop
 
-1. Resolve authority, target and accepted product behavior. Load the normal
-   workflow, freeze the canonical findings ledger and independent pre-edit
-   baseline ONCE. The baseline remains immutable across repairs.
+A short user request is enough when the previous target and unfinished
+acceptance conditions are unambiguous. Resume from the actual project ledger
+and latest evidence; do not require the user to enumerate the findings or
+author a detailed verification plan.
+
+1. Resolve authority, target and accepted product behavior. For local Codex
+   source edits, ensure the host session's workspace contains the target
+   product root (or vice versa) **before making the first change**. A
+   disjoint native proof is not valid Stop evidence for the unrelated host
+   workspace, even if the target project's independent `--check-proof`
+   reports `valid: true`. Stop this task with `WORKSPACE_SCOPE_MISMATCH`
+   rather than mutating across the workspace boundary. Do not try to fix a
+   host-workspace mismatch by issuing more receipts or proof files.
+   Then load the normal workflow, freeze the canonical findings ledger and
+   independent pre-edit baseline ONCE. The baseline remains immutable across
+   repairs.
 2. Inspect actual available UI pixels and interaction states, including current
    user screenshots. Collect external-first native evidence when applicable.
    Reconcile **every** in-scope old finding, preserving IDs and original
@@ -80,6 +93,34 @@ controller alone as a fully autonomous runtime.
 
    Generic control decisions are not desktop-only KPI heuristics. The
    selected finding's original acceptance is the next repair's target.
+
+## Do not confuse a valid incomplete gate with a missing gate
+
+A native `run-iteration-gate.mjs` invocation can have process exit **0**
+and write a structurally valid `PARTIAL` proof while the independent
+`--check-proof` returns exit **1** with `valid: true`,
+`sourceBound: true`, `completionEligible: false` and no issue codes.
+That is **incomplete product acceptance**, not proof corruption or a
+missing gate command.
+
+Before issuing another gate proof, compare the source identity, receipt,
+frozen baseline, ledger, render inputs and validator versions against the
+latest independently checked proof. If **none changed**, do not generate
+another `--proof` merely to respond to a Stop-hook message or to change an
+expected incomplete exit code. First pursue the *specific missing real UI
+state* through a permitted verification path. If the path is unavailable,
+record the actual failed attempt, affected state, evidence reference and
+specific blocker in the existing receipt/ledger, then use a truthful
+`PARTIAL`/`NOT_VERIFIED` stopping outcome. Never claim that source-level
+`EnsureVisible`, ellipsis or tooltip code proves the final selected process,
+scroll position, hover disclosure or keyboard interaction worked.
+
+A failed external native click due to process integrity/UIPI does not
+authorize replacing real interaction evidence with a synthetic screenshot.
+Use available, **already authorized** read-only app/test evidence and the
+desktop-monitoring reference's integrity-level rules, distinguishing
+display-state proof from live input proof. Do not implement a new product
+instrumentation/export mode as a verification shortcut.
 
 ## Actual stopping conditions
 
