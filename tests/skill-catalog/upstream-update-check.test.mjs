@@ -53,6 +53,16 @@ test('upstream update check tracks the five canonical sources and decisions', ()
   const impeccable = registry.sources.find((source) => source.id === 'impeccable');
   assert.equal(impeccable.scope, '.agents/skills/impeccable/');
   assert.equal(impeccable.localPin, 'acb4cfe14470b1fdf51e855431af618d936b7db8');
+  assert.equal(impeccable.integrationOwner, 'design-with-ai');
+  assert.notEqual(impeccable.decision, 'not-applicable');
+  const policy = read('skills/design-with-ai/UPSTREAM.md');
+  assert.match(policy, /## Impeccable upstream integration policy/);
+  for (const decision of ['INTEGRATE', 'ALREADY_COVERED', 'NOT_RELEVANT', 'BLOCKED_PENDING']) {
+    assert.ok(policy.includes(decision), decision);
+  }
+  assert.match(policy, /single owner/);
+  assert.equal(existsSync(resolve('skills/impeccable/SKILL.md')), false);
+  assert.equal(existsSync(resolve('skills/design-with-ai/internal/impeccable/SKILL.md')), false);
 
   const checker = read('scripts/check-upstream-sources.mjs');
   assert.match(checker, /--offline/);
@@ -62,6 +72,7 @@ test('upstream update check tracks the five canonical sources and decisions', ()
   assert.match(read('scripts/lib/upstream-status.mjs'), /CURRENT/);
   assert.match(checker, /PENDING/);
   assert.match(checker, /hasScopedChanges/);
+  assert.match(checker, /validateUpstreamIntegration/);
 });
 
 test('offline upstream check flags Impeccable reference and engine adoption as pending', () => {

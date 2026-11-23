@@ -7,13 +7,31 @@ on:
       - 'skills/github-delivery/**'
       - 'knowledge/**'
       - 'upstream-sources.json'
+      - 'scripts/check-upstream-sources.mjs'
+      - 'scripts/lib/upstream-status.mjs'
+      - 'tests/skill-catalog/upstream-*.test.mjs'
       - '.github/workflows/verify-upstream-authoring-skills.yml'
   workflow_dispatch:
+  schedule:
+    # Weekly upstream drift check; scheduled runs use main after merge.
+    - cron: '17 7 * * 1'
 
 permissions:
   contents: read
 
 jobs:
+  monitor-upstream:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Detect new upstream scope or unqualified local adoption
+        run: node scripts/check-upstream-sources.mjs
+
   validate:
     runs-on: ubuntu-latest
     timeout-minutes: 12
@@ -26,6 +44,8 @@ jobs:
         run: |
           test ! -e skills/impeccable/SKILL.md
           test ! -e skills/design-with-ai/internal/impeccable/SKILL.md
+      - name: Validate upstream source ownership and pending-review behavior
+        run: node --test tests/skill-catalog/upstream-status.test.mjs tests/skill-catalog/upstream-update-check.test.mjs
       - name: Validate Design with AI skill
         run: node scripts/skill-ratchet.mjs validate --skill-root "$PWD/skills/design-with-ai" --json
       - name: Test integrated Impeccable ownership and provider routing

@@ -20,3 +20,16 @@ export function classifyUpstreamStatus({ advanced, scopedChanges = null, decisio
 export function needsUpstreamAction(status) {
   return !['CURRENT', 'REMOTE_ADVANCED'].includes(status);
 }
+
+/**
+ * Impeccable is a selectively integrated DWA upstream, never a separate
+ * discoverable owner. Do not confuse source review with runtime qualification.
+ */
+export function validateUpstreamIntegration(source) {
+  if (source?.id !== 'impeccable') return;
+  if (source.repository !== 'pbakaus/impeccable' ||
+      source.integrationOwner !== 'design-with-ai' ||
+      source.decision === 'not-applicable') {
+    throw new TypeError('impeccable upstream must remain owned by design-with-ai');
+  }
+}
