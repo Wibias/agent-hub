@@ -212,7 +212,8 @@ export async function createIsolatedCodexJsonJudge({
       },
       isolation: {
         freshCodexHome: true,
-        copiedAuthOnly: true,
+        copiedAuthOnly: isolation.modelConfigCopied !== true,
+        inheritedModelRouting: isolation.modelConfigCopied === true,
         inheritedHooks: false,
         inheritedConfig: false,
         inheritedLegacyMemory: false,

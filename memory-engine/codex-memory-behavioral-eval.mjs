@@ -1,8 +1,31 @@
 import {
   copyFile,
   mkdir,
+  readFile,
+  writeFile,
 } from 'node:fs/promises';
 import { join } from 'node:path';
+
+const ISOLATED_MODEL_CONFIG_KEYS = new Set([
+  'model',
+  'model_catalog_json',
+  'openai_base_url',
+  'model_reasoning_effort',
+  'model_verbosity',
+]);
+
+function isolatedModelConfig(text) {
+  const lines = [];
+  for (const raw of String(text).split(/\r?\n/u)) {
+    // Keep only top-level model routing. Hooks, MCP, memory, projects and
+    // environment policies must never enter the isolated judge home.
+    if (/^\s*\[/u.test(raw)) break;
+    const match = raw.match(/^\s*([A-Za-z0-9_]+)\s*=\s*(.+?)\s*$/u);
+    if (!match || !ISOLATED_MODEL_CONFIG_KEYS.has(match[1])) continue;
+    lines.push(match[1] + ' = ' + match[2]);
+  }
+  return lines.length === 0 ? null : lines.join('\n') + '\n';
+}
 
 export const MEMORY_BEHAVIORAL_CASES = Object.freeze([
   Object.freeze({
@@ -176,9 +199,29 @@ export async function prepareIsolatedCodexHome({
     if (error?.code !== 'ENOENT') throw error;
   }
 
+  let modelConfigCopied = false;
+  try {
+    const sourceConfig = await readFile(
+      join(sourceCodexHome, 'config.toml'),
+      'utf8',
+    );
+    const config = isolatedModelConfig(sourceConfig);
+    if (config !== null) {
+      await writeFile(
+        join(isolatedCodexHome, 'config.toml'),
+        config,
+        { mode: 0o600 },
+      );
+      modelConfigCopied = true;
+    }
+  } catch (error) {
+    if (error?.code !== 'ENOENT') throw error;
+  }
+
   return {
     isolatedCodexHome,
     authCopied,
+    modelConfigCopied,
   };
 }
 

@@ -296,7 +296,8 @@ export async function createCodexMemoryCandidateRelationJudge({
       evaluatorId,
       isolation: {
         freshCodexHome: true,
-        copiedAuthOnly: true,
+        copiedAuthOnly: isolation.modelConfigCopied !== true,
+        inheritedModelRouting: isolation.modelConfigCopied === true,
         inheritedHooks: false,
         inheritedConfig: false,
         inheritedLegacyMemory: false,

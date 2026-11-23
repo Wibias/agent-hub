@@ -140,14 +140,25 @@ test('behavioral case scorer requires supported positives and null answers for h
   assert.ok(leaked.failures.some((failure) => /answer/i.test(failure)));
 });
 
-test('isolated Codex home copies auth only and excludes config, hooks, and legacy memory state', async () => {
+test('isolated Codex home copies auth and only model routing config', async () => {
   const root = await mkdtemp(join(tmpdir(), 'agent-hub-codex-isolation-'));
   const source = join(root, 'source');
   const isolated = join(root, 'isolated');
 
   await mkdir(source, { recursive: true });
   await writeFile(join(source, 'auth.json'), '{"token":"fixture"}\n');
-  await writeFile(join(source, 'config.toml'), 'model = "legacy"\n');
+  await writeFile(join(source, 'config.toml'), [
+    'model = "legacy"',
+    'openai_base_url = "http://127.0.0.1:10100/v1"',
+    'notify = [ "must-not-copy" ]',
+    '[features]',
+    'memories = true',
+    '[mcp_servers.private]',
+    'command = "must-not-copy"',
+    '[hooks]',
+    'must_not_copy = true',
+    '',
+  ].join('\n'));
   await writeFile(join(source, 'hooks.json'), '{"UserPromptSubmit":[]}\n');
   await writeFile(join(source, 'memories_1.sqlite'), 'legacy-memory');
 
@@ -159,14 +170,19 @@ test('isolated Codex home copies auth only and excludes config, hooks, and legac
   assert.deepEqual(result, {
     isolatedCodexHome: isolated,
     authCopied: true,
+    modelConfigCopied: true,
   });
   assert.equal(
     await readFile(join(isolated, 'auth.json'), 'utf8'),
     '{"token":"fixture"}\n',
   );
 
+  assert.equal(
+    await readFile(join(isolated, 'config.toml'), 'utf8'),
+    'model = "legacy"\nopenai_base_url = "http://127.0.0.1:10100/v1"\n',
+  );
+
   for (const forbidden of [
-    'config.toml',
     'hooks.json',
     'memories_1.sqlite',
   ]) {
@@ -175,7 +191,38 @@ test('isolated Codex home copies auth only and excludes config, hooks, and legac
       /ENOENT|no such file/i,
     );
   }
+
+  const isolatedConfig = await readFile(join(isolated, 'config.toml'), 'utf8');
+  for (const forbidden of [
+    'notify',
+    '[features]',
+    '[mcp_servers]',
+    '[hooks]',
+    'must-not-copy',
+  ]) {
+    assert.equal(isolatedConfig.includes(forbidden), false);
+  }
 });
+
+test('isolated Codex home omits config when no model routing exists', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'agent-hub-codex-isolation-empty-'));
+  const source = join(root, 'source');
+  const isolated = join(root, 'isolated');
+  await mkdir(source, { recursive: true });
+  await writeFile(join(source, 'auth.json'), '{"token":"fixture"}\n');
+
+  const result = await prepareIsolatedCodexHome({
+    sourceCodexHome: source,
+    isolatedCodexHome: isolated,
+  });
+
+  assert.equal(result.modelConfigCopied, false);
+  await assert.rejects(
+    access(join(isolated, 'config.toml')),
+    /ENOENT|no such file/i,
+  );
+});
+
 
 test('isolated Codex environment points at fresh CODEX_HOME and strips Agent Hub memory overrides', () => {
   const env = createIsolatedCodexEnv({
