@@ -12,6 +12,8 @@ import { createProviderRegistry, runProviders } from "../../scripts/providers/re
 import { createImpeccableProvider } from "../../scripts/providers/impeccable.mjs";
 import { sourceScopeProof } from "../../scripts/providers/scope-proof.mjs";
 import { collectStaticCssText } from "../../internal/impeccable/scripts/detector/engines/static-html/css-cascade.mjs";
+import { checkBorders } from "../../internal/impeccable/scripts/detector/rules/checks.mjs";
+import { detectText } from "../../internal/impeccable/scripts/detector/engines/regex/detect-text.mjs";
 
 const cli = fileURLToPath(new URL("../../scripts/providers/scan.mjs", import.meta.url));
 const vendoredCli = fileURLToPath(new URL("../../internal/impeccable/scripts/detect.mjs", import.meta.url));
@@ -511,4 +513,34 @@ test("explicit CLI rejects unsupported options without touching the provider", (
   { encoding: "utf8" });
   assert.equal(run.status, 2);
   assert.match(JSON.parse(run.stdout).error, /Unrecognized/);
+});
+
+
+test("Impeccable v4.10 side-tab parity: square borders are not rounded-host findings", () => {
+  const widths = { Top: 0, Right: 0, Bottom: 0, Left: 4 };
+  const colors = { Top: "transparent", Right: "transparent", Bottom: "transparent", Left: "#e11d48" };
+  assert.deepEqual(checkBorders("div", widths, colors, 0), [], "a square host is not a side-tab");
+  assert.equal(checkBorders("div", widths, colors, 8).filter((f) => f.id === "side-tab").length, 1,
+    "the same accent on a rounded host remains reportable");
+  assert.deepEqual(checkBorders("div", widths, colors, 8, { statusContext: true }), [],
+    "legitimate live status cues stay exempt");
+
+  const cases = [
+    ["square Tailwind", "card.tsx", 'export const Card = () => <div className="border-l-4 border-rose-600">Card</div>;', false],
+    ["explicitly square Tailwind", "card.tsx", 'export const Card = () => <div className="rounded-none border-l-4 border-rose-600">Card</div>;', false],
+    ["rounded Tailwind", "card.tsx", 'export const Card = () => <div className="rounded-lg border-l-4 border-rose-600">Card</div>;', true],
+    ["square CSS", "card.css", ".card { border-left: 4px solid #e11d48; }", false],
+    ["zero radius CSS", "card.css", ".card { border-radius: 0 !important; border-left: 4px solid #e11d48; }", false],
+    ["rounded CSS", "card.css", ".card { border-radius: 8px; border-left: 4px solid #e11d48; }", true],
+    ["multiline rounded CSS", "card.css", ".card {\n border-left: 4px solid #e11d48;\n border-radius: 8px;\n}", true],
+    ["other selector radius is irrelevant", "card.css", ".square { border-left: 4px solid #e11d48; }\n.round { border-radius: 8px; }", false],
+    ["square logical side CSS", "card.css", ".card { border-radius: 0; border-inline-start: 4px solid #e11d48; }", false],
+    ["rounded logical side CSS", "card.css", ".card { border-radius: 8px; border-inline-start: 4px solid #e11d48; }", true],
+    ["square JSX inline", "card.tsx", 'const card = <div style={{ borderLeft: "4px solid #e11d48", borderRadius: "0px" }}>Card</div>;', false],
+    ["rounded JSX inline", "card.tsx", 'const card = <div style={{ borderLeft: "4px solid #e11d48", borderRadius: "8px" }}>Card</div>;', true],
+  ];
+  for (const [name, path, content, expected] of cases) {
+    const findings = detectText(content, path).filter((finding) => finding.antipattern === "side-tab");
+    assert.equal(findings.length > 0, expected, name + ": " + JSON.stringify(findings));
+  }
 });
