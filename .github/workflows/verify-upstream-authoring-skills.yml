@@ -12,11 +12,26 @@ on:
       - 'tests/skill-catalog/upstream-*.test.mjs'
       - '.github/workflows/verify-upstream-authoring-skills.yml'
   workflow_dispatch:
+  schedule:
+    # Weekly upstream drift check; scheduled runs use main after merge.
+    - cron: '17 7 * * 1'
 
 permissions:
   contents: read
 
 jobs:
+  monitor-upstream:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Detect new upstream scope or unqualified local adoption
+        run: node scripts/check-upstream-sources.mjs
+
   validate:
     runs-on: ubuntu-latest
     timeout-minutes: 12
