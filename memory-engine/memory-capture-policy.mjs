@@ -6,6 +6,12 @@ import {
 
 export const CAPTURE_POLICY_VERSION = 'capture-v1';
 
+// Heuristic capture only handles concise statements. Long task prompts may
+// contain a matching phrase, but storing the whole prompt creates an overlong
+// mixed-intent candidate that the judge cannot evaluate safely. Explicit
+// `memory:` writes use a separate path and are not affected by this bound.
+export const MAX_AUTO_CAPTURE_PROMPT_CHARS = 4000;
+
 function normalizeForFingerprint(value) {
   return String(value ?? '')
     .normalize('NFKC')
@@ -150,6 +156,7 @@ export function classifyMemoryCandidatePrompt(prompt) {
 
   const value = prompt.trim();
   if (value.length === 0) return null;
+  if (value.length > MAX_AUTO_CAPTURE_PROMPT_CHARS) return null;
   if (explicitMemoryManagementPrompt(value)) return null;
 
   const sensitivity = inspectMemoryTextSensitivity(value);

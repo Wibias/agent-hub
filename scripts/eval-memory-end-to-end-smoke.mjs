@@ -555,7 +555,9 @@ function createChecker(checks) {
     const pass = Boolean(condition);
     checks.push({ id, pass, ...details });
     if (!pass) {
-      throw new Error('E2E smoke check failed: ' + id);
+      throw new Error(
+        'E2E smoke check failed: ' + id + ' ' + JSON.stringify(details),
+      );
     }
   };
 }

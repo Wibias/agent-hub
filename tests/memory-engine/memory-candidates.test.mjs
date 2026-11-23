@@ -9,6 +9,7 @@ import {
 } from '../../memory-engine/index.mjs';
 import {
   CAPTURE_POLICY_VERSION,
+  MAX_AUTO_CAPTURE_PROMPT_CHARS,
   classifyMemoryCandidatePrompt,
   memoryCandidateFingerprint,
 } from '../../memory-engine/memory-capture-policy.mjs';
@@ -207,6 +208,20 @@ test('capture policy rejects transient, tentative, question, explicit-memory and
       prompt,
     );
   }
+});
+
+test('capture policy rejects task-length prompts instead of storing one mixed candidate', () => {
+  const oversized = [
+    'We must keep the release checklist current.',
+    'Implement the requested change, run the relevant checks, and report the result.',
+    'x'.repeat(MAX_AUTO_CAPTURE_PROMPT_CHARS),
+  ].join('\n');
+
+  assert.ok(oversized.length > MAX_AUTO_CAPTURE_PROMPT_CHARS);
+  assert.equal(classifyMemoryCandidatePrompt(oversized), null);
+
+  const concise = 'We must keep the release checklist current.';
+  assert.equal(classifyMemoryCandidatePrompt(concise)?.type, 'constraint');
 });
 
 test('candidate fingerprint is stable across insignificant whitespace but type-sensitive', () => {
