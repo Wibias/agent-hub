@@ -509,7 +509,7 @@ test('hybrid UserPromptSubmit skips worker startup when the prepared cache is ab
   assert.equal(ensureCalls, 0);
 });
 
-test('Windows UserPromptSubmit does not start a missing embedding worker', async () => {
+test('Windows UserPromptSubmit recovers a missing embedding worker from the prepared cache', async () => {
   const memory = {
     getProject() {
       return { project_id: 'github.com/example/project' };
@@ -590,7 +590,7 @@ test('Windows UserPromptSubmit does not start a missing embedding worker', async
 
   assert.equal(
     ensureCalls,
-    0,
-    'Windows UserPromptSubmit must not spawn the long-lived embedding worker',
+    1,
+    'Windows UserPromptSubmit must attempt fail-soft worker recovery',
   );
 });
