@@ -81,7 +81,7 @@ test('source authority and source size fail closed', () => {
   assert.equal(proposeAtomicCandidateShadows(value, { sourceAuthority: 'agent_inference' }).reason, 'non_user_authority');
   assert.equal(proposeAtomicCandidateShadows('   ').reason, 'empty');
   assert.equal(proposeAtomicCandidateShadows('x'.repeat(20_001)).reason, 'source_too_large');
-  const longSource = new Array(30).fill('In future we must verify releases.').join(' ');
+  const longSource = new Array(201).fill('In future we must verify releases.').join(' ');
   assert.equal(proposeAtomicCandidateShadows(longSource).reason, 'too_many_segments');
 });
 
@@ -110,4 +110,22 @@ test('default report has no candidate content; explicit local opt-in may show ex
   const explicit = summarizeAtomicCandidateShadows(result, { includeLocalText: true });
   assert.equal(explicit.suggestions[0].localSourceFragment, result.suggestions[0].fragment);
   assert.equal(explicit.suggestions[0].localSourceFragment.includes('dashboard'), false);
+});
+
+test('a long task prompt above 24 sentences still extracts a durable span', () => {
+  const steps = Array.from({ length: 30 }, (_, index) => (
+    'Step ' + index
+    + ': Inspect the current implementation and report the observed behavior'
+    + ' without modifying any files or configuration, and record the exact'
+    + ' command and the resulting output for the final review.'
+  ));
+  const statement = 'We will permanently require Windows x64 as the only supported host.';
+  const source = [...steps, statement].join(' ');
+  const result = proposeAtomicCandidateShadows(source);
+  assert.equal(result.suggestions.length, 1);
+  assert.equal(result.suggestions[0].fragment, statement);
+  assert.equal(
+    source.slice(result.suggestions[0].start, result.suggestions[0].end),
+    statement,
+  );
 });
