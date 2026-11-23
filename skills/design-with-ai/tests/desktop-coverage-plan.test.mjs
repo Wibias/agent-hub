@@ -93,6 +93,6 @@ test("legacy and absent manifests need a real v2 packet, not a fake COMPLETE", (
 
 test("only allowlisted coverage IDs may appear as executable agent targets", () => {
   for (const target of desktopCoverageTargets) assert.equal(isDesktopCoverageTarget(target), true);
-  assert.equal(isDesktopCoverageTarget("C:/Users/private/secret.json"), false);
+  assert.equal(isDesktopCoverageTarget("untrusted-project-file.json"), false);
   assert.equal(isDesktopCoverageTarget("CHECK:TERMINATE_RANDOM_PROCESS"), false);
 });
