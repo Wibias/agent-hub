@@ -62,5 +62,5 @@ test('Impeccable pinned engine release requires executable verification', () => 
   assert.match(provenance, /acb4cfe14470b1fdf51e855431af618d936b7db8/);
   assert.match(provenance, /binary|engine/i);
   assert.match(provenance, /runtime verification/i);
-  assert.equal(engine, '0.1.24');
+  assert.equal(engine, '0.1.28');
 });
