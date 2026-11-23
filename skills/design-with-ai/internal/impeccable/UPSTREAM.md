@@ -1,13 +1,10 @@
-> **AgentHub integration overlay (2026-11-20):** This file records the
-> original v4.9.1 / engine v0.1.24 release provenance for the runtime now
-> embedded under `skills/design-with-ai/internal/impeccable/`.
-> The old top-level `skills/impeccable/SKILL.md` was retired in the
-> integration branch, and `skills/design-with-ai/SKILL.md` is the sole
-> callable design owner. References and local scripts intentionally adapted
-> for the new paths no longer have byte-identical upstream blobs; the
-> unchanged manifest and launchers are still release pinned. This copy
-> does not claim an engine 0.1.28 update, working host hook migration or
-> complete Live/browser parity. Do not install the old standalone skill.
+> **AgentHub integration overlay (2026-11-23):** This internal provider is
+> owned exclusively by `skills/design-with-ai/`, not a separately discoverable
+> Impeccable skill. Historical skill 4.9.1 and engine 0.1.24 provenance remain
+> below. The optional engine pin is now **0.1.28** with release-asset SHA-256
+> checksums, but generic DWA routes never start it automatically. Updating the
+> binary pin alone does **not** prove complete hook, Live/browser or command
+> compatibility or qualify the complete upstream skill 4.10.0.
 >
 # Impeccable upstream
 
@@ -15,6 +12,47 @@ AgentHub selectively vendors the explicit Impeccable specialist from
 [pbakaus/impeccable](https://github.com/pbakaus/impeccable). Runtime binaries
 are **not** included in this repository. The local `SKILL.md` is an intentional
 AgentsHub overlay, not a source-byte-identical upstream copy.
+
+## Engine 0.1.28 upgrade candidate (2026-11-23)
+
+Active engine version: `0.1.28`. The previous engine `0.1.24` pin remains
+documented below as historical provenance. The original selectively vendored
+skill contract remains `4.9.1` plus reviewed, explicitly adapted 4.10 methods;
+this is an **engine release sync**, not an upstream 4.10.0 skill replacement.
+
+- Official upstream tag `engine-v0.1.28`: annotated tag
+  `020bfd2fff5ae3be247a506b1e528e522149046d` points to source commit
+  `80f576894c6157cd895f749565e8755f8406bce2`. Asset publication:
+  2026-11-19. <https://github.com/pbakaus/impeccable/releases/tag/engine-v0.1.28>
+- At that source commit `scripts/VERSION` says 0.1.28, but the **stale upstream
+  source manifest** `scripts/engine-checksums.txt` still lists 0.1.27 hashes.
+  The tagged `skill-v4.10.0` snapshot also embedded 0.1.27. Therefore
+  blindly copying that source manifest would reject the 0.1.28 release.
+- AgentHub's 0.1.28 checksum manifest is reconstructed from the five **official
+  GitHub Release asset SHA-256 digest fields**, one per supported asset, then
+  locked by `tests/impeccable-engine-release-pin.test.mjs`. The Windows x64
+  release checksum is
+  `2fd0b53e8d9554f3f028a258fd958d39bd712b3eb4f1725363966ca2380f8c3e`.
+- The Windows `impeccable.cmd` and POSIX `impeccable` release launcher blobs
+  are unchanged between this AgentHub internal copy and the exact upstream
+  `engine-v0.1.28` tag. Keep their checksum refusal and opt-in boundaries;
+  no binary is committed to AgentHub.
+- Standalone source-only JS detection remains independent from the Rust
+  engine binary. Existing internal JS hook/Live helpers remain AgentHub-owned
+  overlays, **not** byte-identical runtime-parity guarantees. The upstream
+  `live-browser.js` changed after the prior skill release, but it also changed
+  its protocol references to the upstream Rust server: do not overwrite the
+  internal JS Live implementation without its own host/protocol compatibility
+  tests.
+- Release validation: Windows x64 pinned-engine launch/probe, a tampered
+  checksum manifest refusal, Windows hook migration and Live loopback tests,
+  a real Chrome Live smoke, and source/digest checks all must run for the
+  **current PR revision**. A passing binary launch does **not** imply full
+  product/Live/browser parity. Skill Ratchet's independent strong and weaker
+  review receipts are still mandatory for complete DWA skill qualification.
+
+Status: **binary source/digest pinned, full runtime qualification still
+pending**. No new top-level `impeccable/SKILL.md` entrypoint is created.
 
 ## Release candidate (2026-11-14)
 
