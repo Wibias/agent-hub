@@ -420,6 +420,55 @@ test('real MemoryEngine promotion persists complete provenance and recall enforc
       store.close();
     }
 
+    // The selected database and exact listed proposal must match.
+    const reader = new EvidenceBoundProposalStore({ dbPath, readOnly:true, inspectTextSensitivity:safeSensitivity });
+    let expectedProposal;
+    try { expectedProposal=reader.get('proposal-real'); } finally { reader.close(); }
+    const foreignPath=join(root,'foreign.sqlite3');
+    const foreign=new DatabaseSync(foreignPath);
+    foreign.close();
+    const exact={dbPath,proposalId:'proposal-real',projectId:'project-a',branch:'main',expectedProposal,
+      finalizedAt:'2026-10-11T12:04:00.000Z'};
+    assert.throws(()=>memory.commitEvidenceBoundPromotion({...exact,dbPath:foreignPath}),/database identity mismatch/);
+    assert.throws(()=>memory.commitEvidenceBoundPromotion({...exact,expectedProposal:{...expectedProposal,canonical_fact:'Different fact'}}),/scope or state changed/);
+    assert.equal(memory.getClaim('evidence-memory:'+expectedProposal.fingerprint),null);
+
+    // A confirmation-required proposal remains outside the ordinary
+    // promotion lane, even if the caller attaches an alleged review receipt.
+    const scopeDb=new DatabaseSync(dbPath);
+    try {
+      scopeDb.prepare("UPDATE memory_evidence_proposals SET status='needs_confirmation' WHERE id='proposal-real'").run();
+      const pendingReader=new EvidenceBoundProposalStore({dbPath,readOnly:true,inspectTextSensitivity:safeSensitivity});
+      let pending;
+      try { pending=pendingReader.get('proposal-real'); } finally { pendingReader.close(); }
+      assert.throws(()=>memory.commitEvidenceBoundPromotion({
+        ...exact, expectedProposal:pending,
+        conflictReceipt:{verified:true,decision:'confirm',claimWritten:false},
+      }),/not promotion-ready/);
+      assert.equal(scopeDb.prepare("SELECT status FROM memory_evidence_proposals WHERE id='proposal-real'").get().status,'needs_confirmation');
+      for (const table of ['claims','claim_evidence','claim_fts','memory_evidence_proposal_promotions'])
+        assert.equal(scopeDb.prepare('SELECT COUNT(*) n FROM '+table).get().n,0);
+      scopeDb.prepare("UPDATE memory_evidence_proposals SET status='pending' WHERE id='proposal-real'").run();
+    } finally { scopeDb.close(); }
+
+    // Force the final audit to fail AFTER claim/provenance/FTS insertion.
+    const witness = new DatabaseSync(dbPath);
+    try {
+      witness.exec("CREATE TRIGGER deny_fixture_audit BEFORE INSERT ON memory_evidence_proposal_promotions BEGIN SELECT RAISE(ABORT,'fixture_audit_denied'); END;");
+      const failed = await runEvidenceBoundPromotionPipeline({
+        dbPath, memory, projectId:'project-a', branch:'main',
+        inspectTextSensitivity:safeSensitivity,
+        clock:()=> '2026-10-11T12:04:00.000Z',
+      });
+      assert.equal(failed.failed,1);
+      assert.match(failed.results[0].error,/fixture_audit_denied/);
+      const count=table=>witness.prepare('SELECT COUNT(*) n FROM '+table).get().n;
+      for (const table of ['claims','claim_evidence','claim_fts','memory_evidence_proposal_promotions'])
+        assert.equal(count(table),0,table+' must roll back');
+      assert.equal(witness.prepare("SELECT status FROM memory_evidence_proposals WHERE id='proposal-real'").get().status,'pending');
+      witness.exec('DROP TRIGGER deny_fixture_audit');
+    } finally { witness.close(); }
+
     const result = await runEvidenceBoundPromotionPipeline({
       dbPath, memory, projectId: 'project-a', branch: 'main',
       inspectTextSensitivity: safeSensitivity,

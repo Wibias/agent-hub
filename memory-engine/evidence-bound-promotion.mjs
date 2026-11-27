@@ -350,6 +350,70 @@ function validateExistingClaim(existing, {
   }
 }
 
+// Shared existing promotion policy and provenance checks. The MemoryEngine
+// invokes this while holding its single canonical write transaction.
+export function applyEvidenceBoundPromotion({ proposal, memory, finalizedAt }) {
+  const sourceEvidenceSet = proposal.evidence_ids.map(
+    (evidenceId) => memory.getEvidence(evidenceId),
+  );
+  let targetClaim = null;
+  let targetEvidenceSet = [];
+  if (proposal.related_claim_id !== null) {
+    targetClaim = memory.getClaim(proposal.related_claim_id);
+    if (targetClaim) {
+      targetEvidenceSet = memory.getClaimEvidence(targetClaim.id);
+    }
+  }
+
+  const resolved = resolveEvidenceBoundPromotion({
+    proposal,
+    sourceEvidenceSet,
+    targetClaim,
+    targetEvidenceSet,
+    finalizedAt,
+  });
+
+  let claimId = null;
+  if (resolved.status === 'promoted') {
+    claimId = resolved.claim.id;
+    const primaryEvidence = sourceEvidenceSet.find(
+      (item) => item?.id === resolved.primary_evidence_id,
+    );
+    const existing = memory.getClaim(claimId);
+    if (existing) {
+      validateExistingClaim(existing, {
+        proposal,
+        sourceEvidenceSet,
+        primaryEvidence,
+        expectedClaim: resolved.claim,
+        memory,
+      });
+    } else {
+      const asserted = memory.assertClaim({
+        evidenceId: resolved.primary_evidence_id,
+        evidenceIds: resolved.evidence_ids,
+        claim: resolved.claim,
+        lifecycle: resolved.lifecycle,
+      });
+      validateExistingClaim(asserted?.claim, {
+        proposal,
+        sourceEvidenceSet,
+        primaryEvidence,
+        expectedClaim: resolved.claim,
+        memory,
+      });
+    }
+  }
+
+  const audit = {
+    status: resolved.status,
+    relation: resolved.relation,
+    claim_id: claimId,
+    related_claim_id: resolved.related_claim_id,
+  };
+  return audit;
+}
+
 export async function runEvidenceBoundPromotionPipeline({
   dbPath,
   memory,
@@ -379,77 +443,29 @@ export async function runEvidenceBoundPromotionPipeline({
 
     for (const proposal of proposals) {
       try {
-        const sourceEvidenceSet = proposal.evidence_ids.map(
-          (evidenceId) => memory.getEvidence(evidenceId),
-        );
-        let targetClaim = null;
-        let targetEvidenceSet = [];
-        if (proposal.related_claim_id !== null) {
-          targetClaim = memory.getClaim(proposal.related_claim_id);
-          if (targetClaim) {
-            targetEvidenceSet = memory.getClaimEvidence(targetClaim.id);
-          }
-        }
-
         const finalizedAt = clock();
-        const resolved = resolveEvidenceBoundPromotion({
-          proposal,
-          sourceEvidenceSet,
-          targetClaim,
-          targetEvidenceSet,
-          finalizedAt,
-        });
-
-        let claimId = null;
-        if (resolved.status === 'promoted') {
-          claimId = resolved.claim.id;
-          const primaryEvidence = sourceEvidenceSet.find(
-            (item) => item?.id === resolved.primary_evidence_id,
-          );
-          const existing = memory.getClaim(claimId);
-          if (existing) {
-            validateExistingClaim(existing, {
-              proposal,
-              sourceEvidenceSet,
-              primaryEvidence,
-              expectedClaim: resolved.claim,
-              memory,
-            });
-          } else {
-            const asserted = memory.assertClaim({
-              evidenceId: resolved.primary_evidence_id,
-              evidenceIds: resolved.evidence_ids,
-              claim: resolved.claim,
-              lifecycle: resolved.lifecycle,
-            });
-            validateExistingClaim(asserted?.claim, {
-              proposal,
-              sourceEvidenceSet,
-              primaryEvidence,
-              expectedClaim: resolved.claim,
-              memory,
-            });
-          }
+        let audit;
+        if (typeof memory.commitEvidenceBoundPromotion === 'function') {
+          audit = memory.commitEvidenceBoundPromotion({
+            dbPath, proposalId: proposal.id, projectId, branch, expectedProposal: proposal, finalizedAt,
+          });
+        } else {
+          // Legacy noncanonical adapters (including historical test doubles).
+          // This path does NOT provide atomic Claim/audit persistence.
+          audit = applyEvidenceBoundPromotion({ proposal, memory, finalizedAt });
+          store.finalizePromotion({
+            proposalId: proposal.id,
+            status: audit.status,
+            claimId: audit.claim_id,
+            relatedClaimId: audit.related_claim_id,
+            policyVersion: EVIDENCE_PROMOTION_POLICY_VERSION,
+            finalizedAt,
+            result: audit,
+          });
         }
 
-        const audit = {
-          status: resolved.status,
-          relation: resolved.relation,
-          claim_id: claimId,
-          related_claim_id: resolved.related_claim_id,
-        };
-        store.finalizePromotion({
-          proposalId: proposal.id,
-          status: resolved.status,
-          claimId,
-          relatedClaimId: resolved.related_claim_id,
-          policyVersion: EVIDENCE_PROMOTION_POLICY_VERSION,
-          finalizedAt,
-          result: audit,
-        });
-
-        if (resolved.status === 'promoted') promoted += 1;
-        else if (resolved.status === 'superseded') superseded += 1;
+        if (audit.status === 'promoted') promoted += 1;
+        else if (audit.status === 'superseded') superseded += 1;
         else needsConfirmation += 1;
 
         results.push({

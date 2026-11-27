@@ -95,3 +95,51 @@ untrusted for protected decisions.
 project-scoped `E~` proposal end-to-end, with a protected one-time decision,
 and failed/foreign/repeated attempts cannot change an authoritative Claim.
 Until then **production Memory Write = NO-GO**.
+
+### Canonical local transaction prerequisite (post #457)
+
+The ordinary MemoryEngine evidence-bound promotion path now acquires one
+immediate transaction on its own canonical SQLite connection, checks the
+exact listed proposal and database identity, resolves Evidence and target
+within that transaction, and persists the Claim, provenance, FTS and
+proposal promotion audit/status together. A real SQLite audit-insert
+failure previously left an orphaned Claim; the regression now proves
+rollback of all four tables and successful retry. A separately scheduled
+second writer also proves that final relation validation must occur after
+BEGIN IMMEDIATE. The existing noncanonical adapter compatibility fallback
+is not atomic and is not eligible for protected finalization.
+
+Local verification: 134/134 focused tests passed. This is ordinary local
+promotion, not a new protected review authorization path. It does not
+consume the #457 historical intent, establish fresh authoritative source
+provenance, or atomically span the protected and user-writable databases.
+Positive SCM conflict completion and physical Hello remain unverified.
+No live memory database or installed service was modified.
+
+### Protected finalization boundary and acceptance decision
+
+Do not bridge a conflict-intent receipt into the ordinary local promotion
+method. The receipt attests a decision about a pinned historical copy,
+not a fresh authoritative source or a publication gesture. A regression
+now verifies that even an alleged confirmation receipt cannot promote a
+needs_confirmation proposal through the new local transaction method.
+
+For M2, the existing service-owned ledger remains the authoritative
+transaction boundary. The eventual final decision and authoritative Claim
+must be committed there together, after independent source resolution and
+the appropriate one-use human proof. Canonical user-writable SQLite can
+only be a separately reconciled, untrusted projection; do not attempt to
+establish approval by joining two independently writable databases or
+copying their rows. The existing synthetic-only commit path and direct
+Claim publication/read gates remain unchanged.
+
+The next acceptance checkpoint is the #457 explicit comparison preview
+on a verified disposable fixture: signed complete comparison, native
+registration and possession, distinct human conflict decision, durable
+intent readback and no Claim or pending-review creation. The positive
+SCM test is still blocked; physical Windows Hello requires the operator's
+interactive participation and explicit installation authorization. No
+production publication, canonical migration, or issue closure follows
+from a successful intent-only acceptance. See the existing Windows field
+acceptance instructions for the separate verified-package and cleanup
+requirements; those instructions are not permission to install.

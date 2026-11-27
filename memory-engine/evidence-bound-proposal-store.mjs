@@ -807,7 +807,21 @@ export function listPromotionReadyEvidenceBoundProposals({
     .map((row) => normalizeProposalRow(db, row));
 }
 
-export function finalizeEvidenceBoundProposalPromotion(db, {
+export function finalizeEvidenceBoundProposalPromotion(db, options) {
+  assertDb(db);
+  db.exec('BEGIN IMMEDIATE');
+  try {
+    const result = finalizeEvidenceBoundProposalPromotionInTransaction(db, options);
+    db.exec('COMMIT');
+    return result;
+  } catch (error) {
+    db.exec('ROLLBACK');
+    throw error;
+  }
+}
+
+// Only the caller owning the immediate write transaction may use this.
+export function finalizeEvidenceBoundProposalPromotionInTransaction(db, {
   proposalId,
   status,
   claimId = null,
@@ -838,6 +852,9 @@ export function finalizeEvidenceBoundProposalPromotion(db, {
     throw new TypeError('result must be an object');
   }
 
+  if (!db.isTransaction) throw new Error("promotion requires active transaction");
+  // Resolve the persisted proposal and relation after acquiring the write
+  // lock. Another connection may change them before BEGIN IMMEDIATE.
   const proposal = getEvidenceBoundProposal(db, proposalId);
   if (!proposal) throw new Error('unknown evidence proposal: ' + proposalId);
   if (proposal.status !== 'pending') {
@@ -861,34 +878,27 @@ export function finalizeEvidenceBoundProposalPromotion(db, {
     throw new Error('promotion audit result does not match stored relation or ids');
   }
 
-  db.exec('BEGIN IMMEDIATE');
-  try {
-    db.prepare(`
-      INSERT INTO memory_evidence_proposal_promotions (
-        proposal_id, status, claim_id, related_claim_id,
-        policy_version, finalized_at, result_json
-      ) VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      proposalId,
-      status,
-      claimId,
-      relatedClaimId,
-      policyVersion,
-      finalizedAt,
-      JSON.stringify(result),
-    );
-    const updated = db.prepare(`
-      UPDATE memory_evidence_proposals
-      SET status = ?
-      WHERE id = ? AND status = 'pending'
-    `).run(status, proposalId);
-    if (Number(updated.changes) !== 1) {
-      throw new Error('evidence proposal promotion raced');
-    }
-    db.exec('COMMIT');
-  } catch (error) {
-    db.exec('ROLLBACK');
-    throw error;
+  db.prepare(`
+    INSERT INTO memory_evidence_proposal_promotions (
+      proposal_id, status, claim_id, related_claim_id,
+      policy_version, finalized_at, result_json
+    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    proposalId,
+    status,
+    claimId,
+    relatedClaimId,
+    policyVersion,
+    finalizedAt,
+    JSON.stringify(result),
+  );
+  const updated = db.prepare(`
+    UPDATE memory_evidence_proposals
+    SET status = ?
+    WHERE id = ? AND status = 'pending'
+  `).run(status, proposalId);
+  if (Number(updated.changes) !== 1) {
+    throw new Error('evidence proposal promotion raced');
   }
   return getEvidenceBoundProposal(db, proposalId);
 }

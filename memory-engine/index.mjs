@@ -6,6 +6,9 @@ import {
   importTypedRelationSidecar as importDerivedRelationSidecar,
 } from './claim-relations-ledger.mjs';
 import { DatabaseSync } from 'node:sqlite';
+import { realpathSync } from 'node:fs';
+import { getEvidenceBoundProposal, finalizeEvidenceBoundProposalPromotionInTransaction } from './evidence-bound-proposal-store.mjs';
+import { applyEvidenceBoundPromotion, EVIDENCE_PROMOTION_POLICY_VERSION } from './evidence-bound-promotion.mjs';
 
 import { assertAuthorityClass } from './authority.mjs';
 import { validateMemoryCandidateJudgment } from './memory-candidate-judge.mjs';
@@ -5553,7 +5556,55 @@ export class MemoryEngine {
     return this.getEvidence(preparedEvidence.id);
   }
 
-  assertClaim({ evidenceId, evidenceIds = undefined, claim, lifecycle = {} }) {
+  // Ordinary local canonical promotion only; never consumes protected
+  // operator receipts or establishes protected human authorization.
+  commitEvidenceBoundPromotion({ dbPath, proposalId, projectId, branch, expectedProposal, finalizedAt }) {
+    const currentPath = this.#db.prepare('PRAGMA database_list').all().find(row => row.name === 'main')?.file;
+    if (!currentPath || realpathSync.native(currentPath) !== realpathSync.native(dbPath)) {
+      throw new Error('promotion database identity mismatch');
+    }
+    this.#db.exec('BEGIN IMMEDIATE');
+    try {
+      const proposal = getEvidenceBoundProposal(this.#db, proposalId);
+      if (!proposal || proposal.project_id !== projectId || proposal.branch !== branch
+          || proposal.promotion !== null || !jsonEquivalent(proposal, expectedProposal))
+        throw new Error('promotion proposal scope or state changed');
+      const audit = applyEvidenceBoundPromotion({
+        proposal, finalizedAt,
+        memory: {
+          getEvidence: this.getEvidence.bind(this),
+          getClaim: this.getClaim.bind(this),
+          getClaimEvidence: this.getClaimEvidence.bind(this),
+          assertClaim: options => this.#assertClaimInTransaction(options),
+        },
+      });
+      finalizeEvidenceBoundProposalPromotionInTransaction(this.#db, {
+        proposalId, status: audit.status, claimId: audit.claim_id,
+        relatedClaimId: audit.related_claim_id,
+        policyVersion: EVIDENCE_PROMOTION_POLICY_VERSION,
+        finalizedAt, result: audit,
+      });
+      this.#db.exec('COMMIT');
+      return audit;
+    } catch (error) {
+      this.#db.exec('ROLLBACK');
+      throw error;
+    }
+  }
+
+  assertClaim(options) {
+    this.#db.exec('BEGIN IMMEDIATE');
+    try {
+      const result = this.#assertClaimInTransaction(options);
+      this.#db.exec('COMMIT');
+      return result;
+    } catch (error) {
+      this.#db.exec('ROLLBACK');
+      throw error;
+    }
+  }
+
+  #assertClaimInTransaction({ evidenceId, evidenceIds = undefined, claim, lifecycle = {} }) {
     assertNonEmptyString(evidenceId, 'evidenceId');
 
     const normalizedEvidenceIds = evidenceIds === undefined
@@ -5700,30 +5751,23 @@ export class MemoryEngine {
       };
     }
 
-    this.#db.exec('BEGIN IMMEDIATE');
-    try {
-      insertClaimAndLifecycle(this.#db, {
-        claim: preparedClaim,
-        evidenceContent: evidence.content_redacted,
-        lifecycle: preparedLifecycle,
-      });
-      const insertSupporting = this.#db.prepare(`
-        INSERT INTO claim_evidence (
-          claim_id, evidence_id, role, linked_at
-        ) VALUES (?, ?, 'supporting', ?)
-      `);
-      for (const linkedEvidence of evidenceSet) {
-        if (linkedEvidence.id === evidenceId) continue;
-        insertSupporting.run(
-          preparedClaim.id,
-          linkedEvidence.id,
-          preparedClaim.createdAt,
-        );
-      }
-      this.#db.exec('COMMIT');
-    } catch (error) {
-      this.#db.exec('ROLLBACK');
-      throw error;
+    insertClaimAndLifecycle(this.#db, {
+      claim: preparedClaim,
+      evidenceContent: evidence.content_redacted,
+      lifecycle: preparedLifecycle,
+    });
+    const insertSupporting = this.#db.prepare(`
+      INSERT INTO claim_evidence (
+        claim_id, evidence_id, role, linked_at
+      ) VALUES (?, ?, 'supporting', ?)
+    `);
+    for (const linkedEvidence of evidenceSet) {
+      if (linkedEvidence.id === evidenceId) continue;
+      insertSupporting.run(
+        preparedClaim.id,
+        linkedEvidence.id,
+        preparedClaim.createdAt,
+      );
     }
 
     return {
