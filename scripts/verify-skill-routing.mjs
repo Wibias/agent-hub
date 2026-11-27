@@ -874,13 +874,20 @@ for (const assertion of ["evidence-source-ids-resolve","local-policy-provenance-
 }
 
 const a5 = cases.find((row) => row.id === "A5");
-for (const assertion of ["optional-adjective-not-engine-invocation","canonical-dwa-owner","no-retired-specialist-routing"]) {
+for (const assertion of ["both-real-skill-contracts-opened","competing-skill-classification-cites-both-paths","canonical-dwa-owner-retained","fortify-bounded-or-not-applicable-by-evidence","no-unselected-specialist-execution","state-and-permission-semantics-preserved"]) {
   if (!a5?.assertion_ids?.includes(assertion))
     throw new Error(`A5 missing competing-skill assertion: ${assertion}`);
 }
 for (const required of ["SKILL.md","references/hard-invariants.md","references/design-methods.md"]) {
   if (!a5?.expected_resources?.includes(required))
     throw new Error(`A5 missing competing-skill classification resource: ${required}`);
+}
+if (!a5.scenario.includes("skills/fortify/SKILL.md") || !/use fortify if useful/i.test(a5.prompt))
+  throw new Error("A5 must name a real overlapping skill, not the retired Impeccable skill");
+const e129 = cases.find((row) => row.id === "E129");
+for (const assertion of ["optional-adjective-not-engine-invocation","canonical-dwa-owner","no-retired-specialist-routing"]) {
+  if (!e129?.assertion_ids?.includes(assertion))
+    throw new Error(`E129 missing retained optional-Impeccable assertion: ${assertion}`);
 }
 
 const a6 = cases.find((row) => row.id === "A6");
