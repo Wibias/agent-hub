@@ -1,13 +1,15 @@
 {
   "schemaVersion": 2,
-  "reviewedAt": "2026-11-18",
+  "reviewedAt": "2026-11-27",
   "sources": [
     {
       "id": "addy",
       "repository": "addyosmani/agent-skills",
-      "reviewedCommit": "39b723ceebf81474d0557c1fecd01eddab585563",
+      "reviewedCommit": "e997ac5b9a74eab332d5e9793bb38a38c8cfdd74",
       "scope": "adapted skills",
-      "decision": "current"
+      "decision": "current",
+      "reviewedAt": "2026-11-27",
+      "reviewEvidence": "docs/upstream-reviews/2026-11-27-all-sources.md"
     },
     {
       "id": "emil",
@@ -28,19 +30,99 @@
     {
       "id": "pstack",
       "repository": "cursor/plugins",
-      "reviewedCommit": "bb68f2365eceafa0cb2d253112f675acf5f144cc",
+      "reviewedCommit": "b7b93c36be9bcc36a74db438e0fd385d660bc559",
       "scope": "pstack/",
       "decision": "current",
-      "localPin": "aaeb0ea3a0584995aa8f55ce44c6c5259414b896"
+      "localPin": "aaeb0ea3a0584995aa8f55ce44c6c5259414b896",
+      "reviewedAt": "2026-11-27",
+      "reviewEvidence": "docs/upstream-reviews/2026-11-27-all-sources.md"
     },
     {
       "id": "impeccable",
       "repository": "pbakaus/impeccable",
-      "reviewedCommit": "acb4cfe14470b1fdf51e855431af618d936b7db8",
+      "reviewedCommit": "2fc5e1459efbbf06d92c7306517c286bf12490cf",
       "scope": ".agents/skills/impeccable/",
       "decision": "update-pending",
       "localPin": "acb4cfe14470b1fdf51e855431af618d936b7db8",
-      "integrationOwner": "design-with-ai"
+      "integrationOwner": "design-with-ai",
+      "reviewedAt": "2026-11-27",
+      "reviewEvidence": "docs/upstream-reviews/2026-11-27-all-sources.md",
+      "activeEngineVersion": "0.1.31",
+      "pendingIssue": 450
+    }
+  ],
+  "referenceSources": [
+    {
+      "id": "anthropic-design-handoff",
+      "repository": "anthropics/knowledge-work-plugins",
+      "reviewedCommit": "5e504ae11498f2b8daa30d86b7dab97b2ecd8092",
+      "scope": "design/skills/design-handoff/",
+      "decision": "current",
+      "reviewedAt": "2026-11-27"
+    },
+    {
+      "id": "mengto-design",
+      "repository": "MengTo/skills",
+      "reviewedCommit": "3a8517e09e9a258a8b8a1dfdb71579abe75f1c22",
+      "scope": "agent-skills/",
+      "decision": "current",
+      "reviewedAt": "2026-11-27"
+    },
+    {
+      "id": "ui-ux-pro-max",
+      "repository": "nextlevelbuilder/ui-ux-pro-max-skill",
+      "reviewedCommit": "72e5fc76a4f3eb37747dc472cb3091bd46e7752a",
+      "scope": ".claude/skills/ui-ux-pro-max/",
+      "decision": "current",
+      "reviewedAt": "2026-11-27"
+    },
+    {
+      "id": "penpot-mcp",
+      "repository": "penpot/penpot",
+      "reviewedCommit": "28f63af16e14ae26c51c2e18225180de432af1fb",
+      "scope": "mcp/packages/",
+      "decision": "current",
+      "reviewedAt": "2026-11-27"
+    },
+    {
+      "id": "ibelick-ui-skills",
+      "repository": "ibelick/ui-skills",
+      "reviewedCommit": "1a2f2bf91b18365abc102b67400f48ab1046b449",
+      "scope": "baseline UI guidance",
+      "decision": "current",
+      "reviewedAt": "2026-11-27"
+    },
+    {
+      "id": "make-interfaces-feel-better",
+      "repository": "jakubkrehel/make-interfaces-feel-better",
+      "reviewedCommit": "6d9f2f1df10e8ce2ae1708598a73b0506fb98794",
+      "scope": "UI craft guidance",
+      "decision": "current",
+      "reviewedAt": "2026-11-27"
+    },
+    {
+      "id": "vibecoded-design-tells",
+      "repository": "JCarterJohnson/vibecoded-design-tells",
+      "reviewedCommit": "f7c4aefc2c797a66e55b49354a93917ab60d33ac",
+      "scope": "AI-design-tells research taxonomy",
+      "decision": "current",
+      "reviewedAt": "2026-11-27"
+    },
+    {
+      "id": "signs-of-ai-design",
+      "repository": "febbhav/signs-of-ai-design",
+      "reviewedCommit": "854b46f18dee5cc174d45cec8cd4f3142fe46984",
+      "scope": "AI design signs taxonomy",
+      "decision": "current",
+      "reviewedAt": "2026-11-27"
+    },
+    {
+      "id": "no-slop-ui",
+      "repository": "LeoStehlik/no-slop-ui",
+      "reviewedCommit": "c5f80190f0a6cbd906b81d54e79e2756931077fb",
+      "scope": "UI anti-slop practitioner guidance",
+      "decision": "current",
+      "reviewedAt": "2026-11-27"
     }
   ]
 }

@@ -1,0 +1,59 @@
+name: Upstream registry online integration
+
+on:
+  pull_request:
+    paths:
+      - 'upstream-sources.json'
+      - 'scripts/check-upstream-sources.mjs'
+      - 'scripts/lib/upstream-scope-diff.mjs'
+      - 'scripts/lib/upstream-status.mjs'
+      - 'tests/skill-catalog/upstream-update-check.test.mjs'
+      - '.github/workflows/verify-upstream-reference-online.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  remote-heads:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Inspect all real upstream HEADs and reject unexpected adoption drift
+        shell: bash
+        run: |
+          set +e
+          node scripts/check-upstream-sources.mjs > "$RUNNER_TEMP/upstream-monitor.txt" 2> "$RUNNER_TEMP/upstream-errors.txt"
+          code=$?
+          set -e
+          cat "$RUNNER_TEMP/upstream-monitor.txt"
+          cat "$RUNNER_TEMP/upstream-errors.txt" >&2
+          # The one expected nonzero condition is the explicitly pending
+          # Impeccable Rust Live host/command contract tracked in #450.
+          test "$code" -eq 1
+          node --input-type=module - "$RUNNER_TEMP/upstream-monitor.txt" <<'NODE'
+          import assert from 'node:assert/strict';
+          import { readFileSync } from 'node:fs';
+          const lines = readFileSync(process.argv[2], 'utf8').trim().split(/\r?\n/);
+          const expected = [
+            'CURRENT addy', 'CURRENT emil', 'CURRENT matt',
+            'CURRENT pstack', 'PENDING impeccable',
+            'REFERENCE_CURRENT anthropic-design-handoff',
+            'REFERENCE_CURRENT mengto-design',
+            'REFERENCE_CURRENT ui-ux-pro-max',
+            'REFERENCE_CURRENT penpot-mcp',
+            'REFERENCE_CURRENT ibelick-ui-skills',
+            'REFERENCE_CURRENT make-interfaces-feel-better',
+            'REFERENCE_CURRENT vibecoded-design-tells',
+            'REFERENCE_CURRENT signs-of-ai-design',
+            'REFERENCE_CURRENT no-slop-ui',
+          ];
+          assert.deepEqual(lines.map(line => line.split(' ').slice(0, 2).join(' ')), expected,
+            'Unexpected remote HEAD change or reference review drift: fail closed');
+          console.log('PASS: 14 remote HEADs checked; only #450 remains pending.');
+          NODE
