@@ -71,7 +71,7 @@ function validate(registry) {
     if (!/^[0-9a-f]{40}$/.test(source.reviewedCommit)) {
       fail(`reference ${source.id}: reviewedCommit must be a full 40-character SHA`);
     }
-    if (!/^[^/\\s]+\\/[^/\\s]+$/.test(source.repository)) {
+    if (!/^[^/\s]+\/[^/\s]+$/.test(source.repository)) {
       fail(`reference ${source.id}: repository must be owner/name`);
     }
     if (repositories.has(source.repository.toLowerCase())) {
@@ -81,7 +81,7 @@ function validate(registry) {
     if (!['current', 'not-applicable'].includes(source.decision)) {
       fail(`reference ${source.id}: reference-only decision must be current or not-applicable`);
     }
-    if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(source.reviewedAt)) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(source.reviewedAt)) {
       fail(`reference ${source.id}: reviewedAt must use YYYY-MM-DD`);
     }
     if (source.localPin != null || source.integrationOwner != null) {
