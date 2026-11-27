@@ -101,9 +101,12 @@ before/after comparison.
   `28b3b8dee8c976df4fa3e94aed4e092ad43fcb03` to
   `72e5fc76a4f3eb37747dc472cb3091bd46e7752a`, +43 commits,
   245 changed paths. Includes RTL/IME, form error states, map/product
-  cases, PySide6 and Windows UTF-8 refinements. **PENDING:** verify
-  gaps against existing DWA native/mobile/interaction contracts; no
-  global catalog copy or unverified test/data import.
+  cases, PySide6 and Windows UTF-8 refinements. **INTEGRATE, scoped:**
+  the concrete IME composition/Enter and RTL/bidirectional UI interaction
+  cases were missing from DWA's existing state/interaction owner and are
+  now recorded there, with source-contract regressions. No imported Python
+  runner or catalog. **PENDING:** verify actual browser/OS runtime input
+  composition and reassess remaining UI data/preview improvements.
 - `penpot/penpot`: original reviewed
   `e20a0d748eb9ae431c27a4a201ee9f7067d955e8`, latest observed
   `28f63af16e14ae26c51c2e18225180de432af1fb`. Broad repository
@@ -138,11 +141,11 @@ purport to rescan every link.
 
 ## Qualification and remaining tasks
 
-The scoped Addy/Penpot DWA contract adaptations are covered by
+The scoped Addy/Penpot/Nextlevel DWA contract adaptations are covered by
 `skills/design-with-ai/tests/upstream-source-adaptation.test.mjs`,
 which is invoked by `verify-upstream-authoring-skills.yml`. Those tests
-establish source/documentation consistency, **not** an actual screen-reader,
-WCAG, Penpot MCP or other product-runtime certification.
+establish source/documentation consistency, **not** actual screen-reader,
+WCAG, Penpot MCP, IME/RTL browser or other product-runtime certification.
 
 Release requires normal GitHub CI and the two independent Skill Ratchet
 reviews for any nontrivial skill change, tied to the current skill digest.
