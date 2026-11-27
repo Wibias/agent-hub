@@ -189,3 +189,44 @@ einmaliger serviceeigener Human-Consent-Commit, signierter realer
 Read-Projection-Claim und Original-Codex-CLI/Desktop-Abnahme.
 
 **Produktive Memory Writes bleiben NO-GO.**
+
+
+## Attested no-write preview package
+
+Use the manual `Memory preview attested package` workflow on reviewed
+`main`, not a local agent-produced binary, for the next physical
+acceptance. The workflow only builds and verifies the existing preview
+package, includes the corresponding installer alongside (not inside)
+the package directory, and attests the ZIP on a separate hosted runner.
+It does not install a service or access an operator database.
+
+From an ordinary, operator-controlled PowerShell session, independently
+select the successful run and its full reviewed source commit using
+GitHub. Download the `agenthub-memory-preview` artifact to a NEW empty
+directory. Before extracting the inner ZIP, verify it using:
+
+```powershell
+gh attestation verify .\agenthub-memory-preview.zip `
+  --repo Wibias/agent-hub `
+  --signer-workflow Wibias/agent-hub/.github/workflows/build-memory-preview-attested.yml `
+  --source-ref refs/heads/main --source-digest $reviewedCommit `
+  --deny-self-hosted-runners
+if ($LASTEXITCODE -ne 0) { throw 'Attestation verification failed' }
+```
+
+Here `$reviewedCommit` must be set independently to the full reviewed
+commit SHA. Do not obtain it from an unverified package manifest.
+Extract only after successful verification, into a fresh directory.
+Inspect the manifest and verify the package with the matching reviewed
+checkout. The independently verified ZIP includes the exact bootstrap
+script; review it, and have the administrator update the protected
+bootstrap while preserving its owner and ACL. Do not execute anything
+elevated from the download directory. The existing explicit installation
+and removal consent, evidence selection, and physical user interaction
+remain necessary.
+
+Attestation proves build provenance, not code safety, Authenticode
+signing, source evidence authenticity, canonical freshness or user consent.
+The workflow is manual and main-only. No private Evidence, keys, or
+production data are included. A successful build alone is not a native
+SCM/Hello acceptance result.
