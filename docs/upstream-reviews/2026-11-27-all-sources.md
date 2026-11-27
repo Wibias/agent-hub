@@ -9,7 +9,122 @@ tracked in [#447](https://github.com/Wibias/agent-hub/issues/447). The
 Impeccable 4.11.1 / engine 0.1.31 release review is tracked in
 [#446](https://github.com/Wibias/agent-hub/issues/446).
 
-## Registry sources
+## Post-merge reconciliation and final scoped decisions (2026-11-27)
+
+This section is the **latest status**. The original comparison and
+investigation below are a historical checkpoint; their mentions of
+`engine 0.1.28` or pending PRs are not the current installation state.
+
+- [PR #448](https://github.com/Wibias/agent-hub/pull/448) **merged**
+  as `b38de3662d7861659d98370f353e4064c406b77c`. The bounded
+  DWA accessibility, Penpot MCP trust and RTL/IME guidance is now part
+  of `main`. This does **not** certify actual WCAG, screen-reader,
+  Penpot service or native IME runtime behavior.
+- [PR #449](https://github.com/Wibias/agent-hub/pull/449) **merged**
+  as `cafeabdd54b75ca14c8b142de506ba262534ffc1`.
+  `skills/design-with-ai/internal/impeccable/scripts/VERSION` on
+  `main` is `0.1.31`. Official release SHA-256, Windows/Linux
+  launchers, Native Rust Live HTTP security and real Chrome overlay
+  startup were tested. **Native Rust Live is still not a DWA-hosted
+  workflow**: its actual Chrome DESIGN.md panel says
+  `/impeccable document`, not the canonical DWA command. That
+  compatibility gap is tracked as
+  [#450](https://github.com/Wibias/agent-hub/issues/450).
+- Post-merge inspection found a duplicated authority paragraph in
+  `references/impeccable-routes.md`, which the old string-presence
+  tests missed. [PR #451](https://github.com/Wibias/agent-hub/pull/451)
+  contains the targeted repair and a structural/contiguity regression
+  test; it is a **separate, not-yet-merged** correctness fix at this
+  checkpoint. Do not claim this defect is repaired on `main` yet.
+
+### Canonical registry decisions after the scoped review
+
+| Source | Reviewed upstream SHA | Disposition | Active local boundary |
+| --- | --- | --- | --- |
+| Addy / `addyosmani/agent-skills` | `e997ac5b9a74eab332d5e9793bb38a38c8cfdd74` | **CURRENT after selective adoption** | New accessibility-evidence discipline belongs to existing DWA. `performance`, `quality-constraints`, `observability` and `ai-agent-security` already own their applicable domains. No blanket adoption of upstream CLI, evaluator or web security checklist |
+| Emil / `emilkowalski/skills` | `64eb3deb9a5fbfa041faf783e0bc3fd635872e9c` | **CURRENT** | No upstream change |
+| Matt / `mattpocock/skills` | `6f7f7831a625f040a8e06a0e7954826b87ce775a` | **NOT_APPLICABLE** | Reviewed changed files concern unrelated in-progress methods and glossary format |
+| pstack / `cursor/plugins` | `b7b93c36be9bcc36a74db438e0fd385d660bc559` | **CURRENT for AgentHub's adopted scope** | Statechart runtime is unchanged since the actual local `aaeb0ea3a0584995aa8f55ce44c6c5259414b896` pin; other changes are Cursor/pstack-specific or already have canonical AgentHub owners |
+| Impeccable / `pbakaus/impeccable` | `2fc5e1459efbbf06d92c7306517c286bf12490cf` | **UPDATE_PENDING (#450)** | Optional native engine is now **0.1.31**; the old `localPin=acb4...` records *historical skill adaptation*, not the installed engine version. Native Rust Live still lacks DWA host/command parity |
+
+Each `reviewedCommit` now refers to the **source revision actually
+inspected**, not the local vendor snapshot. A `CURRENT` decision means
+**the currently adapted AgentHub scope needs no further source sync**,
+not full source-byte parity or complete qualification of every upstream
+feature. The separate `localPin` fields retain their historical
+vendor/adaptation identities.
+
+### Resolution of previously open source categories
+
+**Addy:** The new 80-path delta contains a11y procedures (selectively
+integrated), structural/lexical and optional behavioral evaluation
+infrastructure (reviewed but not adopted), duplicated shared checklists
+(security, performance, observability, delivery), documentation and
+plugin-specific wrappers. The cross-stack performance measurement
+owner `skills/performance/` already requires real baseline,
+representative workload, repeated comparison, correctness and a
+regression guard; `skills/quality-constraints/` owns sustainable
+floors; `skills/observability/` owns logs, metrics, traces and
+privacy; `skills/ai-agent-security/` covers AI/MCP-specific security.
+Addy's classic web/API security checklist describes a different task
+from the adapted AgentHub source scope and is not justification to
+create a parallel generic security skill or turn every DWA task into a
+security audit. **Decision: ALREADY_COVERED for relevant obligations;
+NOT_RELEVANT for unconditional checklist and evaluator installation.**
+Any future explicit web-security work must use its own selected owner
+and actual project/host permissions. Historical behavioral-record
+regrading cannot substitute for independent current-digest reviews.
+
+**pstack:** A nontruncated recursive Git tree comparison of
+`pstack/` established 113 changed/deleted file paths between the
+registry checkpoint and latest HEAD. Direct comparison from the
+**vendored Statechart snapshot** to the same HEAD contains **zero**
+`pstack/skills/statechart/` file differences. The other changed
+subtrees fall into distinct non-vendored areas:
+
+- `poteto-mode`, `setup-pstack`, `poteto-help`, `swarm`,
+  `arena`, `no-comments`, `automate-me`: Cursor-specific
+  model-pool, Task-subagent, plugin and personal mode workflows.
+  **NOT_RELEVANT for automatic AgentHub adoption**. Importing them
+  would introduce competing owners or tool assumptions.
+- `architect`, `benchmark-checklist`, `blast-radius`,
+  `principle-*`, `technical-writing`, `unslop`, `reflect`,
+  `figure-it-out`, `reframe`, `how`, `why`, `teach`,
+  `show-me-your-work`, `recall` and related process methods:
+  covered by the existing `codebase-design`, `performance`,
+  `test-quality`, `skill-ratchet`, `diagnose`, `intent`,
+  `retrospective`, `writing-ticks` and evidence/decision
+  policies **where applicable**. The new `reframe` terminology
+  workflow is a distinct **OPTIONAL** user-requested experience, not
+  a mandate to create a skill during routine code changes.
+- The remaining `pstack/docs`, agents, automation, plugin metadata
+  and training/playbook changes concern its own Cursor distribution
+  and workflows. They are not imported into AgentHub or treated as
+  tested product runtime behavior.
+
+This is a scoped **adoption classification**, not a proof of identical
+behavior across all 113 external files. It justifies marking the
+**adopted Statechart and related AgentHub contracts current**, while
+retaining the original local Statechart commit and source history.
+
+**Impeccable:** Unlike the other sources, the new native Engine 0.1.31
+is installed but the canonical Rust Live host integration remains
+unqualified by the real UI command check. Keep `update-pending` in the
+five-source registry even though its `reviewedCommit` matches the
+latest upstream HEAD. Weekly checks must still signal a pending
+adoption, not a false five-for-five release completion.
+
+The nine supplemental DWA GitHub references below are method
+citations or optional provider inspirations, **not additional live
+vendor branches**. Their scoped dispositions are retained; real
+deployment parity (Penpot session compatibility, full IME/WCAG
+interaction, 3D demos) must be proved if those features are actually
+requested. The report does **not** claim byte-for-byte upgrades or
+full semantic parity with all nine independent repositories.
+
+---
+
+## Historical registry checkpoint and comparison
 
 | Source | Previous reviewed commit | Observed HEAD | Delta | Decision |
 | --- | --- | --- | --- | --- |
