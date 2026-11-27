@@ -367,13 +367,17 @@ internal static class OperatorSelfTest
             string Digest(string value) => Convert.ToHexString(SHA256.HashData(
                 Encoding.UTF8.GetBytes(value))).ToLowerInvariant();
             byte[] ComparisonPayload(int total = 1, string value = existingFact,
-                bool approved = false, string branch = comparisonBranch)
+                bool approved = false, string branch = comparisonBranch,
+                string intentStatus = "not_recorded", bool available = false,
+                string? expectedValue = null, bool duplicate = false)
                 => JsonSerializer.SerializeToUtf8Bytes(new
                 {
                     protocol = "agenthub-operator-uv-service-v1",
                     op = "comparison_inspect", nonce,
                     status = "operator_comparison_preview_no_approval",
                     service_signed = true, human_approval_verified = approved, claim_written = false,
+                    conflict_intent_available = available,
+                    conflict_intent_status = intentStatus,
                     meaning = new
                     {
                         projectId = comparisonProject, branch, revisionSha = new string('a', 40),
@@ -385,8 +389,8 @@ internal static class OperatorSelfTest
                     comparison_sha256 = new string('d', 64), total,
                     claims = new[] { new
                     {
-                        claim_ref = "@0123456789", value_sha256 = Digest(existingFact),
-                        exact_duplicate = false, value,
+                        claim_ref = "@0123456789", value_sha256 = Digest(expectedValue ?? existingFact),
+                        exact_duplicate = duplicate, value,
                     } },
                 });
             ComparisonOffer ParseComparison(byte[] payload, ECDsa signer, string expectedNonce)
@@ -401,6 +405,8 @@ internal static class OperatorSelfTest
             var display = ProtectedOperatorService.FormatComparison(comparison);
             if (comparison.Claims.Count != 1 || comparison.Claims[0].Value != existingFact
                 || !display.Contains("NO APPROVAL", StringComparison.Ordinal)
+                || !display.Contains("original evidence UNVERIFIED", StringComparison.Ordinal)
+                || !display.Contains("freshness NOT verified", StringComparison.Ordinal)
                 || display.Contains("fact\n[FAKE APPROVAL]", StringComparison.Ordinal))
                 throw new Exception("comparison_preview_not_exact_or_escaped");
             MustDeny(() => ParseComparison(ComparisonPayload(), foreign, nonce));
@@ -411,6 +417,73 @@ internal static class OperatorSelfTest
             MustDeny(() => ParseComparison(ComparisonPayload(branch: "other"), key, nonce));
             if (denied != 9)
                 throw new Exception("comparison_negative_cases_missing");
+            var recorded = ParseComparison(ComparisonPayload(intentStatus:"recorded_exact_snapshot"),key,nonce);
+            if(recorded.ConflictIntentAvailable || recorded.ConflictIntentStatus!="recorded_exact_snapshot"
+                || !ProtectedOperatorService.FormatComparison(recorded).Contains("Intent already recorded",StringComparison.Ordinal))
+                throw new Exception("conflict_recovery_status_invalid");
+            MustDeny(()=>ParseComparison(ComparisonPayload(intentStatus:"recorded_exact_snapshot",available:true),key,nonce));
+            MustDeny(()=>ParseComparison(ComparisonPayload(intentStatus:"unknown"),key,nonce));
+            const string normalizedDuplicate = "\uFF21\u00a0new\t fact";
+            var duplicateComparison = ParseComparison(ComparisonPayload(value:normalizedDuplicate,
+                expectedValue:normalizedDuplicate,duplicate:true),key,nonce);
+            if (!duplicateComparison.Claims[0].ExactDuplicate || duplicateComparison.ConflictIntentAvailable)
+                throw new Exception("normalized_duplicate_not_recognized");
+            MustDeny(()=>ParseComparison(ComparisonPayload(value:normalizedDuplicate,
+                expectedValue:normalizedDuplicate,duplicate:false,available:true),key,nonce));
+            MustDeny(()=>ParseComparison(ComparisonPayload(duplicate:true),key,nonce));
+            MustDeny(()=>ParseComparison(ComparisonPayload(value:normalizedDuplicate,
+                expectedValue:normalizedDuplicate,duplicate:true,available:true),key,nonce));
+            var enabledComparison = ParseComparison(ComparisonPayload(available:true),key,nonce);
+            string Token(int n) => Convert.ToBase64String(new byte[n]).TrimEnd('=').Replace('+','-').Replace('/','_');
+            byte[] ConflictPayload(string snapshot, string digest, string decision = "confirm", bool freshness = false)
+                => JsonSerializer.SerializeToUtf8Bytes(new
+                {
+                    protocol = "agenthub-operator-uv-service-v1", op = "conflict_begin", nonce,
+                    status = "conflict_review_challenge_no_claim", service_signed = true,
+                    human_approval_verified = false, claim_written = false, canonical_freshness_verified = freshness,
+                    comparison_sha256 = digest,
+                    meaning = new { projectId=comparisonProject, branch=comparisonBranch,
+                        revisionSha=comparison.RevisionSha, proposalRef=comparisonRef,
+                        reviewSnapshotSha256=snapshot, canonicalFactSha256=Digest(comparisonFact),
+                        decision, canonicalFact=comparisonFact },
+                    ticket_id=Token(24), challenge=Token(32), credential_id=Token(32),
+                    expected_origin="http://localhost:4328", expires_utc=DateTimeOffset.UtcNow.AddSeconds(60).ToString("O"),
+                });
+            ConflictChallenge ParseConflict(byte[] payload, ComparisonOffer offer)
+            {
+                using var signed=ProtectedOperatorService.VerifySignedResponse(MakeEnvelope(key,payload),
+                    key.ExportSubjectPublicKeyInfoPem(),nonce,"conflict_begin");
+                return ProtectedOperatorService.ParseConflictChallenge(signed.RootElement,offer);
+            }
+            var challengePayload=ConflictPayload(comparison.SnapshotSha256,comparison.ComparisonSha256);
+            if(ParseConflict(challengePayload,enabledComparison).TicketId!=Token(24))
+                throw new Exception("conflict_challenge_invalid");
+            MustDeny(()=>ParseConflict(challengePayload,comparison));
+            MustDeny(()=>ParseConflict(ConflictPayload(new string('e',64),comparison.ComparisonSha256),enabledComparison));
+            MustDeny(()=>ParseConflict(ConflictPayload(comparison.SnapshotSha256,new string('e',64)),enabledComparison));
+            MustDeny(()=>ParseConflict(ConflictPayload(comparison.SnapshotSha256,comparison.ComparisonSha256,"reject"),enabledComparison));
+            MustDeny(()=>ParseConflict(ConflictPayload(comparison.SnapshotSha256,comparison.ComparisonSha256,freshness:true),enabledComparison));
+            byte[] ReceiptPayload(string digest,bool claim=false)
+                => JsonSerializer.SerializeToUtf8Bytes(new
+                {
+                    protocol="agenthub-operator-uv-service-v1",op="conflict_complete",nonce,
+                    status="conflict_review_intent_recorded_no_claim",service_signed=true,
+                    human_approval_verified=false,claim_written=claim,canonical_freshness_verified=false,
+                    signature_verified=true,receipt=new {projectId=comparisonProject,branch=comparisonBranch,
+                        proposalRef=comparisonRef,snapshot_sha256=comparison.SnapshotSha256,
+                        comparison_sha256=digest,decision="confirm"},
+                });
+            bool ParseReceipt(byte[] payload)
+            {
+                using var signed=ProtectedOperatorService.VerifySignedResponse(MakeEnvelope(key,payload),
+                    key.ExportSubjectPublicKeyInfoPem(),nonce,"conflict_complete");
+                return ProtectedOperatorService.ParseConflictReceipt(signed.RootElement,enabledComparison);
+            }
+            if(!ParseReceipt(ReceiptPayload(comparison.ComparisonSha256))
+                || ParseReceipt(ReceiptPayload(new string('e',64))))
+                throw new Exception("conflict_receipt_binding_failed");
+            MustDeny(()=>ParseReceipt(ReceiptPayload(comparison.ComparisonSha256,claim:true)));
+            if(denied!=20) throw new Exception("conflict_negative_cases_missing");
             denied = 3; // Retain the existing subsequent envelope-test count.
 
             // A signed, purpose-bound response is STILL never a Claim and

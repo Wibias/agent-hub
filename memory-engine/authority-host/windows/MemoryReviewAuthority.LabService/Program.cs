@@ -119,12 +119,13 @@ internal sealed class ReviewAuthorityLabService : ServiceBase
         if (File.Exists(Path.Combine(stateDir, ProtectedPendingReviewLedger.OperatorManifestFile)))
         {
             var inspection = _ledger.InspectOperatorPinnedEvidence();
-            if (inspection.ActiveClaims.Count != 0)
+            if (inspection.ComparisonPreviewOnly || inspection.ActiveClaims.Count != 0)
             {
                 if (_ciRegistryFence is not null)
                     throw new InvalidOperationException("comparison_only_conflicts_with_ci_read");
                 _operatorProofPipe = new OperatorWebAuthnPipe(_ledger, stateDir,
-                    comparisonOnlySnapshot: inspection.Review);
+                    comparisonOnlySnapshot: inspection.Review,
+                    comparisonEnrollmentEnabled: inspection.ComparisonPreviewOnly);
                 _operatorProofPipe.Start();
                 return;
             }

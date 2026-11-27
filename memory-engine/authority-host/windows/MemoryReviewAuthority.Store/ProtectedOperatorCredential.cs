@@ -229,6 +229,14 @@ public sealed partial class ProtectedPendingReviewLedger
     /// </summary>
     public ProtectedOperatorCredential RecordNativeUvEnrollment(
         ReviewMeaning meaning, PinnedCredential key, VerificationResult proof)
+        => RecordNativeEnrollmentCore(meaning,key,proof,false);
+
+    public ProtectedOperatorCredential RecordNativeComparisonUvEnrollment(
+        ReviewMeaning meaning, PinnedCredential key, VerificationResult proof)
+        => RecordNativeEnrollmentCore(meaning,key,proof,true);
+
+    private ProtectedOperatorCredential RecordNativeEnrollmentCore(
+        ReviewMeaning meaning, PinnedCredential key, VerificationResult proof, bool comparisonPreview)
     {
         EnsureOpen();
         if (meaning is null || key is null || proof is null
@@ -242,6 +250,14 @@ public sealed partial class ProtectedPendingReviewLedger
         using var tx = _connection.BeginTransaction(deferred: false);
         if (FindOperatorCredential(tx) is not null)
             throw new InvalidOperationException("operator_enrollment_already_exists");
+        if (comparisonPreview)
+        {
+            var current = ReadComparisonEnrollmentOffer();
+            if (current is null || current.Meaning != meaning)
+                throw new InvalidOperationException("comparison_enrollment_snapshot_changed");
+        }
+        else
+        {
         var pending = Lookup(meaning.ProjectId, meaning.Branch,
             meaning.ProposalRef, tx);
         if (pending is null || pending.Status != PendingState
@@ -256,6 +272,7 @@ public sealed partial class ProtectedPendingReviewLedger
         if (source is null || source.SourceOrigin != OperatorSourceOrigin
             || source.Source.CanonicalFact != meaning.CanonicalFact)
             throw new InvalidOperationException("native_enrollment_evidence_missing");
+        }
 
         using var cmd = _connection.CreateCommand();
         cmd.Transaction = tx;
@@ -290,6 +307,20 @@ public sealed partial class ProtectedPendingReviewLedger
     /// comes from any browser/IPC caller. No model-facing public pipe can
     /// access this projection, only the explicitly Admin-ACL operator pipe.
     /// </summary>
+    // Enrollment only: the explicit preview-purpose snapshot is not a pending
+    // review, and must never be promoted through the ordinary approval path.
+    public ProtectedOperatorReviewOffer? ReadComparisonEnrollmentOffer()
+    {
+        var current = InspectOperatorPinnedEvidence(includeLocalContent:true);
+        if (!current.ComparisonPreviewOnly || current.ActiveClaims.Count == 0
+            || current.CanonicalFact is null) return null;
+        var p = current.Review;
+        return new ProtectedOperatorReviewOffer(p.ReviewSnapshotSha256,
+            new ReviewMeaning(p.ProjectId,p.Branch,p.RevisionSha,p.ProposalRef,
+                p.ReviewSnapshotSha256,p.CanonicalFactSha256,p.RequestedAction,current.CanonicalFact),
+            p.SourceEvidenceSha256,current.Kind,OperatorSourceOrigin);
+    }
+
     public ProtectedOperatorReviewOffer? ReadOperatorReviewOffer(
         string projectId, string branch, string proposalRef)
     {

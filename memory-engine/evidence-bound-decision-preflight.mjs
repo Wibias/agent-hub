@@ -163,7 +163,7 @@ export function inspectEvidenceBoundDecision({
     const importance = proposal.importance;
     const support = proposal.support;
     const relationJudgment = proposal.relation;
-    const pendingReady = (
+    const pendingJudgmentsReady = (
       proposal.status === 'pending'
       && ['knowledge', 'preference', 'procedure'].includes(proposal.kind)
       && proposal.fingerprint === evidenceExtractionFingerprint({
@@ -184,8 +184,8 @@ export function inspectEvidenceBoundDecision({
       && relationJudgment.meaning_preserved === true
       && relationJudgment.target_ref === null
       && targetId === null
-      && claimTotal === 0
     );
+    const pendingReady = pendingJudgmentsReady && claimTotal === 0;
     const blockers = [];
     if (proposal.status === 'pending' && !pendingReady) {
       blockers.push('pending_requires_complete_high_confidence_review');
@@ -213,6 +213,7 @@ export function inspectEvidenceBoundDecision({
       kind: proposal.kind,
       proposalStatus: proposal.status,
       eligibleForProtectedPendingReview: pendingReady,
+      eligibleForComparisonPreview: claimTotal > 0 && (proposal.status === "needs_confirmation" || pendingJudgmentsReady) && [null,"unrelated"].includes(relation),
       evidence,
       relation: {
         type: relation,

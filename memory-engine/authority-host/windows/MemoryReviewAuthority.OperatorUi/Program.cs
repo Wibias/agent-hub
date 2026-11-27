@@ -145,6 +145,12 @@ internal sealed class OperatorReviewWindow : Form
         Text = "Signierten Claim-Vergleich laden (nur lesen)",
         AutoSize = true, Height = 38,
     };
+    private ComparisonOffer? _comparisonOffer;
+    private readonly Button _conflict = new()
+    {
+        Text = "Konflikt-Intent mit Windows Hello (kein Claim)",
+        AutoSize = true, Height = 38, Enabled = false,
+    };
     private readonly Button _load = new()
     {
         Text = "Signierten Vorschlag laden",
@@ -294,6 +300,7 @@ internal sealed class OperatorReviewWindow : Form
             FlowDirection = FlowDirection.LeftToRight,
         };
         loadActions.Controls.Add(_compare);
+        loadActions.Controls.Add(_conflict);
         loadActions.Controls.Add(_load);
         loadActions.Controls.Add(_enrollPrepare);
         loadActions.Controls.Add(_reaffirmPrepare);
@@ -320,6 +327,7 @@ internal sealed class OperatorReviewWindow : Form
         Controls.Add(outer);
 
         _compare.Click += async (_, _) => await LoadComparisonAsync();
+        _conflict.Click += (_, _) => PerformConflictReview();
         _load.Click += async (_, _) => await LoadOfferAsync();
         _enrollPrepare.Click += async (_, _) => await LoadEnrollmentAsync();
         _reaffirmPrepare.Click += async (_, _) => await LoadReaffirmationAsync();
@@ -373,6 +381,7 @@ internal sealed class OperatorReviewWindow : Form
 
     private void InvalidateOffer()
     {
+        _comparisonOffer = null;
         _offer = null;
         _enrollment = null;
         _reaffirmation = null;
@@ -400,6 +409,7 @@ internal sealed class OperatorReviewWindow : Form
 
     private void UpdateVerifyEnabled()
     {
+        _conflict.Enabled = !_busy && _comparisonOffer is { ConflictIntentAvailable: true };
         _verify.Enabled = !_busy && _acknowledge.Checked
             && ((_offer is { } o && o.ExpiresUtc > DateTimeOffset.UtcNow)
                 || (_enrollment is { } e
@@ -431,15 +441,24 @@ internal sealed class OperatorReviewWindow : Form
             if (_project.Text.Trim() != project || _branch.Text.Trim() != branch
                 || _reference.Text.Trim() != reference)
                 throw new InvalidOperationException("Selection changed during comparison");
+            _comparisonOffer = offer;
             _fact.Text = ProtectedOperatorService.FormatComparison(offer);
             _meaning.Text = $"PROJECT: {offer.ProjectId} | BRANCH: {offer.Branch} | {offer.ProposalRef}\n"
                 + $"ACTION: {offer.Decision} | KIND: {offer.Kind}\n"
                 + $"COMMIT: {offer.RevisionSha}\nSNAPSHOT: {offer.SnapshotSha256}\n"
                 + $"COMPARISON: {offer.ComparisonSha256}\nEVIDENCE: {offer.EvidenceSha256}";
-            _status.Text = "Signierter Vergleich. Nur lesen. Keine Windows-Hello-Freigabe.";
+            _status.Text = offer.ConflictIntentStatus switch
+            {
+                "recorded_exact_snapshot" => "Intent fuer exakt diesen Snapshot bereits gespeichert. Kein Claim.",
+                "recorded_different_snapshot" => "Frueherer Intent fuer anderen Snapshot. Neue Entscheidung gesperrt.",
+                _ => offer.ConflictIntentAvailable
+                    ? "Vergleich geladen. Nur Konflikt-Intent; keine Claim-Freigabe."
+                    : "Signierter Vergleich. Keine Konfliktaktion verfuegbar.",
+            };
         }
         catch (Exception)
         {
+            _comparisonOffer = null;
             _fact.Clear();
             _meaning.Text = "";
             _status.Text = "Vergleich nicht verfuegbar oder unvollstaendig. Keine Freigabe.";
@@ -448,6 +467,40 @@ internal sealed class OperatorReviewWindow : Form
         {
             _busy = false;
             _compare.Enabled = true;
+            UpdateVerifyEnabled();
+        }
+    }
+
+    private void PerformConflictReview()
+    {
+        if (_busy || _comparisonOffer is not { ConflictIntentAvailable: true } offer) return;
+        _busy=true;
+        _conflict.Enabled=false;
+        _project.Enabled=_branch.Enabled=_reference.Enabled=false;
+        try
+        {
+            // Modal confirmation prevents editing scope and requires an explicit
+            // judgment of the full comparison, not just a successful Hello.
+            var action=offer.Decision=="confirm"
+                ? "Ich habe alle angezeigten Claims verglichen und beurteile den Vorschlag als unabhaengig."
+                : "Ich lehne den angezeigten Vorschlag ab.";
+            if (MessageBox.Show(this,action+"\n\nNur Intent speichern. Keine Claim-Freigabe, keine kanonische Aenderung.",
+                "Konfliktentscheidung: "+offer.Decision,MessageBoxButtons.OKCancel,
+                MessageBoxIcon.Warning,MessageBoxDefaultButton.Button2)!=DialogResult.OK) return;
+            var challenge=ProtectedOperatorService.BeginConflict(offer);
+            var assertion=NativeWindowsWebAuthn.GetAssertion(Handle,challenge.Challenge,challenge.CredentialId,
+                challenge.ExpectedOrigin,challenge.ExpiresUtc);
+            var saved=ProtectedOperatorService.CompleteConflict(offer,challenge,assertion);
+            _status.Text=saved
+                ? "Konflikt-Intent gespeichert. Kein Claim, kanonische Aktualitaet NICHT verifiziert."
+                : "Konflikt-Intent verweigert. Keine Freigabe.";
+        }
+        catch(Exception) { _status.Text="Konfliktaktion abgebrochen oder verweigert. Status nicht bestaetigt."; }
+        finally
+        {
+            _comparisonOffer=null;
+            _project.Enabled=_branch.Enabled=_reference.Enabled=true;
+            _busy=false;
             UpdateVerifyEnabled();
         }
     }

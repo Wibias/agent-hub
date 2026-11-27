@@ -121,6 +121,7 @@ public sealed partial class ProtectedPendingReviewLedger : IDisposable
             InitializeProtectedSourceSchema(connection);
             InitializeOperatorCredentialSchema(connection);
             InitializeOperatorReaffirmationSchema(connection);
+            InitializeConflictReviewSchema(connection);
             InitializeOperatorDirectClaimSchema(connection);
             InitializeDirectReadEnrollmentSchema(connection);
             // Audit-only CI scope. This schema does NOT authorize normal
