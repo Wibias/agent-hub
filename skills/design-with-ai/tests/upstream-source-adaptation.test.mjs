@@ -53,6 +53,24 @@ test('Penpot MCP 2.19 source review preserves session/host/code/rollback boundar
   assert.match(penpot, /does \*\*not\*\* vendor[\s\S]{0,100}enable any new tool/i);
 });
 
+test('Nextlevel IME/RTL guidance protects composition without claiming native runtime proof', () => {
+  const controls = read('../references/states-interaction.md');
+  for (const token of [
+    'event.isComposing', 'keyCode===229', 'compositionstart',
+    'compositionend', 'Japanese, Chinese, or Korean IME',
+    'Shift+Enter', 'NOT_VERIFIED', 'margin-inline-start',
+    'padding-inline', 'inset-inline-end', 'dir="auto"',
+    'Arabic/Hebrew', 'NOT_MEASURED',
+    '72e5fc76a4f3eb37747dc472cb3091bd46e7752a',
+  ]) {
+    assert.ok(controls.includes(token), 'missing locale interaction evidence: ' + token);
+  }
+  assert.match(controls, /must[\s\S]{0,30}not submit while/);
+  assert.match(controls, /A separate, real Enter after confirmed composition may submit once/);
+  assert.match(controls, /Do not mirror entire interfaces/);
+  assert.match(controls, /No upstream search engine/);
+});
+
 test('Matt irrelevant seven-commit upstream delta is reviewed but not adopted', () => {
   const registry = JSON.parse(read('../../../upstream-sources.json'));
   const matt = registry.sources.find((source) => source.id === 'matt');
