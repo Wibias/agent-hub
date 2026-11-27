@@ -106,9 +106,19 @@ before/after comparison.
 - `MengTo/skills`: from
   `3cc93458c4949c39a04e938ea7892a1d6d3d40bf` to
   `3a8517e09e9a258a8b8a1dfdb71579abe75f1c22`, +25 commits.
-  New 3D and demo assets are present; compare hit 300-file cap. Review
-  methods only if the relevant visual experience is requested. No
-  copying of media assets or standalone 3D skill.
+  The **broad Compare API** was capped at 300 files, but direct
+  nontruncated recursive trees establish the DWA-relevant scoped deltas:
+  `agent-skills/3d/` 122 -> 332 entries (143 changed/new file blobs),
+  `web-design/` 969 -> 1151 (141 changed/new),
+  `ui/` 19 -> 52 (21 changed/new), and `game-development/`
+  116 -> 161 (36 changed/new). New entries emphasize Three.js water,
+  3D composition, camera/scroll effects, scenic UI, and demo assets.
+  **NOT_RELEVANT by default** to ordinary DWA application UI;
+  **BLOCKED_PENDING** until the actual product requests a supported
+  3D/experience treatment and assets/licensing/performance are reviewed.
+  No blanket copying of media/demo scripts or extra 3D skill owner.
+  The rest of the repository, including media and a new video-editing
+  directory, is not a claimed complete semantic review.
 - `nextlevelbuilder/ui-ux-pro-max-skill`: from
   `28b3b8dee8c976df4fa3e94aed4e092ad43fcb03` to
   `72e5fc76a4f3eb37747dc472cb3091bd46e7752a`, +43 commits,
