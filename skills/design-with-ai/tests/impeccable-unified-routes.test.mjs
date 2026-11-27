@@ -59,3 +59,16 @@ test('internal helper text points explicit command users to the canonical owner'
   assert.match(provider, /design-with-ai impeccable/);
   assert.doesNotMatch(provider, /`\$\{IMPECCABLE_COMMAND_PREFIX\}impeccable`/);
 });
+
+
+test('Rust Live cannot advertise upstream commands as a verified DWA-owned session', () => {
+  const routes = read('references/impeccable-routes.md');
+  assert.match(routes, /Rust Live command identity gate/);
+  assert.match(routes, /real native Chrome smoke/);
+  assert.match(routes, /\$design-with-ai impeccable/);
+  assert.match(routes, /Do not invoke the Rust[\s\S]*?live-server[\s\S]*?live-inject[\s\S]*?until actual runtime verification/);
+  assert.match(routes, /DWA-owned opt-in JS Live/);
+  assert.match(routes, /Otherwise report `NOT_VERIFIED`/);
+  assert.match(routes, /A successful[\s\S]*?engine-probe[\s\S]*?cannot relax this routing boundary/);
+  assert.doesNotMatch(routes, /\| `live` \|[^\n]*explicit engine session only/);
+});
