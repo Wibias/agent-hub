@@ -4,8 +4,15 @@ on:
   pull_request:
     paths:
       - "memory-ui/**"
+      - "memory-engine/memory-graph-entities.mjs"
+      - "memory-engine/memory-ui-model.mjs"
       - "tests/memory-engine/memory-console-d12-design.test.mjs"
       - "tests/memory-engine/memory-console-evidence-review.test.mjs"
+      - "tests/memory-engine/memory-graph-entities.test.mjs"
+      - "tests/memory-engine/memory-graph-v2-integration.test.mjs"
+      - "tests/memory-engine/memory-graph-v2-ui.test.mjs"
+      - "tests/memory-engine/memory-quality-review.test.mjs"
+      - "docs/memory-quality-review-2026-11-27.json"
       - "memory-engine/evidence-bound-review-readonly.mjs"
       - "docs/memory-console-d12-design-brief.md"
       - ".design-with-ai/**"
@@ -37,8 +44,12 @@ jobs:
           node --test \
             tests/memory-engine/memory-console-d12-design.test.mjs \
             tests/memory-engine/memory-console-evidence-review.test.mjs \
+            tests/memory-engine/memory-graph-entities.test.mjs \
             tests/memory-engine/memory-graph-ui.test.mjs \
             tests/memory-engine/memory-graph-v2.test.mjs \
+            tests/memory-engine/memory-graph-v2-integration.test.mjs \
+            tests/memory-engine/memory-graph-v2-ui.test.mjs \
+            tests/memory-engine/memory-quality-review.test.mjs \
             tests/memory-engine/memory-ui.test.mjs
       - name: Design with AI source taste gate
         run: |

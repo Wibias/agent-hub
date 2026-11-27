@@ -3,6 +3,7 @@ import {
   memoryClaimRef,
 } from './adapters/codex-hooks.mjs';
 import { buildMemoryGraphV2 } from './memory-graph-v2.mjs';
+import { projectClaimEntities } from './memory-graph-entities.mjs';
 import { pipelineRunRef } from './pipeline-observability.mjs';
 
 function text(value) {
@@ -184,20 +185,119 @@ export function memoryUiGraph(memory, {
   includeSimilarity = true,
   semanticThreshold = 0.82,
   maxSemanticNeighbors = 3,
+  scope = 'branch',
+  maxProjectClaims = 500,
 } = {}) {
-  const graph = buildMemoryGraphV2(memory, {
+  if (!['branch', 'project'].includes(scope)) {
+    throw new TypeError('scope must be branch or project');
+  }
+  if (!Number.isInteger(maxProjectClaims) || maxProjectClaims < 1 || maxProjectClaims > 500) {
+    throw new RangeError('maxProjectClaims must be between 1 and 500');
+  }
+  let graph;
+  if (scope === 'project') {
+    const branches = [...new Set(memory.exportCanonical().claims
+      .filter((claim) => claim.project_id === projectId)
+      .map((claim) => claim.branch_scope)
+      .filter(Boolean))].sort();
+    const parts = branches.map((scopeBranch) => buildMemoryGraphV2(memory, {
+      projectId,
+      branch: scopeBranch,
+      revisionSha: null,
+      includeSimilarity,
+      semanticThreshold,
+      maxSemanticNeighbors,
+    }));
+    const partsStats = parts.map((part) => part.stats ?? {});
+    const allNodes = parts.flatMap((part) => part.nodes);
+    const allEdges = parts.flatMap((part) => part.edges);
+    const allClaims = allNodes.filter((node) => (node.nodeType ?? 'claim') === 'claim');
+    const partOmittedClaims = partsStats.reduce(
+      (sum, item) => sum + Number(item.omittedClaims ?? 0), 0,
+    );
+    let nodes = allNodes;
+    let edges = allEdges;
+    let projectOmittedClaims = 0;
+    if (allClaims.length > maxProjectClaims) {
+      // Deterministic newest-first cap across branches. Older claims stay in
+      // canonical storage and are not deleted; only this projection is bounded.
+      const keep = new Set(allClaims
+        .slice()
+        .sort((left, right) => (
+          String(right.createdAt ?? '').localeCompare(String(left.createdAt ?? ''), 'en')
+          || left.id.localeCompare(right.id, 'en')
+        ))
+        .slice(0, maxProjectClaims)
+        .map((node) => node.id));
+      nodes = allNodes.filter((node) => (node.nodeType ?? 'claim') !== 'claim' || keep.has(node.id));
+      edges = allEdges.filter((edge) => keep.has(edge.from) && keep.has(edge.to));
+      projectOmittedClaims = allClaims.length - keep.size;
+    }
+    const groups = new Map();
+    for (const node of nodes) {
+      const id = node.group ?? 'unknown';
+      const current = groups.get(id) ?? {
+        id, label: node.groupLabel ?? 'Unknown authority', count: 0,
+      };
+      current.count += 1;
+      groups.set(id, current);
+    }
+    const claimNodes = nodes.filter((node) => (node.nodeType ?? 'claim') === 'claim');
+    graph = {
+      schemaVersion: parts[0]?.schemaVersion ?? 2,
+      projectId,
+      branch: null,
+      scope: 'project',
+      branches,
+      includedBranches: [...new Set(claimNodes
+        .map((node) => node.branch)
+        .filter(Boolean))].sort(),
+      nodes,
+      edges,
+      groups: [...groups.values()].sort((left, right) => (
+        right.count - left.count || left.id.localeCompare(right.id, 'en')
+      )),
+      stats: {
+        totalClaims: claimNodes.length,
+        nodeCount: nodes.length,
+        edgeCount: edges.length,
+        explicitEdges: edges.filter((edge) => edge.origin === 'explicit').length,
+        inferredEdges: edges.filter((edge) => edge.relation === 'semantic_similarity').length,
+        typedRelations: edges.filter((edge) => edge.source === 'typed_relation').length,
+        typedRelationsOmittedByBound: partsStats.reduce(
+          (sum, item) => sum + Number(item.typedRelationsOmittedByBound ?? 0), 0,
+        ),
+        truncated: partsStats.some((item) => item.truncated === true)
+          || projectOmittedClaims > 0,
+        omittedClaims: partOmittedClaims + projectOmittedClaims,
+        projectClaimsOmittedByBound: projectOmittedClaims,
+        semanticThreshold,
+        maxSemanticNeighbors,
+        similarityEnabled: includeSimilarity,
+        repositoryNodesUnchecked: nodes.filter((node) => node.freshness?.status === 'unchecked').length,
+        repositoryNodesStale: nodes.filter((node) => node.freshness?.status === 'stale').length,
+      },
+      gitContext: { status: 'project_scope', revisionSha: null },
+    };
+  } else {
+    graph = buildMemoryGraphV2(memory, {
+      projectId,
+      branch,
+      revisionSha,
+      includeSimilarity,
+      semanticThreshold,
+      maxSemanticNeighbors,
+    });
+  }
+  graph = projectClaimEntities(graph, {
     projectId,
-    branch,
-    revisionSha,
-    includeSimilarity,
-    semanticThreshold,
-    maxSemanticNeighbors,
+    branch: scope === 'project' ? null : branch,
   });
   return {
     ...graph,
     nodes: graph.nodes.map((node) => ({
       ...node,
-      ref: memoryClaimRef(node.id),
+      ref: node.nodeType === 'entity' ? node.ref : memoryClaimRef(node.id),
       authority: node.authority,
     })),
   };

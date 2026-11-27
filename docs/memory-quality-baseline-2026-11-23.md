@@ -167,3 +167,7 @@ node --test tests/memory-engine/codex-hybrid-recall.test.mjs
 
 The provider smoke requires the configured local Codex provider and a disposable database.
 
+## 9. Human review packet (2026-11-27)
+
+`docs/memory-quality-review-2026-11-27.json` contains 20 synthetic review cases across capture, importance, dedupe, update, conflict, agent provenance and retrieval. It contains no production memory text. The packet is intentionally marked `humanValidated: false`; until a human reviews it, no score derived from these cases is human-validated.
+

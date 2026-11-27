@@ -33,6 +33,11 @@ test('D12 status overview never invents repository verification', () => {
   assert.equal(unavailable.tone, 'caution');
   assert.match(unavailable.message, /must not be treated as fresh/);
   assert.doesNotMatch(JSON.stringify(unavailable), /PRIVATE_VALUE/);
+
+  const userMemory = summary(graph('unbound', [node('not_repository')]));
+  assert.equal(userMemory.tone, 'neutral');
+  assert.match(userMemory.title, /User memory scope/);
+  assert.match(userMemory.message, /does not apply/);
 });
 
 test('D12 stale and unchecked nodes are not presented as fresh', () => {
@@ -101,6 +106,25 @@ test('D12 scoped evidence summary qualifies empty views when records were trunca
   assert.match(full.title, /No repository-backed memories in this scope/);
 });
 
+test('D12 hides isolated nodes by default while search can reveal them', () => {
+  const graphState = {
+    graphSearch: '', graphNodeType: 'all', graphNodeState: 'all',
+    graphGroup: 'all', graphCommunity: 'all', graphScope: 'branch',
+    graphBranchFilter: 'all', graphShowIsolated: false,
+    graph: {
+      nodes: [{ id: 'a', value: 'Alpha' }, { id: 'b', value: 'Beta' }, { id: 'c', value: 'Gamma' }],
+      edges: [{ from: 'a', to: 'b' }],
+    },
+  };
+  const filter = helper('graphFilteredNodes', '\n/** Keep only displayed edges', { state: graphState });
+  assert.deepEqual(filter().map((node) => node.id), ['a', 'b']);
+  graphState.graphShowIsolated = true;
+  assert.deepEqual(filter().map((node) => node.id), ['a', 'b', 'c']);
+  graphState.graphShowIsolated = false;
+  graphState.graphSearch = 'gamma';
+  assert.deepEqual(filter().map((node) => node.id), ['c']);
+});
+
 test('D12 relation filters keep advisory typed edges out of similarity-only results', () => {
   const graphState = {
     graphOrigin: 'all',
@@ -133,6 +157,9 @@ function mountedGraph(nodeBounds) {
     graphLoading: false, graphError: '', graphSearch: '',
     graphOrigin: 'all', graphGroup: 'all', graphNodeState: 'all',
     graphCommunity: 'all', graphSimilarityThreshold: 0.82,
+    graphScope: 'branch', graphBranchFilter: 'all', graphNodeType: 'all',
+    graphShowIsolated: false,
+    graphRequestSeq: 0,
     graphZoom: 1, graphPanX: 0, graphPanY: 0,
     graphPositionOverrides: {}, selectedGraphEdgeId: null,
     graphSelectionExplicit: false,
@@ -207,7 +234,8 @@ function mountedGraph(nodeBounds) {
         return { addEventListener() {} };
       }
       if ([
-        '#graph-community-filter', '#graph-threshold',
+        '#graph-community-filter', '#graph-threshold', '#graph-show-isolated',
+        '#graph-scope-filter', '#graph-node-type-filter', '#graph-branch-filter',
         '#graph-zoom-in', '#graph-zoom-out', '#graph-fit-view',
         '#graph-reset-view', '#graph-fullscreen',
       ].includes(id)) return null;
@@ -215,7 +243,7 @@ function mountedGraph(nodeBounds) {
     },
     getElementById() { return null; },
   };
-  const start = app.indexOf('function graphCommunityData(');
+  const start = app.indexOf('function graphCommunityLabel(');
   const end = app.indexOf('async function loadGraph(', start);
   assert.ok(start >= 0 && end > start, 'bounded production graph functions');
   const ctx = {
@@ -223,6 +251,7 @@ function mountedGraph(nodeBounds) {
     escapeHtml: (value) => String(value ?? '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('"', '&quot;'),
     number: (value) => String(value ?? 0),
     dateTime: (value) => String(value ?? ''),
+    perfNow: () => 0,
     statusClass: () => '',
     definition: () => '',
     compactTechnicalId: (value) => String(value),
@@ -255,9 +284,71 @@ test('D12 selects the matching node from its rendered SVG markup and restores ke
   assert.equal(offscreen.scrollCalls, 1, 'offscreen SVG node must become visible');
 });
 
+test('D12 exposes a desktop close control for the graph inspector', () => {
+  assert.match(css, /@media \(min-width: 981px\)[\s\S]*\.graph-inspector \.mobile-detail-heading\s*\{[^}]*display:\s*flex/);
+});
+
+test('D12 collapses the graph inspector without reserving a desktop column', () => {
+  assert.match(css, /\.graph-layout:not\(\.is-details-open\)\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)/);
+  assert.match(css, /\.graph-layout:not\(\.is-details-open\)\s*>\s*\.graph-inspector\s*\{[^}]*display:\s*none/);
+});
+
 test('D12 keeps the graph inside the mobile viewport with readable labels', () => {
   assert.match(css, /@media \(max-width: 980px\)[\s\S]*?body\s*\{[^}]*min-width:\s*0/);
   assert.match(css, /\.graph-canvas-wrap\s*\{[^}]*min-width:\s*0/);
   assert.match(css, /@media \(max-width: 980px\)[\s\S]*?\.graph-canvas\s*\{[^}]*width:\s*100%/);
   assert.match(css, /\.graph-node \.graph-node-label\s*\{[^}]*font:\s*600 11px/);
+});
++
+test('D12 loadGraph ignores a stale response after a newer scope request', async () => {
+  const start = app.indexOf('async function loadGraph(');
+  const end = app.indexOf('function summaryStat(', start);
+  assert.ok(start >= 0 && end > start, 'bounded loadGraph source');
+  const pending = [];
+  const state = {
+    projectId: 'project',
+    branch: 'main',
+    graph: null,
+    graphLoading: false,
+    graphError: '',
+    graphGroup: 'all',
+    graphBranchFilter: 'all',
+    graphScope: 'branch',
+    graphSimilarityThreshold: 0.82,
+    graphRequestSeq: 0,
+    graphApiMs: null,
+    graphRenderMs: null,
+    graphSelectionExplicit: false,
+    selectedGraphNodeId: null,
+    selectedGraphEdgeId: null,
+  };
+  const ctx = {
+    state,
+    api: () => '/api/graph',
+    fetchJson: () => new Promise((resolve) => pending.push(resolve)),
+    renderGraph: () => {},
+    perfNow: () => 0,
+  };
+  const loadGraph = vm.runInNewContext(
+    app.slice(start, end) + '\nloadGraph',
+    ctx,
+  );
+  const first = loadGraph({ render: false });
+  const second = loadGraph({ render: false });
+  assert.equal(pending.length, 2);
+  pending[1]({
+    projectId: 'project', branch: 'main', scope: 'branch',
+    nodes: [{ id: 'b', state: 'active' }], edges: [], groups: [],
+    stats: { nodeCount: 1, edgeCount: 0 }, branches: [],
+  });
+  await second;
+  assert.equal(state.graph.nodes[0].id, 'b');
+  pending[0]({
+    projectId: 'project', branch: 'main', scope: 'branch',
+    nodes: [{ id: 'a', state: 'active' }], edges: [], groups: [],
+    stats: { nodeCount: 1, edgeCount: 0 }, branches: [],
+  });
+  await first;
+  assert.equal(state.graph.nodes[0].id, 'b', 'stale response must not overwrite newer graph');
+  assert.equal(state.graphLoading, false);
 });
