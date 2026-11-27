@@ -143,3 +143,23 @@ production publication, canonical migration, or issue closure follows
 from a successful intent-only acceptance. See the existing Windows field
 acceptance instructions for the separate verified-package and cleanup
 requirements; those instructions are not permission to install.
+
+### D12.3 consolidation decision (#192)
+
+The stricter read-only preflight hunks from the stacked #192 draft are
+already on main (#329). Align staging with the preflight's exact Codex
+session source reference and UserPromptSubmit metadata requirements.
+Replay must revalidate the persisted span coordinates and hashes, not
+just opaque references, and the existing stage policy and timestamp.
+The preflight explicitly reports hostUserOriginAuthenticated=false:
+local Evidence consistency does not prove the human author's identity.
+
+Do not transplant the old draft's callable finalizer, which combines
+user-writable confirmation Evidence and operatorReviewed=true to create
+an active user_direct Claim. Its atomicity and provenance tests are
+useful acceptance requirements, not an independent authorization grant.
+The local transaction correction in #458 is a separate prerequisite;
+protected finalization needs a service-owned authorization boundary.
+The optional promotion ledger and finalizer remain unmerged, and the
+canonical portability gap for selected source spans remains open.
+Local staging/preflight changes were verified on disposable SQLite only.

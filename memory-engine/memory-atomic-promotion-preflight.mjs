@@ -28,7 +28,7 @@ export function inspectAtomicPromotionPreflight({
   const report = {
     type:'agent_hub_atomic_promotion_preflight_v1',
     readOnly:true,modelInvocations:0,writesToSource:false,
-    claimCreated:false,promotionAllowed:false,
+    claimCreated:false,promotionAllowed:false,hostUserOriginAuthenticated:false,
     scope:{projectId,branch},
     stageRef:'~s'+hash(stageId).slice(0,16),
   };

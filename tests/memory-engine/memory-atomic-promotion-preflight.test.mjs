@@ -108,6 +108,7 @@ test('preflight validates original/source/confirmation and returns non-authorizi
     assert.equal(outcome.unresolvedEvidenceProposals,0);
     assert.equal(outcome.claimCreated,false);
     assert.equal(outcome.promotionAllowed,false);
+    assert.equal(outcome.hostUserOriginAuthenticated,false);
     assert.equal(outcome.writesToSource,false);
     assert.equal(outcome.requiresSeparateWriteCapableImplementation,true);
     assert.equal(outcome.modelInvocations,0);
