@@ -97,6 +97,53 @@ cue supplies the same information.”
 
 Bad: “WCAG violation” as soon as a scanner reports a color pair.
 
+## Explicit WCAG accessibility audit (Addy 2026-11-27 delta)
+
+An ordinary `audit-surface` run and `render-surface-a11y-gate.mjs`
+produce **bounded accessibility leads**, not WCAG 2.2 AA certification.
+When the user explicitly requests a WCAG accessibility audit, use the
+following additional evidence rules, adapted from the current
+`addyosmani/agent-skills` accessibility-engineering workflow without
+installing a second AgentHub skill.
+
+1. **Scope first:** identify the exact route(s), platform(s), component
+   state(s), relevant WCAG version/level and which required interactions
+   are reachable. Do not silently turn one viewport screenshot into a
+   whole-application WCAG result.
+2. **Automated tools are conditional:** when an approved, project-supported
+   axe-core or pa11y runner is available, record the exact command,
+   installed tool/version, route and state, exit code and parseable report
+   or artifact reference. A missing binary, failed installation, network
+   error, timeout, malformed/missing report or nonzero tool exit is
+   `NOT_VERIFIED` or a **recorded test failure**, never zero violations.
+   Do not execute `npx --yes`, install dependencies, or upload private
+   pages without explicit authorization. Treat scanner findings as leads
+   needing applicability confirmation.
+3. **Manual interaction is independent evidence:** inspect Tab/Shift+Tab,
+   Enter/Space, Arrow/Home/End where the declared widget requires them,
+   focus visibility and return, Escape/dismissal, dynamic error updates,
+   200% zoom/reflow, forced colors/high contrast, and reduced-motion
+   behavior for the supported states. Capture observed browser/device,
+   state and result. An untested interaction is `NOT_MEASURED`, not pass.
+4. **Screen-reader checks require a real screen reader:** where the
+   supported environment allows, use NVDA on Windows or VoiceOver on
+   macOS and record heading, landmark, link, form, status and error
+   announcements for the scoped flow. A DOM/ARIA snapshot or keyboard
+   test alone is **not** evidence that the announcements worked.
+   If no reader is available, mark that portion `NOT_VERIFIED`.
+5. **Conformance claims are scoped:** for each confirmed violation state
+   the relevant success criterion, its applicability, exact observed
+   failure and supporting artifact. For each untested criterion/state,
+   retain its limitation. Do not label a target `WCAG 2.2 AA compliant`
+   based only on scanner output, a green DWA source gate or a small
+   manual sample.
+
+Keep any captured report on an approved local evidence path, redacting
+query-string tokens, user-entered values and authenticated page content
+before sharing it. Automated findings may contain private DOM text.
+The existing DWA evidence ledger, severity policy, read-back, and
+`NOT_MEASURED` semantics remain the authoritative workflow.
+
 ## Required state matrix
 
 An interactive surface is not reviewed until its meaningful states are listed
