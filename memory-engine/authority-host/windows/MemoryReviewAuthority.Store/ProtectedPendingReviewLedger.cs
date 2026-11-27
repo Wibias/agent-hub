@@ -101,6 +101,18 @@ public sealed partial class ProtectedPendingReviewLedger : IDisposable
                         created_at_utc TEXT NOT NULL,
                         UNIQUE(project_id, branch, proposal_ref)
                     ) STRICT;
+                    CREATE TRIGGER IF NOT EXISTS deny_review_request_update
+                      BEFORE UPDATE ON review_requests
+                      BEGIN SELECT RAISE(ABORT, 'review_request_immutable'); END;
+                    CREATE TRIGGER IF NOT EXISTS deny_review_request_delete
+                      BEFORE DELETE ON review_requests
+                      BEGIN SELECT RAISE(ABORT, 'review_request_immutable'); END;
+                    CREATE TRIGGER IF NOT EXISTS deny_review_request_replace
+                      BEFORE INSERT ON review_requests
+                      WHEN EXISTS (SELECT 1 FROM review_requests
+                        WHERE request_id=NEW.request_id OR
+                        (project_id=NEW.project_id AND branch=NEW.branch AND proposal_ref=NEW.proposal_ref))
+                      BEGIN SELECT RAISE(ABORT, 'review_request_immutable'); END;
                     """;
                 schema.ExecuteNonQuery();
             }

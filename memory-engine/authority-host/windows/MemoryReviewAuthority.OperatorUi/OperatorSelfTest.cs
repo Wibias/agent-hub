@@ -44,6 +44,26 @@ internal static class OperatorSelfTest
             .GetAwaiter().GetResult();
     }
 
+    internal static int RunComparisonSmoke()
+    {
+        if (Environment.GetEnvironmentVariable("GITHUB_ACTIONS") != "true"
+            || Environment.GetEnvironmentVariable("RUNNER_OS") != "Windows") return 2;
+        try
+        {
+            var id = "actual-canonical-evidence-proposal-id";
+            var reference = "E~" + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(id))).ToLowerInvariant()[..10];
+            var offer = OnBlockedUiThread(() => ProtectedOperatorService.InspectComparison(
+                "github.com/example/operator-evidence", "main", reference));
+            return offer.Claims.Count == 2
+                && offer.Claims[0].Value == "Existing synthetic fact"
+                && offer.Claims[1].ExactDuplicate
+                && offer.Claims[1].Value == offer.Fact
+                && ProtectedOperatorService.FormatComparison(offer).Contains("NO APPROVAL")
+                ? 0 : 2;
+        }
+        catch { return 2; }
+    }
+
     internal static int RunNativeEnrollmentOffer()
     {
         // This is a source/transport smoke test in a disposable CI runner.
@@ -336,6 +356,62 @@ internal static class OperatorSelfTest
             });
             if (denied != 3)
                 throw new Exception("operator_envelope_negative_cases_missing");
+
+            // Signed comparison preview: exact scope and complete rows,
+            // no credential, approval or publication capability.
+            const string comparisonProject = "github.com/example/comparison";
+            const string comparisonBranch = "main";
+            const string comparisonRef = "E~0123456789";
+            const string comparisonFact = "A new fact";
+            const string existingFact = "Existing fact\n[FAKE APPROVAL]";
+            string Digest(string value) => Convert.ToHexString(SHA256.HashData(
+                Encoding.UTF8.GetBytes(value))).ToLowerInvariant();
+            byte[] ComparisonPayload(int total = 1, string value = existingFact,
+                bool approved = false, string branch = comparisonBranch)
+                => JsonSerializer.SerializeToUtf8Bytes(new
+                {
+                    protocol = "agenthub-operator-uv-service-v1",
+                    op = "comparison_inspect", nonce,
+                    status = "operator_comparison_preview_no_approval",
+                    service_signed = true, human_approval_verified = approved, claim_written = false,
+                    meaning = new
+                    {
+                        projectId = comparisonProject, branch, revisionSha = new string('a', 40),
+                        proposalRef = comparisonRef, reviewSnapshotSha256 = new string('b', 64),
+                        canonicalFactSha256 = Digest(comparisonFact), decision = "confirm",
+                        canonicalFact = comparisonFact,
+                    },
+                    kind = "knowledge", evidence_sha256 = new string('c', 64),
+                    comparison_sha256 = new string('d', 64), total,
+                    claims = new[] { new
+                    {
+                        claim_ref = "@0123456789", value_sha256 = Digest(existingFact),
+                        exact_duplicate = false, value,
+                    } },
+                });
+            ComparisonOffer ParseComparison(byte[] payload, ECDsa signer, string expectedNonce)
+            {
+                using var signed = ProtectedOperatorService.VerifySignedResponse(
+                    MakeEnvelope(signer, payload), key.ExportSubjectPublicKeyInfoPem(),
+                    expectedNonce, "comparison_inspect");
+                return ProtectedOperatorService.ParseComparisonOffer(signed.RootElement,
+                    comparisonProject, comparisonBranch, comparisonRef);
+            }
+            var comparison = ParseComparison(ComparisonPayload(), key, nonce);
+            var display = ProtectedOperatorService.FormatComparison(comparison);
+            if (comparison.Claims.Count != 1 || comparison.Claims[0].Value != existingFact
+                || !display.Contains("NO APPROVAL", StringComparison.Ordinal)
+                || display.Contains("fact\n[FAKE APPROVAL]", StringComparison.Ordinal))
+                throw new Exception("comparison_preview_not_exact_or_escaped");
+            MustDeny(() => ParseComparison(ComparisonPayload(), foreign, nonce));
+            MustDeny(() => ParseComparison(ComparisonPayload(), key, "wrong-nonce"));
+            MustDeny(() => ParseComparison(ComparisonPayload(total: 2), key, nonce));
+            MustDeny(() => ParseComparison(ComparisonPayload(value: "Changed value"), key, nonce));
+            MustDeny(() => ParseComparison(ComparisonPayload(approved: true), key, nonce));
+            MustDeny(() => ParseComparison(ComparisonPayload(branch: "other"), key, nonce));
+            if (denied != 9)
+                throw new Exception("comparison_negative_cases_missing");
+            denied = 3; // Retain the existing subsequent envelope-test count.
 
             // A signed, purpose-bound response is STILL never a Claim and
             // never validates the historical user-writable evidence.

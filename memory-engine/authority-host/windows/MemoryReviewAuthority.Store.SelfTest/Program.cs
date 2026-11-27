@@ -38,6 +38,7 @@ internal static class Program
         Run("protected_confirm_claim_and_scoped_read_persist_reopen", ProtectedConfirm);
         Run("protected_claim_requires_approval_purpose_not_possession", ProtectedPurposeGate);
         Run("protected_rejection_never_creates_claim", ProtectedReject);
+        Run("protected_decision_audit_resists_update_delete_and_replace", ProtectedDecisionAuditImmutable);
         Run("protected_write_requires_independent_trusted_source", SourceRequired);
         Run("protected_write_rejects_stale_and_targeted_source", SourceMismatch);
         Run("protected_duplicate_rolls_back_uv_intent_and_claim", DuplicateRollback);
@@ -50,6 +51,8 @@ internal static class Program
         Run("unjudged_pending_and_invalid_relation_denied", RealPendingJudgmentDenied);
         Run("real_evidence_wrong_scope_and_secret_denied", RealEvidenceScopeDenied);
         Run("real_evidence_relation_and_kind_denied", RealEvidenceUnsafeDenied);
+        Run("native_comparison_readonly_scope_and_snapshot_binding", NativeComparison);
+        Run("native_comparison_bounded_and_fail_closed", NativeComparisonBounded);
         Run("real_evidence_changed_snapshot_denied", RealEvidenceChanged);
         Run("operator_credential_pinned_uv_real_evidence_no_approval", OperatorPinProof);
         Run("operator_credential_counter_restart_replay_denied", OperatorCounter);
@@ -76,7 +79,7 @@ internal static class Program
         Run("ci_read_once_sql_receipt_and_tombstone_immutable", CiReadOnceSqlImmutable);
         Run("ci_read_once_full_snapshot_digest_changes_on_every_state_transition",
             CiReadOnceFenceSnapshotChanges);
-        Console.WriteLine($"MEMORY_REVIEW_LEDGER PASS {_passed}/54; REAL_EVIDENCE_UV_PINNED_NO_APPROVAL");
+        Console.WriteLine($"MEMORY_REVIEW_LEDGER PASS {_passed}/57; REAL_EVIDENCE_UV_PINNED_NO_APPROVAL");
     }
 
     private static void Run(string label, Action test)
@@ -863,6 +866,101 @@ internal static class Program
         Check(store.CountPending() == 0);
     }
 
+    private static void ProtectedDecisionAuditImmutable()
+    {
+        using var key = TestCredential.New();
+        var rejected = Example with { ProposalRef = "E~abcdef0123", RequestedAction = "reject" };
+        VerifiedReviewIntentRecord? originalConfirm;
+        VerifiedReviewIntentRecord? originalReject;
+        ProtectedReviewClaim originalClaim;
+        using (var store = Open())
+        {
+            foreach (var review in new[] { Example, rejected })
+            {
+                store.RecordPending(review);
+                store.StageSyntheticLabSource(review, SourceFor(review));
+                var coordinator = new VerifiedReviewCoordinator(store, key.Pinned);
+                var meaning = MeaningFor(review);
+                var ticket = coordinator.BeginProtectedApproval(meaning);
+                var result = coordinator.CompleteProtected(ticket.TicketId, meaning, key.Sign(ticket));
+                Check(result.Verified && result.ClaimWritten == (review.RequestedAction == "confirm"));
+            }
+            originalConfirm = store.ReadVerifiedIntent(Example.ProjectId, Example.Branch, Example.ProposalRef);
+            originalReject = store.ReadVerifiedIntent(rejected.ProjectId, rejected.Branch, rejected.ProposalRef);
+            originalClaim = store.ReadProtectedClaims(Example.ProjectId, Example.Branch).Single();
+            Check(originalConfirm is not null && originalReject is not null);
+        }
+        // Emulate an older disposable database whose existing rows predate
+        // the new triggers. Opening the upgraded store must add them in place.
+        using (var legacy = new SqliteConnection(new SqliteConnectionStringBuilder
+        {
+            DataSource = Path.Combine(TestDirectory, "review-authority.sqlite3"),
+            Mode = SqliteOpenMode.ReadWrite, Pooling = false,
+        }.ToString()))
+        {
+            legacy.Open();
+            using var drop = legacy.CreateCommand();
+            drop.CommandText = """
+                DROP TRIGGER deny_review_request_update;
+                DROP TRIGGER deny_review_request_delete;
+                DROP TRIGGER deny_review_request_replace;
+                DROP TRIGGER deny_verified_review_intent_update;
+                DROP TRIGGER deny_verified_review_intent_delete;
+                DROP TRIGGER deny_verified_review_intent_replace;
+                DROP TRIGGER deny_protected_review_claim_update;
+                DROP TRIGGER deny_protected_review_claim_delete;
+                DROP TRIGGER deny_protected_review_claim_replace;
+                DROP TRIGGER deny_protected_source_replace;
+                """;
+            drop.ExecuteNonQuery();
+        }
+        using (var upgraded = Open())
+        {
+            Check(upgraded.ReadVerifiedIntent(Example.ProjectId, Example.Branch, Example.ProposalRef) == originalConfirm);
+            Check(upgraded.ReadVerifiedIntent(rejected.ProjectId, rejected.Branch, rejected.ProposalRef) == originalReject);
+            Check(upgraded.ReadProtectedClaims(Example.ProjectId, Example.Branch).Single() == originalClaim);
+        }
+        using (var sql = new SqliteConnection(new SqliteConnectionStringBuilder
+        {
+            DataSource = Path.Combine(TestDirectory, "review-authority.sqlite3"),
+            Mode = SqliteOpenMode.ReadWrite, Pooling = false,
+        }.ToString()))
+        {
+            sql.Open();
+            // REPLACE may implicitly delete rows without firing delete triggers.
+            // Test with recursive triggers disabled, including non-primary unique keys.
+            using var pragma = sql.CreateCommand();
+            pragma.CommandText = "PRAGMA recursive_triggers=OFF;";
+            pragma.ExecuteNonQuery();
+            foreach (var statement in new[]
+            {
+                "UPDATE review_requests SET requested_action='confirm' WHERE requested_action='reject';",
+                "DELETE FROM review_requests;",
+                "INSERT OR REPLACE INTO review_requests SELECT * FROM review_requests;",
+                "UPDATE verified_review_intents SET disposition='uv_confirm_intent_no_claim' WHERE disposition='uv_reject_intent_no_claim';",
+                "DELETE FROM verified_review_intents;",
+                "INSERT OR REPLACE INTO verified_review_intents SELECT * FROM verified_review_intents;",
+                "UPDATE protected_review_claims SET value_text='forged';",
+                "DELETE FROM protected_review_claims;",
+                "INSERT OR REPLACE INTO protected_review_claims SELECT * FROM protected_review_claims;",
+                "INSERT OR REPLACE INTO protected_review_sources SELECT * FROM protected_review_sources;",
+                "INSERT OR REPLACE INTO review_requests SELECT 'different-id', project_id, branch, revision_sha, proposal_ref, snapshot_sha256, fact_sha256, evidence_sha256, requested_action, status, policy_version, created_at_utc FROM review_requests LIMIT 1;",
+                "INSERT OR REPLACE INTO protected_review_claims SELECT 'different-id', request_id, project_id, branch, revision_sha, proposal_ref, snapshot_sha256, fact_sha256, evidence_sha256, kind, value_text, created_at_utc, policy_version FROM protected_review_claims;"
+            })
+            {
+                using var command = sql.CreateCommand();
+                command.CommandText = statement;
+                Throws<SqliteException>(() => command.ExecuteNonQuery());
+            }
+        }
+        using var reopened = Open();
+        Check(reopened.CountPending() == 0);
+        Check(reopened.ReadVerifiedIntent(Example.ProjectId, Example.Branch, Example.ProposalRef) == originalConfirm);
+        Check(reopened.ReadVerifiedIntent(rejected.ProjectId, rejected.Branch, rejected.ProposalRef) == originalReject);
+        Check(reopened.ReadProtectedClaims(Example.ProjectId, Example.Branch).Single() == originalClaim);
+        Throws<InvalidOperationException>(() => reopened.RecordPending(rejected));
+    }
+
     private static void SourceRequired()
     {
         using var store = Open();
@@ -1321,6 +1419,96 @@ internal static class Program
         MutateRealSnapshot("DELETE FROM claims; UPDATE memory_evidence_proposals SET kind='procedure';");
         Throws<InvalidOperationException>(() => store.ImportOperatorPinnedEvidence());
         Check(store.CountPending() == 0);
+    }
+
+    private static void NativeComparison()
+    {
+        CreateRealEvidenceFixture();
+        using var store = Open();
+        var empty = store.InspectOperatorPinnedEvidence();
+        Check(empty.Status == "no_active_claims" && empty.ActiveClaims.Count == 0);
+        Check(empty.CanonicalFact is null && !empty.HumanApprovalVerified && !empty.ClaimWritten);
+        Check(store.CountPending() == 0);
+        MutateRealSnapshot("""
+            INSERT INTO claims VALUES
+              ('a','github.com/example/operator-evidence','main','active','Separate fact'),
+              ('b','github.com/example/operator-evidence','main','active','Another fact'),
+              ('foreign','github.com/example/operator-evidence','feature','active','Foreign branch'),
+              ('other','github.com/other/repo','main','active','Foreign project'),
+              ('old','github.com/example/operator-evidence','main','superseded','Inactive fact');
+            """);
+        var first = store.InspectOperatorPinnedEvidence();
+        Check(first.Status == "requires_independent_review" && first.ActiveClaims.Count == 2);
+        Check(first.Review.ReviewSnapshotSha256 != empty.Review.ReviewSnapshotSha256);
+        Check(first.CanonicalFact is null && first.ActiveClaims.All(c => c.LocalValue is null));
+        Check(first.ActiveClaims.Select(c => c.ClaimRef).SequenceEqual(
+            new[] { "@" + Hash("a")[..10], "@" + Hash("b")[..10] }));
+        Check(first.ActiveClaims[0].ValueSha256 == Hash("Separate fact"));
+        var local = store.InspectOperatorPinnedEvidence(includeLocalContent: true);
+        Check(local.CanonicalFact == RealFact);
+        Check(local.Review == first.Review && local.ComparisonSha256 == first.ComparisonSha256);
+        Check(local.ActiveClaims.Select(c => c.LocalValue).SequenceEqual(
+            new[] { "Separate fact", "Another fact" }));
+        Check(local.ActiveClaims.All(c => !c.ExactDuplicate));
+        using (var db = new SqliteConnection(new SqliteConnectionStringBuilder
+        { DataSource = RealSnapshotPath, Mode = SqliteOpenMode.ReadWrite, Pooling = false }.ToString()))
+        {
+            db.Open();
+            using var command = db.CreateCommand();
+            command.CommandText = "UPDATE claims SET value_text=$value WHERE id='b';";
+            command.Parameters.AddWithValue("$value", "  " + RealFact.Replace(" ", "\t") + "  ");
+            command.ExecuteNonQuery();
+        }
+        var duplicate = store.InspectOperatorPinnedEvidence();
+        Check(duplicate.ActiveClaims[1].ExactDuplicate);
+        Check(duplicate.ComparisonSha256 != first.ComparisonSha256);
+        Check(duplicate.Review.ReviewSnapshotSha256 != first.Review.ReviewSnapshotSha256);
+        // The existing challenge already commits to the review snapshot.
+        // Use a fixed nonce only for this deterministic offline assertion.
+        static ReviewMeaning Meaning(OperatorEvidenceInspection inspection)
+            => new(inspection.Review.ProjectId, inspection.Review.Branch,
+                inspection.Review.RevisionSha, inspection.Review.ProposalRef,
+                inspection.Review.ReviewSnapshotSha256, inspection.Review.CanonicalFactSha256,
+                inspection.Review.RequestedAction, RealFact);
+        var nonce = new byte[32];
+        Check(ReviewChallengeCore.ComputeProtectedApprovalChallenge(Meaning(first), nonce)
+            != ReviewChallengeCore.ComputeProtectedApprovalChallenge(Meaning(duplicate), nonce));
+        Check(ReviewChallengeCore.ComputeProtectedClaimCommitChallenge(Meaning(first), nonce)
+            != ReviewChallengeCore.ComputeProtectedClaimCommitChallenge(Meaning(duplicate), nonce));
+        MutateRealSnapshot("DELETE FROM claims WHERE id='a';");
+        var removed = store.InspectOperatorPinnedEvidence();
+        Check(removed.ActiveClaims.Count == 1 && removed.ComparisonSha256 != duplicate.ComparisonSha256);
+        File.WriteAllText(Path.Combine(TestDirectory, ProtectedPendingReviewLedger.OperatorManifestFile),
+            JsonSerializer.Serialize(new
+            {
+                projectId = RealProject, branch = RealBranch, revisionSha = new string('b', 40),
+                proposalRef = RealERef, decision = "reject",
+            }));
+        var rejected = store.InspectOperatorPinnedEvidence();
+        Check(rejected.Review.RequestedAction == "reject");
+        Check(rejected.Review.ReviewSnapshotSha256 != removed.Review.ReviewSnapshotSha256);
+        Check(rejected.ComparisonSha256 == removed.ComparisonSha256);
+        Check(ReviewChallengeCore.ComputeProtectedApprovalChallenge(Meaning(removed), nonce)
+            != ReviewChallengeCore.ComputeProtectedApprovalChallenge(Meaning(rejected), nonce));
+        Throws<InvalidOperationException>(() => store.ImportOperatorPinnedEvidence());
+        Check(store.CountPending() == 0 && store.ReadProtectedClaims(RealProject, RealBranch).Count == 0);
+    }
+
+    private static void NativeComparisonBounded()
+    {
+        CreateRealEvidenceFixture();
+        using var store = Open();
+        MutateRealSnapshot("""
+            WITH RECURSIVE seq(n) AS (VALUES(1) UNION ALL SELECT n+1 FROM seq WHERE n<201)
+            INSERT INTO claims SELECT 'c-'||n,'github.com/example/operator-evidence','main','active','Fact '||n FROM seq;
+            """);
+        Throws<InvalidOperationException>(() => store.InspectOperatorPinnedEvidence());
+        Throws<InvalidOperationException>(() => store.ImportOperatorPinnedEvidence());
+        MutateRealSnapshot("DELETE FROM claims WHERE id='c-201';");
+        Check(store.InspectOperatorPinnedEvidence().ActiveClaims.Count == 200);
+        MutateRealSnapshot("UPDATE claims SET value_text=NULL WHERE id='c-1';");
+        Throws<InvalidOperationException>(() => store.InspectOperatorPinnedEvidence());
+        Check(store.CountPending() == 0 && store.ReadProtectedClaims(RealProject, RealBranch).Count == 0);
     }
 
     private static void RealEvidenceChanged()

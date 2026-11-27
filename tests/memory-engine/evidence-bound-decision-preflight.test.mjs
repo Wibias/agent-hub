@@ -192,3 +192,62 @@ test('real Git + CLI stdio preflight is read-only and identity-bound', t => {
     rmSync(root, { recursive:true, force:true });
   }
 });
+
+test('opt-in active Claim comparison is complete, scope-bound, redacted by default and never authorizes', t => {
+  const db = fixture(); t.after(() => db.close());
+  const insert = db.prepare('INSERT INTO claims (id,project_id,branch_scope,state,value_text) VALUES (?,?,?,?,?)');
+  insert.run('a', PROJECT, BRANCH, 'active', FACT);
+  insert.run('b', PROJECT, BRANCH, 'active', 'Separate confidential fixture statement.');
+  insert.run('foreign-branch', PROJECT, 'feature', 'active', 'Foreign branch text');
+  insert.run('foreign-project', 'github.com/example/other', BRANCH, 'active', 'Foreign project text');
+  insert.run('inactive', PROJECT, BRANCH, 'superseded', 'Inactive text');
+  const ordinary = inspect(db);
+  assert.equal(ordinary.activeClaimComparison, undefined);
+  const compared = inspect(db, { includeActiveClaimComparison: true });
+  const c = compared.activeClaimComparison;
+  assert.equal(c.status, 'requires_independent_review');
+  assert.equal(c.reviewSnapshotSha256, ordinary.reviewSnapshotSha256);
+  assert.equal(c.total, 2);
+  assert.deepEqual(c.items.map(i => i.exactDuplicate), [true, false]);
+  assert.ok(c.items.every(i => /^@[0-9a-f]{10}$/.test(i.claimRef) && /^[0-9a-f]{64}$/.test(i.valueSha256)));
+  assert.equal(c.items.some(i => Object.hasOwn(i, 'localValue')), false);
+  assert.equal(JSON.stringify(compared).includes('Separate confidential'), false);
+  assert.equal(compared.promotionAllowed, false);
+  assert.equal(compared.decisionCommandEnabled, false);
+  const local = inspect(db, { includeActiveClaimComparison: true, showLocalContent: true });
+  assert.deepEqual(local.activeClaimComparison.items.map(i => i.localValue), [FACT, 'Separate confidential fixture statement.']);
+  assert.equal(JSON.stringify(local).includes('Foreign branch text'), false);
+  assert.equal(JSON.stringify(local).includes('Foreign project text'), false);
+  assert.equal(JSON.stringify(local).includes('Inactive text'), false);
+  db.prepare("UPDATE claims SET value_text='Changed active fact' WHERE id='b'").run();
+  const changed = inspect(db, { includeActiveClaimComparison: true });
+  assert.notEqual(changed.activeClaimComparison.reviewSnapshotSha256, c.reviewSnapshotSha256);
+  db.prepare("DELETE FROM claims WHERE id='a'").run();
+  assert.notEqual(inspect(db, { includeActiveClaimComparison: true }).reviewSnapshotSha256, changed.reviewSnapshotSha256);
+});
+
+test('comparison remains bounded and does not clear a pending review blocker', t => {
+  const db = fixture(); t.after(() => db.close());
+  const empty = inspect(db, { includeActiveClaimComparison: true });
+  assert.equal(empty.activeClaimComparison.status, 'no_active_claims');
+  assert.deepEqual(empty.activeClaimComparison.items, []);
+  const insert = db.prepare('INSERT INTO claims (id,project_id,branch_scope,state,value_text) VALUES (?,?,?,?,?)');
+  for (let i = 0; i < 201; i++) insert.run('claim-'+i, PROJECT, BRANCH, 'active', 'Fact '+i);
+  const overflow = inspect(db, { includeActiveClaimComparison: true, showLocalContent: true });
+  assert.equal(overflow.status, 'claim_comparison_not_bounded');
+  assert.equal(overflow.activeClaimComparison, undefined);
+  assert.equal(overflow.promotionAllowed, false);
+});
+
+test('comparison flag is opt-in and local text still requires an interactive TTY', t => {
+  const db = fixture(); t.after(() => {try {db.close();} catch {}});
+  const args = ['--db-path','test','--repo-path','repo','--project-id',PROJECT,'--branch',BRANCH,'--revision',REVISION,'--proposal-ref',evidenceBoundDecisionRef(ID)];
+  assert.equal(parseEvidenceDecisionPreflightArgs(args).includeActiveClaimComparison, false);
+  assert.equal(parseEvidenceDecisionPreflightArgs([...args,'--compare-active-claims']).includeActiveClaimComparison, true);
+  assert.throws(() => parseEvidenceDecisionPreflightArgs([...args,'--compare-active-claims','--compare-active-claims']), /duplicate/);
+  assert.throws(() => runEvidenceDecisionPreflight({
+    dbPath: ':memory:', repoPath: '/local/repo', projectId: PROJECT, branch: BRANCH, revisionSha: REVISION,
+    selectedRef: evidenceBoundDecisionRef(ID), includeActiveClaimComparison: true, showLocalContent: true,
+    isTty: false, openDb: () => db,
+  }), /interactive TTY/);
+});

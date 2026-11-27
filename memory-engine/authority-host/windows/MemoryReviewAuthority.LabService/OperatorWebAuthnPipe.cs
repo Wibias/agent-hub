@@ -24,6 +24,7 @@ internal sealed partial class OperatorWebAuthnPipe : IDisposable
     internal const string Protocol = "agenthub-operator-uv-service-v1";
     private readonly ProtectedPendingReviewLedger _ledger;
     private readonly string _stateDir;
+    private readonly PendingReview? _comparisonOnlySnapshot;
     private VerifiedReviewCoordinator? _coordinator;
     private OperatorReaffirmationCoordinator? _reaffirmation;
     private ChallengeTicket? _activeReaffirmation;
@@ -66,15 +67,19 @@ internal sealed partial class OperatorWebAuthnPipe : IDisposable
 
     internal OperatorWebAuthnPipe(ProtectedPendingReviewLedger ledger, string stateDir,
         OneShotCiRecipientPipe? ciRecipient = null,
-        OneShotCiRegistryFence? ciRegistryFence = null)
+        OneShotCiRegistryFence? ciRegistryFence = null,
+        PendingReview? comparisonOnlySnapshot = null)
     {
         _ledger = ledger ?? throw new ArgumentNullException(nameof(ledger));
         _stateDir = stateDir;
+        _comparisonOnlySnapshot = comparisonOnlySnapshot;
+        if (comparisonOnlySnapshot is not null && (ciRecipient is not null || ciRegistryFence is not null))
+            throw new InvalidOperationException("comparison_only_conflicts_with_ci_read");
         if ((ciRecipient is null) != (ciRegistryFence is null))
             throw new InvalidOperationException("ci_one_shot_registry_fence_required");
         _ciRecipient = ciRecipient;
         _ciRegistryFence = ciRegistryFence;
-        var operatorCredential = _ledger.ReadOperatorCredential();
+        var operatorCredential = comparisonOnlySnapshot is null ? _ledger.ReadOperatorCredential() : null;
         if (operatorCredential is not null)
             _coordinator = VerifiedReviewCoordinator.ForOperatorCredentialProbe(ledger);
         if (operatorCredential?.EnrollmentState == ProtectedPendingReviewLedger.NativeEnrollmentState)
@@ -83,18 +88,7 @@ internal sealed partial class OperatorWebAuthnPipe : IDisposable
             if (IsExplicitSyntheticCiPublishFixture(stateDir))
                 _publisher = OperatorDirectClaimCoordinator.ForNativeCredential(ledger);
         }
-        var privatePath = Path.Combine(stateDir, "review-service-signing-key.pk8");
-        var publicPath = Path.Combine(stateDir, "review-service-signing-key.pub.pem");
-        var bytes = File.ReadAllBytes(privatePath);
-        _signer = ECDsa.Create();
-        try
-        {
-            _signer.ImportPkcs8PrivateKey(bytes, out var read);
-            if (read != bytes.Length
-                || _signer.ExportSubjectPublicKeyInfoPem() != File.ReadAllText(publicPath))
-                throw new InvalidOperationException("service_operator_signing_key_untrusted");
-        }
-        finally { CryptographicOperations.ZeroMemory(bytes); }
+        _signer = ServiceSigningIdentity.OpenOrCreate(stateDir);
     }
 
     internal void Start()
@@ -208,6 +202,15 @@ internal sealed partial class OperatorWebAuthnPipe : IDisposable
             && given.ToHashSet(StringComparer.Ordinal).SetEquals(keys);
     }
 
+    internal static bool IsComparisonInspectionRequest(JsonElement root, PendingReview snapshot)
+        => ExactKeys(root, "protocol", "op", "nonce", "projectId", "branch", "proposalRef")
+            && Str(root, "protocol") == Protocol
+            && ValidNonce(Str(root, "nonce"))
+            && Str(root, "op") == "comparison_inspect"
+            && Str(root, "projectId") == snapshot.ProjectId
+            && Str(root, "branch") == snapshot.Branch
+            && Str(root, "proposalRef") == snapshot.ProposalRef;
+
     private async Task HandleAsync(Stream stream, CancellationToken stop)
     {
         var raw = await ReadOneLineAsync(stream, stop);
@@ -223,7 +226,47 @@ internal sealed partial class OperatorWebAuthnPipe : IDisposable
         object? response = null;
         lock (_ledger)
         {
-            if (operation == "ci_read_revoke")
+            if (_comparisonOnlySnapshot is not null)
+            {
+                // Deliberately exclusive: all enrollment, read-disclosure,
+                // assertion and publication operations are unreachable.
+                if (IsComparisonInspectionRequest(root, _comparisonOnlySnapshot))
+                {
+                    var preview = _ledger.InspectOperatorPinnedEvidence(includeLocalContent: true);
+                    if (preview.Review != _comparisonOnlySnapshot || preview.ActiveClaims.Count == 0)
+                        return;
+                    var review = preview.Review;
+                    response = new
+                    {
+                        protocol = Protocol, op = operation, nonce,
+                        status = "operator_comparison_preview_no_approval",
+                        service_signed = true, human_approval_verified = false,
+                        claim_written = false,
+                        meaning = SignedMeaning(new ReviewMeaning(review.ProjectId, review.Branch,
+                            review.RevisionSha, review.ProposalRef, review.ReviewSnapshotSha256,
+                            review.CanonicalFactSha256, review.RequestedAction, preview.CanonicalFact!)),
+                        kind = preview.Kind, evidence_sha256 = review.SourceEvidenceSha256,
+                        comparison_sha256 = preview.ComparisonSha256,
+                        total = preview.ActiveClaims.Count,
+                        claims = preview.ActiveClaims.Select(c => new
+                        {
+                            claim_ref = c.ClaimRef, value_sha256 = c.ValueSha256,
+                            exact_duplicate = c.ExactDuplicate, value = c.LocalValue,
+                        }).ToArray(),
+                    };
+                    // Preserve the existing signed-response budget. Never
+                    // return a partial comparison as if it were complete.
+                    if (JsonSerializer.SerializeToUtf8Bytes(response).Length > 11_500)
+                        response = new
+                        {
+                            protocol = Protocol, op = operation, nonce,
+                            status = "operator_comparison_preview_too_large",
+                            service_signed = true, human_approval_verified = false,
+                            claim_written = false,
+                        };
+                }
+            }
+            else if (operation == "ci_read_revoke")
             {
                 response = RevokeCiOneShot(root,nonce);
             }

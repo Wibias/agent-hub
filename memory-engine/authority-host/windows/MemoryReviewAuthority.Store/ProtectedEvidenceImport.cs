@@ -21,8 +21,41 @@ public sealed record OperatorEvidenceImport(
     string RequestedAction, bool HumanApprovalVerified = false,
     bool ClaimWritten = false);
 
+public sealed record OperatorComparisonClaim(
+    string ClaimRef, string ValueSha256, bool ExactDuplicate, string? LocalValue);
+
+/// <summary>Local inspection only. A matching digest is not human authorization.</summary>
+public sealed record OperatorEvidenceInspection(
+    PendingReview Review, string Status, string Kind, string? CanonicalFact,
+    string ComparisonSha256, IReadOnlyList<OperatorComparisonClaim> ActiveClaims,
+    bool HumanApprovalVerified = false, bool ClaimWritten = false);
+
 public sealed partial class ProtectedPendingReviewLedger
 {
+    private sealed record ComparisonRow(string Id, string Value);
+    private sealed record PinnedEvidenceSnapshot(
+        PendingReview Review, TrustedReviewSource Source, int EvidenceCount,
+        string ComparisonSha256, IReadOnlyList<OperatorComparisonClaim> ActiveClaims);
+
+    /// <summary>
+    /// Inspect only fixed, operator-pinned files. Not exposed through IPC.
+    /// Claim text is opt-in for a trusted local caller; no decision is staged.
+    /// </summary>
+    public OperatorEvidenceInspection InspectOperatorPinnedEvidence(bool includeLocalContent = false)
+    {
+        var snapshot = ReadOperatorPinnedEvidenceSnapshot();
+        return new OperatorEvidenceInspection(snapshot.Review,
+            snapshot.ActiveClaims.Count == 0 ? "no_active_claims" : "requires_independent_review",
+            snapshot.Source.Kind, includeLocalContent ? snapshot.Source.CanonicalFact : null,
+            snapshot.ComparisonSha256,
+            Array.AsReadOnly(snapshot.ActiveClaims.Select(c => includeLocalContent
+                ? c : c with { LocalValue = null }).ToArray()));
+    }
+
+    private static string NormalizeComparisonFact(string value)
+        => System.Text.RegularExpressions.Regex.Replace(
+            value.Normalize(NormalizationForm.FormKC),
+            @"[\u0009-\u000d\u0020\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]+", " ").Trim(' ');
     public const string OperatorSourceOrigin = "operator_pinned_unverified_evidence_v1";
     public const string OperatorEvidencePolicy = "agenthub-protected-operator-evidence-import-v1";
     public const string OperatorSnapshotFile = "operator-evidence-snapshot.sqlite3";
@@ -123,6 +156,24 @@ public sealed partial class ProtectedPendingReviewLedger
     /// There is no implicit consent, WebAuthn enrollment or Claim write.
     /// </summary>
     public OperatorEvidenceImport ImportOperatorPinnedEvidence()
+    {
+        var snapshot = ReadOperatorPinnedEvidenceSnapshot();
+        // Inspection is not authorization. No nonempty comparison can enter
+        // the existing pending-intake or approval path.
+        if (snapshot.ActiveClaims.Count != 0)
+            throw new InvalidOperationException("operator_relation_review_required");
+        var review = snapshot.Review;
+        var source = snapshot.Source;
+        var saved = RecordPending(review);
+        StageSource(review, source, OperatorSourceOrigin);
+        return new OperatorEvidenceImport(
+            review.ProjectId, review.Branch, review.RevisionSha, review.ProposalRef,
+            review.CanonicalFactSha256, review.ReviewSnapshotSha256, review.SourceEvidenceSha256,
+            source.Kind, source.CanonicalFact, saved.RequestId, OperatorSourceOrigin,
+            snapshot.EvidenceCount, review.RequestedAction);
+    }
+
+    private PinnedEvidenceSnapshot ReadOperatorPinnedEvidenceSnapshot()
     {
         EnsureOpen();
         var snapshotPath = Path.Combine(_protectedDirectory, OperatorSnapshotFile);
@@ -291,22 +342,54 @@ public sealed partial class ProtectedPendingReviewLedger
                 throw new InvalidOperationException("operator_pending_relation_schema_missing");
         }
 
-        // No automatic update/supersede/contradiction support. When any
-        // active Claim is present, the operator must resolve its relation
-        // separately. An exact unrelated fact can proceed as a CANDIDATE
-        // only when the comparison scope is empty.
-        using (var countClaims = input.CreateCommand())
+        // Resolve the complete bounded comparison inside the same SQLite
+        // transaction as the proposal and evidence. Never accept caller rows.
+        var comparisonRows = new List<ComparisonRow>();
+        var ids = new HashSet<string>(StringComparer.Ordinal);
+        var refs = new HashSet<string>(StringComparer.Ordinal);
+        long comparisonBytes = 0;
+        using (var compare = input.CreateCommand())
         {
-            countClaims.Transaction = pinnedRead;
-            countClaims.CommandText = """
-                SELECT COUNT(*) FROM claims WHERE project_id=$p
-                  AND branch_scope=$b AND state='active';
+            compare.Transaction = pinnedRead;
+            compare.CommandText = """
+                SELECT id, value_text, typeof(id), typeof(value_text) FROM claims
+                WHERE project_id COLLATE BINARY=$p AND branch_scope COLLATE BINARY=$b
+                  AND state COLLATE BINARY='active'
+                ORDER BY id COLLATE BINARY LIMIT 201;
                 """;
-            countClaims.Parameters.AddWithValue("$p", manifest.ProjectId!);
-            countClaims.Parameters.AddWithValue("$b", manifest.Branch!);
-            if (Convert.ToInt64(countClaims.ExecuteScalar()) != 0)
-                throw new InvalidOperationException("operator_relation_review_required");
+            compare.Parameters.AddWithValue("$p", manifest.ProjectId!);
+            compare.Parameters.AddWithValue("$b", manifest.Branch!);
+            using var reader = compare.ExecuteReader();
+            while (reader.Read())
+            {
+                if (comparisonRows.Count >= 200)
+                    throw new InvalidOperationException("operator_claim_comparison_not_bounded");
+                if (reader.GetString(2) != "text" || reader.GetString(3) != "text")
+                    throw new InvalidOperationException("operator_claim_comparison_invalid");
+                var claimId = reader.GetString(0);
+                var value = reader.GetString(1);
+                if (string.IsNullOrWhiteSpace(claimId) || claimId.Length > 256
+                    || value.Length > 65536 || !ids.Add(claimId)
+                    || !refs.Add(Sha(claimId)[..10]))
+                    throw new InvalidOperationException("operator_claim_comparison_invalid");
+                comparisonBytes += Encoding.UTF8.GetByteCount(claimId)
+                    + Encoding.UTF8.GetByteCount(value);
+                if (comparisonBytes > 1024 * 1024)
+                    throw new InvalidOperationException("operator_claim_comparison_not_bounded");
+                comparisonRows.Add(new ComparisonRow(claimId, value));
+            }
         }
+        var comparisonSha = Sha(JsonSerializer.Serialize(new
+        {
+            policy = "agenthub-protected-claim-comparison-v1",
+            project = manifest.ProjectId,
+            branch = manifest.Branch,
+            claims = comparisonRows.Select(c => new { id = c.Id, valueSha256 = Sha(c.Value) }).ToArray(),
+        }));
+        var normalizedComparisonFact = NormalizeComparisonFact(fact);
+        var comparison = Array.AsReadOnly(comparisonRows.Select(c => new OperatorComparisonClaim(
+            "@" + Sha(c.Id)[..10], Sha(c.Value),
+            NormalizeComparisonFact(c.Value) == normalizedComparisonFact, c.Value)).ToArray());
 
         var rows = new List<EvidenceRow>();
         using (var query = input.CreateCommand())
@@ -388,8 +471,12 @@ public sealed partial class ProtectedPendingReviewLedger
             snapshotFileHash,
             kind,
             action = manifest.Decision,
-            comparison = "no_active_claims",
+            comparison = comparison.Count == 0 ? "no_active_claims" : "requires_independent_review",
         }));
+        // Preserve the existing empty-scope snapshot identity. Nonempty
+        // previews bind the ordered exact Claim identity/value digest too.
+        if (comparison.Count != 0)
+            snapshotSha = Sha(JsonSerializer.Serialize(new { snapshotSha, comparisonSha }));
         pinnedRead.Commit();
 
         var review = new PendingReview(
@@ -400,14 +487,6 @@ public sealed partial class ProtectedPendingReviewLedger
             review.ProjectId, review.Branch, review.RevisionSha,
             review.ProposalRef, review.ReviewSnapshotSha256,
             fact, review.SourceEvidenceSha256, kind, "unrelated", null);
-        var saved = RecordPending(review);
-        StageSource(review, source, OperatorSourceOrigin);
-
-        return new OperatorEvidenceImport(
-            review.ProjectId, review.Branch, review.RevisionSha,
-            review.ProposalRef, review.CanonicalFactSha256,
-            review.ReviewSnapshotSha256, review.SourceEvidenceSha256,
-            kind, fact, saved.RequestId, OperatorSourceOrigin, rows.Count,
-            review.RequestedAction);
+        return new PinnedEvidenceSnapshot(review, source, rows.Count, comparisonSha, comparison);
     }
 }

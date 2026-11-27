@@ -113,6 +113,22 @@ internal sealed class ReviewAuthorityLabService : ServiceBase
                 throw;
             }
         }
+        // Nonempty scopes can only enter the comparison-only laboratory
+        // mode. No synthetic seed, public reader, credential or write lane
+        // is activated; no pending import is attempted.
+        if (File.Exists(Path.Combine(stateDir, ProtectedPendingReviewLedger.OperatorManifestFile)))
+        {
+            var inspection = _ledger.InspectOperatorPinnedEvidence();
+            if (inspection.ActiveClaims.Count != 0)
+            {
+                if (_ciRegistryFence is not null)
+                    throw new InvalidOperationException("comparison_only_conflicts_with_ci_read");
+                _operatorProofPipe = new OperatorWebAuthnPipe(_ledger, stateDir,
+                    comparisonOnlySnapshot: inspection.Review);
+                _operatorProofPipe.Start();
+                return;
+            }
+        }
         SyntheticLabClaim.Seed(_ledger);
         // A distinct REAL E~ pipeline input can be pinned by the elevated
         // operator into this service-owned directory. No input path, source
@@ -229,7 +245,47 @@ internal static class Program
                 "S-1-5-19", null, expected));
             // GitHub Windows runner is not an actual LocalService SCM host.
             Require(!ReviewHostIdentity.IsCurrentScmIdentity());
-            Console.WriteLine("MEMORY_REVIEW_SERVICE_POLICY PASS 6/6; NO_MEMORY_WRITES");
+            var scope = new PendingReview("github.com/example/comparison", "main",
+                new string('a', 40), "E~0123456789", new string('b', 64),
+                new string('c', 64), new string('d', 64), "confirm");
+            var nonce = Convert.ToBase64String(new byte[32]).TrimEnd('=').Replace('+', '-').Replace('/', '_');
+            bool Allows(string op, string branch = "main", bool extra = false)
+            {
+                var fields = new Dictionary<string, string>
+                {
+                    ["protocol"] = OperatorWebAuthnPipe.Protocol, ["op"] = op, ["nonce"] = nonce,
+                    ["projectId"] = scope.ProjectId, ["branch"] = branch, ["proposalRef"] = scope.ProposalRef,
+                };
+                if (extra) fields["decision"] = "confirm";
+                using var request = System.Text.Json.JsonDocument.Parse(
+                    System.Text.Json.JsonSerializer.Serialize(fields));
+                return OperatorWebAuthnPipe.IsComparisonInspectionRequest(request.RootElement, scope);
+            }
+            Require(Allows("comparison_inspect"));
+            Require(!Allows("comparison_inspect", "foreign"));
+            Require(!Allows("comparison_inspect", extra: true));
+            foreach (var op in new[] { "begin", "complete", "enroll_begin", "enroll_key",
+                "enroll_finish", "reaffirm_begin", "reaffirm_complete", "publish_begin",
+                "publish_complete", "read_begin", "read_complete", "ci_read_begin",
+                "ci_read_complete", "ci_read_revoke" })
+                Require(!Allows(op));
+            var scratch = Path.Combine(Path.GetTempPath(), "AgentHubSignerSelfTest-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(scratch);
+            try
+            {
+                string pin;
+                using (var first = ServiceSigningIdentity.OpenOrCreate(scratch))
+                    pin = first.ExportSubjectPublicKeyInfoPem();
+                using (var reopened = ServiceSigningIdentity.OpenOrCreate(scratch))
+                    Require(reopened.ExportSubjectPublicKeyInfoPem() == pin);
+                File.Delete(Path.Combine(scratch, "review-service-signing-key.pub.pem"));
+                var denied = false;
+                try { using var unexpected = ServiceSigningIdentity.OpenOrCreate(scratch); }
+                catch (InvalidOperationException) { denied = true; }
+                Require(denied);
+            }
+            finally { Directory.Delete(scratch, recursive: true); }
+            Console.WriteLine("MEMORY_REVIEW_SERVICE_POLICY PASS 25/25; NO_MEMORY_WRITES");
             return 0;
         }
         if (args.Length != 0)

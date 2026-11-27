@@ -41,6 +41,16 @@ public sealed partial class ProtectedPendingReviewLedger
                 policy_version TEXT NOT NULL
                     CHECK (policy_version = 'agenthub-uv-review-intent-v1')
             ) STRICT;
+            CREATE TRIGGER IF NOT EXISTS deny_verified_review_intent_update
+              BEFORE UPDATE ON verified_review_intents
+              BEGIN SELECT RAISE(ABORT, 'verified_review_intent_immutable'); END;
+            CREATE TRIGGER IF NOT EXISTS deny_verified_review_intent_delete
+              BEFORE DELETE ON verified_review_intents
+              BEGIN SELECT RAISE(ABORT, 'verified_review_intent_immutable'); END;
+            CREATE TRIGGER IF NOT EXISTS deny_verified_review_intent_replace
+              BEFORE INSERT ON verified_review_intents
+              WHEN EXISTS (SELECT 1 FROM verified_review_intents WHERE request_id=NEW.request_id)
+              BEGIN SELECT RAISE(ABORT, 'verified_review_intent_immutable'); END;
             """;
         schema.ExecuteNonQuery();
     }

@@ -19,13 +19,15 @@ export function evidenceBoundDecisionRef(id) {
 export function inspectEvidenceBoundDecision({
   db, projectId, branch, revisionSha, selectedRef,
   showLocalContent = false,
+  includeActiveClaimComparison = false,
 } = {}) {
   if (!db || typeof db.prepare !== 'function'
     || typeof projectId !== 'string' || !projectId.trim()
     || typeof branch !== 'string' || !branch.trim()
     || !GIT_SHA.test(revisionSha ?? '')
     || !REVIEW_REF.test(selectedRef ?? '')
-    || typeof showLocalContent !== 'boolean') {
+    || typeof showLocalContent !== 'boolean'
+    || typeof includeActiveClaimComparison !== 'boolean') {
     throw new TypeError('exact DB, project, branch, revision, ref and content option required');
   }
   const report = {
@@ -220,6 +222,17 @@ export function inspectEvidenceBoundDecision({
       },
       activeClaimsInScope: claimTotal,
       exactDuplicateCount: duplicates.length,
+      ...(includeActiveClaimComparison ? { activeClaimComparison: {
+        status: claimTotal === 0 ? 'no_active_claims' : 'requires_independent_review',
+        reviewSnapshotSha256: fingerprint,
+        total: claimTotal,
+        items: claims.map(claim => ({
+          claimRef: '@' + SHA(claim.id).slice(0, 10),
+          valueSha256: SHA(claim.value_text),
+          exactDuplicate: normalized(claim.value_text) === normalized(proposal.canonical_fact),
+          ...(showLocalContent ? { localValue: claim.value_text } : {}),
+        })),
+      } } : {}),
       blockers,
       reviewSnapshotSha256: fingerprint,
       requiresFreshLocalUserDecision: true,

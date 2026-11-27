@@ -23,12 +23,16 @@ const VALUE_FLAGS = new Map([
 
 export function parseEvidenceDecisionPreflightArgs(argv = []) {
   if (!Array.isArray(argv)) throw new TypeError('argv array required');
-  const parsed = { showLocalContent: false };
+  const parsed = { showLocalContent: false, includeActiveClaimComparison: false };
   const seen = new Set();
   for (let i = 0; i < argv.length; i++) {
     const flag = argv[i];
     if (seen.has(flag)) throw new Error('duplicate flag');
     seen.add(flag);
+    if (flag === '--compare-active-claims') {
+      parsed.includeActiveClaimComparison = true;
+      continue;
+    }
     if (flag === '--show-local-content') {
       parsed.showLocalContent = true;
       continue;
@@ -118,6 +122,7 @@ export function runEvidenceDecisionPreflight({
   expectedSnapshot = undefined,
   historicalSource = null,
   showLocalContent = false,
+  includeActiveClaimComparison = false,
   isTty = Boolean(process.stdin.isTTY && process.stdout.isTTY),
   gitResolve = defaultGitResolve,
   openDb = path => new DatabaseSync(path, { readOnly: true, timeout: 5000 }),
@@ -133,6 +138,7 @@ export function runEvidenceDecisionPreflight({
     '--branch', branch, '--revision', revisionSha, '--proposal-ref', selectedRef,
     ...(expectedSnapshot ? ['--expected-snapshot', expectedSnapshot] : []),
     ...(showLocalContent ? ['--show-local-content'] : []),
+    ...(includeActiveClaimComparison ? ['--compare-active-claims'] : []),
   ]);
   const context = gitResolve(input.repoPath);
   if (!context || context.projectId !== projectId
@@ -162,7 +168,7 @@ export function runEvidenceDecisionPreflight({
         repoPath: context.repoPath, projectId, branch, revisionSha, selectedRef,
       });
     const report = inspectEvidenceBoundDecision({
-      db, projectId, branch, revisionSha, selectedRef, showLocalContent,
+      db, projectId, branch, revisionSha, selectedRef, showLocalContent, includeActiveClaimComparison,
     });
     const base = provenance === null ? report
       : { ...report, historicalProvenance: provenance,
