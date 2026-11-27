@@ -1,13 +1,15 @@
 {
   "schemaVersion": 2,
-  "reviewedAt": "2026-11-18",
+  "reviewedAt": "2026-11-27",
   "sources": [
     {
       "id": "addy",
       "repository": "addyosmani/agent-skills",
-      "reviewedCommit": "39b723ceebf81474d0557c1fecd01eddab585563",
+      "reviewedCommit": "e997ac5b9a74eab332d5e9793bb38a38c8cfdd74",
       "scope": "adapted skills",
-      "decision": "current"
+      "decision": "current",
+      "reviewedAt": "2026-11-27",
+      "reviewEvidence": "docs/upstream-reviews/2026-11-27-all-sources.md"
     },
     {
       "id": "emil",
@@ -28,19 +30,25 @@
     {
       "id": "pstack",
       "repository": "cursor/plugins",
-      "reviewedCommit": "bb68f2365eceafa0cb2d253112f675acf5f144cc",
+      "reviewedCommit": "b7b93c36be9bcc36a74db438e0fd385d660bc559",
       "scope": "pstack/",
       "decision": "current",
-      "localPin": "aaeb0ea3a0584995aa8f55ce44c6c5259414b896"
+      "localPin": "aaeb0ea3a0584995aa8f55ce44c6c5259414b896",
+      "reviewedAt": "2026-11-27",
+      "reviewEvidence": "docs/upstream-reviews/2026-11-27-all-sources.md"
     },
     {
       "id": "impeccable",
       "repository": "pbakaus/impeccable",
-      "reviewedCommit": "acb4cfe14470b1fdf51e855431af618d936b7db8",
+      "reviewedCommit": "2fc5e1459efbbf06d92c7306517c286bf12490cf",
       "scope": ".agents/skills/impeccable/",
       "decision": "update-pending",
       "localPin": "acb4cfe14470b1fdf51e855431af618d936b7db8",
-      "integrationOwner": "design-with-ai"
+      "integrationOwner": "design-with-ai",
+      "reviewedAt": "2026-11-27",
+      "reviewEvidence": "docs/upstream-reviews/2026-11-27-all-sources.md",
+      "activeEngineVersion": "0.1.31",
+      "pendingIssue": 450
     }
   ]
 }
