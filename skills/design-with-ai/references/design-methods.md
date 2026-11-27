@@ -39,9 +39,12 @@ specialist command (for example, `use shadcn if useful`):
    reason: <scope evidence from both skill contracts>
    ```
 
-3. General visible-UI work remains owned by `design-with-ai`; a named optional
-   the optional candidate is classified by its actual domain; a named
-   Impeccable adjective or command belongs to DWA, not a competing skill.
+3. General visible-UI work remains owned by `design-with-ai`. Classify
+   the optional candidate by its actual domain, citing both skill paths.
+   For example, `fortify` is a real candidate for visible-state resilience,
+   but visual styling of an already working error state does not by itself
+   require delegation or authorize changes to state semantics or permissions.
+   An Impeccable adjective or command belongs to DWA, not a competing skill.
 4. Classification is not execution. Do not run the candidate's setup, command,
    or broader workflow unless it is selected after classification.
 5. Do not expand this check to unrelated installed skills. It applies only to a
