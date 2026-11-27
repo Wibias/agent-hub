@@ -189,6 +189,24 @@ files moved to `internal/impeccable/` and the separate `SKILL.md` entry
 was retired. Command dispatch is a conditional DWA subroute in
 `references/impeccable-routes.md`, not a second design workflow.
 
+## Optional Impeccable engine 0.1.31 release sync (2026-11-27)
+
+**Active candidate engine pin:** `0.1.31`. The previous reviewed
+0.1.28 engine milestone is retained below as history. This is an
+**engine-only** change inside the canonical DWA owner. It does **not**
+install the standalone `skill-v4.11.1` skill or treat its new
+account/Loop/auto-trust/upload behaviors as automatically authorized.
+
+Use release `engine-v0.1.31` for the binary asset identity, and
+`skill-v4.11.1` for the coherent source `0.1.31` version,
+checksum manifest and launcher blobs. The engine tag's source
+manifest still listed `0.1.30`, so never promote it directly.
+`internal/impeccable/UPSTREAM.md` records the exact tag commits,
+published asset SHA-256 values and Windows/POSIX launcher provenance.
+Full native checks and independent Skill Ratchet qualification must
+precede merge. The JS detector and browser/Live helpers remain
+separately owned and are not implied Rust-engine parity.
+
 This migration originally pinned legacy skill 4.9.1 and engine 0.1.24
 with matching hashes. The 2026-11-23 **engine-only** release candidate
 updates `internal/impeccable/scripts/VERSION` and its verified release-asset
