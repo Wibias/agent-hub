@@ -90,7 +90,8 @@ test('offline upstream check keeps native Rust Live pending after engine 0.1.31 
 
   assert.equal(result.status, 0, result.stderr);
   const lines = result.stdout.trim().split(/\r?\n/);
-  assert.equal(lines.length, 5);
+  assert.equal(lines.length, 14, 'five canonical sources plus nine reference-only GitHub sources');
+  assert.equal(lines.filter(line => line.startsWith('REFERENCE_RECORDED ')).length, 9);
   assert.match(result.stdout, /RECORDED addy .*decision=current/);
   assert.match(result.stdout, /RECORDED emil .*decision=current/);
   assert.match(result.stdout, /RECORDED matt .*decision=not-applicable/);
@@ -100,6 +101,9 @@ test('offline upstream check keeps native Rust Live pending after engine 0.1.31 
     /PENDING impeccable reviewed=2fc5e1459efbbf06d92c7306517c286bf12490cf local=acb4cfe14470b1fdf51e855431af618d936b7db8/,
   );
   assert.doesNotMatch(result.stdout, /RECORDED impeccable/);
+  assert.match(result.stdout, /REFERENCE_RECORDED penpot-mcp 28f63af16e14ae26c51c2e18225180de432af1fb decision=current scope=mcp\/packages\//);
+  assert.match(result.stdout, /REFERENCE_RECORDED ui-ux-pro-max 72e5fc76a4f3eb37747dc472cb3091bd46e7752a decision=current/);
+
 });
 
 test('integrated Impeccable engine pin remains unqualified until executable verification', () => {
@@ -137,4 +141,41 @@ test('reviewed engine 0.1.31 manifest and launcher files retain tagged Git blob 
     assert.equal(git('hash-object', path), sha, path + ' must match pinned-release provenance');
   }
   assert.match(git('ls-tree', 'HEAD', 'skills/design-with-ai/internal/impeccable/scripts/impeccable'), /^100755 blob /);
+});
+
+
+test('secondary DWA source monitor records nine exact GitHub snapshots without owner authority', () => {
+  const registry = JSON.parse(read('upstream-sources.json'));
+  const refs = registry.referenceSources;
+  assert.ok(Array.isArray(refs));
+  assert.equal(registry.sources.length, 5, 'canonical five-source registry remains unchanged');
+  assert.equal(refs.length, 9);
+  const expected = new Map([
+    ['anthropic-design-handoff', ['anthropics/knowledge-work-plugins', '5e504ae11498f2b8daa30d86b7dab97b2ecd8092']],
+    ['mengto-design', ['MengTo/skills', '3a8517e09e9a258a8b8a1dfdb71579abe75f1c22']],
+    ['ui-ux-pro-max', ['nextlevelbuilder/ui-ux-pro-max-skill', '72e5fc76a4f3eb37747dc472cb3091bd46e7752a']],
+    ['penpot-mcp', ['penpot/penpot', '28f63af16e14ae26c51c2e18225180de432af1fb']],
+    ['ibelick-ui-skills', ['ibelick/ui-skills', '1a2f2bf91b18365abc102b67400f48ab1046b449']],
+    ['make-interfaces-feel-better', ['jakubkrehel/make-interfaces-feel-better', '6d9f2f1df10e8ce2ae1708598a73b0506fb98794']],
+    ['vibecoded-design-tells', ['JCarterJohnson/vibecoded-design-tells', 'f7c4aefc2c797a66e55b49354a93917ab60d33ac']],
+    ['signs-of-ai-design', ['febbhav/signs-of-ai-design', '854b46f18dee5cc174d45cec8cd4f3142fe46984']],
+    ['no-slop-ui', ['LeoStehlik/no-slop-ui', 'c5f80190f0a6cbd906b81d54e79e2756931077fb']],
+  ]);
+  const allIds = new Set(registry.sources.map(source => source.id));
+  for (const ref of refs) {
+    assert.deepEqual([ref.repository, ref.reviewedCommit], expected.get(ref.id), ref.id);
+    assert.equal(ref.decision, 'current');
+    assert.equal(ref.reviewedAt, '2026-11-27');
+    assert.match(ref.reviewedCommit, /^[0-9a-f]{40}$/);
+    assert.ok(ref.scope.length > 0);
+    assert.equal(Object.hasOwn(ref, 'localPin'), false, ref.id + ' must not claim an implementation pin');
+    assert.equal(Object.hasOwn(ref, 'integrationOwner'), false, ref.id + ' must not claim skill ownership');
+    assert.equal(allIds.has(ref.id), false, 'reference source ID collision');
+    allIds.add(ref.id);
+  }
+  const monitor = read('scripts/check-upstream-sources.mjs');
+  assert.match(monitor, /referenceSources/);
+  assert.match(monitor, /REFERENCE_RECORDED/);
+  assert.match(monitor, /REFERENCE_\$\{status\}/);
+  assert.match(monitor, /needsUpstreamAction\(status\)/);
 });
