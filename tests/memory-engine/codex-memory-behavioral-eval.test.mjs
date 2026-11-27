@@ -275,3 +275,45 @@ test('behavioral runner evaluates every case and emits one aggregate pass/fail s
   assert.equal(seen.filter(([kind]) => kind === 'context').length, 4);
   assert.equal(seen.filter(([kind]) => kind === 'codex').length, 4);
 });
+
+test('isolated Codex home copies the configured relative catalog and rebases its path', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'agenthub-model-catalog-'));
+  const source = join(root, 'source');
+  const isolated = join(root, 'isolated');
+  await mkdir(source, { recursive: true });
+  const catalog = JSON.stringify({ models: [{ slug: 'fixture-model' }] });
+  await writeFile(join(source, 'catalog with spaces.json'), catalog);
+  const original = 'model = "fixture-model"\nmodel_catalog_json = "catalog with spaces.json" # configured\n[features]\nmemories = true\n';
+  await writeFile(join(source, 'config.toml'), original);
+  await writeFile(join(source, 'unrelated.json'), '{}');
+  await prepareIsolatedCodexHome({ sourceCodexHome: source, isolatedCodexHome: isolated });
+  const config = await readFile(join(isolated, 'config.toml'), 'utf8');
+  const destination = JSON.parse(config.match(/^model_catalog_json = (.+)$/m)[1]);
+  assert.equal(destination, join(isolated, 'model-catalog.json'));
+  assert.equal(await readFile(destination, 'utf8'), catalog);
+  assert.equal(await readFile(join(source, 'config.toml'), 'utf8'), original);
+  assert.doesNotMatch(config, /features|memories/);
+  await assert.rejects(access(join(isolated, 'unrelated.json')), /ENOENT/);
+});
+
+test('isolated Codex home handles an explicit absolute catalog path', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'agenthub-absolute-catalog-'));
+  const source = join(root, 'source');
+  const isolated = join(root, 'isolated');
+  const catalogPath = join(root, 'catalog.json');
+  await mkdir(source, { recursive: true });
+  await writeFile(catalogPath, '{"models":[]}');
+  await writeFile(join(source, 'config.toml'), 'model_catalog_json = '+JSON.stringify(catalogPath)+'\n');
+  await prepareIsolatedCodexHome({ sourceCodexHome: source, isolatedCodexHome: isolated });
+  assert.equal(await readFile(join(isolated, 'model-catalog.json'), 'utf8'), '{"models":[]}');
+});
+
+test('missing or invalid configured catalog fails explicitly rather than dropping routing config', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'agenthub-invalid-catalog-'));
+  const source = join(root, 'source');
+  await mkdir(source, { recursive: true });
+  await writeFile(join(source, 'config.toml'), "model_catalog_json = 'missing.json'\n");
+  await assert.rejects(prepareIsolatedCodexHome({sourceCodexHome: source, isolatedCodexHome: join(root,'first')}), /CODEX_ISOLATED_MODEL_CATALOG_MISSING/);
+  await writeFile(join(source, 'missing.json'), '{"not_models":true}');
+  await assert.rejects(prepareIsolatedCodexHome({sourceCodexHome: source, isolatedCodexHome: join(root,'second')}), /CODEX_ISOLATED_MODEL_CATALOG_INVALID/);
+});

@@ -1,0 +1,132 @@
+{
+  "format": "agent-hub-semantic-relation-live-fixture",
+  "version": 1,
+  "humanValidated": false,
+  "description": "Synthetic, distinct directed relation examples. Author labels; not independent human ground truth.",
+  "cases": [
+    {
+      "id": "dep-en",
+      "source": "The nightly database backup job requires a mounted encrypted backup volume before it can start.",
+      "targets": [
+        {
+          "id": "volume",
+          "value": "The encrypted backup volume is mounted at startup."
+        },
+        {
+          "id": "other",
+          "value": "The web dashboard uses compact date labels."
+        }
+      ],
+      "expectedRelations": [
+        {
+          "relation": "depends_on",
+          "targetClaimId": "volume"
+        }
+      ]
+    },
+    {
+      "id": "dep-de",
+      "source": "Die Browser-Tests benötigen einen laufenden lokalen HTTP-Testserver, bevor sie starten können.",
+      "targets": [
+        {
+          "id": "server",
+          "value": "Der lokale HTTP-Testserver stellt die Testseiten bereit."
+        },
+        {
+          "id": "other",
+          "value": "Die Projektnavigation verwendet kurze Namen."
+        }
+      ],
+      "expectedRelations": [
+        {
+          "relation": "depends_on",
+          "targetClaimId": "server"
+        }
+      ]
+    },
+    {
+      "id": "impl-en",
+      "source": "The settings writer implements the atomic-write policy by writing a temporary file and renaming it over the destination.",
+      "targets": [
+        {
+          "id": "policy",
+          "value": "Settings must be written using a temporary file and an atomic rename."
+        },
+        {
+          "id": "other",
+          "value": "Settings are shown in alphabetical order."
+        }
+      ],
+      "expectedRelations": [
+        {
+          "relation": "implements",
+          "targetClaimId": "policy"
+        }
+      ]
+    },
+    {
+      "id": "supports-en",
+      "source": "A measured cold-start experiment on the target Windows host showed the worker ready in 120 ms, below the 500 ms limit.",
+      "targets": [
+        {
+          "id": "claim",
+          "value": "The worker satisfies the 500 ms cold-start limit on the target Windows host."
+        },
+        {
+          "id": "other",
+          "value": "The worker logs are formatted as JSONL."
+        }
+      ],
+      "expectedRelations": [
+        {
+          "relation": "supports",
+          "targetClaimId": "claim"
+        }
+      ]
+    },
+    {
+      "id": "same-tech-negative",
+      "source": "SQLite stores desktop window positions in the editor.",
+      "targets": [
+        {
+          "id": "other",
+          "value": "SQLite stores grocery receipts in an unrelated expense tracker."
+        }
+      ],
+      "expectedRelations": []
+    },
+    {
+      "id": "similar-topic-negative",
+      "source": "The camera toolbar uses compact icon buttons.",
+      "targets": [
+        {
+          "id": "other",
+          "value": "The audio mixer has a 48 kHz sample rate."
+        }
+      ],
+      "expectedRelations": []
+    },
+    {
+      "id": "conflict-negative",
+      "source": "Production deployments require exactly two reviewers.",
+      "targets": [
+        {
+          "id": "other",
+          "value": "Production deployments require exactly one reviewer."
+        }
+      ],
+      "expectedRelations": []
+    },
+    {
+      "id": "unrelated-de",
+      "source": "Die Schreibtischlampe soll warmweiß leuchten.",
+      "targets": [
+        {
+          "id": "other",
+          "value": "Die Datenbankmigration verwendet eine transaktionale Ausführung."
+        }
+      ],
+      "expectedRelations": []
+    }
+  ]
+}

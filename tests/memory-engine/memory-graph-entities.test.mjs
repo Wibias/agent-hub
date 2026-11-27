@@ -209,3 +209,26 @@ test('project graph merges branches but keeps claim branch provenance', async (t
   assert.equal(graph.nodes.some((node) => node.id === 'claim-other'), false);
   assert.equal(graph.nodes.filter((node) => (node.nodeType ?? 'claim') === 'claim').length, 2);
 });
+
+test('same basename in different directories is not one shared module entity', () => {
+  const graph = projectClaimEntities({
+    nodes: [
+      { id: 'src', value: 'src/ui/config.mjs', nodeType: 'claim', branch: 'main' },
+      { id: 'test', value: 'tests/config.mjs', nodeType: 'claim', branch: 'main' },
+    ], edges: [], groups: [], stats: {},
+  }, { projectId: 'p' });
+  const modules = graph.nodes.filter(node => node.entityKind === 'module');
+  assert.equal(modules.length, 2);
+  assert.notEqual(modules[0].id, modules[1].id);
+  assert.deepEqual(modules.map(node => node.value).sort(), ['src/ui/config.mjs', 'tests/config.mjs']);
+  assert.ok(modules.every(node => node.claimIds.length === 1));
+});
+
+test('quoted and plain mentions of one explicit module share a single identity', () => {
+  const plain = extractClaimEntities('src/ui/config.mjs').filter(entity => entity.kind === 'module');
+  const inline = extractClaimEntities('Use `src/ui/config.mjs`.').filter(entity => entity.kind === 'module');
+  assert.equal(plain.length, 1);
+  assert.equal(inline.length, 1);
+  assert.equal(plain[0].key, inline[0].key);
+  assert.equal(extractClaimEntities('Use `src/ui/config.mjs`.').filter(entity => entity.kind === 'code').length, 0);
+});

@@ -9,7 +9,7 @@ import {
 } from 'node:fs';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 
 import {
   installCodexMemoryHooks,
@@ -211,10 +211,8 @@ test('installer emits shell-neutral Windows hooks with safely quoted paths', () 
 
   const promptScript = decodeWindowsPowerShellCommand(prompt);
   assert.match(promptScript, /^& '\/opt\/Node Runtime\/node' '/);
-  assert.match(
-    promptScript,
-    /'\/opt\/Agent Hub''s runtime\/memory-engine\/adapters\/codex-hook-cli\.mjs'/,
-  );
+  const expectedHook = resolve("/opt/Agent Hub's runtime", 'memory-engine', 'adapters', 'codex-hook-cli.mjs');
+  assert.ok(promptScript.includes("'" + expectedHook.replaceAll("'", "''") + "'"));
   assert.match(promptScript, /; exit \$LASTEXITCODE$/);
 
   const stopScript = decodeWindowsPowerShellCommand(stop);

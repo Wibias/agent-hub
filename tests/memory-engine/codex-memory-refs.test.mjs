@@ -307,7 +307,7 @@ test('real Codex CLI supports list, replace, and forget by stable ref', () => {
       ], {
         input,
         encoding: 'utf8',
-        env: { ...process.env, XDG_STATE_HOME: stateHome },
+        env: { ...process.env, LOCALAPPDATA: stateHome, XDG_STATE_HOME: stateHome },
       });
     };
 

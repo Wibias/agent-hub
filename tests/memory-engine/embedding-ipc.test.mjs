@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { lstat, mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { randomUUID } from 'node:crypto';
 
 import {
   MEMORY_EMBEDDING_IPC_V1,
@@ -10,6 +11,12 @@ import {
   defaultEmbeddingIpcPath,
   startEmbeddingIpcServer,
 } from '../../memory-engine/embedding-ipc.mjs';
+
+function testSocketPath(root, name = 'embedding.sock') {
+  return process.platform === 'win32'
+    ? '\\\\.\\pipe\\agent-hub-test-' + randomUUID()
+    : join(root, name);
+}
 
 function vector(seed, dimensions = 3) {
   return Float32Array.from(
@@ -32,7 +39,7 @@ test('embedding IPC uses a local named pipe on Windows', () => {
 
 test('embedding IPC client round-trips query and passage vectors', async (t) => {
   const root = await mkdtemp(join(tmpdir(), 'agent-hub-embedding-ipc-'));
-  const socketPath = join(root, 'embedding.sock');
+  const socketPath = testSocketPath(root);
   t.after(async () => {
     await rm(root, { recursive: true, force: true });
   });
@@ -58,8 +65,10 @@ test('embedding IPC client round-trips query and passage vectors', async (t) => 
   });
   t.after(() => server.close());
 
-  const stat = await lstat(socketPath);
-  assert.equal(stat.mode & 0o777, 0o600);
+  if (process.platform !== 'win32') {
+    const stat = await lstat(socketPath);
+    assert.equal(stat.mode & 0o777, 0o600);
+  }
 
   const client = createEmbeddingIpcClient({
     socketPath,
@@ -89,7 +98,7 @@ test('embedding IPC client round-trips query and passage vectors', async (t) => 
 
 test('embedding IPC client rejects unavailable workers instead of hanging', async () => {
   const root = await mkdtemp(join(tmpdir(), 'agent-hub-embedding-ipc-missing-'));
-  const socketPath = join(root, 'missing.sock');
+  const socketPath = testSocketPath(root, 'missing.sock');
 
   try {
     const client = createEmbeddingIpcClient({
@@ -111,7 +120,7 @@ test('embedding IPC client rejects unavailable workers instead of hanging', asyn
 
 test('embedding IPC rejects model identity mismatches', async (t) => {
   const root = await mkdtemp(join(tmpdir(), 'agent-hub-embedding-ipc-model-'));
-  const socketPath = join(root, 'embedding.sock');
+  const socketPath = testSocketPath(root);
   t.after(async () => {
     await rm(root, { recursive: true, force: true });
   });
@@ -147,9 +156,9 @@ test('embedding IPC rejects model identity mismatches', async (t) => {
 });
 
 
-test('a second Unix worker cannot replace an active socket', async (t) => {
+test('a second worker cannot replace an active local IPC endpoint', async (t) => {
   const root = await mkdtemp(join(tmpdir(), 'agent-hub-embedding-ipc-active-'));
-  const socketPath = join(root, 'embedding.sock');
+  const socketPath = testSocketPath(root);
   t.after(async () => {
     await rm(root, { recursive: true, force: true });
   });
@@ -169,7 +178,6 @@ test('a second Unix worker cannot replace an active socket', async (t) => {
   const first = await startEmbeddingIpcServer({
     socketPath,
     embedder,
-    platform: 'linux',
   });
   t.after(() => first.close());
 
@@ -177,9 +185,8 @@ test('a second Unix worker cannot replace an active socket', async (t) => {
     startEmbeddingIpcServer({
       socketPath,
       embedder,
-      platform: 'linux',
     }),
-    /already running/i,
+    /already running|EADDRINUSE/i,
   );
 
   const client = createEmbeddingIpcClient({
@@ -195,7 +202,7 @@ test('a second Unix worker cannot replace an active socket', async (t) => {
 
 test('embedding IPC health probe verifies worker identity without running inference', async (t) => {
   const root = await mkdtemp(join(tmpdir(), 'agent-hub-embedding-ipc-health-'));
-  const socketPath = join(root, 'embedding.sock');
+  const socketPath = testSocketPath(root);
   t.after(async () => {
     await rm(root, { recursive: true, force: true });
   });

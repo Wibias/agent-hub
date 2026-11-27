@@ -176,7 +176,7 @@ export async function evaluateSemanticRelationShadowCases({
         },
       });
       const predicted = result.relations.map((relation) => {
-        const record = { relation: relation.relation, sourceClaimId: entry.sourceClaimId,
+        const record = { relation: relation.relation, sourceClaimId: relation.source_claim_id,
           targetClaimId: relation.target_claim_id };
         return { ...record, key: edgeKey(record.relation, record.sourceClaimId, record.targetClaimId) };
       });

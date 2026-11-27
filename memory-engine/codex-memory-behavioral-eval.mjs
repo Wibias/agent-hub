@@ -4,7 +4,7 @@ import {
   readFile,
   writeFile,
 } from 'node:fs/promises';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 
 const ISOLATED_MODEL_CONFIG_KEYS = new Set([
   'model',
@@ -25,6 +25,42 @@ function isolatedModelConfig(text) {
     lines.push(match[1] + ' = ' + match[2]);
   }
   return lines.length === 0 ? null : lines.join('\n') + '\n';
+}
+
+/**
+ * A model catalog path is resolved against the source Codex home, not the
+ * judge's disposable workspace. Copy only the configured catalog and rewrite
+ * its reference to the isolated copy. Never inherit unrelated config files.
+ */
+async function isolateModelCatalog(config, sourceCodexHome, isolatedCodexHome) {
+  const lines = config.split('\n');
+  const index = lines.findIndex(line => line.startsWith('model_catalog_json = '));
+  if (index < 0) return config;
+  const raw = lines[index].slice('model_catalog_json = '.length);
+  const match = raw.match(/^("(?:[^"\\]|\\.)*"|'[^']*')\s*(?:#.*)?$/u);
+  let path;
+  try {
+    if (match) path = match[1].startsWith("'") ? match[1].slice(1, -1) : JSON.parse(match[1]);
+  } catch {}
+  if (typeof path !== 'string' || !path.trim()) {
+    throw new Error('CODEX_ISOLATED_MODEL_CATALOG_INVALID: expected a quoted catalog path');
+  }
+  const source = resolve(sourceCodexHome, path);
+  const destination = resolve(isolatedCodexHome, 'model-catalog.json');
+  try {
+    const contents = await readFile(source, 'utf8');
+    const catalog = JSON.parse(contents);
+    if (!catalog || typeof catalog !== 'object' || !Array.isArray(catalog.models)) {
+      throw new Error('invalid model catalog');
+    }
+    await writeFile(destination, contents, { mode: 0o600, flag: 'wx' });
+  } catch (error) {
+    const code = error?.code === 'ENOENT' ? 'MISSING' : 'INVALID';
+    throw new Error('CODEX_ISOLATED_MODEL_CATALOG_' + code + ': cannot prepare configured model catalog');
+  }
+  // TOML basic strings support JSON's escaped Windows path separators.
+  lines[index] = 'model_catalog_json = ' + JSON.stringify(destination);
+  return lines.join('\n');
 }
 
 export const MEMORY_BEHAVIORAL_CASES = Object.freeze([
@@ -200,22 +236,23 @@ export async function prepareIsolatedCodexHome({
   }
 
   let modelConfigCopied = false;
+  let sourceConfig;
   try {
-    const sourceConfig = await readFile(
-      join(sourceCodexHome, 'config.toml'),
-      'utf8',
-    );
+    sourceConfig = await readFile(join(sourceCodexHome, 'config.toml'), 'utf8');
+  } catch (error) {
+    if (error?.code !== 'ENOENT') throw error;
+  }
+  if (sourceConfig !== undefined) {
     const config = isolatedModelConfig(sourceConfig);
     if (config !== null) {
+      const isolatedConfig = await isolateModelCatalog(config, sourceCodexHome, isolatedCodexHome);
       await writeFile(
         join(isolatedCodexHome, 'config.toml'),
-        config,
+        isolatedConfig,
         { mode: 0o600 },
       );
       modelConfigCopied = true;
     }
-  } catch (error) {
-    if (error?.code !== 'ENOENT') throw error;
   }
 
   return {

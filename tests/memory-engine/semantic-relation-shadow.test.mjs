@@ -273,3 +273,13 @@ test('D3 empty or internally inconsistent partial usage fails without rewarding 
   assert.equal(result.usage.reportedCases, 0);
   assert.equal(result.usage.totals, null);
 });
+
+test('D3 scores undirected relations using normalized endpoints when source sorts after target', async () => {
+  const result = await evaluateSemanticRelationShadowCases({
+    cases: [mkCase('reverse-undirected', { sourceClaimId: 'b', targetClaimIds: ['a'], expectedRelations: [{ relation: 'related_to', targetClaimId: 'a' }] })],
+    judge: async () => response([edge('related_to', 'a')]),
+  });
+  assert.equal(result.counts.truePositiveEdges, 1);
+  assert.equal(result.counts.falseEdges, 0);
+  assert.equal(result.counts.missingEdges, 0);
+});
