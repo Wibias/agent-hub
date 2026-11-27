@@ -153,3 +153,57 @@ test('promotion finalization rejects audit payload that disagrees with stored re
   );
   assert.equal(storeModule.getEvidenceBoundProposal(db, 'proposal-1').status, 'pending');
 });
+
+
+test('promotion checks the persisted relation after acquiring its write transaction', async t => {
+  const db = await createDb();
+  t.after(() => db.close());
+  seedReady(db);
+  const other = new DatabaseSync(db.prepare('PRAGMA database_list').all().find(row => row.name === 'main').file);
+  t.after(() => other.close());
+  // Deterministic scheduling of a real second SQLite writer immediately
+  // before the first connection acquires its write lock.
+  let changed = false;
+  const scheduled = {
+    get isTransaction() { return db.isTransaction; },
+    prepare: db.prepare.bind(db),
+    exec(sql) {
+      if (sql === 'BEGIN IMMEDIATE' && !changed) {
+        other.prepare('UPDATE memory_evidence_proposal_relations SET relation=?, related_claim_id=?, result_json=? WHERE proposal_id=?')
+          .run('same', 'existing-target', JSON.stringify({
+            relation: 'same', target_ref: '@abcdef0123', confidence: 'high',
+            meaning_preserved: true, reason: 'Concurrent relation change.',
+          }), 'proposal-1');
+        changed = true;
+      }
+      return db.exec(sql);
+    },
+  };
+  assert.throws(() => storeModule.finalizeEvidenceBoundProposalPromotion(scheduled, {
+    proposalId: 'proposal-1', status: 'promoted', claimId: 'evidence-memory:abc',
+    relatedClaimId: null, policyVersion: 'evidence-promotion-v1',
+    finalizedAt: '2026-10-11T12:04:00.000Z',
+    result: { status: 'promoted', relation: 'unrelated', claim_id: 'evidence-memory:abc', related_claim_id: null },
+  }), /related claim invariant|audit.*relation/i);
+  assert.equal(changed, true);
+  const actual = storeModule.getEvidenceBoundProposal(db, 'proposal-1');
+  assert.equal(actual.status, 'pending');
+  assert.equal(actual.relation.relation, 'same');
+  assert.equal(actual.promotion, null);
+});
+
+test('promotion audit rolls back when terminal proposal update fails', async t => {
+  const db = await createDb();
+  t.after(() => db.close());
+  seedReady(db);
+  db.exec("CREATE TRIGGER deny_fixture_status_update BEFORE UPDATE OF status ON memory_evidence_proposals BEGIN SELECT RAISE(ABORT,'fixture_update_denied'); END;");
+  assert.throws(() => storeModule.finalizeEvidenceBoundProposalPromotion(db, {
+    proposalId: 'proposal-1', status: 'promoted', claimId: 'evidence-memory:abc',
+    relatedClaimId: null, policyVersion: 'evidence-promotion-v1',
+    finalizedAt: '2026-10-11T12:04:00.000Z',
+    result: { status: 'promoted', relation: 'unrelated', claim_id: 'evidence-memory:abc', related_claim_id: null },
+  }), /fixture_update_denied/);
+  const actual = storeModule.getEvidenceBoundProposal(db, 'proposal-1');
+  assert.equal(actual.status, 'pending');
+  assert.equal(actual.promotion, null);
+});
