@@ -72,3 +72,20 @@ test('Rust Live cannot advertise upstream commands as a verified DWA-owned sessi
   assert.match(routes, /A successful[\s\S]*?engine-probe[\s\S]*?cannot relax this routing boundary/);
   assert.doesNotMatch(routes, /\| `live` \|[^\n]*explicit engine session only/);
 });
+
+
+test('Rust Live route contract is complete and has no duplicated authority text', () => {
+  const routes = read('references/impeccable-routes.md');
+  assert.equal((routes.match(/^# Integrated Impeccable command routes$/gm) || []).length, 1,
+    'the route document must have exactly one top-level owner');
+  assert.equal((routes.match(/^## Authority and runtime boundary$/gm) || []).length, 1,
+    'do not accidentally paste the authority contract into a paragraph');
+  assert.equal((routes.match(/^## Rust Live command identity gate \(2026-11-27\)$/gm) || []).length, 1);
+  assert.equal((routes.match(/This reference is owned by \*\*design-with-ai\*\*/g) || []).length, 1);
+  const gate = routes.match(/## Rust Live command identity gate \(2026-11-27\)\n\n([\s\S]*?)\n\n## Former commands, now DWA subroutes/);
+  assert.ok(gate, 'a complete contiguous Rust Live gate is mandatory');
+  assert.match(gate[1], /upstream Rust provider detection only\s+supports \`\/\` or \`\$\` prefixes\. AgentHub's DWA-owned JS Live overlay/);
+  assert.match(gate[1], /\$design-with-ai impeccable/);
+  assert.match(gate[1], /Do not invoke the Rust/);
+  assert.doesNotMatch(gate[1], /^#/m, 'embedded headings indicate source text corruption');
+});
