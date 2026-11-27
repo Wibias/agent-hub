@@ -368,7 +368,8 @@ internal static class OperatorSelfTest
                 Encoding.UTF8.GetBytes(value))).ToLowerInvariant();
             byte[] ComparisonPayload(int total = 1, string value = existingFact,
                 bool approved = false, string branch = comparisonBranch,
-                string intentStatus = "not_recorded", bool available = false)
+                string intentStatus = "not_recorded", bool available = false,
+                string? expectedValue = null, bool duplicate = false)
                 => JsonSerializer.SerializeToUtf8Bytes(new
                 {
                     protocol = "agenthub-operator-uv-service-v1",
@@ -388,8 +389,8 @@ internal static class OperatorSelfTest
                     comparison_sha256 = new string('d', 64), total,
                     claims = new[] { new
                     {
-                        claim_ref = "@0123456789", value_sha256 = Digest(existingFact),
-                        exact_duplicate = false, value,
+                        claim_ref = "@0123456789", value_sha256 = Digest(expectedValue ?? existingFact),
+                        exact_duplicate = duplicate, value,
                     } },
                 });
             ComparisonOffer ParseComparison(byte[] payload, ECDsa signer, string expectedNonce)
@@ -404,6 +405,8 @@ internal static class OperatorSelfTest
             var display = ProtectedOperatorService.FormatComparison(comparison);
             if (comparison.Claims.Count != 1 || comparison.Claims[0].Value != existingFact
                 || !display.Contains("NO APPROVAL", StringComparison.Ordinal)
+                || !display.Contains("original evidence UNVERIFIED", StringComparison.Ordinal)
+                || !display.Contains("freshness NOT verified", StringComparison.Ordinal)
                 || display.Contains("fact\n[FAKE APPROVAL]", StringComparison.Ordinal))
                 throw new Exception("comparison_preview_not_exact_or_escaped");
             MustDeny(() => ParseComparison(ComparisonPayload(), foreign, nonce));
@@ -420,6 +423,16 @@ internal static class OperatorSelfTest
                 throw new Exception("conflict_recovery_status_invalid");
             MustDeny(()=>ParseComparison(ComparisonPayload(intentStatus:"recorded_exact_snapshot",available:true),key,nonce));
             MustDeny(()=>ParseComparison(ComparisonPayload(intentStatus:"unknown"),key,nonce));
+            const string normalizedDuplicate = "\uFF21\u00a0new\t fact";
+            var duplicateComparison = ParseComparison(ComparisonPayload(value:normalizedDuplicate,
+                expectedValue:normalizedDuplicate,duplicate:true),key,nonce);
+            if (!duplicateComparison.Claims[0].ExactDuplicate || duplicateComparison.ConflictIntentAvailable)
+                throw new Exception("normalized_duplicate_not_recognized");
+            MustDeny(()=>ParseComparison(ComparisonPayload(value:normalizedDuplicate,
+                expectedValue:normalizedDuplicate,duplicate:false,available:true),key,nonce));
+            MustDeny(()=>ParseComparison(ComparisonPayload(duplicate:true),key,nonce));
+            MustDeny(()=>ParseComparison(ComparisonPayload(value:normalizedDuplicate,
+                expectedValue:normalizedDuplicate,duplicate:true,available:true),key,nonce));
             var enabledComparison = ParseComparison(ComparisonPayload(available:true),key,nonce);
             string Token(int n) => Convert.ToBase64String(new byte[n]).TrimEnd('=').Replace('+','-').Replace('/','_');
             byte[] ConflictPayload(string snapshot, string digest, string decision = "confirm", bool freshness = false)
@@ -470,7 +483,7 @@ internal static class OperatorSelfTest
                 || ParseReceipt(ReceiptPayload(new string('e',64))))
                 throw new Exception("conflict_receipt_binding_failed");
             MustDeny(()=>ParseReceipt(ReceiptPayload(comparison.ComparisonSha256,claim:true)));
-            if(denied!=17) throw new Exception("conflict_negative_cases_missing");
+            if(denied!=20) throw new Exception("conflict_negative_cases_missing");
             denied = 3; // Retain the existing subsequent envelope-test count.
 
             // A signed, purpose-bound response is STILL never a Claim and

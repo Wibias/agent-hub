@@ -27,6 +27,12 @@ internal static partial class ProtectedOperatorService
     private static string ValueHash(string value)
         => Convert.ToHexString(SHA256.HashData(Utf8.GetBytes(value))).ToLowerInvariant();
 
+    // Same normalization as the native Store comparison. Check the
+    // signed duplicate label against the independently verified text.
+    private static string NormalizeComparisonValue(string value)
+        => Regex.Replace(value.Normalize(NormalizationForm.FormKC),
+            @"[\u0009-\u000d\u0020\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]+", " ").Trim(' ');
+
     internal static ComparisonOffer ParseComparisonOffer(JsonElement r, string project, string branch, string proposalRef)
     {
         if (Str(r, "status") == "operator_comparison_preview_too_large")
@@ -50,6 +56,7 @@ internal static partial class ProtectedOperatorService
         var count = r.GetProperty("total").GetInt32();
         if (count is < 1 or > 200 || list.ValueKind != JsonValueKind.Array || list.GetArrayLength() != count)
             throw new InvalidOperationException("Incomplete signed comparison");
+        var normalizedFact = NormalizeComparisonValue(fact);
         var claims = new List<ComparisonClaim>();
         var refs = new HashSet<string>(StringComparer.Ordinal);
         foreach (var row in list.EnumerateArray())
@@ -62,7 +69,10 @@ internal static partial class ProtectedOperatorService
             if (!Regex.IsMatch(reference, @"\A@[0-9a-f]{10}\z") || !refs.Add(reference)
                 || value.Length > 65536 || ValueHash(value) != hash)
                 throw new InvalidOperationException("Invalid comparison value or reference");
-            claims.Add(new ComparisonClaim(reference, hash, row.GetProperty("exact_duplicate").GetBoolean(), value));
+            var exactDuplicate = NormalizeComparisonValue(value) == normalizedFact;
+            if (row.GetProperty("exact_duplicate").GetBoolean() != exactDuplicate)
+                throw new InvalidOperationException("Inconsistent comparison duplicate label");
+            claims.Add(new ComparisonClaim(reference, hash, exactDuplicate, value));
         }
         var intentAvailable = r.GetProperty("conflict_intent_available").GetBoolean();
         var intentStatus = Str(r,"conflict_intent_status");
@@ -149,6 +159,8 @@ internal static partial class ProtectedOperatorService
     {
         var display = new StringBuilder();
         display.AppendLine("SIGNED COMPARISON / READ ONLY / NO APPROVAL");
+        display.AppendLine("Source: operator-pinned historical snapshot; original evidence UNVERIFIED.");
+        display.AppendLine("Current canonical database freshness NOT verified.");
         display.AppendLine("Candidate: " + JsonSerializer.Serialize(offer.Fact));
         display.AppendLine();
         display.AppendLine("Complete active Claim comparison (" + offer.Claims.Count + "):");

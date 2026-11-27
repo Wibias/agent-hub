@@ -334,3 +334,15 @@ not physical Hello, trusted hardware attestation, SCM end-to-end, or
 canonical finalization. Installer syntax and native service build pass.
 No installation or live database export has been performed. The previously
 blocked positive SCM test remains unverified.
+
+### Independent comparison display validation
+
+The operator client recomputes exact-duplicate labels from the signed,
+hash-checked text using the Store's NFKC and whitespace normalization.
+Inconsistent labels are rejected, including an available confirmation for
+an actual duplicate. The displayed comparison explicitly states that its
+source is an operator-pinned historical snapshot, original Evidence is
+unverified, and current canonical database freshness is not verified.
+Offline UI contract tests cover normalized duplicates and three additional
+negative cases. These checks do not establish a positive SCM enrollment /
+conflict completion or physical Hello test.
