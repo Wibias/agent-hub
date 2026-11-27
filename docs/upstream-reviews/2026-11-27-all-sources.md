@@ -115,12 +115,32 @@ latest upstream HEAD. Weekly checks must still signal a pending
 adoption, not a false five-for-five release completion.
 
 The nine supplemental DWA GitHub references below are method
-citations or optional provider inspirations, **not additional live
-vendor branches**. Their scoped dispositions are retained; real
-deployment parity (Penpot session compatibility, full IME/WCAG
-interaction, 3D demos) must be proved if those features are actually
-requested. The report does **not** claim byte-for-byte upgrades or
-full semantic parity with all nine independent repositories.
+citations or optional provider inspirations, **not installed vendor
+branches or independent skill owners**. They are now present under the
+separate `referenceSources` field of `upstream-sources.json` and
+**included in the weekly, read-only drift monitor** alongside the five
+canonical upstream sources. Four carry explicit Git directory scopes
+(Anthropic design handoff, MengTo `agent-skills/`, UI UX Pro Max, and
+Penpot `mcp/packages/`). The other five have research-only prose
+scopes: any new upstream HEAD prompts review instead of an automatic
+file transplant. Changes outside an explicit directory scope are
+reported as remote advances but do not automatically demand adoption.
+
+On an unchanged HEAD the monitor records `REFERENCE_CURRENT`. On a
+changed, relevant directory it reports `REFERENCE_SCOPE_CHANGED`;
+an unscoped new HEAD reports `REFERENCE_REVIEW`. Neither status
+grants file writes, dependency installation, an executable skill route
+or acceptance evidence. The **five canonical source records remain a
+distinct top-level `sources` array**, and Impeccable stays
+`PENDING` until #450. The nine source refs have **no `localPin`
+or `integrationOwner`**, so a source review cannot impersonate a
+runtime qualification.
+
+Their scoped dispositions are retained; real deployment parity
+(Penpot session compatibility, full IME/WCAG interaction, 3D demos)
+must be proved if those features are actually requested. This report
+does **not** claim byte-for-byte upgrades or complete functional parity
+with the nine independent repositories.
 
 ---
 
