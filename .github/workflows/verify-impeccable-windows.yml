@@ -34,32 +34,32 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $scripts = Join-Path $env:GITHUB_WORKSPACE 'skills\design-with-ai\internal\impeccable\scripts'
           $version = (Get-Content -Raw -LiteralPath (Join-Path $scripts 'VERSION')).Trim()
-          if ($version -ne '0.1.28') { throw "Unexpected engine version: $version" }
+          if ($version -ne '0.1.31') { throw "Unexpected engine version: $version" }
           $manifest = Get-Content -LiteralPath (Join-Path $scripts 'engine-checksums.txt')
-          $matching = @($manifest | Where-Object { $_ -match '^0\.1\.28 impeccable-windows-x64\.exe [0-9a-f]{64}$' })
-          if ($matching.Count -ne 1) { throw 'Expected exactly one Windows 0.1.28 checksum' }
+          $matching = @($manifest | Where-Object { $_ -match '^0\.1\.31 impeccable-windows-x64\.exe [0-9a-f]{64}$' })
+          if ($matching.Count -ne 1) { throw 'Expected exactly one Windows 0.1.31 checksum' }
 
           $env:IMPECCABLE_HOME = Join-Path $env:RUNNER_TEMP 'impeccable-positive'
           Remove-Item Env:IMPECCABLE_BIN -ErrorAction SilentlyContinue
           $out = (& (Join-Path $scripts 'impeccable.cmd') engine-probe 2>&1 | Out-String).Trim()
-          if ($LASTEXITCODE -ne 0 -or $out -notmatch 'impeccable-engine 0\.1\.28') {
+          if ($LASTEXITCODE -ne 0 -or $out -notmatch 'impeccable-engine 0\.1\.31') {
             throw "Pinned Windows engine launch failed (exit $LASTEXITCODE)"
           }
-          Write-Output 'PASS: Engine 0.1.28 launched through the Windows checksum-verifying path'
+          Write-Output 'PASS: Engine 0.1.31 launched through the Windows checksum-verifying path'
           # Read-only command parser checks; do not start Live servers or hooks.
           foreach ($args in @(@('--help'), @('live', '--help'), @('doctor', '--help'))) {
             $helpOut = (& (Join-Path $scripts 'impeccable.cmd') @args 2>&1 | Out-String).Trim()
             if ($LASTEXITCODE -ne 0 -or $helpOut -notmatch '(?i)(impeccable|usage|live|doctor)') {
-              throw "Pinned Windows 0.1.28 CLI help failed for $($args -join ' ') (exit $LASTEXITCODE)"
+              throw "Pinned Windows 0.1.31 CLI help failed for $($args -join ' ') (exit $LASTEXITCODE)"
             }
           }
-          Write-Output 'PASS: Windows 0.1.28 main, Live and doctor CLI help'
+          Write-Output 'PASS: Windows 0.1.31 main, Live and doctor CLI help'
 
           $badScripts = Join-Path $env:RUNNER_TEMP 'impeccable-tampered-scripts'
           Copy-Item -LiteralPath $scripts -Destination $badScripts -Recurse
           $badManifestPath = Join-Path $badScripts 'engine-checksums.txt'
           $lines = @(Get-Content -LiteralPath $badManifestPath)
-          $badLine = '0.1.28 impeccable-windows-x64.exe ' + ('0' * 64)
+          $badLine = '0.1.31 impeccable-windows-x64.exe ' + ('0' * 64)
           $changed = @($lines | ForEach-Object {
             if ($_ -eq $matching[0]) { $badLine } else { $_ }
           })
@@ -89,21 +89,21 @@ jobs:
         run: |
           set -euo pipefail
           scripts="$GITHUB_WORKSPACE/skills/design-with-ai/internal/impeccable/scripts"
-          test "$(cat "$scripts/VERSION")" = '0.1.28'
+          test "$(cat "$scripts/VERSION")" = '0.1.31'
           export IMPECCABLE_HOME="$RUNNER_TEMP/impeccable-linux-positive"
           unset IMPECCABLE_BIN || true
           out="$(sh "$scripts/impeccable" engine-probe)"
-          test "$out" = 'impeccable-engine 0.1.28'
-          echo 'PASS: Linux x64 engine 0.1.28 launched with a release-verified cache'
+          test "$out" = 'impeccable-engine 0.1.31'
+          echo 'PASS: Linux x64 engine 0.1.31 launched with a release-verified cache'
           # Verify the read-only command parser for the existing DWA explicit verbs.
           sh "$scripts/impeccable" --help > "$RUNNER_TEMP/impeccable-help.txt"
           sh "$scripts/impeccable" live --help > "$RUNNER_TEMP/impeccable-live-help.txt"
           sh "$scripts/impeccable" doctor --help > "$RUNNER_TEMP/impeccable-doctor-help.txt"
           grep -Eqi 'impeccable|usage' "$RUNNER_TEMP/impeccable-help.txt"
-          echo 'PASS: Linux 0.1.28 main, Live and doctor CLI help'
+          echo 'PASS: Linux 0.1.31 main, Live and doctor CLI help'
           copied="$RUNNER_TEMP/impeccable-linux-negative"
           cp -R "$scripts" "$copied"
-          sed -i -E "s/^0\.1\.28 impeccable-linux-x64 [0-9a-f]{64}$/0.1.28 impeccable-linux-x64 $(printf '0%.0s' {1..64})/" "$copied/engine-checksums.txt"
+          sed -i -E "s/^0\.1\.31 impeccable-linux-x64 [0-9a-f]{64}$/0.1.31 impeccable-linux-x64 $(printf '0%.0s' {1..64})/" "$copied/engine-checksums.txt"
           export IMPECCABLE_DOWNLOAD_BASE='http://127.0.0.1:9'
           set +e
           bad="$(sh "$copied/impeccable" engine-probe 2>&1)"
