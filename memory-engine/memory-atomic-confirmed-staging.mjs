@@ -67,8 +67,9 @@ function verifyConfirmation(row, request, createdAt, sourceEvidenceId) {
     || row.project_id !== request.projectId || row.branch !== request.branch
     || row.authority_class !== 'user_direct' || row.sensitivity !== 'normal'
     || row.source_kind !== 'session' || row.harness !== 'codex'
-    || !proper(row.session_id) || row.path !== null
-    || metadata.event_type !== 'user_prompt' || metadata.explicit_memory !== true
+    || !proper(row.session_id) || row.source_ref !== 'session:' + row.session_id || row.path !== null
+    || metadata.event_type !== 'user_prompt' || metadata.hook_event_name !== 'UserPromptSubmit'
+    || metadata.explicit_memory !== true
     || metadata.explicit_memory_mode !== 'atomic_rule_confirm'
     || metadata.atomic_rule_draft_ref !== request.draftRef
     || row.content_redacted !== atomicRuleConfirmationText(request)) {
@@ -134,7 +135,7 @@ function verifiedSource(db, request) {
  *
  * No Claim is created; no original Candidate is altered. The staging sidecar
  * stores only a hash of the canonical rule (the complete text stays in the
- * existing authenticated confirmation Evidence). Explicit schema setup is
+ * existing locally classified confirmation Evidence; not host-authenticated). Explicit schema setup is
  * required before this function can run.
  */
 export function stageConfirmedAtomicRule(request = {}) {
@@ -188,15 +189,23 @@ export function stageConfirmedAtomicRule(request = {}) {
       'SELECT * FROM memory_atomic_rule_staging WHERE id = ?'
     ).get(stageId);
     if (existing) {
-      const priorRefs = db.prepare(
-        'SELECT review_ref FROM memory_atomic_rule_staging_spans WHERE staging_id = ? ORDER BY review_ref'
-      ).all(stageId).map(row => row.review_ref);
+      const priorSpans = db.prepare(
+        'SELECT review_ref, start_offset, end_offset, fragment_sha256 FROM memory_atomic_rule_staging_spans WHERE staging_id = ? ORDER BY review_ref'
+      ).all(stageId);
+      const expectedSpans = [...verified.spans].sort((a,b) => a.reviewRef < b.reviewRef ? -1 : a.reviewRef > b.reviewRef ? 1 : 0);
       if (existing.project_id !== projectId || existing.branch !== branch
         || existing.source_candidate_id !== candidateId
         || existing.source_evidence_id !== verified.source.evidence_id
         || existing.confirmation_evidence_id !== confirmationEvidenceId
         || existing.draft_ref !== draftRef || existing.rule_sha256 !== ruleHash
-        || JSON.stringify(priorRefs) !== JSON.stringify([...reviewRefs].sort())) {
+        || existing.policy_version !== ATOMIC_RULE_STAGING_POLICY_VERSION
+        || existing.duration !== 'permanent' || existing.status !== 'awaiting_promotion_review'
+        || !Number.isFinite(Date.parse(existing.staged_at))
+        || Date.parse(existing.staged_at) < Date.parse(confirmation.captured_at)
+        || priorSpans.length !== expectedSpans.length
+        || priorSpans.some((row,i) => row.review_ref !== expectedSpans[i].reviewRef
+          || row.start_offset !== expectedSpans[i].start || row.end_offset !== expectedSpans[i].end
+          || row.fragment_sha256 !== expectedSpans[i].hash)) {
         throw new Error('existing stage has mismatched provenance');
       }
       db.exec('COMMIT');

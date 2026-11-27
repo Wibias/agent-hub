@@ -56,10 +56,10 @@ async function fixture(action, { installSchema = true } = {}) {
     });
     const confirmation = memory.recordEvidence({
       id:'confirmation-evidence',projectId:PROJECT,branch:BRANCH,harness:'codex',
-      sessionId:'session-confirm',sourceKind:'session',sourceRef:'session:confirm',
+      sessionId:'session-confirm',sourceKind:'session',sourceRef:'session:session-confirm',
       capturedAt:CONFIRM_AT,content:confirmationContent,authorityClass:'user_direct',
       metadata:{
-        event_type:'user_prompt',explicit_memory:true,
+        event_type:'user_prompt',hook_event_name:'UserPromptSubmit',explicit_memory:true,
         explicit_memory_mode:'atomic_rule_confirm',
         atomic_rule_draft_ref:draftRef,
       },
@@ -201,4 +201,31 @@ test('exact confirmation string carries draft, project, branch and full endorsed
     projectId:PROJECT,branch:'main\nfeature',
     draftRef:'~d1234567890abcdef',ruleText:RULE,
   }));
+});
+
+
+test('staging rejects confirmation origin metadata that preflight would reject',async()=>{
+  await fixture(async({db,request})=>{
+    const row=db.prepare('SELECT metadata_json,source_ref FROM evidence WHERE id=?').get('confirmation-evidence');
+    const update=db.prepare('UPDATE evidence SET metadata_json=?,source_ref=? WHERE id=?');
+    update.run(JSON.stringify({...JSON.parse(row.metadata_json),hook_event_name:'Stop'}),row.source_ref,'confirmation-evidence');
+    assert.throws(()=>stageConfirmedAtomicRule(request),/confirmation evidence invalid/);
+    update.run(row.metadata_json,'session:wrong-session','confirmation-evidence');
+    assert.throws(()=>stageConfirmedAtomicRule(request),/confirmation evidence invalid/);
+    assert.equal(db.prepare('SELECT COUNT(*) n FROM memory_atomic_rule_staging').get().n,0);
+  });
+});
+
+test('staging replay refuses tampered span coordinates or hashes',async()=>{
+  await fixture(async({db,request})=>{
+    const result=stageConfirmedAtomicRule(request);
+    const row=db.prepare('SELECT * FROM memory_atomic_rule_staging_spans WHERE staging_id=? ORDER BY review_ref LIMIT 1').get(result.stageId);
+    const update=db.prepare('UPDATE memory_atomic_rule_staging_spans SET end_offset=?,fragment_sha256=? WHERE staging_id=? AND review_ref=?');
+    update.run(row.end_offset+1,row.fragment_sha256,result.stageId,row.review_ref);
+    assert.throws(()=>stageConfirmedAtomicRule(request),/mismatched provenance/);
+    update.run(row.end_offset,'a'.repeat(64),result.stageId,row.review_ref);
+    assert.throws(()=>stageConfirmedAtomicRule(request),/mismatched provenance/);
+    update.run(row.end_offset,row.fragment_sha256,result.stageId,row.review_ref);
+    assert.equal(stageConfirmedAtomicRule(request).status,'already_staged');
+  });
 });
