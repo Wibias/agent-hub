@@ -41,11 +41,29 @@ jobs:
 
           $env:IMPECCABLE_HOME = Join-Path $env:RUNNER_TEMP 'impeccable-positive'
           Remove-Item Env:IMPECCABLE_BIN -ErrorAction SilentlyContinue
+          # Exercise upstream's bounded staging cleanup in an isolated test cache:
+          # only old matching cache staging directories may disappear.
+          $stageRoot = Join-Path $env:IMPECCABLE_HOME 'bin\0.1.28'
+          $staleStage = Join-Path $stageRoot '.impeccable.part.stale'
+          $freshStage = Join-Path $stageRoot '.impeccable.part.fresh'
+          $externalStage = Join-Path $env:RUNNER_TEMP 'outside-cache-stage'
+          foreach ($dir in @($staleStage, $freshStage, $externalStage)) {
+            New-Item -ItemType Directory -Force -Path $dir | Out-Null
+            Set-Content -LiteralPath (Join-Path $dir 'sentinel.txt') -Value 'protected' -Encoding ascii
+          }
+          (Get-Item -LiteralPath $staleStage).LastWriteTime = (Get-Date).AddDays(-5)
           $out = (& (Join-Path $scripts 'impeccable.cmd') engine-probe 2>&1 | Out-String).Trim()
           if ($LASTEXITCODE -ne 0 -or $out -notmatch 'impeccable-engine 0\.1\.31') {
             throw "Pinned Windows engine launch failed (exit $LASTEXITCODE)"
           }
           Write-Output 'PASS: Engine 0.1.31 launched through the Windows checksum-verifying path'
+          if (Test-Path -LiteralPath $staleStage) { throw 'Stale Windows cache staging directory survived the cleanup' }
+          foreach ($dir in @($freshStage, $externalStage)) {
+            if (-not (Test-Path -LiteralPath (Join-Path $dir 'sentinel.txt'))) {
+              throw "Windows cleanup escaped its bounded stale cache scope: $dir"
+            }
+          }
+          Write-Output 'PASS: Windows cleanup removes stale cache staging only and preserves fresh/external sentinels'
           # Read-only command parser checks; do not start Live servers or hooks.
           foreach ($args in @(@('--help'), @('live', '--help'), @('doctor', '--help'))) {
             $helpOut = (& (Join-Path $scripts 'impeccable.cmd') @args 2>&1 | Out-String).Trim()
@@ -92,9 +110,24 @@ jobs:
           test "$(cat "$scripts/VERSION")" = '0.1.31'
           export IMPECCABLE_HOME="$RUNNER_TEMP/impeccable-linux-positive"
           unset IMPECCABLE_BIN || true
+          # Real stale-cache cleanup verification: dead PID parts are removed,
+          # a live owner's part and a non-PID part are retained.
+          old_bin="$IMPECCABLE_HOME/bin/0.1.28"
+          mkdir -p "$old_bin" "$RUNNER_TEMP/unrelated-engine-cache"
+          orphan="$old_bin/.impeccable.part.999999"
+          live_part="$old_bin/.impeccable.part.$$"
+          invalid="$old_bin/.impeccable.part.not-a-pid"
+          external="$RUNNER_TEMP/unrelated-engine-cache/.impeccable.part.999999"
+          touch "$orphan" "$live_part" "$invalid" "$external"
+          touch -d '3 hours ago' "$orphan" "$live_part" "$invalid" "$external"
           out="$(sh "$scripts/impeccable" engine-probe)"
           test "$out" = 'impeccable-engine 0.1.31'
           echo 'PASS: Linux x64 engine 0.1.31 launched with a release-verified cache'
+          test ! -e "$orphan"
+          test -f "$live_part"
+          test -f "$invalid"
+          test -f "$external"
+          echo 'PASS: Linux cleanup removes orphan cache parts, preserves live/non-PID/external sentinels'
           # Verify the read-only command parser for the existing DWA explicit verbs.
           sh "$scripts/impeccable" --help > "$RUNNER_TEMP/impeccable-help.txt"
           sh "$scripts/impeccable" live --help > "$RUNNER_TEMP/impeccable-live-help.txt"
