@@ -30,7 +30,7 @@ internal static class Program
             if ((args.Length != 0
                     && !(args.Length == 1
                         && args[0] is "--service-smoke" or "--read-preview-smoke"
-                            or "--ci-one-shot-offer-smoke"
+                            or "--ci-one-shot-offer-smoke" or "--comparison-smoke"
                             or "--installed-path-selftest"
                             or "--installed-native-enrollment-selftest"))
                 || !new WindowsPrincipal(WindowsIdentity.GetCurrent())
@@ -53,6 +53,8 @@ internal static class Program
                 return 2;
             }
 
+            if (args.Length == 1 && args[0] == "--comparison-smoke")
+                return OperatorSelfTest.RunComparisonSmoke();
             if (args.Length == 1 && args[0] == "--service-smoke")
                 return OperatorSelfTest.RunServiceOffer();
             if (args.Length == 1 && args[0] == "--read-preview-smoke")
@@ -137,6 +139,11 @@ internal sealed class OperatorReviewWindow : Form
         Text = "Ich habe diesen exakten Fakt und die angezeigte Entscheidung gelesen."
             + " Nur Windows-Hello-Nachweis prüfen, KEINEN Claim genehmigen.",
         AutoSize = true, Enabled = false,
+    };
+    private readonly Button _compare = new()
+    {
+        Text = "Signierten Claim-Vergleich laden (nur lesen)",
+        AutoSize = true, Height = 38,
     };
     private readonly Button _load = new()
     {
@@ -286,6 +293,7 @@ internal sealed class OperatorReviewWindow : Form
             Dock = DockStyle.Fill, WrapContents = true, AutoScroll = true,
             FlowDirection = FlowDirection.LeftToRight,
         };
+        loadActions.Controls.Add(_compare);
         loadActions.Controls.Add(_load);
         loadActions.Controls.Add(_enrollPrepare);
         loadActions.Controls.Add(_reaffirmPrepare);
@@ -311,6 +319,7 @@ internal sealed class OperatorReviewWindow : Form
         outer.Controls.Add(_status, 0, 15);
         Controls.Add(outer);
 
+        _compare.Click += async (_, _) => await LoadComparisonAsync();
         _load.Click += async (_, _) => await LoadOfferAsync();
         _enrollPrepare.Click += async (_, _) => await LoadEnrollmentAsync();
         _reaffirmPrepare.Click += async (_, _) => await LoadReaffirmationAsync();
@@ -405,6 +414,42 @@ internal sealed class OperatorReviewWindow : Form
             && _ciReadOffer is { } ci && ci.ExpiresUtc > DateTimeOffset.UtcNow
             && _ciObserved is { } observed && observed.Matches()
             && observed.KernelPid == ci.KernelRecipientPid;
+    }
+
+    private async Task LoadComparisonAsync()
+    {
+        if (_busy) return;
+        InvalidateOffer();
+        _busy = true;
+        _compare.Enabled = false;
+        try
+        {
+            var project = _project.Text.Trim();
+            var branch = _branch.Text.Trim();
+            var reference = _reference.Text.Trim();
+            var offer = await Task.Run(() => ProtectedOperatorService.InspectComparison(project, branch, reference));
+            if (_project.Text.Trim() != project || _branch.Text.Trim() != branch
+                || _reference.Text.Trim() != reference)
+                throw new InvalidOperationException("Selection changed during comparison");
+            _fact.Text = ProtectedOperatorService.FormatComparison(offer);
+            _meaning.Text = $"PROJECT: {offer.ProjectId} | BRANCH: {offer.Branch} | {offer.ProposalRef}\n"
+                + $"ACTION: {offer.Decision} | KIND: {offer.Kind}\n"
+                + $"COMMIT: {offer.RevisionSha}\nSNAPSHOT: {offer.SnapshotSha256}\n"
+                + $"COMPARISON: {offer.ComparisonSha256}\nEVIDENCE: {offer.EvidenceSha256}";
+            _status.Text = "Signierter Vergleich. Nur lesen. Keine Windows-Hello-Freigabe.";
+        }
+        catch (Exception)
+        {
+            _fact.Clear();
+            _meaning.Text = "";
+            _status.Text = "Vergleich nicht verfuegbar oder unvollstaendig. Keine Freigabe.";
+        }
+        finally
+        {
+            _busy = false;
+            _compare.Enabled = true;
+            UpdateVerifyEnabled();
+        }
     }
 
     private async Task LoadOfferAsync()

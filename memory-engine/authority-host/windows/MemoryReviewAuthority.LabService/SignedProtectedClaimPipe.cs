@@ -29,35 +29,7 @@ internal sealed class SignedProtectedClaimPipe : IDisposable
     internal SignedProtectedClaimPipe(ProtectedPendingReviewLedger ledger, string stateRoot)
     {
         _ledger = ledger;
-        var privatePath = Path.Combine(stateRoot, "review-service-signing-key.pk8");
-        var publicPath = Path.Combine(stateRoot, "review-service-signing-key.pub.pem");
-        _signer = ECDsa.Create(ECCurve.NamedCurves.nistP256);
-        if (File.Exists(privatePath))
-        {
-            var bytes = File.ReadAllBytes(privatePath);
-            _signer.ImportPkcs8PrivateKey(bytes, out var read);
-            if (read != bytes.Length)
-                throw new InvalidOperationException("invalid_service_signing_key");
-            CryptographicOperations.ZeroMemory(bytes);
-            if (!File.Exists(publicPath)
-                || File.ReadAllText(publicPath) != _signer.ExportSubjectPublicKeyInfoPem())
-                throw new InvalidOperationException("service_public_pin_changed");
-        }
-        else
-        {
-            using (var file = new FileStream(privatePath, FileMode.CreateNew,
-                FileAccess.Write, FileShare.None))
-            {
-                var bytes = _signer.ExportPkcs8PrivateKey();
-                try
-                {
-                    file.Write(bytes);
-                    file.Flush(flushToDisk: true);
-                }
-                finally { CryptographicOperations.ZeroMemory(bytes); }
-            }
-            File.WriteAllText(publicPath, _signer.ExportSubjectPublicKeyInfoPem());
-        }
+        _signer = ServiceSigningIdentity.OpenOrCreate(stateRoot);
     }
 
     internal void Start()

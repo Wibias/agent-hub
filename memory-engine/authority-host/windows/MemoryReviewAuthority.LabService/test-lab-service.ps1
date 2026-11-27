@@ -5,7 +5,8 @@ param(
     [string]$PublishedExe,
     [Parameter(Mandatory = $true)]
     [string]$AccessProbeExe,
-    [switch]$NativeEnrollmentMode
+    [switch]$NativeEnrollmentMode,
+    [switch]$ComparisonOnlyMode
 )
 
 $ErrorActionPreference = 'Stop'
@@ -14,6 +15,7 @@ if ($env:GITHUB_ACTIONS -ne 'true' -or $env:RUNNER_OS -ne 'Windows' -or
     [string]::IsNullOrWhiteSpace($env:RUNNER_TEMP)) {
     throw 'SCM lab is permitted only on an ephemeral Windows GitHub runner'
 }
+if ($NativeEnrollmentMode -and $ComparisonOnlyMode) { throw 'mutually exclusive SCM fixtures' }
 $service = 'AgentHubMemoryReviewLab'
 $sc = Join-Path $env:WINDIR 'System32\sc.exe'
 $exe = (Resolve-Path -LiteralPath $PublishedExe).Path
@@ -180,7 +182,7 @@ try {
     # PowerShell enumerates arrays returned by if expressions. Always keep
     # a real object[] for native-argv splatting, including legacy one-item mode.
     [object[]]$fixtureArgs = @()
-    if ($NativeEnrollmentMode.IsPresent) {
+    if ($NativeEnrollmentMode.IsPresent -or $ComparisonOnlyMode.IsPresent) {
         $fixtureArgs = @('--native-enroll-only', $stateRoot)
     } else {
         $fixtureArgs = @($stateRoot)
@@ -188,6 +190,10 @@ try {
     & node $fixtureScript @fixtureArgs
     if ($LASTEXITCODE -ne 0) {
         throw 'canonical E~ source fixture creation failed'
+    }
+    if ($ComparisonOnlyMode) {
+        & node (Join-Path $repoRoot 'tests/memory-engine/probe-comparison-scm-fixture.mjs') --seed
+        if ($LASTEXITCODE -ne 0) { throw 'comparison-only fixture seed failed' }
     }
 
     if ($NativeEnrollmentMode.IsPresent) {
@@ -316,6 +322,7 @@ try {
     }
     $ledgerPath = Join-Path $stateRoot 'review-authority.sqlite3'
     $ledgerMarker = Join-Path $stateRoot 'protected-ledger-ok.txt'
+    if (-not $ComparisonOnlyMode) {
     if (-not (Test-Path -LiteralPath $ledgerPath -PathType Leaf) -or
         ((Get-Item -LiteralPath $ledgerPath).Length -lt 4096) -or
         -not (Test-Path -LiteralPath $ledgerMarker -PathType Leaf) -or
@@ -369,6 +376,12 @@ try {
             throw 'restricted LocalService did not persist unverified WebAuthn credential under service SID'
         }
         Write-Host 'PASS: restricted LocalService pinned operator ES256 public key as unverified in protected SQLite; no claim or approval'
+    }
+    } else {
+        if (-not (Test-Path -LiteralPath $ledgerPath -PathType Leaf)) { throw "comparison ledger missing" }
+        foreach ($marker in @("protected-ledger-ok.txt","operator-evidence-imported.txt","operator-credential-pinned.txt","read-once-ci-listener-started.txt")) {
+            if (Test-Path -LiteralPath (Join-Path $stateRoot $marker)) { throw "unexpected comparison-only marker: $marker" }
+        }
     }
     $stateFiles = @(Get-ChildItem -LiteralPath $stateRoot -File)
     foreach ($stateFile in $stateFiles) {
@@ -465,6 +478,19 @@ try {
             (($ace.FileSystemRights -band [System.Security.AccessControl.FileSystemRights]::WriteData) -ne 0)) {
             throw 'ordinary users can replace the service identity pin'
         }
+    }
+
+    if ($ComparisonOnlyMode) {
+        $operatorUiProject = Join-Path $repoRoot 'memory-engine/authority-host/windows/MemoryReviewAuthority.OperatorUi/MemoryReviewAuthority.OperatorUi.csproj'
+        $uiExe = Join-Path (Split-Path $operatorUiProject) 'bin/Release/net10.0-windows/win-x64/MemoryReviewAuthority.OperatorUi.exe'
+        $uiRun = Start-Process -FilePath $uiExe -ArgumentList '--comparison-smoke' -PassThru -Wait
+        if ($uiRun.ExitCode -ne 0) { throw 'native comparison client failed' }
+        & node (Join-Path $repoRoot 'tests/memory-engine/probe-comparison-scm-fixture.mjs') --verify
+        if ($LASTEXITCODE -ne 0) { throw 'comparison-only SCM boundary failed' }
+        $currentStatus = & $sc query $service
+        if ($LASTEXITCODE -ne 0 -or ($currentStatus -join ' ') -notmatch 'RUNNING') { throw 'comparison-only service stopped' }
+        Write-Host 'PASS: restricted SCM comparison-only boundary, signed native preview, no pending or Claim writes'
+        return
     }
 
     # Exercise the REAL service-owned E~ content in a new ADMIN-ACL-only

@@ -61,6 +61,12 @@ public sealed partial class ProtectedPendingReviewLedger
             CREATE TRIGGER IF NOT EXISTS deny_protected_source_delete
               BEFORE DELETE ON protected_review_sources
               BEGIN SELECT RAISE(ABORT, 'protected_source_immutable'); END;
+            CREATE TRIGGER IF NOT EXISTS deny_protected_source_replace
+              BEFORE INSERT ON protected_review_sources
+              WHEN EXISTS (SELECT 1 FROM protected_review_sources
+                WHERE request_id=NEW.request_id OR
+                (project_id=NEW.project_id AND branch=NEW.branch AND proposal_ref=NEW.proposal_ref))
+              BEGIN SELECT RAISE(ABORT, 'protected_source_immutable'); END;
             """;
         cmd.ExecuteNonQuery();
     }

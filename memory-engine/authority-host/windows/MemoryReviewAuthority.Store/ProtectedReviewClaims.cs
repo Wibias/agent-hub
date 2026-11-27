@@ -78,6 +78,19 @@ public sealed partial class ProtectedPendingReviewLedger
             ) STRICT;
             CREATE INDEX IF NOT EXISTS protected_review_claims_scope
               ON protected_review_claims(project_id, branch, created_at_utc);
+            CREATE TRIGGER IF NOT EXISTS deny_protected_review_claim_update
+              BEFORE UPDATE ON protected_review_claims
+              BEGIN SELECT RAISE(ABORT, 'protected_review_claim_immutable'); END;
+            CREATE TRIGGER IF NOT EXISTS deny_protected_review_claim_delete
+              BEFORE DELETE ON protected_review_claims
+              BEGIN SELECT RAISE(ABORT, 'protected_review_claim_immutable'); END;
+            CREATE TRIGGER IF NOT EXISTS deny_protected_review_claim_replace
+              BEFORE INSERT ON protected_review_claims
+              WHEN EXISTS (SELECT 1 FROM protected_review_claims
+                WHERE claim_id=NEW.claim_id OR request_id=NEW.request_id OR
+                (project_id=NEW.project_id AND branch=NEW.branch AND
+                    (fact_sha256=NEW.fact_sha256 OR proposal_ref=NEW.proposal_ref)))
+              BEGIN SELECT RAISE(ABORT, 'protected_review_claim_immutable'); END;
             """;
         command.ExecuteNonQuery();
     }

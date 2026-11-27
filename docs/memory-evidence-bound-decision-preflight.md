@@ -25,6 +25,30 @@ node .\scripts\inspect-evidence-bound-decision.mjs --db-path $db --repo-path $re
 
 Replace E~0123456789 with the actual proposal reference from the unified Review UI. An optional --expected-snapshot followed by the previous 64-character reviewSnapshotSha256 detects changed review state. Run with --show-local-content only in a trusted local interactive terminal when you intend to read private redacted evidence.
 
+### Existing active Claims: conflict inspection only
+
+Append `--compare-active-claims` to the command to obtain the complete bounded
+same-project, same-branch active Claim comparison (at most 200 rows). Each
+row includes an opaque Claim reference, SHA-256 value digest and the existing
+normalized exact-duplicate check. By default no Claim text is included. Add
+`--show-local-content` only in a trusted interactive local TTY to display
+the candidate, evidence and exact active Claim values together. Hashes are
+identifiers, not anonymization guarantees. Do not share the output.
+
+The comparison carries the existing reviewSnapshotSha256, which binds the
+ordered active Claim IDs and exact values along with the proposal, evidence,
+relation and revision. Use `--expected-snapshot` on a subsequent inspection
+to detect changes. Foreign and inactive Claims are excluded. Oversized
+comparison scopes fail closed; a nonduplicate is NOT proof of semantic
+independence. This is a diagnostic, not a conflict-resolution receipt or
+an authenticated decision. No existing blocker is removed.
+
+The protected export and native import continue to deny nonempty active
+Claim scopes. A future protected review must independently resolve and
+display the exact comparison, bind the operator's decision to that complete
+scope and revalidate it atomically at publication; untrusted local verdicts
+or a copied snapshot hash alone cannot satisfy that gate.
+
 The script does not accept --apply, --confirm, --reject or any mutation command. Every returned result contains promotionAllowed=false and decisionCommandEnabled=false.
 
 ## Authorization boundary and next phase

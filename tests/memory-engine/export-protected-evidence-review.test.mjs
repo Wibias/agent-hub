@@ -241,3 +241,20 @@ test('pending without real Support or with targeted relation cannot be exported 
   await assert.rejects(exportProtectedEvidenceReview(f.options),/unavailable/u);
   assert.equal(existsSync(f.outputDir),false);
 });
+
+test('nonduplicate existing Claim still blocks both protected export actions', async t => {
+  const f = fixture(t);
+  const db = new DatabaseSync(f.dbPath);
+  db.prepare('INSERT INTO claims (id,project_id,branch_scope,state,value_text) VALUES (?,?,?,?,?)')
+    .run('existing', projectId, 'main', 'active', 'Completely separate existing fact.');
+  db.close();
+  for (const decision of ['confirm', 'reject']) {
+    await assert.rejects(exportProtectedEvidenceReview({...f.options, decision}), /unavailable/);
+    assert.equal(existsSync(f.outputDir), false);
+  }
+  const check = new DatabaseSync(f.dbPath, {readOnly:true});
+  try {
+    assert.equal(check.prepare('SELECT COUNT(*) AS n FROM claims').get().n, 1);
+    assert.equal(check.prepare('SELECT status FROM memory_evidence_proposals').get().status, 'needs_confirmation');
+  } finally { check.close(); }
+});
