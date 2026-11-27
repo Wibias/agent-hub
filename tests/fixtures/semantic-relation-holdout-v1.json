@@ -1,0 +1,109 @@
+{
+  "format": "agent-hub-semantic-relation-live-fixture",
+  "version": 1,
+  "humanValidated": false,
+  "description": "Separate synthetic challenge set, authored before the policy v3 live rerun. Not independent human ground truth.",
+  "cases": [
+    {
+      "id": "reverse-support",
+      "source": "The import worker complies with the 2 second runtime requirement.",
+      "targets": [
+        {
+          "id": "measurement",
+          "value": "A timed benchmark measured the import worker completing in 1.4 seconds."
+        }
+      ],
+      "expectedRelations": []
+    },
+    {
+      "id": "same-explicit-artifact",
+      "source": "The contents of artifact release-47.zip were archived by the release team.",
+      "targets": [
+        {
+          "id": "scan",
+          "value": "Artifact release-47.zip was examined by the security scanner."
+        },
+        {
+          "id": "other",
+          "value": "Artifact release-12.zip was examined by the security scanner."
+        }
+      ],
+      "expectedRelations": [
+        {
+          "relation": "related_to",
+          "targetClaimId": "scan"
+        }
+      ]
+    },
+    {
+      "id": "two-prerequisites",
+      "source": "The report generator cannot run without the input CSV file and the configured locale table.",
+      "targets": [
+        {
+          "id": "csv",
+          "value": "The input CSV file supplies the report generator with rows."
+        },
+        {
+          "id": "locale",
+          "value": "The configured locale table supplies the report generator with number formatting rules."
+        },
+        {
+          "id": "style",
+          "value": "The report generator uses a blue header."
+        }
+      ],
+      "expectedRelations": [
+        {
+          "relation": "depends_on",
+          "targetClaimId": "csv"
+        },
+        {
+          "relation": "depends_on",
+          "targetClaimId": "locale"
+        }
+      ]
+    },
+    {
+      "id": "reverse-dependency",
+      "source": "The central configuration service is available to applications.",
+      "targets": [
+        {
+          "id": "worker",
+          "value": "The background worker requires the central configuration service to start."
+        }
+      ],
+      "expectedRelations": []
+    },
+    {
+      "id": "specific-implementation",
+      "source": "The log writer implements the retention policy by deleting log files older than 14 days.",
+      "targets": [
+        {
+          "id": "policy",
+          "value": "The log retention policy requires deletion after 14 days."
+        },
+        {
+          "id": "other",
+          "value": "The error dashboard retains charts for 14 days."
+        }
+      ],
+      "expectedRelations": [
+        {
+          "relation": "implements",
+          "targetClaimId": "policy"
+        }
+      ]
+    },
+    {
+      "id": "unrelated-keyword",
+      "source": "The calendar synchronization worker retries failed HTTP requests.",
+      "targets": [
+        {
+          "id": "other",
+          "value": "The unrelated payment synchronization worker retries failed database transactions."
+        }
+      ],
+      "expectedRelations": []
+    }
+  ]
+}

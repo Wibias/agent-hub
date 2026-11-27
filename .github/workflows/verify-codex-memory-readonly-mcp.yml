@@ -42,9 +42,13 @@ on:
       - 'tests/memory-engine/codex-memory-refs.test.mjs'
       - 'tests/memory-engine/typed-relation-discovery.test.mjs'
       - 'tests/memory-engine/memory-graph-entities.test.mjs'
+      - 'tests/memory-engine/memory-graph.test.mjs'
+      - 'tests/memory-engine/memory-graph-v2-integration.test.mjs'
+      - 'tests/memory-engine/memory-recall-telemetry.test.mjs'
       - 'scripts/discover-typed-relations.mjs'
       - 'scripts/eval-semantic-relations-live.mjs'
       - 'tests/fixtures/semantic-relation-live-v1.json'
+      - 'tests/fixtures/semantic-relation-holdout-v1.json'
       - 'tests/memory-engine/codex-memory-behavioral-eval.test.mjs'
       - 'tests/memory-engine/semantic-relation-judge.test.mjs'
       - 'tests/memory-engine/semantic-relation-shadow.test.mjs'
@@ -89,9 +93,13 @@ on:
       - 'tests/memory-engine/codex-memory-refs.test.mjs'
       - 'tests/memory-engine/typed-relation-discovery.test.mjs'
       - 'tests/memory-engine/memory-graph-entities.test.mjs'
+      - 'tests/memory-engine/memory-graph.test.mjs'
+      - 'tests/memory-engine/memory-graph-v2-integration.test.mjs'
+      - 'tests/memory-engine/memory-recall-telemetry.test.mjs'
       - 'scripts/discover-typed-relations.mjs'
       - 'scripts/eval-semantic-relations-live.mjs'
       - 'tests/fixtures/semantic-relation-live-v1.json'
+      - 'tests/fixtures/semantic-relation-holdout-v1.json'
       - 'tests/memory-engine/codex-memory-behavioral-eval.test.mjs'
       - 'tests/memory-engine/semantic-relation-judge.test.mjs'
       - 'tests/memory-engine/semantic-relation-shadow.test.mjs'
@@ -120,4 +128,4 @@ jobs:
         with:
           node-version: '24'
       - name: Test real stdio MCP, canonical SQLite read-only and scoped authority
-        run: node --test tests/memory-engine/codex-readonly-memory-mcp.test.mjs tests/memory-engine/codex-protected-claim-pipe.test.mjs tests/memory-engine/codex-protected-direct-read-ci.test.mjs tests/memory-engine/codex-protected-user-ci-mcp.test.mjs tests/memory-engine/codex-ci-one-shot-read.test.mjs tests/memory-engine/operator-web-authn-probe-pipe.test.mjs tests/memory-engine/codex-project-memory-scope.test.mjs tests/memory-engine/codex-global-memory-scope.test.mjs tests/memory-engine/codex-local-read-doctor.test.mjs tests/memory-engine/project-wide-user-memory.test.mjs tests/memory-engine/codex-memory-pipeline-diagnostics.test.mjs tests/memory-engine/memory-candidates.test.mjs tests/memory-engine/codex-hybrid-recall.test.mjs tests/memory-engine/memory-candidate-judge.test.mjs tests/memory-engine/memory-candidate-fence-redaction.test.mjs tests/memory-engine/codex-candidate-process-error.test.mjs tests/memory-engine/codex-judge-executable.test.mjs tests/memory-engine/codex-judge-auto-retry.test.mjs tests/memory-engine/codex-memory-command-failclosed.test.mjs tests/memory-engine/embedding-ipc.test.mjs tests/memory-engine/codex-memory-hook-installer.test.mjs tests/memory-engine/codex-memory-forget.test.mjs tests/memory-engine/codex-memory-list.test.mjs tests/memory-engine/codex-memory-refs.test.mjs tests/memory-engine/typed-relation-discovery.test.mjs tests/memory-engine/memory-graph-entities.test.mjs tests/memory-engine/codex-memory-behavioral-eval.test.mjs tests/memory-engine/semantic-relation-judge.test.mjs tests/memory-engine/semantic-relation-shadow.test.mjs tests/memory-engine/semantic-relation-shadow-cli.test.mjs tests/memory-engine/semantic-relation-live-eval.test.mjs
+        run: node --test tests/memory-engine/codex-readonly-memory-mcp.test.mjs tests/memory-engine/codex-protected-claim-pipe.test.mjs tests/memory-engine/codex-protected-direct-read-ci.test.mjs tests/memory-engine/codex-protected-user-ci-mcp.test.mjs tests/memory-engine/codex-ci-one-shot-read.test.mjs tests/memory-engine/operator-web-authn-probe-pipe.test.mjs tests/memory-engine/codex-project-memory-scope.test.mjs tests/memory-engine/codex-global-memory-scope.test.mjs tests/memory-engine/codex-local-read-doctor.test.mjs tests/memory-engine/project-wide-user-memory.test.mjs tests/memory-engine/codex-memory-pipeline-diagnostics.test.mjs tests/memory-engine/memory-candidates.test.mjs tests/memory-engine/codex-hybrid-recall.test.mjs tests/memory-engine/memory-candidate-judge.test.mjs tests/memory-engine/memory-candidate-fence-redaction.test.mjs tests/memory-engine/codex-candidate-process-error.test.mjs tests/memory-engine/codex-judge-executable.test.mjs tests/memory-engine/codex-judge-auto-retry.test.mjs tests/memory-engine/codex-memory-command-failclosed.test.mjs tests/memory-engine/embedding-ipc.test.mjs tests/memory-engine/codex-memory-hook-installer.test.mjs tests/memory-engine/codex-memory-forget.test.mjs tests/memory-engine/codex-memory-list.test.mjs tests/memory-engine/codex-memory-refs.test.mjs tests/memory-engine/typed-relation-discovery.test.mjs tests/memory-engine/memory-graph-entities.test.mjs tests/memory-engine/memory-graph.test.mjs tests/memory-engine/memory-graph-v2-integration.test.mjs tests/memory-engine/memory-recall-telemetry.test.mjs tests/memory-engine/codex-memory-behavioral-eval.test.mjs tests/memory-engine/semantic-relation-judge.test.mjs tests/memory-engine/semantic-relation-shadow.test.mjs tests/memory-engine/semantic-relation-shadow-cli.test.mjs tests/memory-engine/semantic-relation-live-eval.test.mjs

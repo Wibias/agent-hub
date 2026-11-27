@@ -33,9 +33,9 @@ const valid = () => ({ relations: [{ relation: 'depends_on', target_ref: ref('po
 const parse = (value, overrides = {}) => parseSemanticRelationResponse(JSON.stringify(value), { ...scope, ...overrides });
 
 test('defines a separate semantic-relation policy and generates bounded, untrusted-data prompt', () => {
-  assert.equal(SEMANTIC_RELATION_POLICY_VERSION, 'semantic-relation-v2');
+  assert.equal(SEMANTIC_RELATION_POLICY_VERSION, 'semantic-relation-v3');
   const prompt = buildSemanticRelationPrompt(scope);
-  assert.match(prompt, /semantic-relation-v2/);
+  assert.match(prompt, /semantic-relation-v3/);
   assert.match(prompt, /untrusted quoted data/);
   assert.match(prompt, /do not infer.*(?:lifecycle|conflicts)/i);
   assert.match(prompt, new RegExp(ref('powershell')));
@@ -118,7 +118,7 @@ test('shadow evaluator calls the injected judge once, never persists anything', 
   } });
   assert.equal(calls, 1);
   assert.equal(result.relations.length, 1);
-  assert.equal(result.policyVersion, 'semantic-relation-v2');
+  assert.equal(result.policyVersion, 'semantic-relation-v3');
   assert.equal(result.mode, 'shadow');
 });
 
@@ -162,7 +162,7 @@ test('exact valid_from is included and exact valid_until is excluded', () => {
 test('accepted proposals retain exact source/target Evidence IDs and semantic policy provenance', () => {
   const [edge] = parse(valid());
   assert.deepEqual(edge.supporting_evidence_ids, ['e1', 'e2']);
-  assert.equal(edge.policy_version, 'semantic-relation-v2');
+  assert.equal(edge.policy_version, 'semantic-relation-v3');
   assert.equal(edge.advisory, true);
 });
 

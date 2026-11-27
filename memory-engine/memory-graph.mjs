@@ -57,14 +57,7 @@ function evidenceProvenance(evidence) {
   };
 }
 
-function claimNode(memory, claim, evidence) {
-  const inspected = typeof memory.inspectClaimObservability === 'function'
-    ? memory.inspectClaimObservability({
-        projectId: claim.project_id,
-        branch: claim.branch_scope,
-        claimId: claim.id,
-      })
-    : null;
+function claimNode(claim, evidence, inspected) {
   const usage = inspected?.recall_usage ?? null;
   const embeddings = (inspected?.embeddings ?? []).map((item) => ({
     modelId: item.model_id,
@@ -109,42 +102,39 @@ function semanticProfileKey(item) {
   return `${item.model_id}\u0000${item.model_revision}\u0000${item.dimensions}`;
 }
 
-function cosineSimilarity(left, right) {
-  if (!left || !right || left.length !== right.length || left.length === 0) return null;
-  let dot = 0;
-  let leftNorm = 0;
-  let rightNorm = 0;
-  for (let index = 0; index < left.length; index += 1) {
-    const a = Number(left[index]);
-    const b = Number(right[index]);
-    if (!Number.isFinite(a) || !Number.isFinite(b)) return null;
-    dot += a * b;
-    leftNorm += a * a;
-    rightNorm += b * b;
+function vectorNorm(vector) {
+  let squared = 0;
+  for (let index = 0; index < vector.length; index += 1) {
+    const value = Number(vector[index]);
+    if (!Number.isFinite(value)) return null;
+    squared += value * value;
   }
-  if (leftNorm === 0 || rightNorm === 0) return null;
-  return dot / (Math.sqrt(leftNorm) * Math.sqrt(rightNorm));
+  return squared > 0 && Number.isFinite(squared) ? Math.sqrt(squared) : null;
+}
+
+function cosineSimilarity(left, right) {
+  // Keep the same accumulation order and double-precision arithmetic.
+  // Cache the vector references and length outside the dimension loop.
+  const a = left.vector;
+  const b = right.vector;
+  const length = a.length;
+  let dot = 0;
+  for (let index = 0; index < length; index += 1) {
+    dot += Number(a[index]) * Number(b[index]);
+  }
+  return dot / (left.norm * right.norm);
 }
 
 function pairKey(leftId, rightId) {
   return [leftId, rightId].sort((a, b) => a.localeCompare(b, 'en')).join('\u0000');
 }
 
-function semanticEdges(memory, claims, threshold, maxNeighbors) {
-  if (
-    typeof memory.inspectClaimObservability !== 'function'
-    || typeof memory.getClaimEmbedding !== 'function'
-  ) {
-    return [];
-  }
+function semanticEdges(memory, claims, inspectedById, threshold, maxNeighbors) {
+  if (typeof memory.getClaimEmbedding !== 'function') return [];
 
   const profiles = new Map();
   for (const claim of claims) {
-    const inspected = memory.inspectClaimObservability({
-      projectId: claim.project_id,
-      branch: claim.branch_scope,
-      claimId: claim.id,
-    });
+    const inspected = inspectedById.get(claim.id);
     for (const metadata of inspected?.embeddings ?? []) {
       if (
         typeof metadata.model_id !== 'string'
@@ -160,11 +150,14 @@ function semanticEdges(memory, claims, threshold, maxNeighbors) {
         modelRevision: metadata.model_revision,
       });
       if (!stored?.vector || stored.vector.length !== metadata.dimensions) continue;
+      const norm = vectorNorm(stored.vector);
+      if (norm === null) continue;
       const key = semanticProfileKey(metadata);
       if (!profiles.has(key)) profiles.set(key, []);
       profiles.get(key).push({
         claimId: claim.id,
         vector: stored.vector,
+        norm,
         modelId: metadata.model_id,
         modelRevision: metadata.model_revision,
         dimensions: metadata.dimensions,
@@ -179,8 +172,8 @@ function semanticEdges(memory, claims, threshold, maxNeighbors) {
       for (let rightIndex = leftIndex + 1; rightIndex < profile.length; rightIndex += 1) {
         const left = profile[leftIndex];
         const right = profile[rightIndex];
-        const similarity = cosineSimilarity(left.vector, right.vector);
-        if (similarity === null || similarity < threshold) continue;
+        const similarity = cosineSimilarity(left, right);
+        if (!Number.isFinite(similarity) || similarity < threshold) continue;
         const key = pairKey(left.claimId, right.claimId);
         const previous = candidatesByPair.get(key);
         if (!previous || similarity > previous.weight) {
@@ -272,11 +265,24 @@ export function buildMemoryGraph(memory, {
   const evidenceById = new Map(
     (exported.evidence ?? []).map((item) => [item.id, item]),
   );
-  const nodes = selectedClaims.map((claim) => claimNode(
-    memory,
-    claim,
-    evidenceById.get(claim.created_from_evidence_id) ?? null,
-  ));
+  // Reuse the same bounded, per-call observation snapshot for nodes and similarity.
+  const batch = typeof memory.inspectGraphClaimObservability === 'function'
+    ? memory.inspectGraphClaimObservability({ projectId: normalizedProjectId, branch: normalizedBranch,
+        claimIds: selectedClaims.map(claim => claim.id) })
+    : null;
+  const inspectedById = new Map();
+  const nodes = selectedClaims.map((claim) => {
+    const inspected = batch ? (batch.get(claim.id) ?? null)
+      : typeof memory.inspectClaimObservability === 'function'
+      ? memory.inspectClaimObservability({
+          projectId: claim.project_id,
+          branch: claim.branch_scope,
+          claimId: claim.id,
+        })
+      : null;
+    if (includeSemantic === true) inspectedById.set(claim.id, inspected);
+    return claimNode(claim, evidenceById.get(claim.created_from_evidence_id) ?? null, inspected);
+  });
 
   const edges = [];
   for (const event of exported.lifecycle_events ?? []) {
@@ -338,6 +344,7 @@ export function buildMemoryGraph(memory, {
     edges.push(...semanticEdges(
       memory,
       selectedClaims,
+      inspectedById,
       threshold,
       semanticNeighborLimit,
     ));

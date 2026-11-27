@@ -58,13 +58,34 @@ export function shadowUsageFromCodex(usage) {
   return { input_tokens, output_tokens };
 }
 
-async function main(args) {
-  if (args.length !== 1 || args[0] !== '--judge') {
-    throw new Error('Usage: node scripts/eval-semantic-relations-live.mjs --judge');
+// Cache and reasoning counters are provider breakdowns, not additive usage.
+export function summarizeCodexBreakdowns(samples) {
+  const fields = ['cached_input_tokens', 'cache_write_input_tokens', 'reasoning_output_tokens'];
+  const totals = Object.fromEntries(fields.map(field => [field, null]));
+  const reportedFieldCases = Object.fromEntries(fields.map(field => [field, 0]));
+  for (const sample of samples) {
+    if (sample == null) continue;
+    for (const field of fields) {
+      const value = sample[field];
+      if (value == null) continue;
+      if (!Number.isSafeInteger(value) || value < 0) throw new TypeError('Invalid Codex breakdown');
+      const sum = (totals[field] ?? 0) + value;
+      if (!Number.isSafeInteger(sum)) throw new TypeError('Codex breakdown overflow');
+      totals[field] = sum;
+      reportedFieldCases[field]++;
+    }
   }
-  // Only the versioned synthetic fixture is used. No production store is opened.
+  return { totals, reportedFieldCases };
+}
+
+async function main(args) {
+  if (args[0] !== '--judge' || (args.length !== 1 && !(args.length === 2 && args[1] === '--holdout'))) {
+    throw new Error('Usage: node scripts/eval-semantic-relations-live.mjs --judge [--holdout]');
+  }
+  // Only fixed synthetic fixtures are used. No production store is opened.
+  const dataset = args.length === 2 ? 'semantic-relation-holdout-v1' : 'semantic-relation-live-v1';
   const fixture = JSON.parse(await readFile(
-    new URL('../tests/fixtures/semantic-relation-live-v1.json', import.meta.url), 'utf8',
+    new URL('../tests/fixtures/' + dataset + '.json', import.meta.url), 'utf8',
   ));
   const cases = prepareSyntheticRelationCases(fixture);
   const judge = await createIsolatedCodexJsonJudge({
@@ -72,15 +93,19 @@ async function main(args) {
     reasoningEffort: 'low', timeoutMs: 60000,
   });
   try {
+    const samples = [];
     const report = await evaluateSemanticRelationShadowCases({
       cases, judge: async ({ prompt }) => {
         const text = await judge.judge(prompt);
-        return { text, usage: shadowUsageFromCodex(judge.lastUsage()) };
+        const usage = judge.lastUsage();
+        samples.push(usage);
+        return { text, usage: shadowUsageFromCodex(usage) };
       },
     });
     console.log(JSON.stringify({
-      dataset: 'semantic-relation-live-v1', humanValidated: false,
+      dataset, humanValidated: false,
       evaluatorId: judge.evaluatorId, ...report,
+      codexUsageBreakdown: summarizeCodexBreakdowns(samples),
     }, null, 2));
     if (!report.complete) process.exitCode = 1;
   } finally {
