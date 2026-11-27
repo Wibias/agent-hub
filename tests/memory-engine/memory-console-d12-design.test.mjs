@@ -132,6 +132,10 @@ function mountedGraph(nodeBounds) {
   const state = {
     graphLoading: false, graphError: '', graphSearch: '',
     graphOrigin: 'all', graphGroup: 'all', graphNodeState: 'all',
+    graphCommunity: 'all', graphSimilarityThreshold: 0.82,
+    graphZoom: 1, graphPanX: 0, graphPanY: 0,
+    graphPositionOverrides: {}, selectedGraphEdgeId: null,
+    graphSelectionExplicit: false,
     selectedGraphNodeId: 'a',
     graph: {
       nodes: [
@@ -173,8 +177,10 @@ function mountedGraph(nodeBounds) {
       if (selector === '.graph-node[data-graph-node]') {
         return this.elements.filter(x => x.tag === 'g' && x.className.startsWith('graph-node'));
       }
+      if (selector === '[data-graph-edge]') return [];
       throw new Error('Unexpected query selector ' + selector);
     },
+    querySelector() { return null; },
   };
   function makeElement(tag, id, attrs) {
     return {
@@ -200,11 +206,16 @@ function mountedGraph(nodeBounds) {
       if (['#graph-search', '#graph-origin-filter', '#graph-group-filter', '#graph-state-filter'].includes(id)) {
         return { addEventListener() {} };
       }
+      if ([
+        '#graph-community-filter', '#graph-threshold',
+        '#graph-zoom-in', '#graph-zoom-out', '#graph-fit-view',
+        '#graph-reset-view', '#graph-fullscreen',
+      ].includes(id)) return null;
       throw new Error('Unexpected query selector ' + id);
     },
     getElementById() { return null; },
   };
-  const start = app.indexOf('function graphFilteredNodes(');
+  const start = app.indexOf('function graphCommunityData(');
   const end = app.indexOf('async function loadGraph(', start);
   assert.ok(start >= 0 && end > start, 'bounded production graph functions');
   const ctx = {
@@ -229,7 +240,7 @@ test('D12 selects the matching node from its rendered SVG markup and restores ke
   const visible = mountedGraph({ left: 120, right: 150, top: 130, bottom: 155 });
   const neighbor = visible.view.elements.find(x => x.tag === 'button' && x.dataset.graphNode === 'b');
   assert.ok(neighbor, 'inspector neighbor is rendered as a real data-graph-node button');
-  neighbor.listeners.click();
+  neighbor.listeners.click({ stopPropagation() {} });
   assert.equal(visible.state.selectedGraphNodeId, 'b');
   assert.ok(visible.focused, 'focus must reach an SVG node rendered after the selection');
   assert.equal(visible.focused.dataset.graphNode, 'b');
@@ -239,13 +250,14 @@ test('D12 selects the matching node from its rendered SVG markup and restores ke
   const offscreen = mountedGraph({ left: 900, right: 930, top: 130, bottom: 155 });
   const nextNeighbor = offscreen.view.elements.find(x => x.tag === 'button' && x.dataset.graphNode === 'b');
   assert.ok(nextNeighbor);
-  nextNeighbor.listeners.click();
+  nextNeighbor.listeners.click({ stopPropagation() {} });
   assert.equal(offscreen.focused?.dataset.graphNode, 'b');
   assert.equal(offscreen.scrollCalls, 1, 'offscreen SVG node must become visible');
 });
 
-test('D12 keeps full-size scrollable graph canvas on mobile without shrinking viewBox labels', () => {
-  assert.match(css, /@media \(max-width: 980px\)[\s\S]*?\.graph-canvas-wrap\s*\{[^}]*overflow:\s*auto/);
-  assert.match(css, /@media \(max-width: 980px\)[\s\S]*?\.graph-canvas\s*\{[^}]*min-width:\s*1000px/);
-  assert.match(css, /\.graph-canvas\s*\{[^}]*min-width:\s*1000px;\s*min-height:\s*680px/);
+test('D12 keeps the graph inside the mobile viewport with readable labels', () => {
+  assert.match(css, /@media \(max-width: 980px\)[\s\S]*?body\s*\{[^}]*min-width:\s*0/);
+  assert.match(css, /\.graph-canvas-wrap\s*\{[^}]*min-width:\s*0/);
+  assert.match(css, /@media \(max-width: 980px\)[\s\S]*?\.graph-canvas\s*\{[^}]*width:\s*100%/);
+  assert.match(css, /\.graph-node \.graph-node-label\s*\{[^}]*font:\s*600 11px/);
 });
