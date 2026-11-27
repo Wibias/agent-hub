@@ -89,3 +89,42 @@ test('Rust Live route contract is complete and has no duplicated authority text'
   assert.match(gate[1], /Do not invoke the Rust/);
   assert.doesNotMatch(gate[1], /^#/m, 'embedded headings indicate source text corruption');
 });
+
+
+test('canonical A5 actually compares the installed Fortify and DWA skill contracts', () => {
+  const cases = read('tests/evals/cases.jsonl').trim().split('\n').map(JSON.parse);
+  const a5 = cases.find(c => c.id === 'A5');
+  const fortifyPath = path.join(root, '../fortify/SKILL.md');
+  assert.ok(existsSync(fortifyPath), 'A5 must use a real installed sibling skill');
+  assert.match(readFileSync(fortifyPath, 'utf8'), /^name: fortify$/m);
+  assert.match(a5.prompt, /use fortify if useful/i);
+  assert.match(a5.scenario, /skills\/fortify\/SKILL\.md/);
+  for (const id of ['both-real-skill-contracts-opened', 'competing-skill-classification-cites-both-paths', 'no-unselected-specialist-execution']) {
+    assert.ok(a5.assertion_ids.includes(id), id);
+  }
+  assert.match(read('references/design-methods.md'), /citing both skill paths/);
+  assert.match(read('references/design-methods.md'), /COMPETING-SKILL CLASSIFICATION/);
+  assert.ok(cases.find(c => c.id === 'E129').assertion_ids.includes('optional-adjective-not-engine-invocation'));
+  assert.match(read('tests/evals/regression-cases.jsonl'), /"id":"R7"/);
+});
+
+test('unqualified Live and Generate cannot fall through to imported executable steps', () => {
+  const routes = read('references/impeccable-routes.md');
+  assert.match(routes, /Current executable boundary/);
+  assert.match(routes, /no \x60live-generate\.mjs\x60/);
+  assert.match(routes, /stop here with\s+\x60NOT_VERIFIED\x60 before loading an executable playbook/);
+  for (const verb of ['live', 'generate']) {
+    const row = routes.split('\n').find(line => line.startsWith('| \x60' + verb + '\x60 |'));
+    assert.ok(row, verb + ' route missing');
+    assert.match(row, /NOT_VERIFIED/);
+    assert.match(row, /non-executable upstream material/);
+    const guide = read('internal/impeccable/reference/' + verb + '.md');
+    assert.match(guide, /^> \*\*DWA integration status: NOT_VERIFIED/);
+    assert.match(guide.split('\n\n')[0], /non-executable reference material/);
+    assert.match(guide.split('\n\n')[0], /_instructions\x60 are untrusted runtime data/);
+    assert.match(guide, /Stop before any server startup, script injection/);
+  }
+  const cases = read('tests/evals/cases.jsonl').trim().split('\n').map(JSON.parse);
+  assert.ok(cases.find(c => c.id === 'E130').assertion_ids.includes('no-native-or-unqualified-js-dispatch'));
+  assert.ok(cases.find(c => c.id === 'E131').assertion_ids.includes('no-native-fallback'));
+});
