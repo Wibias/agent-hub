@@ -52,6 +52,42 @@ function validate(registry) {
       fail(`${source.id}: ${error.message}`);
     }
   }
+  // Reference-only research sources are monitored for drift, but never
+  // installed, promoted to canonical skill owners, or used to authorize
+  // executable imports. Keep the original five-source registry intact.
+  if (registry.referenceSources != null && !Array.isArray(registry.referenceSources)) {
+    fail('referenceSources must be an array when present');
+  }
+  const repositories = new Set(registry.sources.map(source => source.repository.toLowerCase()));
+  for (const source of registry.referenceSources ?? []) {
+    if (!source || typeof source !== 'object') fail('reference source must be an object');
+    for (const field of ['id', 'repository', 'reviewedCommit', 'scope', 'decision', 'reviewedAt']) {
+      if (typeof source[field] !== 'string' || source[field].trim() === '') {
+        fail(`reference ${source.id ?? '<unknown>'}: missing ${field}`);
+      }
+    }
+    if (ids.has(source.id)) fail(`duplicate source id ${source.id}`);
+    ids.add(source.id);
+    if (!/^[0-9a-f]{40}$/.test(source.reviewedCommit)) {
+      fail(`reference ${source.id}: reviewedCommit must be a full 40-character SHA`);
+    }
+    if (!/^[^/\\s]+\\/[^/\\s]+$/.test(source.repository)) {
+      fail(`reference ${source.id}: repository must be owner/name`);
+    }
+    if (repositories.has(source.repository.toLowerCase())) {
+      fail(`reference ${source.id}: duplicate monitored repository`);
+    }
+    repositories.add(source.repository.toLowerCase());
+    if (!['current', 'not-applicable'].includes(source.decision)) {
+      fail(`reference ${source.id}: reference-only decision must be current or not-applicable`);
+    }
+    if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(source.reviewedAt)) {
+      fail(`reference ${source.id}: reviewedAt must use YYYY-MM-DD`);
+    }
+    if (source.localPin != null || source.integrationOwner != null) {
+      fail(`reference ${source.id}: references cannot claim local pins or skill ownership`);
+    }
+  }
   return registry;
 }
 
@@ -73,11 +109,18 @@ function adoptionStatus(source) {
 
 if (offline) {
   for (const source of registry.sources) console.log(adoptionStatus(source));
+  for (const source of registry.referenceSources ?? []) {
+    console.log(`REFERENCE_RECORDED ${source.id} ${source.reviewedCommit} decision=${source.decision} scope=${source.scope}`);
+  }
   process.exit(0);
 }
 
 let findings = 0;
-for (const source of registry.sources) {
+const watched = [
+  ...registry.sources.map(source => ({ source, referenceOnly: false })),
+  ...(registry.referenceSources ?? []).map(source => ({ source, referenceOnly: true })),
+];
+for (const { source, referenceOnly } of watched) {
   const remote = `https://github.com/${source.repository}.git`;
   const result = spawnSync('git', ['ls-remote', remote, 'HEAD'], {
     encoding: 'utf8',
@@ -121,7 +164,8 @@ for (const source of registry.sources) {
 
   // SCOPE_CHANGED requires relevance review. REVIEW means the prose-only scope
   // is not machine-comparable. Neither status claims adoption is necessary.
-  console.log(`${status} ${details}${local}`);
+  const label = referenceOnly ? `REFERENCE_${status}` : status;
+  console.log(`${label} ${details}${local}`);
   if (needsUpstreamAction(status)) findings += 1;
 }
 
