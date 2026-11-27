@@ -102,25 +102,25 @@ test('integrated Impeccable engine pin remains unqualified until executable veri
   assert.match(upstream, /acb4cfe14470b1fdf51e855431af618d936b7db8/);
   assert.match(upstream, /Skill version: `4[.]9[.]1`/);
   assert.match(upstream, /Engine version: `0[.]1[.]24`/);
-  assert.equal(read(scripts + 'VERSION').trim(), '0.1.28');
-  assert.match(upstream, /Active engine version: `0[.]1[.]28`/);
+  assert.equal(read(scripts + 'VERSION').trim(), '0.1.31');
+  assert.match(upstream, /Active engine version: `0[.]1[.]31`/);
   assert.match(read(scripts + 'engine-checksums.txt'),
-    /0[.]1[.]28 impeccable-windows-x64[.]exe [0-9a-f]{64}/);
+    /0[.]1[.]31 impeccable-windows-x64[.]exe [0-9a-f]{64}/);
   assert.match(routes, /DWA/);
   assert.match(skill, /^name: design-with-ai$/m);
   assert.match(skill, /impeccable <verb>/);
   assert.equal(existsSync(resolve('skills/impeccable/SKILL.md')), false);
 });
 
-test('reviewed engine 0.1.28 pins and unchanged internal files retain Git blob provenance', () => {
+test('reviewed engine 0.1.31 manifest and launcher files retain tagged Git blob provenance', () => {
   const expected = new Map([
     ['agents/impeccable_finish_reviewer.toml', '40d58d11818cde624baad91316a637e553f09f67'],
     ['reference/degraded/finish-reviewer.md', 'b2cc1cceaa3f0692541ea2ac51d4d8a0107a8fac'],
     ['reference/overdrive.md', '4ac7f17fc7d3a96a08e12d6e915e2108b8fedda5'],
-    ['scripts/VERSION', 'baec65a93d34a19e86e30fc3895285462555d563'],
-    ['scripts/engine-checksums.txt', '5d62f57e8d2c4e849f102c304c803846c7b84bb7'],
-    ['scripts/impeccable', '502652747b67ba10ad79d347553cc64a458b7408'],
-    ['scripts/impeccable.cmd', 'ab90ace70ee4cb60671a3afdb6b9f022cab82da0'],
+    ['scripts/VERSION', 'db7a480479e8c5b6b8dfd95a485a19a005a5cb67'],
+    ['scripts/engine-checksums.txt', '7502a231eb37ef27444f75d962014d7bcdf1322f'],
+    ['scripts/impeccable', '16086b9047568fba26d45f02c123494b4c9a845e'],
+    ['scripts/impeccable.cmd', '622a52217e32f42d5ac79fb39ee15d054b1a357a'],
     ['scripts/live-browser.js', '4ab37e343e4f330106f101a2143f4f8d219110e1'],
     ['scripts/command-metadata.json', '4686bb6deea643493198bff1369bc2958b3909a7'],
   ]);

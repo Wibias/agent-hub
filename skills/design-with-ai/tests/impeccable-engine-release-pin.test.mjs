@@ -4,15 +4,15 @@ import { readFileSync } from 'node:fs';
 
 const read = (name) => readFileSync(new URL(name, import.meta.url), 'utf8');
 const expected = new Map([
-  ['impeccable-darwin-arm64', '2884e7eca3898ecf035287cd756c870106ba03bcaa9703e62d9cb25e06ac52b3'],
-  ['impeccable-darwin-x64', '201559fbccbe4ca87b00b3c018a8acfe228e80008220c41f4c47b0939450773b'],
-  ['impeccable-linux-x64', 'bf0524d3b44a199953d70ba10548ba48c5ab50d6ad260eeaa84ed8945c10a721'],
-  ['impeccable-linux-arm64', '107112e1bf8067b3991eeb38ccafd2085278c8973f689d7feb2b94e879345387'],
-  ['impeccable-windows-x64.exe', '2fd0b53e8d9554f3f028a258fd958d39bd712b3eb4f1725363966ca2380f8c3e'],
+  ['impeccable-darwin-arm64', '0d96cf802af6c52f3ed0925a409c7f4a1eda6a4c4b8274ff545b1d23e8dd6ae6'],
+  ['impeccable-darwin-x64', 'af28d77242fc345f11ade5075c304beef2e938a3df70905a95f9864708ee0a2a'],
+  ['impeccable-linux-x64', '01c642862b0e505277bb8810b1a74aacc42b2b38eb24bc69bc0bcf324089be77'],
+  ['impeccable-linux-arm64', 'fd488471ae6df728e260bb54c26d0f7fa9235765777f8ee2ff28e9d3dba0dc6b'],
+  ['impeccable-windows-x64.exe', 'f6606bbf6bd8993e2b0dab98261c27659a865e7dcbc775986d40e8808527ff47'],
 ]);
 
-test('optional internal Impeccable 0.1.28 pin has exact official release SHA-256 assets', () => {
-  assert.equal(read('../internal/impeccable/scripts/VERSION').trim(), '0.1.28');
+test('optional internal Impeccable 0.1.31 pin has exact official release SHA-256 assets', () => {
+  assert.equal(read('../internal/impeccable/scripts/VERSION').trim(), '0.1.31');
   const manifest = read('../internal/impeccable/scripts/engine-checksums.txt');
   const lines = manifest.split(/\r?\n/).map((line) => line.trim()).filter((line) => line && !line.startsWith('#'));
   const seen = new Set();
@@ -21,14 +21,14 @@ test('optional internal Impeccable 0.1.28 pin has exact official release SHA-256
     const match = line.match(/^(\S+) (impeccable-[^\s]+) ([0-9a-f]{64})$/);
     assert.ok(match, 'malformed manifest line: ' + line);
     const [, version, name, digest] = match;
-    assert.equal(version, '0.1.28', 'no 0.1.27 or older mixed-version assets');
+    assert.equal(version, '0.1.31', 'no 0.1.27 or older mixed-version assets');
     assert.ok(expected.has(name), 'unexpected release asset ' + name);
     assert.equal(digest, expected.get(name), 'official GitHub Release SHA-256 for ' + name);
     assert.equal(seen.has(name), false, 'duplicate release asset ' + name);
     seen.add(name);
   }
   assert.equal(seen.size, expected.size);
-  assert.match(manifest, /stale upstream source manifest/);
+  assert.match(manifest, /check-engine-release[.]mjs --record/);
 });
 
 test('Windows and POSIX launchers retain checksum and explicit opt-in boundaries', () => {
@@ -42,11 +42,11 @@ test('Windows and POSIX launchers retain checksum and explicit opt-in boundaries
   assert.match(read('../UPSTREAM.md'), /single owner|sole.*owner/i);
 });
 
-test('upstream 0.1.28 provenance is explicitly distinguished from skill tag and stale source manifest', () => {
+test('engine 0.1.31 provenance identifies the stale engine-tag manifest and coherent skill-tag release', () => {
   const record = read('../internal/impeccable/UPSTREAM.md');
-  assert.match(record, /80f576894c6157cd895f749565e8755f8406bce2/);
-  assert.match(record, /skill-v4\.10\.0/);
-  assert.match(record, /0\.1\.27/);
+  assert.match(record, /ce0733287403d77e1017612ec0bc9f5a9251b52a/);
+  assert.match(record, /skill-v4\.11\.1/);
+  assert.match(record, /0\.1\.30/);
   assert.match(record, /stale[\s\S]*?manifest/i);
   assert.match(record, /0\.1\.28/);
   assert.match(record, /not[\s\S]{0,300}(?:full|complete)[\s\S]{0,200}parity/i);

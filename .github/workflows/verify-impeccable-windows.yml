@@ -5,6 +5,7 @@ on:
     paths:
       - 'skills/impeccable/**'
       - 'skills/design-with-ai/internal/impeccable/**'
+      - 'skills/design-with-ai/tests/impeccable-engine-rust-live-native.test.mjs'
       - '.github/workflows/verify-impeccable-windows.yml'
   workflow_dispatch:
 
@@ -34,32 +35,50 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $scripts = Join-Path $env:GITHUB_WORKSPACE 'skills\design-with-ai\internal\impeccable\scripts'
           $version = (Get-Content -Raw -LiteralPath (Join-Path $scripts 'VERSION')).Trim()
-          if ($version -ne '0.1.28') { throw "Unexpected engine version: $version" }
+          if ($version -ne '0.1.31') { throw "Unexpected engine version: $version" }
           $manifest = Get-Content -LiteralPath (Join-Path $scripts 'engine-checksums.txt')
-          $matching = @($manifest | Where-Object { $_ -match '^0\.1\.28 impeccable-windows-x64\.exe [0-9a-f]{64}$' })
-          if ($matching.Count -ne 1) { throw 'Expected exactly one Windows 0.1.28 checksum' }
+          $matching = @($manifest | Where-Object { $_ -match '^0\.1\.31 impeccable-windows-x64\.exe [0-9a-f]{64}$' })
+          if ($matching.Count -ne 1) { throw 'Expected exactly one Windows 0.1.31 checksum' }
 
           $env:IMPECCABLE_HOME = Join-Path $env:RUNNER_TEMP 'impeccable-positive'
           Remove-Item Env:IMPECCABLE_BIN -ErrorAction SilentlyContinue
+          # Exercise upstream's bounded staging cleanup in an isolated test cache:
+          # only old matching cache staging directories may disappear.
+          $stageRoot = Join-Path $env:IMPECCABLE_HOME 'bin\0.1.28'
+          $staleStage = Join-Path $stageRoot '.impeccable.part.stale'
+          $freshStage = Join-Path $stageRoot '.impeccable.part.fresh'
+          $externalStage = Join-Path $env:RUNNER_TEMP 'outside-cache-stage'
+          foreach ($dir in @($staleStage, $freshStage, $externalStage)) {
+            New-Item -ItemType Directory -Force -Path $dir | Out-Null
+            Set-Content -LiteralPath (Join-Path $dir 'sentinel.txt') -Value 'protected' -Encoding ascii
+          }
+          (Get-Item -LiteralPath $staleStage).LastWriteTime = (Get-Date).AddDays(-5)
           $out = (& (Join-Path $scripts 'impeccable.cmd') engine-probe 2>&1 | Out-String).Trim()
-          if ($LASTEXITCODE -ne 0 -or $out -notmatch 'impeccable-engine 0\.1\.28') {
+          if ($LASTEXITCODE -ne 0 -or $out -notmatch 'impeccable-engine 0\.1\.31') {
             throw "Pinned Windows engine launch failed (exit $LASTEXITCODE)"
           }
-          Write-Output 'PASS: Engine 0.1.28 launched through the Windows checksum-verifying path'
+          Write-Output 'PASS: Engine 0.1.31 launched through the Windows checksum-verifying path'
+          if (Test-Path -LiteralPath $staleStage) { throw 'Stale Windows cache staging directory survived the cleanup' }
+          foreach ($dir in @($freshStage, $externalStage)) {
+            if (-not (Test-Path -LiteralPath (Join-Path $dir 'sentinel.txt'))) {
+              throw "Windows cleanup escaped its bounded stale cache scope: $dir"
+            }
+          }
+          Write-Output 'PASS: Windows cleanup removes stale cache staging only and preserves fresh/external sentinels'
           # Read-only command parser checks; do not start Live servers or hooks.
           foreach ($args in @(@('--help'), @('live', '--help'), @('doctor', '--help'))) {
             $helpOut = (& (Join-Path $scripts 'impeccable.cmd') @args 2>&1 | Out-String).Trim()
             if ($LASTEXITCODE -ne 0 -or $helpOut -notmatch '(?i)(impeccable|usage|live|doctor)') {
-              throw "Pinned Windows 0.1.28 CLI help failed for $($args -join ' ') (exit $LASTEXITCODE)"
+              throw "Pinned Windows 0.1.31 CLI help failed for $($args -join ' ') (exit $LASTEXITCODE)"
             }
           }
-          Write-Output 'PASS: Windows 0.1.28 main, Live and doctor CLI help'
+          Write-Output 'PASS: Windows 0.1.31 main, Live and doctor CLI help'
 
           $badScripts = Join-Path $env:RUNNER_TEMP 'impeccable-tampered-scripts'
           Copy-Item -LiteralPath $scripts -Destination $badScripts -Recurse
           $badManifestPath = Join-Path $badScripts 'engine-checksums.txt'
           $lines = @(Get-Content -LiteralPath $badManifestPath)
-          $badLine = '0.1.28 impeccable-windows-x64.exe ' + ('0' * 64)
+          $badLine = '0.1.31 impeccable-windows-x64.exe ' + ('0' * 64)
           $changed = @($lines | ForEach-Object {
             if ($_ -eq $matching[0]) { $badLine } else { $_ }
           })
@@ -71,6 +90,11 @@ jobs:
           }
           Write-Output 'PASS: Incorrect manifest digest fails closed'
           exit 0
+
+      - name: Real native Rust Live 0.1.31 token and source confinement (Windows)
+        env:
+          IMPECCABLE_TEST_ENGINE_PATH: ${{ runner.temp }}/impeccable-positive/bin/0.1.31/impeccable.exe
+        run: node --test skills/design-with-ai/tests/impeccable-engine-rust-live-native.test.mjs
 
   linux-launcher:
     runs-on: ubuntu-latest
@@ -89,21 +113,36 @@ jobs:
         run: |
           set -euo pipefail
           scripts="$GITHUB_WORKSPACE/skills/design-with-ai/internal/impeccable/scripts"
-          test "$(cat "$scripts/VERSION")" = '0.1.28'
+          test "$(cat "$scripts/VERSION")" = '0.1.31'
           export IMPECCABLE_HOME="$RUNNER_TEMP/impeccable-linux-positive"
           unset IMPECCABLE_BIN || true
+          # Real stale-cache cleanup verification: dead PID parts are removed,
+          # a live owner's part and a non-PID part are retained.
+          old_bin="$IMPECCABLE_HOME/bin/0.1.28"
+          mkdir -p "$old_bin" "$RUNNER_TEMP/unrelated-engine-cache"
+          orphan="$old_bin/.impeccable.part.999999"
+          live_part="$old_bin/.impeccable.part.$$"
+          invalid="$old_bin/.impeccable.part.not-a-pid"
+          external="$RUNNER_TEMP/unrelated-engine-cache/.impeccable.part.999999"
+          touch "$orphan" "$live_part" "$invalid" "$external"
+          touch -d '3 hours ago' "$orphan" "$live_part" "$invalid" "$external"
           out="$(sh "$scripts/impeccable" engine-probe)"
-          test "$out" = 'impeccable-engine 0.1.28'
-          echo 'PASS: Linux x64 engine 0.1.28 launched with a release-verified cache'
+          test "$out" = 'impeccable-engine 0.1.31'
+          echo 'PASS: Linux x64 engine 0.1.31 launched with a release-verified cache'
+          test ! -e "$orphan"
+          test -f "$live_part"
+          test -f "$invalid"
+          test -f "$external"
+          echo 'PASS: Linux cleanup removes orphan cache parts, preserves live/non-PID/external sentinels'
           # Verify the read-only command parser for the existing DWA explicit verbs.
           sh "$scripts/impeccable" --help > "$RUNNER_TEMP/impeccable-help.txt"
           sh "$scripts/impeccable" live --help > "$RUNNER_TEMP/impeccable-live-help.txt"
           sh "$scripts/impeccable" doctor --help > "$RUNNER_TEMP/impeccable-doctor-help.txt"
           grep -Eqi 'impeccable|usage' "$RUNNER_TEMP/impeccable-help.txt"
-          echo 'PASS: Linux 0.1.28 main, Live and doctor CLI help'
+          echo 'PASS: Linux 0.1.31 main, Live and doctor CLI help'
           copied="$RUNNER_TEMP/impeccable-linux-negative"
           cp -R "$scripts" "$copied"
-          sed -i -E "s/^0\.1\.28 impeccable-linux-x64 [0-9a-f]{64}$/0.1.28 impeccable-linux-x64 $(printf '0%.0s' {1..64})/" "$copied/engine-checksums.txt"
+          sed -i -E "s/^0\.1\.31 impeccable-linux-x64 [0-9a-f]{64}$/0.1.31 impeccable-linux-x64 $(printf '0%.0s' {1..64})/" "$copied/engine-checksums.txt"
           export IMPECCABLE_DOWNLOAD_BASE='http://127.0.0.1:9'
           set +e
           bad="$(sh "$copied/impeccable" engine-probe 2>&1)"
@@ -114,3 +153,8 @@ jobs:
             exit 1
           fi
           echo 'PASS: Linux x64 manifest tamper fails closed'
+
+      - name: Real native Rust Live 0.1.31 token and source confinement (Linux)
+        env:
+          IMPECCABLE_TEST_ENGINE_PATH: ${{ runner.temp }}/impeccable-linux-positive/bin/0.1.31/impeccable
+        run: node --test skills/design-with-ai/tests/impeccable-engine-rust-live-native.test.mjs

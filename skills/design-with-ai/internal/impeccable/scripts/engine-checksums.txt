@@ -1,9 +1,9 @@
-# Engine SHA-256 digests for the pinned engine-v0.1.28 release (2026-11-19).
-# Source: https://github.com/pbakaus/impeccable/releases/tag/engine-v0.1.28
-# GitHub Release asset digest field, NOT the stale upstream source manifest.
-# Exact 0.1.28 assets; the launchers compare the received bytes to these pins.
-0.1.28 impeccable-darwin-arm64 2884e7eca3898ecf035287cd756c870106ba03bcaa9703e62d9cb25e06ac52b3
-0.1.28 impeccable-darwin-x64 201559fbccbe4ca87b00b3c018a8acfe228e80008220c41f4c47b0939450773b
-0.1.28 impeccable-linux-x64 bf0524d3b44a199953d70ba10548ba48c5ab50d6ad260eeaa84ed8945c10a721
-0.1.28 impeccable-linux-arm64 107112e1bf8067b3991eeb38ccafd2085278c8973f689d7feb2b94e879345387
-0.1.28 impeccable-windows-x64.exe 2fd0b53e8d9554f3f028a258fd958d39bd712b3eb4f1725363966ca2380f8c3e
+# Engine binary digests for the pinned ENGINE_VERSION: <engine-version> <asset> <sha256>.
+# The launchers, the npm shim, `impeccable install` and scripts/fetch-engine.mjs verify
+# every engine download against this file. Written by
+# `node scripts/check-engine-release.mjs --record` after each engine release.
+0.1.31 impeccable-darwin-arm64 0d96cf802af6c52f3ed0925a409c7f4a1eda6a4c4b8274ff545b1d23e8dd6ae6
+0.1.31 impeccable-darwin-x64 af28d77242fc345f11ade5075c304beef2e938a3df70905a95f9864708ee0a2a
+0.1.31 impeccable-linux-x64 01c642862b0e505277bb8810b1a74aacc42b2b38eb24bc69bc0bcf324089be77
+0.1.31 impeccable-linux-arm64 fd488471ae6df728e260bb54c26d0f7fa9235765777f8ee2ff28e9d3dba0dc6b
+0.1.31 impeccable-windows-x64.exe f6606bbf6bd8993e2b0dab98261c27659a865e7dcbc775986d40e8808527ff47

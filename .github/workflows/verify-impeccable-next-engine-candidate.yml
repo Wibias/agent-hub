@@ -20,50 +20,50 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - name: Verify exact upstream 0.1.28 binary and the DWA launcher without changing the installed pin
+      - name: Verify exact upstream 0.1.31 binary and the DWA launcher without changing the installed pin
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          # Official GitHub Release asset metadata for engine-v0.1.28 (2026-11-19).
+          # Official GitHub Release asset metadata for engine-v0.1.31 (2026-11-26).
           # Keep this immutable expected digest independent from the downloaded
           # asset and from the test-only candidate manifest.
-          $expected = '2fd0b53e8d9554f3f028a258fd958d39bd712b3eb4f1725363966ca2380f8c3e'
-          $release = 'https://github.com/pbakaus/impeccable/releases/download/engine-v0.1.28/impeccable-windows-x64.exe'
+          $expected = 'f6606bbf6bd8993e2b0dab98261c27659a865e7dcbc775986d40e8808527ff47'
+          $release = 'https://github.com/pbakaus/impeccable/releases/download/engine-v0.1.31/impeccable-windows-x64.exe'
           $scripts = Join-Path $env:GITHUB_WORKSPACE 'skills\design-with-ai\internal\impeccable\scripts'
 
           # Keep the checked-in pin unchanged; candidate files use temp only.
           $baselinePin = (Get-Content -Raw (Join-Path $scripts 'VERSION')).Trim()
-          if ($baselinePin -notmatch '^0[.]1[.](?:24|28)$') {
+          if ($baselinePin -notmatch '^0[.]1[.](?:28|31)$') {
             throw "Unreviewed installed engine baseline: $baselinePin"
           }
-          $candidateScripts = Join-Path $env:RUNNER_TEMP 'impeccable-0128-scripts'
+          $candidateScripts = Join-Path $env:RUNNER_TEMP 'impeccable-0131-scripts'
           Copy-Item -LiteralPath $scripts -Destination $candidateScripts -Recurse
-          Set-Content -LiteralPath (Join-Path $candidateScripts 'VERSION') -Value '0.1.28' -Encoding ascii
-          Set-Content -LiteralPath (Join-Path $candidateScripts 'engine-checksums.txt') -Value ("0.1.28 impeccable-windows-x64.exe " + $expected) -Encoding ascii
+          Set-Content -LiteralPath (Join-Path $candidateScripts 'VERSION') -Value '0.1.31' -Encoding ascii
+          Set-Content -LiteralPath (Join-Path $candidateScripts 'engine-checksums.txt') -Value ("0.1.31 impeccable-windows-x64.exe " + $expected) -Encoding ascii
           $launcher = Join-Path $candidateScripts 'impeccable.cmd'
 
-          $env:IMPECCABLE_HOME = Join-Path $env:RUNNER_TEMP 'impeccable-0128-home'
+          $env:IMPECCABLE_HOME = Join-Path $env:RUNNER_TEMP 'impeccable-0131-home'
           $env:IMPECCABLE_DOWNLOAD_BASE = 'http://127.0.0.1:9'
           Remove-Item Env:IMPECCABLE_BIN -ErrorAction SilentlyContinue
           Remove-Item Env:IMPECCABLE_LAUNCHER_PROBE -ErrorAction SilentlyContinue
 
-          $cache = Join-Path $env:IMPECCABLE_HOME 'bin\0.1.28'
+          $cache = Join-Path $env:IMPECCABLE_HOME 'bin\0.1.31'
           New-Item -ItemType Directory -Path $cache -Force | Out-Null
           $binary = Join-Path $cache 'impeccable.exe'
           & curl.exe --fail --location --silent --show-error --retry 2 --connect-timeout 10 --max-time 120 --output $binary $release
           if ($LASTEXITCODE -ne 0) { throw "Official release download failed: $LASTEXITCODE" }
           $actual = (Get-FileHash -LiteralPath $binary -Algorithm SHA256).Hash.ToLowerInvariant()
           if ($actual -ne $expected) { throw "Upstream release SHA256 mismatch: $actual" }
-          Write-Output 'PASS: Official 0.1.28 Windows x64 artifact SHA256 verified'
+          Write-Output 'PASS: Official 0.1.31 Windows x64 artifact SHA256 verified'
 
           $out = (& $launcher engine-probe 2>&1 | Out-String).Trim()
-          if ($LASTEXITCODE -ne 0 -or $out -notmatch 'impeccable-engine 0\.1\.28') {
+          if ($LASTEXITCODE -ne 0 -or $out -notmatch 'impeccable-engine 0\.1\.31') {
             throw "Candidate launcher engine-probe failed (exit $LASTEXITCODE)"
           }
-          Write-Output 'PASS: DWA Windows launcher starts 0.1.28 from the checksum-verified candidate cache'
+          Write-Output 'PASS: DWA Windows launcher starts 0.1.31 from the checksum-verified candidate cache'
 
           # Manifest tampering must not reuse an earlier verified cache stamp.
-          $badLine = '0.1.28 impeccable-windows-x64.exe ' + ('0' * 64)
+          $badLine = '0.1.31 impeccable-windows-x64.exe ' + ('0' * 64)
           Set-Content -LiteralPath (Join-Path $candidateScripts 'engine-checksums.txt') -Value $badLine -Encoding ascii
           $badOut = (& $launcher engine-probe 2>&1 | Out-String).Trim()
           if ($LASTEXITCODE -eq 0 -or $badOut -notmatch 'cannot verify the cached engine') {
