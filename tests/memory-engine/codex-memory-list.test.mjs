@@ -409,7 +409,7 @@ test('real Codex CLI memory list reads the production store without writing', ()
       encoding: 'utf8',
       env: {
         ...process.env,
-        XDG_STATE_HOME: stateHome,
+        LOCALAPPDATA: stateHome, XDG_STATE_HOME: stateHome,
       },
     });
 

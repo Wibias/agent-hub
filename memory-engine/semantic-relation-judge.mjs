@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { validateClaimRelationProposal, relationClaimEvidenceAuthority } from './claim-relations.mjs';
 
-export const SEMANTIC_RELATION_POLICY_VERSION = 'semantic-relation-v1';
+export const SEMANTIC_RELATION_POLICY_VERSION = 'semantic-relation-v3';
 
 const MAX_TARGETS = 12;
 const MAX_RELATIONS = 3;
@@ -94,7 +94,13 @@ export function buildSemanticRelationPrompt(options) {
     'A topical match, shared keywords, and high embedding similarity are NOT enough for an edge.',
     'Do not infer or authorize lifecycle, supersession, rejects, conflicts, authority, or memory writes.',
     'Allowed directed relations: supports, depends_on, implements.',
-    'Allowed undirected relation: related_to. Prefer no edge over a loose association.',
+    'depends_on: the source needs the target capability, resource, or condition as a prerequisite. The existence of a dependency is not evidence that the prerequisite is satisfied.',
+    'implements: the source describes a concrete realization of the target requirement or policy. A requirement does not implement its realization.',
+    'supports: the source supplies evidence or a concrete justification for the target assertion. Shared subject matter, prerequisites and implementation are not automatically support.',
+    'related_to: a concrete non-directional association, such as independently observed facts about the same explicitly identified event or artifact. No causal inference is required. A shared broad subject alone is insufficient.',
+    'If the only defensible directed relation runs from a target to the source, omit that pair. Never downgrade a reversed directed relation to related_to.',
+    'Evaluate every target independently before selecting up to three edges. Multiple distinct prerequisites can each warrant depends_on; do not stop after the first match.',
+    'Choose the most specific defensible type for each pair. Do not reverse a directed relation to force a match. Prefer no edge over a loose association.',
     'The first claim is always the source of the directed relation. target_ref must be copied verbatim.',
     'Only high confidence relations; each reason must explain concrete evidence in both claim texts.',
     '',

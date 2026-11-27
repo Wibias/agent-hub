@@ -262,3 +262,80 @@ test('bounded graph expansion respects hops, candidate cap, edge weight, and cyc
   assert.deepEqual(unknown.claimIds, []);
   assert.deepEqual(unknown.traversedEdges, []);
 });
+
+test('graph reuses one observability read per bounded claim and preserves exact cosine weights', async (t) => {
+  const { root, memory } = await createFixture();
+  t.after(async () => {
+    memory.close();
+    await rm(root, { recursive: true, force: true });
+  });
+  const vectors = { a: [1, 0.5, 0.1], b: [0.9, 0.4, 0.2], c: [0, 1, 0] };
+  for (const [id, vector] of Object.entries(vectors)) {
+    ingest(memory, { claimId: id, value: 'claim ' + id, createdAt: '2026-10-28T10:00:00.000Z' });
+    indexEmbedding(memory, id, vector);
+  }
+  const reads = new Map();
+  const view = {
+    exportCanonical: () => memory.exportCanonical(),
+    inspectClaimObservability(options) {
+      reads.set(options.claimId, (reads.get(options.claimId) ?? 0) + 1);
+      return memory.inspectClaimObservability(options);
+    },
+    getClaimEmbedding: options => memory.getClaimEmbedding(options),
+  };
+  const graph = buildMemoryGraph(view, {
+    projectId: 'github.com/example/graph', branch: 'main', semanticThreshold: 0.82,
+  });
+  const a = Float32Array.from(vectors.a), b = Float32Array.from(vectors.b);
+  let dot = 0, an = 0, bn = 0;
+  for (let i = 0; i < a.length; i++) {
+    dot += a[i] * b[i]; an += a[i] * a[i]; bn += b[i] * b[i];
+  }
+  assert.equal(graph.edges.length, 1);
+  assert.equal(graph.edges[0].weight, dot / (Math.sqrt(an) * Math.sqrt(bn)));
+  assert.deepEqual([...reads.entries()].sort(), [['a', 1], ['b', 1], ['c', 1]]);
+  assert.equal(graph.nodes.every(node => node.semanticIndexed), true);
+});
+
+test('bounded graph observation batch matches individual metadata and usage, rejects cross-scope IDs and stays read-only', async (t) => {
+  const {root,memory}=await createFixture();
+  t.after(async()=>{memory.close();await rm(root,{recursive:true,force:true});});
+  const projectId='github.com/example/graph',branch='main';
+  for(const [claimId,scope] of [['a','main'],['b','main'],['foreign','feature']]){
+    ingest(memory,{claimId,value:'Claim '+claimId,branch:scope,createdAt:'2026-10-28T10:00:00.000Z'});
+  }
+  indexEmbedding(memory,'a',[1,0]);
+  indexEmbedding(memory,'a',[0,1],{modelRevision:'r2'});
+  indexEmbedding(memory,'foreign',[1,0]);
+  for(const [id,selected,retained,observedAt] of [
+    ['first',false,true,'2026-10-28T12:00:00.000Z'],
+    ['second',true,true,'2026-10-28T13:00:00.000Z'],
+    ['third',false,false,'2026-10-28T14:00:00.000Z']
+  ])memory.recordRecallTelemetry({id,projectId,branch,queryHash:'a'.repeat(64),observedAt,retrievalMode:'hybrid',items:[{claimId:'a',authorityClass:'user_direct',budgetRetained:retained,answerSelected:selected}]});
+  memory.registerProject({projectId:'github.com/example/other',repoIdentity:'github.com/example/other'});
+  memory.ingest({evidence:{id:'other-evidence',projectId:'github.com/example/other',harness:'codex',sessionId:'other',sourceKind:'session',sourceRef:'session:other',capturedAt:'2026-10-28T10:00:00.000Z',branch:'main',content:'Other project',authorityClass:'user_direct'},claim:{id:'other-project',kind:'decision',subject:'test',predicate:'states',value:'Other project',state:'active',branchScope:'main',createdAt:'2026-10-28T10:00:00.000Z'}});
+  const canonical=memory.exportCanonical();
+  const batch=memory.inspectGraphClaimObservability({projectId,branch,claimIds:['a','b','foreign','absent','other-project']});
+  assert.deepEqual([...batch.keys()].sort(),['a','b']);
+  for(const id of ['a','b']){
+    const individual=memory.inspectClaimObservability({projectId,branch,claimId:id});
+    assert.deepEqual(batch.get(id),{embeddings:individual.embeddings,semantic_indexed:individual.semantic_indexed,recall_usage:individual.recall_usage});
+  }
+  assert.equal(batch.get('a').recall_usage.retrieval_count,3);
+  assert.equal(batch.get('a').recall_usage.context_count,1);
+  assert.equal(batch.get('b').recall_usage.retrieval_count,0);
+  assert.throws(()=>memory.inspectGraphClaimObservability({projectId,branch,claimIds:Array.from({length:501},(_,i)=>'x'+i)}));
+  assert.throws(()=>memory.inspectGraphClaimObservability({projectId,branch,claimIds:['a','a']}));
+  assert.deepEqual(memory.inspectGraphClaimObservability({projectId,branch,claimIds:[]}),new Map());
+  const legacyView={exportCanonical:()=>memory.exportCanonical(),inspectClaimObservability:o=>memory.inspectClaimObservability(o),getClaimEmbedding:o=>memory.getClaimEmbedding(o)};
+  for(const includeSemantic of [true,false]){
+    const options={projectId,branch,includeSemantic};
+    assert.deepEqual(buildMemoryGraph(memory,options),buildMemoryGraph(legacyView,options));
+  }
+  const reader=new MemoryEngine({dbPath:join(root,'memory.sqlite3'),readOnly:true});
+  try {
+    assert.deepEqual(reader.inspectGraphClaimObservability({projectId,branch,claimIds:['a','b','foreign','other-project']}),batch);
+    assert.deepEqual(buildMemoryGraph(reader,{projectId,branch}),buildMemoryGraph(memory,{projectId,branch}));
+  } finally { reader.close(); }
+  assert.deepEqual(memory.exportCanonical(),canonical);
+});

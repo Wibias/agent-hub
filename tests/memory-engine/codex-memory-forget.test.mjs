@@ -408,7 +408,7 @@ test('real Codex forget marks old memory rejected and leaves no new current memo
         encoding: 'utf8',
         env: {
           ...process.env,
-          XDG_STATE_HOME: stateHome,
+          LOCALAPPDATA: stateHome, XDG_STATE_HOME: stateHome,
         },
       });
       assert.equal(result.status, 0, result.stderr);

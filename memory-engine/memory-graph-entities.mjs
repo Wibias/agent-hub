@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 
-export const ENTITY_PROJECTION_VERSION = 'entity-projection-v1';
+export const ENTITY_PROJECTION_VERSION = 'entity-projection-v2';
 const MAX_ENTITIES_PER_CLAIM = 5;
 
 const STOPWORDS = new Set(`
@@ -30,6 +30,14 @@ const KNOWN_ENTITIES = [
   ['Desktop', /\bDesktop\b/iu, 'interface'],
   ['SQLite FTS5', /\bSQLite\s+FTS5?\b/iu, 'technology'],
 ];
+
+// Preserve explicit module paths; a basename is not an entity identity.
+const MODULE_MENTION = /(?:[A-Za-z]:)?[\w./\\-]+\.(?:mjs|js|ts|tsx|jsx|json|md|css|html|yml|yaml|sql|ps1|cs|py)\b/giu;
+const MODULE_PATH = /^(?:[A-Za-z]:)?[\w./\\-]+\.(?:mjs|js|ts|tsx|jsx|json|md|css|html|yml|yaml|sql|ps1|cs|py)$/iu;
+
+function moduleLabel(value) {
+  return value.replaceAll('\\', '/').replace(/^(?:\.\/)+/u, '');
+}
 
 function normalizedKey(value) {
   return String(value)
@@ -62,11 +70,14 @@ function entityRef(key) {
 }
 
 function pushCandidate(map, label, kind, score) {
-  const key = normalizedKey(label);
+  if (kind === 'module') label = moduleLabel(label);
+  const key = kind === 'module' ? 'module:' + label : normalizedKey(label);
   if (!key || key.length < 2) return;
-  const lowerTokens = key.split('-');
-  if (lowerTokens.some((token) => STOPWORDS.has(token))) return;
-  if (STOPWORDS.has(key)) return;
+  if (kind !== 'module') {
+    const lowerTokens = key.split('-');
+    if (lowerTokens.some((token) => STOPWORDS.has(token))) return;
+    if (STOPWORDS.has(key)) return;
+  }
   const current = map.get(key);
   if (!current) {
     map.set(key, { key, label, kind, score });
@@ -85,12 +96,11 @@ export function extractClaimEntities(value) {
   const candidates = new Map();
 
   for (const match of source.matchAll(/`([^`]{2,120})`/gu)) {
-    pushCandidate(candidates, match[1].trim(), 'code', 9);
+    const label = match[1].trim();
+    pushCandidate(candidates, label, MODULE_PATH.test(label) ? 'module' : 'code', 9);
   }
-  for (const match of source.matchAll(/\b[\w./-]+\.(?:mjs|js|ts|tsx|jsx|json|md|css|html|yml|yaml|sql|ps1|cs|py)\b/giu)) {
-    const path = match[0];
-    const base = path.split(/[\\/]/u).pop() ?? path;
-    pushCandidate(candidates, base, 'module', 8);
+  for (const match of source.matchAll(MODULE_MENTION)) {
+    pushCandidate(candidates, match[0], 'module', 8);
   }
   for (const match of source.matchAll(/\bports?\s+\d{2,5}(?:\/\d{2,5})?\b/giu)) {
     pushCandidate(candidates, match[0].replace(/\s+/gu, ' '), 'port', 7);
@@ -146,7 +156,7 @@ export function extractClaimEntities(value) {
 
   const values = [...candidates.values()];
   const withoutNestedSingles = values.filter((candidate) => {
-    if (candidate.key.includes('-')) return true;
+    if (candidate.kind === 'module' || candidate.key.includes('-')) return true;
     return !values.some((other) => (
       other !== candidate
       && other.score > candidate.score

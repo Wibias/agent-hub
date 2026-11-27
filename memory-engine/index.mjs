@@ -2561,6 +2561,66 @@ export class MemoryEngine {
     `).all(projectId, branch, limit).map(normalizePipelineFailure);
   }
 
+  /** Bounded graph-only metadata projection; never fetches candidate or Evidence text. */
+  inspectGraphClaimObservability({ projectId, branch, claimIds }) {
+    assertNonEmptyString(projectId, 'projectId');
+    assertNonEmptyString(branch, 'branch');
+    if (!Array.isArray(claimIds) || claimIds.length > 500) {
+      throw new RangeError('graph claimIds must contain at most 500 IDs');
+    }
+    for (const id of claimIds) assertNonEmptyString(id, 'claimId');
+    if (new Set(claimIds).size !== claimIds.length) throw new TypeError('duplicate graph claim ID');
+    const result = new Map();
+    if (claimIds.length === 0) return result;
+    const placeholders = claimIds.map(() => '?').join(', ');
+    const rows = this.#db.prepare(`
+      SELECT c.id AS claim_id, ce.model_id, ce.model_revision, ce.dimensions, ce.indexed_at
+      FROM claims c
+      LEFT JOIN claim_embeddings ce ON ce.claim_id = c.id
+      WHERE c.project_id = ? AND c.branch_scope = ? AND c.id IN (${placeholders})
+      ORDER BY c.id, ce.indexed_at DESC, ce.model_id ASC, ce.model_revision ASC
+    `).all(projectId, branch, ...claimIds);
+    for (const row of rows) {
+      const id = row.claim_id;
+      if (!result.has(id)) result.set(id, {
+        embeddings: [], semantic_indexed: false,
+        recall_usage: { retrieval_count: 0, retained_count: 0, context_count: 0,
+          last_retained_at: null, last_context_at: null },
+      });
+      if (row.model_id !== null) {
+        delete row.claim_id;
+        result.get(id).embeddings.push(row);
+        result.get(id).semantic_indexed = true;
+      }
+    }
+    const usage = this.#db.prepare(`
+      SELECT i.claim_id, COUNT(*) AS retrieval_count,
+        COALESCE(SUM(CASE WHEN i.budget_retained = 1 THEN 1 ELSE 0 END), 0) AS retained_count,
+        COALESCE(SUM(CASE WHEN i.answer_selected = 1 OR i.advisory_included = 1 THEN 1 ELSE 0 END), 0) AS context_count,
+        MAX(CASE WHEN i.budget_retained = 1 THEN r.observed_at ELSE NULL END) AS last_retained_at,
+        MAX(CASE WHEN i.answer_selected = 1 OR i.advisory_included = 1 THEN r.observed_at ELSE NULL END) AS last_context_at
+      FROM memory_recall_items i
+      JOIN memory_recall_runs r ON r.id = i.run_id
+      JOIN claims c ON c.id = i.claim_id
+      WHERE r.project_id = ? AND r.branch = ?
+        AND c.project_id = r.project_id AND c.branch_scope = r.branch
+        AND c.id IN (${placeholders})
+      GROUP BY i.claim_id
+    `).all(projectId, branch, ...claimIds);
+    for (const row of usage) {
+      const entry = result.get(row.claim_id);
+      if (!entry) continue;
+      entry.recall_usage = {
+        retrieval_count: Number(row.retrieval_count),
+        retained_count: Number(row.retained_count),
+        context_count: Number(row.context_count),
+        last_retained_at: row.last_retained_at ?? null,
+        last_context_at: row.last_context_at ?? null,
+      };
+    }
+    return result;
+  }
+
   inspectClaimObservability({
     projectId,
     branch,

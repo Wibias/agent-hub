@@ -33,14 +33,18 @@ const valid = () => ({ relations: [{ relation: 'depends_on', target_ref: ref('po
 const parse = (value, overrides = {}) => parseSemanticRelationResponse(JSON.stringify(value), { ...scope, ...overrides });
 
 test('defines a separate semantic-relation policy and generates bounded, untrusted-data prompt', () => {
-  assert.equal(SEMANTIC_RELATION_POLICY_VERSION, 'semantic-relation-v1');
+  assert.equal(SEMANTIC_RELATION_POLICY_VERSION, 'semantic-relation-v3');
   const prompt = buildSemanticRelationPrompt(scope);
-  assert.match(prompt, /semantic-relation-v1/);
+  assert.match(prompt, /semantic-relation-v3/);
   assert.match(prompt, /untrusted quoted data/);
   assert.match(prompt, /do not infer.*(?:lifecycle|conflicts)/i);
   assert.match(prompt, new RegExp(ref('powershell')));
   assert.doesNotMatch(prompt, /"content_redacted"|"commit_sha"/);
   assert.match(prompt, /at most 3/);
+  assert.match(prompt, /depends_on: the source needs/);
+  assert.match(prompt, /implements: the source describes/);
+  assert.match(prompt, /supports: the source supplies evidence/);
+  assert.match(prompt, /Do not reverse a directed relation/);
 });
 
 test('accepts a high-confidence supported typed relation with canonical scoped endpoints', () => {
@@ -114,7 +118,7 @@ test('shadow evaluator calls the injected judge once, never persists anything', 
   } });
   assert.equal(calls, 1);
   assert.equal(result.relations.length, 1);
-  assert.equal(result.policyVersion, 'semantic-relation-v1');
+  assert.equal(result.policyVersion, 'semantic-relation-v3');
   assert.equal(result.mode, 'shadow');
 });
 
@@ -158,7 +162,7 @@ test('exact valid_from is included and exact valid_until is excluded', () => {
 test('accepted proposals retain exact source/target Evidence IDs and semantic policy provenance', () => {
   const [edge] = parse(valid());
   assert.deepEqual(edge.supporting_evidence_ids, ['e1', 'e2']);
-  assert.equal(edge.policy_version, 'semantic-relation-v1');
+  assert.equal(edge.policy_version, 'semantic-relation-v3');
   assert.equal(edge.advisory, true);
 });
 
