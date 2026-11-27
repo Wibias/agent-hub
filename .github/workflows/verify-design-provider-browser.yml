@@ -6,6 +6,7 @@ on:
       - 'skills/design-with-ai/scripts/providers/**'
       - 'skills/design-with-ai/internal/impeccable/**'
       - 'skills/design-with-ai/tests/impeccable-live-chrome-smoke.mjs'
+      - 'skills/design-with-ai/tests/impeccable-engine-rust-live-chrome-smoke.mjs'
       - 'skills/design-with-ai/tests/providers/**'
       - 'skills/design-with-ai/scripts/taste-rule-context.mjs'
       - 'skills/design-with-ai/scripts/taste-gate.mjs'
@@ -120,6 +121,40 @@ jobs:
 
       - name: Network browser error redaction and fail-closed regression tests
         run: node --test skills/design-with-ai/tests/providers/network-response-probe.test.mjs
+
+  # Independent native binary+Chrome coverage. This bypasses the slow Taste
+  # harness and exercises the official Rust-served browser asset directly.
+  native-rust-live-chrome:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Resolve local Chrome
+        run: |
+          set -euo pipefail
+          CHROME="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium || true)"
+          test -n "$CHROME"
+          echo "CHROME_PATH=$CHROME" >> "$GITHUB_ENV"
+      - name: Install pinned test-only Playwright transport
+        run: |
+          set -euo pipefail
+          npm install --prefix "$RUNNER_TEMP/dwa-rust-live-playwright" --no-save --no-audit --no-fund --ignore-scripts --package-lock=false playwright-core@1.64.1
+          test -f "$RUNNER_TEMP/dwa-rust-live-playwright/node_modules/playwright-core/index.mjs"
+          echo "DWA_PLAYWRIGHT_ROOT=$RUNNER_TEMP/dwa-rust-live-playwright/node_modules/playwright-core" >> "$GITHUB_ENV"
+      - name: Populate manifest-verified official Rust 0.1.31 cache
+        run: |
+          set -euo pipefail
+          export IMPECCABLE_HOME="$RUNNER_TEMP/dwa-rust-live-cache"
+          sh skills/design-with-ai/internal/impeccable/scripts/impeccable engine-probe | grep -qx 'impeccable-engine 0.1.31'
+          test -x "$IMPECCABLE_HOME/bin/0.1.31/impeccable"
+          echo "IMPECCABLE_TEST_ENGINE_PATH=$IMPECCABLE_HOME/bin/0.1.31/impeccable" >> "$GITHUB_ENV"
+      - name: Real Chrome native Rust Live UI and non-mutating command surface
+        run: node skills/design-with-ai/tests/impeccable-engine-rust-live-chrome-smoke.mjs
 
   # Separate from Chrome/Taste. Windows specifically validates canonical path
   # handling and bounded full-tree SHA evidence on a large Vite-style build.
