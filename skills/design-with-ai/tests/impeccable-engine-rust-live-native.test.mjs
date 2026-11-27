@@ -50,7 +50,16 @@ async function request(port, uri) {
 test('official Rust 0.1.31 Live loopback server enforces token and source-root confinement', { timeout: 35000 }, async (t) => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'dwa-impeccable-native-live-'));
   const outside = await mkdtemp(path.join(os.tmpdir(), 'dwa-impeccable-native-outside-'));
+  let child;
   t.after(async () => {
+    // Stop the native child before deleting any Windows-owned directories.
+    if (child && child.exitCode === null && child.signalCode === null) {
+      child.kill();
+      await Promise.race([
+        new Promise((resolve) => child.once('exit', resolve)),
+        new Promise((resolve) => setTimeout(resolve, 2000)),
+      ]);
+    }
     await rm(root, { recursive: true, force: true });
     await rm(outside, { recursive: true, force: true });
   });
@@ -65,7 +74,7 @@ test('official Rust 0.1.31 Live loopback server enforces token and source-root c
   await writeFile(path.join(outside, 'secret.txt'), 'OUTSIDE_DWA_SECRET_DO_NOT_EXPOSE\n');
 
   const port = await unusedLocalPort();
-  const child = spawn(engine, ['live-server', '--port=' + port], {
+  child = spawn(engine, ['live-server', '--port=' + port], {
     cwd: root,
     env: {
       ...process.env,
@@ -75,15 +84,7 @@ test('official Rust 0.1.31 Live loopback server enforces token and source-root c
     windowsHide: true,
     stdio: ['ignore', 'ignore', 'ignore'],
   });
-  t.after(async () => {
-    if (child.exitCode === null && child.signalCode === null) {
-      child.kill();
-      await Promise.race([
-        new Promise((resolve) => child.once('exit', resolve)),
-        new Promise((resolve) => setTimeout(resolve, 2000)),
-      ]);
-    }
-  });
+  child.on('error', () => {}); // Polling below reports a failed spawn as missing metadata.
 
   const info = await readServerInfo(path.join(root, '.impeccable', 'live', 'server.json'), child);
   assert.equal(info.port, port);
