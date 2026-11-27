@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { randomBytes, randomUUID } from 'node:crypto';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { homedir } from 'node:os';
@@ -156,7 +156,36 @@ function graphQueryOptions(url) {
     throw new Error('maxSemanticNeighbors must be an integer between 1 and 10');
   }
 
-  return { includeSimilarity, semanticThreshold, maxSemanticNeighbors };
+  const scope = queryValue(url, 'scope') ?? 'branch';
+  if (!['branch', 'project'].includes(scope)) {
+    throw new Error('scope must be branch or project');
+  }
+
+  return { includeSimilarity, semanticThreshold, maxSemanticNeighbors, scope };
+}
+
+/** Read only explicitly approved repository roots from the local scope manifest. */
+export function approvedRepositoryRootsFromScope(dbPath) {
+  if (!nonEmpty(dbPath)) return [];
+  const scopePath = join(dirname(resolve(dbPath)), 'codex-memory-scopes.json');
+  try {
+    const parsed = JSON.parse(readFileSync(scopePath, 'utf8'));
+    if (!parsed || parsed.schema !== 1 || !Array.isArray(parsed.projects)) return [];
+    const seen = new Set();
+    return parsed.projects
+      .map((project) => project?.root)
+      .filter((root) => nonEmpty(root))
+      .map((root) => resolve(root.trim()))
+      .filter((root) => {
+        const key = process.platform === 'win32' ? root.toLowerCase() : root;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .slice(0, 16);
+  } catch {
+    return [];
+  }
 }
 
 function validClaimRef(value) {
@@ -378,8 +407,20 @@ export function createMemoryUiServer({
     throw new Error('memory database not found: ' + resolvedDbPath);
   }
 
-  // Validate operator roots before opening an owned SQLite database handle.
-  const approvedGitRoots = normalizeRepositoryRoots(repositoryRoots);
+  // Validate operator roots and explicitly approved scope roots before
+  // opening an owned SQLite database handle. No directory crawling.
+  const scopeRoots = approvedRepositoryRootsFromScope(resolvedDbPath);
+  const mergedRoots = [];
+  const seenRoots = new Set();
+  for (const root of [...repositoryRoots, ...scopeRoots]) {
+    const absolute = resolve(root);
+    const key = process.platform === 'win32'
+      ? absolute.toLowerCase() : absolute;
+    if (seenRoots.has(key)) continue;
+    seenRoots.add(key);
+    mergedRoots.push(absolute);
+  }
+  const approvedGitRoots = normalizeRepositoryRoots(mergedRoots.slice(0, 16));
   const ownedMemory = memory === null;
   const engine = memory ?? new MemoryEngine({
     dbPath: resolvedDbPath,
@@ -388,11 +429,13 @@ export function createMemoryUiServer({
   const actionToken = randomBytes(24).toString('hex');
   const uvProbe = webauthnProbe ? new EvidenceWebAuthnLocalProbe() : null;
 
+
   async function resolveFreshEvidenceMeaning({ projectId, branch, proposalRef, decision }) {
     if (!nonEmpty(projectId) || !nonEmpty(branch)
         || !validEvidenceReviewRef(proposalRef)
         || !['confirm', 'reject'].includes(decision)) return null;
-    // The checkout and exact revision are resolved from SERVER-approved roots.
+    // Security-sensitive review actions resolve the checkout fresh; a cached
+    // verified scope must not survive a branch switch.
     memoryUiScope(engine, { projectId, branch });
     const git = await resolveMemoryConsoleGitScopeAsync({
       memory: engine, projectId, branch, repositoryRoots: approvedGitRoots,
@@ -743,7 +786,7 @@ export function createMemoryUiServer({
           const gitScope = await resolveMemoryConsoleGitScopeAsync({
             memory: engine, projectId, branch, repositoryRoots: approvedGitRoots,
           });
-          const graphMemory = gitScope.status === 'verified'
+          const graphMemory = graphOptions.scope !== 'project' && gitScope.status === 'verified'
             ? await createAsyncGitGraphView(engine, { projectId, branch, scope: gitScope })
             : engine;
           const graph = memoryUiGraph(graphMemory, {

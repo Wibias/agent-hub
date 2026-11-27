@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { request as httpRequest } from 'node:http';
@@ -20,6 +20,7 @@ import {
   memoryUiScope,
 } from '../../memory-engine/memory-ui-model.mjs';
 import {
+  approvedRepositoryRootsFromScope,
   createMemoryUiServer,
   parseMemoryUiArgs,
 } from '../../scripts/memory-ui.mjs';
@@ -267,6 +268,33 @@ test('memory console args expose port/db only and keep host fixed internally', (
     /between 1 and 65535/i,
   );
 });
+
++test('memory console trusts only explicitly approved scope roots', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'agent-hub-console-scope-roots-'));
+  const dbPath = join(root, 'memory.sqlite3');
+  await writeFile(dbPath, '');
+  await writeFile(join(root, 'codex-memory-scopes.json'), JSON.stringify({
+    schema: 1,
+    projects: [
+      { root: join(root, 'repo-a'), project_id: 'a', repo_identity: 'a' },
+      { root: join(root, 'repo-b'), project_id: 'b', repo_identity: 'b' },
+      { root: join(root, 'repo-a'), project_id: 'duplicate', repo_identity: 'duplicate' },
+    ],
+  }));
+  t.after(() => rm(root, { recursive: true, force: true }));
+
+  assert.deepEqual(
+    approvedRepositoryRootsFromScope(dbPath),
+    [join(root, 'repo-a'), join(root, 'repo-b')],
+  );
+
+  await writeFile(join(root, 'codex-memory-scopes.json'), JSON.stringify({
+    schema: 2,
+    projects: [{ root: join(root, 'repo-a') }],
+  }));
+  assert.deepEqual(approvedRepositoryRootsFromScope(dbPath), []);
+});
+
 
 test('memory console overview groups durable memory by project and branch', async () => {
   const root = await mkdtemp(join(tmpdir(), 'agent-hub-memory-ui-overview-'));

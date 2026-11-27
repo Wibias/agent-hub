@@ -69,8 +69,14 @@ test('D4 Memory Console projection is v2 with reference labels and explorer simi
     includeSimilarity: false,
   });
   assert.equal(recordedOnly.stats.similarityEnabled, false);
-  assert.deepEqual(graph.groups.map((group) => group.id).sort(), ['agent_inference', 'user_direct']);
-  assert.equal(graph.nodes.every((node) => /^@[a-f0-9]{10}$/.test(node.ref)), true);
+  assert.deepEqual(
+    graph.groups.filter((group) => group.id !== 'entity').map((group) => group.id).sort(),
+    ['agent_inference', 'user_direct'],
+  );
+  assert.equal(graph.groups.find((group) => group.id === 'entity')?.count, graph.stats.entityNodes);
+  for (const node of graph.nodes) {
+    assert.match(node.ref, node.nodeType === 'entity' ? /^E:[a-f0-9]{10}$/ : /^@[a-f0-9]{10}$/);
+  }
 });
 
 test('D4 real bounded SQLite relation query filters before LIMIT and reports exact count', async (t) => {

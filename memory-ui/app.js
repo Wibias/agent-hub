@@ -10,6 +10,15 @@ const state = {
   graphGroup: 'all',
   graphNodeState: 'all',
   graphCommunity: 'all',
+  graphScope: 'branch',
+  graphBranchFilter: 'all',
+  graphNodeType: 'all',
+  graphShowIsolated: false,
+  graphRequestSeq: 0,
+  graphApiMs: null,
+  graphRenderMs: null,
+  projectSearch: '',
+  showEmptyProjects: false,
   graphSimilarityThreshold: 0.82,
   graphZoom: 1,
   graphPanX: 0,
@@ -47,6 +56,8 @@ const state = {
 const el = {
   projectList: document.querySelector('#project-list'),
   projectTotal: document.querySelector('#project-total'),
+  projectSearch: document.querySelector('#project-search'),
+  projectShowEmpty: document.querySelector('#project-show-empty'),
   projectTitle: document.querySelector('#project-title'),
   projectKicker: document.querySelector('#project-kicker'),
   branchSelect: document.querySelector('#branch-select'),
@@ -64,6 +75,10 @@ function escapeHtml(value) {
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;')
     .replaceAll("'", '&#039;');
+}
+
+function perfNow() {
+  return globalThis.performance?.now?.() ?? Date.now();
 }
 
 function projectName(projectId) {
@@ -175,6 +190,10 @@ function resetGraphState({ keepData = false } = {}) {
   state.graphGroup = 'all';
   state.graphNodeState = 'all';
   state.graphCommunity = 'all';
+  state.graphScope = 'branch';
+  state.graphBranchFilter = 'all';
+  state.graphNodeType = 'all';
+  state.graphRequestSeq += 1;
   state.selectedGraphEdgeId = null;
   state.graphSelectionExplicit = false;
   state.graphPositionOverrides = {};
@@ -234,18 +253,34 @@ function updateUrl() {
   history.replaceState(null, '', url);
 }
 
+function projectDisplayName(projectId, projects) {
+  const name = projectName(projectId);
+  const count = projects.filter((project) => projectName(project.projectId) === name).length;
+  return count > 1 ? name + " · " + String(projectId).slice(-6) : name;
+}
+
 function renderProjects() {
-  const projects = state.overview?.projects ?? [];
-  el.projectTotal.textContent = String(projects.length);
+  const allProjects = state.overview?.projects ?? [];
+  const query = state.projectSearch.trim().toLowerCase();
+  const matched = allProjects.filter((project) => (
+    !query
+    || project.projectId.toLowerCase().includes(query)
+    || projectName(project.projectId).toLowerCase().includes(query)
+  ));
+  const projects = state.showEmptyProjects
+    ? matched
+    : matched.filter((project) => project.total > 0 || project.projectId === state.projectId);
+  el.projectTotal.textContent = projects.length + "/" + allProjects.length;
   el.projectList.innerHTML = projects.map((project) => {
     const branchCount = project.branches.length;
     return `
       <button
         class="project-row ${project.projectId === state.projectId ? 'is-active' : ''}"
         data-project="${escapeHtml(project.projectId)}"
+        title="${escapeHtml(project.projectId)}"
       >
         <span class="project-row-main">
-          <span class="project-name">${escapeHtml(projectName(project.projectId))}</span>
+          <span class="project-name">${escapeHtml(projectDisplayName(project.projectId, allProjects))}</span>
           <span class="project-meta">${number(branchCount)} branch${branchCount === 1 ? '' : 'es'} · ${number(project.active)} active</span>
         </span>
         <span class="project-count">${number(project.total)}</span>
@@ -255,7 +290,7 @@ function renderProjects() {
 
   el.projectList.querySelectorAll('[data-project]').forEach((button) => {
     button.addEventListener('click', () => {
-      const project = projects.find(
+      const project = allProjects.find(
         (item) => item.projectId === button.dataset.project,
       );
       if (!project || project.projectId === state.projectId) return;
@@ -869,6 +904,14 @@ function renderMemories() {
   );
 }
 
+/** Compact a recorded label for a filter without changing its meaning. */
+function graphCommunityLabel(value, maxChars = 52) {
+  const full = memoryDisplayTitle(value);
+  const chars = [...full];
+  if (chars.length <= maxChars) return full;
+  return chars.slice(0, maxChars - 1).join('').trimEnd() + '…';
+}
+
 /** Derive visible communities from persisted edges, never from invented topics. */
 function graphCommunityData(nodes, edges) {
   const byId = new Map(nodes.map((node) => [node.id, node]));
@@ -904,12 +947,31 @@ function graphCommunityData(nodes, edges) {
     || a.memberIds[0].localeCompare(b.memberIds[0], 'en'));
   const byNode = new Map();
   const list = components.map((component, index) => {
+    const members = component.memberIds.map((id) => byId.get(id)).filter(Boolean);
+    const entities = members
+      .filter((node) => node.nodeType === 'entity')
+      .sort((a, b) => (
+        (b.claimIds?.length ?? 0) - (a.claimIds?.length ?? 0)
+        || (adjacent.get(b.id)?.size ?? 0) - (adjacent.get(a.id)?.size ?? 0)
+        || memoryDisplayTitle(a.value).localeCompare(memoryDisplayTitle(b.value), 'de')
+      ));
     const lead = byId.get(component.memberIds[0]);
     const id = 'community-' + index;
-    const label = memoryDisplayTitle(lead?.value ?? 'Memory group');
+    const claimCount = members.filter((node) => node.nodeType !== 'entity').length;
+    const detail = entities.length
+      ? entities.slice(0, 2).map((node) => memoryDisplayTitle(node.value)).join(' · ')
+      : memoryDisplayTitle(lead?.value ?? 'Memory group');
+    const label = graphCommunityLabel(
+      detail || 'Memory group ' + (index + 1),
+      entities.length ? 48 : 52,
+    );
     const entry = {
       id,
       label: label || 'Memory group ' + (index + 1),
+      detail,
+      basis: entities.length ? 'entity' : 'claim',
+      claimCount,
+      entityCount: entities.length,
       count: component.memberIds.length,
       color: index % 8,
       isolated: component.memberIds.length === 1,
@@ -927,6 +989,10 @@ function graphFilteredNodes(communityByNode = new Map()) {
   const query = state.graphSearch.trim().toLowerCase();
   return graph.nodes.filter((node) => {
     if (
+      state.graphNodeType !== 'all'
+      && (node.nodeType ?? 'claim') !== state.graphNodeType
+    ) return false;
+    if (
       state.graphNodeState !== 'all'
       && node.state !== state.graphNodeState
     ) return false;
@@ -934,6 +1000,14 @@ function graphFilteredNodes(communityByNode = new Map()) {
     if (state.graphCommunity !== 'all') {
       const community = communityByNode.get(node.id);
       if (!community || community.id !== state.graphCommunity) return false;
+    }
+    if (state.graphScope === 'project' && state.graphBranchFilter !== 'all') {
+      const branches = node.branches ?? (node.branch ? [node.branch] : []);
+      if (!branches.includes(state.graphBranchFilter)) return false;
+    }
+    if (!query && state.graphShowIsolated !== true) {
+      const connected = graph.edges.some((edge) => edge.from === node.id || edge.to === node.id);
+      if (!connected) return false;
     }
     if (!query) return true;
     return [
@@ -944,6 +1018,9 @@ function graphFilteredNodes(communityByNode = new Map()) {
       node.kind,
       node.authority,
       node.state,
+      node.label,
+      node.entityKey,
+      Array.isArray(node.branches) ? node.branches.join(' ') : '',
     ].some((value) => String(value ?? '').toLowerCase().includes(query));
   });
 }
@@ -953,14 +1030,15 @@ function graphFilteredEdges(nodes) {
   const graph = state.graph;
   if (!graph) return [];
   const visible = new Set(nodes.map((node) => node.id));
-  return graph.edges.filter((edge) => (
-    visible.has(edge.from)
-    && visible.has(edge.to)
-    && (state.graphOrigin === 'all'
-      || (state.graphOrigin === 'typed'
-        ? edge.source === 'typed_relation'
-        : edge.source !== 'typed_relation' && edge.origin === state.graphOrigin))
-  ));
+  return graph.edges.filter((edge) => {
+    if (!visible.has(edge.from) || !visible.has(edge.to)) return false;
+    if (state.graphOrigin === 'all') return true;
+    if (state.graphOrigin === 'typed') return edge.source === 'typed_relation';
+    if (state.graphOrigin === 'entity') return edge.source === 'entity_projection';
+    return edge.source !== 'typed_relation'
+      && edge.source !== 'entity_projection'
+      && edge.origin === state.graphOrigin;
+  });
 }
 
 /** Render excerpts from recorded claim text only; never reinterpret content. */
@@ -1013,6 +1091,17 @@ function graphNodeCircleSvg(node, { radius, community, labelVisible }) {
   const clipped = [...label].length > 34
     ? [...label].slice(0, 33).join('') + '…'
     : label;
+  if (node.nodeType === 'entity') {
+    const size = radius * 1.55;
+    return "<rect class='graph-node-entity' x='" + (-size / 2).toFixed(2)
+      + "' y='" + (-size / 2).toFixed(2)
+      + "' width='" + size.toFixed(2) + "' height='" + size.toFixed(2)
+      + "' rx='2' transform='rotate(45)'></rect>"
+      + "<circle class='graph-node-ring' r='" + (radius + 4).toFixed(2) + "'></circle>"
+      + (labelVisible && clipped
+        ? "<text class='graph-node-label' y='" + (radius + 15).toFixed(2) + "' text-anchor='middle'>" + escapeHtml(clipped) + '</text>'
+        : '');
+  }
   return "<circle class='graph-node-halo' r='" + (radius + 7).toFixed(2) + "'></circle>"
     + "<circle class='graph-node-dot community-" + Number(community?.color ?? 0) + "' r='" + radius.toFixed(2) + "'></circle>"
     + "<circle class='graph-node-ring' r='" + (radius + 2.5).toFixed(2) + "'></circle>"
@@ -1161,12 +1250,20 @@ function graphVerificationSummary(graph) {
     if (Object.hasOwn(statuses, status)) statuses[status] += 1;
   }
   const total = statuses.fresh + statuses.stale + statuses.unchecked;
-  if (graph?.gitContext?.status !== 'verified') return {
-    tone: 'caution', label: 'GIT CONTEXT',
-    title: 'Repository verification unavailable',
-    message: 'The selected checkout is not verified. Repository memories must not be treated as fresh.',
-    count: total ? total + ' Git-linked' : 'No verified checkout',
-  };
+  if (graph?.gitContext?.status !== 'verified') {
+    if (total === 0) return {
+      tone: 'neutral', label: 'MEMORY SCOPE',
+      title: 'User memory scope',
+      message: 'No repository-backed memories in this scope. Git freshness does not apply.',
+      count: '0 Git-linked',
+    };
+    return {
+      tone: 'caution', label: 'GIT CONTEXT',
+      title: 'Repository verification unavailable',
+      message: 'The selected checkout is not verified. Repository memories must not be treated as fresh.',
+      count: total + ' Git-linked',
+    };
+  }
   if (statuses.stale > 0) return {
     tone: 'caution', label: 'EVIDENCE STATUS',
     title: statuses.stale + (statuses.stale === 1 ? ' Git-linked memory needs review' : ' Git-linked memories need review'),
@@ -1202,6 +1299,7 @@ function graphVerificationSummary(graph) {
 /** Normalize origin terminology without changing underlying edge classes. */
 function graphRelationOriginLabel(edge) {
   if (edge?.source === 'typed_relation') return 'Advisory';
+  if (edge?.source === 'entity_projection') return 'Entity';
   if (edge?.origin === 'inferred') return 'Similarity';
   return 'Recorded';
 }
@@ -1252,6 +1350,9 @@ function graphEdgeProvenance(edge) {
       provenance.validatedAt ? dateTime(provenance.validatedAt) : null,
       provenance.reason ? String(provenance.reason).slice(0, 180) : null,
     ].filter(Boolean).join(' · ');
+  }
+  if (edge?.source === 'entity_projection') {
+    return 'derived entity membership · source claim text';
   }
   if (edge?.origin === 'inferred') {
     const model = [provenance.modelId, provenance.modelRevision]
@@ -1414,8 +1515,42 @@ function graphEdgeInspector(edge, nodes) {
   `;
 }
 
+/** Entity detail: derived node, never a Claim or support relation. */
+function graphEntityInspector(node, nodes) {
+  const claims = (node.claimIds ?? [])
+    .map((claimId) => nodes.find((item) => item.id === claimId))
+    .filter(Boolean);
+  const branches = node.branches ?? (node.branch ? [node.branch] : []);
+  return `
+    <div class="graph-entity-inspector">
+      <span class="graph-evidence-kicker">DERIVED ENTITY</span>
+      <h2>${escapeHtml(node.label ?? node.value)}</h2>
+      <p class="inline-empty">Derived from claim text. This is not a Claim, approval, or proof of support.</p>
+      <dl class="detail-list">
+        <div><dt>Entity kind</dt><dd>${escapeHtml(node.entityKind ?? 'concept')}</dd></div>
+        <div><dt>Claims</dt><dd>${number(claims.length)}</dd></div>
+        <div><dt>Branches</dt><dd>${escapeHtml(branches.join(', ') || '—')}</dd></div>
+        <div><dt>Source</dt><dd>${escapeHtml(node.provenance?.sourceRef ?? 'entity projection')}</dd></div>
+        <div><dt>Evidence refs</dt><dd>${number(node.provenance?.evidenceIds?.length ?? 0)}</dd></div>
+      </dl>
+      <div class="graph-entity-claims">
+        ${claims.length ? claims.map((claim) => `
+          <button class="graph-neighbor" type="button" data-graph-node="${escapeHtml(claim.id)}">
+            <span class="graph-neighbor-top">
+              <span class="graph-neighbor-name">${escapeHtml(memoryDisplayTitle(claim.value))}</span>
+              <span class="graph-origin">${escapeHtml(claim.branch ?? '')}</span>
+            </span>
+            <span class="graph-neighbor-meta">${escapeHtml(claim.ref)} · ${escapeHtml(claim.state)}</span>
+          </button>
+        `).join('') : '<div class="inline-empty">No visible claims for this entity in the current filter.</div>'}
+      </div>
+    </div>
+  `;
+}
+
 /** Render a bounded read-only graph without implying advisory authority. */
 function renderGraph() {
+  const renderStarted = perfNow();
   if (state.graphLoading && !state.graph) {
     loading();
     return;
@@ -1430,9 +1565,12 @@ function renderGraph() {
   }
 
   const communities = graphCommunityData(state.graph.nodes, state.graph.edges);
+  const visibleCommunities = communities.list.filter((item) => (
+    state.graphShowIsolated || !item.isolated
+  ));
   if (
     state.graphCommunity !== 'all'
-    && !communities.list.some((item) => item.id === state.graphCommunity)
+    && !visibleCommunities.some((item) => item.id === state.graphCommunity)
   ) {
     state.graphCommunity = 'all';
   }
@@ -1470,7 +1608,8 @@ function renderGraph() {
   }
   const dimSelection = Boolean(selected && state.graphSelectionExplicit);
 
-  const labelEveryNode = nodes.length <= 12;
+  const labelEveryNode = nodes.length <= 24;
+  const labelDegreeFloor = nodes.length <= 40 ? 4 : nodes.length <= 200 ? 8 : 50;
   const stats = state.graph.stats ?? {};
   const gitContext = state.graph.gitContext ?? { status: 'unconfigured', revisionSha: null };
   const verification = graphVerificationSummary(state.graph);
@@ -1499,11 +1638,16 @@ function renderGraph() {
             placeholder="Find a memory, source or topic…"
             value="${escapeHtml(state.graphSearch)}"
           >
+          <select id="graph-scope-filter" class="filter" aria-label="Graph scope">
+            <option value="branch" ${state.graphScope === 'branch' ? 'selected' : ''}>Branch graph</option>
+            <option value="project" ${state.graphScope === 'project' ? 'selected' : ''}>Project graph</option>
+          </select>
           <select id="graph-origin-filter" class="filter" aria-label="Relation type">
             <option value="all" ${state.graphOrigin === 'all' ? 'selected' : ''}>All relations</option>
             <option value="explicit" ${state.graphOrigin === 'explicit' ? 'selected' : ''}>Recorded only</option>
             <option value="inferred" ${state.graphOrigin === 'inferred' ? 'selected' : ''}>Similarity only</option>
             <option value="typed" ${state.graphOrigin === 'typed' ? 'selected' : ''}>Advisory only</option>
+            <option value="entity" ${state.graphOrigin === 'entity' ? 'selected' : ''}>Entity links</option>
           </select>
           <select id="graph-group-filter" class="filter" aria-label="Filter graph by Evidence authority">
             <option value="all" ${state.graphGroup === 'all' ? 'selected' : ''}>All sources</option>
@@ -1523,12 +1667,29 @@ function renderGraph() {
           </select>
           <select id="graph-community-filter" class="filter" aria-label="Filter graph by community">
             <option value="all">All communities</option>
-            ${communities.list.map((community) => `
+            ${visibleCommunities.map((community) => `
               <option value="${escapeHtml(community.id)}" ${community.id === state.graphCommunity ? 'selected' : ''}>
                 ${escapeHtml(community.label)} (${number(community.count)})
               </option>
             `).join('')}
           </select>
+          <select id="graph-node-type-filter" class="filter" aria-label="Filter graph by node type">
+            <option value="all" ${state.graphNodeType === 'all' ? 'selected' : ''}>All nodes</option>
+            <option value="claim" ${state.graphNodeType === 'claim' ? 'selected' : ''}>Claims</option>
+            <option value="entity" ${state.graphNodeType === 'entity' ? 'selected' : ''}>Entities</option>
+          </select>
+          <label class="graph-toggle">
+            <input type="checkbox" id="graph-show-isolated"${state.graphShowIsolated ? ' checked' : ''}>
+            Isolated
+          </label>
+          ${state.graphScope === 'project' ? `
+            <select id="graph-branch-filter" class="filter" aria-label="Filter graph by branch">
+              <option value="all">All branches</option>
+              ${(state.graph.branches ?? []).map((value) => `
+                <option value="${escapeHtml(value)}" ${value === state.graphBranchFilter ? 'selected' : ''}>${escapeHtml(value)}</option>
+              `).join('')}
+            </select>
+          ` : ''}
           <label class="graph-threshold" for="graph-threshold">
             Similarity
             <select id="graph-threshold" class="filter" aria-label="Semantic similarity threshold">
@@ -1550,10 +1711,11 @@ function renderGraph() {
             <span class="graph-legend-item"><span class="graph-legend-swatch explicit"></span>Explicit relation · recorded</span>
             <span class="graph-legend-item"><span class="graph-legend-swatch typed"></span>Advisory typed · not proof</span>
             <span class="graph-legend-item"><span class="graph-legend-swatch inferred"></span>Inferred similarity (optional)</span>
+            <span class="graph-legend-item"><span class="graph-legend-swatch entity"></span>Entity membership · derived</span>
             <details class="graph-community-legend">
-              <summary>${communities.list.length} communities</summary>
+              <summary>${visibleCommunities.length} communities</summary>
               <div class="graph-legend">
-                ${communities.list.slice(0, 12).map((community) => `
+                ${visibleCommunities.slice(0, 12).map((community) => `
                   <span class="graph-legend-item">
                     <span class="graph-community-dot community-${community.color}"></span>
                     ${escapeHtml(community.label)} (${number(community.count)})
@@ -1568,21 +1730,28 @@ function renderGraph() {
               <span class="graph-legend-item"><span class="graph-legend-swatch explicit"></span>Recorded</span>
               <span class="graph-legend-item"><span class="graph-legend-swatch typed"></span>Advisory, not proof</span>
               <span class="graph-legend-item"><span class="graph-legend-swatch inferred"></span>Similarity suggestion</span>
+              <span class="graph-legend-item"><span class="graph-legend-swatch entity"></span>Entity link</span>
             </div>
           </details>
           <div class="graph-stats">
-            <span>${number(nodes.length)} of ${number(stats.nodeCount)} memories shown</span>
+            <span>${number(nodes.length)} of ${number(stats.nodeCount)} nodes shown</span>
             <span>·</span>
             <span>${number(edges.length)} of ${number(stats.edgeCount)} links shown</span>
             <span>· ${number(stats.typedRelations)} typed</span>
             <span>· ${number(stats.inferredEdges)} semantic</span>
-            <span>· ${communities.list.filter((item) => item.isolated).length} isolated</span>
-            <span>· ${communities.list.length} communities</span>
+            <span>· ${number(stats.entityNodes)} entities</span>
+            <span>· ${number(stats.entityEdges)} entity links</span>
+            <span>· ${communities.list.filter((item) => item.isolated).length} isolated${state.graphShowIsolated ? '' : ' hidden'}</span>
+            <span>· ${visibleCommunities.length} communities</span>
             <span>· Similarity ≥ ${Number(stats.semanticThreshold ?? state.graphSimilarityThreshold).toFixed(2)}</span>
+            ${state.graphScope === 'project' ? '<span>· Project scope · branch provenance preserved</span>' : ''}
+            <span id="graph-perf">API ${state.graphApiMs ?? '—'} ms · render ${state.graphRenderMs ?? '—'} ms</span>
             <span>· Checkout: ${gitContext.status === 'verified' ? 'verified' : 'not verified'}</span>
             ${stats.typedRelationsOmittedByBound > 0 ? `<span>· ${number(stats.typedRelationsOmittedByBound)} advisory links omitted</span>` : ''}
             ${stats.repositoryNodesUnchecked ? `<span>· ${number(stats.repositoryNodesUnchecked)} Git records unchecked</span>` : ''}
             ${stats.truncated ? `<span>· ${number(stats.omittedClaims)} omitted by bound</span>` : ''}
+            ${stats.entityNodesOmitted > 0 ? `<span>· ${number(stats.entityNodesOmitted)} entities omitted</span>` : ''}
+            ${stats.entityEdgesOmitted > 0 ? `<span>· ${number(stats.entityEdgesOmitted)} entity links omitted</span>` : ''}
           </div>
         </div>
         ${graphConnectionIndex(nodes, edges)}
@@ -1636,13 +1805,15 @@ function renderGraph() {
                   const groupClass = ` group-${String(node.group ?? 'unknown').replace(/[^a-z0-9_-]/gi, '-')}`;
                   const freshClass = ` freshness-${String(node.freshness?.status ?? 'unknown').replace(/[^a-z0-9_-]/gi, '-')}`;
                   const community = communities.byNode.get(node.id) ?? { color: 0 };
+                  const entityClass = node.nodeType === 'entity' ? ' is-entity' : '';
                   const radius = 9 + Math.min(10, Math.sqrt(degrees.get(node.id) ?? 0) * 3.2)
                     + (node.id === selected?.id ? 3 : 0);
                   const dimmed = dimSelection && !neighborIds.has(node.id) ? ' is-dimmed' : '';
-                  const labelVisible = labelEveryNode || node.id === selected?.id || (degrees.get(node.id) ?? 0) >= 4;
+                  const labelVisible = labelEveryNode || node.id === selected?.id
+                    || (degrees.get(node.id) ?? 0) >= labelDegreeFloor;
                   return `
                     <g
-                      class="graph-node${selectedClass}${stateClass}${groupClass}${freshClass}${dimmed}${labelVisible ? ' is-labeled' : ''} community-${community.color}"
+                      class="graph-node${selectedClass}${stateClass}${groupClass}${freshClass}${dimmed}${labelVisible ? ' is-labeled' : ''}${entityClass} community-${community.color}"
                       data-graph-node="${escapeHtml(node.id)}"
                       transform="translate(${point.x.toFixed(2)} ${point.y.toFixed(2)})"
                       role="button"
@@ -1663,10 +1834,21 @@ function renderGraph() {
       </section>
       <aside class="graph-inspector" aria-label="Selected memory details">
         <div class="mobile-detail-heading"><strong>Memory details</strong><button class="text-action" id="graph-close-details" type="button">Close</button></div>
-        ${selectedEdge ? graphEdgeInspector(selectedEdge, nodes) : graphInspector(selected, edges)}
+        ${selectedEdge
+          ? graphEdgeInspector(selectedEdge, nodes)
+          : (selected?.nodeType === 'entity'
+            ? graphEntityInspector(selected, state.graph.nodes)
+            : graphInspector(selected, edges))}
       </aside>
     </div>
   `;
+
+  state.graphRenderMs = Math.round(perfNow() - renderStarted);
+  const perfTarget = el.view.querySelector('#graph-perf');
+  if (perfTarget) {
+    perfTarget.textContent = 'API ' + (state.graphApiMs ?? '—')
+      + ' ms · render ' + state.graphRenderMs + ' ms';
+  }
 
   // Keep canvas navigation stable during search, selection and 10-second refresh.
   const activeCanvas = el.view.querySelector?.('.graph-canvas-wrap');
@@ -1680,6 +1862,10 @@ function renderGraph() {
   const group = document.querySelector('#graph-group-filter');
   const nodeState = document.querySelector('#graph-state-filter');
   const community = document.querySelector('#graph-community-filter');
+  const scope = document.querySelector('#graph-scope-filter');
+  const nodeType = document.querySelector('#graph-node-type-filter');
+  const showIsolated = document.querySelector('#graph-show-isolated');
+  const branchFilter = document.querySelector('#graph-branch-filter');
   search?.addEventListener('input', () => {
     const selection = { start: search.selectionStart, end: search.selectionEnd };
     state.graphSearch = search.value;
@@ -1709,6 +1895,32 @@ function renderGraph() {
     state.selectedGraphEdgeId = null;
     renderGraph();
     restoreGraphControlFocus('graph-community-filter');
+  });
+  scope?.addEventListener('change', async () => {
+    state.graphScope = scope.value;
+    state.graphBranchFilter = 'all';
+    state.selectedGraphEdgeId = null;
+    state.graphSelectionExplicit = false;
+    await loadGraph({ render: true, preferredNodeId: null });
+    restoreGraphControlFocus('graph-scope-filter');
+  });
+  nodeType?.addEventListener('change', () => {
+    state.graphNodeType = nodeType.value;
+    state.selectedGraphEdgeId = null;
+    renderGraph();
+    restoreGraphControlFocus('graph-node-type-filter');
+  });
+  showIsolated?.addEventListener('change', () => {
+    state.graphShowIsolated = showIsolated.checked;
+    state.selectedGraphEdgeId = null;
+    renderGraph();
+    restoreGraphControlFocus('graph-show-isolated');
+  });
+  branchFilter?.addEventListener('change', () => {
+    state.graphBranchFilter = branchFilter.value;
+    state.selectedGraphEdgeId = null;
+    renderGraph();
+    restoreGraphControlFocus('graph-branch-filter');
   });
   document.querySelector('#graph-threshold')?.addEventListener('change', async (event) => {
     state.graphSimilarityThreshold = Number(event.target.value);
@@ -1927,6 +2139,8 @@ async function loadGraph({
   preferredNodeId = state.selectedGraphNodeId,
 } = {}) {
   if (!state.projectId || !state.branch) return;
+  const requestSeq = ++state.graphRequestSeq;
+  const loadStarted = perfNow();
   state.graphLoading = true;
   state.graphError = '';
   if (render) renderGraph();
@@ -1937,11 +2151,21 @@ async function loadGraph({
       includeSimilarity: '1',
       semanticThreshold: String(state.graphSimilarityThreshold),
       maxSemanticNeighbors: '3',
+      scope: state.graphScope,
     }));
+    if (requestSeq !== state.graphRequestSeq) return;
     state.graph = graph;
+    state.graphApiMs = Math.round(perfNow() - loadStarted);
     state.graphSelectionExplicit = false;
     if (state.graphGroup !== 'all' && !(graph.groups ?? []).some((item) => item.id === state.graphGroup)) {
       state.graphGroup = 'all';
+    }
+    if (
+      state.graphBranchFilter !== 'all'
+      && graph.scope === 'project'
+      && !(graph.branches ?? []).includes(state.graphBranchFilter)
+    ) {
+      state.graphBranchFilter = 'all';
     }
     const degree = new Map((graph.nodes ?? []).map((node) => [node.id, 0]));
     for (const edge of graph.edges ?? []) {
@@ -1960,13 +2184,14 @@ async function loadGraph({
       ? preferredNodeId
       : highestDegree;
   } catch (error) {
+    if (requestSeq !== state.graphRequestSeq) return;
     state.graph = null;
     state.selectedGraphNodeId = null;
     state.graphError = error.message;
   } finally {
-    state.graphLoading = false;
+    if (requestSeq === state.graphRequestSeq) state.graphLoading = false;
   }
-  if (render) renderGraph();
+  if (render && requestSeq === state.graphRequestSeq) renderGraph();
 }
 
 function summaryStat(label, value) {
@@ -2571,6 +2796,13 @@ function renderQuality() {
   const graphCommunities = state.graph
     ? graphCommunityData(state.graph.nodes, state.graph.edges)
     : null;
+  const isolatedClaims = state.graph
+    ? state.graph.nodes.filter((node) => (
+      (node.nodeType ?? 'claim') === 'claim'
+      && !state.graph.edges.some((edge) => edge.from === node.id || edge.to === node.id)
+    )).length
+    : null;
+  const scopeHealth = state.scope?.health ?? {};
 
   el.view.innerHTML = `
     <div class="wide-view">
@@ -2594,12 +2826,22 @@ function renderQuality() {
         <div class="data-section-head"><h2>Graph projection</h2><span>derived, read-only</span></div>
         ${graphStats ? `
           <div class="health-grid">
-            ${metric('Graph nodes', `${number(graphStats.nodeCount)} shown / ${number(graphStats.totalClaims)} total`)}
+            ${metric('Graph nodes', number(graphStats.nodeCount))}
+            ${metric('Claims', number(graphStats.totalClaims))}
+            ${metric('Entity nodes', number(graphStats.entityNodes))}
+            ${metric('Entity links', number(graphStats.entityEdges))}
+            ${metric('Claims with entities', number(graphStats.claimsWithEntities))}
+            ${metric('Entity nodes omitted', number(graphStats.entityNodesOmitted))}
+            ${metric('Entity links omitted', number(graphStats.entityEdgesOmitted))}
             ${metric('Recorded links', number(graphStats.explicitEdges))}
             ${metric('Typed advisory links', number(graphStats.typedRelations))}
+            ${metric('Typed suppressed · freshness', number(graphStats.typedSuppressedFreshness))}
+            ${metric('Typed suppressed · other', number(graphStats.typedSuppressedOther))}
+            ${metric('Advisory links omitted', number(graphStats.typedRelationsOmittedByBound))}
             ${metric('Semantic links', number(graphStats.inferredEdges))}
-            ${metric('Isolated claims', number(graphCommunities?.list.filter((item) => item.isolated).length))}
+            ${metric('Isolated claims', number(isolatedClaims))}
             ${metric('Communities', number(graphCommunities?.list.length))}
+            ${metric('Topic nodes', '0 · entity/community projection only')}
             ${metric('Similarity threshold', Number(graphStats.semanticThreshold ?? state.graphSimilarityThreshold).toFixed(2))}
           </div>
         ` : '<p class="inline-empty">Open the Graph view to load current graph metrics.</p>'}
@@ -2617,6 +2859,16 @@ function renderQuality() {
           ${metric('Stale advisory memories', number(quality.stale_agent_memories))}
         </div>
         <p class="inline-empty">Semantic coverage measures embeddings, not memory accuracy. Human-validated quality remains provisional until a reviewed benchmark is attached.</p>
+      </section>
+
+      <section class="data-section">
+        <div class="data-section-head"><h2>Quality validation</h2><span>not a score</span></div>
+        <div class="health-grid">
+          ${metric('Benchmark', 'memory-quality-baseline-2026-11-23')}
+          ${metric('Human validation', 'NOT HUMAN-VALIDATED')}
+          ${metric('Evidence class', 'synthetic + provisional')}
+          ${metric('Embedding coverage', percent(scopeHealth.semantic_coverage_percent))}
+        </div>
       </section>
     </div>
   `;
@@ -2726,6 +2978,11 @@ async function loadScope({
   state.graphOrigin = 'all';
   state.graphGroup = 'all';
   state.graphNodeState = 'all';
+  state.graphCommunity = 'all';
+  state.graphScope = 'branch';
+  state.graphBranchFilter = 'all';
+  state.graphNodeType = 'all';
+  state.graphRequestSeq += 1;
   updateUrl();
   renderProjects();
   renderScopeHeader();
@@ -2844,6 +3101,16 @@ el.refreshButton?.addEventListener('click', async () => {
   } finally {
     el.refreshButton.textContent = prior;
   }
+});
+
+el.projectSearch?.addEventListener('input', () => {
+  state.projectSearch = el.projectSearch.value;
+  renderProjects();
+});
+
+el.projectShowEmpty?.addEventListener('change', () => {
+  state.showEmptyProjects = el.projectShowEmpty.checked;
+  renderProjects();
 });
 
 el.tabs.addEventListener('click', async (event) => {

@@ -72,9 +72,10 @@ test('memoryUiGraph returns a browser-safe project/branch projection', async (t)
 
   assert.equal(graph.projectId, 'github.com/example/graph-ui');
   assert.equal(graph.branch, 'main');
-  assert.equal(graph.nodes.length, 1);
-  assert.match(graph.nodes[0].ref, /^@[0-9a-f]{10}$/);
-  assert.equal(graph.nodes[0].authority, 'user_direct');
+  const claimNodes = graph.nodes.filter((node) => (node.nodeType ?? 'claim') === 'claim');
+  assert.equal(claimNodes.length, 1);
+  assert.match(claimNodes[0].ref, /^@[0-9a-f]{10}$/);
+  assert.equal(claimNodes[0].authority, 'user_direct');
   assert.equal(hasPropertyDeep(graph, 'vector'), false);
 });
 
@@ -193,7 +194,7 @@ test('GET /api/graph is scoped, guarded, browser-safe, and read-only', async (t)
   let payload = await response.json();
   assert.equal(payload.projectId, 'github.com/example/graph-ui');
   assert.equal(payload.branch, 'main');
-  assert.equal(payload.nodes.length, 1);
+  assert.equal(payload.nodes.filter((node) => (node.nodeType ?? 'claim') === 'claim').length, 1);
   assert.equal(payload.stats.similarityEnabled, true);
   assert.equal(hasPropertyDeep(payload, 'vector'), false);
 
@@ -203,6 +204,17 @@ test('GET /api/graph is scoped, guarded, browser-safe, and read-only', async (t)
   assert.equal(payload.error, 'invalid_graph_options');
 
   response = await fetch(graphUrl + '&includeSimilarity=maybe');
+  assert.equal(response.status, 400);
+  payload = await response.json();
+  assert.equal(payload.error, 'invalid_graph_options');
+
+  response = await fetch(graphUrl + '&scope=project');
+  assert.equal(response.status, 200);
+  payload = await response.json();
+  assert.equal(payload.scope, 'project');
+  assert.equal(Array.isArray(payload.branches), true);
+
+  response = await fetch(graphUrl + '&scope=global');
   assert.equal(response.status, 400);
   payload = await response.json();
   assert.equal(payload.error, 'invalid_graph_options');

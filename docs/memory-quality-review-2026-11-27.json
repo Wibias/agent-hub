@@ -1,0 +1,129 @@
+{
+  "datasetVersion": "memory-quality-review-2026-11-27",
+  "privacy": "synthetic only; no production memory text",
+  "humanValidated": false,
+  "instructions": "Review each case. Mark the expected result as correct, incorrect, or unclear. Do not treat a model response as independent ground truth.",
+  "cases": [
+    {
+      "id": "extract-mixed-en-1",
+      "category": "capture",
+      "source": "Fix the dashboard today. Going forward, always verify overlays with realistic data.",
+      "expected": "durable suggestion for the future-scoped sentence only"
+    },
+    {
+      "id": "extract-mixed-de-1",
+      "category": "capture",
+      "source": "Prüfe heute das Layout. Künftig immer alle Tests mit gültigen Daten prüfen.",
+      "expected": "durable suggestion for the future-scoped sentence only"
+    },
+    {
+      "id": "extract-bounded-1",
+      "category": "capture",
+      "source": "Until the migration completes, keep the compatibility shim.",
+      "expected": "bounded suggestion, not permanent rule"
+    },
+    {
+      "id": "extract-feedback-1",
+      "category": "capture",
+      "source": "The agent tested too quickly and did not research the flow.",
+      "expected": "ambiguous review suggestion, not permanent rule"
+    },
+    {
+      "id": "extract-transient-1",
+      "category": "capture",
+      "source": "Run tests on port 9229 today.",
+      "expected": "no memory suggestion"
+    },
+    {
+      "id": "extract-tentative-1",
+      "category": "capture",
+      "source": "Maybe we should use Postgres later.",
+      "expected": "no memory suggestion"
+    },
+    {
+      "id": "extract-question-1",
+      "category": "capture",
+      "source": "Should we use SQLite?",
+      "expected": "no memory suggestion"
+    },
+    {
+      "id": "extract-secret-1",
+      "category": "capture",
+      "source": "Use api_key=abcdefghijklmnop for deployment.",
+      "expected": "no memory suggestion; secret excluded"
+    },
+    {
+      "id": "judge-durable-1",
+      "category": "importance",
+      "source": "We decided to use Postgres as the production database.",
+      "expected": "promote durable project decision"
+    },
+    {
+      "id": "judge-transient-1",
+      "category": "importance",
+      "source": "We will use port 9229 for today's debugger session.",
+      "expected": "ignore"
+    },
+    {
+      "id": "judge-keep-1",
+      "category": "importance",
+      "source": "We will use the compatibility shim until all enterprise clients migrate.",
+      "expected": "keep_candidate or needs_confirmation; not permanent without review"
+    },
+    {
+      "id": "judge-ambiguous-1",
+      "category": "importance",
+      "source": "We decided to keep that private for future releases.",
+      "expected": "needs_confirmation"
+    },
+    {
+      "id": "relation-same-1",
+      "category": "dedupe",
+      "source": "We decided to keep Postgres as the production database.",
+      "expected": "same relation to the exact Postgres decision; no duplicate active Claim"
+    },
+    {
+      "id": "relation-update-1",
+      "category": "update",
+      "source": "Correction: the production database now uses MySQL instead of Postgres.",
+      "expected": "update relation; old Claim superseded; history retained"
+    },
+    {
+      "id": "relation-contradict-1",
+      "category": "conflict",
+      "source": "We must require one approval for production deployments.",
+      "expected": "contradict relation to the two-approval rule; open conflict, no winner"
+    },
+    {
+      "id": "relation-unrelated-1",
+      "category": "relation",
+      "source": "Use JSONL for durable memory pipeline logs.",
+      "expected": "unrelated relation"
+    },
+    {
+      "id": "agent-root-1",
+      "category": "agent",
+      "source": "Decision: use structured JSONL records for durable memory pipeline logs.",
+      "expected": "durable agent decision with agent_inference authority"
+    },
+    {
+      "id": "agent-subagent-1",
+      "category": "agent",
+      "source": "Decision: keep semantic recall telemetry separate from canonical memory export.",
+      "expected": "advisory agent decision with subagent provenance"
+    },
+    {
+      "id": "retrieval-paraphrase-1",
+      "category": "retrieval",
+      "source": "Which storage engine do we use for the production database?",
+      "expected": "retrieve MySQL decision, not the superseded Postgres decision"
+    },
+    {
+      "id": "retrieval-negative-1",
+      "category": "retrieval",
+      "source": "What is the capital of France?",
+      "expected": "no current authorized memory match"
+    }
+  ]
+}
+
