@@ -9,7 +9,15 @@ const state = {
   graphOrigin: 'all',
   graphGroup: 'all',
   graphNodeState: 'all',
+  graphCommunity: 'all',
+  graphSimilarityThreshold: 0.82,
+  graphZoom: 1,
+  graphPanX: 0,
+  graphPanY: 0,
+  graphPositionOverrides: {},
   selectedGraphNodeId: null,
+  selectedGraphEdgeId: null,
+  graphSelectionExplicit: false,
   graphInspectorOpen: false,
   memoryInspectorOpen: false,
   view: 'memories',
@@ -166,6 +174,13 @@ function resetGraphState({ keepData = false } = {}) {
   state.graphOrigin = 'all';
   state.graphGroup = 'all';
   state.graphNodeState = 'all';
+  state.graphCommunity = 'all';
+  state.selectedGraphEdgeId = null;
+  state.graphSelectionExplicit = false;
+  state.graphPositionOverrides = {};
+  state.graphZoom = 1;
+  state.graphPanX = 0;
+  state.graphPanY = 0;
   state.selectedGraphNodeId = null;
   state.graphInspectorOpen = false;
 }
@@ -854,8 +869,59 @@ function renderMemories() {
   );
 }
 
-/** Apply project-local search, lifecycle and authority filters to displayed nodes. */
-function graphFilteredNodes() {
+/** Derive visible communities from persisted edges, never from invented topics. */
+function graphCommunityData(nodes, edges) {
+  const byId = new Map(nodes.map((node) => [node.id, node]));
+  const adjacent = new Map(nodes.map((node) => [node.id, new Set()]));
+  for (const edge of edges) {
+    if (!adjacent.has(edge.from) || !adjacent.has(edge.to)) continue;
+    adjacent.get(edge.from).add(edge.to);
+    adjacent.get(edge.to).add(edge.from);
+  }
+  const visited = new Set();
+  const components = [];
+  for (const node of nodes) {
+    if (visited.has(node.id)) continue;
+    const queue = [node.id];
+    visited.add(node.id);
+    const memberIds = [];
+    for (let index = 0; index < queue.length; index += 1) {
+      const id = queue[index];
+      memberIds.push(id);
+      for (const next of adjacent.get(id) ?? []) {
+        if (visited.has(next)) continue;
+        visited.add(next);
+        queue.push(next);
+      }
+    }
+    memberIds.sort((a, b) => (
+      (adjacent.get(b)?.size ?? 0) - (adjacent.get(a)?.size ?? 0)
+      || a.localeCompare(b, 'en')
+    ));
+    components.push({ memberIds });
+  }
+  components.sort((a, b) => b.memberIds.length - a.memberIds.length
+    || a.memberIds[0].localeCompare(b.memberIds[0], 'en'));
+  const byNode = new Map();
+  const list = components.map((component, index) => {
+    const lead = byId.get(component.memberIds[0]);
+    const id = 'community-' + index;
+    const label = memoryDisplayTitle(lead?.value ?? 'Memory group');
+    const entry = {
+      id,
+      label: label || 'Memory group ' + (index + 1),
+      count: component.memberIds.length,
+      color: index % 8,
+      isolated: component.memberIds.length === 1,
+    };
+    for (const nodeId of component.memberIds) byNode.set(nodeId, entry);
+    return entry;
+  });
+  return { byNode, list };
+}
+
+/** Apply project-local search, lifecycle, authority and community filters. */
+function graphFilteredNodes(communityByNode = new Map()) {
   const graph = state.graph;
   if (!graph) return [];
   const query = state.graphSearch.trim().toLowerCase();
@@ -865,6 +931,10 @@ function graphFilteredNodes() {
       && node.state !== state.graphNodeState
     ) return false;
     if (state.graphGroup !== 'all' && node.group !== state.graphGroup) return false;
+    if (state.graphCommunity !== 'all') {
+      const community = communityByNode.get(node.id);
+      if (!community || community.id !== state.graphCommunity) return false;
+    }
     if (!query) return true;
     return [
       node.ref,
@@ -932,64 +1002,23 @@ function graphLabelLines(value, maxChars = 27) {
   return lines.filter(Boolean);
 }
 
-/** A bounded semantic layout: connected claims are positioned next to each other. */
-function graphReadableLayout(nodes, edges) {
-  if (nodes.length > 24) return null;
-  const cols = Math.min(3, Math.max(1, Math.ceil(Math.sqrt(nodes.length))));
-  const rows = Math.max(1, Math.ceil(nodes.length / cols));
-  const width = 1200;
-  const height = Math.max(720, 120 + rows * 172);
-  const firstX = (width - (cols - 1) * 360) / 2;
-  const firstY = (height - (rows - 1) * 172) / 2;
-  const byId = new Map(nodes.map(node => [node.id, node]));
-  const adjacent = new Map(nodes.map(node => [node.id, new Set()]));
-  for (const edge of edges) {
-    if (!adjacent.has(edge.from) || !adjacent.has(edge.to)) continue;
-    adjacent.get(edge.from).add(edge.to);
-    adjacent.get(edge.to).add(edge.from);
-  }
-  const ordered = [];
-  const visited = new Set();
-  const roots = [...nodes].sort((a, b) =>
-    adjacent.get(b.id).size - adjacent.get(a.id).size || a.id.localeCompare(b.id, 'en'));
-  for (const root of roots) {
-    if (visited.has(root.id)) continue;
-    const queue = [root.id];
-    visited.add(root.id);
-    for (let index = 0; index < queue.length; index += 1) {
-      const id = queue[index];
-      ordered.push(byId.get(id));
-      const links = [...adjacent.get(id)].sort((a, b) => a.localeCompare(b, 'en'));
-      for (const next of links) {
-        if (visited.has(next)) continue;
-        visited.add(next);
-        queue.push(next);
-      }
-    }
-  }
-  const positions = new Map(ordered.map((node, i) => [node.id, {
-    x: firstX + (i % cols) * 360,
-    y: firstY + Math.floor(i / cols) * 172,
-  }]));
-  return { positions, width, height };
-}
-
 /** Keep relation semantics from the actual edge, never from inferred keywords. */
 function graphRelationLabel(edge) {
   return String(edge?.relation ?? 'related').replaceAll('_', ' ');
 }
 
-/** Semantic claim excerpts inside interactive SVG cards, never opaque refs. */
-function graphNodeCardSvg(node) {
-  const lines = graphLabelLines(node.value);
-  const meta = node.state + ' · ' + graphAuthorityLabel(node.authority);
-  const clippedMeta = [...meta].length > 37 ? [...meta].slice(0, 36).join('') + '…' : meta;
-  return "<rect class='graph-node-card' x='-126' y='-42' width='252' height='84' rx='9'></rect>"
-    + "<circle cx='-109' cy='-21' r='5'></circle>"
-    + "<text class='graph-node-title' x='-96' y='" + (lines.length === 1 ? '-7' : '-17') + "'>"
-    + lines.map((line, index) => "<tspan x='-96' dy='" + (index === 0 ? '0' : '18') + "'>" + escapeHtml(line) + '</tspan>').join('')
-    + '</text>'
-    + "<text class='graph-node-caption' x='-96' y='29'>" + escapeHtml(clippedMeta) + '</text>';
+/** Compact circular node with the label progressively revealed by CSS. */
+function graphNodeCircleSvg(node, { radius, community, labelVisible }) {
+  const label = memoryDisplayTitle(node.value);
+  const clipped = [...label].length > 34
+    ? [...label].slice(0, 33).join('') + '…'
+    : label;
+  return "<circle class='graph-node-halo' r='" + (radius + 7).toFixed(2) + "'></circle>"
+    + "<circle class='graph-node-dot community-" + Number(community?.color ?? 0) + "' r='" + radius.toFixed(2) + "'></circle>"
+    + "<circle class='graph-node-ring' r='" + (radius + 2.5).toFixed(2) + "'></circle>"
+    + (labelVisible && clipped
+      ? "<text class='graph-node-label' y='" + (radius + 14).toFixed(2) + "' text-anchor='middle'>" + escapeHtml(clipped) + '</text>'
+      : '');
 }
 
 /** Only actual selected-node relations receive inline semantic labels. */
@@ -1021,9 +1050,14 @@ function graphPositions(nodes, edges) {
   const radius = Math.min(width, height) * 0.37;
   sorted.forEach((node, index) => {
     const angle = -Math.PI / 2 + (Math.PI * 2 * index) / sorted.length;
+    const seed = [...node.id].reduce((value, char) => (
+      (value * 31 + char.charCodeAt(0)) >>> 0
+    ), 7);
+    const jitterX = ((seed % 97) / 97 - 0.5) * 54;
+    const jitterY = (((seed >>> 7) % 97) / 97 - 0.5) * 54;
     positions.set(node.id, {
-      x: width / 2 + Math.cos(angle) * radius,
-      y: height / 2 + Math.sin(angle) * radius,
+      x: width / 2 + Math.cos(angle) * radius + jitterX,
+      y: height / 2 + Math.sin(angle) * radius + jitterY,
     });
   });
 
@@ -1357,6 +1391,29 @@ function graphInspector(node, visibleEdges) {
   `;
 }
 
+/** Edge details stay compact and never imply more authority than recorded. */
+function graphEdgeInspector(edge, nodes) {
+  const from = nodes.find((node) => node.id === edge.from) ?? null;
+  const to = nodes.find((node) => node.id === edge.to) ?? null;
+  return `
+    <div class="graph-edge-inspector">
+      <span class="graph-evidence-kicker">RELATION</span>
+      <h2>${escapeHtml(graphRelationLabel(edge))}</h2>
+      <p class="inline-empty">${escapeHtml(graphEdgeProvenance(edge))}</p>
+      <dl class="detail-list">
+        <div><dt>Origin</dt><dd>${escapeHtml(graphRelationOriginLabel(edge))}</dd></div>
+        <div><dt>State</dt><dd>${edge.current === false ? 'historical' : 'current'}</dd></div>
+        ${edge.relation === 'semantic_similarity' ? `<div><dt>Similarity</dt><dd>${Number(edge.weight ?? 0).toFixed(3)}</dd></div>` : ''}
+        ${edge.modelId ? `<div><dt>Embedding</dt><dd>${escapeHtml(edge.modelId)}${edge.modelRevision ? ' · ' + escapeHtml(String(edge.modelRevision).slice(0, 12)) : ''}</dd></div>` : ''}
+      </dl>
+      <div class="graph-edge-endpoints">
+        ${from ? `<button class="graph-neighbor" type="button" data-graph-node="${escapeHtml(from.id)}"><span class="graph-neighbor-name">${escapeHtml(memoryDisplayTitle(from.value))}</span><span class="graph-neighbor-ref">${escapeHtml(from.ref)}</span></button>` : ''}
+        ${to ? `<button class="graph-neighbor" type="button" data-graph-node="${escapeHtml(to.id)}"><span class="graph-neighbor-name">${escapeHtml(memoryDisplayTitle(to.value))}</span><span class="graph-neighbor-ref">${escapeHtml(to.ref)}</span></button>` : ''}
+      </div>
+    </div>
+  `;
+}
+
 /** Render a bounded read-only graph without implying advisory authority. */
 function renderGraph() {
   if (state.graphLoading && !state.graph) {
@@ -1372,14 +1429,31 @@ function renderGraph() {
     return;
   }
 
-  const nodes = graphFilteredNodes();
+  const communities = graphCommunityData(state.graph.nodes, state.graph.edges);
+  if (
+    state.graphCommunity !== 'all'
+    && !communities.list.some((item) => item.id === state.graphCommunity)
+  ) {
+    state.graphCommunity = 'all';
+  }
+  const nodes = graphFilteredNodes(communities.byNode);
   const edges = graphFilteredEdges(nodes);
   const states = [...new Set(state.graph.nodes.map((node) => node.state))].sort();
   const groups = state.graph.groups ?? [];
-  const readableLayout = graphReadableLayout(nodes, edges);
-  const positions = readableLayout?.positions ?? graphPositions(nodes, edges);
-  const graphWidth = readableLayout?.width ?? 1000;
-  const graphHeight = readableLayout?.height ?? 680;
+  const positions = graphPositions(nodes, edges);
+  for (const [nodeId, point] of Object.entries(state.graphPositionOverrides)) {
+    if (positions.has(nodeId)) positions.set(nodeId, { ...point });
+  }
+  const graphWidth = 1000;
+  const graphHeight = 680;
+  const degrees = new Map(nodes.map((node) => [node.id, 0]));
+  for (const edge of edges) {
+    if (degrees.has(edge.from)) degrees.set(edge.from, degrees.get(edge.from) + 1);
+    if (degrees.has(edge.to)) degrees.set(edge.to, degrees.get(edge.to) + 1);
+  }
+  const selectedEdge = state.selectedGraphEdgeId
+    ? edges.find((edge) => edge.id === state.selectedGraphEdgeId) ?? null
+    : null;
   const selected = nodes.find((node) => node.id === state.selectedGraphNodeId)
     ?? nodes.find((node) => node.state === 'active')
     ?? nodes[0]
@@ -1387,8 +1461,16 @@ function renderGraph() {
   if (selected && selected.id !== state.selectedGraphNodeId) {
     state.selectedGraphNodeId = selected.id;
   }
+  const neighborIds = new Set(selected ? [selected.id] : []);
+  if (selected) {
+    for (const edge of edges) {
+      if (edge.from === selected.id) neighborIds.add(edge.to);
+      if (edge.to === selected.id) neighborIds.add(edge.from);
+    }
+  }
+  const dimSelection = Boolean(selected && state.graphSelectionExplicit);
 
-  const labelEveryNode = nodes.length <= 24;
+  const labelEveryNode = nodes.length <= 12;
   const stats = state.graph.stats ?? {};
   const gitContext = state.graph.gitContext ?? { status: 'unconfigured', revisionSha: null };
   const verification = graphVerificationSummary(state.graph);
@@ -1439,12 +1521,46 @@ function renderGraph() {
               </option>
             `).join('')}
           </select>
+          <select id="graph-community-filter" class="filter" aria-label="Filter graph by community">
+            <option value="all">All communities</option>
+            ${communities.list.map((community) => `
+              <option value="${escapeHtml(community.id)}" ${community.id === state.graphCommunity ? 'selected' : ''}>
+                ${escapeHtml(community.label)} (${number(community.count)})
+              </option>
+            `).join('')}
+          </select>
+          <label class="graph-threshold" for="graph-threshold">
+            Similarity
+            <select id="graph-threshold" class="filter" aria-label="Semantic similarity threshold">
+              ${[0.70, 0.75, 0.82, 0.88].map((value) => `
+                <option value="${value}" ${value === state.graphSimilarityThreshold ? 'selected' : ''}>≥ ${value.toFixed(2)}</option>
+              `).join('')}
+            </select>
+          </label>
+          <div class="graph-zoom-controls" role="group" aria-label="Graph view controls">
+            <button type="button" class="graph-control" id="graph-zoom-out" aria-label="Zoom out">−</button>
+            <button type="button" class="graph-control" id="graph-zoom-in" aria-label="Zoom in">+</button>
+            <button type="button" class="graph-control" id="graph-fit-view">Fit</button>
+            <button type="button" class="graph-control" id="graph-reset-view">Reset</button>
+            <button type="button" class="graph-control" id="graph-fullscreen" aria-label="Fullscreen graph">⛶</button>
+          </div>
         </div>
         <div class="graph-meta">
           <div class="graph-legend graph-legend-desktop" aria-label="Graph relation legend">
             <span class="graph-legend-item"><span class="graph-legend-swatch explicit"></span>Explicit relation · recorded</span>
             <span class="graph-legend-item"><span class="graph-legend-swatch typed"></span>Advisory typed · not proof</span>
             <span class="graph-legend-item"><span class="graph-legend-swatch inferred"></span>Inferred similarity (optional)</span>
+            <details class="graph-community-legend">
+              <summary>${communities.list.length} communities</summary>
+              <div class="graph-legend">
+                ${communities.list.slice(0, 12).map((community) => `
+                  <span class="graph-legend-item">
+                    <span class="graph-community-dot community-${community.color}"></span>
+                    ${escapeHtml(community.label)} (${number(community.count)})
+                  </span>
+                `).join('')}
+              </div>
+            </details>
           </div>
           <details class="graph-legend-mobile">
             <summary>Connection key</summary>
@@ -1459,6 +1575,10 @@ function renderGraph() {
             <span>·</span>
             <span>${number(edges.length)} of ${number(stats.edgeCount)} links shown</span>
             <span>· ${number(stats.typedRelations)} typed</span>
+            <span>· ${number(stats.inferredEdges)} semantic</span>
+            <span>· ${communities.list.filter((item) => item.isolated).length} isolated</span>
+            <span>· ${communities.list.length} communities</span>
+            <span>· Similarity ≥ ${Number(stats.semanticThreshold ?? state.graphSimilarityThreshold).toFixed(2)}</span>
             <span>· Checkout: ${gitContext.status === 'verified' ? 'verified' : 'not verified'}</span>
             ${stats.typedRelationsOmittedByBound > 0 ? `<span>· ${number(stats.typedRelationsOmittedByBound)} advisory links omitted</span>` : ''}
             ${stats.repositoryNodesUnchecked ? `<span>· ${number(stats.repositoryNodesUnchecked)} Git records unchecked</span>` : ''}
@@ -1468,23 +1588,43 @@ function renderGraph() {
         ${graphConnectionIndex(nodes, edges)}
         <div class="graph-canvas-wrap">
           ${nodes.length ? `
-            <svg class="graph-canvas" viewBox="0 0 ${graphWidth} ${graphHeight}" role="group" aria-label="Interactive memory relation graph">
+            <svg class="graph-canvas" data-graph-canvas viewBox="0 0 ${graphWidth} ${graphHeight}" role="group" aria-label="Interactive memory relation graph">
+              <g class="graph-viewport" data-graph-viewport transform="translate(${Number(state.graphPanX).toFixed(2)} ${Number(state.graphPanY).toFixed(2)}) scale(${Number(state.graphZoom).toFixed(3)})">
               <g class="graph-edges">
                 ${edges.map((edge) => {
                   const from = positions.get(edge.from);
                   const to = positions.get(edge.to);
                   if (!from || !to) return '';
+                  const mx = (from.x + to.x) / 2 + (to.y - from.y) * 0.06;
+                  const my = (from.y + to.y) / 2 + (from.x - to.x) * 0.06;
+                  const edgeClass = [
+                    'graph-edge',
+                    edge.origin,
+                    edge.source || '',
+                    edge.current === false ? 'is-historical' : '',
+                    dimSelection && edge.from !== selected.id && edge.to !== selected.id ? 'is-dimmed' : '',
+                    selectedEdge?.id === edge.id ? 'is-selected' : '',
+                  ].filter(Boolean).join(' ');
                   return `
-                    <line
-                      class="graph-edge ${escapeHtml(edge.origin)} ${escapeHtml(edge.source || '')} ${edge.current === false ? 'is-historical' : ''}"
-                      x1="${from.x.toFixed(2)}"
-                      y1="${from.y.toFixed(2)}"
-                      x2="${to.x.toFixed(2)}"
-                      y2="${to.y.toFixed(2)}"
+                    <path
+                      class="graph-edge-hit"
+                      data-graph-edge="${escapeHtml(edge.id)}"
+                      d="M ${from.x.toFixed(2)} ${from.y.toFixed(2)} Q ${mx.toFixed(2)} ${my.toFixed(2)} ${to.x.toFixed(2)} ${to.y.toFixed(2)}"
+                      aria-hidden="true"
+                    ></path>
+                    <path
+                      class="${edgeClass}"
+                      data-graph-edge="${escapeHtml(edge.id)}"
+                      d="M ${from.x.toFixed(2)} ${from.y.toFixed(2)} Q ${mx.toFixed(2)} ${my.toFixed(2)} ${to.x.toFixed(2)} ${to.y.toFixed(2)}"
+                      tabindex="0"
+                      role="button"
+                      aria-label="${escapeHtml(graphRelationLabel(edge) + ' relation')}"
                     >
                       <title>${escapeHtml(edge.relation)} · ${escapeHtml(edge.origin)}${edge.relation === 'semantic_similarity' && Number.isFinite(edge.weight) ? ` · ${edge.weight.toFixed(3)}` : ''}</title>
-                    </line>
-                    ${graphSelectedRelationNote(edge, from, to, selected)}
+                    </path>
+                    ${selectedEdge?.id === edge.id
+                      ? graphSelectedRelationNote(edge, from, to, selected)
+                      : ''}
                   `;
                 }).join('')}
               </g>
@@ -1495,9 +1635,14 @@ function renderGraph() {
                   const stateClass = ` state-${String(node.state ?? 'unknown').replace(/[^a-z0-9_-]/gi, '-')}`;
                   const groupClass = ` group-${String(node.group ?? 'unknown').replace(/[^a-z0-9_-]/gi, '-')}`;
                   const freshClass = ` freshness-${String(node.freshness?.status ?? 'unknown').replace(/[^a-z0-9_-]/gi, '-')}`;
+                  const community = communities.byNode.get(node.id) ?? { color: 0 };
+                  const radius = 9 + Math.min(10, Math.sqrt(degrees.get(node.id) ?? 0) * 3.2)
+                    + (node.id === selected?.id ? 3 : 0);
+                  const dimmed = dimSelection && !neighborIds.has(node.id) ? ' is-dimmed' : '';
+                  const labelVisible = labelEveryNode || node.id === selected?.id || (degrees.get(node.id) ?? 0) >= 4;
                   return `
                     <g
-                      class="graph-node${selectedClass}${stateClass}${groupClass}${freshClass}"
+                      class="graph-node${selectedClass}${stateClass}${groupClass}${freshClass}${dimmed}${labelVisible ? ' is-labeled' : ''} community-${community.color}"
                       data-graph-node="${escapeHtml(node.id)}"
                       transform="translate(${point.x.toFixed(2)} ${point.y.toFixed(2)})"
                       role="button"
@@ -1505,11 +1650,12 @@ function renderGraph() {
                       aria-pressed="${node.id === selected?.id ? 'true' : 'false'}"
                       aria-label="${escapeHtml(`${memoryDisplayTitle(node.value)}; ${node.state}; ${graphAuthorityLabel(node.authority)}`)}"
                     >
-                      ${(labelEveryNode || node.id === selected?.id) ? graphNodeCardSvg(node) : '<circle r="9"></circle>'}
+                      ${graphNodeCircleSvg(node, { radius, community, labelVisible })}
                       <title>${escapeHtml(node.ref)} · ${escapeHtml(node.state)} · ${escapeHtml(node.value)}</title>
                     </g>
                   `;
                 }).join('')}
+              </g>
               </g>
             </svg>
           ` : '<div class="empty">No graph nodes match the current filters.</div>'}
@@ -1517,7 +1663,7 @@ function renderGraph() {
       </section>
       <aside class="graph-inspector" aria-label="Selected memory details">
         <div class="mobile-detail-heading"><strong>Memory details</strong><button class="text-action" id="graph-close-details" type="button">Close</button></div>
-        ${graphInspector(selected, edges)}
+        ${selectedEdge ? graphEdgeInspector(selectedEdge, nodes) : graphInspector(selected, edges)}
       </aside>
     </div>
   `;
@@ -1527,18 +1673,13 @@ function renderGraph() {
   if (activeCanvas && priorScroll) {
     activeCanvas.scrollLeft = priorScroll.left;
     activeCanvas.scrollTop = priorScroll.top;
-  } else if (activeCanvas && selected && readableLayout) {
-    const point = positions.get(selected.id);
-    if (point) {
-      activeCanvas.scrollLeft = Math.max(0, point.x - activeCanvas.clientWidth / 2);
-      activeCanvas.scrollTop = Math.max(0, point.y - activeCanvas.clientHeight / 2);
-    }
   }
 
   const search = document.querySelector('#graph-search');
   const origin = document.querySelector('#graph-origin-filter');
   const group = document.querySelector('#graph-group-filter');
   const nodeState = document.querySelector('#graph-state-filter');
+  const community = document.querySelector('#graph-community-filter');
   search?.addEventListener('input', () => {
     const selection = { start: search.selectionStart, end: search.selectionEnd };
     state.graphSearch = search.value;
@@ -1547,33 +1688,218 @@ function renderGraph() {
   });
   origin?.addEventListener('change', () => {
     state.graphOrigin = origin.value;
+    state.selectedGraphEdgeId = null;
     renderGraph();
     restoreGraphControlFocus('graph-origin-filter');
   });
   group?.addEventListener('change', () => {
     state.graphGroup = group.value;
+    state.selectedGraphEdgeId = null;
     renderGraph();
     restoreGraphControlFocus('graph-group-filter');
   });
   nodeState?.addEventListener('change', () => {
     state.graphNodeState = nodeState.value;
+    state.selectedGraphEdgeId = null;
     renderGraph();
     restoreGraphControlFocus('graph-state-filter');
   });
+  community?.addEventListener('change', () => {
+    state.graphCommunity = community.value;
+    state.selectedGraphEdgeId = null;
+    renderGraph();
+    restoreGraphControlFocus('graph-community-filter');
+  });
+  document.querySelector('#graph-threshold')?.addEventListener('change', async (event) => {
+    state.graphSimilarityThreshold = Number(event.target.value);
+    await loadGraph({ render: true, preferredNodeId: state.selectedGraphNodeId });
+    restoreGraphControlFocus('graph-threshold');
+  });
+
+  const svg = el.view.querySelector('[data-graph-canvas]');
+  const viewport = el.view.querySelector('[data-graph-viewport]');
+  const applyViewport = () => {
+    if (!viewport) return;
+    const zoom = Math.max(0.4, Math.min(4, Number(state.graphZoom) || 1));
+    state.graphZoom = zoom;
+    viewport.setAttribute(
+      'transform',
+      'translate(' + Number(state.graphPanX).toFixed(2) + ' '
+        + Number(state.graphPanY).toFixed(2) + ') scale(' + zoom.toFixed(3) + ')',
+    );
+  };
+  const zoomAt = (factor, clientX = null, clientY = null) => {
+    if (!svg) return;
+    const rect = svg.getBoundingClientRect();
+    const px = clientX === null ? 500 : ((clientX - rect.left) / rect.width) * 1000;
+    const py = clientY === null ? 340 : ((clientY - rect.top) / rect.height) * 680;
+    const oldZoom = Number(state.graphZoom) || 1;
+    const newZoom = Math.max(0.4, Math.min(4, oldZoom * factor));
+    state.graphPanX = px - (px - Number(state.graphPanX || 0)) * (newZoom / oldZoom);
+    state.graphPanY = py - (py - Number(state.graphPanY || 0)) * (newZoom / oldZoom);
+    state.graphZoom = newZoom;
+    applyViewport();
+  };
+  const fitView = () => {
+    const points = [...positions.values()];
+    if (points.length === 0) {
+      state.graphZoom = 1;
+      state.graphPanX = 0;
+      state.graphPanY = 0;
+      applyViewport();
+      return;
+    }
+    const minX = Math.min(...points.map((point) => point.x));
+    const maxX = Math.max(...points.map((point) => point.x));
+    const minY = Math.min(...points.map((point) => point.y));
+    const maxY = Math.max(...points.map((point) => point.y));
+    const pad = 96;
+    const zoom = Math.max(0.5, Math.min(2.4,
+      Math.min((1000 - pad * 2) / Math.max(1, maxX - minX),
+        (680 - pad * 2) / Math.max(1, maxY - minY))));
+    state.graphZoom = zoom;
+    state.graphPanX = 500 - ((minX + maxX) / 2) * zoom;
+    state.graphPanY = 340 - ((minY + maxY) / 2) * zoom;
+    applyViewport();
+  };
+  document.querySelector('#graph-zoom-in')?.addEventListener('click', () => zoomAt(1.25));
+  document.querySelector('#graph-zoom-out')?.addEventListener('click', () => zoomAt(0.8));
+  document.querySelector('#graph-fit-view')?.addEventListener('click', fitView);
+  document.querySelector('#graph-reset-view')?.addEventListener('click', () => {
+    state.graphZoom = 1;
+    state.graphPanX = 0;
+    state.graphPanY = 0;
+    state.graphPositionOverrides = {};
+    renderGraph();
+  });
+  document.querySelector('#graph-fullscreen')?.addEventListener('click', async () => {
+    if (!activeCanvas) return;
+    try {
+      if (document.fullscreenElement) await document.exitFullscreen();
+      else await activeCanvas.requestFullscreen();
+    } catch {
+      // Fullscreen can be blocked by the host; the graph remains usable.
+    }
+  });
+
+  if (svg) {
+    svg.addEventListener('wheel', (event) => {
+      event.preventDefault();
+      zoomAt(event.deltaY < 0 ? 1.12 : 0.89, event.clientX, event.clientY);
+    }, { passive: false });
+
+    let pan = null;
+    svg.addEventListener('pointerdown', (event) => {
+      if (event.target.closest?.('[data-graph-node], [data-graph-edge], [data-edge-note]')) return;
+      pan = {
+        pointerId: event.pointerId,
+        clientX: event.clientX,
+        clientY: event.clientY,
+        panX: Number(state.graphPanX || 0),
+        panY: Number(state.graphPanY || 0),
+      };
+      svg.setPointerCapture?.(event.pointerId);
+      svg.classList.add('is-panning');
+    });
+    svg.addEventListener('pointermove', (event) => {
+      if (!pan || pan.pointerId !== event.pointerId) return;
+      const rect = svg.getBoundingClientRect();
+      state.graphPanX = pan.panX + ((event.clientX - pan.clientX) / rect.width) * 1000;
+      state.graphPanY = pan.panY + ((event.clientY - pan.clientY) / rect.height) * 680;
+      applyViewport();
+    });
+    const endPan = (event) => {
+      if (!pan || pan.pointerId !== event.pointerId) return;
+      pan = null;
+      svg.classList.remove('is-panning');
+    };
+    svg.addEventListener('pointerup', endPan);
+    svg.addEventListener('pointercancel', endPan);
+  }
 
   const selectGraphNode = (nodeId) => {
     if (!state.graph?.nodes.some((node) => node.id === nodeId)) return;
     state.selectedGraphNodeId = nodeId;
+    state.selectedGraphEdgeId = null;
+    state.graphSelectionExplicit = true;
     state.graphInspectorOpen = true;
     renderGraph();
     focusSelectedGraphNode(nodeId);
   };
   el.view.querySelectorAll('[data-graph-node]').forEach((target) => {
-    target.addEventListener('click', () => selectGraphNode(target.dataset.graphNode));
+    target.addEventListener('click', (event) => {
+      event.stopPropagation();
+      selectGraphNode(target.dataset.graphNode);
+    });
     target.addEventListener('keydown', (event) => {
       if (event.key !== 'Enter' && event.key !== ' ') return;
       event.preventDefault();
       selectGraphNode(target.dataset.graphNode);
+    });
+    target.addEventListener('pointerdown', (event) => {
+      if (!svg || event.button !== 0) return;
+      event.stopPropagation();
+      const nodeId = target.dataset.graphNode;
+      const start = positions.get(nodeId);
+      if (!start) return;
+      const rect = svg.getBoundingClientRect();
+      const origin = {
+        clientX: event.clientX,
+        clientY: event.clientY,
+        x: start.x,
+        y: start.y,
+        zoom: Number(state.graphZoom) || 1,
+      };
+      let moved = false;
+      target.setPointerCapture?.(event.pointerId);
+      const move = (moveEvent) => {
+        moved = true;
+        const dx = ((moveEvent.clientX - origin.clientX) / rect.width) * 1000 / origin.zoom;
+        const dy = ((moveEvent.clientY - origin.clientY) / rect.height) * 680 / origin.zoom;
+        const point = { x: origin.x + dx, y: origin.y + dy };
+        state.graphPositionOverrides[nodeId] = point;
+        positions.set(nodeId, point);
+        const groupNode = el.view.querySelector(
+          '[data-graph-node="' + CSS.escape(nodeId) + '"]',
+        );
+        groupNode?.setAttribute('transform', 'translate(' + point.x.toFixed(2) + ' ' + point.y.toFixed(2) + ')');
+        for (const path of el.view.querySelectorAll('[data-graph-edge]')) {
+          const edge = edges.find((item) => item.id === path.dataset.graphEdge);
+          if (!edge || (edge.from !== nodeId && edge.to !== nodeId)) continue;
+          const from = positions.get(edge.from);
+          const to = positions.get(edge.to);
+          if (!from || !to) continue;
+          const mx = (from.x + to.x) / 2 + (to.y - from.y) * 0.06;
+          const my = (from.y + to.y) / 2 + (from.x - to.x) * 0.06;
+          path.setAttribute('d', 'M ' + from.x.toFixed(2) + ' ' + from.y.toFixed(2)
+            + ' Q ' + mx.toFixed(2) + ' ' + my.toFixed(2)
+            + ' ' + to.x.toFixed(2) + ' ' + to.y.toFixed(2));
+        }
+      };
+      const up = () => {
+        target.removeEventListener('pointermove', move);
+        target.removeEventListener('pointerup', up);
+        target.removeEventListener('pointercancel', up);
+        if (moved) renderGraph();
+      };
+      target.addEventListener('pointermove', move);
+      target.addEventListener('pointerup', up);
+      target.addEventListener('pointercancel', up);
+    });
+  });
+
+  el.view.querySelectorAll('[data-graph-edge]').forEach((target) => {
+    const select = (event) => {
+      event.stopPropagation();
+      state.selectedGraphEdgeId = target.dataset.graphEdge;
+      state.graphInspectorOpen = true;
+      renderGraph();
+    };
+    target.addEventListener('click', select);
+    target.addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter' && event.key !== ' ') return;
+      event.preventDefault();
+      select(event);
     });
   });
 
@@ -1608,19 +1934,31 @@ async function loadGraph({
     const graph = await fetchJson(api('/api/graph', {
       projectId: state.projectId,
       branch: state.branch,
+      includeSimilarity: '1',
+      semanticThreshold: String(state.graphSimilarityThreshold),
+      maxSemanticNeighbors: '3',
     }));
     state.graph = graph;
+    state.graphSelectionExplicit = false;
     if (state.graphGroup !== 'all' && !(graph.groups ?? []).some((item) => item.id === state.graphGroup)) {
       state.graphGroup = 'all';
     }
+    const degree = new Map((graph.nodes ?? []).map((node) => [node.id, 0]));
+    for (const edge of graph.edges ?? []) {
+      if (degree.has(edge.from)) degree.set(edge.from, degree.get(edge.from) + 1);
+      if (degree.has(edge.to)) degree.set(edge.to, degree.get(edge.to) + 1);
+    }
+    const highestDegree = [...(graph.nodes ?? [])].sort((left, right) => (
+      (degree.get(right.id) ?? 0) - (degree.get(left.id) ?? 0)
+      || (left.state === 'active' ? -1 : 1) - (right.state === 'active' ? -1 : 1)
+      || left.id.localeCompare(right.id, 'en')
+    ))[0]?.id ?? null;
     state.selectedGraphNodeId = (
       preferredNodeId
       && graph.nodes.some((node) => node.id === preferredNodeId)
     )
       ? preferredNodeId
-      : graph.nodes.find((node) => node.state === 'active')?.id
-        ?? graph.nodes[0]?.id
-        ?? null;
+      : highestDegree;
   } catch (error) {
     state.graph = null;
     state.selectedGraphNodeId = null;
@@ -2229,6 +2567,10 @@ function renderQuality() {
   const quality = state.scope?.quality ?? {};
   const recall = quality.recall ?? {};
   const authorities = quality.by_authority ?? {};
+  const graphStats = state.graph?.stats ?? null;
+  const graphCommunities = state.graph
+    ? graphCommunityData(state.graph.nodes, state.graph.edges)
+    : null;
 
   el.view.innerHTML = `
     <div class="wide-view">
@@ -2249,6 +2591,21 @@ function renderQuality() {
       </section>
 
       <section class="data-section">
+        <div class="data-section-head"><h2>Graph projection</h2><span>derived, read-only</span></div>
+        ${graphStats ? `
+          <div class="health-grid">
+            ${metric('Graph nodes', `${number(graphStats.nodeCount)} shown / ${number(graphStats.totalClaims)} total`)}
+            ${metric('Recorded links', number(graphStats.explicitEdges))}
+            ${metric('Typed advisory links', number(graphStats.typedRelations))}
+            ${metric('Semantic links', number(graphStats.inferredEdges))}
+            ${metric('Isolated claims', number(graphCommunities?.list.filter((item) => item.isolated).length))}
+            ${metric('Communities', number(graphCommunities?.list.length))}
+            ${metric('Similarity threshold', Number(graphStats.semanticThreshold ?? state.graphSimilarityThreshold).toFixed(2))}
+          </div>
+        ` : '<p class="inline-empty">Open the Graph view to load current graph metrics.</p>'}
+      </section>
+
+      <section class="data-section">
         <div class="data-section-head"><h2>Recall funnel</h2><span>operational telemetry</span></div>
         <div class="health-grid">
           ${metric('Retrieved', number(recall.retrieved))}
@@ -2259,6 +2616,7 @@ function renderQuality() {
           ${metric('Near-duplicates closed', number(quality.deterministic_near_duplicates))}
           ${metric('Stale advisory memories', number(quality.stale_agent_memories))}
         </div>
+        <p class="inline-empty">Semantic coverage measures embeddings, not memory accuracy. Human-validated quality remains provisional until a reviewed benchmark is attached.</p>
       </section>
     </div>
   `;
@@ -2389,6 +2747,9 @@ async function loadScope({
       await loadGraph();
       return;
     }
+    if (state.view === 'quality') {
+      await loadGraph({ render: false });
+    }
 
     if (state.view === 'memories' && state.scope.memories.length > 0) {
       const preferred = state.scope.memories.find(
@@ -2499,6 +2860,11 @@ el.tabs.addEventListener('click', async (event) => {
   renderTabs();
   if (state.view === 'graph') {
     await loadGraph();
+    return;
+  }
+  if (state.view === 'quality') {
+    await loadGraph({ render: false });
+    renderView();
     return;
   }
   renderView();

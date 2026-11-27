@@ -127,6 +127,38 @@ function queryValue(url, key) {
   return nonEmpty(value) ? value.trim() : null;
 }
 
+function graphQueryOptions(url) {
+  const includeRaw = queryValue(url, 'includeSimilarity');
+  if (
+    includeRaw !== null
+    && !['0', '1', 'true', 'false'].includes(includeRaw.toLowerCase())
+  ) {
+    throw new Error('includeSimilarity must be 0, 1, true or false');
+  }
+  const includeSimilarity = includeRaw === null
+    || includeRaw === '1'
+    || includeRaw.toLowerCase() === 'true';
+
+  const thresholdRaw = queryValue(url, 'semanticThreshold');
+  const semanticThreshold = thresholdRaw === null
+    ? 0.82 : Number(thresholdRaw);
+  if (!Number.isFinite(semanticThreshold)
+    || semanticThreshold < 0.5
+    || semanticThreshold > 0.99) {
+    throw new Error('semanticThreshold must be between 0.50 and 0.99');
+  }
+
+  const maxRaw = queryValue(url, 'maxSemanticNeighbors');
+  const maxSemanticNeighbors = maxRaw === null ? 3 : Number(maxRaw);
+  if (!Number.isInteger(maxSemanticNeighbors)
+    || maxSemanticNeighbors < 1
+    || maxSemanticNeighbors > 10) {
+    throw new Error('maxSemanticNeighbors must be an integer between 1 and 10');
+  }
+
+  return { includeSimilarity, semanticThreshold, maxSemanticNeighbors };
+}
+
 function validClaimRef(value) {
   return typeof value === 'string' && /^@[0-9a-f]{10}$/i.test(value.trim());
 }
@@ -695,6 +727,17 @@ export function createMemoryUiServer({
           return;
         }
 
+        let graphOptions;
+        try {
+          graphOptions = graphQueryOptions(url);
+        } catch (error) {
+          json(res, 400, {
+            error: 'invalid_graph_options',
+            message: error instanceof Error ? error.message : String(error),
+          });
+          return;
+        }
+
         try {
           // No HTTP query parameter supplies a trusted root, identity, or SHA.
           const gitScope = await resolveMemoryConsoleGitScopeAsync({
@@ -705,6 +748,7 @@ export function createMemoryUiServer({
             : engine;
           const graph = memoryUiGraph(graphMemory, {
             projectId, branch, revisionSha: gitScope.revisionSha,
+            ...graphOptions,
           });
           graph.gitContext = publicMemoryConsoleGitScope(gitScope);
           json(res, 200, graph);

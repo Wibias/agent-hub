@@ -181,8 +181,18 @@ export function memoryUiGraph(memory, {
   projectId,
   branch,
   revisionSha = null,
+  includeSimilarity = true,
+  semanticThreshold = 0.82,
+  maxSemanticNeighbors = 3,
 } = {}) {
-  const graph = buildMemoryGraphV2(memory, { projectId, branch, revisionSha });
+  const graph = buildMemoryGraphV2(memory, {
+    projectId,
+    branch,
+    revisionSha,
+    includeSimilarity,
+    semanticThreshold,
+    maxSemanticNeighbors,
+  });
   return {
     ...graph,
     nodes: graph.nodes.map((node) => ({

@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
@@ -14,6 +15,7 @@ import {
 } from '../../memory-engine/memory-capture-policy.mjs';
 import {
   memoryUiClaim,
+  memoryUiGraph,
   memoryUiOverview,
   memoryUiScope,
 } from '../../memory-engine/memory-ui-model.mjs';
@@ -236,7 +238,12 @@ test('memory console browser source parses and keeps the divider-first visual co
   const radii = [...css.matchAll(/border-radius:\s*([^;]+);/gi)]
     .map((match) => match[1].trim());
   assert.equal(radii.length > 0, true);
-  assert.deepEqual([...new Set(radii)], ['0']);
+  // Layout containers stay divider-first. Circular graph nodes and compact
+  // graph controls are explicit graph affordances, not card styling.
+  const allowedRadii = new Set(['0', '5px', '999px']);
+  for (const radius of new Set(radii)) {
+    assert.equal(allowedRadii.has(radius), true, 'unexpected border radius: ' + radius);
+  }
   assert.match(css, /border-bottom:\s*1px solid var\(--line\)/i);
   assert.match(html, /class="sidebar"/);
   assert.match(html, /class="tabs"/);
