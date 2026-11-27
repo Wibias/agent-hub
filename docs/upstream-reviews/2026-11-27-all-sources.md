@@ -37,10 +37,25 @@ end-user qualification are independent.
   where available, and `NOT_VERIFIED` when missing. Implemented in
   `skills/design-with-ai/references/audit-surface-evidence.md` with
   source-contract tests. No new standalone accessibility skill.
-- **PENDING:** the upstream behavioral evaluation runner and general
-  performance/security checklists need comparison against AgentHub
-  Skill Ratchet, quality constraints and existing test harnesses before
-  any code reuse. No upstream script has been vendored.
+- **REVIEWED / NO MANDATORY IMPORT:** Addy's `run-evals.js` has three
+  distinct tiers: structural linting, lexical TF-IDF skill-routing
+  approximations (`--min-rank1`), and optional headless-`claude`
+  behavioral execution in a temporary workspace. Its
+  `scripts/lib/behavioral-record.js` persists a hash-bound transcript,
+  staged-file SHA-256 inventory and replayable rubric-grade attempts.
+  That historical regrade is explicitly **not** a fresh execution.
+  AgentHub's `skills/skill-ratchet/references/evaluation-contract.md`
+  instead binds current non-config acceptance judgments to the exact
+  DWA source digest and two independent user-started models. A lexical
+  similarity score or a regrade of prior traces **cannot** replace
+  that release gate. The recorded-runner method may be revisited as
+  an optional research harness, but `acceptEdits`, external model
+  execution, and replayed results must not be silently added to
+  ordinary CI or treated as fresh independent reviews.
+- **PENDING:** assess Addy's shared general performance/security
+  checklists against AgentHub's canonical quality/security owners
+  only when a concrete gap is identified. No upstream eval or
+  checklist script has been vendored.
 
 ### Emil
 
@@ -128,7 +143,15 @@ before/after comparison.
   cases were missing from DWA's existing state/interaction owner and are
   now recorded there, with source-contract regressions. No imported Python
   runner or catalog. **PENDING:** verify actual browser/OS runtime input
-  composition and reassess remaining UI data/preview improvements.
+  composition. The newer `preview.py` produces a standalone inline-CSS
+  design-token specimen, not a rendered product or evidence of working
+  interactions. Its standalone HTML, optional Google Fonts links,
+  contrast badges and form examples can be useful for concept exploration,
+  but **do not** substitute it for DWA's real product/browser-state
+  evidence or import the generator as a second design-system owner.
+  The PySide6/QSS guidance is specifically scoped to Qt/qfluentwidgets,
+  not a universal Windows UI rule; review it when that stack is
+  actually selected. Other catalog/data changes remain conditional.
 - `penpot/penpot`: original reviewed
   `e20a0d748eb9ae431c27a4a201ee9f7067d955e8`, latest observed
   `28f63af16e14ae26c51c2e18225180de432af1fb`. Broad repository
