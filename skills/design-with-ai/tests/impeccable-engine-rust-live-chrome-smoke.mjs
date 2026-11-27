@@ -85,10 +85,42 @@ try {
   assert.equal(initialized, true);
   assert.equal(bar, true);
   assert.equal(leakedToken, false, 'Rust Live must not retain an exposed bootstrap token');
-  assert.ok(commandPrefix === '/' || commandPrefix === '$', 'Unexpected upstream command prefix');
-  if (commandPrefix !== '$design-with-ai ') {
-    console.log('LIMITATION: Rust Live remains upstream-command-branded; canonical DWA command parity NOT_VERIFIED.');
+  assert.ok(commandPrefix === '/' || commandPrefix === '
+  const stop = await fetch(origin + '/stop?token=' + encodeURIComponent(token), {
+    signal: AbortSignal.timeout(5000),
+  });
+  assert.equal(stop.ok, true);
+  console.log('PASS: native Rust Live script initialized inside real isolated Chrome and preserved product DOM.');
+} finally {
+  if (browser) await browser.close().catch(() => {});
+  if (helper.exitCode === null && helper.signalCode === null) {
+    helper.kill();
+    await Promise.race([
+      once(helper, 'exit').catch(() => {}),
+      new Promise((resolve) => setTimeout(resolve, 2000)),
+    ]);
   }
+  rmSync(root, { recursive: true, force: true });
+}
+, 'Unexpected upstream command prefix');
+  // Inspect a REAL user-visible instruction rather than inferring a defect
+  // only from a bootstrap prefix or static source string.
+  await page.locator('#impeccable-live-design-toggle').click();
+  await page.waitForFunction(() => {
+    const host = document.getElementById('impeccable-live-design-host');
+    const instruction = host?.shadowRoot?.querySelector('#panel-body .empty code');
+    return !!instruction && !!instruction.textContent?.includes(' document');
+  }, null, { timeout: 12000 });
+  const shownCommand = await page.evaluate(() => {
+    const host = document.getElementById('impeccable-live-design-host');
+    return host?.shadowRoot?.querySelector('#panel-body .empty code')?.textContent?.trim() || '';
+  });
+  assert.equal(shownCommand, commandPrefix + 'impeccable document',
+    'The rendered Rust Live instruction must match the effective upstream command prefix');
+  assert.notEqual(shownCommand, '$design-with-ai impeccable document',
+    'Rust Live has not passed canonical DWA command parity and must remain gated');
+  console.log('LIMITATION: Real Rust Live DESIGN.md panel displays ' + JSON.stringify(shownCommand)
+    + ', not the canonical DWA command; native DWA Live remains NOT_VERIFIED.');
   await context.close();
   const stop = await fetch(origin + '/stop?token=' + encodeURIComponent(token), {
     signal: AbortSignal.timeout(5000),
