@@ -91,6 +91,8 @@ if (process.argv[2] === '--seed') {
     assert.equal(result.human_approval_verified,false);assert.equal(result.claim_written,false);
     for(const [key,value] of Object.entries(scope))assert.equal(result.meaning[key],value);
     assert.equal(result.meaning.revisionSha,manifest.revisionSha);
+    assert.equal(result.conflict_intent_available,false);
+    assert.equal(result.conflict_intent_status,"not_recorded");
     assert.equal(result.total,2);assert.equal(result.claims.length,2);
     assert.equal(result.claims[0].value,'Existing synthetic fact');
     assert.equal(result.claims[1].value,result.meaning.canonicalFact);
@@ -100,6 +102,11 @@ if (process.argv[2] === '--seed') {
     return result.meaning.reviewSnapshotSha256;
   }
   const before=await inspect();
+  assert.equal(await request('OperatorV1',{protocol,op:'conflict_begin',
+    nonce:randomBytes(32).toString('base64url'),...scope,
+    snapshotSha256:before,comparisonSha256:'a'.repeat(64)}),null);
+  assert.equal(await request('OperatorV1',{protocol,op:'conflict_complete',
+    nonce:randomBytes(32).toString('base64url'),ticketId:'A'.repeat(32),assertion:{}}),null);
   console.log("PASS initial signed comparison");
   for(const op of ['begin','complete','enroll_begin','enroll_key','enroll_finish',
     'reaffirm_begin','reaffirm_complete','publish_begin','publish_complete',

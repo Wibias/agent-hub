@@ -258,3 +258,40 @@ test('nonduplicate existing Claim still blocks both protected export actions', a
     assert.equal(check.prepare('SELECT status FROM memory_evidence_proposals').get().status, 'needs_confirmation');
   } finally { check.close(); }
 });
+
+
+test('explicit comparison-only export keeps normal admission closed and binds purpose',async t=>{
+  const f=fixture(t);
+  const purpose='comparison_preview_v1';
+  await assert.rejects(exportProtectedEvidenceReview({...f.options,purpose}),/unavailable/);
+  assert.equal(existsSync(f.outputDir),false);
+  const db=new DatabaseSync(f.dbPath);
+  db.prepare('INSERT INTO claims VALUES (?,?,?,?,?)').run('existing',projectId,'main','active','Independent existing fact');
+  db.close();
+  await assert.rejects(exportProtectedEvidenceReview(f.options),/unavailable/);
+  const result=await exportProtectedEvidenceReview({...f.options,purpose});
+  assert.equal(result.status,'operator_comparison_transfer_ready_unverified_no_authority');
+  assert.equal(result.claimWritten,false);
+  assert.equal(result.humanApprovalVerified,false);
+  assert.equal(result.protectedServiceImportCompleted,false);
+  const {readFileSync}=await import('node:fs');
+  const manifest=JSON.parse(readFileSync(join(f.outputDir,EVIDENCE_MANIFEST_NAME),'utf8'));
+  assert.deepEqual(manifest,{projectId,branch:'main',revisionSha:f.revisionSha,proposalRef,decision:'confirm',purpose});
+  const copy=new DatabaseSync(join(f.outputDir,EVIDENCE_SNAPSHOT_NAME),{readOnly:true});
+  try{assert.equal(copy.prepare('SELECT COUNT(*) n FROM claims').get().n,1);}
+  finally{copy.close();}
+});
+
+test('comparison transfer denies changed claim and leaves no manifest',async t=>{
+  const f=fixture(t);
+  const db=new DatabaseSync(f.dbPath);
+  db.prepare('INSERT INTO claims VALUES (?,?,?,?,?)').run('existing',projectId,'main','active','Independent existing fact');
+  db.close();
+  await assert.rejects(exportProtectedEvidenceReview({...f.options,purpose:'comparison_preview_v1',
+    sqliteBackup:async(input,path)=>{
+      await backup(input,path);
+      const changed=new DatabaseSync(f.dbPath);
+      try{changed.exec("UPDATE claims SET value_text='Changed comparison'");}finally{changed.close();}
+    }}),/changed_during_export/);
+  assert.equal(existsSync(join(f.outputDir,EVIDENCE_MANIFEST_NAME)),false);
+});

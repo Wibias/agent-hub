@@ -69,7 +69,8 @@ public sealed partial class ReviewChallengeCore
     // Publishing to protected Memory is a NEW explicit user gesture, never
     // implied by an earlier reaffirmation/possession assertion.
     public const string ProtectedClaimCommitProtocol = "agenthub-evidence-bound-uv-commit-v1";
-    private enum ChallengePurpose { Proof, ProtectedApproval, ProtectedClaimCommit }
+    public const string ProtectedConflictReviewProtocol = "agenthub-protected-conflict-review-intent-v1";
+    private enum ChallengePurpose { Proof, ProtectedApproval, ProtectedClaimCommit, ConflictReview }
     public const int MaxPending = 32;
     public static readonly TimeSpan Lifetime = TimeSpan.FromSeconds(90);
 
@@ -104,6 +105,9 @@ public sealed partial class ReviewChallengeCore
         ReviewMeaning meaning, PinnedCredential credential)
         => BeginForPurpose(meaning, credential, ChallengePurpose.ProtectedClaimCommit);
 
+    public ChallengeTicket BeginConflictReview(ReviewMeaning meaning, PinnedCredential credential)
+        => BeginForPurpose(meaning, credential, ChallengePurpose.ConflictReview);
+
     private ChallengeTicket BeginForPurpose(
         ReviewMeaning meaning, PinnedCredential credential, ChallengePurpose purpose)
     {
@@ -114,6 +118,7 @@ public sealed partial class ReviewChallengeCore
         {
             ChallengePurpose.ProtectedApproval => ComputeProtectedApprovalChallenge(meaning, nonce),
             ChallengePurpose.ProtectedClaimCommit => ComputeProtectedClaimCommitChallenge(meaning, nonce),
+            ChallengePurpose.ConflictReview => ComputeConflictReviewChallenge(meaning, nonce),
             _ => ComputeChallenge(meaning, nonce),
         };
         // Ticket ID and nonce are independently random. Neither is a portable
@@ -158,6 +163,10 @@ public sealed partial class ReviewChallengeCore
         => VerifyForPurposeAndConsume(ticketId, expectedMeaning, assertion,
             ChallengePurpose.ProtectedClaimCommit);
 
+    public VerificationResult VerifyConflictReviewAndConsume(
+        string ticketId, ReviewMeaning expectedMeaning, BrowserAssertion assertion)
+        => VerifyForPurposeAndConsume(ticketId, expectedMeaning, assertion, ChallengePurpose.ConflictReview);
+
     private VerificationResult VerifyForPurposeAndConsume(
         string ticketId, ReviewMeaning expectedMeaning, BrowserAssertion assertion,
         ChallengePurpose purpose)
@@ -201,6 +210,7 @@ public sealed partial class ReviewChallengeCore
                             "verified_protected_approval_intent_only",
                         ChallengePurpose.ProtectedClaimCommit =>
                             "verified_protected_claim_commit_intent_only",
+                        ChallengePurpose.ConflictReview => "verified_conflict_review_intent_only",
                         _ => "verified_not_authorized",
                     },
                     ApprovedReviewDecision = false,
@@ -282,6 +292,9 @@ public sealed partial class ReviewChallengeCore
     public static string ComputeProtectedClaimCommitChallenge(
         ReviewMeaning meaning, ReadOnlySpan<byte> nonce)
         => ComputeChallengeInDomain(meaning, nonce, ProtectedClaimCommitProtocol);
+
+    public static string ComputeConflictReviewChallenge(ReviewMeaning meaning, ReadOnlySpan<byte> nonce)
+        => ComputeChallengeInDomain(meaning, nonce, ProtectedConflictReviewProtocol);
 
     private static string ComputeChallengeInDomain(
         ReviewMeaning meaning, ReadOnlySpan<byte> nonce, string domain)

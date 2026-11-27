@@ -28,14 +28,16 @@ public sealed record OperatorComparisonClaim(
 public sealed record OperatorEvidenceInspection(
     PendingReview Review, string Status, string Kind, string? CanonicalFact,
     string ComparisonSha256, IReadOnlyList<OperatorComparisonClaim> ActiveClaims,
-    bool HumanApprovalVerified = false, bool ClaimWritten = false);
+    bool HumanApprovalVerified = false, bool ClaimWritten = false,
+    bool ComparisonPreviewOnly = false);
 
 public sealed partial class ProtectedPendingReviewLedger
 {
     private sealed record ComparisonRow(string Id, string Value);
     private sealed record PinnedEvidenceSnapshot(
         PendingReview Review, TrustedReviewSource Source, int EvidenceCount,
-        string ComparisonSha256, IReadOnlyList<OperatorComparisonClaim> ActiveClaims);
+        string ComparisonSha256, IReadOnlyList<OperatorComparisonClaim> ActiveClaims,
+        bool ComparisonPreviewOnly);
 
     /// <summary>
     /// Inspect only fixed, operator-pinned files. Not exposed through IPC.
@@ -49,7 +51,8 @@ public sealed partial class ProtectedPendingReviewLedger
             snapshot.Source.Kind, includeLocalContent ? snapshot.Source.CanonicalFact : null,
             snapshot.ComparisonSha256,
             Array.AsReadOnly(snapshot.ActiveClaims.Select(c => includeLocalContent
-                ? c : c with { LocalValue = null }).ToArray()));
+                ? c : c with { LocalValue = null }).ToArray()),
+            ComparisonPreviewOnly: snapshot.ComparisonPreviewOnly);
     }
 
     private static string NormalizeComparisonFact(string value)
@@ -58,11 +61,12 @@ public sealed partial class ProtectedPendingReviewLedger
             @"[\u0009-\u000d\u0020\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]+", " ").Trim(' ');
     public const string OperatorSourceOrigin = "operator_pinned_unverified_evidence_v1";
     public const string OperatorEvidencePolicy = "agenthub-protected-operator-evidence-import-v1";
+    public const string ComparisonPreviewPurpose = "comparison_preview_v1";
     public const string OperatorSnapshotFile = "operator-evidence-snapshot.sqlite3";
     public const string OperatorManifestFile = "operator-evidence-manifest.json";
 
     private sealed record Manifest(string? ProjectId, string? Branch,
-        string? RevisionSha, string? ProposalRef, string? Decision);
+        string? RevisionSha, string? ProposalRef, string? Decision, string? Purpose);
 
     private sealed record EvidenceRow(string Id, string Authority,
         string Content, string Metadata);
@@ -160,7 +164,7 @@ public sealed partial class ProtectedPendingReviewLedger
         var snapshot = ReadOperatorPinnedEvidenceSnapshot();
         // Inspection is not authorization. No nonempty comparison can enter
         // the existing pending-intake or approval path.
-        if (snapshot.ActiveClaims.Count != 0)
+        if (snapshot.ComparisonPreviewOnly || snapshot.ActiveClaims.Count != 0)
             throw new InvalidOperationException("operator_relation_review_required");
         var review = snapshot.Review;
         var source = snapshot.Source;
@@ -191,8 +195,14 @@ public sealed partial class ProtectedPendingReviewLedger
 
         using var manifestJson = JsonDocument.Parse(File.ReadAllBytes(manifestPath));
         var root = manifestJson.RootElement;
-        if (root.ValueKind != JsonValueKind.Object
-            || root.EnumerateObject().Count() != 5)
+        if (root.ValueKind != JsonValueKind.Object)
+            throw new InvalidOperationException("operator_manifest_invalid");
+        var keys = root.EnumerateObject().Select(p=>p.Name).ToArray();
+        var comparisonPreview = keys.Length == 6;
+        var allowed = new HashSet<string>(new[]{"projectId","branch","revisionSha","proposalRef","decision"},StringComparer.Ordinal);
+        if (comparisonPreview) allowed.Add("purpose");
+        if (keys.Length != allowed.Count || keys.Distinct(StringComparer.Ordinal).Count() != keys.Length
+            || !allowed.SetEquals(keys))
             throw new InvalidOperationException("operator_manifest_invalid");
         static string? Field(JsonElement root, string name)
             => root.TryGetProperty(name, out var value)
@@ -200,7 +210,9 @@ public sealed partial class ProtectedPendingReviewLedger
                 ? value.GetString() : null;
         var manifest = new Manifest(Field(root, "projectId"), Field(root, "branch"),
             Field(root, "revisionSha"), Field(root, "proposalRef"),
-            Field(root, "decision"));
+            Field(root, "decision"), comparisonPreview ? Field(root,"purpose") : null);
+        if (comparisonPreview && manifest.Purpose != ComparisonPreviewPurpose)
+            throw new InvalidOperationException("operator_manifest_purpose_invalid");
         if (!IsAsciiScope(manifest.ProjectId, 256)
             || !IsAsciiScope(manifest.Branch, 128)
             || !Hex(manifest.RevisionSha, 40)
@@ -477,6 +489,8 @@ public sealed partial class ProtectedPendingReviewLedger
         // previews bind the ordered exact Claim identity/value digest too.
         if (comparison.Count != 0)
             snapshotSha = Sha(JsonSerializer.Serialize(new { snapshotSha, comparisonSha }));
+        if (comparisonPreview)
+            snapshotSha = Sha(JsonSerializer.Serialize(new { snapshotSha, purpose = manifest.Purpose }));
         pinnedRead.Commit();
 
         var review = new PendingReview(
@@ -487,6 +501,6 @@ public sealed partial class ProtectedPendingReviewLedger
             review.ProjectId, review.Branch, review.RevisionSha,
             review.ProposalRef, review.ReviewSnapshotSha256,
             fact, review.SourceEvidenceSha256, kind, "unrelated", null);
-        return new PinnedEvidenceSnapshot(review, source, rows.Count, comparisonSha, comparison);
+        return new PinnedEvidenceSnapshot(review, source, rows.Count, comparisonSha, comparison, comparisonPreview);
     }
 }

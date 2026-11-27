@@ -53,6 +53,10 @@ internal static class Program
         Run("real_evidence_relation_and_kind_denied", RealEvidenceUnsafeDenied);
         Run("native_comparison_readonly_scope_and_snapshot_binding", NativeComparison);
         Run("native_comparison_bounded_and_fail_closed", NativeComparisonBounded);
+        Run("conflict_review_purpose_and_atomic_receipt", ConflictReceipt);
+        Run("explicit_comparison_enrollment_offer_isolated", ComparisonEnrollmentOffer);
+        Run("comparison_enrollment_has_no_pending_or_claim", ComparisonEnrollmentNoClaim);
+        Run("conflict_review_changed_snapshot_and_duplicate_denied", ConflictStale);
         Run("real_evidence_changed_snapshot_denied", RealEvidenceChanged);
         Run("operator_credential_pinned_uv_real_evidence_no_approval", OperatorPinProof);
         Run("operator_credential_counter_restart_replay_denied", OperatorCounter);
@@ -79,7 +83,7 @@ internal static class Program
         Run("ci_read_once_sql_receipt_and_tombstone_immutable", CiReadOnceSqlImmutable);
         Run("ci_read_once_full_snapshot_digest_changes_on_every_state_transition",
             CiReadOnceFenceSnapshotChanges);
-        Console.WriteLine($"MEMORY_REVIEW_LEDGER PASS {_passed}/57; REAL_EVIDENCE_UV_PINNED_NO_APPROVAL");
+        Console.WriteLine($"MEMORY_REVIEW_LEDGER PASS {_passed}/61; REAL_EVIDENCE_UV_PINNED_NO_APPROVAL");
     }
 
     private static void Run(string label, Action test)
@@ -1509,6 +1513,181 @@ internal static class Program
         MutateRealSnapshot("UPDATE claims SET value_text=NULL WHERE id='c-1';");
         Throws<InvalidOperationException>(() => store.InspectOperatorPinnedEvidence());
         Check(store.CountPending() == 0 && store.ReadProtectedClaims(RealProject, RealBranch).Count == 0);
+    }
+
+    private static void EnrollConflictFixture(ProtectedPendingReviewLedger store, TestCredential key)
+    {
+        var imported=store.ImportOperatorPinnedEvidence();
+        var meaning=RealReviewMeaning(imported);
+        var core=new ReviewChallengeCore();
+        var ticket=core.Begin(meaning,key.Pinned);
+        store.RecordNativeUvEnrollment(meaning,key.Pinned,
+            core.VerifyAndConsume(ticket.TicketId,meaning,key.Sign(ticket)));
+        MutateRealSnapshot("INSERT INTO claims VALUES ('a','github.com/example/operator-evidence','main','active','Separate fact');");
+    }
+
+    private static void ComparisonEnrollmentNoClaim()
+    {
+        CreateRealEvidenceFixture();
+        using var store=Open();
+        using var key=TestCredential.New();
+        MutateRealSnapshot("INSERT INTO claims VALUES ('a','github.com/example/operator-evidence','main','active','Independent existing fact');");
+        var path=Path.Combine(TestDirectory,ProtectedPendingReviewLedger.OperatorManifestFile);
+        var manifest=JsonSerializer.Deserialize<Dictionary<string,string>>(File.ReadAllText(path))!;
+        manifest["purpose"]=ProtectedPendingReviewLedger.ComparisonPreviewPurpose;
+        File.WriteAllText(path,JsonSerializer.Serialize(manifest));
+        var offer=store.ReadComparisonEnrollmentOffer()!;
+        var core=new ReviewChallengeCore();
+        var ticket=core.Begin(offer.Meaning,key.Pinned);
+        var proof=core.VerifyAndConsume(ticket.TicketId,offer.Meaning,key.Sign(ticket));
+        MutateRealSnapshot("UPDATE claims SET value_text='Changed before enrollment' WHERE id='a';");
+        Throws<InvalidOperationException>(()=>store.RecordNativeComparisonUvEnrollment(offer.Meaning,key.Pinned,proof));
+        Check(store.ReadOperatorCredential() is null);
+        var fresh=store.ReadComparisonEnrollmentOffer()!;
+        var freshTicket=core.Begin(fresh.Meaning,key.Pinned);
+        var freshProof=core.VerifyAndConsume(freshTicket.TicketId,fresh.Meaning,key.Sign(freshTicket,2));
+        var enrolled=store.RecordNativeComparisonUvEnrollment(fresh.Meaning,key.Pinned,freshProof);
+        Check(enrolled.EnrollmentState==ProtectedPendingReviewLedger.NativeEnrollmentState);
+        Check(enrolled.LastSignCount==2 && !enrolled.HumanApprovalVerified);
+        Check(store.ReadPending(RealProject,RealBranch,RealERef) is null);
+        Check(store.ReadVerifiedIntent(RealProject,RealBranch,RealERef) is null);
+        Check(store.ReadProtectedClaims(RealProject,RealBranch).Count==0);
+        Check(new ConflictReviewCoordinator(store).CanBegin(store.InspectOperatorPinnedEvidence()));
+        Throws<InvalidOperationException>(()=>store.RecordNativeComparisonUvEnrollment(fresh.Meaning,key.Pinned,freshProof));
+        Throws<InvalidOperationException>(()=>store.ImportOperatorPinnedEvidence());
+    }
+
+    private static void ComparisonEnrollmentOffer()
+    {
+        CreateRealEvidenceFixture();
+        using var store=Open();
+        var manifestPath=Path.Combine(TestDirectory,ProtectedPendingReviewLedger.OperatorManifestFile);
+        Check(store.ReadComparisonEnrollmentOffer() is null);
+        MutateRealSnapshot("INSERT INTO claims VALUES ('a','github.com/example/operator-evidence','main','active','Independent existing fact');");
+        Check(store.ReadComparisonEnrollmentOffer() is null);
+        var original=store.InspectOperatorPinnedEvidence();
+        var manifest=JsonSerializer.Deserialize<Dictionary<string,string>>(File.ReadAllText(manifestPath))!;
+        manifest["purpose"]=ProtectedPendingReviewLedger.ComparisonPreviewPurpose;
+        File.WriteAllText(manifestPath,JsonSerializer.Serialize(manifest));
+        var comparison=store.InspectOperatorPinnedEvidence();
+        var offer=store.ReadComparisonEnrollmentOffer();
+        Check(comparison.ComparisonPreviewOnly && comparison.Review.ReviewSnapshotSha256!=original.Review.ReviewSnapshotSha256);
+        Check(offer is not null && offer.Meaning.ReviewSnapshotSha256==comparison.Review.ReviewSnapshotSha256);
+        Check(offer!.Meaning.CanonicalFact==RealFact && !offer.ClaimWritten && !offer.HumanApprovalVerified);
+        Throws<InvalidOperationException>(()=>store.ImportOperatorPinnedEvidence());
+        Check(store.ReadOperatorReviewOffer(RealProject,RealBranch,RealERef) is null);
+        Check(store.ReadOperatorCredential() is null && store.ReadProtectedClaims(RealProject,RealBranch).Count==0);
+        MutateRealSnapshot("DELETE FROM claims WHERE id='a';");
+        Check(store.ReadComparisonEnrollmentOffer() is null);
+        Check(store.InspectOperatorPinnedEvidence().ComparisonPreviewOnly);
+        Throws<InvalidOperationException>(()=>store.ImportOperatorPinnedEvidence());
+        manifest["purpose"]="unrecognized";
+        File.WriteAllText(manifestPath,JsonSerializer.Serialize(manifest));
+        Throws<InvalidOperationException>(()=>store.InspectOperatorPinnedEvidence());
+    }
+
+    private static void ConflictReceipt()
+    {
+        CreateRealEvidenceFixture();
+        using var key=TestCredential.New();
+        using(var store=Open())
+        {
+            Throws<InvalidOperationException>(()=>new ConflictReviewCoordinator(store));
+            EnrollConflictFixture(store,key);
+            var preview=store.InspectOperatorPinnedEvidence();
+            var coordinator=new ConflictReviewCoordinator(store);
+            Throws<InvalidOperationException>(()=>coordinator.Begin(new string('a',64),preview.ComparisonSha256));
+            var cancelled=coordinator.Begin(preview.Review.ReviewSnapshotSha256,preview.ComparisonSha256);
+            Throws<InvalidOperationException>(()=>coordinator.Begin(preview.Review.ReviewSnapshotSha256,preview.ComparisonSha256));
+            Check(!coordinator.Complete("wrong-ticket",key.Sign(cancelled,2)).Verified);
+            Check(!coordinator.Complete(cancelled.TicketId,key.Sign(cancelled,2)).Verified);
+            Check(store.ReadOperatorCredential()?.LastSignCount==1);
+            var ticket=coordinator.Begin(preview.Review.ReviewSnapshotSha256,preview.ComparisonSha256);
+            var nonce=new byte[32];
+            Check(ReviewChallengeCore.ComputeConflictReviewChallenge(ticket.Meaning,nonce)
+                !=ReviewChallengeCore.ComputeProtectedApprovalChallenge(ticket.Meaning,nonce));
+            Check(ReviewChallengeCore.ComputeConflictReviewChallenge(ticket.Meaning,nonce)
+                !=ReviewChallengeCore.ComputeProtectedClaimCommitChallenge(ticket.Meaning,nonce));
+            var otherCore=new ReviewChallengeCore();
+            var other=otherCore.BeginProtectedApproval(ticket.Meaning,key.Pinned);
+            Check(!otherCore.VerifyConflictReviewAndConsume(other.TicketId,other.Meaning,key.Sign(other,2)).Verified);
+            var competing=new ConflictReviewCoordinator(store);
+            var competingTicket=competing.Begin(preview.Review.ReviewSnapshotSha256,preview.ComparisonSha256);
+            var result=coordinator.Complete(ticket.TicketId,key.Sign(ticket,2));
+            Check(result.Verified && result.Receipt is { ClaimWritten:false,CanonicalFreshnessVerified:false,SignCount:2 });
+            Check(result.Receipt?.ComparisonSha256==preview.ComparisonSha256);
+            Check(store.ReadOperatorCredential()?.LastSignCount==2);
+            Check(!coordinator.Complete(ticket.TicketId,key.Sign(ticket,3)).Verified);
+            Check(store.ReadProtectedClaims(RealProject,RealBranch).Count==0);
+            Check(store.ReadVerifiedIntent(RealProject,RealBranch,RealERef) is null);
+            Check(!competing.Complete(competingTicket.TicketId,key.Sign(competingTicket,3)).Verified);
+            Check(!coordinator.CanBegin(preview));
+            Check(store.ReadConflictIntentStatus(preview)=="recorded_exact_snapshot");
+            Throws<InvalidOperationException>(()=>competing.Begin(preview.Review.ReviewSnapshotSha256,preview.ComparisonSha256));
+            Check(store.ReadOperatorCredential()?.LastSignCount==2);
+        }
+        using(var reopened=Open())
+        {
+            Check(reopened.ReadOperatorCredential()?.LastSignCount==2);
+            var preview=reopened.InspectOperatorPinnedEvidence();
+            var coordinator=new ConflictReviewCoordinator(reopened);
+            Check(reopened.ReadConflictIntentStatus(preview)=="recorded_exact_snapshot");
+            Check(!coordinator.CanBegin(preview));
+            Throws<InvalidOperationException>(()=>coordinator.Begin(preview.Review.ReviewSnapshotSha256,preview.ComparisonSha256));
+            Check(reopened.ReadProtectedClaims(RealProject,RealBranch).Count==0);
+            Check(reopened.ReadVerifiedIntent(RealProject,RealBranch,RealERef) is null);
+            MutateRealSnapshot("UPDATE claims SET value_text='Changed after receipt' WHERE id='a';");
+            var changed=reopened.InspectOperatorPinnedEvidence();
+            Check(reopened.ReadConflictIntentStatus(changed)=="recorded_different_snapshot");
+            Check(!coordinator.CanBegin(changed));
+        }
+        using var sql=new SqliteConnection(new SqliteConnectionStringBuilder
+        {DataSource=Path.Combine(TestDirectory,"review-authority.sqlite3"),Mode=SqliteOpenMode.ReadWrite,Pooling=false}.ToString());
+        sql.Open();
+        using var command=sql.CreateCommand();
+        command.CommandText="SELECT COUNT(*) FROM protected_conflict_review_intents;";
+        Check(Convert.ToInt64(command.ExecuteScalar())==1);
+        foreach(var statement in new[]{"UPDATE protected_conflict_review_intents SET decision='reject';",
+            "DELETE FROM protected_conflict_review_intents;",
+            "INSERT OR REPLACE INTO protected_conflict_review_intents SELECT * FROM protected_conflict_review_intents;"})
+        {
+            command.CommandText=statement;
+            Throws<SqliteException>(()=>command.ExecuteNonQuery());
+        }
+    }
+
+    private static void ConflictStale()
+    {
+        CreateRealEvidenceFixture();
+        using var key=TestCredential.New();
+        using var store=Open();
+        EnrollConflictFixture(store,key);
+        var preview=store.InspectOperatorPinnedEvidence();
+        var coordinator=new ConflictReviewCoordinator(store);
+        var ticket=coordinator.Begin(preview.Review.ReviewSnapshotSha256,preview.ComparisonSha256);
+        MutateRealSnapshot("UPDATE claims SET value_text='Changed fact' WHERE id='a';");
+        Check(!coordinator.Complete(ticket.TicketId,key.Sign(ticket,2)).Verified);
+        Check(store.ReadOperatorCredential()?.LastSignCount==1);
+        using(var db=new SqliteConnection(new SqliteConnectionStringBuilder
+        {DataSource=RealSnapshotPath,Mode=SqliteOpenMode.ReadWrite,Pooling=false}.ToString()))
+        {
+            db.Open();
+            using var command=db.CreateCommand();
+            command.CommandText="UPDATE claims SET value_text=$value WHERE id='a';";
+            command.Parameters.AddWithValue("$value",RealFact);
+            command.ExecuteNonQuery();
+        }
+        var duplicate=store.InspectOperatorPinnedEvidence();
+        Throws<InvalidOperationException>(()=>coordinator.Begin(duplicate.Review.ReviewSnapshotSha256,duplicate.ComparisonSha256));
+        File.WriteAllText(Path.Combine(TestDirectory,ProtectedPendingReviewLedger.OperatorManifestFile),
+            JsonSerializer.Serialize(new {projectId=RealProject,branch=RealBranch,
+                revisionSha=new string('b',40),proposalRef=RealERef,decision="reject"}));
+        var reject=store.InspectOperatorPinnedEvidence();
+        var rejection=coordinator.Begin(reject.Review.ReviewSnapshotSha256,reject.ComparisonSha256);
+        var result=coordinator.Complete(rejection.TicketId,key.Sign(rejection,3));
+        Check(result.Verified && result.Receipt?.Decision=="reject");
+        Check(store.ReadProtectedClaims(RealProject,RealBranch).Count==0);
+        Throws<InvalidOperationException>(()=>store.ImportOperatorPinnedEvidence());
     }
 
     private static void RealEvidenceChanged()

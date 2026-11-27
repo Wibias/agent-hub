@@ -228,3 +228,109 @@ The new lane has been parsed and its local execution guard checked. Its
 actual SCM result is NOT YET VERIFIED: it requires an ephemeral GitHub
 Windows runner. No local service was created, no CI environment guard was
 overridden, and no physical operator approval was attempted.
+
+
+## Conflict-review intent prerequisite (post #456)
+
+A separate conflict-review challenge domain binds the exact native review
+snapshot and pinned confirm/reject action. Its verifier yields only
+`verified_conflict_review_intent_only`; ordinary proof, approval and
+publication challenges cannot be substituted. The host-only coordinator
+requires an existing native-enrolled credential, resolves the comparison
+itself, checks the displayed snapshot and comparison digests, and consumes
+one outstanding ticket on the first completion attempt. A confirmation is
+not supported if an exact duplicate exists; rejection remains eligible.
+No semantic independence is inferred from a nonduplicate.
+
+The protected SQLite transaction re-resolves the pinned comparison,
+checks native credential identity and persistent sign count, inserts one
+immutable intent per proposal and updates the credential counter together.
+A stale pinned comparison, replay, competing receipt, wrong purpose or
+failed insertion cannot advance the persisted counter. The receipt records
+the specific pinned snapshot, comparison, decision and source digests.
+It is not a portable authorization, a canonical proposal disposition, a
+Claim or historical evidence authentication.
+
+This is deliberately not wired to any named-pipe command, enrollment path
+or UI action. Tests use synthetic ES256 credentials in disposable stores,
+not physical Windows Hello. The existing comparison-only service and
+nonempty-scope export/import denial remain unchanged. Rechecking a separate
+pinned file during a ledger transaction is NOT an atomic freshness check
+against the live canonical database. Before any real decision/publication
+endpoint, establish the native reviewed gesture and a trusted canonical
+freshness/commit boundary; do not treat this receipt as a production grant.
+The one-receipt-per-proposal rule intentionally has no supersession path
+yet; changed proposals remain blocked rather than overwriting history.
+
+### Native intent-only comparison integration
+
+The existing administrator-only comparison pipe can now offer conflict_begin
+and conflict_complete ONLY when the protected ledger already contains a
+native-enrolled operator credential. No credential is enrolled, imported or
+upgraded in this mode. The signed comparison exposes availability explicitly;
+confirm with an exact duplicate remains disabled. Begin requires an already
+issued complete bounded preview and matching startup snapshot, scope and
+comparison digest. Complete consumes the ticket and returns a signed,
+exact-scope intent-only receipt. Other existing operations remain denied.
+
+The native UI validates the returned challenge against the displayed review,
+requires explicit operator judgment, then calls the existing native Hello
+assertion API. It validates the signed receipt and never reports a canonical
+change or Claim permission. A fresh comparison installation without an
+existing native credential remains read-only. The supported provisioning
+and transfer path for a nonempty scope is still missing; do not hand-copy
+credentials or weaken the installer/export gates to reach this action.
+
+Local service/UI builds and offline signed-envelope contract tests pass.
+The CI comparison fixture now also asserts absence of the conflict actions
+without a native credential. The new positive credential-bearing SCM/UI
+path, actual rendered dialog and physical Hello have NOT been exercised.
+No canonical freshness or publication guarantee is added by this increment.
+
+### Durable intent status and provisioning blocker
+
+The signed comparison response now includes conflict_intent_status:
+not_recorded, recorded_exact_snapshot, or recorded_different_snapshot.
+The exact status compares scope, revision, fact, evidence, action and both
+snapshot digests against the immutable ledger receipt. The native UI refuses
+an inconsistent available/recorded response. After an uncertain completion,
+reload the signed comparison rather than resubmit an assertion. Existing
+receipts and outstanding tickets disable new offers. Local Store tests
+check reopening and changed snapshots, not actual SCM restart behavior.
+
+The current preview installer refuses an existing service or state path and
+requires either explicit NativeEnrollOnly or an unverified public manifest.
+The ordinary export rejects nonempty scopes. Neither is a supported native
+credential reuse/provisioning path for nonempty scopes. Do not copy existing
+credential rows, relax installer isolation or interpret an unverified pin as
+native enrollment. A new provisioning design and actual positive SCM test
+remain necessary. No changes to export or installation permissions here.
+
+### Explicit comparison-preview provisioning (local implementation)
+
+The explicit export purpose comparison_preview_v1 selects a nonempty,
+non-authorizing comparison transfer. The six-field manifest is validated
+separately and its purpose is included in the native snapshot digest. Even
+if the active scope becomes empty, the explicit manifest cannot enter the
+ordinary pending-import route. Existing five-field manifests retain their
+prior semantics. This export makes a full consistent local SQLite copy;
+it may contain unrelated private scopes and must never be uploaded.
+
+The preview installer requires its existing explicit NativeEnrollOnly
+choice for this purpose. The service permits the existing two-step native
+registration and possession protocol for this exact pinned comparison,
+without creating a pending request or importing a key. Enrollment is
+bound to the current purpose-tagged snapshot; after enrollment, only
+comparison and conflict-intent operations are available. No publish or
+read-disclosure coordinator is activated. An empty comparison or changed
+snapshot cannot supply a new enrollment offer. An existing credential
+cannot be overwritten. Legacy comparison fixtures remain enrollment-free.
+
+Local regression: 19/19 JavaScript export/preflight tests, 61/61 Store
+selftests, 25/25 service policy tests. The isolated Store test uses the
+existing synthetic ES256 fixture and proves zero Pending/Claim rows,
+changed-snapshot refusal, and refusal of repeated enrollment. This is
+not physical Hello, trusted hardware attestation, SCM end-to-end, or
+canonical finalization. Installer syntax and native service build pass.
+No installation or live database export has been performed. The previously
+blocked positive SCM test remains unverified.

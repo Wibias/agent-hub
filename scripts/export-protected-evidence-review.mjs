@@ -17,6 +17,7 @@ import { runEvidenceDecisionPreflight } from './inspect-evidence-bound-decision.
 
 export const EVIDENCE_SNAPSHOT_NAME = 'operator-evidence-snapshot.sqlite3';
 export const EVIDENCE_MANIFEST_NAME = 'operator-evidence-manifest.json';
+export const COMPARISON_PREVIEW_PURPOSE = 'comparison_preview_v1';
 
 export function parseOperatorEvidenceExportArgs(argv = []) {
   if (!Array.isArray(argv)) throw new TypeError('argument array required');
@@ -24,7 +25,7 @@ export function parseOperatorEvidenceExportArgs(argv = []) {
   const flags = {
     '--db-path': 'dbPath', '--repo-path': 'repoPath',
     '--proposal-ref': 'proposalRef', '--decision': 'decision',
-    '--output-dir': 'outputDir',
+    '--output-dir': 'outputDir', '--purpose': 'purpose',
   };
   for (let i = 0; i < argv.length; i += 2) {
     const key = flags[argv[i]];
@@ -38,6 +39,7 @@ export function parseOperatorEvidenceExportArgs(argv = []) {
     .every(key => typeof opts[key] === 'string')) {
     throw new Error('complete_export_arguments_required');
   }
+  if (opts.purpose !== undefined && opts.purpose !== COMPARISON_PREVIEW_PURPOSE) throw new Error('invalid_export_purpose');
   if (!/^E~[0-9a-f]{10}$/u.test(opts.proposalRef)
       || !['confirm','reject'].includes(opts.decision)) {
     throw new Error('invalid_review_ref_or_action');
@@ -64,12 +66,14 @@ function currentGit(repoPath) {
   });
 }
 
-function reviewable(report) {
+function reviewable(report, purpose) {
   return report
     && ['requires_review','reviewable_no_write_authority'].includes(report.status)
     && report.scope?.revisionSha
     && ['knowledge','preference','procedure'].includes(report.kind)
-    && (report.proposalStatus === 'needs_confirmation'
+    && (purpose === COMPARISON_PREVIEW_PURPOSE
+      ? report.eligibleForComparisonPreview === true && report.activeClaimsInScope > 0
+      : (report.proposalStatus === 'needs_confirmation'
       || (report.proposalStatus === 'pending'
         && report.eligibleForProtectedPendingReview === true
         && report.blockers?.length === 0
@@ -77,7 +81,7 @@ function reviewable(report) {
         && report.relation.confidence === 'high'
         && report.relation.meaningPreserved === true))
     && report.activeClaimsInScope === 0
-    && report.exactDuplicateCount === 0
+    && report.exactDuplicateCount === 0)
     && [null,'unrelated'].includes(report.relation?.type)
     && Array.isArray(report.evidence) && report.evidence.length >= 1
     && report.evidence.length <= 10
@@ -92,12 +96,14 @@ function reviewable(report) {
 export async function exportProtectedEvidenceReview({
   dbPath, repoPath, proposalRef, decision, outputDir,
   historicalSource = null,
+  purpose,
   sqliteBackup = backup,
 } = {}) {
   const opts = parseOperatorEvidenceExportArgs([
     '--db-path', dbPath, '--repo-path', repoPath,
     '--proposal-ref', proposalRef, '--decision', decision,
     '--output-dir', outputDir,
+    ...(purpose === undefined ? [] : ['--purpose',purpose]),
   ]);
   if (!existsSync(opts.dbPath) || !existsSync(opts.repoPath)
       || existsSync(opts.outputDir)) {
@@ -125,7 +131,7 @@ export async function exportProtectedEvidenceReview({
     isTty: false,
   };
   const before = runEvidenceDecisionPreflight(context);
-  if (!reviewable(before)) {
+  if (!reviewable(before, purpose)) {
     throw new Error('source_proposal_requires_separate_review_or_is_unavailable');
   }
   // No copy into ProgramData by this unprivileged source exporter. Use the
@@ -150,7 +156,7 @@ export async function exportProtectedEvidenceReview({
   const current = runEvidenceDecisionPreflight({
     ...context, expectedSnapshot: before.reviewSnapshotSha256,
   });
-  if (!reviewable(after) || !reviewable(current)
+  if (!reviewable(after, purpose) || !reviewable(current, purpose)
       || before.reviewSnapshotSha256 !== current.reviewSnapshotSha256
       || before.reviewSnapshotSha256 !== after.reviewSnapshotSha256
       || before.canonicalFactHash !== after.canonicalFactHash
@@ -177,10 +183,13 @@ export async function exportProtectedEvidenceReview({
       revisionSha: sourceRevision,
       proposalRef: opts.proposalRef,
       decision: opts.decision,
+      ...(purpose === COMPARISON_PREVIEW_PURPOSE ? { purpose } : {}),
     }), { encoding: 'utf8', flag: 'wx', mode: 0o600 });
 
   return Object.freeze({
-    status: 'operator_transfer_ready_unverified_unapproved',
+    status: purpose === COMPARISON_PREVIEW_PURPOSE
+      ? 'operator_comparison_transfer_ready_unverified_no_authority'
+      : 'operator_transfer_ready_unverified_unapproved',
     proposalRef: opts.proposalRef,
     projectId: firstGit.projectId,
     branch: sourceBranch,

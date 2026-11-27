@@ -328,6 +328,11 @@ $sourceEvidence = Join-Path $evidence $stateSource
 $sourceManifest = Join-Path $evidence $stateManifest
 Require-File $sourceEvidence 512MB
 Require-File $sourceManifest 4096
+$reviewManifest = Get-Content -LiteralPath $sourceManifest -Raw | ConvertFrom-Json -ErrorAction Stop
+if ($reviewManifest.PSObject.Properties.Name -contains "purpose") {
+    Require ($reviewManifest.purpose -ceq "comparison_preview_v1" -and $NativeEnrollOnly.IsPresent -and -not $hasManifest) `
+        "Comparison preview requires explicit native enrollment, never an imported credential"
+}
 if ($hasManifest) {
     Require-File $publicCredential 8192
     $credentialPreview = Get-Content -LiteralPath $publicCredential -Raw |

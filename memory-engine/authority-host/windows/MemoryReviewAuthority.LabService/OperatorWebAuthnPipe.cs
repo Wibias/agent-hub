@@ -25,6 +25,9 @@ internal sealed partial class OperatorWebAuthnPipe : IDisposable
     private readonly ProtectedPendingReviewLedger _ledger;
     private readonly string _stateDir;
     private readonly PendingReview? _comparisonOnlySnapshot;
+    private ConflictReviewCoordinator? _conflictReview;
+    private readonly bool _comparisonEnrollmentEnabled;
+    private string? _offeredComparisonSha;
     private VerifiedReviewCoordinator? _coordinator;
     private OperatorReaffirmationCoordinator? _reaffirmation;
     private ChallengeTicket? _activeReaffirmation;
@@ -68,11 +71,14 @@ internal sealed partial class OperatorWebAuthnPipe : IDisposable
     internal OperatorWebAuthnPipe(ProtectedPendingReviewLedger ledger, string stateDir,
         OneShotCiRecipientPipe? ciRecipient = null,
         OneShotCiRegistryFence? ciRegistryFence = null,
-        PendingReview? comparisonOnlySnapshot = null)
+        PendingReview? comparisonOnlySnapshot = null, bool comparisonEnrollmentEnabled = false)
     {
         _ledger = ledger ?? throw new ArgumentNullException(nameof(ledger));
         _stateDir = stateDir;
         _comparisonOnlySnapshot = comparisonOnlySnapshot;
+        _comparisonEnrollmentEnabled = comparisonEnrollmentEnabled;
+        if (comparisonEnrollmentEnabled && comparisonOnlySnapshot is null)
+            throw new InvalidOperationException("comparison_enrollment_scope_required");
         if (comparisonOnlySnapshot is not null && (ciRecipient is not null || ciRegistryFence is not null))
             throw new InvalidOperationException("comparison_only_conflicts_with_ci_read");
         if ((ciRecipient is null) != (ciRegistryFence is null))
@@ -88,6 +94,9 @@ internal sealed partial class OperatorWebAuthnPipe : IDisposable
             if (IsExplicitSyntheticCiPublishFixture(stateDir))
                 _publisher = OperatorDirectClaimCoordinator.ForNativeCredential(ledger);
         }
+        if (comparisonOnlySnapshot is not null &&
+            _ledger.ReadOperatorCredential()?.EnrollmentState == ProtectedPendingReviewLedger.NativeEnrollmentState)
+            _conflictReview = new ConflictReviewCoordinator(_ledger);
         _signer = ServiceSigningIdentity.OpenOrCreate(stateDir);
     }
 
@@ -211,6 +220,17 @@ internal sealed partial class OperatorWebAuthnPipe : IDisposable
             && Str(root, "branch") == snapshot.Branch
             && Str(root, "proposalRef") == snapshot.ProposalRef;
 
+    private ProtectedOperatorReviewOffer? ReadEnrollmentOffer(string project,string branch,string proposal)
+    {
+        if (_comparisonOnlySnapshot is null)
+            return _ledger.ReadOperatorReviewOffer(project,branch,proposal);
+        if (!_comparisonEnrollmentEnabled) return null;
+        var p=_comparisonOnlySnapshot;
+        if (project!=p.ProjectId || branch!=p.Branch || proposal!=p.ProposalRef) return null;
+        var offer=_ledger.ReadComparisonEnrollmentOffer();
+        return offer?.Meaning.ReviewSnapshotSha256==p.ReviewSnapshotSha256 ? offer : null;
+    }
+
     private async Task HandleAsync(Stream stream, CancellationToken stop)
     {
         var raw = await ReadOneLineAsync(stream, stop);
@@ -226,16 +246,19 @@ internal sealed partial class OperatorWebAuthnPipe : IDisposable
         object? response = null;
         lock (_ledger)
         {
-            if (_comparisonOnlySnapshot is not null)
+            var comparisonEnrollment = _comparisonOnlySnapshot is not null && _comparisonEnrollmentEnabled
+                && operation is ("enroll_begin" or "enroll_key" or "enroll_finish");
+            if (_comparisonOnlySnapshot is not null && !comparisonEnrollment)
             {
-                // Deliberately exclusive: all enrollment, read-disclosure,
-                // assertion and publication operations are unreachable.
+                // Exclusive comparison lane: no enrollment, disclosure or
+                // Claim publication. Existing native credential can record an intent only.
                 if (IsComparisonInspectionRequest(root, _comparisonOnlySnapshot))
                 {
                     var preview = _ledger.InspectOperatorPinnedEvidence(includeLocalContent: true);
                     if (preview.Review != _comparisonOnlySnapshot || preview.ActiveClaims.Count == 0)
                         return;
                     var review = preview.Review;
+                    _offeredComparisonSha = null;
                     response = new
                     {
                         protocol = Protocol, op = operation, nonce,
@@ -247,6 +270,8 @@ internal sealed partial class OperatorWebAuthnPipe : IDisposable
                             review.CanonicalFactSha256, review.RequestedAction, preview.CanonicalFact!)),
                         kind = preview.Kind, evidence_sha256 = review.SourceEvidenceSha256,
                         comparison_sha256 = preview.ComparisonSha256,
+                        conflict_intent_available = _conflictReview?.CanBegin(preview) == true,
+                        conflict_intent_status = _ledger.ReadConflictIntentStatus(preview),
                         total = preview.ActiveClaims.Count,
                         claims = preview.ActiveClaims.Select(c => new
                         {
@@ -264,6 +289,66 @@ internal sealed partial class OperatorWebAuthnPipe : IDisposable
                             service_signed = true, human_approval_verified = false,
                             claim_written = false,
                         };
+                    else
+                        _offeredComparisonSha = preview.ComparisonSha256;
+                }
+                else if (operation == "conflict_begin" && _conflictReview is not null
+                    && ExactKeys(root, "protocol", "op", "nonce", "projectId", "branch",
+                        "proposalRef", "snapshotSha256", "comparisonSha256")
+                    && Str(root,"projectId") == _comparisonOnlySnapshot.ProjectId
+                    && Str(root,"branch") == _comparisonOnlySnapshot.Branch
+                    && Str(root,"proposalRef") == _comparisonOnlySnapshot.ProposalRef
+                    && Str(root,"snapshotSha256") == _comparisonOnlySnapshot.ReviewSnapshotSha256
+                    && _offeredComparisonSha is not null
+                    && Str(root,"comparisonSha256") == _offeredComparisonSha)
+                {
+                    var comparison = _offeredComparisonSha;
+                    _offeredComparisonSha = null;
+                    var ticket = _conflictReview.Begin(_comparisonOnlySnapshot.ReviewSnapshotSha256, comparison);
+                    var key = _ledger.ReadOperatorCredential()
+                        ?? throw new InvalidOperationException("conflict_review_native_key_missing");
+                    response = new
+                    {
+                        protocol = Protocol, op = operation, nonce,
+                        status = "conflict_review_challenge_no_claim",
+                        service_signed = true, human_approval_verified = false, claim_written = false,
+                        canonical_freshness_verified = false,
+                        comparison_sha256 = comparison,
+                        meaning = SignedMeaning(ticket.Meaning),
+                        ticket_id = ticket.TicketId, challenge = ticket.ChallengeBase64Url,
+                        expires_utc = ticket.ExpiresUtc.ToString("O"),
+                        credential_id = key.Credential.CredentialIdBase64Url,
+                        expected_origin = key.Credential.ExpectedOrigin,
+                    };
+                }
+                else if (operation == "conflict_complete" && _conflictReview is not null)
+                {
+                    // Any recognizable completion consumes the outstanding
+                    // ticket, even if the submitted envelope is malformed.
+                    var item = new BrowserAssertion("","","","","");
+                    string ticketId = "";
+                    if (ExactKeys(root,"protocol","op","nonce","ticketId","assertion")
+                        && root.TryGetProperty("assertion",out var assertion)
+                        && ExactKeys(assertion,"credentialId","type","clientDataJSON","authenticatorData","signature"))
+                    {
+                        ticketId = Str(root,"ticketId") ?? "";
+                        item = new BrowserAssertion(Str(assertion,"credentialId") ?? "",
+                            Str(assertion,"type") ?? "", Str(assertion,"clientDataJSON") ?? "",
+                            Str(assertion,"authenticatorData") ?? "", Str(assertion,"signature") ?? "");
+                    }
+                    var result = _conflictReview.Complete(ticketId,item);
+                    response = new
+                    {
+                        protocol = Protocol, op = operation, nonce, status = result.Status,
+                        service_signed = true, human_approval_verified = false, claim_written = false,
+                        canonical_freshness_verified = false, signature_verified = result.Verified,
+                        receipt = result.Receipt is { } receipt ? new
+                        {
+                            projectId = receipt.ProjectId, branch = receipt.Branch, proposalRef = receipt.ProposalRef,
+                            snapshot_sha256 = receipt.SnapshotSha256, comparison_sha256 = receipt.ComparisonSha256,
+                            decision = receipt.Decision,
+                        } : null,
+                    };
                 }
             }
             else if (operation == "ci_read_revoke")
@@ -549,7 +634,7 @@ internal sealed partial class OperatorWebAuthnPipe : IDisposable
                     && (_registrationPossession is null
                         || _registrationPossession.Ticket.ExpiresUtc <= DateTimeOffset.UtcNow))
                 {
-                    var offer = _ledger.ReadOperatorReviewOffer(project, branch, proposal!);
+                    var offer = ReadEnrollmentOffer(project, branch, proposal!);
                     if (offer is not null)
                     {
                         var started = DateTimeOffset.UtcNow;
@@ -589,7 +674,7 @@ internal sealed partial class OperatorWebAuthnPipe : IDisposable
                     && attempt.ExpiresUtc > DateTimeOffset.UtcNow
                     && _ledger.ReadOperatorCredential() is null)
                 {
-                    var current = _ledger.ReadOperatorReviewOffer(
+                    var current = ReadEnrollmentOffer(
                         attempt.Meaning.ProjectId, attempt.Meaning.Branch,
                         attempt.Meaning.ProposalRef);
                     if (current is not null && current.RequestId == attempt.RequestId
@@ -642,10 +727,13 @@ internal sealed partial class OperatorWebAuthnPipe : IDisposable
                     var proof = _registrationProofCore.VerifyAndConsume(
                         candidate.Ticket.TicketId, candidate.Ticket.Meaning, item);
                     var saved = proof.Verified && proof.UserPresent && proof.UserVerified
-                        ? _ledger.RecordNativeUvEnrollment(candidate.Ticket.Meaning,
-                            candidate.Credential, proof)
+                        ? (comparisonEnrollment
+                            ? _ledger.RecordNativeComparisonUvEnrollment(candidate.Ticket.Meaning,candidate.Credential,proof)
+                            : _ledger.RecordNativeUvEnrollment(candidate.Ticket.Meaning,candidate.Credential,proof))
                         : null;
-                    if (saved is not null)
+                    if (saved is not null && comparisonEnrollment)
+                        _conflictReview = new ConflictReviewCoordinator(_ledger);
+                    else if (saved is not null)
                     {
                         _coordinator = VerifiedReviewCoordinator.ForOperatorCredentialProbe(
                             _ledger);
