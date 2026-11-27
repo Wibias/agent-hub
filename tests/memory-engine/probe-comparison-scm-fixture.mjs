@@ -4,6 +4,7 @@ import { createHash, createPublicKey, randomBytes, verify } from 'node:crypto';
 import { createConnection } from 'node:net';
 import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { setTimeout as delay } from 'node:timers/promises';
 
 if (process.platform !== 'win32' || process.env.GITHUB_ACTIONS !== 'true'
     || process.env.RUNNER_OS !== 'Windows' || !process.env.RUNNER_TEMP
@@ -42,24 +43,39 @@ if (process.argv[2] === '--seed') {
   const pin = createPublicKey(readFileSync(join(process.env.ProgramData,
     'AgentHubMemoryReviewLab-Public','review-service-signing-key.pub.pem')));
   assert.equal(pin.asymmetricKeyDetails.namedCurve,'prime256v1');
-  function request(suffix, payload) {
+  function requestOnce(suffix, payload) {
     return new Promise((resolve,reject) => {
       const client = createConnection(prefix+suffix);
-      let data = '', settled = false;
+      let data = '', settled = false, connected = false;
       const done = (error,result) => {
         if(settled)return;
         settled=true;client.destroy();error?reject(error):resolve(result);
       };
       client.setTimeout(4000,()=>done(new Error('pipe timeout')));
-      client.on('connect',()=>client.write(JSON.stringify(payload)+'\n'));
+      client.on('connect',()=>{connected=true;client.write(JSON.stringify(payload)+'\n');});
       client.on('data',chunk=>{
         data+=chunk.toString('utf8');
         if(data.length>16384)return done(new Error('response too large'));
         if(data.includes('\n'))done(null,data.split('\n')[0]);
       });
       client.on('end',()=>done(null,data||null));
-      client.on('error',error=>done(error));
+      client.on('error',error=>{error.beforeConnect=!connected;done(error);});
     });
+  }
+  async function request(suffix, payload) {
+    // The single-instance operator pipe is disposed/recreated after each
+    // request. Windows can report ENOENT/EBUSY in that interval. Retry only
+    // before connection, never after sending a request, on the expected pipe.
+    const deadline=performance.now()+2500;
+    for (;;) {
+      try {return await requestOnce(suffix,payload);}
+      catch(error) {
+        if(suffix!=='OperatorV1'||!error.beforeConnect
+            ||!['ENOENT','EBUSY'].includes(error.code)||performance.now()>=deadline)
+          throw error;
+        await delay(40);
+      }
+    }
   }
   async function inspect() {
     const nonce=randomBytes(32).toString('base64url');
@@ -84,6 +100,7 @@ if (process.argv[2] === '--seed') {
     return result.meaning.reviewSnapshotSha256;
   }
   const before=await inspect();
+  console.log("PASS initial signed comparison");
   for(const op of ['begin','complete','enroll_begin','enroll_key','enroll_finish',
     'reaffirm_begin','reaffirm_complete','publish_begin','publish_complete',
     'read_begin','read_complete','ci_read_begin','ci_read_complete','ci_read_revoke']) {
@@ -99,16 +116,19 @@ if (process.argv[2] === '--seed') {
   }
   assert.equal(await request('OperatorV1',{protocol,op:'comparison_inspect',nonce:randomBytes(32).toString('base64url'),...scope,branch:'foreign'}),null);
   assert.equal(await request('OperatorV1',{protocol,op:'comparison_inspect',nonce:randomBytes(32).toString('base64url'),...scope,decision:'confirm'}),null);
+  console.log('PASS operation and scope denials');
   for(const suffix of ['ReadV1','DirectReadCiV1','UserReadCiV1','ReadOnceCiV1']) {
     await assert.rejects(request(suffix,{}),error=>error.code==='ENOENT',suffix);
   }
   assert.equal(await inspect(),before);
+  console.log('PASS absent read pipes and unchanged comparison');
   // Change only a disposable pinned CI copy. A live preview must refuse
   // a different snapshot, even though the service remains running.
   const changed=new DatabaseSync(snapshot);
   try {changed.prepare("UPDATE claims SET value_text=? WHERE id='a'").run('Changed synthetic fact');}
   finally {changed.close();}
   assert.equal(await request('OperatorV1',{protocol,op:'comparison_inspect',nonce:randomBytes(32).toString('base64url'),...scope}),null);
+  console.log('PASS changed snapshot denied');
   const ledger=new DatabaseSync(join(root,'review-authority.sqlite3'),{readOnly:true});
   try {
     const tables=ledger.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name").all();
