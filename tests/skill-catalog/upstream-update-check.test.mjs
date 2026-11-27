@@ -20,17 +20,18 @@ test('upstream update check tracks the five canonical sources and decisions', ()
 
   const registry = JSON.parse(read('upstream-sources.json'));
   assert.equal(registry.schemaVersion, 2);
+  assert.equal(registry.reviewedAt, '2026-11-27');
   assert.deepEqual(
     registry.sources.map((source) => source.id),
     ['addy', 'emil', 'matt', 'pstack', 'impeccable'],
   );
 
   const expected = new Map([
-    ['addy', ['addyosmani/agent-skills', '39b723ceebf81474d0557c1fecd01eddab585563', 'current']],
+    ['addy', ['addyosmani/agent-skills', 'e997ac5b9a74eab332d5e9793bb38a38c8cfdd74', 'current']],
     ['emil', ['emilkowalski/skills', '64eb3deb9a5fbfa041faf783e0bc3fd635872e9c', 'current']],
     ['matt', ['mattpocock/skills', '6f7f7831a625f040a8e06a0e7954826b87ce775a', 'not-applicable']],
-    ['pstack', ['cursor/plugins', 'bb68f2365eceafa0cb2d253112f675acf5f144cc', 'current']],
-    ['impeccable', ['pbakaus/impeccable', 'acb4cfe14470b1fdf51e855431af618d936b7db8', 'update-pending']],
+    ['pstack', ['cursor/plugins', 'b7b93c36be9bcc36a74db438e0fd385d660bc559', 'current']],
+    ['impeccable', ['pbakaus/impeccable', '2fc5e1459efbbf06d92c7306517c286bf12490cf', 'update-pending']],
   ]);
 
   for (const source of registry.sources) {
@@ -44,6 +45,11 @@ test('upstream update check tracks the five canonical sources and decisions', ()
 
   assert.equal(registry.sources.find((source) => source.id === 'emil').reviewedAt, '2026-11-20');
   assert.equal(registry.sources.find((source) => source.id === 'matt').reviewedAt, '2026-11-27');
+  for (const id of ['addy', 'pstack', 'impeccable']) {
+    const source = registry.sources.find((entry) => entry.id === id);
+    assert.equal(source.reviewedAt, '2026-11-27');
+    assert.equal(source.reviewEvidence, 'docs/upstream-reviews/2026-11-27-all-sources.md');
+  }
 
   const pstack = registry.sources.find((source) => source.id === 'pstack');
   assert.equal(pstack.scope, 'pstack/');
@@ -53,6 +59,8 @@ test('upstream update check tracks the five canonical sources and decisions', ()
   assert.equal(impeccable.scope, '.agents/skills/impeccable/');
   assert.equal(impeccable.localPin, 'acb4cfe14470b1fdf51e855431af618d936b7db8');
   assert.equal(impeccable.integrationOwner, 'design-with-ai');
+  assert.equal(impeccable.activeEngineVersion, '0.1.31');
+  assert.equal(impeccable.pendingIssue, 450);
   assert.notEqual(impeccable.decision, 'not-applicable');
   const policy = read('skills/design-with-ai/UPSTREAM.md');
   assert.match(policy, /## Impeccable upstream integration policy/);
@@ -74,7 +82,7 @@ test('upstream update check tracks the five canonical sources and decisions', ()
   assert.match(checker, /validateUpstreamIntegration/);
 });
 
-test('offline upstream check flags Impeccable reference and engine adoption as pending', () => {
+test('offline upstream check keeps native Rust Live pending after engine 0.1.31 merge', () => {
   const result = spawnSync(process.execPath, ['scripts/check-upstream-sources.mjs', '--offline'], {
     cwd: resolve('.'),
     encoding: 'utf8',
@@ -89,7 +97,7 @@ test('offline upstream check flags Impeccable reference and engine adoption as p
   assert.match(result.stdout, /RECORDED pstack .*decision=current/);
   assert.match(
     result.stdout,
-    /PENDING impeccable reviewed=acb4cfe14470b1fdf51e855431af618d936b7db8 local=acb4cfe14470b1fdf51e855431af618d936b7db8/,
+    /PENDING impeccable reviewed=2fc5e1459efbbf06d92c7306517c286bf12490cf local=acb4cfe14470b1fdf51e855431af618d936b7db8/,
   );
   assert.doesNotMatch(result.stdout, /RECORDED impeccable/);
 });
@@ -99,7 +107,7 @@ test('integrated Impeccable engine pin remains unqualified until executable veri
   const routes = read('skills/design-with-ai/references/impeccable-routes.md');
   const skill = read('skills/design-with-ai/SKILL.md');
   const scripts = 'skills/design-with-ai/internal/impeccable/scripts/';
-  assert.match(upstream, /acb4cfe14470b1fdf51e855431af618d936b7db8/);
+  assert.match(upstream, /2fc5e1459efbbf06d92c7306517c286bf12490cf/);
   assert.match(upstream, /Skill version: `4[.]9[.]1`/);
   assert.match(upstream, /Engine version: `0[.]1[.]24`/);
   assert.equal(read(scripts + 'VERSION').trim(), '0.1.31');
