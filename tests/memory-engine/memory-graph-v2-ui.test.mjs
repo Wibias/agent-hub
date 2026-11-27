@@ -13,8 +13,15 @@ test('D4 graph UI has grouped authority, explicit advisory and optional similari
   assert.match(js, /Inferred similarity \(optional\)/);
   assert.match(js, /Git freshness/);
   assert.match(js, /source === 'typed_relation'/);
+  assert.match(js, /graph-community-filter/);
+  assert.match(js, /graph-threshold/);
+  assert.match(js, /graph-zoom-in/);
+  assert.match(js, /Graph projection/);
+  assert.match(js, /Semantic coverage measures embeddings, not memory accuracy/);
   assert.match(css, /\.graph-edge\.typed_relation/);
   assert.match(css, /\.graph-node\.freshness-unchecked/);
+  assert.match(css, /\.graph-node-dot/);
+  assert.match(css, /\.graph-canvas-wrap[\s\S]*min-width: 0/);
   assert.match(model, /buildMemoryGraphV2\(memory/);
 });
 

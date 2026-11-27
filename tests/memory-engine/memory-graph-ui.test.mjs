@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { readFile, mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -77,6 +78,81 @@ test('memoryUiGraph returns a browser-safe project/branch projection', async (t)
   assert.equal(hasPropertyDeep(graph, 'vector'), false);
 });
 
++test('memoryUiGraph requests semantic similarity by default and keeps recorded-only mode', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'agent-hub-memory-graph-semantic-'));
+  const memory = new MemoryEngine({ dbPath: join(root, 'memory.sqlite3') });
+  t.after(async () => {
+    memory.close();
+    await rm(root, { recursive: true, force: true });
+  });
+  const projectId = 'github.com/example/semantic-graph';
+  memory.registerProject({ projectId, repoIdentity: projectId });
+  const values = [
+    'Windows x64 is the only supported host.',
+    'Use Windows x64 for every native test.',
+  ];
+  for (const [index, value] of values.entries()) {
+    const claimId = 'claim-semantic-' + index;
+    memory.ingest({
+      evidence: {
+        id: 'evidence-semantic-' + index,
+        projectId,
+        harness: 'codex',
+        sessionId: 'semantic-session',
+        sourceKind: 'session',
+        sourceRef: 'session:semantic-' + index,
+        capturedAt: '2026-11-27T10:00:00.000Z',
+        branch: 'main',
+        commitSha: null,
+        path: null,
+        blobOid: null,
+        content: value,
+        authorityClass: 'user_direct',
+        metadata: { event_type: 'user_prompt' },
+      },
+      claim: {
+        id: claimId,
+        kind: 'user_direct',
+        subject: 'user memory',
+        predicate: 'states',
+        value,
+        branchScope: 'main',
+        createdAt: '2026-11-27T10:00:00.000Z',
+      },
+    });
+    memory.putClaimEmbedding({
+      claimId,
+      modelId: 'intfloat/multilingual-e5-small',
+      modelRevision: 'test-revision',
+      textHash: createHash('sha256').update(value).digest('hex'),
+      dimensions: 3,
+      vector: new Float32Array([1, 0, 0]),
+      indexedAt: '2026-11-27T10:00:00.000Z',
+    });
+  }
+
+  const graph = memoryUiModel.memoryUiGraph(memory, { projectId, branch: 'main' });
+  assert.equal(graph.stats.similarityEnabled, true);
+  assert.equal(
+    graph.edges.some((edge) => edge.relation === 'semantic_similarity'
+      && edge.origin === 'inferred'
+      && edge.weight === 1),
+    true,
+  );
+
+  const recordedOnly = memoryUiModel.memoryUiGraph(memory, {
+    projectId,
+    branch: 'main',
+    includeSimilarity: false,
+  });
+  assert.equal(recordedOnly.stats.similarityEnabled, false);
+  assert.equal(
+    recordedOnly.edges.some((edge) => edge.relation === 'semantic_similarity'),
+    false,
+  );
+});
+
+
 test('GET /api/graph is scoped, guarded, browser-safe, and read-only', async (t) => {
   const root = await mkdtemp(join(tmpdir(), 'agent-hub-memory-graph-ui-http-'));
   const dbPath = join(root, 'memory.sqlite3');
@@ -118,7 +194,18 @@ test('GET /api/graph is scoped, guarded, browser-safe, and read-only', async (t)
   assert.equal(payload.projectId, 'github.com/example/graph-ui');
   assert.equal(payload.branch, 'main');
   assert.equal(payload.nodes.length, 1);
+  assert.equal(payload.stats.similarityEnabled, true);
   assert.equal(hasPropertyDeep(payload, 'vector'), false);
+
+  response = await fetch(graphUrl + '&semanticThreshold=2');
+  assert.equal(response.status, 400);
+  payload = await response.json();
+  assert.equal(payload.error, 'invalid_graph_options');
+
+  response = await fetch(graphUrl + '&includeSimilarity=maybe');
+  assert.equal(response.status, 400);
+  payload = await response.json();
+  assert.equal(payload.error, 'invalid_graph_options');
 
   response = await fetch(base + '/api/graph?branch=main');
   assert.equal(response.status, 400);

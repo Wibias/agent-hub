@@ -58,11 +58,17 @@ test('D4 real MemoryEngine projects typed relations but never changes canonical 
   assert.deepEqual(memory.exportCanonical(), before);
 });
 
-test('D4 Memory Console projection is v2 with reference labels and optional similarity disabled', async (t) => {
+test('D4 Memory Console projection is v2 with reference labels and explorer similarity enabled', async (t) => {
   const memory = await fixture(t);
   const graph = memoryUiGraph(memory, { projectId: PROJECT, branch: 'main' });
   assert.equal(graph.schemaVersion, 2);
-  assert.equal(graph.stats.similarityEnabled, false);
+  assert.equal(graph.stats.similarityEnabled, true);
+  const recordedOnly = memoryUiGraph(memory, {
+    projectId: PROJECT,
+    branch: 'main',
+    includeSimilarity: false,
+  });
+  assert.equal(recordedOnly.stats.similarityEnabled, false);
   assert.deepEqual(graph.groups.map((group) => group.id).sort(), ['agent_inference', 'user_direct']);
   assert.equal(graph.nodes.every((node) => /^@[a-f0-9]{10}$/.test(node.ref)), true);
 });
