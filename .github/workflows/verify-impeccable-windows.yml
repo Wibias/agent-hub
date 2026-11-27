@@ -5,6 +5,7 @@ on:
     paths:
       - 'skills/impeccable/**'
       - 'skills/design-with-ai/internal/impeccable/**'
+      - 'skills/design-with-ai/tests/impeccable-engine-rust-live-native.test.mjs'
       - '.github/workflows/verify-impeccable-windows.yml'
   workflow_dispatch:
 
@@ -90,6 +91,11 @@ jobs:
           Write-Output 'PASS: Incorrect manifest digest fails closed'
           exit 0
 
+      - name: Real native Rust Live 0.1.31 token and source confinement (Windows)
+        env:
+          IMPECCABLE_TEST_ENGINE_PATH: ${{ runner.temp }}/impeccable-positive/bin/0.1.31/impeccable.exe
+        run: node --test skills/design-with-ai/tests/impeccable-engine-rust-live-native.test.mjs
+
   linux-launcher:
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -147,3 +153,8 @@ jobs:
             exit 1
           fi
           echo 'PASS: Linux x64 manifest tamper fails closed'
+
+      - name: Real native Rust Live 0.1.31 token and source confinement (Linux)
+        env:
+          IMPECCABLE_TEST_ENGINE_PATH: ${{ runner.temp }}/impeccable-linux-positive/bin/0.1.31/impeccable
+        run: node --test skills/design-with-ai/tests/impeccable-engine-rust-live-native.test.mjs
