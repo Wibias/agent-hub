@@ -1,10 +1,11 @@
-> **AgentHub integration overlay (2026-11-23):** This internal provider is
-> owned exclusively by `skills/design-with-ai/`, not a separately discoverable
-> Impeccable skill. Historical skill 4.9.1 and engine 0.1.24 provenance remain
-> below. The optional engine pin is now **0.1.28** with release-asset SHA-256
-> checksums, but generic DWA routes never start it automatically. Updating the
-> binary pin alone does **not** prove complete hook, Live/browser or command
-> compatibility or qualify the complete upstream skill 4.10.0.
+> **AgentHub integration overlay (2026-11-27):** This internal provider
+> belongs only to `skills/design-with-ai/`, never a separately discoverable
+> Impeccable skill. Original skill 4.9.1, engine 0.1.24 and prior engine
+> 0.1.28 provenance remain below as historical records. The **optional**
+> runtime is now pinned to engine **0.1.31** from the official release.
+> Generic DWA workflows do not auto-launch, download, or install it.
+> The engine update is **not** a wholesale upstream skill 4.11.1 import
+> or proof of full Rust Live/browser/host parity.
 >
 # Impeccable upstream
 
@@ -12,6 +13,50 @@ AgentHub selectively vendors the explicit Impeccable specialist from
 [pbakaus/impeccable](https://github.com/pbakaus/impeccable). Runtime binaries
 are **not** included in this repository. The local `SKILL.md` is an intentional
 AgentsHub overlay, not a source-byte-identical upstream copy.
+
+## Engine 0.1.31 release sync candidate (2026-11-27)
+
+Active engine version: `0.1.31`. The prior `0.1.28` entry below
+remains a **historical** merge/release record, not the active engine pin.
+The upstream skill's 4.11.1 methods are still selectively adapted
+under canonical DWA ownership, **not** a second discoverable skill.
+
+- Official annotated tag `engine-v0.1.31` object
+  `c0340e9edc92cd1130597d9cdf600802217c735b`
+  points to commit `ce0733287403d77e1017612ec0bc9f5a9251b52a`.
+  Official release was published 2026-11-26:
+  <https://github.com/pbakaus/impeccable/releases/tag/engine-v0.1.31>.
+- The engine tag's `scripts/VERSION` is `0.1.31`, but its
+  **stale source manifest** `scripts/engine-checksums.txt` still lists
+  five **0.1.30** binaries. The later `skill-v4.11.1` tag commit
+  `2fc5e1459efbbf06d92c7306517c286bf12490cf`
+  has the coherent `0.1.31` manifest. Each of its five SHA-256 values
+  was compared against the **official 0.1.31 Release asset digest field**.
+  Windows x64 SHA-256:
+  `f6606bbf6bd8993e2b0dab98261c27659a865e7dcbc775986d40e8808527ff47`.
+  Never import the stale `engine-v0.1.31` source manifest.
+- The internal `scripts/VERSION`, `engine-checksums.txt`,
+  `impeccable` POSIX launcher and `impeccable.cmd` Windows launcher
+  are **byte-identical Git blobs** to the exact `skill-v4.11.1` tag.
+  The Windows/POSIX launchers now carry upstream download-error
+  reporting and stale-staging cleanup. The POSIX launcher also handles
+  Windows backslash-delimited hook invocations. Review deletion
+  boundaries and verify failure/negative paths before release.
+- Rust binaries are downloaded only through an **explicit** internal
+  engine invocation with pinned hash verification, never committed to
+  AgentHub. Internal DWA-owned JS detection, hooks and Live/browser code
+  are separate from the Rust binary and do **not** prove full parity.
+- Required qualification: real Windows x64 and Linux x64 pinned launch
+  and read-only CLI probes, forged-checksum cache refusal and staging
+  boundaries, Windows hooks, JS Live loopback and actual Chrome browser
+  coverage for the final combined revision, followed by two independent
+  strong/weaker Skill Ratchet reviews. The existing DWA permission and
+  source-integrity gates cannot be bypassed by an upstream release.
+  External uploads, sign-in, Loop hook trust grants and background
+  refresh behavior are **not enabled** by this engine sync.
+
+State: **pinned source and hashes; full runtime and model qualification
+pending**. Do not equate a successful binary probe with product acceptance.
 
 ## Engine 0.1.28 upgrade candidate (2026-11-23)
 
