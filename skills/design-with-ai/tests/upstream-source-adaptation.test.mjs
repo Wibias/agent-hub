@@ -50,7 +50,7 @@ test('Penpot MCP 2.19 source review preserves session/host/code/rollback boundar
   assert.match(penpot, /plugin bridge can execute code/);
   assert.match(penpot, /Do not recommend wildcards/);
   assert.match(penpot, /not proof of the version installed/);
-  assert.match(penpot, /does not.*enable any new tool/is);
+  assert.match(penpot, /does \*\*not\*\* vendor[\s\S]{0,100}enable any new tool/i);
 });
 
 test('Matt irrelevant seven-commit upstream delta is reviewed but not adopted', () => {
