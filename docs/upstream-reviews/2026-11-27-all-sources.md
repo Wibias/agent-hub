@@ -65,11 +65,23 @@ The exact comparison **local statechart pin -> remote HEAD** spans 29
 commits / 69 changed files, **zero** under
 `pstack/skills/statechart/`. No statechart vendor refresh is required
 by this evidence. Six changed `pstack/` files relate to metadata,
-guides, and new `reframe` guidance. Earlier changes to poteto,
-architecture and reflect still need a bounded semantic comparison.
-Do not add a competing workflow router. The broad 116-commit compare
-hit the 300-file limit, so comprehensive pstack scope closure is
-**NOT_VERIFIED**.
+guides, and new `reframe` guidance. The GitHub Compare API's broad 300-file cap has now been
+resolved for this source using recursive, untruncated `pstack/` subtree
+Git trees at the **registry SHA** and current upstream HEAD.
+The tree comparison covers every tracked path (including deletions):
+`skills/` went from 650 to 627 tree entries, with 70 changed/new and
+24 deleted file blobs; alongside 10 docs, four automations, two agents,
+one plugin manifest and two root files, this yields **113 changed/deleted
+pstack files**. Neither recursive tree response was truncated.
+Fifteen `statechart/` paths changed since the **older registry SHA**,
+but all of their runtime changes precede the local pinned snapshot:
+the **local pin -> current HEAD** delta remains zero in `statechart/`.
+Most other changes reorganize poteto/architect/reflect/why guidance,
+and the new `reframe` skill introduces a separate optional prompting
+method. They still need bounded semantic relevance review before
+updating the broad registry checkpoint; no competing workflow router.
+The complete **path inventory is VERIFIED**, but full functional/adoption
+qualification is **NOT_VERIFIED**.
 
 ### Impeccable
 
