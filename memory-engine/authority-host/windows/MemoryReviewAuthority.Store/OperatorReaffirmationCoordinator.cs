@@ -4,8 +4,8 @@ using Microsoft.Data.Sqlite;
 namespace MemoryReviewAuthority.Store;
 
 /// <summary>
-/// Host-only, not wired to any UI or IPC. A synthetic test key cannot pass
-/// the native credential gate, and this flow NEVER writes a memory Claim.
+/// Protected host coordinator. Renewal is not exposed through UI or IPC.
+/// This flow NEVER writes a memory Claim.
 /// The operator's protected statement reaffirmation is a new intent, not
 /// independent authentication of the original user-writable evidence.
 /// </summary>
@@ -41,7 +41,7 @@ public sealed class OperatorReaffirmationCoordinator
     /// A reaffirmation-purpose challenge is distinct from an enrollment or
     /// possession ticket; neither is itself user consent.
     /// </summary>
-    public ChallengeTicket Begin(ReviewMeaning meaning)
+    private void ValidateOffer(ReviewMeaning meaning)
     {
         if (meaning is null)
             throw new ArgumentException("reaffirmation_meaning_required");
@@ -56,10 +56,26 @@ public sealed class OperatorReaffirmationCoordinator
         if (source is null || source.Relation != "unrelated"
             || source.RelatedClaimId is not null)
             throw new InvalidOperationException("reaffirmation_relation_not_supported");
+    }
+
+    public ChallengeTicket Begin(ReviewMeaning meaning)
+    {
+        ValidateOffer(meaning);
         if (_ledger.ReadOperatorReaffirmationIntent(
                 meaning.ProjectId, meaning.Branch, meaning.ProposalRef) is not null)
             throw new InvalidOperationException("reaffirmation_intent_already_recorded");
         return _core.BeginOperatorReaffirmation(meaning, _nativeCredential);
+    }
+
+    public ChallengeTicket BeginRenewal(ReviewMeaning meaning)
+    {
+        ValidateOffer(meaning);
+        var previous = _ledger.ReadOperatorReaffirmationIntent(meaning.ProjectId, meaning.Branch, meaning.ProposalRef);
+        if (previous is null || !ProtectedPendingReviewLedger.IsExpiredOperatorReaffirmation(previous.RecordedAtUtc, DateTimeOffset.UtcNow))
+            throw new InvalidOperationException("reaffirmation_renewal_requires_expired_receipt");
+        if (_ledger.HasOperatorDirectClaim(previous.RequestId))
+            throw new InvalidOperationException("reaffirmation_already_published");
+        return _core.BeginOperatorReaffirmationRenewal(meaning, _nativeCredential, previous.BindingSha256);
     }
 
     /// <summary>
@@ -70,16 +86,27 @@ public sealed class OperatorReaffirmationCoordinator
     public OperatorReaffirmationCompletion Complete(
         string ticketId, ReviewMeaning meaning, BrowserAssertion assertion)
     {
-        var proof = _core.VerifyOperatorReaffirmationAndConsume(
-            ticketId, meaning, assertion);
+        return Record(meaning, _core.VerifyOperatorReaffirmationAndConsume(ticketId, meaning, assertion),
+            "verified_operator_reaffirmation_intent_only");
+    }
+
+    public OperatorReaffirmationCompletion CompleteRenewal(
+        string ticketId, ReviewMeaning meaning, BrowserAssertion assertion)
+        => Record(meaning, _core.VerifyOperatorReaffirmationRenewalAndConsume(ticketId, meaning, assertion),
+            "verified_operator_reaffirmation_renewal_intent_only");
+
+    private OperatorReaffirmationCompletion Record(ReviewMeaning meaning, VerificationResult proof, string requiredStatus)
+    {
         if (!proof.Verified || !proof.UserPresent || !proof.UserVerified
-            || proof.Status != "verified_operator_reaffirmation_intent_only")
+            || proof.Status != requiredStatus)
             return new(false, proof.Status);
         try
         {
             var intent = _ledger.RecordOperatorReaffirmationIntent(
                 meaning, _nativeCredential, proof);
-            return new(true, "operator_reaffirmation_intent_recorded_no_claim",
+            return new(true, requiredStatus == "verified_operator_reaffirmation_renewal_intent_only"
+                ? "operator_reaffirmation_renewal_recorded_no_claim"
+                : "operator_reaffirmation_intent_recorded_no_claim",
                 intent.RequestId);
         }
         catch (Exception e) when (e is InvalidOperationException

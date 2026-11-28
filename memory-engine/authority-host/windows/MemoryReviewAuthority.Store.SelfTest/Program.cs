@@ -72,6 +72,13 @@ internal static class Program
         Run("operator_reaffirmation_unverified_pin_denied", ReaffirmationUnverifiedDenied);
         Run("operator_reaffirmation_procedure_denied", ReaffirmationProcedureDenied);
         Run("user_direct_claim_requires_prior_reaffirmation", DirectClaimNeedsReaffirmation);
+        Run("user_direct_claim_requires_exact_signed_receipt_binding", DirectClaimBoundReceipt);
+        Run("legacy_fresh_reaffirmation_cannot_publish_or_renew", LegacyFreshReaffirmationDenied);
+        Run("legacy_expired_reaffirmation_renewal_is_append_only", () => ReaffirmationRenewal(false));
+        Run("versioned_expired_reaffirmation_renewal_is_append_only", () => ReaffirmationRenewal(true));
+        Run("user_direct_claim_expired_reaffirmation_denied_before_challenge", () => DirectClaimStaleReaffirmation(DateTimeOffset.UtcNow.AddMinutes(-16).ToString("O")));
+        Run("user_direct_claim_future_reaffirmation_denied_before_challenge", () => DirectClaimStaleReaffirmation(DateTimeOffset.UtcNow.AddMinutes(16).ToString("O")));
+        Run("user_direct_claim_malformed_reaffirmation_denied_before_challenge", () => DirectClaimStaleReaffirmation("invalid"));
         Run("user_direct_claim_commit_wal_restart_scope_provenance", DirectClaimCommit);
         Run("user_direct_claim_commit_cross_purpose_and_counter_replay_denied", DirectClaimBadPurpose);
         Run("user_direct_claim_duplicate_denied_without_counter_advance", DirectClaimNoDuplicate);
@@ -87,7 +94,7 @@ internal static class Program
         Run("ci_read_once_sql_receipt_and_tombstone_immutable", CiReadOnceSqlImmutable);
         Run("ci_read_once_full_snapshot_digest_changes_on_every_state_transition",
             CiReadOnceFenceSnapshotChanges);
-        Console.WriteLine($"MEMORY_REVIEW_LEDGER PASS {_passed}/65; REAL_EVIDENCE_UV_PINNED_NO_APPROVAL");
+        Console.WriteLine($"MEMORY_REVIEW_LEDGER PASS {_passed}/72; REAL_EVIDENCE_UV_PINNED_NO_APPROVAL");
     }
 
     private static void Run(string label, Action test)
@@ -1940,6 +1947,9 @@ internal static class Program
         using var delete = sql.CreateCommand();
         delete.CommandText = "DELETE FROM protected_operator_reaffirmation_intents;";
         Throws<SqliteException>(() => delete.ExecuteNonQuery());
+        using var replace = sql.CreateCommand();
+        replace.CommandText = "INSERT OR REPLACE INTO protected_operator_reaffirmation_intents SELECT * FROM protected_operator_reaffirmation_intents;";
+        Throws<SqliteException>(() => replace.ExecuteNonQuery());
     }
 
 
@@ -2054,6 +2064,210 @@ internal static class Program
         Check(store.ReadOperatorCredential()?.LastSignCount == 1);
     }
 
+
+    private static ReviewMeaning SeedReaffirmationFixture(ProtectedPendingReviewLedger store, TestCredential key, string recordedAt)
+    {
+        var imported = store.ImportOperatorPinnedEvidence();
+        var meaning = RealReviewMeaning(imported);
+        var enrollCore = new ReviewChallengeCore();
+        var enroll = enrollCore.Begin(meaning, key.Pinned);
+        store.RecordNativeUvEnrollment(meaning, key.Pinned,
+            enrollCore.VerifyAndConsume(enroll.TicketId, meaning, key.Sign(enroll)));
+
+        using (var sql = new SqliteConnection(new SqliteConnectionStringBuilder
+        {
+            DataSource = Path.Combine(TestDirectory, "review-authority.sqlite3"),
+            Mode = SqliteOpenMode.ReadWrite, Pooling = false, ForeignKeys = true,
+        }.ToString()))
+        {
+            sql.Open();
+            using var insert = sql.CreateCommand();
+            insert.CommandText = """
+                INSERT INTO protected_operator_reaffirmation_intents
+                (request_id,project_id,branch,revision_sha,proposal_ref,snapshot_sha256,
+                 fact_sha256,evidence_sha256,source_origin,kind,credential_id_sha256,
+                 sign_count,recorded_at_utc,policy_version)
+                SELECT r.request_id,r.project_id,r.branch,r.revision_sha,r.proposal_ref,
+                       r.snapshot_sha256,r.fact_sha256,r.evidence_sha256,s.source_origin,
+                       s.kind,$credential,1,$when,$policy
+                FROM review_requests r JOIN protected_review_sources s ON s.request_id=r.request_id;
+                """;
+            insert.Parameters.AddWithValue("$credential", Hash(key.Pinned.CredentialIdBase64Url));
+            insert.Parameters.AddWithValue("$when", recordedAt);
+            insert.Parameters.AddWithValue("$policy", ProtectedPendingReviewLedger.OperatorReaffirmationPolicy);
+            Check(insert.ExecuteNonQuery() == 1);
+        }
+
+        return meaning;
+    }
+
+    private static void DirectClaimStaleReaffirmation(string recordedAt)
+    {
+        CreateRealEvidenceFixture();
+        using var key = TestCredential.New();
+        using var store = Open();
+        var meaning = SeedReaffirmationFixture(store, key, recordedAt);
+        var core = new ReviewChallengeCore();
+        var publisher = OperatorDirectClaimCoordinator.ForNativeCredential(store, core);
+        var refused = false;
+        try { publisher.Begin(meaning); }
+        catch (InvalidOperationException e) when (e.Message == "direct_claim_reaffirmation_missing_or_stale")
+        { refused = true; }
+        Check(refused);
+        Check(store.ReadOperatorCredential()?.LastSignCount == 1);
+        Check(store.ReadOperatorDirectClaims(RealProject, RealBranch).Count == 0);
+        Check(store.ReadOperatorReaffirmationIntent(RealProject, RealBranch, RealERef)?.RecordedAtUtc == recordedAt);
+
+        var receipt = store.ReadOperatorReaffirmationIntent(RealProject, RealBranch, RealERef)!;
+        var ticket = core.BeginBoundOperatorClaimCommit(meaning, key.Pinned, receipt.BindingSha256);
+        var denied = publisher.Complete(ticket.TicketId, meaning, key.Sign(ticket, forcedSignCount: 2));
+        Check(!denied.ClaimWritten && denied.Status == "direct_claim_transaction_denied");
+        Check(store.ReadOperatorCredential()?.LastSignCount == 1);
+        Check(store.ReadOperatorDirectClaims(RealProject, RealBranch).Count == 0);
+    }
+
+
+
+    private static void ReaffirmationRenewal(bool previouslyVersioned)
+    {
+        CreateRealEvidenceFixture();
+        using var key = TestCredential.New();
+        using var store = Open();
+        var expired = DateTimeOffset.UtcNow.AddMinutes(-16).ToString("O");
+        var meaning = SeedReaffirmationFixture(store, key, expired);
+        var original = store.ReadOperatorReaffirmationIntent(RealProject, RealBranch, RealERef)!;
+        Check(original.Generation == 0);
+        if (previouslyVersioned)
+        {
+            var old = original with { Generation = 1 };
+            using var sql = new SqliteConnection(new SqliteConnectionStringBuilder
+            {
+                DataSource = Path.Combine(TestDirectory, "review-authority.sqlite3"),
+                Mode = SqliteOpenMode.ReadWrite, Pooling = false, ForeignKeys = true,
+            }.ToString());
+            sql.Open();
+            using var insert = sql.CreateCommand();
+            insert.CommandText = """
+                INSERT INTO protected_operator_reaffirmation_generations
+                (request_id,generation,binding_sha256,previous_binding_sha256,sign_count,recorded_at_utc)
+                VALUES ($request,1,$binding,NULL,1,$when);
+                """;
+            insert.Parameters.AddWithValue("$request", old.RequestId);
+            insert.Parameters.AddWithValue("$binding", old.BindingSha256);
+            insert.Parameters.AddWithValue("$when", expired);
+            Check(insert.ExecuteNonQuery() == 1);
+        }
+        var prior = store.ReadOperatorReaffirmationIntent(RealProject, RealBranch, RealERef)!;
+        Check(prior.Generation == (previouslyVersioned ? 1 : 0));
+        var first = OperatorReaffirmationCoordinator.ForNativeCredential(store);
+        Throws<InvalidOperationException>(() => first.Begin(meaning));
+        var publishCore = new ReviewChallengeCore();
+        var publisher = OperatorDirectClaimCoordinator.ForNativeCredential(store, publishCore);
+        var oldPublication = publishCore.BeginBoundOperatorClaimCommit(meaning, key.Pinned, prior.BindingSha256);
+        using var competingStore = Open();
+        var second = OperatorReaffirmationCoordinator.ForNativeCredential(competingStore);
+        var ticketA = first.BeginRenewal(meaning);
+        var ticketB = second.BeginRenewal(meaning);
+        var result = first.CompleteRenewal(ticketA.TicketId, meaning, key.Sign(ticketA, forcedSignCount: 0));
+        Check(result.Verified && result.Status == "operator_reaffirmation_renewal_recorded_no_claim"
+            && !result.HistoricalEvidenceVerified && !result.ClaimWritten);
+        Check(!second.CompleteRenewal(ticketB.TicketId, meaning, key.Sign(ticketB, forcedSignCount: 0)).Verified);
+        Check(!first.CompleteRenewal(ticketA.TicketId, meaning, key.Sign(ticketA, forcedSignCount: 0)).Verified);
+        var renewed = store.ReadOperatorReaffirmationIntent(RealProject, RealBranch, RealERef)!;
+        Check(renewed.Generation == prior.Generation + 1 && renewed.PreviousBindingSha256 == prior.BindingSha256
+            && renewed.BindingSha256 != prior.BindingSha256 && renewed.RecordedAtUtc != expired
+            && !renewed.ClaimWritten && !renewed.HistoricalEvidenceVerified);
+        Check(store.ReadOperatorCredential()?.LastSignCount == 1);
+        Check(store.ReadOperatorDirectClaims(RealProject, RealBranch).Count == 0);
+        Check(store.ReadVerifiedIntent(RealProject, RealBranch, RealERef) is null);
+        Throws<InvalidOperationException>(() => first.BeginRenewal(meaning));
+        var denied = publisher.Complete(oldPublication.TicketId, meaning, key.Sign(oldPublication, forcedSignCount: 0));
+        Check(!denied.ClaimWritten && denied.Status == "direct_claim_transaction_denied");
+        Check(store.ReadOperatorCredential()?.LastSignCount == 1);
+
+        using (var reopened = Open())
+        {
+            Check(reopened.ReadOperatorReaffirmationIntent(RealProject, RealBranch, RealERef) == renewed);
+            var freshPublisher = OperatorDirectClaimCoordinator.ForNativeCredential(reopened);
+            var fresh = freshPublisher.Begin(meaning);
+            Check(freshPublisher.Complete(fresh.TicketId, meaning, key.Sign(fresh, forcedSignCount: 2)).ClaimWritten);
+        }
+        using (var reopened = Open())
+        {
+            var saved = reopened.ReadOperatorDirectClaims(RealProject, RealBranch).Single();
+            Check(saved.ReaffirmationGeneration == renewed.Generation && saved.ReaffirmationBindingSha256 == renewed.BindingSha256
+                && !saved.HistoricalEvidenceVerified);
+            Check(reopened.ReadOperatorCredential()?.LastSignCount == 2);
+            Check(reopened.ReadProtectedClaims(RealProject, RealBranch).Count == 0);
+        }
+        using var history = new SqliteConnection(new SqliteConnectionStringBuilder
+        {
+            DataSource = Path.Combine(TestDirectory, "review-authority.sqlite3"),
+            Mode = SqliteOpenMode.ReadWrite, Pooling = false, ForeignKeys = true,
+        }.ToString());
+        history.Open();
+        using var command = history.CreateCommand();
+        command.CommandText = "SELECT recorded_at_utc FROM protected_operator_reaffirmation_intents;";
+        Check((string?)command.ExecuteScalar() == expired);
+        command.CommandText = "SELECT COUNT(*) FROM protected_operator_reaffirmation_generations;";
+        Check(Convert.ToInt64(command.ExecuteScalar()) == renewed.Generation);
+        if (previouslyVersioned)
+        {
+            command.CommandText = "SELECT binding_sha256 FROM protected_operator_reaffirmation_generations WHERE generation=1;";
+            Check((string?)command.ExecuteScalar() == prior.BindingSha256);
+        }
+        foreach (var table in new[] { "protected_operator_reaffirmation_generations", "protected_operator_direct_claim_bindings" })
+        {
+            command.CommandText = $"INSERT OR REPLACE INTO {table} SELECT * FROM {table};";
+            Throws<SqliteException>(() => command.ExecuteNonQuery());
+            command.CommandText = $"DELETE FROM {table};";
+            Throws<SqliteException>(() => command.ExecuteNonQuery());
+            command.CommandText = $"UPDATE {table} SET generation=generation;";
+            Throws<SqliteException>(() => command.ExecuteNonQuery());
+        }
+    }
+
+    private static void LegacyFreshReaffirmationDenied()
+    {
+        CreateRealEvidenceFixture();
+        using var key = TestCredential.New();
+        using var store = Open();
+        var meaning = SeedReaffirmationFixture(store, key, DateTimeOffset.UtcNow.ToString("O"));
+        var old = store.ReadOperatorReaffirmationIntent(RealProject, RealBranch, RealERef)!;
+        Check(old.Generation == 0);
+        var publisher = OperatorDirectClaimCoordinator.ForNativeCredential(store);
+        Throws<InvalidOperationException>(() => publisher.Begin(meaning));
+        var renewer = OperatorReaffirmationCoordinator.ForNativeCredential(store);
+        Throws<InvalidOperationException>(() => renewer.BeginRenewal(meaning));
+        Check(store.ReadOperatorCredential()?.LastSignCount == 1);
+        Check(store.ReadOperatorDirectClaims(RealProject, RealBranch).Count == 0);
+    }
+
+    private static void DirectClaimBoundReceipt()
+    {
+        CreateRealEvidenceFixture();
+        using var key = TestCredential.New();
+        using var store = Open();
+        var meaning = PrepareNativeReaffirmation(store, key);
+        var receipt = store.ReadOperatorReaffirmationIntent(RealProject, RealBranch, RealERef)!;
+        Check(receipt.BindingSha256 != (receipt with { RecordedAtUtc = DateTimeOffset.UtcNow.AddMinutes(-1).ToString("O") }).BindingSha256);
+        var core = new ReviewChallengeCore();
+        var publisher = OperatorDirectClaimCoordinator.ForNativeCredential(store, core);
+        var legacy = core.BeginProtectedClaimCommit(meaning, key.Pinned);
+        Check(publisher.Complete(legacy.TicketId, meaning, key.Sign(legacy, forcedSignCount: 3)).Status
+            == "challenge_purpose_mismatch");
+        var wrong = core.BeginBoundOperatorClaimCommit(meaning, key.Pinned, new string('0', 64));
+        var denied = publisher.Complete(wrong.TicketId, meaning, key.Sign(wrong, forcedSignCount: 3));
+        Check(!denied.ClaimWritten && denied.Status == "direct_claim_transaction_denied");
+        Check(store.ReadOperatorCredential()?.LastSignCount == 2);
+        Check(store.ReadOperatorDirectClaims(RealProject, RealBranch).Count == 0);
+        Check(store.ReadOperatorReaffirmationIntent(RealProject, RealBranch, RealERef) == receipt);
+        var fresh = publisher.Begin(meaning);
+        Check(publisher.Complete(fresh.TicketId, meaning, key.Sign(fresh, forcedSignCount: 4)).ClaimWritten);
+        Check(store.ReadOperatorDirectClaims(RealProject, RealBranch).Count == 1);
+        Check(store.ReadOperatorCredential()?.LastSignCount == 4);
+    }
+
     private static void DirectClaimCommit()
     {
         CreateRealEvidenceFixture();
@@ -2113,6 +2327,9 @@ internal static class Program
         using var remove = sql.CreateCommand();
         remove.CommandText = "DELETE FROM protected_operator_direct_claims;";
         Throws<SqliteException>(() => remove.ExecuteNonQuery());
+        using var replace = sql.CreateCommand();
+        replace.CommandText = "INSERT OR REPLACE INTO protected_operator_direct_claims SELECT * FROM protected_operator_direct_claims;";
+        Throws<SqliteException>(() => replace.ExecuteNonQuery());
     }
 
     private static void DirectClaimBadPurpose()

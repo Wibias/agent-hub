@@ -24,6 +24,7 @@ internal static class Program
         Run("valid_uv_assertion_is_not_claim_authority", ValidAssertion);
         Run("protected_approval_challenge_is_domain_separated_one_use_no_claim", ApprovalDomainSeparation);
         Run("protected_claim_commit_challenge_separate_one_use_no_authority", ClaimCommitPurpose);
+        Run("bound_claim_commit_receipt_domain_and_one_use", BoundClaimCommitPurpose);
         Run("read_disclosure_exact_scope_and_purpose_challenge", ReadDisclosureDomainBinding);
         Run("read_disclosure_wrong_scope_consumes_no_permission", ReadDisclosureWrongScope);
         Run("read_disclosure_native_uv_one_time_not_authority", ReadDisclosureVerifiedOneUse);
@@ -43,7 +44,7 @@ internal static class Program
         Run("reject_invalid_fact_and_nonlocal_origin", InvalidInputs);
         Run("native_registration_parses_only_es256_not_approval", NativeRegistrationParse);
         Run("native_registration_denies_tampering_and_missing_uv", NativeRegistrationDeny);
-        Console.WriteLine($"MEMORY_AUTHORITY_CORE PASS {_passed}/23; NO_SERVICE NO_DB_WRITE NO_AUTHORIZATION");
+        Console.WriteLine($"MEMORY_AUTHORITY_CORE PASS {_passed}/24; NO_SERVICE NO_DB_WRITE NO_AUTHORIZATION");
     }
 
     private static void Run(string name, Action test)
@@ -154,6 +155,31 @@ internal static class Program
             fresh.TicketId, Meaning, key.Sign(fresh, counter: 4)).Verified);
     }
 
+
+
+    private static void BoundClaimCommitPurpose()
+    {
+        var nonce = new byte[32];
+        var first = new string('a', 64);
+        var second = new string('b', 64);
+        var bound = ReviewChallengeCore.ComputeBoundOperatorClaimCommitChallenge(Meaning, nonce, first);
+        Check(bound != ReviewChallengeCore.ComputeProtectedClaimCommitChallenge(Meaning, nonce));
+        Check(bound != ReviewChallengeCore.ComputeBoundOperatorClaimCommitChallenge(Meaning, nonce, second));
+        Throws<ArgumentException>(() => ReviewChallengeCore.ComputeBoundOperatorClaimCommitChallenge(Meaning, nonce, "invalid"));
+        using var key = TestCredential.New();
+        var core = new ReviewChallengeCore();
+        var legacy = core.BeginProtectedClaimCommit(Meaning, key.Pinned);
+        Check(core.VerifyBoundOperatorClaimCommitAndConsume(legacy.TicketId, Meaning, key.Sign(legacy)).Status
+            == "challenge_purpose_mismatch");
+        var ticket = core.BeginBoundOperatorClaimCommit(Meaning, key.Pinned, first);
+        var assertion = key.Sign(ticket, counter: 2);
+        var proof = core.VerifyBoundOperatorClaimCommitAndConsume(ticket.TicketId, Meaning, assertion);
+        Check(proof.Verified && proof.ReaffirmationBindingSha256 == first
+            && !proof.ClaimWritten && !proof.ApprovedReviewDecision);
+        Check(!core.VerifyBoundOperatorClaimCommitAndConsume(ticket.TicketId, Meaning, assertion).Verified);
+        var restarted = new ReviewChallengeCore();
+        Check(!restarted.VerifyBoundOperatorClaimCommitAndConsume(ticket.TicketId, Meaning, assertion).Verified);
+    }
 
     private static readonly ReadDisclosureMeaning ReadMeaning = new(
         "github.com/wibias/agent-hub", "main", new string('a',40),

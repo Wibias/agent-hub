@@ -52,7 +52,8 @@ public sealed record VerificationResult(
     uint SignCount = 0,
     bool SignCounterVerifiable = false,
     bool ApprovedReviewDecision = false,
-    bool ClaimWritten = false);
+    bool ClaimWritten = false,
+    string? ReaffirmationBindingSha256 = null);
 
 /// <summary>
 /// In-memory one-time challenge and ES256/UV verification engine.
@@ -71,7 +72,9 @@ public sealed partial class ReviewChallengeCore
     public const string ProtectedClaimCommitProtocol = "agenthub-evidence-bound-uv-commit-v1";
     public const string ProtectedConflictReviewProtocol = "agenthub-protected-conflict-review-intent-v1";
     public const string OperatorReaffirmationProtocol = "agenthub-operator-reaffirmation-uv-v1";
-    private enum ChallengePurpose { Proof, ProtectedApproval, ProtectedClaimCommit, ConflictReview, OperatorReaffirmation }
+    public const string BoundOperatorClaimCommitProtocol = "agenthub-operator-claim-commit-bound-v1";
+    public const string OperatorReaffirmationRenewalProtocol = "agenthub-operator-reaffirmation-renewal-uv-v1";
+    private enum ChallengePurpose { Proof, ProtectedApproval, ProtectedClaimCommit, ConflictReview, OperatorReaffirmation, BoundOperatorClaimCommit, OperatorReaffirmationRenewal }
     public const int MaxPending = 32;
     public static readonly TimeSpan Lifetime = TimeSpan.FromSeconds(90);
 
@@ -86,7 +89,8 @@ public sealed partial class ReviewChallengeCore
         string Challenge,
         long StartedTick,
         DateTimeOffset ExpiresUtc,
-        ChallengePurpose Purpose);
+        ChallengePurpose Purpose,
+        string? ReaffirmationBindingSha256);
 
     public ReviewChallengeCore(TimeProvider? clock = null)
     {
@@ -112,8 +116,15 @@ public sealed partial class ReviewChallengeCore
     public ChallengeTicket BeginOperatorReaffirmation(ReviewMeaning meaning, PinnedCredential credential)
         => BeginForPurpose(meaning, credential, ChallengePurpose.OperatorReaffirmation);
 
+    public ChallengeTicket BeginBoundOperatorClaimCommit(ReviewMeaning meaning, PinnedCredential credential, string reaffirmationBindingSha256)
+        => BeginForPurpose(meaning, credential, ChallengePurpose.BoundOperatorClaimCommit, reaffirmationBindingSha256);
+
+    public ChallengeTicket BeginOperatorReaffirmationRenewal(ReviewMeaning meaning, PinnedCredential credential, string priorBindingSha256)
+        => BeginForPurpose(meaning, credential, ChallengePurpose.OperatorReaffirmationRenewal, priorBindingSha256);
+
     private ChallengeTicket BeginForPurpose(
-        ReviewMeaning meaning, PinnedCredential credential, ChallengePurpose purpose)
+        ReviewMeaning meaning, PinnedCredential credential, ChallengePurpose purpose,
+        string? reaffirmationBindingSha256 = null)
     {
         ValidateMeaning(meaning);
         ValidateCredential(credential);
@@ -124,6 +135,8 @@ public sealed partial class ReviewChallengeCore
             ChallengePurpose.ProtectedClaimCommit => ComputeProtectedClaimCommitChallenge(meaning, nonce),
             ChallengePurpose.ConflictReview => ComputeConflictReviewChallenge(meaning, nonce),
             ChallengePurpose.OperatorReaffirmation => ComputeOperatorReaffirmationChallenge(meaning, nonce),
+            ChallengePurpose.BoundOperatorClaimCommit => ComputeBoundOperatorClaimCommitChallenge(meaning, nonce, reaffirmationBindingSha256!),
+            ChallengePurpose.OperatorReaffirmationRenewal => ComputeBoundReaffirmationChallenge(meaning, nonce, reaffirmationBindingSha256!, OperatorReaffirmationRenewalProtocol),
             _ => ComputeChallenge(meaning, nonce),
         };
         // Ticket ID and nonce are independently random. Neither is a portable
@@ -139,7 +152,7 @@ public sealed partial class ReviewChallengeCore
                 throw new InvalidOperationException("review_challenge_already_pending");
             var now = _clock.GetUtcNow();
             _pending.Add(id, new Pending(
-                meaning, credential, challenge, _clock.GetTimestamp(), now.Add(Lifetime), purpose));
+                meaning, credential, challenge, _clock.GetTimestamp(), now.Add(Lifetime), purpose, reaffirmationBindingSha256));
             return new ChallengeTicket(id, challenge, now.Add(Lifetime), meaning);
         }
     }
@@ -175,6 +188,14 @@ public sealed partial class ReviewChallengeCore
     public VerificationResult VerifyOperatorReaffirmationAndConsume(
         string ticketId, ReviewMeaning expectedMeaning, BrowserAssertion assertion)
         => VerifyForPurposeAndConsume(ticketId, expectedMeaning, assertion, ChallengePurpose.OperatorReaffirmation);
+
+    public VerificationResult VerifyBoundOperatorClaimCommitAndConsume(
+        string ticketId, ReviewMeaning expectedMeaning, BrowserAssertion assertion)
+        => VerifyForPurposeAndConsume(ticketId, expectedMeaning, assertion, ChallengePurpose.BoundOperatorClaimCommit);
+
+    public VerificationResult VerifyOperatorReaffirmationRenewalAndConsume(
+        string ticketId, ReviewMeaning expectedMeaning, BrowserAssertion assertion)
+        => VerifyForPurposeAndConsume(ticketId, expectedMeaning, assertion, ChallengePurpose.OperatorReaffirmationRenewal);
 
     private VerificationResult VerifyForPurposeAndConsume(
         string ticketId, ReviewMeaning expectedMeaning, BrowserAssertion assertion,
@@ -221,10 +242,13 @@ public sealed partial class ReviewChallengeCore
                             "verified_protected_claim_commit_intent_only",
                         ChallengePurpose.ConflictReview => "verified_conflict_review_intent_only",
                         ChallengePurpose.OperatorReaffirmation => "verified_operator_reaffirmation_intent_only",
+                        ChallengePurpose.BoundOperatorClaimCommit => "verified_bound_operator_claim_commit_intent_only",
+                        ChallengePurpose.OperatorReaffirmationRenewal => "verified_operator_reaffirmation_renewal_intent_only",
                         _ => "verified_not_authorized",
                     },
                     ApprovedReviewDecision = false,
                     ClaimWritten = false,
+                    ReaffirmationBindingSha256 = pending.ReaffirmationBindingSha256,
                     SignCounterVerifiable = previous > 0 && verified.SignCount > 0,
                 };
             }
@@ -309,8 +333,18 @@ public sealed partial class ReviewChallengeCore
     public static string ComputeOperatorReaffirmationChallenge(ReviewMeaning meaning, ReadOnlySpan<byte> nonce)
         => ComputeChallengeInDomain(meaning, nonce, OperatorReaffirmationProtocol);
 
+    public static string ComputeBoundOperatorClaimCommitChallenge(ReviewMeaning meaning, ReadOnlySpan<byte> nonce, string reaffirmationBindingSha256)
+        => ComputeBoundReaffirmationChallenge(meaning, nonce, reaffirmationBindingSha256, BoundOperatorClaimCommitProtocol);
+
+    private static string ComputeBoundReaffirmationChallenge(ReviewMeaning meaning, ReadOnlySpan<byte> nonce, string binding, string protocol)
+    {
+        if (binding is null || !Regex.IsMatch(binding, @"\A[0-9a-f]{64}\z"))
+            throw new ArgumentException("invalid_reaffirmation_binding");
+        return ComputeChallengeInDomain(meaning, nonce, protocol, binding);
+    }
+
     private static string ComputeChallengeInDomain(
-        ReviewMeaning meaning, ReadOnlySpan<byte> nonce, string domain)
+        ReviewMeaning meaning, ReadOnlySpan<byte> nonce, string domain, string? binding = null)
     {
         ValidateMeaning(meaning);
         if (nonce.Length < 32 || nonce.Length > 64)
@@ -323,7 +357,7 @@ public sealed partial class ReviewChallengeCore
         };
         // Cross-language compatible with JSON.stringify() in the current
         // Node verifier. Scope identifiers are restricted to plain ASCII.
-        var json = JsonSerializer.Serialize(parts, new JsonSerializerOptions
+        var json = JsonSerializer.Serialize(binding is null ? parts : parts.Append(binding).ToArray(), new JsonSerializerOptions
         {
             Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
         });
