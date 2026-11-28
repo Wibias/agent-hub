@@ -6,6 +6,81 @@ namespace MemoryReviewAuthority.OperatorUi;
 // A task-first layout with native keyboard, focus and consent behavior.
 internal sealed partial class OperatorReviewWindow
 {
+
+    private readonly Label _decisionSummary = new()
+    {
+        Name = "DecisionSummary", AccessibleName = "Vorgeschlagene Entscheidung",
+        Text = "Kein aktiver Entscheidungsvorschlag geladen.",
+        AutoSize = true, Dock = DockStyle.Fill,
+        Font = new Font("Segoe UI Semibold", 13),
+        ForeColor = ReviewPalette.Text, Margin = new Padding(0, 0, 0, 3),
+    };
+
+    private readonly Label _ceremonySummary = new()
+    {
+        Name = "CeremonySummary", AccessibleName = "Aktueller Pr\u00fcfschritt",
+        Text = "Keine aktive Pr\u00fcfung. Oben einen Pr\u00fcfpfad ausw\u00e4hlen.",
+        AutoSize = true, Dock = DockStyle.Fill,
+        ForeColor = ReviewPalette.Text, Margin = new Padding(0, 0, 0, 8),
+    };
+
+    private void RefreshDecisionSummary()
+    {
+        var now = DateTimeOffset.UtcNow;
+        string? decision = null;
+        string? ceremony = null;
+        if (_comparisonOffer is { } comparison)
+        {
+            decision = comparison.Decision;
+            ceremony = comparison.ConflictIntentStatus switch
+            {
+                "recorded_exact_snapshot" => "Intent f\u00fcr diesen Snapshot bereits gespeichert; kein Claim.",
+                "recorded_different_snapshot" => "Fr\u00fcherer Intent f\u00fcr anderen Snapshot; neue Entscheidung gesperrt.",
+                _ => comparison.ConflictIntentAvailable
+                    ? "Konflikt-Intent pr\u00fcfen; kein Claim."
+                    : "Nur Vergleich lesen; keine Konfliktaktion verf\u00fcgbar.",
+            };
+        }
+        else if (_enrollment is { } enrollment && enrollment.ExpiresUtc > now)
+        {
+            decision = enrollment.Decision;
+            ceremony = "Windows-Hello-Einschreibung und Besitznachweis; kein Claim.";
+        }
+        else if (_offer is { } offer && offer.ExpiresUtc > now)
+        {
+            decision = offer.Decision;
+            ceremony = "Windows-Hello-Besitznachweis; kein Claim.";
+        }
+        else if (_reaffirmation is { } reaffirmation && reaffirmation.ExpiresUtc > now)
+        {
+            decision = reaffirmation.Decision;
+            ceremony = "Neue pers\u00f6nliche Aussage; historische Evidence unverifiziert; kein Claim.";
+        }
+        else if (_publication is { } publication && publication.ExpiresUtc > now)
+        {
+            decision = publication.Decision;
+            ceremony = "Separater gesch\u00fctzter Claim-Commit; kein Codex-Recall.";
+        }
+        else if (_readOffer is { } read && read.ExpiresUtc > now)
+        {
+            ceremony = "Read-Zustimmungspr\u00fcfung; keine Freigabe an Codex.";
+        }
+        else if (_ciReadOffer is { } ci && ci.ExpiresUtc > now)
+        {
+            ceremony = "CI-Test\u00fcbertragung; keine produktive Freigabe.";
+        }
+
+        _decisionSummary.Text = decision switch
+        {
+            "confirm" => "Vorgeschlagene Entscheidung: Best\u00e4tigen (confirm)",
+            "reject" => "Vorgeschlagene Entscheidung: Ablehnen (reject)",
+            _ => "Kein aktiver Entscheidungsvorschlag geladen.",
+        };
+        _ceremonySummary.Text = ceremony is null
+            ? "Keine aktive Pr\u00fcfung. Oben einen Pr\u00fcfpfad ausw\u00e4hlen."
+            : "Pr\u00fcfschritt: " + ceremony;
+    }
+
     private void BuildLayout()
     {
         Text = "AgentHub Memory | Gesch\u00fctzter E~ Review | NO-GO";
@@ -67,6 +142,8 @@ internal sealed partial class OperatorReviewWindow
         AddRow(content, ActionPair(_load, _reaffirmPrepare));
 
         AddRow(content, Heading("2. Signierten Inhalt pr\u00fcfen"));
+        AddRow(content, _decisionSummary);
+        AddRow(content, _ceremonySummary);
         var reviewHint = new Label
         {
             Text = "Kein signierter Inhalt geladen. Oben einen Pr\u00fcfpfad ausw\u00e4hlen.",

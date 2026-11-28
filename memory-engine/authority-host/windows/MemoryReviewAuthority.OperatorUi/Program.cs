@@ -325,6 +325,7 @@ internal sealed partial class OperatorReviewWindow : Form
             && _ciReadOffer is { } ci && ci.ExpiresUtc > DateTimeOffset.UtcNow
             && _ciObserved is { } observed && observed.Matches()
             && observed.KernelPid == ci.KernelRecipientPid;
+        RefreshDecisionSummary();
     }
 
     private async Task LoadComparisonAsync()

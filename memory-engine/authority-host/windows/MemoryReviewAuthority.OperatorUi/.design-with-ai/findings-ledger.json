@@ -108,6 +108,72 @@
       "disposition": "RESOLVED",
       "reason": "Move format guidance to visible field captions and accessible descriptions.",
       "evidenceRef": "final medium-idle.png; readable project and E~ format captions"
+    },
+    {
+      "type": "FOUND",
+      "id": "MRUI-07",
+      "route": "/operator-review",
+      "kind": "WORKFLOW",
+      "priority": "HIGH",
+      "symptom": "During the installed native enrollment workflow the operator could not locate the proposed decision without guidance; ACTION and KIND were buried in the technical scope/hash pane.",
+      "acceptance": "The exact server-validated proposed action and distinct current ceremony are prominently readable before the acknowledgment and final Hello action; loading, failure and scope edits must clear stale decision presentation. No change to authorization.",
+      "evidenceRef": "Operator field feedback and installed UI screenshot, 2026-11-28; docs/memory-windows11-hello-field-acceptance.md"
+    },
+    {
+      "type": "REVIEWED",
+      "runId": "76f12518-9813-46ed-ac25-c10ceca3d8cf",
+      "id": "MRUI-01",
+      "disposition": "RESOLVED",
+      "reason": "Current compact/medium fixture and additional scroll show readable disabled buttons and checks; existing contrast checks pass.",
+      "evidenceRef": "Native WinForms inert layout probe, 96 DPI, client 760x620, 1067x960, 1360x900; contract selftest exit 0; no IPC/Hello handlers. Current compact/medium fixture and additional scroll show readable disabled buttons and checks; existing contrast checks pass. local synthetic render evidence: agenthub-native-review-decision-evidence-20261128/compact-additional-scroll.png"
+    },
+    {
+      "type": "REVIEWED",
+      "runId": "76f12518-9813-46ed-ac25-c10ceca3d8cf",
+      "id": "MRUI-02",
+      "disposition": "RESOLVED",
+      "reason": "Current measured fact and metadata height 244px at all three sizes; independent scroll, no horizontal overflow.",
+      "evidenceRef": "Native WinForms inert layout probe, 96 DPI, client 760x620, 1067x960, 1360x900; contract selftest exit 0; no IPC/Hello handlers. Current measured fact and metadata height 244px at all three sizes; independent scroll, no horizontal overflow. local synthetic render evidence: agenthub-native-review-decision-evidence-20261128/compact-additional-scroll.png"
+    },
+    {
+      "type": "REVIEWED",
+      "runId": "76f12518-9813-46ed-ac25-c10ceca3d8cf",
+      "id": "MRUI-03",
+      "disposition": "UNVERIFIED",
+      "reason": "Prior attested build had operator-reported positive native comparison and conflict action. Candidate preserves eligibility and renders reachable compact action; new exact-head protected positive path not rerun.",
+      "evidenceRef": "local synthetic render evidence: agenthub-native-review-decision-evidence-20261128/compact-conflict-scroll.png"
+    },
+    {
+      "type": "REVIEWED",
+      "runId": "76f12518-9813-46ed-ac25-c10ceca3d8cf",
+      "id": "MRUI-04",
+      "disposition": "RESOLVED",
+      "reason": "Current compact additional-scroll confirms supplementary section and no reserved CI-only rows; contract test passes.",
+      "evidenceRef": "Native WinForms inert layout probe, 96 DPI, client 760x620, 1067x960, 1360x900; contract selftest exit 0; no IPC/Hello handlers. Current compact additional-scroll confirms supplementary section and no reserved CI-only rows; contract test passes. local synthetic render evidence: agenthub-native-review-decision-evidence-20261128/compact-additional-scroll.png"
+    },
+    {
+      "type": "REVIEWED",
+      "runId": "76f12518-9813-46ed-ac25-c10ceca3d8cf",
+      "id": "MRUI-05",
+      "disposition": "UNVERIFIED",
+      "reason": "Previous operator successfully completed consent with mouse. Current layout tests and keyboard Project-to-Branch pass; complete consent keyboard navigation and new installed candidate not verified.",
+      "evidenceRef": "local synthetic render evidence: agenthub-native-review-decision-evidence-20261128/compact-conflict-scroll.png"
+    },
+    {
+      "type": "REVIEWED",
+      "runId": "76f12518-9813-46ed-ac25-c10ceca3d8cf",
+      "id": "MRUI-06",
+      "disposition": "RESOLVED",
+      "reason": "Current medium and compact captures show visible scope input format captions; no placeholder reliance.",
+      "evidenceRef": "Native WinForms inert layout probe, 96 DPI, client 760x620, 1067x960, 1360x900; contract selftest exit 0; no IPC/Hello handlers. Current medium and compact captures show visible scope input format captions; no placeholder reliance. local synthetic render evidence: agenthub-native-review-decision-evidence-20261128/compact-additional-scroll.png"
+    },
+    {
+      "type": "REVIEWED",
+      "runId": "76f12518-9813-46ed-ac25-c10ceca3d8cf",
+      "id": "MRUI-07",
+      "disposition": "IMPROVED_BUT_OPEN",
+      "reason": "Prominence directly inspected in medium and compact fixture; live signed offer still unverified.",
+      "evidenceRef": "local synthetic render evidence: agenthub-native-review-decision-evidence-20261128/medium-fixture.png; local synthetic render evidence: agenthub-native-review-decision-evidence-20261128/compact-fixture.png"
     }
   ]
 }

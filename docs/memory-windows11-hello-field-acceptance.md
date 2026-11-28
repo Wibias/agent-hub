@@ -230,3 +230,71 @@ signing, source evidence authenticity, canonical freshness or user consent.
 The workflow is manual and main-only. No private Evidence, keys, or
 production data are included. A successful build alone is not a native
 SCM/Hello acceptance result.
+
+## 2026-11-28: attested native comparison-preview field acceptance
+
+**Result: PASS for the bounded native no-write intent flow, based on operator
+reported interaction and supplied UI screenshots. NOT a production write
+or trusted canonical evidence acceptance.** The earlier public browser-key
+pin route above is a separate historical test route; its acceptance cannot
+be inferred from this native-enrollment run.
+
+- Reviewed main build: `23141859f504f2c000b049d4ffc91d24c4213ff3` (#461).
+- GitHub Actions run [46090629320](https://github.com/Wibias/agent-hub/actions/runs/46090629320):
+  build and attestation succeeded; ZIP attestation verified against this
+  exact main commit, repository and hosted signer workflow.
+- Verified manifest SHA-256:
+  `17f20d0d5cb43483c94c1683d2665447d0bbcb13f0bd0b3c502fddc7d1314c02`.
+  Seven package files verified; claimsEnabled=false. The installer digest
+  was unchanged from the preceding independently attested package.
+- Explicit `comparison_preview_v1` nonempty-scope export and
+  `-NativeEnrollOnly` installation. One real E~ proposal, five existing
+  comparison Claims. No private fact, proposal reference, scope, credential,
+  assertion, full snapshot, or screenshots are included in this report.
+
+| Step | Field evidence | Result |
+| --- | --- | --- |
+| Read signed comparison before enrollment | Installed UI screenshot; conflict action unavailable | PASS (observed UI) |
+| Native enrollment plus second UV possession check | Operator reported the UI message confirming protected credential enrollment and explicitly no Claim or approval | PASS (operator reported) |
+| Reload comparison and personally confirm conflict intent with Hello | Operator reported: "Konflikt-Intent gespeichert. Kein Claim, kanonische Aktualitaet NICHT verifiziert." | PASS (operator reported) |
+| Repeat exact comparison | Operator reported: "Intent fuer exakt diesen Snapshot bereits gespeichert. Kein Claim." | PASS (operator reported) |
+| Close UI, restart SCM service, reopen same comparison | Operator reported the same exact-snapshot status after instructed restart | PASS (operator reported; no independent SCM restart trace collected) |
+| Remove temporary service with protected archival | Still running at follow-up inspection; operator-controlled removal requested | OPEN |
+
+The positive interaction validates the purpose-tagged native enrollment,
+comparison, signed intent and immutable duplicate behavior in the field.
+It does not independently inspect the protected database, verify a raw
+assertion transcript, authenticate historical Evidence, verify live canonical
+freshness, prove hostile-client coverage, prove safe production read
+projection, or grant a production Claim. Do not promote this receipt or
+the conversation to authorization. Private exported and archived data
+remain local. Use the protected installer removal path above; do not
+force-delete state or alter its DACL.
+
+The decision was initially difficult for the operator to find because the
+action label was buried among technical scope and hash metadata. Track
+MRUI-07 separately; the successful interaction does not waive this UX defect.
+
+### Remaining delivery sequence (#326 / #338)
+
+1. Establish the trust boundary for authoritative current source and
+   exact canonical scope/revision/lifecycle/related-target state. The
+   historical pinned export and the user-writable SQLite database alone
+   cannot provide authenticated provenance or freshness. Do not elevate
+   an ordinary hook JSON, a local trust flag, an attestation of build
+   provenance, or a previous native intent to that authority.
+2. Specify and prove a single service-owned transaction for validation,
+   one-use authenticated decision, audit and final Claim/denial, including
+   stale/duplicate/conflict/tamper and crash/restart rejection. Keep the
+   current no-write comparison receipt distinct; do not add an intent
+   conversion or production write endpoint before the source boundary
+   and atomic semantics are proven.
+3. Bind the read-only projection to exact verified service/source authority
+   and demonstrate the real Codex CLI and Desktop consumers, including
+   fail-closed protected behavior and the existing ordinary-memory fallback.
+4. Require exact-head review, hostile-client and rollback evidence, and
+   separate explicit operator deployment approval. Keep production default
+   OFF / NO-GO. #275 is independently gated and unaffected.
+
+The native field milestone is complete within its stated scope; removal,
+remaining UI work and the broader issue acceptance criteria are not.

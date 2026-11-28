@@ -38,7 +38,7 @@ public sealed class OperatorReaffirmationCoordinator
 
     /// <summary>
     /// Exact protected E~ lookup. No caller-injected source or trust-bit.
-    /// An approval-purpose challenge is distinct from an enrollment or
+    /// A reaffirmation-purpose challenge is distinct from an enrollment or
     /// possession ticket; neither is itself user consent.
     /// </summary>
     public ChallengeTicket Begin(ReviewMeaning meaning)
@@ -59,21 +59,21 @@ public sealed class OperatorReaffirmationCoordinator
         if (_ledger.ReadOperatorReaffirmationIntent(
                 meaning.ProjectId, meaning.Branch, meaning.ProposalRef) is not null)
             throw new InvalidOperationException("reaffirmation_intent_already_recorded");
-        return _core.BeginProtectedApproval(meaning, _nativeCredential);
+        return _core.BeginOperatorReaffirmation(meaning, _nativeCredential);
     }
 
     /// <summary>
-    /// Consumes and verifies the approval-purpose ticket before the protected
+    /// Consumes and verifies the reaffirmation-purpose ticket before the protected
     /// SQLite BEGIN IMMEDIATE transaction. No bearer authorization is returned,
     /// and no Claim / verified-review-intent row is ever created.
     /// </summary>
     public OperatorReaffirmationCompletion Complete(
         string ticketId, ReviewMeaning meaning, BrowserAssertion assertion)
     {
-        var proof = _core.VerifyProtectedApprovalAndConsume(
+        var proof = _core.VerifyOperatorReaffirmationAndConsume(
             ticketId, meaning, assertion);
         if (!proof.Verified || !proof.UserPresent || !proof.UserVerified
-            || proof.Status != "verified_protected_approval_intent_only")
+            || proof.Status != "verified_operator_reaffirmation_intent_only")
             return new(false, proof.Status);
         try
         {

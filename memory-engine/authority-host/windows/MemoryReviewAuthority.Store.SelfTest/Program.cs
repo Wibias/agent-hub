@@ -42,6 +42,9 @@ internal static class Program
         Run("protected_write_requires_independent_trusted_source", SourceRequired);
         Run("protected_write_rejects_stale_and_targeted_source", SourceMismatch);
         Run("protected_duplicate_rolls_back_uv_intent_and_claim", DuplicateRollback);
+        Run("protected_normalized_duplicate_rolls_back", NormalizedDuplicateRollback);
+        Run("protected_cross_provenance_duplicate_direct_denied", () => CrossProvenanceNormalizedDuplicate(false));
+        Run("protected_cross_provenance_duplicate_synthetic_denied", () => CrossProvenanceNormalizedDuplicate(true));
         Run("protected_competing_tickets_commit_only_once", ProtectedRace);
         Run("protected_snapshot_immutable_and_reopens_with_same_request", SnapshotImmutable);
         Run("protected_targeted_confirmation_refused", TargetedConfirmDenied);
@@ -65,6 +68,7 @@ internal static class Program
         Run("native_operator_enrollment_persists_but_creates_no_claim", NativeOperatorEnrolled);
         Run("native_enrollment_does_not_upgrade_a_pinned_unverified_key", NativeOperatorCannotUpgrade);
         Run("native_operator_reaffirmation_intent_persists_no_claim", ReaffirmationNoClaim);
+        Run("native_reaffirmation_rejects_general_approval_purpose", ReaffirmationRejectsGeneralApproval);
         Run("operator_reaffirmation_unverified_pin_denied", ReaffirmationUnverifiedDenied);
         Run("operator_reaffirmation_procedure_denied", ReaffirmationProcedureDenied);
         Run("user_direct_claim_requires_prior_reaffirmation", DirectClaimNeedsReaffirmation);
@@ -83,7 +87,7 @@ internal static class Program
         Run("ci_read_once_sql_receipt_and_tombstone_immutable", CiReadOnceSqlImmutable);
         Run("ci_read_once_full_snapshot_digest_changes_on_every_state_transition",
             CiReadOnceFenceSnapshotChanges);
-        Console.WriteLine($"MEMORY_REVIEW_LEDGER PASS {_passed}/61; REAL_EVIDENCE_UV_PINNED_NO_APPROVAL");
+        Console.WriteLine($"MEMORY_REVIEW_LEDGER PASS {_passed}/65; REAL_EVIDENCE_UV_PINNED_NO_APPROVAL");
     }
 
     private static void Run(string label, Action test)
@@ -1055,6 +1059,90 @@ internal static class Program
             second.ProposalRef) is not null);
     }
 
+
+    private static void NormalizedDuplicateRollback()
+    {
+        using var store = Open();
+        using var key = TestCredential.New();
+        const string variant = "Synthetic\u00a0  fact ";
+        var first = Example;
+        var second = Example with { ProposalRef = "E~9876543210",
+            CanonicalFactSha256 = Hash(variant) };
+        store.RecordPending(first);
+        store.RecordPending(second);
+        store.StageSyntheticLabSource(first, SourceFor(first));
+        store.StageSyntheticLabSource(second, SourceFor(second) with { CanonicalFact = variant });
+        var coordinator = new VerifiedReviewCoordinator(store, key.Pinned);
+        var firstMeaning = MeaningFor(first);
+        var firstTicket = coordinator.BeginProtectedApproval(firstMeaning);
+        Check(coordinator.CompleteProtected(firstTicket.TicketId, firstMeaning,
+            key.Sign(firstTicket)).ClaimWritten);
+        var secondMeaning = MeaningFor(second) with { CanonicalFact = variant };
+        var secondTicket = coordinator.BeginProtectedApproval(secondMeaning);
+        var denied = coordinator.CompleteProtected(secondTicket.TicketId, secondMeaning,
+            key.Sign(secondTicket));
+        Check(!denied.Verified && !denied.ClaimWritten);
+        Check(store.ReadProtectedClaims(first.ProjectId, first.Branch).Count == 1);
+        Check(store.ReadVerifiedIntent(second.ProjectId, second.Branch, second.ProposalRef) is null);
+        Check(store.ReadPending(second.ProjectId, second.Branch, second.ProposalRef) is not null);
+
+        var other = second with { Branch = "other" };
+        store.RecordPending(other);
+        store.StageSyntheticLabSource(other, SourceFor(other) with { CanonicalFact = variant });
+        var otherMeaning = MeaningFor(other) with { CanonicalFact = variant };
+        var otherTicket = coordinator.BeginProtectedApproval(otherMeaning);
+        Check(coordinator.CompleteProtected(otherTicket.TicketId, otherMeaning,
+            key.Sign(otherTicket)).ClaimWritten);
+        Check(store.ReadProtectedClaims(other.ProjectId, other.Branch).Count == 1);
+    }
+
+    private static void CrossProvenanceNormalizedDuplicate(bool directFirst)
+    {
+        CreateRealEvidenceFixture();
+        using var key = TestCredential.New();
+        using var store = Open();
+        var variant = RealFact.Replace(" ", "\u00a0  ");
+        var synthetic = Example with { ProjectId = RealProject, Branch = RealBranch,
+            CanonicalFactSha256 = Hash(variant) };
+        store.RecordPending(synthetic);
+        store.StageSyntheticLabSource(synthetic,
+            SourceFor(synthetic) with { CanonicalFact = variant });
+        var syntheticMeaning = MeaningFor(synthetic) with { CanonicalFact = variant };
+        var coordinator = new VerifiedReviewCoordinator(store, key.Pinned);
+
+        var meaning = PrepareNativeReaffirmation(store, key);
+        if (!directFirst)
+        {
+            var ticket = coordinator.BeginProtectedApproval(syntheticMeaning);
+            Check(coordinator.CompleteProtected(ticket.TicketId, syntheticMeaning,
+                key.Sign(ticket)).ClaimWritten);
+        }
+
+        var publisher = OperatorDirectClaimCoordinator.ForNativeCredential(store);
+        var publish = publisher.Begin(meaning);
+        var result = publisher.Complete(publish.TicketId, meaning,
+            key.Sign(publish, forcedSignCount: 3));
+        if (directFirst)
+        {
+            Check(result.ClaimWritten);
+            var ticket = coordinator.BeginProtectedApproval(syntheticMeaning);
+            var denied = coordinator.CompleteProtected(ticket.TicketId, syntheticMeaning,
+                key.Sign(ticket, forcedSignCount: 4));
+            Check(!denied.Verified && !denied.ClaimWritten);
+            Check(store.ReadVerifiedIntent(synthetic.ProjectId, synthetic.Branch,
+                synthetic.ProposalRef) is null);
+            Check(store.ReadProtectedClaims(RealProject, RealBranch).Count == 0);
+            Check(store.ReadOperatorDirectClaims(RealProject, RealBranch).Count == 1);
+        }
+        else
+        {
+            Check(!result.ClaimWritten);
+            Check(store.ReadOperatorCredential()?.LastSignCount == 2);
+            Check(store.ReadProtectedClaims(RealProject, RealBranch).Count == 1);
+            Check(store.ReadOperatorDirectClaims(RealProject, RealBranch).Count == 0);
+        }
+    }
+
     private static void ProtectedRace()
     {
         using var firstStore = Open();
@@ -1852,6 +1940,45 @@ internal static class Program
         using var delete = sql.CreateCommand();
         delete.CommandText = "DELETE FROM protected_operator_reaffirmation_intents;";
         Throws<SqliteException>(() => delete.ExecuteNonQuery());
+    }
+
+
+    private static void ReaffirmationRejectsGeneralApproval()
+    {
+        CreateRealEvidenceFixture();
+        using var key = TestCredential.New();
+        using var store = Open();
+        var imported = store.ImportOperatorPinnedEvidence();
+        var meaning = RealReviewMeaning(imported);
+        var enrollment = new ReviewChallengeCore();
+        var enroll = enrollment.Begin(meaning, key.Pinned);
+        store.RecordNativeUvEnrollment(meaning, key.Pinned,
+            enrollment.VerifyAndConsume(enroll.TicketId, meaning, key.Sign(enroll)));
+        var core = new ReviewChallengeCore();
+        var review = OperatorReaffirmationCoordinator.ForNativeCredential(store, core);
+        var wrong = core.BeginProtectedApproval(meaning, key.Pinned);
+        var denied = review.Complete(wrong.TicketId, meaning,
+            key.Sign(wrong, forcedSignCount: 2));
+        Check(!denied.Verified && denied.Status == "challenge_purpose_mismatch");
+        Check(store.ReadOperatorReaffirmationIntent(RealProject, RealBranch, RealERef) is null);
+        Check(store.ReadOperatorCredential()?.LastSignCount == 1);
+        Check(!core.VerifyProtectedApprovalAndConsume(wrong.TicketId, meaning,
+            key.Sign(wrong, forcedSignCount: 2)).Verified);
+
+        var reaffirm = review.Begin(meaning);
+        var swapped = core.VerifyProtectedApprovalAndConsume(reaffirm.TicketId, meaning,
+            key.Sign(reaffirm, forcedSignCount: 2));
+        Check(!swapped.Verified && swapped.Status == "challenge_purpose_mismatch");
+        Check(!review.Complete(reaffirm.TicketId, meaning,
+            key.Sign(reaffirm, forcedSignCount: 2)).Verified);
+        var fresh = review.Begin(meaning);
+        var accepted = review.Complete(fresh.TicketId, meaning,
+            key.Sign(fresh, forcedSignCount: 2));
+        Check(accepted.Verified && !accepted.HistoricalEvidenceVerified && !accepted.ClaimWritten);
+        Check(store.ReadOperatorCredential()?.LastSignCount == 2);
+        Check(store.ReadProtectedClaims(RealProject, RealBranch).Count == 0);
+        Check(store.ReadOperatorDirectClaims(RealProject, RealBranch).Count == 0);
+        Check(store.ReadVerifiedIntent(RealProject, RealBranch, RealERef) is null);
     }
 
     private static void ReaffirmationUnverifiedDenied()

@@ -120,7 +120,9 @@ internal static class Program
     {
         var nonce = Enumerable.Range(0, 32).Select(i => (byte)i).ToArray();
         var proof = ReviewChallengeCore.ComputeChallenge(Meaning, nonce);
-        var reaffirm = ReviewChallengeCore.ComputeProtectedApprovalChallenge(Meaning, nonce);
+        var reaffirm = ReviewChallengeCore.ComputeOperatorReaffirmationChallenge(Meaning, nonce);
+        Check(reaffirm != proof && reaffirm != ReviewChallengeCore.ComputeProtectedApprovalChallenge(Meaning, nonce)
+            && reaffirm != ReviewChallengeCore.ComputeConflictReviewChallenge(Meaning, nonce));
         var commit = ReviewChallengeCore.ComputeProtectedClaimCommitChallenge(Meaning, nonce);
         Check(commit != proof && commit != reaffirm);
         Check(commit != ReviewChallengeCore.ComputeProtectedClaimCommitChallenge(
@@ -129,15 +131,15 @@ internal static class Program
             Meaning with { Branch = "other" }, nonce));
         using var key = TestCredential.New();
         var core = new ReviewChallengeCore();
-        var reaffirmTicket = core.BeginProtectedApproval(Meaning, key.Pinned);
+        var reaffirmTicket = core.BeginOperatorReaffirmation(Meaning, key.Pinned);
         var reaffirmSigned = key.Sign(reaffirmTicket);
         Check(core.VerifyProtectedClaimCommitAndConsume(reaffirmTicket.TicketId,
             Meaning, reaffirmSigned).Status == "challenge_purpose_mismatch");
-        Check(!core.VerifyProtectedApprovalAndConsume(
+        Check(!core.VerifyOperatorReaffirmationAndConsume(
             reaffirmTicket.TicketId, Meaning, reaffirmSigned).Verified);
         var commitTicket = core.BeginProtectedClaimCommit(Meaning, key.Pinned);
         var commitSigned = key.Sign(commitTicket, counter: 2);
-        Check(core.VerifyProtectedApprovalAndConsume(
+        Check(core.VerifyOperatorReaffirmationAndConsume(
             commitTicket.TicketId, Meaning, commitSigned).Status ==
             "challenge_purpose_mismatch");
         Check(!core.VerifyProtectedClaimCommitAndConsume(

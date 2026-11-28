@@ -70,7 +70,8 @@ public sealed partial class ReviewChallengeCore
     // implied by an earlier reaffirmation/possession assertion.
     public const string ProtectedClaimCommitProtocol = "agenthub-evidence-bound-uv-commit-v1";
     public const string ProtectedConflictReviewProtocol = "agenthub-protected-conflict-review-intent-v1";
-    private enum ChallengePurpose { Proof, ProtectedApproval, ProtectedClaimCommit, ConflictReview }
+    public const string OperatorReaffirmationProtocol = "agenthub-operator-reaffirmation-uv-v1";
+    private enum ChallengePurpose { Proof, ProtectedApproval, ProtectedClaimCommit, ConflictReview, OperatorReaffirmation }
     public const int MaxPending = 32;
     public static readonly TimeSpan Lifetime = TimeSpan.FromSeconds(90);
 
@@ -108,6 +109,9 @@ public sealed partial class ReviewChallengeCore
     public ChallengeTicket BeginConflictReview(ReviewMeaning meaning, PinnedCredential credential)
         => BeginForPurpose(meaning, credential, ChallengePurpose.ConflictReview);
 
+    public ChallengeTicket BeginOperatorReaffirmation(ReviewMeaning meaning, PinnedCredential credential)
+        => BeginForPurpose(meaning, credential, ChallengePurpose.OperatorReaffirmation);
+
     private ChallengeTicket BeginForPurpose(
         ReviewMeaning meaning, PinnedCredential credential, ChallengePurpose purpose)
     {
@@ -119,6 +123,7 @@ public sealed partial class ReviewChallengeCore
             ChallengePurpose.ProtectedApproval => ComputeProtectedApprovalChallenge(meaning, nonce),
             ChallengePurpose.ProtectedClaimCommit => ComputeProtectedClaimCommitChallenge(meaning, nonce),
             ChallengePurpose.ConflictReview => ComputeConflictReviewChallenge(meaning, nonce),
+            ChallengePurpose.OperatorReaffirmation => ComputeOperatorReaffirmationChallenge(meaning, nonce),
             _ => ComputeChallenge(meaning, nonce),
         };
         // Ticket ID and nonce are independently random. Neither is a portable
@@ -167,6 +172,10 @@ public sealed partial class ReviewChallengeCore
         string ticketId, ReviewMeaning expectedMeaning, BrowserAssertion assertion)
         => VerifyForPurposeAndConsume(ticketId, expectedMeaning, assertion, ChallengePurpose.ConflictReview);
 
+    public VerificationResult VerifyOperatorReaffirmationAndConsume(
+        string ticketId, ReviewMeaning expectedMeaning, BrowserAssertion assertion)
+        => VerifyForPurposeAndConsume(ticketId, expectedMeaning, assertion, ChallengePurpose.OperatorReaffirmation);
+
     private VerificationResult VerifyForPurposeAndConsume(
         string ticketId, ReviewMeaning expectedMeaning, BrowserAssertion assertion,
         ChallengePurpose purpose)
@@ -211,6 +220,7 @@ public sealed partial class ReviewChallengeCore
                         ChallengePurpose.ProtectedClaimCommit =>
                             "verified_protected_claim_commit_intent_only",
                         ChallengePurpose.ConflictReview => "verified_conflict_review_intent_only",
+                        ChallengePurpose.OperatorReaffirmation => "verified_operator_reaffirmation_intent_only",
                         _ => "verified_not_authorized",
                     },
                     ApprovedReviewDecision = false,
@@ -295,6 +305,9 @@ public sealed partial class ReviewChallengeCore
 
     public static string ComputeConflictReviewChallenge(ReviewMeaning meaning, ReadOnlySpan<byte> nonce)
         => ComputeChallengeInDomain(meaning, nonce, ProtectedConflictReviewProtocol);
+
+    public static string ComputeOperatorReaffirmationChallenge(ReviewMeaning meaning, ReadOnlySpan<byte> nonce)
+        => ComputeChallengeInDomain(meaning, nonce, OperatorReaffirmationProtocol);
 
     private static string ComputeChallengeInDomain(
         ReviewMeaning meaning, ReadOnlySpan<byte> nonce, string domain)

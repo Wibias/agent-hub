@@ -346,3 +346,57 @@ unverified, and current canonical database freshness is not verified.
 Offline UI contract tests cover normalized duplicates and three additional
 negative cases. These checks do not establish a positive SCM enrollment /
 conflict completion or physical Hello test.
+
+### Attested physical comparison-preview field result (2026-11-28)
+
+The earlier positive-path field verification gap is now addressed for the
+bounded no-write comparison preview by operator-reported real native
+enrollment, second UV check, exact conflict intent, replay refusal and
+same-snapshot receipt status after a reported SCM restart. See
+[Windows 11 field acceptance](memory-windows11-hello-field-acceptance.md)
+for the exact attested build, evidence grades, cleanup status and limitations.
+This updates the historical local-only milestones above; it does not
+retroactively make synthetic tests physical or independently authenticate
+source freshness. Production #326/#338 remain open/default OFF.
+
+### Local follow-up verification (2026-11-28)
+
+The local follow-up candidate (not yet delivered or installed) contains:
+
+- Transaction-local normalized duplicate rejection across both protected Claim
+  origins, with the comparison normalization reused, and branch scope
+  isolation preserved. Synthetic regression reproduced the missing rejection
+  before repair. Store tests cover both cross-origin insertion orders and
+  rollback/no credential-counter advance on denial.
+- A separate cryptographic domain, `agenthub-operator-reaffirmation-uv-v1`,
+  for a new personal statement. The general review-approval domain cannot
+  be used to record the reaffirmation, and the reverse is denied. Both
+  the coordinator and Store require the dedicated intent-only status.
+  Existing generic approval, conflict-intent, possession and publication
+  domains remain distinct. Offline Core 23/23 and Store 65/65 passed
+  (combined command exit 0); the tests do not prove physical enrollment
+  or a new personal statement was actually consented to.
+- MRUI-07: the validated proposed action and current ceremony are presented
+  above the fact. Actual WinForms layout inspected in compact and medium
+  synthetic fixture states, with three geometry checks at 96 DPI.
+  UI contract selftest passed. DWA receipt is source-bound PARTIAL; open
+  MRUI-03/05/07 require exact-candidate live verification. Expiry is
+  rechecked when the UI refreshes action state and again before the ceremony;
+  an autonomous expiry display transition has not been demonstrated.
+
+Remaining publication lifecycle gap: the protected transaction already
+refuses a reaffirmation older than 15 minutes, but the current begin path
+does not check that window before offering the second ceremony. The existing
+immutable receipt is unique per scope/proposal, so the same proposal cannot
+simply be reaffirmed again after expiry. A future design must make stale
+receipt handling explicit (fail early, and if renewal is allowed, record a
+distinct fresh consent generation without rewriting or reusing the original
+receipt). Do not extend the lifetime or silently refresh consent. No
+production upgrade or in-place migration of previous reaffirmation receipts
+is authorized; a persisted v1 receipt does not prove the new challenge
+domain. The currently tested field receipt is a conflict-intent, not a
+reaffirmation or publication receipt.
+
+The source authority and private recipient boundary remain separate
+unresolved requirements; no production write or real-project private-read
+activation follows from these test results.

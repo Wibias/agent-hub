@@ -162,6 +162,29 @@ public sealed partial class ProtectedPendingReviewLedger
         => Convert.ToHexString(SHA256.HashData(
             Encoding.UTF8.GetBytes(value))).ToLowerInvariant();
 
+    private void RequireNoProtectedDuplicate(
+        string projectId, string branch, string fact, SqliteTransaction transaction)
+    {
+        var normalized = NormalizeComparisonFact(fact);
+        using var command = _connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = """
+            SELECT value_text FROM protected_review_claims
+            WHERE project_id=$project AND branch=$branch
+            UNION ALL
+            SELECT value_text FROM protected_operator_direct_claims
+            WHERE project_id=$project AND branch=$branch;
+            """;
+        command.Parameters.AddWithValue("$project", projectId);
+        command.Parameters.AddWithValue("$branch", branch);
+        using var rows = command.ExecuteReader();
+        while (rows.Read())
+        {
+            if (NormalizeComparisonFact(rows.GetString(0)) == normalized)
+                throw new InvalidOperationException("protected_normalized_duplicate");
+        }
+    }
+
     /// <summary>
     /// Writes the verified decision AND (for an unrelated confirm only) the
     /// protected Claim in ONE immediate transaction. Rejection is a durable
@@ -225,6 +248,9 @@ public sealed partial class ProtectedPendingReviewLedger
             throw new InvalidOperationException("protected_source_mismatch_or_relation_unsafe");
         if (FindVerifiedIntent(pending.RequestId, transaction) is not null)
             throw new InvalidOperationException("review_decision_already_recorded");
+
+        if (meaning.Decision == "confirm")
+            RequireNoProtectedDuplicate(meaning.ProjectId, meaning.Branch, meaning.CanonicalFact, transaction);
 
         // Record the same UV proof as the existing verified-intent API, but do
         // not commit halfway through. Rollback removes BOTH decision and Claim.
