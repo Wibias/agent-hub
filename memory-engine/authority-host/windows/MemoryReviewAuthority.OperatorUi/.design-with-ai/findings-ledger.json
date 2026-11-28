@@ -1,0 +1,113 @@
+{
+  "schemaVersion": 1,
+  "events": [
+    {
+      "type": "FOUND",
+      "id": "MRUI-01",
+      "route": "/operator-review",
+      "kind": "VISUAL",
+      "priority": "HIGH",
+      "symptom": "Disabled action and acknowledgment text is nearly black against the dark surface in the supplied 1083x999 capture.",
+      "acceptance": "Enabled and disabled controls, acknowledgment copy and status are legible with distinguishable native states.",
+      "evidenceRef": "user-supplied installed Operator UI screenshot 2026-11-28"
+    },
+    {
+      "type": "FOUND",
+      "id": "MRUI-02",
+      "route": "/operator-review",
+      "kind": "DETAIL",
+      "priority": "HIGH",
+      "symptom": "Fixed outer rows collapse the signed fact region and truncate the metadata area.",
+      "acceptance": "Fact and complete scope/hash metadata have nonzero usable space and independently scrollable text at compact and medium desktop sizes.",
+      "evidenceRef": "user screenshot; Program.cs fixed-row table"
+    },
+    {
+      "type": "FOUND",
+      "id": "MRUI-03",
+      "route": "/operator-review",
+      "kind": "WORKFLOW",
+      "priority": "HIGH",
+      "symptom": "Nested fixed-height action panel clips rows, hides actions, and introduces nested scrollbars.",
+      "acceptance": "Scope inputs and prepare actions remain discoverable without horizontal clipping, and the conflict action is reachable with its existing eligibility guard.",
+      "evidenceRef": "user screenshot; Program.cs loadActions"
+    },
+    {
+      "type": "FOUND",
+      "id": "MRUI-04",
+      "route": "/operator-review",
+      "kind": "VISUAL",
+      "priority": "MEDIUM",
+      "symptom": "Invisible CI rows reserve space and unrelated confirmation blocks compete with the active workflow.",
+      "acceptance": "No production CI row space; clear hierarchy distinguishes selection, signed review, applicable action and additional review paths.",
+      "evidenceRef": "user screenshot; Program.cs row 13/14"
+    },
+    {
+      "type": "FOUND",
+      "id": "MRUI-05",
+      "route": "/operator-review",
+      "kind": "WORKFLOW",
+      "priority": "MEDIUM",
+      "symptom": "Status and long acknowledgment text are hard to scan and may truncate in resized windows.",
+      "acceptance": "Readable status remains visible and complete consent statements are reachable with keyboard and scrolling without changing authority.",
+      "evidenceRef": "user screenshot; Program.cs fixed-height labels/checks"
+    },
+    {
+      "type": "REVIEWED",
+      "runId": "356bb478-9380-4c21-8aa8-7100ff8b7052",
+      "id": "MRUI-01",
+      "disposition": "RESOLVED",
+      "reason": "Preserve dark theme; draw readable disabled labels and maintain native enabled behavior.",
+      "evidenceRef": "OperatorReviewLayoutSelfTest.cs#VerifyLayoutContract; --contract-selftest exit 0; native PrintWindow and measured geometry; medium-idle and compact-additional-scroll renders"
+    },
+    {
+      "type": "REVIEWED",
+      "runId": "356bb478-9380-4c21-8aa8-7100ff8b7052",
+      "id": "MRUI-02",
+      "disposition": "RESOLVED",
+      "reason": "Replace percent remainder row with independent 244px scrollable fact and metadata controls.",
+      "evidenceRef": "OperatorReviewLayoutSelfTest.cs#VerifyLayoutContract; --contract-selftest exit 0; native PrintWindow and measured geometry; medium-fixture and compact-conflict-scroll with synthetic content"
+    },
+    {
+      "type": "REVIEWED",
+      "runId": "356bb478-9380-4c21-8aa8-7100ff8b7052",
+      "id": "MRUI-03",
+      "disposition": "UNVERIFIED",
+      "reason": "Layout and initial guards verified at three sizes, but actual protected signed comparison and positive Hello eligibility cannot be tested with the uninstalled candidate.",
+      "evidenceRef": "local render evidence: agenthub-operator-ui-dwa-evidence-20261128/medium-idle.png"
+    },
+    {
+      "type": "REVIEWED",
+      "runId": "356bb478-9380-4c21-8aa8-7100ff8b7052",
+      "id": "MRUI-04",
+      "disposition": "RESOLVED",
+      "reason": "Remove production CI rows and group supplementary paths below primary review.",
+      "evidenceRef": "OperatorReviewLayoutSelfTest.cs#VerifyLayoutContract; --contract-selftest exit 0; native PrintWindow and measured geometry; compact-additional-scroll render"
+    },
+    {
+      "type": "REVIEWED",
+      "runId": "356bb478-9380-4c21-8aa8-7100ff8b7052",
+      "id": "MRUI-05",
+      "disposition": "UNVERIFIED",
+      "reason": "Status, text wrap and Project-to-Branch tab verified in inert layout; actual consent path and positive protected state still require an attested installed build and human interaction.",
+      "evidenceRef": "local render evidence: agenthub-operator-ui-dwa-evidence-20261128/medium-idle.png"
+    },
+    {
+      "type": "FOUND",
+      "id": "MRUI-06",
+      "route": "/operator-review",
+      "kind": "VISUAL",
+      "priority": "LOW",
+      "symptom": "Intermediate dark candidate had low-contrast native placeholder text.",
+      "acceptance": "Input format guidance visible without reliance on low-contrast placeholder.",
+      "evidenceRef": "intermediate dark candidate screenshot inspected in this iteration"
+    },
+    {
+      "type": "REVIEWED",
+      "runId": "356bb478-9380-4c21-8aa8-7100ff8b7052",
+      "id": "MRUI-06",
+      "disposition": "RESOLVED",
+      "reason": "Move format guidance to visible field captions and accessible descriptions.",
+      "evidenceRef": "final medium-idle.png; readable project and E~ format captions"
+    }
+  ]
+}
