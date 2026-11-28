@@ -99,11 +99,11 @@ internal static class Program
 /// original fact is not HTML or model supplied. Only a physical click can
 /// invoke Windows native WebAuthn. No UI action sends a Claim approval.
 /// </summary>
-internal sealed class OperatorReviewWindow : Form
+internal sealed partial class OperatorReviewWindow : Form
 {
     private readonly TextBox _project = new()
     {
-        Text = "", Width = 420, PlaceholderText = "github.com/owner/repo",
+        Text = "", Width = 420, AccessibleDescription = "github.com/owner/repo",
     };
     private readonly TextBox _branch = new()
     {
@@ -111,122 +111,117 @@ internal sealed class OperatorReviewWindow : Form
     };
     private readonly TextBox _reference = new()
     {
-        Width = 135, PlaceholderText = "E~0123456789",
+        Width = 135, AccessibleDescription = "E~ plus ten hexadecimal characters",
     };
-    private readonly TextBox _fact = new()
+    private readonly RichTextBox _fact = new()
     {
-        ReadOnly = true, Multiline = true, ScrollBars = ScrollBars.Vertical,
-        Dock = DockStyle.Fill, BorderStyle = BorderStyle.FixedSingle,
-        BackColor = Color.FromArgb(25, 29, 35),
-        ForeColor = Color.FromArgb(235, 239, 243),
-        Font = new Font("Segoe UI", 13, FontStyle.Regular),
-        TabStop = false,
+        ReadOnly = true, BorderStyle = BorderStyle.FixedSingle,
+        Font = new Font("Segoe UI", 11),
     };
-    private readonly Label _meaning = new()
+    private readonly RichTextBox _meaning = new()
     {
-        AutoSize = false, Dock = DockStyle.Fill,
-        ForeColor = Color.FromArgb(217, 225, 233),
-        Font = new Font("Consolas", 9),
+        ReadOnly = true, BorderStyle = BorderStyle.FixedSingle,
     };
-    private readonly Label _status = new()
+    private readonly RichTextBox _status = new()
     {
-        Dock = DockStyle.Fill, ForeColor = Color.FromArgb(176, 196, 206),
+        ReadOnly = true, ScrollBars = RichTextBoxScrollBars.Vertical,
+        WordWrap = true, DetectUrls = false, BorderStyle = BorderStyle.FixedSingle,
         Font = new Font("Segoe UI", 10),
         Text = "Kein signierter Vorschlag geladen. Keine Genehmigung.",
     };
-    private readonly CheckBox _acknowledge = new()
+    private readonly ReviewCheckBox _acknowledge = new()
     {
         Text = "Ich habe diesen exakten Fakt und die angezeigte Entscheidung gelesen."
             + " Nur Windows-Hello-Nachweis prüfen, KEINEN Claim genehmigen.",
         AutoSize = true, Enabled = false,
     };
-    private readonly Button _compare = new()
+    private readonly ReviewButton _compare = new()
     {
         Text = "Signierten Claim-Vergleich laden (nur lesen)",
         AutoSize = true, Height = 38,
     };
     private ComparisonOffer? _comparisonOffer;
-    private readonly Button _conflict = new()
+    private readonly ReviewButton _conflict = new()
     {
         Text = "Konflikt-Intent mit Windows Hello (kein Claim)",
         AutoSize = true, Height = 38, Enabled = false,
     };
-    private readonly Button _load = new()
+    private readonly ReviewButton _load = new()
     {
         Text = "Signierten Vorschlag laden",
         AutoSize = true, Height = 38,
     };
-    private readonly Button _enrollPrepare = new()
+    private readonly ReviewButton _enrollPrepare = new()
     {
         Text = "Neue Windows-Hello-Einschreibung vorbereiten",
         AutoSize = true, Height = 38,
     };
-    private readonly Button _verify = new()
+    private readonly ReviewButton _verify = new()
     {
         Text = "Mit Windows Hello prüfen (keine Freigabe)",
         AutoSize = true, Height = 38, Enabled = false,
     };
-    private readonly Button _reaffirmPrepare = new()
+    private readonly ReviewButton _reaffirmPrepare = new()
     {
         Text = "Eigene Aussage vorbereiten", AutoSize = true, Height = 38,
     };
-    private readonly CheckBox _reaffirmAcknowledge = new()
+    private readonly ReviewCheckBox _reaffirmAcknowledge = new()
     {
         Text = "Ich bestätige den angezeigten Fakt JETZT als eigene Aussage. "
             + "Historische Evidence bleibt UNVERIFIZIERT. KEIN Claim.",
         Dock = DockStyle.Fill, Enabled = false,
     };
-    private readonly Button _reaffirmConfirm = new()
+    private readonly ReviewButton _reaffirmConfirm = new()
     {
         Text = "Diese neue Aussage mit Windows Hello bestätigen (kein Claim)",
         AutoSize = true, Height = 38, Enabled = false,
     };
-    private readonly Button _publishPrepare = new()
+    private readonly ReviewButton _publishPrepare = new()
     {
         Text = "Memory-Claim (No-Write-Preview: gesperrt)",
         AutoSize = true, Height = 38, Enabled = false,
     };
-    private readonly CheckBox _publishAcknowledge = new()
+    private readonly ReviewCheckBox _publishAcknowledge = new()
     {
         Text = "Ich will diesen exakt angezeigten NEU bestätigten Fakt jetzt "
             + "im geschützten Claim-Speicher aufnehmen. Historische Evidence "
             + "bleibt unverifiziert. NICHT in Codex abrufbar.",
         Dock = DockStyle.Fill, Enabled = false,
     };
-    private readonly Button _publishCommit = new()
+    private readonly ReviewButton _publishCommit = new()
     {
         Text = "Jetzt mit Windows Hello als geschützten Claim speichern",
         AutoSize = true, Height = 38, Enabled = false,
     };
-    private readonly Button _readPrepare = new()
+    private readonly ReviewButton _readPrepare = new()
     {
         Text = "Geschützten Claim zur Read-Prüfung laden",
         AutoSize = true, Height = 38,
     };
-    private readonly CheckBox _readAcknowledge = new()
+    private readonly ReviewCheckBox _readAcknowledge = new()
     {
         Text = "Ich habe den konkreten Claim, das Projekt und den Empfänger gelesen. "
             + "Nur separate Windows-Hello-Absicht, KEIN Codex-Recall.",
         Dock = DockStyle.Fill, Enabled = false,
     };
-    private readonly Button _readConfirm = new()
+    private readonly ReviewButton _readConfirm = new()
     {
         Text = "Read-Zustimmung mit Windows Hello prüfen (KEINE Freigabe)",
         AutoSize = true, Height = 38, Enabled = false,
     };
-    private readonly Button _ciReadPrepare = new()
+    private readonly ReviewButton _ciReadPrepare = new()
     {
         Text = "CI: Wartenden Test-Empfänger prüfen",
         AutoSize = true, Height = 38,
     };
-    private readonly CheckBox _ciReadAcknowledge = new()
+    private readonly ReviewCheckBox _ciReadAcknowledge = new()
     {
         Text = "CI-NUR: Ich habe den echten Claim und die Kernel-PID des "
             + "wartenden Testempfängers gelesen. Diese PID attestiert KEINE "
             + "sichere Codex-Sitzung. Einmalige Test-Übertragung erlauben.",
         Dock = DockStyle.Fill, Enabled = false,
     };
-    private readonly Button _ciReadConfirm = new()
+    private readonly ReviewButton _ciReadConfirm = new()
     {
         Text = "CI: Einmalige Test-Übertragung mit Windows Hello erlauben",
         AutoSize = true, Height = 38, Enabled = false,
@@ -243,88 +238,13 @@ internal sealed class OperatorReviewWindow : Form
     private RegistrationOffer? _enrollment;
     private bool _busy;
 
-    internal OperatorReviewWindow()
+    internal OperatorReviewWindow() : this(wireActions: true) { }
+
+    // An inert form for offscreen layout tests only; no IPC or Hello handlers.
+    private OperatorReviewWindow(bool wireActions)
     {
-        Text = "AgentHub Memory | Geschützter E~ Review | NO-GO";
-        StartPosition = FormStartPosition.CenterScreen;
-        MinimumSize = new Size(860, 920);
-        Size = new Size(1100, 1010);
-        BackColor = Color.FromArgb(16, 19, 24);
-        ForeColor = Color.FromArgb(243, 245, 246);
-        Font = new Font("Segoe UI", 10);
-
-        var outer = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill, Padding = new Padding(28),
-            AutoScroll = true,
-            ColumnCount = 1, RowCount = 16,
-        };
-        outer.RowStyles.Add(new RowStyle(SizeType.Absolute, 80));
-        outer.RowStyles.Add(new RowStyle(SizeType.Absolute, 74));
-        outer.RowStyles.Add(new RowStyle(SizeType.Absolute, 80));
-        outer.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        outer.RowStyles.Add(new RowStyle(SizeType.Absolute, 125));
-        outer.RowStyles.Add(new RowStyle(SizeType.Absolute, 50));
-        outer.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
-        outer.RowStyles.Add(new RowStyle(SizeType.Absolute, 50));
-        outer.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
-        outer.RowStyles.Add(new RowStyle(SizeType.Absolute, 65));
-        outer.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
-        outer.RowStyles.Add(new RowStyle(SizeType.Absolute, 65));
-        outer.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
-        outer.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
-        outer.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
-        outer.RowStyles.Add(new RowStyle(SizeType.Absolute, 55));
-        var header = new Label
-        {
-            Dock = DockStyle.Fill,
-            Text = "AGENTHUB  /  MEMORY REVIEW\n"
-                + "TEMPORÄRES NATIVE-HELLO-LAB    ·    KEIN CODEX-RECALL",
-            Font = new Font("Segoe UI Semibold", 14),
-            ForeColor = Color.White,
-        };
-        outer.Controls.Add(header, 0, 0);
-
-        var scope = new FlowLayoutPanel
-        {
-            Dock = DockStyle.Fill, WrapContents = false,
-            FlowDirection = FlowDirection.LeftToRight, AutoScroll = true,
-        };
-        scope.Controls.Add(Captioned("PROJEKT", _project));
-        scope.Controls.Add(Captioned("BRANCH", _branch));
-        scope.Controls.Add(Captioned("E~ REFERENZ", _reference));
-        outer.Controls.Add(scope, 0, 1);
-        var loadActions = new FlowLayoutPanel
-        {
-            Dock = DockStyle.Fill, WrapContents = true, AutoScroll = true,
-            FlowDirection = FlowDirection.LeftToRight,
-        };
-        loadActions.Controls.Add(_compare);
-        loadActions.Controls.Add(_conflict);
-        loadActions.Controls.Add(_load);
-        loadActions.Controls.Add(_enrollPrepare);
-        loadActions.Controls.Add(_reaffirmPrepare);
-        loadActions.Controls.Add(_publishPrepare);
-        loadActions.Controls.Add(_readPrepare);
-        _ciReadPrepare.Visible = CiOnly;
-        loadActions.Controls.Add(_ciReadPrepare);
-        outer.Controls.Add(loadActions, 0, 2);
-        outer.Controls.Add(_fact, 0, 3);
-        outer.Controls.Add(_meaning, 0, 4);
-        outer.Controls.Add(_acknowledge, 0, 5);
-        outer.Controls.Add(_verify, 0, 6);
-        outer.Controls.Add(_reaffirmAcknowledge, 0, 7);
-        outer.Controls.Add(_reaffirmConfirm, 0, 8);
-        outer.Controls.Add(_publishAcknowledge, 0, 9);
-        outer.Controls.Add(_publishCommit, 0, 10);
-        outer.Controls.Add(_readAcknowledge, 0, 11);
-        outer.Controls.Add(_readConfirm, 0, 12);
-        _ciReadAcknowledge.Visible = CiOnly;
-        _ciReadConfirm.Visible = CiOnly;
-        outer.Controls.Add(_ciReadAcknowledge, 0, 13);
-        outer.Controls.Add(_ciReadConfirm, 0, 14);
-        outer.Controls.Add(_status, 0, 15);
-        Controls.Add(outer);
+        BuildLayout();
+        if (!wireActions) return;
 
         _compare.Click += async (_, _) => await LoadComparisonAsync();
         _conflict.Click += (_, _) => PerformConflictReview();
@@ -358,25 +278,6 @@ internal sealed class OperatorReviewWindow : Form
         _ciObserved?.Dispose();
         _ciObserved = null;
         base.OnFormClosed(e);
-    }
-
-    private static Control Captioned(string name, TextBox input)
-    {
-        var panel = new FlowLayoutPanel
-        {
-            Width = input.Width + 12, Height = 68,
-            FlowDirection = FlowDirection.TopDown, WrapContents = false,
-        };
-        panel.Controls.Add(new Label
-        {
-            Text = name, Width = input.Width,
-            Height = 22, ForeColor = Color.Silver,
-            Font = new Font("Segoe UI", 9, FontStyle.Bold),
-        });
-        input.ForeColor = Color.Black;
-        input.BackColor = Color.White;
-        panel.Controls.Add(input);
-        return panel;
     }
 
     private void InvalidateOffer()

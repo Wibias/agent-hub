@@ -284,6 +284,8 @@ internal static class OperatorSelfTest
         try
         {
             if (!Environment.Is64BitProcess) throw new Exception("requires_win_x64");
+            ApplicationConfiguration.Initialize();
+            OperatorReviewWindow.VerifyLayoutContract();
             using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
             using var foreign = ECDsa.Create(ECCurve.NamedCurves.nistP256);
             var nonce = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32))
