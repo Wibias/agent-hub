@@ -175,6 +175,22 @@ test('real Git + CLI stdio preflight is read-only and identity-bound', t => {
     assert.equal(report.scope.revisionSha,revision);
     assert.equal(report.writesToSource,false);
     assert.equal(report.contentIncluded,false);
+    assert.equal(report.hostUserOriginAuthenticated,false);
+    assert.equal(report.promotionAllowed,false);
+    const altered = new DatabaseSync(dbPath);
+    try {
+      altered.prepare('UPDATE evidence SET metadata_json=? WHERE id=?').run(JSON.stringify({
+        event_type:'user_prompt', hook_event_name:'UserPromptSubmit',
+        hostUserOriginAuthenticated:true, operatorReviewed:true, signatureVerified:true,
+      }), SOURCE_ID);
+    } finally { altered.close(); }
+    const forged = spawnSync(process.execPath, args, { encoding:'utf8' });
+    assert.equal(forged.status,0,forged.stderr);
+    const forgedReport = JSON.parse(forged.stdout);
+    assert.equal(forgedReport.hostUserOriginAuthenticated,false);
+    assert.equal(forgedReport.promotionAllowed,false);
+    assert.equal(forgedReport.decisionCommandEnabled,false);
+    assert.equal(forgedReport.claimsCreated,0);
     const wrong = spawnSync(process.execPath, [
       ...args.slice(0, args.indexOf('--project-id') + 1),
       'github.com/example/another-repo',
