@@ -16,7 +16,7 @@ concurrency:
 
 jobs:
   verify:
-    name: verify
+    name: AgentHub release governance
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
