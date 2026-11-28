@@ -168,24 +168,7 @@ public sealed partial class ProtectedPendingReviewLedger
             && proof.SignCount <= credential.LastSignCount)
             throw new InvalidOperationException("direct_claim_counter_replay");
 
-        // Check unique fact across the existing synthetic lab table too.
-        // The new DIRECT table is a separate provenance type, never a
-        // synthetic claim with a misleading source-origin label.
-        using (var duplicate = _connection.CreateCommand())
-        {
-            duplicate.Transaction = tx;
-            duplicate.CommandText = """
-                SELECT EXISTS(
-                    SELECT 1 FROM protected_review_claims
-                    WHERE project_id=$project AND branch=$branch AND fact_sha256=$hash
-                );
-                """;
-            duplicate.Parameters.AddWithValue("$project", meaning.ProjectId);
-            duplicate.Parameters.AddWithValue("$branch", meaning.Branch);
-            duplicate.Parameters.AddWithValue("$hash", meaning.CanonicalFactSha256);
-            if (Convert.ToInt32(duplicate.ExecuteScalar()) != 0)
-                throw new InvalidOperationException("direct_claim_conflicts_with_lab_claim");
-        }
+        RequireNoProtectedDuplicate(meaning.ProjectId, meaning.Branch, meaning.CanonicalFact, tx);
 
         var when = DateTimeOffset.UtcNow.ToString("O");
         var claim = new ProtectedOperatorDirectClaim(

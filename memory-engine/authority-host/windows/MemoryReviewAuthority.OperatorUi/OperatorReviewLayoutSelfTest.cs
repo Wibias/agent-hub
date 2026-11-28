@@ -58,6 +58,32 @@ internal sealed partial class OperatorReviewWindow
         Require(CiOnly == (form._ciReadPrepare.Parent is not null)
             && CiOnly == (form._ciReadAcknowledge.Parent is not null)
             && CiOnly == (form._ciReadConfirm.Parent is not null), "CI-only layout rows");
+        var decision = Find("DecisionSummary");
+        var ceremony = Find("CeremonySummary");
+        Require(decision.Text.Contains("Kein aktiver") && ceremony.Text.Contains("Keine"),
+            "empty decision summary");
+        var expiry = DateTimeOffset.UtcNow.AddMinutes(10);
+        form._enrollment = new RegistrationOffer("request", "ticket", "challenge", "user",
+            "origin", "rp", expiry, "project", "branch", "E~0123456789", "revision",
+            "snapshot", "fact", "evidence", "knowledge", "origin", "confirm", "Synthetic fact");
+        form.UpdateVerifyEnabled();
+        Require(decision.Text.Contains("confirm") && ceremony.Text.Contains("Einschreibung")
+            && ceremony.Text.Contains("kein Claim"), "enrollment decision is not clear");
+        Require(!form._verify.Enabled, "summary must not enable verification");
+        form._enrollment = form._enrollment with { ExpiresUtc = expiry.AddHours(-1) };
+        form.UpdateVerifyEnabled();
+        Require(decision.Text.Contains("Kein aktiver"), "expired decision still active");
+        form.InvalidateOffer();
+        form._comparisonOffer = new ComparisonOffer("project", "branch", "E~0123456789",
+            "revision", "snapshot", "evidence", "comparison", "reject", "knowledge",
+            "Synthetic fact", Array.Empty<ComparisonClaim>(), false, "recorded_exact_snapshot");
+        form.UpdateVerifyEnabled();
+        Require(decision.Text.Contains("reject") && ceremony.Text.Contains("bereits gespeichert")
+            && !form._conflict.Enabled, "recorded rejection summary");
+        form.InvalidateOffer();
+        Require(decision.Text.Contains("Kein aktiver") && ceremony.Text.Contains("Keine"),
+            "invalidated decision remains visible");
+
         if (!ReviewPalette.HighContrast)
         {
             static double Luminance(Color color)

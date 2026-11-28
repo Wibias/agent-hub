@@ -69,7 +69,7 @@ public sealed partial class ProtectedPendingReviewLedger
 
     /// <summary>
     /// Host-internal commit of an explicit future operator review INTENT.
-    /// Must be called only after a single-use approval-purpose UV assertion,
+    /// Must be called only after a single-use reaffirmation-purpose UV assertion,
     /// with the protected service reading the native-enrolled key itself.
     /// Never converts the original evidence into authenticated provenance.
     /// The native host does not expose this operation over IPC yet.
@@ -81,7 +81,7 @@ public sealed partial class ProtectedPendingReviewLedger
         if (meaning is null || enrolledKey is null || proof is null
             || meaning.Decision != "confirm"
             || !proof.Verified || !proof.UserPresent || !proof.UserVerified
-            || proof.Status != "verified_protected_approval_intent_only"
+            || proof.Status != "verified_operator_reaffirmation_intent_only"
             || proof.ApprovedReviewDecision || proof.ClaimWritten
             || meaning.CanonicalFact is not { Length: > 0 and <= 4000 }
             || Hash(meaning.CanonicalFact) != meaning.CanonicalFactSha256)
