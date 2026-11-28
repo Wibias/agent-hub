@@ -384,18 +384,65 @@ The local follow-up candidate (not yet delivered or installed) contains:
   rechecked when the UI refreshes action state and again before the ceremony;
   an autonomous expiry display transition has not been demonstrated.
 
-Remaining publication lifecycle gap: the protected transaction already
-refuses a reaffirmation older than 15 minutes, but the current begin path
-does not check that window before offering the second ceremony. The existing
-immutable receipt is unique per scope/proposal, so the same proposal cannot
-simply be reaffirmed again after expiry. A future design must make stale
-receipt handling explicit (fail early, and if renewal is allowed, record a
-distinct fresh consent generation without rewriting or reusing the original
-receipt). Do not extend the lifetime or silently refresh consent. No
-production upgrade or in-place migration of previous reaffirmation receipts
-is authorized; a persisted v1 receipt does not prove the new challenge
-domain. The currently tested field receipt is a conflict-intent, not a
-reaffirmation or publication receipt.
+Publication lifecycle follow-up: the host-internal begin path and final
+protected transaction now share the same 15-minute freshness predicate.
+Both deny malformed timestamps, future timestamps and expired reaffirmations.
+The begin path refuses before issuing a publication challenge; the transaction
+still rechecks freshness independently, including expiry during a ceremony.
+The persisted round-trip timestamp format is checked without locale-dependent
+parsing. Synthetic Store regressions reproduce the original stale-begin
+failure and verify all three denials at both boundaries without a Claim
+or credential-counter advance (68/68 Store tests passed). The production
+publication path remains disabled.
+
+The first reaffirmation receipt and direct Claim now also reject replacement
+through SQLite INSERT OR REPLACE on every declared unique identity. Existing
+UPDATE and DELETE guards remain. Both replacement regressions failed before
+the respective guard was added and passed after repair (68/68 Store tests).
+This protects the append-only contract within the Store; it does not defend
+against an actor with arbitrary schema or protected-file write access.
+
+Publication challenges bind the immutable reaffirmation receipt digest
+under the separate agenthub-operator-claim-commit-bound-v1 domain. The Core
+returns the exact digest from its consumed ticket, not from the IPC caller.
+The final transaction reconstructs the latest receipt digest and verifies
+freshness again immediately before insertion. The generic commit-purpose
+proof is insufficient. The stored Claim binding references exactly one
+generation and is inserted in the same transaction as the Claim and counter.
+
+The protected Store now supports an explicit host-internal renewal ceremony
+under agenthub-operator-reaffirmation-renewal-uv-v1. It requires a valid
+expired receipt and signs its exact previous binding. Each successful renewal
+appends a new immutable generation, without rewriting the original receipt
+or any earlier generation. A pending ticket for the older generation fails
+after renewal, and competing tickets against the same prior receipt cannot
+both commit (including zero-counter authenticators). The original table
+remains the immutable scope anchor; additive generation and Claim-binding
+tables protect all unique identities against UPDATE, DELETE and REPLACE.
+The projection recomputes the bound receipt digest and checks freshness at
+the committed Claim timestamp.
+
+Existing v1 receipts without a generation marker remain historical generation
+zero, not proof of the new cryptographic domain. Even a fresh such receipt
+cannot publish. A new explicitly signed renewal is required after expiry.
+Existing historical Claims are not retroactively given a generation binding.
+No in-place rewrite or migration of production data was performed.
+
+The local synthetic suite passed Core 24/24, Store 72/72, and Service policy
+25/25. Tests include expired legacy and versioned fixtures, independent
+connections and competing renewal tickets, old publication refusal, exact
+generation after reopening, preserved historical rows, and replacement guards.
+The build passed with zero warnings/errors. The simulated expiry fixtures
+do not substitute for a physical Hello ceremony or a live installed-service
+migration test. Renewal is deliberately not exposed via IPC or UI; the
+existing synthetic-only publication fence remains unchanged. Production
+publication, private Codex reads, and historical source authentication
+remain disabled or unresolved. Do not extend the 15-minute lifetime or
+silently renew consent.
+
+No production upgrade or in-place migration is authorized. The tested
+field receipt is a conflict-intent, not a reaffirmation or publication
+receipt.
 
 The source authority and private recipient boundary remain separate
 unresolved requirements; no production write or real-project private-read

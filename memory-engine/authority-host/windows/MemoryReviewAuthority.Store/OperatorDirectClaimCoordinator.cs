@@ -56,11 +56,16 @@ public sealed class OperatorDirectClaimCoordinator
             || reaffirmed.HistoricalEvidenceVerified
             || reaffirmed.ClaimWritten)
             throw new InvalidOperationException("direct_claim_reaffirmation_missing");
+        if (!ProtectedPendingReviewLedger.IsFreshOperatorReaffirmation(
+                reaffirmed.RecordedAtUtc, DateTimeOffset.UtcNow))
+            throw new InvalidOperationException("direct_claim_reaffirmation_missing_or_stale");
+        if (reaffirmed.Generation <= 0)
+            throw new InvalidOperationException("direct_claim_legacy_reaffirmation_requires_renewal");
         if (_ledger.ReadOperatorDirectClaims(meaning.ProjectId, meaning.Branch)
             .Any(c => c.RequestId == current.RequestId
                 || c.FactSha256 == meaning.CanonicalFactSha256))
             throw new InvalidOperationException("direct_claim_already_recorded");
-        return _core.BeginProtectedClaimCommit(meaning, _nativeCredential);
+        return _core.BeginBoundOperatorClaimCommit(meaning, _nativeCredential, reaffirmed.BindingSha256);
     }
 
     /// <summary>
@@ -70,9 +75,9 @@ public sealed class OperatorDirectClaimCoordinator
     public OperatorDirectClaimCompletion Complete(
         string ticketId, ReviewMeaning meaning, BrowserAssertion assertion)
     {
-        var proof = _core.VerifyProtectedClaimCommitAndConsume(ticketId, meaning, assertion);
+        var proof = _core.VerifyBoundOperatorClaimCommitAndConsume(ticketId, meaning, assertion);
         if (!proof.Verified || !proof.UserPresent || !proof.UserVerified
-            || proof.Status != "verified_protected_claim_commit_intent_only")
+            || proof.Status != "verified_bound_operator_claim_commit_intent_only")
             return new(false, proof.Status);
         try
         {

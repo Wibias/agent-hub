@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using MemoryReviewAuthority.Core;
@@ -26,13 +27,35 @@ public sealed record ProtectedOperatorDirectClaim(
     string CreatedAtUtc,
     string Provenance,
     string HistoricalSourceOrigin,
-    bool HistoricalEvidenceVerified = false);
+    bool HistoricalEvidenceVerified = false,
+    long ReaffirmationGeneration = 0,
+    string? ReaffirmationBindingSha256 = null);
 
 public sealed partial class ProtectedPendingReviewLedger
 {
     public const string OperatorDirectClaimPolicy = "agenthub-protected-operator-direct-claim-v1";
     public const string OperatorDirectClaimOrigin = "user_direct_reaffirmed_and_published_v1";
     public static readonly TimeSpan OperatorReaffirmationLifetime = TimeSpan.FromMinutes(15);
+
+    internal static bool IsFreshOperatorReaffirmation(string recordedAtUtc, DateTimeOffset now)
+        => DateTimeOffset.TryParseExact(recordedAtUtc, "O", CultureInfo.InvariantCulture,
+               DateTimeStyles.None, out var recorded)
+           && recorded <= now && now - recorded <= OperatorReaffirmationLifetime;
+
+    internal static bool IsExpiredOperatorReaffirmation(string recordedAtUtc, DateTimeOffset now)
+        => DateTimeOffset.TryParseExact(recordedAtUtc, "O", CultureInfo.InvariantCulture,
+               DateTimeStyles.None, out var recorded)
+           && recorded <= now && now - recorded > OperatorReaffirmationLifetime;
+
+    internal bool HasOperatorDirectClaim(string requestId, SqliteTransaction? tx = null)
+    {
+        EnsureOpen();
+        using var cmd = _connection.CreateCommand();
+        cmd.Transaction = tx;
+        cmd.CommandText = "SELECT 1 FROM protected_operator_direct_claims WHERE request_id=$request;";
+        cmd.Parameters.AddWithValue("$request", requestId);
+        return cmd.ExecuteScalar() is not null;
+    }
 
     private static void InitializeOperatorDirectClaimSchema(SqliteConnection connection)
     {
@@ -75,6 +98,32 @@ public sealed partial class ProtectedPendingReviewLedger
             CREATE TRIGGER IF NOT EXISTS deny_direct_claim_delete
               BEFORE DELETE ON protected_operator_direct_claims
               BEGIN SELECT RAISE(ABORT, 'operator_direct_claim_immutable'); END;
+            CREATE TRIGGER IF NOT EXISTS deny_direct_claim_replace
+              BEFORE INSERT ON protected_operator_direct_claims
+              WHEN EXISTS (SELECT 1 FROM protected_operator_direct_claims
+                WHERE claim_id=NEW.claim_id OR request_id=NEW.request_id OR
+                (project_id=NEW.project_id AND branch=NEW.branch AND
+                 (fact_sha256=NEW.fact_sha256 OR proposal_ref=NEW.proposal_ref)))
+              BEGIN SELECT RAISE(ABORT, 'operator_direct_claim_immutable'); END;
+            CREATE TABLE IF NOT EXISTS protected_operator_direct_claim_bindings (
+                claim_id TEXT PRIMARY KEY NOT NULL REFERENCES protected_operator_direct_claims(claim_id) ON DELETE RESTRICT,
+                request_id TEXT NOT NULL UNIQUE,
+                generation INTEGER NOT NULL CHECK(generation>0),
+                binding_sha256 TEXT NOT NULL CHECK(length(binding_sha256)=64),
+                FOREIGN KEY(request_id,generation,binding_sha256)
+                    REFERENCES protected_operator_reaffirmation_generations(request_id,generation,binding_sha256) ON DELETE RESTRICT
+            ) STRICT;
+            CREATE TRIGGER IF NOT EXISTS deny_direct_claim_binding_update
+              BEFORE UPDATE ON protected_operator_direct_claim_bindings
+              BEGIN SELECT RAISE(ABORT, 'direct_claim_binding_immutable'); END;
+            CREATE TRIGGER IF NOT EXISTS deny_direct_claim_binding_delete
+              BEFORE DELETE ON protected_operator_direct_claim_bindings
+              BEGIN SELECT RAISE(ABORT, 'direct_claim_binding_immutable'); END;
+            CREATE TRIGGER IF NOT EXISTS deny_direct_claim_binding_replace
+              BEFORE INSERT ON protected_operator_direct_claim_bindings
+              WHEN EXISTS (SELECT 1 FROM protected_operator_direct_claim_bindings
+                WHERE claim_id=NEW.claim_id OR request_id=NEW.request_id)
+              BEGIN SELECT RAISE(ABORT, 'direct_claim_binding_immutable'); END;
             """;
         cmd.ExecuteNonQuery();
     }
@@ -94,7 +143,8 @@ public sealed partial class ProtectedPendingReviewLedger
         if (meaning is null || pinned is null || proof is null
             || meaning.Decision != "confirm"
             || !proof.Verified || !proof.UserPresent || !proof.UserVerified
-            || proof.Status != "verified_protected_claim_commit_intent_only"
+            || proof.Status != "verified_bound_operator_claim_commit_intent_only"
+            || proof.ReaffirmationBindingSha256 is null
             || proof.ApprovedReviewDecision || proof.ClaimWritten
             || meaning.CanonicalFact is not { Length: > 0 and <= 4000 }
             || Hash(meaning.CanonicalFact) != meaning.CanonicalFactSha256)
@@ -128,41 +178,16 @@ public sealed partial class ProtectedPendingReviewLedger
             || source.Source.Kind is not ("knowledge" or "preference"))
             throw new InvalidOperationException("direct_claim_related_or_unsafe_source");
 
-        // The earlier human reaffirmation MUST be present, immutable and
-        // fresh. Its statement cannot be reused for a publication much later.
-        using (var first = _connection.CreateCommand())
-        {
-            first.Transaction = tx;
-            first.CommandText = """
-                SELECT project_id,branch,revision_sha,proposal_ref,
-                       snapshot_sha256,fact_sha256,evidence_sha256,
-                       source_origin,kind,credential_id_sha256,sign_count,
-                       recorded_at_utc,policy_version
-                FROM protected_operator_reaffirmation_intents
-                WHERE request_id=$request;
-                """;
-            first.Parameters.AddWithValue("$request", pending.RequestId);
-            using var row = first.ExecuteReader();
-            if (!row.Read()
-                || row.GetString(0) != meaning.ProjectId
-                || row.GetString(1) != meaning.Branch
-                || row.GetString(2) != meaning.RevisionSha
-                || row.GetString(3) != meaning.ProposalRef
-                || row.GetString(4) != meaning.ReviewSnapshotSha256
-                || row.GetString(5) != meaning.CanonicalFactSha256
-                || row.GetString(6) != source.Source.SourceEvidenceSha256
-                || row.GetString(7) != OperatorSourceOrigin
-                || row.GetString(8) != source.Source.Kind
-                || row.GetString(9) != Hash(pinned.CredentialIdBase64Url)
-                || row.GetString(12) != OperatorReaffirmationPolicy
-                || !DateTimeOffset.TryParse(row.GetString(11), out var reaffirmed)
-                || reaffirmed > DateTimeOffset.UtcNow
-                || DateTimeOffset.UtcNow - reaffirmed > OperatorReaffirmationLifetime
-                || row.GetInt64(10) > credential.LastSignCount)
-                throw new InvalidOperationException("direct_claim_reaffirmation_missing_or_stale");
-            if (row.Read())
-                throw new InvalidOperationException("direct_claim_ambiguous_reaffirmation");
-        }
+        var receipt = ReadOperatorReaffirmationIntent(meaning.ProjectId, meaning.Branch, meaning.ProposalRef, tx);
+        if (receipt is null || receipt.RequestId != pending.RequestId || receipt.Generation <= 0
+            || receipt.RevisionSha != meaning.RevisionSha || receipt.ReviewSnapshotSha256 != meaning.ReviewSnapshotSha256
+            || receipt.CanonicalFactSha256 != meaning.CanonicalFactSha256
+            || receipt.HistoricalEvidenceSha256 != source.Source.SourceEvidenceSha256
+            || receipt.Kind != source.Source.Kind || receipt.CredentialIdSha256 != Hash(pinned.CredentialIdBase64Url)
+            || receipt.SignCount > credential.LastSignCount
+            || !IsFreshOperatorReaffirmation(receipt.RecordedAtUtc, DateTimeOffset.UtcNow)
+            || receipt.BindingSha256 != proof.ReaffirmationBindingSha256)
+            throw new InvalidOperationException("direct_claim_reaffirmation_missing_stale_or_changed");
 
         if (proof.SignCount > 0 && credential.LastSignCount > 0
             && proof.SignCount <= credential.LastSignCount)
@@ -170,7 +195,10 @@ public sealed partial class ProtectedPendingReviewLedger
 
         RequireNoProtectedDuplicate(meaning.ProjectId, meaning.Branch, meaning.CanonicalFact, tx);
 
-        var when = DateTimeOffset.UtcNow.ToString("O");
+        var commitTime = DateTimeOffset.UtcNow;
+        if (!IsFreshOperatorReaffirmation(receipt.RecordedAtUtc, commitTime))
+            throw new InvalidOperationException("direct_claim_reaffirmation_expired_before_insert");
+        var when = commitTime.ToString("O");
         var claim = new ProtectedOperatorDirectClaim(
             "C~" + Hash("agenthub-protected-operator-direct-claim-v1\n"
                 + pending.RequestId + "\n" + meaning.CanonicalFactSha256)[..24],
@@ -178,7 +206,8 @@ public sealed partial class ProtectedPendingReviewLedger
             meaning.RevisionSha, meaning.ProposalRef,
             meaning.ReviewSnapshotSha256, meaning.CanonicalFactSha256,
             source.Source.SourceEvidenceSha256, source.Source.Kind,
-            meaning.CanonicalFact, when, OperatorDirectClaimOrigin, OperatorSourceOrigin);
+            meaning.CanonicalFact, when, OperatorDirectClaimOrigin, OperatorSourceOrigin,
+            ReaffirmationGeneration: receipt.Generation, ReaffirmationBindingSha256: receipt.BindingSha256);
 
         using (var insert = _connection.CreateCommand())
         {
@@ -213,6 +242,21 @@ public sealed partial class ProtectedPendingReviewLedger
             insert.Parameters.AddWithValue("$policy", OperatorDirectClaimPolicy);
             if (insert.ExecuteNonQuery() != 1)
                 throw new InvalidOperationException("direct_claim_insert_failed");
+        }
+        using (var binding = _connection.CreateCommand())
+        {
+            binding.Transaction = tx;
+            binding.CommandText = """
+                INSERT INTO protected_operator_direct_claim_bindings
+                    (claim_id,request_id,generation,binding_sha256)
+                VALUES ($id,$request,$generation,$binding);
+                """;
+            binding.Parameters.AddWithValue("$id", claim.ClaimId);
+            binding.Parameters.AddWithValue("$request", claim.RequestId);
+            binding.Parameters.AddWithValue("$generation", receipt.Generation);
+            binding.Parameters.AddWithValue("$binding", receipt.BindingSha256);
+            if (binding.ExecuteNonQuery() != 1)
+                throw new InvalidOperationException("direct_claim_binding_insert_failed");
         }
         if (proof.SignCount > credential.LastSignCount)
         {
@@ -252,7 +296,9 @@ public sealed partial class ProtectedPendingReviewLedger
                    c.historical_evidence_verified,c.policy_version,
                    r.fact_sha256,r.evidence_sha256,r.snapshot_sha256,
                    s.canonical_fact,s.source_origin,
-                   a.fact_sha256,a.evidence_sha256,a.source_origin
+                   a.fact_sha256,a.evidence_sha256,a.source_origin,
+                   l.request_id,l.generation,l.binding_sha256,g.generation,g.binding_sha256,
+                   g.previous_binding_sha256,g.sign_count,g.recorded_at_utc,a.credential_id_sha256
             FROM protected_operator_direct_claims c
             JOIN review_requests r ON r.request_id=c.request_id
                 AND r.project_id=c.project_id AND r.branch=c.branch
@@ -266,6 +312,9 @@ public sealed partial class ProtectedPendingReviewLedger
                 ON a.request_id=c.request_id AND a.project_id=c.project_id
                 AND a.branch=c.branch AND a.revision_sha=c.revision_sha
                 AND a.proposal_ref=c.proposal_ref
+            LEFT JOIN protected_operator_direct_claim_bindings l ON l.claim_id=c.claim_id
+            LEFT JOIN protected_operator_reaffirmation_generations g ON g.request_id=c.request_id
+                AND g.generation=(SELECT MAX(generation) FROM protected_operator_reaffirmation_generations WHERE request_id=c.request_id)
             WHERE c.project_id=$project AND c.branch=$branch
             ORDER BY c.created_at_utc DESC,c.claim_id ASC LIMIT $limit;
             """;
@@ -288,14 +337,34 @@ public sealed partial class ProtectedPendingReviewLedger
                 || reader.GetString(19) != reader.GetString(10)
                 || reader.GetString(21) != reader.GetString(7)
                 || reader.GetString(22) != reader.GetString(8)
-                || Hash(reader.GetString(10)) != reader.GetString(7))
+                || Hash(reader.GetString(10)) != reader.GetString(7)
+                || (reader.IsDBNull(24) != reader.IsDBNull(27))
+                || (!reader.IsDBNull(24) && (reader.GetString(24) != reader.GetString(1)
+                    || reader.GetInt64(25) != reader.GetInt64(27) || reader.GetString(26) != reader.GetString(28))))
                 throw new InvalidOperationException("direct_claim_integrity_invalid");
+            if (!reader.IsDBNull(24))
+            {
+                var generation = new ProtectedOperatorReaffirmationIntent(
+                    reader.GetString(1), reader.GetString(2), reader.GetString(3), reader.GetString(4),
+                    reader.GetString(5), reader.GetString(6), reader.GetString(7), reader.GetString(8),
+                    reader.GetString(13), reader.GetString(9), reader.GetString(32),
+                    checked((uint)reader.GetInt64(30)), reader.GetString(31),
+                    Generation: reader.GetInt64(27),
+                    PreviousBindingSha256: reader.IsDBNull(29) ? null : reader.GetString(29));
+                if (generation.BindingSha256 != reader.GetString(26)
+                    || !DateTimeOffset.TryParseExact(reader.GetString(11), "O", CultureInfo.InvariantCulture,
+                        DateTimeStyles.None, out var committedAt)
+                    || !IsFreshOperatorReaffirmation(generation.RecordedAtUtc, committedAt))
+                    throw new InvalidOperationException("direct_claim_generation_integrity_invalid");
+            }
             found.Add(new ProtectedOperatorDirectClaim(
                 reader.GetString(0),reader.GetString(1),reader.GetString(2),
                 reader.GetString(3),reader.GetString(4),reader.GetString(5),
                 reader.GetString(6),reader.GetString(7),reader.GetString(8),
                 reader.GetString(9),reader.GetString(10),reader.GetString(11),
-                reader.GetString(12),reader.GetString(13)));
+                reader.GetString(12),reader.GetString(13),
+                ReaffirmationGeneration: reader.IsDBNull(25) ? 0 : reader.GetInt64(25),
+                ReaffirmationBindingSha256: reader.IsDBNull(26) ? null : reader.GetString(26)));
         }
         return found;
     }
