@@ -74,7 +74,9 @@ public sealed partial class ReviewChallengeCore
     public const string OperatorReaffirmationProtocol = "agenthub-operator-reaffirmation-uv-v1";
     public const string BoundOperatorClaimCommitProtocol = "agenthub-operator-claim-commit-bound-v1";
     public const string OperatorReaffirmationRenewalProtocol = "agenthub-operator-reaffirmation-renewal-uv-v1";
-    private enum ChallengePurpose { Proof, ProtectedApproval, ProtectedClaimCommit, ConflictReview, OperatorReaffirmation, BoundOperatorClaimCommit, OperatorReaffirmationRenewal }
+    public const string NewOperatorStatementProtocol = "agenthub-new-operator-statement-uv-v1";
+    public const string NewStatementPublicationProtocol = "agenthub-new-statement-preview-publication-uv-v1";
+    private enum ChallengePurpose { Proof, ProtectedApproval, ProtectedClaimCommit, ConflictReview, OperatorReaffirmation, BoundOperatorClaimCommit, OperatorReaffirmationRenewal, NewOperatorStatement, NewStatementPublication }
     public const int MaxPending = 32;
     public static readonly TimeSpan Lifetime = TimeSpan.FromSeconds(90);
 
@@ -122,11 +124,17 @@ public sealed partial class ReviewChallengeCore
     public ChallengeTicket BeginOperatorReaffirmationRenewal(ReviewMeaning meaning, PinnedCredential credential, string priorBindingSha256)
         => BeginForPurpose(meaning, credential, ChallengePurpose.OperatorReaffirmationRenewal, priorBindingSha256);
 
+    public ChallengeTicket BeginNewOperatorStatement(ReviewMeaning meaning, PinnedCredential credential)
+        => BeginForPurpose(meaning, credential, ChallengePurpose.NewOperatorStatement);
+
+    public ChallengeTicket BeginNewStatementPublication(ReviewMeaning meaning, PinnedCredential credential)
+        => BeginForPurpose(meaning, credential, ChallengePurpose.NewStatementPublication);
+
     private ChallengeTicket BeginForPurpose(
         ReviewMeaning meaning, PinnedCredential credential, ChallengePurpose purpose,
         string? reaffirmationBindingSha256 = null)
     {
-        ValidateMeaning(meaning);
+        ValidateMeaning(meaning, purpose is ChallengePurpose.NewOperatorStatement or ChallengePurpose.NewStatementPublication);
         ValidateCredential(credential);
         var nonce = RandomNumberGenerator.GetBytes(32);
         var challenge = purpose switch
@@ -137,6 +145,8 @@ public sealed partial class ReviewChallengeCore
             ChallengePurpose.OperatorReaffirmation => ComputeOperatorReaffirmationChallenge(meaning, nonce),
             ChallengePurpose.BoundOperatorClaimCommit => ComputeBoundOperatorClaimCommitChallenge(meaning, nonce, reaffirmationBindingSha256!),
             ChallengePurpose.OperatorReaffirmationRenewal => ComputeBoundReaffirmationChallenge(meaning, nonce, reaffirmationBindingSha256!, OperatorReaffirmationRenewalProtocol),
+            ChallengePurpose.NewOperatorStatement => ComputeChallengeInDomain(meaning, nonce, NewOperatorStatementProtocol),
+            ChallengePurpose.NewStatementPublication => ComputeChallengeInDomain(meaning, nonce, NewStatementPublicationProtocol),
             _ => ComputeChallenge(meaning, nonce),
         };
         // Ticket ID and nonce are independently random. Neither is a portable
@@ -197,6 +207,14 @@ public sealed partial class ReviewChallengeCore
         string ticketId, ReviewMeaning expectedMeaning, BrowserAssertion assertion)
         => VerifyForPurposeAndConsume(ticketId, expectedMeaning, assertion, ChallengePurpose.OperatorReaffirmationRenewal);
 
+    public VerificationResult VerifyNewOperatorStatementAndConsume(
+        string ticketId, ReviewMeaning expectedMeaning, BrowserAssertion assertion)
+        => VerifyForPurposeAndConsume(ticketId, expectedMeaning, assertion, ChallengePurpose.NewOperatorStatement);
+
+    public VerificationResult VerifyNewStatementPublicationAndConsume(
+        string ticketId, ReviewMeaning expectedMeaning, BrowserAssertion assertion)
+        => VerifyForPurposeAndConsume(ticketId, expectedMeaning, assertion, ChallengePurpose.NewStatementPublication);
+
     private VerificationResult VerifyForPurposeAndConsume(
         string ticketId, ReviewMeaning expectedMeaning, BrowserAssertion assertion,
         ChallengePurpose purpose)
@@ -244,6 +262,8 @@ public sealed partial class ReviewChallengeCore
                         ChallengePurpose.OperatorReaffirmation => "verified_operator_reaffirmation_intent_only",
                         ChallengePurpose.BoundOperatorClaimCommit => "verified_bound_operator_claim_commit_intent_only",
                         ChallengePurpose.OperatorReaffirmationRenewal => "verified_operator_reaffirmation_renewal_intent_only",
+                        ChallengePurpose.NewOperatorStatement => "verified_new_operator_statement_intent_only",
+                        ChallengePurpose.NewStatementPublication => "verified_new_statement_preview_publication_only",
                         _ => "verified_not_authorized",
                     },
                     ApprovedReviewDecision = false,
@@ -346,7 +366,7 @@ public sealed partial class ReviewChallengeCore
     private static string ComputeChallengeInDomain(
         ReviewMeaning meaning, ReadOnlySpan<byte> nonce, string domain, string? binding = null)
     {
-        ValidateMeaning(meaning);
+        ValidateMeaning(meaning, domain is NewOperatorStatementProtocol or NewStatementPublicationProtocol);
         if (nonce.Length < 32 || nonce.Length > 64)
             throw new ArgumentOutOfRangeException(nameof(nonce), "host nonce must be 32-64 bytes");
         var parts = new[]
@@ -368,12 +388,13 @@ public sealed partial class ReviewChallengeCore
         return Encode(SHA256.HashData(bytes));
     }
 
-    private static void ValidateMeaning(ReviewMeaning m)
+    private static void ValidateMeaning(ReviewMeaning m, bool newStatement = false)
     {
         if (m is null
             || !AsciiScope(m.ProjectId, 256) || !AsciiScope(m.Branch, 128)
             || !Regex.IsMatch(m.RevisionSha ?? "", "^[0-9a-f]{40}$", RegexOptions.CultureInvariant)
-            || !Regex.IsMatch(m.ProposalRef ?? "", "^E~[0-9a-f]{10}$", RegexOptions.CultureInvariant)
+            || !Regex.IsMatch(m.ProposalRef ?? "", newStatement ? @"\AN~[0-9a-f]{48}\z" : "^E~[0-9a-f]{10}$", RegexOptions.CultureInvariant)
+            || (newStatement && m.Decision != "confirm")
             || !Regex.IsMatch(m.ReviewSnapshotSha256 ?? "", "^[0-9a-f]{64}$", RegexOptions.CultureInvariant)
             || !Regex.IsMatch(m.CanonicalFactSha256 ?? "", "^[0-9a-f]{64}$", RegexOptions.CultureInvariant)
             || m.Decision is not ("confirm" or "reject")

@@ -121,6 +121,9 @@ public sealed partial class ProtectedPendingReviewLedger : IDisposable
             InitializeProtectedSourceSchema(connection);
             InitializeOperatorCredentialSchema(connection);
             InitializeOperatorReaffirmationSchema(connection);
+            InitializeNewStatementScopeSchema(connection);
+            InitializeNewOperatorStatementSchema(connection);
+            InitializeNewStatementPublicationSchema(connection);
             InitializeConflictReviewSchema(connection);
             InitializeOperatorDirectClaimSchema(connection);
             InitializeDirectReadEnrollmentSchema(connection);

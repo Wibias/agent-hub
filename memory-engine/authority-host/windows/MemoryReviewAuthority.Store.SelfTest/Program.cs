@@ -68,6 +68,13 @@ internal static class Program
         Run("native_operator_enrollment_persists_but_creates_no_claim", NativeOperatorEnrolled);
         Run("native_enrollment_does_not_upgrade_a_pinned_unverified_key", NativeOperatorCannotUpgrade);
         Run("native_operator_reaffirmation_intent_persists_no_claim", ReaffirmationNoClaim);
+        Run("new_operator_statement_exact_bound_source_no_claim", NewStatementIntake);
+        Run("new_operator_statement_counter_failure_rolls_back", NewStatementRollback);
+        Run("new_operator_statement_scope_withdrawal_blocks_pending_and_restart", NewStatementScopeWithdrawal);
+        Run("new_operator_statement_full_protected_comparison_and_race", NewStatementComparisonChanged);
+        Run("new_statement_preview_publication_separate_proof_and_race", NewStatementPublicationRace);
+        Run("new_statement_preview_publication_counter_failure_atomic", NewStatementPublicationRollback);
+        Run("new_statement_preview_publication_nonfixture_scope_denied", NewStatementPublicationRealScopeDenied);
         Run("native_reaffirmation_rejects_general_approval_purpose", ReaffirmationRejectsGeneralApproval);
         Run("operator_reaffirmation_unverified_pin_denied", ReaffirmationUnverifiedDenied);
         Run("operator_reaffirmation_procedure_denied", ReaffirmationProcedureDenied);
@@ -94,7 +101,7 @@ internal static class Program
         Run("ci_read_once_sql_receipt_and_tombstone_immutable", CiReadOnceSqlImmutable);
         Run("ci_read_once_full_snapshot_digest_changes_on_every_state_transition",
             CiReadOnceFenceSnapshotChanges);
-        Console.WriteLine($"MEMORY_REVIEW_LEDGER PASS {_passed}/72; REAL_EVIDENCE_UV_PINNED_NO_APPROVAL");
+        Console.WriteLine($"MEMORY_REVIEW_LEDGER PASS {_passed}/79; REAL_EVIDENCE_UV_PINNED_NO_APPROVAL");
     }
 
     private static void Run(string label, Action test)
@@ -2024,6 +2031,390 @@ internal static class Program
             RealProject, RealBranch, RealERef) is null);
         Check(store.ReadProtectedClaims(RealProject, RealBranch).Count == 0);
         Check(store.ReadOperatorCredential()?.LastSignCount == 1);
+    }
+
+
+
+    private static void WriteNewStatementScopeManifest(string project, string branch, string revision)
+    {
+        File.WriteAllText(Path.Combine(TestDirectory, ProtectedPendingReviewLedger.NewStatementScopeFile),
+            JsonSerializer.Serialize(new { protocol = "agenthub-host-pinned-statement-preview-v1",
+                projectId = project, branch, revisionSha = revision }));
+    }
+
+    private static void NewStatementScopeWithdrawal()
+    {
+        CreateRealEvidenceFixture();
+        using var key = TestCredential.New();
+        using var store = Open();
+        var historical = PrepareNativeReaffirmation(store, key);
+        var coordinator = new NewOperatorStatementCoordinator(store);
+        const string fact = "Synthetic scope-bound preference.";
+        Throws<InvalidOperationException>(() => coordinator.Begin(RealProject, RealBranch, historical.RevisionSha, "preference", fact));
+        Throws<InvalidOperationException>(() => store.PinNewStatementPreviewScope());
+        WriteNewStatementScopeManifest(RealProject, RealBranch, historical.RevisionSha);
+        var scope = store.PinNewStatementPreviewScope();
+        Check(store.PinNewStatementPreviewScope() == scope);
+        Throws<InvalidOperationException>(() => coordinator.Begin("github.com/example/foreign", RealBranch, historical.RevisionSha, "preference", fact));
+        Throws<InvalidOperationException>(() => coordinator.Begin(RealProject, "foreign", historical.RevisionSha, "preference", fact));
+        Throws<InvalidOperationException>(() => coordinator.Begin(RealProject, RealBranch, new string('d',40), "preference", fact));
+        WriteNewStatementScopeManifest(RealProject, "foreign", historical.RevisionSha);
+        Throws<InvalidOperationException>(() => store.PinNewStatementPreviewScope());
+        WriteNewStatementScopeManifest(RealProject, RealBranch, historical.RevisionSha);
+        var offer = coordinator.Begin(RealProject, RealBranch, historical.RevisionSha, "preference", fact);
+        using (var other = Open())
+        {
+            other.WithdrawNewStatementPreviewScope();
+            other.WithdrawNewStatementPreviewScope();
+        }
+        Check(!coordinator.Complete(offer, key.Sign(offer.Ticket, forcedSignCount: 3)).Verified);
+        Check(store.ReadOperatorCredential()?.LastSignCount == 2);
+        using var reopened = Open();
+        Throws<InvalidOperationException>(() => reopened.PinNewStatementPreviewScope());
+        Throws<InvalidOperationException>(() => new NewOperatorStatementCoordinator(reopened)
+            .Begin(RealProject, RealBranch, historical.RevisionSha, "preference", fact));
+        using var sql = new SqliteConnection(new SqliteConnectionStringBuilder
+        {
+            DataSource = Path.Combine(TestDirectory, "review-authority.sqlite3"),
+            Mode = SqliteOpenMode.ReadWrite, Pooling = false, ForeignKeys = true,
+        }.ToString());
+        sql.Open();
+        using var cmd = sql.CreateCommand();
+        cmd.CommandText = "SELECT COUNT(*) FROM protected_new_operator_statements;";
+        Check(Convert.ToInt64(cmd.ExecuteScalar()) == 0);
+        foreach (var table in new[] { "protected_new_statement_preview_scope", "protected_new_statement_scope_withdrawal" })
+        {
+            foreach (var mutation in new[] { $"UPDATE {table} SET singleton=1;",
+                $"DELETE FROM {table};", $"INSERT OR REPLACE INTO {table} SELECT * FROM {table};" })
+            {
+                cmd.CommandText = mutation;
+                Throws<SqliteException>(() => cmd.ExecuteNonQuery());
+            }
+        }
+    }
+
+
+
+    private static void NewStatementPublicationRace()
+    {
+        CreateRealEvidenceFixture();
+        using var key = TestCredential.New();
+        using var store = Open();
+        var historical = PrepareNativeReaffirmation(store, key);
+        WriteNewStatementScopeManifest(RealProject, RealBranch, historical.RevisionSha);
+        store.PinNewStatementPreviewScope();
+        var intake = new NewOperatorStatementCoordinator(store);
+        var first = new NewStatementPublicationCoordinator(store);
+        const string fact = "Synthetic preview publication statement.";
+        var draft = intake.Begin(RealProject, RealBranch, historical.RevisionSha, "knowledge", fact);
+        Throws<InvalidOperationException>(() => first.Begin(draft.Ticket.Meaning.ProposalRef, "unrelated"));
+        var recorded = intake.Complete(draft, key.Sign(draft.Ticket, forcedSignCount: 3));
+        Check(recorded.Verified && !recorded.ClaimWritten && recorded.Receipt is not null);
+        var receipt = recorded.Receipt!;
+        Throws<InvalidOperationException>(() => first.Begin(receipt.StatementRef, "conflicting"));
+
+        var secondDraft = intake.Begin(RealProject, RealBranch, historical.RevisionSha, "knowledge", "Another synthetic statement.");
+        var secondReceipt = intake.Complete(secondDraft, key.Sign(secondDraft.Ticket, forcedSignCount: 4)).Receipt!;
+        var another = first.Begin(secondReceipt.StatementRef, "unrelated");
+        var wrong = first.Begin(receipt.StatementRef, "unrelated");
+        var crossCore = new ReviewChallengeCore();
+        var crossTicket = crossCore.BeginNewOperatorStatement(wrong.Ticket.Meaning, key.Pinned);
+        Check(!crossCore.VerifyNewStatementPublicationAndConsume(crossTicket.TicketId,
+            wrong.Ticket.Meaning, key.Sign(crossTicket, forcedSignCount: 5)).Verified);
+        Check(!first.Complete(wrong, key.Sign(draft.Ticket, forcedSignCount: 5)).Verified);
+        var changed = first.Begin(receipt.StatementRef, "unrelated");
+        Check(!first.Complete(changed with { Receipt = receipt with { RecordedAtUtc = "changed" } },
+            key.Sign(changed.Ticket, forcedSignCount: 5)).Verified);
+        Check(store.ReadOperatorCredential()?.LastSignCount == 4);
+        var a = first.Begin(receipt.StatementRef, "unrelated");
+        using var other = Open();
+        var competing = new NewStatementPublicationCoordinator(other);
+        var b = competing.Begin(receipt.StatementRef, "unrelated");
+        var assertion = key.Sign(a.Ticket, forcedSignCount: 0);
+        Check(!new NewStatementPublicationCoordinator(store).Complete(a, assertion).Verified);
+        var completed = first.Complete(a, assertion);
+        Check(completed.Verified && completed.ClaimWritten && !completed.ProductionClaimWritten
+            && completed.PreviewClaim is not null);
+        Check(completed.PreviewClaim!.StatementRef == receipt.StatementRef
+            && completed.PreviewClaim.StatementSha256 == receipt.StatementSha256
+            && completed.PreviewClaim.ComparisonSha256 == receipt.ComparisonSha256
+            && completed.PreviewClaim.PublicationSha256 == a.Ticket.Meaning.ReviewSnapshotSha256);
+        Check(!competing.Complete(b, key.Sign(b.Ticket, forcedSignCount: 0)).Verified);
+        Check(!first.Complete(a, assertion).Verified);
+        Check(!first.Complete(another, key.Sign(another.Ticket, forcedSignCount: 6)).Verified);
+        Check(store.ReadOperatorCredential()?.LastSignCount == 4);
+        Throws<InvalidOperationException>(() => first.Begin(secondReceipt.StatementRef, "unrelated"));
+        Throws<InvalidOperationException>(() => intake.Begin(RealProject, RealBranch, historical.RevisionSha,
+            "knowledge", fact.Replace(" ", "\u00a0 ")));
+        using var reopened = Open();
+        Throws<InvalidOperationException>(() => new NewStatementPublicationCoordinator(reopened).Begin(receipt.StatementRef, "unrelated"));
+        Check(reopened.ReadProtectedClaims(RealProject, RealBranch).Count == 0);
+        Check(reopened.ReadOperatorDirectClaims(RealProject, RealBranch).Count == 0);
+        var next = new NewOperatorStatementCoordinator(reopened).Begin(RealProject, RealBranch,
+            historical.RevisionSha, "knowledge", "A third synthetic statement.");
+        Check(next.Comparison.Claims.Count == 1 && next.Comparison.Claims[0].Origin == "new_statement_preview");
+        using var sql = new SqliteConnection(new SqliteConnectionStringBuilder
+        {
+            DataSource = Path.Combine(TestDirectory, "review-authority.sqlite3"),
+            Mode = SqliteOpenMode.ReadWrite, Pooling = false, ForeignKeys = true,
+        }.ToString());
+        sql.Open();
+        using var cmd = sql.CreateCommand();
+        cmd.CommandText = "SELECT publication_sha256 FROM protected_new_statement_preview_claims;";
+        Check((string?)cmd.ExecuteScalar() == completed.PreviewClaim.PublicationSha256);
+        cmd.CommandText = "SELECT COUNT(*) FROM protected_new_statement_preview_claims;";
+        Check(Convert.ToInt64(cmd.ExecuteScalar()) == 1);
+        foreach (var mutation in new[] {
+            "UPDATE protected_new_statement_preview_claims SET sign_count=1;",
+            "DELETE FROM protected_new_statement_preview_claims;",
+            "INSERT OR REPLACE INTO protected_new_statement_preview_claims SELECT * FROM protected_new_statement_preview_claims;" })
+        {
+            cmd.CommandText = mutation;
+            Throws<SqliteException>(() => cmd.ExecuteNonQuery());
+        }
+    }
+
+    private static void NewStatementPublicationRollback()
+    {
+        CreateRealEvidenceFixture();
+        using var key = TestCredential.New();
+        using var store = Open();
+        var historical = PrepareNativeReaffirmation(store, key);
+        WriteNewStatementScopeManifest(RealProject, RealBranch, historical.RevisionSha);
+        store.PinNewStatementPreviewScope();
+        var intake = new NewOperatorStatementCoordinator(store);
+        var draft = intake.Begin(RealProject, RealBranch, historical.RevisionSha, "preference", "Synthetic rollback statement.");
+        var recorded = intake.Complete(draft, key.Sign(draft.Ticket, forcedSignCount: 3));
+        Check(recorded.Verified && recorded.Receipt is not null);
+        var publisher = new NewStatementPublicationCoordinator(store);
+        var offer = publisher.Begin(recorded.Receipt!.StatementRef, "unrelated");
+        using var sql = new SqliteConnection(new SqliteConnectionStringBuilder
+        {
+            DataSource = Path.Combine(TestDirectory, "review-authority.sqlite3"),
+            Mode = SqliteOpenMode.ReadWrite, Pooling = false, ForeignKeys = true,
+        }.ToString());
+        sql.Open();
+        using var cmd = sql.CreateCommand();
+        cmd.CommandText = """
+            CREATE TRIGGER fixture_fail_publication_counter BEFORE UPDATE OF last_sign_count
+            ON protected_operator_credentials BEGIN SELECT RAISE(ABORT, 'fixture_failure'); END;
+            """;
+        cmd.ExecuteNonQuery();
+        var assertion = key.Sign(offer.Ticket, forcedSignCount: 4);
+        Check(!publisher.Complete(offer, assertion).Verified);
+        Check(store.ReadOperatorCredential()?.LastSignCount == 3);
+        cmd.CommandText = "SELECT COUNT(*) FROM protected_new_statement_preview_claims;";
+        Check(Convert.ToInt64(cmd.ExecuteScalar()) == 0);
+        cmd.CommandText = "DROP TRIGGER fixture_fail_publication_counter;";
+        cmd.ExecuteNonQuery();
+        Check(!publisher.Complete(offer, assertion).Verified);
+        var retry = publisher.Begin(recorded.Receipt.StatementRef, "unrelated");
+        Check(publisher.Complete(retry, key.Sign(retry.Ticket, forcedSignCount: 5)).ClaimWritten);
+        Check(store.ReadOperatorCredential()?.LastSignCount == 5);
+        cmd.CommandText = "SELECT COUNT(*) FROM protected_new_statement_preview_claims;";
+        Check(Convert.ToInt64(cmd.ExecuteScalar()) == 1);
+    }
+
+    private static void NewStatementPublicationRealScopeDenied()
+    {
+        CreateRealEvidenceFixture();
+        using var key = TestCredential.New();
+        using var store = Open();
+        var historical = PrepareNativeReaffirmation(store, key);
+        const string foreign = "github.com/example/not-publication-fixture";
+        WriteNewStatementScopeManifest(foreign, RealBranch, historical.RevisionSha);
+        store.PinNewStatementPreviewScope();
+        var intake = new NewOperatorStatementCoordinator(store);
+        var offer = intake.Begin(foreign, RealBranch, historical.RevisionSha, "knowledge", "Synthetic non-fixture scope statement.");
+        var recorded = intake.Complete(offer, key.Sign(offer.Ticket, forcedSignCount: 3));
+        Check(recorded.Verified && recorded.Receipt is not null);
+        var publisher = new NewStatementPublicationCoordinator(store);
+        Throws<InvalidOperationException>(() => publisher.Begin(recorded.Receipt!.StatementRef, "unrelated"));
+        Check(store.ReadOperatorCredential()?.LastSignCount == 3);
+    }
+
+    private static void NewStatementComparisonChanged()
+    {
+        CreateRealEvidenceFixture();
+        using var key = TestCredential.New();
+        using var store = Open();
+        var historical = PrepareNativeReaffirmation(store, key);
+        WriteNewStatementScopeManifest(RealProject, RealBranch, historical.RevisionSha);
+        store.PinNewStatementPreviewScope();
+        var coordinator = new NewOperatorStatementCoordinator(store);
+        const string fact = "Synthetic independent comparison statement.";
+        var empty = coordinator.Begin(RealProject, RealBranch, historical.RevisionSha, "knowledge", fact);
+        Check(empty.Comparison.Claims.Count == 0);
+
+        using (var other = Open())
+        {
+            var synthetic = Example with { ProjectId = RealProject, Branch = RealBranch };
+            other.RecordPending(synthetic);
+            other.StageSyntheticLabSource(synthetic, SourceFor(synthetic));
+            var reviewer = new VerifiedReviewCoordinator(other, key.Pinned);
+            var m = MeaningFor(synthetic);
+            var ticket = reviewer.BeginProtectedApproval(m);
+            Check(reviewer.CompleteProtected(ticket.TicketId, m, key.Sign(ticket, forcedSignCount: 3)).ClaimWritten);
+        }
+        Check(!coordinator.Complete(empty, key.Sign(empty.Ticket, forcedSignCount: 4)).Verified);
+        Check(store.ReadOperatorCredential()?.LastSignCount == 2);
+        var reviewOnly = coordinator.Begin(RealProject, RealBranch, historical.RevisionSha, "knowledge", fact);
+        Check(reviewOnly.Comparison.Claims.Count == 1 && reviewOnly.Comparison.Claims[0].Origin == "review");
+        Check(reviewOnly.Comparison.Sha256 != empty.Comparison.Sha256);
+        Throws<InvalidOperationException>(() => coordinator.Begin(RealProject, RealBranch,
+            historical.RevisionSha, "knowledge", "Synthetic\u00a0  fact"));
+
+        using (var other = Open())
+        {
+            var publisher = OperatorDirectClaimCoordinator.ForNativeCredential(other);
+            var ticket = publisher.Begin(historical);
+            Check(publisher.Complete(ticket.TicketId, historical, key.Sign(ticket, forcedSignCount: 5)).ClaimWritten);
+        }
+        Check(!coordinator.Complete(reviewOnly, key.Sign(reviewOnly.Ticket, forcedSignCount: 6)).Verified);
+        Check(store.ReadOperatorCredential()?.LastSignCount == 5);
+        var both = coordinator.Begin(RealProject, RealBranch, historical.RevisionSha, "knowledge", fact);
+        Check(both.Comparison.Claims.Count == 2);
+        Check(both.Comparison.Claims.Select(c => c.Origin).SequenceEqual(new[] { "operator_direct", "review" }));
+        Check(both.Comparison.Sha256 != reviewOnly.Comparison.Sha256);
+        Throws<InvalidOperationException>(() => coordinator.Begin(RealProject, RealBranch,
+            historical.RevisionSha, "knowledge", RealFact.Replace(" ", "\u00a0 ")));
+        var altered = both with { Comparison = both.Comparison with { Claims = both.Comparison.Claims.Take(1).ToArray() } };
+        Check(!coordinator.Complete(altered, key.Sign(both.Ticket, forcedSignCount: 7)).Verified);
+        Check(store.ReadOperatorCredential()?.LastSignCount == 5);
+
+        var stable = coordinator.Begin(RealProject, RealBranch, historical.RevisionSha, "knowledge", fact);
+        using (var other = Open())
+        {
+            var foreign = Example with { ProjectId = RealProject, Branch = "foreign" };
+            other.RecordPending(foreign);
+            other.StageSyntheticLabSource(foreign, SourceFor(foreign));
+            var reviewer = new VerifiedReviewCoordinator(other, key.Pinned);
+            var m = MeaningFor(foreign);
+            var ticket = reviewer.BeginProtectedApproval(m);
+            Check(reviewer.CompleteProtected(ticket.TicketId, m, key.Sign(ticket, forcedSignCount: 8)).ClaimWritten);
+        }
+        var completed = coordinator.Complete(stable, key.Sign(stable.Ticket, forcedSignCount: 9));
+        Check(completed.Verified && completed.Receipt?.ComparisonSha256 == stable.Comparison.Sha256
+            && !completed.ClaimWritten && !completed.CanonicalScopeVerified);
+        Check(store.ReadProtectedClaims(RealProject, RealBranch).Count == 1);
+        Check(store.ReadOperatorDirectClaims(RealProject, RealBranch).Count == 1);
+        using var sql = new SqliteConnection(new SqliteConnectionStringBuilder
+        {
+            DataSource = Path.Combine(TestDirectory, "review-authority.sqlite3"),
+            Mode = SqliteOpenMode.ReadWrite, Pooling = false, ForeignKeys = true,
+        }.ToString());
+        sql.Open();
+        using var cmd = sql.CreateCommand();
+        cmd.CommandText = "SELECT comparison_sha256 FROM protected_new_operator_statements;";
+        Check((string?)cmd.ExecuteScalar() == stable.Comparison.Sha256);
+        cmd.CommandText = "SELECT COUNT(*) FROM protected_new_operator_statements;";
+        Check(Convert.ToInt64(cmd.ExecuteScalar()) == 1);
+    }
+
+    private static void NewStatementIntake()
+    {
+        CreateRealEvidenceFixture();
+        using var key = TestCredential.New();
+        using var store = Open();
+        Throws<InvalidOperationException>(() => new NewOperatorStatementCoordinator(store));
+        var historical = PrepareNativeReaffirmation(store, key);
+        var original = store.ReadOperatorReaffirmationIntent(RealProject, RealBranch, RealERef);
+        var coordinator = new NewOperatorStatementCoordinator(store);
+        const string fact = "Synthetic new statement independent of historical evidence.";
+        WriteNewStatementScopeManifest(RealProject, RealBranch, historical.RevisionSha);
+        var scope = store.PinNewStatementPreviewScope();
+        foreach (var sensitive in new[] { "password=fixture-secret", "Passwort: x", "Bearer fixture-token",
+            "sk-abcdefghijklmnop", "ghp_abcdefghijklmnopqrstuv", "-----BEGIN PRIVATE KEY-----",
+            "password\uFF1Dfixture", "[REDACTED_SECRET]" })
+            Throws<ArgumentException>(() => coordinator.Begin(RealProject, RealBranch, historical.RevisionSha, "knowledge", sensitive));
+        Throws<ArgumentException>(() => coordinator.Begin(RealProject, RealBranch, historical.RevisionSha, "procedure", fact));
+        Throws<ArgumentException>(() => coordinator.Begin(RealProject, RealBranch, historical.RevisionSha, "knowledge", "bad\ntext"));
+        var changed = coordinator.Begin(RealProject, RealBranch, historical.RevisionSha, "knowledge", fact);
+        var changedResult = coordinator.Complete(changed with { Kind = "preference" }, key.Sign(changed.Ticket, forcedSignCount: 3));
+        Check(!changedResult.Verified && !changedResult.ClaimWritten);
+        Check(store.ReadOperatorCredential()?.LastSignCount == 2);
+        Check(!coordinator.Complete(changed, key.Sign(changed.Ticket, forcedSignCount: 4)).Verified);
+
+        var offer = coordinator.Begin(RealProject, RealBranch, historical.RevisionSha, "knowledge", fact);
+        Check(offer.Ticket.Meaning.ProposalRef.StartsWith("N~", StringComparison.Ordinal));
+        var core = new ReviewChallengeCore();
+        Throws<ArgumentException>(() => core.BeginProtectedApproval(offer.Ticket.Meaning, key.Pinned));
+        Throws<ArgumentException>(() => core.BeginNewOperatorStatement(historical, key.Pinned));
+        var assertion = key.Sign(offer.Ticket, forcedSignCount: 5);
+        var deniedAfterRestart = new NewOperatorStatementCoordinator(store).Complete(offer, assertion);
+        Check(!deniedAfterRestart.Verified);
+        var completed = coordinator.Complete(offer, assertion);
+        Check(completed.Verified && completed.Receipt is not null && !completed.ClaimWritten
+            && !completed.HistoricalEvidenceVerified && !completed.CanonicalScopeVerified);
+        var receipt = completed.Receipt!;
+        Check(receipt.FactSha256 == Hash(fact) && receipt.StatementRef == offer.Ticket.Meaning.ProposalRef
+            && receipt.StatementSha256 == offer.Ticket.Meaning.ReviewSnapshotSha256
+            && receipt.Kind == "knowledge" && receipt.ScopePinSha256 == scope.PinSha256);
+        Check(!coordinator.Complete(offer, assertion).Verified);
+        Check(store.ReadOperatorCredential()?.LastSignCount == 5);
+        Check(store.ReadOperatorReaffirmationIntent(RealProject, RealBranch, RealERef) == original);
+        Check(store.ReadProtectedClaims(RealProject, RealBranch).Count == 0);
+        Check(store.ReadOperatorDirectClaims(RealProject, RealBranch).Count == 0);
+        using var reopened = Open();
+        Check(reopened.ReadOperatorCredential()?.LastSignCount == 5);
+        using var sql = new SqliteConnection(new SqliteConnectionStringBuilder
+        {
+            DataSource = Path.Combine(TestDirectory, "review-authority.sqlite3"),
+            Mode = SqliteOpenMode.ReadWrite, Pooling = false, ForeignKeys = true,
+        }.ToString());
+        sql.Open();
+        using var cmd = sql.CreateCommand();
+        cmd.CommandText = "SELECT statement_ref,value_text,statement_sha256,source_origin,scope_pin_sha256 FROM protected_new_operator_statements;";
+        using (var row = cmd.ExecuteReader())
+        {
+            Check(row.Read() && row.GetString(0) == receipt.StatementRef && row.GetString(1) == fact
+                && row.GetString(2) == receipt.StatementSha256 && row.GetString(3) == "operator_new_statement_uv_v1"
+                && row.GetString(4) == scope.PinSha256);
+            Check(!row.Read());
+        }
+        foreach (var mutation in new[] {
+            "UPDATE protected_new_operator_statements SET value_text='changed';",
+            "DELETE FROM protected_new_operator_statements;",
+            "INSERT OR REPLACE INTO protected_new_operator_statements SELECT * FROM protected_new_operator_statements;" })
+        {
+            cmd.CommandText = mutation;
+            Throws<SqliteException>(() => cmd.ExecuteNonQuery());
+        }
+    }
+
+    private static void NewStatementRollback()
+    {
+        CreateRealEvidenceFixture();
+        using var key = TestCredential.New();
+        using var store = Open();
+        var historical = PrepareNativeReaffirmation(store, key);
+        using var sql = new SqliteConnection(new SqliteConnectionStringBuilder
+        {
+            DataSource = Path.Combine(TestDirectory, "review-authority.sqlite3"),
+            Mode = SqliteOpenMode.ReadWrite, Pooling = false, ForeignKeys = true,
+        }.ToString());
+        sql.Open();
+        using var cmd = sql.CreateCommand();
+        cmd.CommandText = """
+            CREATE TRIGGER fixture_fail_counter BEFORE UPDATE OF last_sign_count
+            ON protected_operator_credentials BEGIN SELECT RAISE(ABORT, 'fixture_failure'); END;
+            """;
+        cmd.ExecuteNonQuery();
+        var coordinator = new NewOperatorStatementCoordinator(store);
+        WriteNewStatementScopeManifest(RealProject, RealBranch, historical.RevisionSha);
+        store.PinNewStatementPreviewScope();
+        var offer = coordinator.Begin(RealProject, RealBranch, historical.RevisionSha, "preference", "Synthetic new preference.");
+        var assertion = key.Sign(offer.Ticket, forcedSignCount: 3);
+        Check(!coordinator.Complete(offer, assertion).Verified);
+        Check(store.ReadOperatorCredential()?.LastSignCount == 2);
+        cmd.CommandText = "SELECT COUNT(*) FROM protected_new_operator_statements;";
+        Check(Convert.ToInt64(cmd.ExecuteScalar()) == 0);
+        cmd.CommandText = "DROP TRIGGER fixture_fail_counter;";
+        cmd.ExecuteNonQuery();
+        Check(!coordinator.Complete(offer, assertion).Verified);
+        var retry = coordinator.Begin(RealProject, RealBranch, historical.RevisionSha, "preference", "Synthetic new preference.");
+        Check(coordinator.Complete(retry, key.Sign(retry.Ticket, forcedSignCount: 4)).Verified);
+        Check(store.ReadOperatorCredential()?.LastSignCount == 4);
     }
 
     private static ReviewMeaning PrepareNativeReaffirmation(

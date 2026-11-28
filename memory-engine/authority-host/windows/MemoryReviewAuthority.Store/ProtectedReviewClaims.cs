@@ -173,7 +173,11 @@ public sealed partial class ProtectedPendingReviewLedger
             WHERE project_id=$project AND branch=$branch
             UNION ALL
             SELECT value_text FROM protected_operator_direct_claims
-            WHERE project_id=$project AND branch=$branch;
+            WHERE project_id=$project AND branch=$branch
+            UNION ALL
+            SELECT s.value_text FROM protected_new_statement_preview_claims c
+            JOIN protected_new_operator_statements s ON s.statement_ref=c.statement_ref
+            WHERE s.project_id=$project AND s.branch=$branch;
             """;
         command.Parameters.AddWithValue("$project", projectId);
         command.Parameters.AddWithValue("$branch", branch);
